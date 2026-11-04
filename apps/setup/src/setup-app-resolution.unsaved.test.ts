@@ -50,7 +50,7 @@ it("asks before discarding the interrupted password draft and restores its nativ
 });
 
 it("Recover from backup opens its confirmation in place, keeping an entered setup password, with no leave warning", async () => {
-  const { api } = wizardApi({
+  const { api, requests } = wizardApi({
     claimed: true,
     intercept(path) {
       if (path.endsWith("/backup/status"))
@@ -72,7 +72,7 @@ it("Recover from backup opens its confirmation in place, keeping an entered setu
   expect(
     el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("wt-unsaved-changes")!.open,
   ).toBe(false);
-  expect(el.shadowRoot!.querySelector("setup-first-backup")).toBeNull();
+  expect(requests.filter((r) => /\/resolution\/backup\//.test(r.path))).toEqual([]);
   const kept = el.shadowRoot!.querySelector<WtInput>("[data-test=resume-password]")!;
   await kept.updateComplete;
   expect(kept.shadowRoot!.querySelector<HTMLInputElement>("input")!.value).toBe(

@@ -937,129 +937,14 @@ it.each(Object.keys(damagedSteps) as (keyof typeof damagedSteps)[])(
   },
 );
 
-it.each([
-  { locale: "en-GB", strings: "en" },
-  { locale: "es-ES", strings: "es" },
-] as const)(
-  "with the database present, while another device runs a recovery, draws no Start again, no Recover from backup and no password field ($locale)",
-  async ({ locale, strings }) => {
-    const startedAt = new Date(2026, 9, 25, 14, 35).toISOString();
-    const lastActiveAt = new Date(2026, 9, 25, 14, 41).toISOString();
-    const shown = {
-      en: { started: "25 Oct 2026, 14:35", last: "25 Oct 2026, 14:41" },
-      es: { started: "25 oct 2026, 14:35", last: "25 oct 2026, 14:41" },
-    }[strings];
-    const { app, requests } = await mount({
-      intercept(path) {
-        if (path.endsWith("/backup/activity"))
-          return Response.json({ activity: { state: "running", startedAt, lastActiveAt } });
-      },
-    });
-    setLocale(locale);
-    await app.updateComplete;
-    const t = initialOwnerStrings[strings];
-    await expect
-      .poll(() => app.shadowRoot!.querySelector("[data-test=recovery-running]"))
-      .not.toBeNull();
-    expect(
-      [...q(app, "recovery-running").querySelectorAll("p")].map((p) => p.textContent!.trim()),
-    ).toEqual([
-      t.recoveryRunning.replace("{started}", shown.started),
-      t.recoveryLastActive.replace("{at}", shown.last),
-      t.recoveryRunningNext,
-    ]);
-    const shadow = app.shadowRoot!;
-    expect(shadow.querySelector("[data-test=start-again]")).toBeNull();
-    expect(shadow.querySelector("[data-test=recover-backup]")).toBeNull();
-    expect(shadow.querySelector("[data-test=resume-password]")).toBeNull();
-    expect(shadow.querySelector("[data-test=resume]")).toBeNull();
-    expect(requests.some((r) => /\/(recover|start-again|summary)$/.test(r.path))).toBe(false);
-  },
-);
-
-it("with the database present, a tab that signed in before reads the activity on reload and, while another device runs a recovery, offers no password field, no Continue and no Abandon, and sends nothing", async () => {
-  sessionStorage.setItem(
-    FIRST_SETUP_SESSION_KEY,
-    JSON.stringify({
-      version: 1,
-      clientClaimNonce: "N".repeat(43),
-      claimPending: false,
-      owner: {
-        attemptId: initial.attemptId,
-        revision: 1,
-        ownerGeneration: 1,
-        capability: "A".repeat(43),
-      },
-    }),
-  );
-  const startedAt = new Date(2026, 9, 25, 14, 35).toISOString();
-  const lastActiveAt = new Date(2026, 9, 25, 14, 41).toISOString();
-  const { app, requests } = await mount({
-    intercept(path) {
-      if (path.endsWith("/backup/activity"))
-        return Response.json({ activity: { state: "running", startedAt, lastActiveAt } });
-    },
-  });
-  await expect
-    .poll(() => app.shadowRoot!.querySelector("[data-test=recovery-running]"))
-    .not.toBeNull();
-  const t = initialOwnerStrings.en;
-  expect(
-    [...q(app, "recovery-running").querySelectorAll("p")].map((p) => p.textContent!.trim()),
-  ).toEqual([
-    t.recoveryRunning.replace("{started}", "25 Oct 2026, 14:35"),
-    t.recoveryLastActive.replace("{at}", "25 Oct 2026, 14:41"),
-    t.recoveryRunningNext,
-  ]);
-  const shadow = app.shadowRoot!;
-  for (const name of [
-    "resume-password",
-    "resume",
-    "abandon-attempt",
-    "start-again",
-    "recover-backup",
-    "finish-setup",
-  ])
-    expect(shadow.querySelector(`[data-test=${name}]`), name).toBeNull();
-  expect(shadow.querySelector("h1")!.textContent).toBe(t.interrupted);
-  expect(requests.filter((r) => r.body !== undefined)).toEqual([]);
-  expect(requests.some((r) => r.path.endsWith("/first-setup/resume"))).toBe(false);
-});
-
-const stoppedAt = {
-  startedAt: new Date(2026, 9, 25, 14, 35).toISOString(),
-  lastActiveAt: new Date(2026, 9, 25, 14, 41).toISOString(),
-};
-/** The server's shape for a stopped recovery's activity. */
-const stoppedActivity = (overrides: Record<string, unknown> = {}) => ({
-  state: "stopped",
-  ...stoppedAt,
-  lastActiveSource: "memory",
-  phase: "prepared",
-  recoveryId: "r1",
-  failed: false,
-  cloud: false,
-  ...overrides,
-});
-/** Read on pressing Start again, so it is later than the activity read when the page loaded. */
-const summaryLastActiveAt = new Date(2026, 9, 25, 14, 47).toISOString();
-const stoppedSummary = (damaged: boolean) => ({
+/** The summary the box answers on pressing Start again with the setup database present. */
+const presentSummary = (damaged: boolean) => ({
   reached: "claimed",
   ...(damaged ? { recoveryRecordDamaged: true } : {}),
-  recovery: {
-    startedAt: stoppedAt.startedAt,
-    lastActiveAt: summaryLastActiveAt,
-    lastActiveSource: "memory",
-    failed: false,
-    cloud: false,
-  },
 });
-async function stoppedPresent(
+async function presentDatabase(
   options: {
     damaged?: boolean;
-    running?: boolean;
-    /** The activity answered by each read, counted from 0; a `Response`, or a promise of one, is sent as it is. */
-    activity?: (read: number) => unknown;
     /** The summary's answer for each read, counted from 0; the summary itself when undefined. */
     summary?: (read: number) => Response | Promise<Response> | undefined;
     /** Merged into every inspection read. */
@@ -1069,96 +954,38 @@ async function stoppedPresent(
   } = {},
 ) {
   let startAgainSends = 0;
-  let activityReads = 0;
   let summaryReads = 0;
   const fixture = await mount({
+    inspection: options.inspection,
     intercept(path) {
-      if (path.endsWith("/backup/activity")) {
-        const activity = options.activity
-          ? options.activity(activityReads++)
-          : options.running
-            ? { state: "running", ...stoppedAt }
-            : stoppedActivity();
-        return activity instanceof Response || activity instanceof Promise
-          ? (activity as Response | Promise<Response>)
-          : Response.json({ activity });
-      }
       if (path.endsWith("/start-again/summary"))
         return (
           options.summary?.(summaryReads++) ??
-          Response.json(stoppedSummary(options.damaged === true))
+          Response.json(presentSummary(options.damaged === true))
         );
       if (path.endsWith("/resolution/start-again") && options.startAgain) {
         const answer = options.startAgain(startAgainSends++);
         if (answer) return answer;
       }
-      if (path.endsWith("/resolution"))
-        return Response.json({ ...inspection, ...options.inspection });
     },
   });
   await expect
-    .poll(() =>
-      fixture.app.shadowRoot!.querySelector(
-        options.running ? "[data-test=recovery-running]" : "[data-test=start-again]",
-      ),
-    )
+    .poll(() => fixture.app.shadowRoot!.querySelector("[data-test=start-again]"))
     .not.toBeNull();
   return fixture;
 }
-const stoppedLines = (app: SetupApp) =>
-  [...q(app, "recovery-stopped").querySelectorAll("p")].map((p) => p.textContent!.trim());
 const click = (app: SetupApp, name: string) =>
   userEvent.click(q<WtButton>(app, name).shadowRoot!.querySelector("button")!);
-/** Start again reads the inspection, the activity and the summary before it draws anything. */
+/** Start again reads the inspection and the summary before it draws anything. */
 const pressStartAgain = (app: SetupApp) => click(app, "start-again");
 
-it("with the database present and a stopped recovery: the stopped line, then the confirmation; nothing is sent before the tick and Confirm", async () => {
+it("with the database present, a damaged record: its line is drawn before Confirm, and the request carries the damaged flag", async () => {
   const t = initialOwnerStrings.en;
-  const { app, requests } = await stoppedPresent();
-  const sentNothing = () => expect(startAgainRequests(requests)).toEqual([]);
-  expect(stoppedLines(app)).toEqual([
-    t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"),
-    t.recoveryLastActive.replace("{at}", "25 Oct 2026, 14:41"),
-  ]);
-  await pressStartAgain(app);
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  expect(app.shadowRoot!.querySelector("[data-test=recovery-record-damaged]")).toBeNull();
-  // The confirmation is drawn from the summary read on pressing, not the earlier activity.
-  expect(stoppedLines(app)).toEqual([
-    t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"),
-    t.recoveryLastActive.replace("{at}", "25 Oct 2026, 14:47"),
-  ]);
-  expect(q(app, "cancel-start-again")).not.toBeNull();
-  expect(q<WtButton>(app, "confirm-start-again").disabled).toBe(true);
-  sentNothing();
-  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
-  await app.updateComplete;
-  sentNothing();
-  await userEvent.click(
-    q<WtButton>(app, "confirm-start-again").shadowRoot!.querySelector("button")!,
-  );
-  await expect.poll(() => startAgainRequests(requests)).toHaveLength(1);
-  const sent = startAgainRequests(requests)[0]!;
-  expect(sent.body).toEqual({
-    inspectionId: "a".repeat(64),
-    revision: 1,
-    ownerGeneration: 1,
-    confirmRecoveryDiscard: { shown: stoppedSummary(false) },
-  });
-  expect(sent.headers.has(ownerHeader)).toBe(false);
-  await expect.poll(() => app.shadowRoot!.textContent).toContain(t.restarting);
-});
-
-it("with the database present, a damaged record and a stopped recovery: both lines are drawn before Confirm, and the request carries both keys", async () => {
-  const t = initialOwnerStrings.en;
-  const { app, requests } = await stoppedPresent({ damaged: true });
+  const { app, requests } = await presentDatabase({ damaged: true });
   await pressStartAgain(app);
   await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
   const damaged = q(app, "recovery-record-damaged");
   expect(damaged.textContent).toBe(t.recoveryRecordDamaged);
-  expect(
-    damaged.compareDocumentPosition(q(app, "recovery-stopped")) & Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
   expect(startAgainRequests(requests)).toEqual([]);
   await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
   await app.updateComplete;
@@ -1170,297 +997,27 @@ it("with the database present, a damaged record and a stopped recovery: both lin
     inspectionId: "a".repeat(64),
     revision: 1,
     ownerGeneration: 1,
-    confirmRecoveryDiscard: { shown: stoppedSummary(true) },
     recoveryRecordDamagedShown: true,
   });
 });
 
-it("with the database present, while a recovery runs, no Start again, password or confirmation is offered and nothing is sent", async () => {
-  const { app, requests } = await stoppedPresent({ running: true });
-  for (const name of ["start-again", "resume-password", "confirm-start-again", "recovery-stopped"])
-    expect(app.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
-  expect(requests.some((r) => /\/(recover|start-again|summary)$/.test(r.path))).toBe(false);
-});
-
-it("with the database present, Recover from backup is offered beside a stopped recovery", async () => {
-  const { app } = await stoppedPresent();
-  expect(q(app, "recovery-stopped")).not.toBeNull();
-  expect(q<WtButton>(app, "recover-backup").disabled).toBe(false);
-  expect(q<WtButton>(app, "start-again").disabled).toBe(false);
-});
-
 it("with the database present and no recovery, Recover from backup is still offered", async () => {
-  const { app } = await stoppedPresent({ activity: () => null });
+  const { app } = await presentDatabase();
   expect(app.shadowRoot!.querySelector("[data-test=recovery-stopped]")).toBeNull();
   expect(q(app, "recover-backup")).not.toBeNull();
 });
 
-it.each([
-  {
-    activity: { lastActiveSource: "saved-step" },
-    lines: (t: (typeof initialOwnerStrings)["en"]) => [
-      t.recoveryLastSaved.replace("{at}", "25 Oct 2026, 14:41"),
-    ],
-  },
-  {
-    activity: { cloud: true },
-    lines: (t: (typeof initialOwnerStrings)["en"]) => [
-      t.recoveryLastActive.replace("{at}", "25 Oct 2026, 14:41"),
-      t.recoveryStoppedCloud,
-    ],
-  },
-])(
-  "with the database present, the stopped line before the password follows the activity's $activity",
-  async ({ activity, lines }) => {
-    const t = initialOwnerStrings.en;
-    const { app } = await stoppedPresent({ activity: () => stoppedActivity(activity) });
-    await expect
-      .poll(() => app.shadowRoot!.querySelector("[data-test=recovery-stopped]"))
-      .not.toBeNull();
-    expect(stoppedLines(app)).toEqual([
-      t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"),
-      ...lines(t),
-    ]);
-  },
-);
-
-it("with the database present, a recovery that stopped after the page loaded is drawn from the reads on pressing Start again: no damaged warning, and no damaged flag sent", async () => {
-  const t = initialOwnerStrings.en;
-  const { app, requests } = await stoppedPresent({
-    activity: (read) => (read === 0 ? null : stoppedActivity()),
-  });
-  expect(app.shadowRoot!.querySelector("[data-test=recovery-stopped]")).toBeNull();
-  await pressStartAgain(app);
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  expect(app.shadowRoot!.querySelector("[data-test=recovery-record-damaged]")).toBeNull();
-  expect(stoppedLines(app)).toEqual([
-    t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"),
-    t.recoveryLastActive.replace("{at}", "25 Oct 2026, 14:47"),
-  ]);
-  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
-  await app.updateComplete;
-  await click(app, "confirm-start-again");
-  await expect.poll(() => startAgainRequests(requests)).toHaveLength(1);
-  expect(startAgainRequests(requests)[0]!.body).toEqual({
-    inspectionId: "a".repeat(64),
-    revision: 1,
-    ownerGeneration: 1,
-    confirmRecoveryDiscard: { shown: stoppedSummary(false) },
-  });
-});
-
-it("with the database present, a stopped recovery that runs again by the time Start again is pressed is drawn as running, signed out, and nothing is sent", async () => {
-  const { app, requests } = await stoppedPresent({
-    activity: (read) => (read === 0 ? stoppedActivity() : { state: "running", ...stoppedAt }),
-  });
-  await pressStartAgain(app);
-  await expect
-    .poll(() => app.shadowRoot!.querySelector("[data-test=recovery-running]"))
-    .not.toBeNull();
-  for (const name of ["confirm-start-again", "start-again", "abandon-attempt"])
-    expect(app.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
-  expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toBeUndefined();
-  expect(requests.some((r) => r.path.endsWith("/start-again/summary"))).toBe(false);
-  expect(startAgainRequests(requests)).toEqual([]);
-});
-
 const refusal = (code: string, status: number) =>
   Response.json({ error: { code, params: {} } }, { status });
-it.each([
-  {
-    name: "a refusal the page has no words for",
-    locale: "en-GB",
-    answer: () => refusal("server.internal", 500),
-    shown: () => initialOwnerStrings.en.recoveryDetailsUnread,
-  },
-  {
-    name: "a refusal the page has no words for, in Spanish",
-    locale: "es-ES",
-    answer: () => refusal("server.internal", 500),
-    shown: () => initialOwnerStrings.es.recoveryDetailsUnread,
-  },
-  {
-    name: "a refusal the page has words for",
-    locale: "en-GB",
-    answer: () => refusal("setup.recovery_in_progress", 409),
-    shown: () => shellEn["shell.first_setup.recovery_in_progress"],
-  },
-])(
-  "with the database present, a summary read on pressing Start again that fails with $name says so, and Check again reads it again",
-  async ({ locale, answer, shown }) => {
-    const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
-    const shell = shellText(locale);
-    const { app, requests } = await stoppedPresent({
-      summary: (read) => (read === 0 ? answer() : undefined),
-    });
-    setLocale(locale);
-    await app.updateComplete;
-    await pressStartAgain(app);
-    await expect.poll(() => formErrors(app).filter(Boolean)).toEqual([shown()]);
-    const text = app.shadowRoot!.textContent!;
-    for (const wrong of [t.error, shell["shell.first_setup.attempt_conflict"]])
-      expect(text).not.toContain(wrong);
-    expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
-    expect(app.shadowRoot!.querySelector("[data-test=abandon-attempt]")).toBeNull();
-    expect(q(app, "recovery-stopped")).not.toBeNull();
-    expect(q(app, "check-again").textContent).toContain(t.checkAgain);
-    const activityReads = requests.filter((r) => r.path.endsWith("/backup/activity")).length;
-    await click(app, "check-again");
-    await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-    expect(requests.filter((r) => r.path.endsWith("/backup/activity")).length).toBe(
-      activityReads + 1,
-    );
-    expect(requests.filter((r) => r.path.endsWith("/start-again/summary"))).toHaveLength(2);
-    expect(formErrors(app).filter(Boolean)).toEqual([]);
-    expect(startAgainRequests(requests)).toEqual([]);
-  },
-);
-
-it("with the database present, a summary read on pressing Start again that names no recovery is drawn as the box says it: no stopped line, and Confirm sends no recovery discard", async () => {
-  const { app, requests } = await stoppedPresent({
-    summary: () => Response.json({ reached: "claimed" }),
-  });
-  await pressStartAgain(app);
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  expect(app.shadowRoot!.querySelector("[data-test=recovery-stopped]")).toBeNull();
-  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
-  await app.updateComplete;
-  await click(app, "confirm-start-again");
-  await expect.poll(() => startAgainRequests(requests)).toHaveLength(1);
-  expect(startAgainRequests(requests)[0]!.body).toEqual({
-    inspectionId: "a".repeat(64),
-    revision: 1,
-    ownerGeneration: 1,
-  });
-});
-
-it("with the database present, Cancel after a failed summary read returns to the stopped recovery, signed out", async () => {
-  const t = initialOwnerStrings.en;
-  const { app, requests } = await stoppedPresent({
-    summary: (read) => (read === 0 ? refusal("server.internal", 500) : undefined),
-  });
-  await pressStartAgain(app);
-  await expect.poll(() => q(app, "check-again")).not.toBeNull();
-  await click(app, "cancel-start-again");
-  await expect
-    .poll(() => app.shadowRoot!.querySelector<WtButton>("[data-test=start-again]")?.disabled)
-    .toBe(false);
-  expect(stoppedLines(app)[0]).toBe(t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"));
-  expect(q(app, "resume")).not.toBeNull();
-  for (const name of ["abandon-attempt", "check-again", "confirm-start-again"])
-    expect(app.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
-  expect(q<WtButton>(app, "recover-backup").disabled).toBe(false);
-  expect(formErrors(app)).toEqual([""]);
-  expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toBeUndefined();
-
-  await pressStartAgain(app);
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  expect(requests.filter((r) => r.path.endsWith("/start-again/summary"))).toHaveLength(2);
-  expect(requests.some((r) => r.path.endsWith("/resolution/recover"))).toBe(false);
-  expect(startAgainRequests(requests)).toEqual([]);
-});
-
-it("with the database present, Start again after Cancel at a stopped recovery's confirmation reads the activity and the summary again before drawing it", async () => {
-  const t = initialOwnerStrings.en;
-  const later = new Date(2026, 9, 25, 14, 52).toISOString();
-  const { app, requests } = await stoppedPresent({
-    summary: (read) =>
-      read === 0
-        ? undefined
-        : Response.json({
-            ...stoppedSummary(false),
-            recovery: { ...stoppedSummary(false).recovery, lastActiveAt: later },
-          }),
-  });
-  await pressStartAgain(app);
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  await click(app, "cancel-start-again");
-  await expect
-    .poll(() => app.shadowRoot!.querySelector("[data-test=confirm-start-again]"))
-    .toBeNull();
-  const activityReads = requests.filter((r) => r.path.endsWith("/backup/activity")).length;
-  await click(app, "start-again");
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  expect(requests.filter((r) => r.path.endsWith("/backup/activity")).length).toBe(
-    activityReads + 1,
-  );
-  expect(stoppedLines(app)).toEqual([
-    t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"),
-    t.recoveryLastActive.replace("{at}", "25 Oct 2026, 14:52"),
-  ]);
-  expect(requests.some((r) => r.path.endsWith("/resolution/recover"))).toBe(false);
-  expect(startAgainRequests(requests)).toEqual([]);
-});
-
-it("with the database present, a stopped recovery gone by the time Start again is pressed: the confirmation names no recovery and no damaged record, signed out, and nothing is sent", async () => {
-  const { app, requests } = await stoppedPresent({
-    activity: (read) => (read === 0 ? stoppedActivity() : null),
-    summary: () => Response.json({ reached: "claimed" }),
-  });
-  await pressStartAgain(app);
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  for (const name of ["recovery-stopped", "recovery-record-damaged", "abandon-attempt"])
-    expect(app.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
-  expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toBeUndefined();
-  expect(startAgainRequests(requests)).toEqual([]);
-});
-
-it("with the database present, a recovery that stops between the confirmation and Confirm sends nothing: the confirmation closes, says the setup changed, and Start again reads the box again", async () => {
-  let stopped = false;
-  const { app, requests } = await stoppedPresent({
-    activity: () => (stopped ? stoppedActivity() : null),
-    summary: () => (stopped ? undefined : Response.json({ reached: "claimed" })),
-  });
-  await pressStartAgain(app);
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
-  await app.updateComplete;
-  stopped = true;
-  await click(app, "confirm-start-again");
-  await expect.poll(() => formErrors(app)).toContain(initialOwnerStrings.en.heldChanged);
-  for (const name of ["recovery-record-damaged", "confirm-start-again"])
-    expect(app.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
-  expect(q<WtButton>(app, "start-again").disabled).toBe(false);
-  expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toBeUndefined();
-  expect(startAgainRequests(requests)).toHaveLength(0);
-  await pressStartAgain(app);
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  expect(q(app, "recovery-stopped")).not.toBeNull();
-});
-
-it("with the database present, while Check again reads after a failed summary, the stopped line and both buttons stay drawn, disabled", async () => {
-  let answer: (response: Response) => void = () => undefined;
-  const { app, requests } = await stoppedPresent({
-    summary: (read) =>
-      read === 0
-        ? refusal("server.internal", 500)
-        : read === 1
-          ? new Promise<Response>((done) => (answer = done))
-          : undefined,
-  });
-  await pressStartAgain(app);
-  await expect.poll(() => q(app, "check-again")).not.toBeNull();
-  await click(app, "check-again");
-  await expect
-    .poll(() => requests.filter((r) => r.path.endsWith("/start-again/summary")))
-    .toHaveLength(2);
-  await app.updateComplete;
-  expect(q<WtButton>(app, "check-again").disabled).toBe(true);
-  expect(q(app, "recovery-stopped")).not.toBeNull();
-  expect(q<WtButton>(app, "cancel-start-again").disabled).toBe(true);
-  answer(Response.json(stoppedSummary(false)));
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-});
 
 it.each(["en-GB", "es-ES"])(
-  "with the database present and holding records beside a stopped recovery, Start again is offered and, once pressed, says what Start again deletes and that no invoice was sent, in %s",
+  "with the database present and holding records, Start again is offered and, once pressed, says what Start again deletes and that no invoice was sent, in %s",
   async (locale) => {
     const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
-    const { app, requests } = await stoppedPresent({
+    const { app, requests } = await presentDatabase({
       inspection: { database: "occupied", emptyDatabase: false },
     });
     setLocale(locale);
-    await expect.poll(() => q(app, "recovery-stopped")).not.toBeNull();
     await app.updateComplete;
     expect(q<WtButton>(app, "start-again").disabled).toBe(false);
     expect(app.shadowRoot!.querySelector("[data-test=start-again-refused]")).toBeNull();
@@ -1470,12 +1027,8 @@ it.each(["en-GB", "es-ES"])(
     expect(q(app, "start-again-deletes").textContent!.trim()).toBe(
       `${t.heldLost} ${t.noInvoiceSent}`,
     );
-    expect(q(app, "recovery-stopped").textContent).toContain(
-      t.recoveryStopped.split("{started}")[1]!,
-    );
     const order = [
       q(app, "start-again-deletes"),
-      q(app, "recovery-stopped"),
       q(app, "retire-confirmed"),
       q(app, "cancel-start-again"),
       q(app, "confirm-start-again"),
@@ -1494,7 +1047,6 @@ it.each(["en-GB", "es-ES"])(
       inspectionId: "a".repeat(64),
       revision: 1,
       ownerGeneration: 1,
-      confirmRecoveryDiscard: { shown: stoppedSummary(false) },
     });
     expect(startAgainRequests(requests)[0]!.headers.has(ownerHeader)).toBe(false);
     await expect.poll(() => app.shadowRoot!.textContent).toContain(t.restarting);
@@ -1505,7 +1057,7 @@ it.each(["en-GB", "es-ES"])(
   "a setup database holding rows in a table other than the venue's is offered Start again, with the same words, in %s",
   async (locale) => {
     const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
-    const { app } = await stoppedPresent({
+    const { app } = await presentDatabase({
       inspection: { database: "no-venue-rows", emptyDatabase: false },
     });
     setLocale(locale);
@@ -1519,8 +1071,8 @@ it.each(["en-GB", "es-ES"])(
   },
 );
 
-it("an empty setup database beside a stopped recovery says what Start again deletes and that no invoice was sent", async () => {
-  const { app } = await stoppedPresent({ inspection: { emptyDatabase: true } });
+it("an empty setup database says what Start again deletes and that no invoice was sent", async () => {
+  const { app } = await presentDatabase({ inspection: { emptyDatabase: true } });
   await pressStartAgain(app);
   await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
   const t = initialOwnerStrings.en;
@@ -1530,7 +1082,7 @@ it("an empty setup database beside a stopped recovery says what Start again dele
 });
 
 it("a refused Start again from the held confirmation closes it and says the setup changed, with Start again offered again and nobody signed in", async () => {
-  const { app, requests } = await stoppedPresent({
+  const { app, requests } = await presentDatabase({
     inspection: { database: "occupied", emptyDatabase: false },
     startAgain: (send) => (send === 0 ? refusal("setup.attempt_conflict", 409) : undefined),
   });
@@ -1553,9 +1105,8 @@ it.each(["en-GB", "es-ES"])(
   "a database holding records with no stopped recovery offers Start again, and pressing it draws the confirmation with nothing sent, in %s",
   async (locale) => {
     const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
-    const { app, requests } = await stoppedPresent({
+    const { app, requests } = await presentDatabase({
       inspection: { database: "occupied", emptyDatabase: false },
-      activity: () => null,
       summary: () => Response.json({ reached: "claimed" }),
     });
     setLocale(locale);
@@ -1572,9 +1123,9 @@ it.each(["en-GB", "es-ES"])(
   },
 );
 
-it("saved trading settings beside a stopped recovery and a database holding records offer Start again, and pressing it draws the box's refusal with nothing sent", async () => {
+it("saved trading settings beside a database holding records offer Start again, and pressing it draws the box's refusal with nothing sent", async () => {
   const t = initialOwnerStrings.en;
-  const { app, requests } = await stoppedPresent({
+  const { app, requests } = await presentDatabase({
     inspection: {
       database: "occupied",
       emptyDatabase: false,
@@ -1582,7 +1133,6 @@ it("saved trading settings beside a stopped recovery and a database holding reco
     },
     summary: () => refusedCause("trading-settings"),
   });
-  await expect.poll(() => q(app, "recovery-stopped")).not.toBeNull();
   await app.updateComplete;
   expect(q<WtButton>(app, "start-again").disabled).toBe(false);
   expect(app.shadowRoot!.textContent).not.toContain(t.tradingSaved);
@@ -1593,205 +1143,6 @@ it("saved trading settings beside a stopped recovery and a database holding reco
   expect(app.shadowRoot!.querySelector("[data-test=start-again]")).toBeNull();
   expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
   expect(startAgainRequests(requests)).toEqual([]);
-});
-
-it.each([
-  {
-    name: "an answer the page cannot read",
-    locale: "en-GB",
-    answer: () => ({ state: "stopped" }),
-    shown: (): string => initialOwnerStrings.en.recoveryDetailsUnread,
-  },
-  {
-    name: "an answer the page cannot read, in Spanish",
-    locale: "es-ES",
-    answer: () => ({ state: "stopped" }),
-    shown: (): string => initialOwnerStrings.es.recoveryDetailsUnread,
-  },
-  {
-    name: "a refusal the page has words for",
-    locale: "en-GB",
-    answer: () => refusal("setup.recovery_in_progress", 409),
-    shown: (): string => shellEn["shell.first_setup.recovery_in_progress"],
-  },
-])(
-  "with the database present, an activity read on pressing Start again that fails with $name says so, reads no summary, and Check again reads both",
-  async ({ locale, answer, shown }) => {
-    const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
-    const { app, requests } = await stoppedPresent({
-      activity: (read) => (read === 1 ? answer() : stoppedActivity()),
-    });
-    setLocale(locale);
-    await app.updateComplete;
-    await pressStartAgain(app);
-    await expect.poll(() => formErrors(app).filter(Boolean)).toEqual([shown()]);
-    expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
-    expect(q(app, "check-again").textContent).toContain(t.checkAgain);
-    expect(q(app, "cancel-start-again").textContent).toContain(t.cancel);
-    expect(summaryRequests(requests)).toEqual([]);
-    await click(app, "check-again");
-    await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-    expect(summaryRequests(requests)).toHaveLength(1);
-    expect(formErrors(app).filter(Boolean)).toEqual([]);
-    expect(startAgainRequests(requests)).toEqual([]);
-  },
-);
-
-it("with the database present, a stopped recovery running again when Start again is pressed keeps the running view when the next activity read is refused, offering only Reconnect, signed out, with nothing sent", async () => {
-  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-  try {
-    const { app, requests } = await stoppedPresent({
-      activity: (read) =>
-        read === 0
-          ? stoppedActivity()
-          : read === 1
-            ? { state: "running", ...stoppedAt }
-            : refusal("setup.recovery_in_progress", 409),
-    });
-    const activityReads = () => requests.filter((r) => r.path.endsWith("/backup/activity")).length;
-    await pressStartAgain(app);
-    await expect
-      .poll(() => app.shadowRoot!.querySelector("[data-test=recovery-running]"))
-      .not.toBeNull();
-    await vi.advanceTimersByTimeAsync(30_000);
-    await expect.poll(activityReads).toBe(3);
-    await app.updateComplete;
-    expect(q(app, "recovery-running")).not.toBeNull();
-    expect(q(app, "reconnect-first")).not.toBeNull();
-    for (const name of ["start-again", "resume-password", "confirm-start-again", "check-again"])
-      expect(app.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
-    expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toBeUndefined();
-    expect(summaryRequests(requests)).toEqual([]);
-    expect(startAgainRequests(requests)).toEqual([]);
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
-it("with the database present and no recovery, an activity read on pressing Start again that fails says so and claims no damaged record or stopped recovery; Start again reads the box again", async () => {
-  const { app, requests } = await stoppedPresent({
-    activity: (read) => (read === 1 ? refusal("server.internal", 500) : null),
-    summary: () => Response.json({ reached: "claimed" }),
-  });
-  await pressStartAgain(app);
-  await expect.poll(() => formErrors(app).filter(Boolean)).toEqual([initialOwnerStrings.en.error]);
-  for (const name of [
-    "recovery-record-damaged",
-    "confirm-start-again",
-    "recovery-stopped",
-    "check-again",
-  ])
-    expect(app.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
-  expect(q<WtButton>(app, "start-again").disabled).toBe(false);
-  expect(summaryRequests(requests)).toEqual([]);
-  await pressStartAgain(app);
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  for (const name of ["recovery-record-damaged", "recovery-stopped"])
-    expect(app.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
-  expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toBeUndefined();
-  expect(startAgainRequests(requests)).toEqual([]);
-});
-
-async function detailsUnread() {
-  const fixture = await stoppedPresent({
-    summary: (read) => (read === 0 ? refusal("server.internal", 500) : undefined),
-  });
-  await pressStartAgain(fixture.app);
-  await expect.poll(() => q(fixture.app, "check-again")).not.toBeNull();
-  await fixture.app.updateComplete;
-  return fixture;
-}
-
-it("with the database present, a second click on Check again while the first is reading sends no second read", async () => {
-  const { app, requests } = await detailsUnread();
-  const reads = (suffix: string) => requests.filter((r) => r.path.endsWith(suffix)).length;
-  const activityReads = reads("/backup/activity");
-  q(app, "check-again").dispatchEvent(new MouseEvent("click"));
-  q(app, "check-again").dispatchEvent(new MouseEvent("click"));
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  expect(reads("/backup/activity")).toBe(activityReads + 1);
-  expect(reads("/start-again/summary")).toBe(2);
-  expect(formErrors(app).filter(Boolean)).toEqual([]);
-});
-
-it("with the database present, Cancel clicked while Check again is reading does nothing, and the confirmation is drawn when the read answers", async () => {
-  let answer: (response: Response) => void = () => undefined;
-  const { app, requests } = await stoppedPresent({
-    summary: (read) =>
-      read === 0
-        ? refusal("server.internal", 500)
-        : read === 1
-          ? new Promise<Response>((done) => (answer = done))
-          : undefined,
-  });
-  await pressStartAgain(app);
-  await expect.poll(() => q(app, "check-again")).not.toBeNull();
-  const inspections = () =>
-    requests.filter((r) => r.path.endsWith("/first-setup/resolution")).length;
-  await click(app, "check-again");
-  await expect
-    .poll(() => requests.filter((r) => r.path.endsWith("/start-again/summary")))
-    .toHaveLength(2);
-  const before = inspections();
-  q(app, "cancel-start-again").dispatchEvent(new MouseEvent("click"));
-  answer(Response.json(stoppedSummary(false)));
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  expect(inspections()).toBe(before);
-  expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toBeUndefined();
-  expect(startAgainRequests(requests)).toEqual([]);
-});
-
-const running = { state: "running", ...stoppedAt };
-it("with the database present, a tab closed while Start again reads the activity starts no activity re-reads", async () => {
-  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-  try {
-    let answer: (response: Response) => void = () => undefined;
-    const { app, api, requests } = await stoppedPresent({
-      activity: (read) =>
-        read === 1 ? new Promise<Response>((done) => (answer = done)) : stoppedActivity(),
-    });
-    const activity = vi.spyOn(api, "firstSetupBackupActivity");
-    const activityReads = () => requests.filter((r) => r.path.endsWith("/backup/activity")).length;
-    await pressStartAgain(app);
-    await expect.poll(activityReads).toBe(2);
-    app.remove();
-    answer(Response.json({ activity: running }));
-    await activity.mock.results.at(-1)!.value;
-    await vi.advanceTimersByTimeAsync(120_000);
-    expect(activityReads()).toBe(2);
-    expect(summaryRequests(requests)).toEqual([]);
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
-it("with the database present, a tab closed while Check again reads the activity starts no activity re-reads", async () => {
-  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-  try {
-    let answer: (response: Response) => void = () => undefined;
-    const { app, api, requests } = await stoppedPresent({
-      activity: (read) =>
-        read === 1
-          ? { state: "stopped" }
-          : read === 2
-            ? new Promise<Response>((done) => (answer = done))
-            : stoppedActivity(),
-    });
-    const activity = vi.spyOn(api, "firstSetupBackupActivity");
-    const activityReads = () => requests.filter((r) => r.path.endsWith("/backup/activity")).length;
-    await pressStartAgain(app);
-    await expect.poll(() => q(app, "check-again")).not.toBeNull();
-    await click(app, "check-again");
-    await expect.poll(activityReads).toBe(3);
-    app.remove();
-    answer(Response.json({ activity: running }));
-    await activity.mock.results.at(-1)!.value;
-    await vi.advanceTimersByTimeAsync(120_000);
-    expect(activityReads()).toBe(3);
-    expect(startAgainRequests(requests)).toEqual([]);
-  } finally {
-    vi.useRealTimers();
-  }
 });
 
 const DISK_FULL = {
@@ -1875,8 +1226,8 @@ it.each(["en-GB", "es-ES"] as const)(
   },
 );
 
-it("with the database present, a stopped recovery's summary read refused storage.disk_full says the disk is full", async () => {
-  const { app } = await stoppedPresent({
+it("with the database present, a summary read refused storage.disk_full says the disk is full", async () => {
+  const { app } = await presentDatabase({
     summary: (read) => (read === 0 ? diskFull() : undefined),
   });
   await pressStartAgain(app);
@@ -1884,16 +1235,16 @@ it("with the database present, a stopped recovery's summary read refused storage
   expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
 });
 
-it("with the database present, a stopped recovery's summary read refused storage.disk_full keeps the server's word on restarting", async () => {
-  const { app } = await stoppedPresent({
+it("with the database present, a summary read refused storage.disk_full keeps the server's word on restarting", async () => {
+  const { app } = await presentDatabase({
     summary: (read) => (read === 0 ? diskFull({ restartDeletesLogs: false }) : undefined),
   });
   await pressStartAgain(app);
   await expect.poll(() => formErrors(app)).toContain(DISK_FULL_RESTART_FREES_NOTHING["en-GB"]);
 });
 
-it("with the database present, a stopped recovery's summary read refused storage.disk_full without the field says nothing about restarting", async () => {
-  const { app } = await stoppedPresent({
+it("with the database present, a summary read refused storage.disk_full without the field says nothing about restarting", async () => {
+  const { app } = await presentDatabase({
     summary: (read) => (read === 0 ? diskFull({}) : undefined),
   });
   await pressStartAgain(app);
