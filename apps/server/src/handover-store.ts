@@ -137,11 +137,11 @@ export function storedRefusal(detail: Readonly<Record<string, unknown>>): Handov
   return { code: code as ErrorCode, params: params as Record<string, string> };
 }
 
-/** Records why this box is waiting at its current step, beside the state it keeps. */
+/** Records why this box is waiting at its current step, or with `null` that it no longer is. */
 export function waitHandover(
   deps: HandoverStoreDeps,
   operationId: string,
-  reason: ErrorCode,
+  reason: ErrorCode | null,
 ): Promise<void> {
   return withNodeTransaction(deps.node, async (tx) => {
     const row = await readHandoverOperation(tx, deps.nodeId, operationId);

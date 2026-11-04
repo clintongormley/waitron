@@ -290,7 +290,7 @@ function stateFits(role: HandoverRole, scenario: HandoverScenario, state: Handov
   });
 }
 
-function isOperationStatus(value: unknown): value is PeerOperationStatus | null {
+export function isOperationStatus(value: unknown): value is PeerOperationStatus | null {
   if (value === null) return true;
   if (!isRecord(value)) return false;
   return (

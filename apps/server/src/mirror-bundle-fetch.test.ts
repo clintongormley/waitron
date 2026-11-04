@@ -1,7 +1,7 @@
 import { createServer as createHttpServer, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { Readable } from "node:stream";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer as createTcpServer, type AddressInfo } from "node:net";
@@ -786,6 +786,43 @@ describe("boxDownload streams one answer to a file", () => {
   function options(signal: AbortSignal = AbortSignal.timeout(5_000)) {
     return { trust: { rejectUnauthorized: true }, signal, body: '{"signed":true}' };
   }
+
+  it("a box silent before its answer is given up on within the silence limit", async () => {
+    const url = await httpBox(() => {});
+    await expect(
+      boxDownload(url, { ...options(), silenceLimitMs: 100 }, destination),
+    ).rejects.toThrow("no bytes in time");
+    expect(existsSync(partial)).toBe(false);
+  });
+
+  it("a box silent part way through its answer is given up on, with neither file left", async () => {
+    const url = await httpBox((res) => {
+      res.writeHead(200, { "content-length": String(BYTES.length) });
+      res.write(BYTES.subarray(0, 100));
+    });
+    await expect(
+      boxDownload(url, { ...options(), silenceLimitMs: 100 }, destination),
+    ).rejects.toThrow();
+    expect(existsSync(partial)).toBe(false);
+    expect(existsSync(destination)).toBe(false);
+  });
+
+  it("an answer taking far longer than the silence limit lands whole while its bytes keep coming", async () => {
+    const url = await httpBox((res) => {
+      res.writeHead(200, { "content-length": "20" });
+      let sent = 0;
+      const timer = setInterval(() => {
+        res.write("x");
+        if (++sent === 20) {
+          clearInterval(timer);
+          res.end();
+        }
+      }, 25);
+    });
+    const answer = await boxDownload(url, { ...options(), silenceLimitMs: 200 }, destination);
+    expect(answer.status).toBe(200);
+    expect(statSync(destination).size).toBe(20);
+  });
 
   it("a whole answer from a box under the pinned authority lands byte for byte, and its body was sent", async () => {
     const authority = await mintBoxAuthority();

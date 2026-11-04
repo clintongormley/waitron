@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   readTenant,
@@ -237,6 +237,43 @@ describe("POST /api/node/handover/offer", () => {
       await post(envelopeOf({ operationId: OTHER_OP }));
       await advanceHandover(store(), OTHER_OP, "abandoned", {});
       expect((await signedStatusOf(await post(envelopeOf()))).operationId).toBe(OP);
+    });
+  });
+
+  describe("the spare's duty", () => {
+    function appTelling(onOfferRecorded: () => void): Hono {
+      const told = new Hono();
+      mountHandoverDestinationApi(
+        told,
+        { db: suite.db, node: suite.node, ring: RING, nodeId: self },
+        () => undefined,
+        onOfferRecorded,
+      );
+      return told;
+    }
+    const offer = (to: Hono, raw: unknown) =>
+      to.request("/api/node/handover/offer", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(raw),
+      });
+
+    it("is told of an offer once the operation is on disk", async () => {
+      const states: Promise<unknown>[] = [];
+      const told = appTelling(() => {
+        states.push(readHandoverOperation(suite.node, self, OP));
+      });
+      const response = await offer(told, envelopeOf());
+      expect(response.status).toBe(200);
+      expect(states).toHaveLength(1);
+      expect(await states[0]).toMatchObject({ state: "prepared" });
+    });
+
+    it("is not told of an offer that is refused", async () => {
+      const telling = vi.fn();
+      const response = await offer(appTelling(telling), envelopeOf({ scenario: "emergency" }));
+      expect(response.status).toBe(400);
+      expect(telling).not.toHaveBeenCalled();
     });
   });
 

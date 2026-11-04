@@ -209,6 +209,7 @@ import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
+import { startHandoverDestinationDuty } from "./handover-destination-duty.js";
 import { mountHandoverSourceStartApi } from "./handover-source-start-api.js";
 import { mountHandoverStatusApi } from "./handover-status-api.js";
 import { mountNodeMembershipApi } from "./node-membership-api.js";
@@ -2292,10 +2293,22 @@ async function bootServer(
   );
   mountPeerStatusApi(app, { db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
   mountHandoverStatusApi(app, { db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
+  const handoverDestinationDuty = await startHandoverDestinationDuty({
+    db,
+    node: store.node,
+    ring,
+    nodeId: tradingContext.nodeId,
+    stateDir: config.stateDir,
+    log,
+  });
+  if (handoverDestinationDuty !== undefined) {
+    undoOnFailure.push(() => handoverDestinationDuty.stop());
+  }
   mountHandoverDestinationApi(
     app,
     { db, node: store.node, ring, nodeId: tradingContext.nodeId },
     log,
+    () => handoverDestinationDuty?.wake(),
   );
   mountNodeMembershipApi(
     app,
@@ -3730,6 +3743,7 @@ async function bootServer(
     backupSupervisor,
     demoPrinterLoop,
     clockWatch,
+    handoverDestinationDuty,
     streamHost,
   });
   const started = makeStartedServer(

@@ -1357,6 +1357,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The old box's venue data changed after it made its final copy, so it did not send the copy. Nothing was changed.",
     es: "Los datos del local en el equipo antiguo cambiaron después de hacer la copia final, así que no ha enviado la copia. No se ha cambiado nada.",
   },
+  "handover.source_unreachable": {
+    en: "This box can't get an answer it can use from the old box yet. It keeps asking by itself. Nothing was changed.",
+    es: "Este equipo aún no recibe una respuesta válida del equipo antiguo. Sigue preguntando por sí solo. No se ha cambiado nada.",
+  },
   "handover.not_a_spare": {
     en: "This box is not a spare, so it cannot take over the venue. Nothing was changed.",
     es: "Este equipo no es un equipo de reserva, así que no puede pasar a llevar el local. No se ha cambiado nada.",

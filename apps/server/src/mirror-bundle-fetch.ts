@@ -170,6 +170,10 @@ export function boxExchange(
 // A refusal is one short JSON error; anything far larger is not one.
 const MAX_REFUSAL_BYTES = 64 * 1024;
 
+// Long, because the sender digests the whole file before it sends the first byte, and silent only:
+// a copy of any size may take as long as it needs while its bytes keep coming.
+const DOWNLOAD_SILENCE_LIMIT_MS = 5 * 60_000;
+
 async function refusalText(res: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -184,7 +188,8 @@ async function refusalText(res: IncomingMessage): Promise<string> {
 /**
  * One POST to a box whose 200 answer is a file: written to `<destinationPath>.partial` as it
  * arrives, and moved to `destinationPath` only once all of it came. Any other status comes back
- * with its text and touches no file. The destination's folder must exist.
+ * with its text and touches no file. The destination's folder must exist. A connection that carries
+ * no byte for `silenceLimitMs` is a failure.
  *
  * The file is flushed to disk before the move and the folder after it. A failed folder flush is
  * thrown with the file already at its final name.
@@ -200,6 +205,7 @@ export async function boxDownload(
     trust: Pick<RequestOptions, "ca" | "rejectUnauthorized">;
     signal: AbortSignal;
     body: string;
+    silenceLimitMs?: number;
   },
   destinationPath: string,
 ): Promise<{ status: number; text: string }> {
@@ -210,6 +216,7 @@ export async function boxDownload(
         method: "POST",
         agent: false,
         signal: options.signal,
+        timeout: options.silenceLimitMs ?? DOWNLOAD_SILENCE_LIMIT_MS,
         ...options.trust,
         headers: {
           "content-type": "application/json",
@@ -218,6 +225,7 @@ export async function boxDownload(
       },
       resolve,
     );
+    req.on("timeout", () => req.destroy(new Error("no bytes in time")));
     req.on("error", reject);
     req.end(options.body);
   });

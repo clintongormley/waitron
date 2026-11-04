@@ -77,6 +77,7 @@ const STOPPERS = [
   "backupSupervisor",
   "demoPrinterLoop",
   "clockWatch",
+  "handoverDestinationDuty",
   "streamHost",
 ] as const;
 const AT_STEPDOWN = [
@@ -85,6 +86,7 @@ const AT_STEPDOWN = [
   "boxEmails",
   "demoPrinterLoop",
   "clockWatch",
+  "handoverDestinationDuty",
 ];
 
 /** Stand-in duties that record, by table name, each stop or wait as it is called. */

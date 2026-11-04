@@ -59,6 +59,7 @@ export interface BackgroundDutyHandles {
   backupSupervisor: Stopper;
   demoPrinterLoop: Stopper | undefined;
   clockWatch: Stopper;
+  handoverDestinationDuty: Stopper | undefined;
   streamHost: Stopper;
 }
 
@@ -199,6 +200,11 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
     },
     { name: "demoPrinterLoop", close: () => h.demoPrinterLoop?.stop(), atStepdown: true },
     { name: "clockWatch", close: () => h.clockWatch.stop(), atStepdown: true },
+    {
+      name: "handoverDestinationDuty",
+      close: () => h.handoverDestinationDuty?.stop(),
+      atStepdown: true,
+    },
     // Litestream writes venue.db, so its stop is awaited before the store closes.
     {
       name: "streamHost",

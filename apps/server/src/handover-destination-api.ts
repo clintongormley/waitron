@@ -78,7 +78,12 @@ async function matchesThisBox(deps: PeerStatusApiDeps, binding: HandoverBinding)
 }
 
 /** `POST /api/node/handover/offer` — a spare receives a main box's offer to hand the venue over. */
-export function mountHandoverDestinationApi(app: Hono, deps: PeerStatusApiDeps, log: Logger): void {
+export function mountHandoverDestinationApi(
+  app: Hono,
+  deps: PeerStatusApiDeps,
+  log: Logger,
+  onOfferRecorded: () => void = () => {},
+): void {
   const run = createErrorBoundary(STATUS, "handover-destination.failed");
 
   app.post("/api/node/handover/offer", (c) =>
@@ -101,6 +106,7 @@ export function mountHandoverDestinationApi(app: Hono, deps: PeerStatusApiDeps, 
       const recorded = await readHandoverOperation(deps.node, deps.nodeId, operationId);
       // A fault in Waitron: the transaction above recorded this row or found it recorded.
       if (recorded === null) throw new Error(`no handover operation ${operationId} after begin`);
+      onOfferRecorded();
       return c.json(await signedHandoverStatus(deps, recorded), 200);
     }),
   );

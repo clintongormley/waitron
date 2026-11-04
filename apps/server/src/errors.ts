@@ -187,6 +187,11 @@ declare module "@waitron/shared" {
      * signed.
      */
     "handover.final_copy_changed": { operationId: string };
+    /**
+     * The spare could not reach the box handing over to it, or what that box answered was not
+     * something the spare can act on. The spare asks again by itself.
+     */
+    "handover.source_unreachable": Record<string, never>;
     /** A handover offer reached a box that is not a mirror, so it has no way to take over. */
     "handover.not_a_spare": Record<string, never>;
     /** A handover offer reached a box while an ordinary promotion of it was running. */
