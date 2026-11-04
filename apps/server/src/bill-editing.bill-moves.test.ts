@@ -328,6 +328,23 @@ describe("split a table carries only its moved bill editor", () => {
       ownerId: venue.adminId,
     });
   });
+  it("lets a colleague's draft on a staying bill stand, the split going ahead around it", async () => {
+    const from = await setup();
+    const saved = await save(from.partyId, from.tabId, venue.adminId);
+    const staying = (await billEdits(from.tabId))[0]!;
+    expect(staying.editorId).toBe(venue.adminId);
+    await split(from, [blank(from.billId)]);
+    expect((await billEdits(from.tabId))[0]).toEqual(staying);
+    const [draft] = await venue.db
+      .select()
+      .from(orderDrafts)
+      .where(eq(orderDrafts.id, saved.draft!.id));
+    expect(draft).toMatchObject({
+      partyId: from.partyId,
+      billId: from.tabId,
+      ownerId: venue.adminId,
+    });
+  });
   it("refuses a stale empty bill without creating a party or editor state", async () => {
     const from = await setup();
     const saved = await save(from.partyId, from.billId);

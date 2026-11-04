@@ -3285,6 +3285,7 @@ describe("A803 split", () => {
         ]),
       );
 
+      // A loose dish cannot fire on arrival; the whole bill's can, and it needs the allergy copy first.
       const result = await splitSelected(ana.partyId, m5, {
         wholeBillIds: [b2],
         loose: [loose(b1, agua.id)],

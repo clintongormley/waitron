@@ -498,8 +498,8 @@ describe("a table split off a group renamed for today, as the kitchen sees it", 
 
   it("Table 9 split off an unnamed group with no bill prints no MOVED slip: Counter 6's name is still on the paper", async () => {
     const { table, guests } = await seatedPair(null);
-    await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
-    expect((await kitchenJobs()).length).toBeGreaterThan(0);
+    const sent = await jobsFrom(() => orderForParty(v, guests.partyId, ["Burger"], guests.tabId));
+    expect(sent.length).toBeGreaterThan(0);
 
     const printed = await jobsFrom(() => splitTableOff(guests.partyId, table.t9!, null));
 
@@ -757,6 +757,16 @@ describe("a counter order delivered to a table split off a seated group, as the 
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
     expect(slips[0]!.join(" ")).toContain(fromTo(name, nine));
+  });
+
+  it("a counter order delivered to a table of an unnamed group prints no MOVED slip when the other table is split off: its table keeps its name", async () => {
+    const { table, zoneId, guests } = await seatedPair(null);
+    const sent = await jobsFrom(() => deliveredCounterOrder(zoneId, table.c6!));
+    expect(sent.length).toBeGreaterThan(0);
+
+    const printed = await jobsFrom(() => splitTableOff(guests.partyId, table.t9!, null));
+
+    expect(printed.filter(isMovedSlip)).toEqual([]);
   });
 });
 

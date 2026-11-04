@@ -2,6 +2,7 @@ import { and, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-or
 import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
+  diningTables,
   insertInChunks,
   kitchenCourses,
   kitchenPrintJobLines,
@@ -12,6 +13,7 @@ import {
   printJobs,
   printers,
   stationPrinters,
+  tableNames,
   ticketItems,
   ticketState,
   parties,
@@ -47,6 +49,7 @@ import {
 } from "./kitchen-ticket.js";
 import { readKitchenLanguage } from "./kitchen-language.js";
 import type { KitchenLanguage } from "./i18n/kitchen-ticket.js";
+import { kitchenNotices } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
 import { printJobInTrouble, printedOrResent } from "./print-job-trouble.js";
@@ -1576,13 +1579,32 @@ export async function enqueueMovedSlips(
   toOrderId: string,
   splitFrom: ReadonlyMap<string, string> = new Map(),
 ): Promise<void> {
-  if (before === null) return;
+  await enqueueMovedSlipsOnto(tx, cfg, toOrderId, [{ before, splitFrom }]);
+}
+
+/**
+ * {@link enqueueMovedSlips} for several `sources` now on one order, one slip per source, reading
+ * the order and what the slips print with once.
+ */
+export async function enqueueMovedSlipsOnto(
+  tx: Transaction,
+  cfg: TradingContext,
+  toOrderId: string,
+  sources: readonly { before: SentWork | null; splitFrom: ReadonlyMap<string, string> }[],
+): Promise<void> {
+  const sent = sources.flatMap(({ before, splitFrom }) =>
+    before === null ? [] : [{ before, splitFrom }],
+  );
+  if (sent.length === 0) return;
   const after = (await readPlacedOrders(tx, [toOrderId])).get(toOrderId)!;
-  if (!kitchenToBeTold(before, after.places)) return;
-  const fired = await readTicketItemsOn(tx, [toOrderId]);
-  await notifyMoved(tx, cfg, [
-    { before, to: toOrderId, after, onOrder: fired.get(toOrderId) ?? [], splitFrom },
-  ]);
+  const told = sent.filter(({ before }) => kitchenToBeTold(before, after.places));
+  if (told.length === 0) return;
+  const onOrder = (await readTicketItemsOn(tx, [toOrderId])).get(toOrderId) ?? [];
+  await notifyMoved(
+    tx,
+    cfg,
+    told.map(({ before, splitFrom }) => ({ before, to: toOrderId, after, onOrder, splitFrom })),
+  );
 }
 
 /**
@@ -1699,7 +1721,7 @@ async function notifyMoved(
   const printing = toPrint.length === 0 ? null : await readMovedSlipPrinting(tx, cfg, toPrint);
   const kitchenNotes = await readOrderKitchenNotes(
     tx,
-    printing === null ? [] : told.map((move) => move.to),
+    printing === null ? [] : [...new Set(told.map((move) => move.to))],
   );
   for (const { before, to, after, items } of told) {
     const texts = movedTexts(before.places, after.places, printing?.language ?? cfg.locale);
@@ -1916,44 +1938,211 @@ export async function enqueueMovedSlipsFor(
   cfg: TradingContext,
   before: ReadonlyMap<string, SentWork>,
 ): Promise<void> {
-  await notifyOwnBillsWhere(tx, cfg, before, kitchenToBeTold);
+  await notifyOwnBillsWhere(tx, cfg, before, (work, after) =>
+    kitchenToBeTold(work, after) ? work : null,
+  );
 }
 
 /**
- * {@link enqueueMovedSlipsFor} for the bills `before` read whose kitchen paper printed a name and
- * no longer has any of its names among the order's places.
+ * The names on each sent dish's latest paper, by ticket item, of the tables `before`'s places hold
+ * now. That paper is its ticket, or its last MOVED notice, which is kept per bill, station and dish
+ * name, so two dishes alike on one bill share it. Print jobs are not read: a station with no printer
+ * has none. A paper names the tables the dish's sending party held when it printed
+ * ({@link readTablesHeldOverTime}), a table that joined in the same millisecond counting as held. A
+ * reprint counts for nothing, so a dish reprinted after a join can be told when it need not be. An
+ * order with no party or no table keeps its places' names.
+ */
+export async function readNamesOnPaper(
+  tx: Transaction,
+  before: ReadonlyMap<string, SentWork>,
+): Promise<Map<string, ReadonlySet<string>>> {
+  if (before.size === 0) return new Map();
+  const billIds = [...before.keys()];
+  const items = await tx
+    .select({
+      id: ticketItems.id,
+      billId: ticketItems.workingOrderId,
+      stationId: ticketItems.stationId,
+      firedAt: ticketItems.firedAt,
+      holdPrintedAt: orderGroups.holdPrintedAt,
+      sentParty: orderGroups.numberPartyId,
+      billParty: workingOrders.partyId,
+      name: workingOrderLines.name,
+      kitchenName: workingOrderLines.kitchenName,
+      variantName: workingOrderLines.variantName,
+      variantKitchenName: workingOrderLines.variantKitchenName,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .where(inArray(ticketItems.workingOrderId, billIds));
+  const noticeKey = (billId: string, stationId: string, lineName: string) =>
+    JSON.stringify([billId, stationId, lineName]);
+  const lastNotice = new Map<string, number>();
+  const notices = await tx
+    .select({
+      billId: kitchenNotices.workingOrderId,
+      stationId: kitchenNotices.stationId,
+      lineName: kitchenNotices.lineName,
+      createdAt: kitchenNotices.createdAt,
+    })
+    .from(kitchenNotices)
+    .where(and(eq(kitchenNotices.kind, "moved"), inArray(kitchenNotices.workingOrderId, billIds)));
+  for (const { billId, stationId, lineName, createdAt } of notices) {
+    const key = noticeKey(billId, stationId, lineName);
+    lastNotice.set(key, Math.max(lastNotice.get(key) ?? 0, Date.parse(createdAt)));
+  }
+  const tableIds = [
+    ...new Set([...before.values()].flatMap((work) => work.places.tables.map((table) => table.id))),
+  ];
+  const heldAt = await readTablesHeldOverTime(
+    tx,
+    items.flatMap((item) => item.sentParty ?? item.billParty ?? []),
+    tableIds,
+  );
+  const shown = await tableNames(tx, tableIds);
+
+  const onPaper = new Map<string, ReadonlySet<string>>();
+  for (const item of items) {
+    const work = before.get(item.billId)!;
+    if (!work.ticketItemIds.has(item.id)) continue;
+    const sentParty = item.sentParty ?? item.billParty;
+    if (sentParty === null || work.places.tables.length === 0) {
+      onPaper.set(item.id, new Set(work.places.names));
+      continue;
+    }
+    const printedAt = Math.max(
+      Date.parse((item.firedAt ?? item.holdPrintedAt)!),
+      lastNotice.get(noticeKey(item.billId, item.stationId, kitchenPresentationName(item))) ?? 0,
+    );
+    const onItsPaper = heldAt(sentParty, printedAt);
+    onPaper.set(
+      item.id,
+      new Set(
+        work.places.tables.flatMap((table) =>
+          onItsPaper.has(table.id) ? shown.get(table.id)!.shown : [],
+        ),
+      ),
+    );
+  }
+  return onPaper;
+}
+
+/**
+ * A reader of which of `tableIds` a party held at a time, in epoch milliseconds, or, when it held
+ * none then, the first party along its merges that did. A closed party's rows are gone, and it keeps
+ * only the label of every table it ever held, so up to its closing it answers all of those: a table
+ * it joined after that time counts as held.
+ */
+async function readTablesHeldOverTime(
+  tx: Transaction,
+  partyIds: readonly string[],
+  tableIds: readonly string[],
+): Promise<(partyId: string, at: number) => ReadonlySet<string>> {
+  const { rows } = await tx.execute<{ id: string }>(sql`
+    with recursive chain(id, next) as (
+      select id, merged_into_party_id from parties
+      where id in (select value from json_each(${JSON.stringify([...new Set(partyIds)])}))
+      union
+      select p.id, p.merged_into_party_id from parties p join chain c on p.id = c.next
+    )
+    select id from chain
+  `);
+  const chainIds = rows.map((row) => row.id);
+  const chain = await tx
+    .select({
+      id: parties.id,
+      next: parties.mergedIntoPartyId,
+      closedAt: parties.closedAt,
+      tableNames: parties.tableNames,
+    })
+    .from(parties)
+    .where(inArray(parties.id, chainIds));
+  const partyById = new Map(chain.map((party) => [party.id, party]));
+  const seats = await tx
+    .select({
+      partyId: partyTables.partyId,
+      tableId: partyTables.tableId,
+      joinedAt: partyTables.joinedAt,
+      leftAt: partyTables.leftAt,
+    })
+    .from(partyTables)
+    .where(inArray(partyTables.partyId, chainIds));
+  const tables = await tx
+    .select({ id: diningTables.id, label: diningTables.label })
+    .from(diningTables)
+    .where(inArray(diningTables.id, [...tableIds]));
+  return (partyId, at) => {
+    const seen = new Set<string>();
+    let party = partyById.get(partyId);
+    while (party !== undefined && !seen.has(party.id)) {
+      seen.add(party.id);
+      const { id, closedAt, tableNames } = party;
+      const held =
+        closedAt === null
+          ? seats
+              .filter(
+                (seat) =>
+                  seat.partyId === id &&
+                  Date.parse(seat.joinedAt) <= at &&
+                  (seat.leftAt === null || Date.parse(seat.leftAt) >= at),
+              )
+              .map((seat) => seat.tableId)
+          : at < Date.parse(closedAt)
+            ? tables.filter((table) => tableNames?.includes(table.label)).map((table) => table.id)
+            : [];
+      if (held.length > 0) return new Set(held);
+      party = party.next === null ? undefined : partyById.get(party.next);
+    }
+    return new Set();
+  };
+}
+
+/**
+ * {@link enqueueMovedSlipsFor} for the dishes of `before` no name on whose paper
+ * ({@link readNamesOnPaper}) is still one of their order's places, so long as the order had a name
+ * at all. One slip per order, naming only those dishes.
  */
 export async function enqueueMovedSlipsForNamesGone(
   tx: Transaction,
   cfg: TradingContext,
   before: ReadonlyMap<string, SentWork>,
+  namesOnPaper: ReadonlyMap<string, ReadonlySet<string>>,
 ): Promise<void> {
   await notifyOwnBillsWhere(tx, cfg, before, (work, after) => {
-    const names = new Set(after.names);
-    return work.places.names.length > 0 && !work.places.names.some((name) => names.has(name));
+    if (work.places.names.length === 0) return null;
+    const stillThere = (name: string) => after.names.includes(name);
+    const gone = [...work.ticketItemIds].filter(
+      (id) => ![...namesOnPaper.get(id)!].some(stillThere),
+    );
+    return gone.length === 0 ? null : { ...work, ticketItemIds: new Set(gone) };
   });
 }
 
-/** Tells the kitchen of each bill `before` read, onto the bill itself, where `toBeTold` says so. */
+/** Tells the kitchen of each bill `before` read, onto the bill itself, of the work `told` picks. */
 async function notifyOwnBillsWhere(
   tx: Transaction,
   cfg: TradingContext,
   before: ReadonlyMap<string, SentWork>,
-  toBeTold: (work: SentWork, after: OrderPlaces) => boolean,
+  told: (work: SentWork, after: OrderPlaces) => SentWork | null,
 ): Promise<void> {
   if (before.size === 0) return;
   const now = await readPlacedOrders(tx, [...before.keys()]);
-  const changed = [...before].filter(([billId, work]) => toBeTold(work, now.get(billId)!.places));
+  const changed = [...before].flatMap(([billId, work]) => {
+    const picked = told(work, now.get(billId)!.places);
+    return picked === null ? [] : [{ billId, picked }];
+  });
   if (changed.length === 0) return;
   const onOrders = await readTicketItemsOn(
     tx,
-    changed.map(([billId]) => billId),
+    changed.map(({ billId }) => billId),
   );
   await notifyMoved(
     tx,
     cfg,
-    changed.map(([billId, work]) => ({
-      before: work,
+    changed.map(({ billId, picked }) => ({
+      before: picked,
       to: billId,
       after: now.get(billId)!,
       onOrder: onOrders.get(billId) ?? [],

@@ -23,9 +23,10 @@ import { VENUE_SERVICE } from "./modules.js";
 import { withMovedSlips, type SlipsLater } from "./moved-slips.js";
 import { moveBillDraftsToParty, moveDraftsToParty } from "./order-drafts.js";
 import {
-  enqueueMovedSlips,
   enqueueMovedSlipsFor,
   enqueueMovedSlipsForNamesGone,
+  enqueueMovedSlipsOnto,
+  readNamesOnPaper,
   readPartiesSentWork,
 } from "./kitchen-print.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
@@ -366,6 +367,9 @@ export async function splitTable(
   // Read while held dishes are still in their groups and loose dishes still on their sources: what
   // the kitchen is told at the end is measured against this.
   const sentWork = await readPartiesSentWork(tx, [partyId]);
+  const wholeIds = new Set(wholeBillIds);
+  const notWhole = new Map([...sentWork].filter(([billId]) => !wholeIds.has(billId)));
+  const namesOnPaper = await readNamesOnPaper(tx, notWhole);
   await leaveTables(tx, [tableId]);
   const [table] = await tx
     .select({ zoneId: diningTables.zoneId })
@@ -436,19 +440,22 @@ export async function splitTable(
   await printHoldTickets(tx, cfg, heldGroups);
   if (leaving.length > 0) await ensureFamilyBill(tx, cfg, partyId);
   await leaveMergesRestoring(tx, [tableId]);
-  const wholeIds = new Set(wholeBillIds);
   await enqueueMovedSlipsFor(
     tx,
     cfg,
     new Map([...sentWork].filter(([billId]) => wholeIds.has(billId))),
   );
-  for (const { billId, splitFrom } of carved)
-    await enqueueMovedSlips(tx, cfg, sentWork.get(billId) ?? null, newBill!, splitFrom);
-  await enqueueMovedSlipsForNamesGone(
-    tx,
-    cfg,
-    new Map([...sentWork].filter(([billId]) => !wholeIds.has(billId))),
-  );
+  if (newBill !== null)
+    await enqueueMovedSlipsOnto(
+      tx,
+      cfg,
+      newBill,
+      carved.map(({ billId, splitFrom }) => ({
+        before: sentWork.get(billId) ?? null,
+        splitFrom,
+      })),
+    );
+  await enqueueMovedSlipsForNamesGone(tx, cfg, notWhole, namesOnPaper);
   return {
     partyId: newParty,
     billIds: await shownBillIds(tx, cfg, newParty),
