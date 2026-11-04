@@ -19,10 +19,11 @@ import {
   readRawJsonBody,
   requireManagementSession,
 } from "@waitron/server-kit";
-import { AppError, isUuid } from "@waitron/shared";
+import { AppError, isAppError, isUuid } from "@waitron/shared";
 import { askPeerStatus, originOf, postToBox } from "./boot-peer-check.js";
 import { confirmFreshSignIn } from "./fresh-sign-in.js";
 import { currentBinding, peerKeyOf, signAsThisBox } from "./handover-signing.js";
+import type { HandoverGate } from "./handover-gate.js";
 import { handoverPageAt, handoverPageOf } from "./handover-status-api.js";
 import {
   abandonHandover,
@@ -43,6 +44,7 @@ export interface HandoverSourceStartDeps extends PeerStatusApiDeps {
   origin: string;
   /** Whether an enabled module can prepare the spare's promotion. */
   venueCanPromote: boolean;
+  gate: Pick<HandoverGate, "isClosed">;
   /** Runs once the spare has accepted the offer. */
   stepDownAfterOffer: (c: Context, binding: HandoverBinding) => Promise<void>;
   peerTimeoutMs?: number;
@@ -80,6 +82,9 @@ const STATUS = {
   "handover.destination_unreachable": 409,
   "handover.restarted_before_stepdown": 409,
   "handover.membership_changed": 409,
+  "handover.restriction_conflict": 409,
+  "handover.step_out_of_order": 409,
+  "server.internal": 500,
 } as const;
 
 const FIELD_NAME = /^[A-Za-z][A-Za-z.]{0,63}$/;
@@ -147,6 +152,11 @@ function refusalIn(text: string): HandoverRefusal | null {
   const value = isRecord(error.params) ? error.params[param.name] : undefined;
   if (!param.isValid(value)) return null;
   return { code, params: { [param.name]: value as string } };
+}
+
+function refusalOf(error: unknown): HandoverRefusal {
+  if (!isAppError(error)) return { code: "server.internal", params: {} };
+  return { code: error.code, params: error.params as HandoverRefusal["params"] };
 }
 
 /** `id`'s entry in `held`, when the chart names it a spare. */
@@ -231,7 +241,15 @@ export function mountHandoverSourceStartApi(
   ): Promise<{ handoverPage: string }> => {
     const refused = await answerToOffer(binding, contactUrl, envelope);
     if (refused !== null) return abandon(binding.operationId, refused);
-    await deps.stepDownAfterOffer(c, binding);
+    try {
+      await deps.stepDownAfterOffer(c, binding);
+    } catch (error) {
+      // An open gate means nothing was stopped. Once it has closed the box is restarting, perhaps
+      // already stepped down, so `abandoned` could be false.
+      if (deps.gate.isClosed()) throw error;
+      await abandonHandover(deps, binding.operationId, refusalOf(error));
+      throw error;
+    }
     return { handoverPage: handoverPageAt(contactUrl, binding.operationId) };
   };
 

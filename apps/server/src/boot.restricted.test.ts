@@ -1,16 +1,25 @@
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { readNodeMembership, withNodeTransaction } from "@waitron/db";
+import {
+  readNodeMembership,
+  stampDeployment,
+  withNodeTransaction,
+  writeNodeMembership,
+} from "@waitron/db";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
 import { signEnvelope, verifyEnvelope } from "@waitron/handover";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import {
+  endorseKey,
   generateNodeKeyPair,
   signDocumentBody,
+  type CanonicalValue,
   type MembershipDocumentBody,
 } from "@waitron/membership";
 import { emptyDrainResult } from "@waitron/fiscal";
@@ -79,9 +88,11 @@ async function boot(
     restricted: boolean;
     seams?: StartServerSeams;
     beforeStart?: (venue: Venue) => Promise<void>;
+    /** Runs once the box has its identity and first chart, so it can sign another. */
+    beforeListening?: (nodeId: string, privateKey: string) => Promise<void>;
     tls?: boolean;
   },
-): Promise<{ port: number; venue: Venue }> {
+): Promise<{ port: number; venue: Venue; env: Record<string, string> }> {
   beforeServerStarts();
   const venue = await setupVenue(suite.db);
   await options.beforeStart?.(venue);
@@ -94,6 +105,7 @@ async function boot(
     "https://box.example",
   );
   await pinMainBoxKey(suite.node, nodeId, MAIN_BOX);
+  await options.beforeListening?.(nodeId, await readNodeIdentityKey(suite.node, ring, nodeId));
   if (options.restricted) {
     await withNodeTransaction(suite.node, (tx) =>
       recordHandoverRestrictionTx(tx, {
@@ -135,7 +147,7 @@ async function boot(
     await ensureBoxSecrets({ stateDir: scratch, hostnames: ["localhost"], now: () => new Date() });
     server = await startServer(env, env, options.seams);
     await awaitListening(httpPort());
-    return { port: httpPort(), venue };
+    return { port: httpPort(), venue, env };
   }
   server = await startServer(env, env, options.seams);
   await vi.waitFor(
@@ -144,7 +156,7 @@ async function boot(
     },
     { timeout: 10_000 },
   );
-  return { port: httpPort(), venue };
+  return { port: httpPort(), venue, env };
 }
 
 const FINAL_COPY_OP = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -472,6 +484,222 @@ describe("a full start's stepdown, through its test seam", () => {
     expect((await readHandoverOperation(suite.node, nodeId, operationId))?.state).toBe("abandoned");
     expect(await readHandoverRestriction(suite.node, nodeId)).toBeNull();
   }, 60_000);
+
+  describe("a controlled handover on real starts", () => {
+    const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const OTHER_BOX_OP = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const SPARE = { nodeId: "00000000-0000-4000-8000-0000000000cc", ...generateNodeKeyPair() };
+    const OTHER_BOX = "00000000-0000-4000-8000-0000000000dd";
+
+    let spare: Server | undefined;
+    let spareUrl = "";
+
+    afterEach(async () => {
+      if (spare !== undefined) await new Promise((done) => spare!.close(done));
+      spare = undefined;
+      suite.node.run(sql`drop trigger if exists refuse_restriction`);
+    });
+
+    /** Answers the query and the offer as a spare does, under the key the chart endorses. */
+    async function listenAsSpare(): Promise<void> {
+      spare = createServer((request, response) => {
+        let text = "";
+        request.on("data", (chunk: Buffer) => (text += chunk.toString()));
+        request.on("end", () => {
+          const { body } = JSON.parse(text) as {
+            body: {
+              nonce?: string;
+              binding?: { operationId: string; sourceNodeId: string };
+            };
+          };
+          const answer: CanonicalValue =
+            body.binding === undefined
+              ? {
+                  nonce: body.nonce!,
+                  heldMembership: null,
+                  restriction: null,
+                  openOperation: null,
+                  requestedOperation: null,
+                }
+              : {
+                  operationId: body.binding.operationId,
+                  role: "destination",
+                  scenario: "controlled",
+                  state: "prepared",
+                  sourceNodeId: body.binding.sourceNodeId,
+                  destinationNodeId: SPARE.nodeId,
+                  waitingReason: null,
+                };
+          response.setHeader("content-type", "application/json");
+          response.end(
+            JSON.stringify(
+              signEnvelope("status", answer, {
+                nodeId: SPARE.nodeId,
+                privateKey: SPARE.privateKey,
+              }),
+            ),
+          );
+        });
+      });
+      await new Promise<void>((done) => spare!.listen(0, "127.0.0.1", done));
+      spareUrl = `http://127.0.0.1:${(spare.address() as AddressInfo).port}`;
+    }
+
+    const holdChartNamingSpare = async (nodeId: string, privateKey: string): Promise<void> => {
+      const body: MembershipDocumentBody = {
+        term: 1,
+        nodes: [
+          { nodeId, contactUrl: "https://box.example", standing: "serving-primary" },
+          { nodeId: SPARE.nodeId, contactUrl: spareUrl, standing: "serving-secondary" },
+        ],
+      };
+      await writeNodeMembership(suite.db, {
+        body,
+        signerNodeId: nodeId,
+        signature: signDocumentBody(body, privateKey),
+        endorsements: [endorseKey(SPARE.nodeId, SPARE.publicKey, nodeId, privateKey)],
+      });
+    };
+
+    const overTls = async (
+      port: number,
+      path: string,
+      init: RequestInit = {},
+    ): Promise<{ status: number; body: unknown }> => {
+      const { via, close } = httpsVia(await readFile(join(scratch!, "tls", "ca.crt")));
+      try {
+        const response = await fetch(`https://127.0.0.1:${port}${path}`, { ...via, ...init });
+        return { status: response.status, body: await response.json().catch(() => null) };
+      } finally {
+        await close();
+      }
+    };
+
+    const startOnce = async (restart: () => void, beforeStart?: () => void) => {
+      let cookie = "";
+      const started = await boot(suite, {
+        restricted: false,
+        tls: true,
+        seams: { stepdown: { restart, mount: () => {} } },
+        beforeStart: async () => {
+          cookie = await adminCookie();
+          await stampDeployment(suite.db, "preproduction");
+          beforeStart?.();
+        },
+        beforeListening: holdChartNamingSpare,
+      });
+      return { ...started, cookie };
+    };
+
+    const startAgain = async (env: Record<string, string>): Promise<number> => {
+      await server!.close();
+      beforeServerStarts();
+      server = await startServer(env, env);
+      await awaitListening(httpPort());
+      return httpPort();
+    };
+
+    it("answers the page and restarts, and the restricted start answers a retry from its own row", async () => {
+      await listenAsSpare();
+      const restart = vi.fn();
+      const { port, venue, env, cookie } = await startOnce(restart);
+      const nodeId = venue.cfg.nodeId;
+
+      expect(await overTls(port, "/management-api/handover", handoverRequest(cookie))).toEqual({
+        status: 200,
+        body: { handoverPage: `${spareUrl}/handover/${OP}` },
+      });
+      await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+      expect((await readHandoverOperation(suite.node, nodeId, OP))?.state).toBe(
+        "source_stepped_down",
+      );
+      expect(await readHandoverRestriction(suite.node, nodeId)).toMatchObject({
+        operationId: OP,
+        kind: "handed-over",
+        successorNodeId: SPARE.nodeId,
+      });
+
+      await beginHandover(
+        { node: suite.node, nodeId: OTHER_BOX },
+        {
+          operationId: OTHER_BOX_OP,
+          scenario: "controlled",
+          venue: { country: "ES", taxId: "B12345678", environment: "preproduction" },
+          sourceNodeId: OTHER_BOX,
+          destinationNodeId: SPARE.nodeId,
+          membership: { term: 1, digest: "a".repeat(64) },
+        },
+        "source",
+      );
+      const restrictedPort = await startAgain(env);
+
+      const retry = await overTls(restrictedPort, `/api/node/handover/${OP}`);
+      expect(retry.status).toBe(200);
+      const key = nodeSigningPublicKey(
+        await readNodeIdentityKey(suite.node, loadKeyRing(KEY_ENV), nodeId),
+      );
+      const verdict = verifyEnvelope<{ state: string; handoverPage: string }>(
+        retry.body,
+        "status",
+        (id) => (id === nodeId ? key : undefined),
+      );
+      expect(verdict).toMatchObject({
+        valid: true,
+        signerNodeId: nodeId,
+        body: {
+          operationId: OP,
+          state: "source_stepped_down",
+          handoverPage: `${spareUrl}/handover/${OP}`,
+        },
+      });
+
+      expect(await overTls(restrictedPort, `/api/node/handover/${OTHER_BOX_OP}`)).toMatchObject({
+        status: 404,
+        body: { error: { code: "handover.operation_unknown" } },
+      });
+      const post = await overTls(
+        restrictedPort,
+        "/management-api/handover",
+        handoverRequest(cookie),
+      );
+      expect(post.status).toBe(404);
+    }, 90_000);
+
+    it("a stepdown whose write fails restarts the box as a normal one, whose start leaves it `abandoned`", async () => {
+      await listenAsSpare();
+      const restart = vi.fn();
+      const { port, venue, env, cookie } = await startOnce(restart, () => {
+        suite.node.run(
+          sql`create trigger refuse_restriction before insert on node_handover_restriction
+              begin select raise(abort, 'the write fails here'); end`,
+        );
+      });
+      const nodeId = venue.cfg.nodeId;
+
+      expect(await overTls(port, "/management-api/handover", handoverRequest(cookie))).toEqual({
+        status: 500,
+        body: { error: { code: "server.internal" } },
+      });
+      await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+      expect((await readHandoverOperation(suite.node, nodeId, OP))?.state).toBe("prepared");
+      expect(await readHandoverRestriction(suite.node, nodeId)).toBeNull();
+
+      suite.node.run(sql`drop trigger refuse_restriction`);
+      const nextPort = await startAgain(env);
+
+      expect((await readHandoverOperation(suite.node, nodeId, OP))?.state).toBe("abandoned");
+      expect(await overTls(nextPort, `/api/node/handover/${OP}`)).toMatchObject({
+        status: 200,
+        body: { body: { operationId: OP, state: "abandoned" } },
+      });
+      expect(
+        await overTls(nextPort, "/management-api/handover", handoverRequest(cookie)),
+      ).toMatchObject({
+        status: 409,
+        body: { error: { code: "handover.restarted_before_stepdown" } },
+      });
+    }, 90_000);
+  });
 
   it("a full start answers a peer's signed query", async () => {
     const { port, venue } = await boot(suite, { restricted: false });

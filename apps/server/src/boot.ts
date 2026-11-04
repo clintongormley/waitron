@@ -3398,7 +3398,10 @@ async function bootServer(
       rpId: config.managementRpId,
       origin: config.managementOrigin,
       venueCanPromote: nodePreparation.hasRecoveryOperation,
-      stepDownAfterOffer: async () => {},
+      gate: handoverGate,
+      stepDownAfterOffer: async (c, binding) => {
+        await stepDownHere({ binding, kind: "handed-over", self: c });
+      },
     },
     log,
   );

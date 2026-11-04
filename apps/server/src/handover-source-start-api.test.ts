@@ -8,6 +8,7 @@ import {
   CORE_MIGRATIONS,
   readTenant,
   stampDeployment,
+  withNodeTransaction,
   writeNodeMembership,
   type Database,
   type NodeDatabase,
@@ -41,9 +42,11 @@ import {
   nodeHandoverEvents,
   nodeHandoverOperations,
   readHandoverRestriction,
+  recordHandoverRestrictionTx,
   setNodeMode,
 } from "@waitron/node-db";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import type { BackgroundDuties } from "./background-duties.js";
 import { createHandoverGate, type HandoverGate } from "./handover-gate.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
 import { promotionTurn } from "./handover-promotion-turn.js";
@@ -52,6 +55,7 @@ import {
   type HandoverSourceStartDeps,
 } from "./handover-source-start-api.js";
 import { mountHandoverStatusApi } from "./handover-status-api.js";
+import { stepDown } from "./handover-stepdown.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
@@ -131,9 +135,13 @@ async function holdChart(
   for (const db of boxes) await writeNodeMembership(db, held);
 }
 
-function mount(overrides: Partial<HandoverSourceStartDeps> = {}): Hono {
+function mount(
+  overrides: Partial<HandoverSourceStartDeps> = {},
+  behindTheGate: (built: Hono) => void = () => {},
+): Hono {
   const built = new Hono();
   built.use("*", gate.middleware);
+  behindTheGate(built);
   mountHandoverSourceStartApi(
     built,
     {
@@ -146,6 +154,7 @@ function mount(overrides: Partial<HandoverSourceStartDeps> = {}): Hono {
       rpId: "localhost",
       origin: "http://localhost",
       venueCanPromote: true,
+      gate,
       stepDownAfterOffer,
       peerTimeoutMs: 50,
       fetch: ((url: string, init: RequestInit) => {
@@ -1141,5 +1150,433 @@ describe("two requests at once", () => {
     await start();
     await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spare, "mirror");
     expect((await start({ operationId: NEXT_OP })).status).toBe(200);
+  });
+});
+
+describe("with the real stepdown", () => {
+  const SPARE_PAGE = { handoverPage: `${SPARE_URL}/handover/${OP}` };
+  const STEPPING_DOWN = refusal(503, "handover.stepping_down");
+  const INTERNAL = { status: 500, body: { error: { code: "server.internal" } } };
+  const OTHER_RESTRICTION = {
+    operationId: null,
+    kind: "superseded" as const,
+    successorNodeId: OTHER_BOX,
+    membershipTerm: 1,
+  };
+
+  let restart: ReturnType<typeof vi.fn<() => void>>;
+  let close: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  let duties: BackgroundDuties;
+  let holdNextStart: Promise<void> | null;
+  let slowWork: Promise<void>;
+
+  beforeEach(() => {
+    restart = vi.fn<() => void>();
+    close = vi.fn<() => Promise<void>>(async () => {});
+    duties = { aborts: [], closers: [] };
+    holdNextStart = null;
+    slowWork = Promise.resolve();
+  });
+
+  /** A route behind the gate, and a way to hold a request just past it. */
+  function realBox(changeBinding: (binding: HandoverBinding) => HandoverBinding = (b) => b): Hono {
+    const box = { db: mainBox.db, node: mainBox.node as NodeDatabase, ring: RING, nodeId: self };
+    return mount(
+      {
+        stepDownAfterOffer: async (c, binding) => {
+          await stepDown(
+            { node: box.node, nodeId: self, gate, duties, close, restart, log: () => undefined },
+            { binding: changeBinding(binding), kind: "handed-over", self: c },
+          );
+        },
+      },
+      (built) => {
+        built.use(ROUTE, async (_c, next) => {
+          const hold = holdNextStart;
+          holdNextStart = null;
+          if (hold !== null) await hold;
+          await next();
+        });
+        built.post("/slow", async (c) => {
+          await slowWork;
+          return c.json({ done: true });
+        });
+        mountHandoverStatusApi(built, box, () => undefined);
+        mountPeerStatusApi(built, box, () => undefined);
+      },
+    );
+  }
+
+  /** Lets a timer run, where a restart that was wrongly scheduled would have shown. */
+  const aTurnLater = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+  const stateOf = (operationId = OP) =>
+    operations().find((row) => row.operationId === operationId)?.state;
+  const eventKinds = () => events().map((row) => row.kind);
+
+  async function statusRead(on: Hono): Promise<{ state: string; handoverPage?: string }> {
+    const response = await on.request(`/api/node/handover/${OP}`);
+    expect(response.status).toBe(200);
+    const { body } = (await response.json()) as {
+      body: { state: string; handoverPage?: string };
+    };
+    return body;
+  }
+
+  async function saleStatus(on: Hono): Promise<number> {
+    return (await on.request("/sale", { method: "POST" })).status;
+  }
+
+  async function expectRestartedOnce(): Promise<void> {
+    await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1));
+    await aTurnLater();
+    expect(restart).toHaveBeenCalledTimes(1);
+  }
+
+  /** The first check refused: nothing was stopped, so nothing restarts. */
+  async function expectStillOpen(on: Hono): Promise<void> {
+    await aTurnLater();
+    expect(gate.isClosed()).toBe(false);
+    expect(restart).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+    expect(await saleStatus(on)).toBe(200);
+  }
+
+  function failRestrictionWrites(): void {
+    mainBox.node.run(
+      sql`create trigger refuse_restriction before insert on node_handover_restriction
+          begin select raise(abort, 'the write fails here'); end`,
+    );
+  }
+
+  const allowRestrictionWrites = () => mainBox.node.run(sql`drop trigger refuse_restriction`);
+
+  describe("a valid start", () => {
+    it("records `prepared`, offers, steps down, and the caller receives the page address", async () => {
+      const box = realBox();
+
+      expect(await start({}, box)).toEqual({ status: 200, body: SPARE_PAGE });
+
+      expect(exchanged).toEqual([QUERY_PATH, OFFER_PATH]);
+      expect(operations(spareBox).map((row) => row.state)).toEqual(["prepared"]);
+      expect(stateOf()).toBe("source_stepped_down");
+      expect(eventKinds()).toEqual(["offer", "source_stepped_down"]);
+      expect(await readHandoverRestriction(mainBox.node, self)).toMatchObject({
+        operationId: OP,
+        kind: "handed-over",
+        successorNodeId: spare,
+        membershipTerm: 3,
+      });
+      expect(gate.isClosed()).toBe(true);
+      expect(await saleStatus(box)).toBe(503);
+      await expectRestartedOnce();
+      expect(close.mock.invocationCallOrder[0]!).toBeLessThan(restart.mock.invocationCallOrder[0]!);
+    });
+
+    it("answers before the wait for admitted work and the restart", async () => {
+      let finishSlowWork!: () => void;
+      slowWork = new Promise((resolve) => (finishSlowWork = resolve));
+      const box = realBox();
+      const slow = box.request("/slow", { method: "POST" });
+      await aTurnLater();
+
+      expect(await start({}, box)).toEqual({ status: 200, body: SPARE_PAGE });
+
+      await aTurnLater();
+      expect(close).not.toHaveBeenCalled();
+      expect(restart).not.toHaveBeenCalled();
+      finishSlowWork();
+      expect((await slow).status).toBe(200);
+      await expectRestartedOnce();
+    });
+  });
+
+  describe("a stepdown refused at its first check", () => {
+    it("a conflicting restriction: `abandoned`, the box selling, and a repeat answers the same", async () => {
+      await withNodeTransaction(mainBox.node, (tx) =>
+        recordHandoverRestrictionTx(tx, { nodeId: self, ...OTHER_RESTRICTION }),
+      );
+      const box = realBox();
+      const refused = refusal(409, "handover.restriction_conflict");
+
+      expect(await start({}, box)).toEqual(refused);
+
+      expect(stateOf()).toBe("abandoned");
+      expect(eventKinds()).toEqual(["offer", "abandoned"]);
+      expect(events()[1]!.detail).toEqual({ code: "handover.restriction_conflict", params: {} });
+      await expectStillOpen(box);
+
+      exchanged = [];
+      expect(await start({}, box)).toEqual(refused);
+      expect(exchanged).toEqual([]);
+    });
+
+    it("a conflicting binding: `abandoned`, the box selling, and a new handover allowed", async () => {
+      const tampered = realBox((binding) => ({
+        ...binding,
+        membership: { ...binding.membership, term: binding.membership.term + 1 },
+      }));
+
+      expect(await start({}, tampered)).toEqual(
+        refusal(409, "handover.operation_conflict", { operationId: OP }),
+      );
+
+      await expectAbandoned("handover.operation_conflict", { operationId: OP });
+      await expectStillOpen(tampered);
+
+      // Stands in for the spare's own closing of the offer it took, which is a later piece.
+      await advanceHandover({ node: spareBox.node, nodeId: spare }, OP, "abandoned", {});
+      expect(await start({ operationId: NEXT_OP }, realBox())).toEqual({
+        status: 200,
+        body: { handoverPage: `${SPARE_URL}/handover/${NEXT_OP}` },
+      });
+      expect(stateOf(NEXT_OP)).toBe("source_stepped_down");
+    });
+
+    it("a first check that cannot read: `abandoned` as a fault, and a repeat answers the fault", async () => {
+      const box = realBox();
+      mainBox.node.run(sql`alter table node_handover_restriction rename to hidden_restriction`);
+      try {
+        expect(await start({}, box)).toEqual(INTERNAL);
+      } finally {
+        mainBox.node.run(sql`alter table hidden_restriction rename to node_handover_restriction`);
+      }
+
+      expect(stateOf()).toBe("abandoned");
+      expect(events()[1]!.detail).toEqual({ code: "server.internal", params: {} });
+      await expectStillOpen(box);
+      expect(await start({}, box)).toEqual(refusal(500, "server.internal"));
+    });
+
+    it("a refusal that cannot be recorded leaves `prepared` and the box selling", async () => {
+      const box = realBox();
+      await withNodeTransaction(mainBox.node, (tx) =>
+        recordHandoverRestrictionTx(tx, { nodeId: self, ...OTHER_RESTRICTION }),
+      );
+      mainBox.node.run(
+        sql`create trigger refuse_event before insert on node_handover_events
+            when new.kind = 'abandoned'
+            begin select raise(abort, 'the record fails here'); end`,
+      );
+      try {
+        expect(await start({}, box)).toEqual(INTERNAL);
+      } finally {
+        mainBox.node.run(sql`drop trigger refuse_event`);
+      }
+
+      expect(stateOf()).toBe("prepared");
+      await expectStillOpen(box);
+    });
+  });
+
+  describe("a stepdown whose write fails", () => {
+    it("answers the failure and restarts, and the next start leaves it `abandoned`, which the spare's next read sees", async () => {
+      const box = realBox();
+      failRestrictionWrites();
+      try {
+        expect(await start({}, box)).toEqual(INTERNAL);
+        expect(stateOf()).toBe("prepared");
+        expect(eventKinds()).toEqual(["offer"]);
+        expect(await readHandoverRestriction(mainBox.node, self)).toBeNull();
+        expect(gate.isClosed()).toBe(true);
+        expect(await start({}, box)).toEqual(STEPPING_DOWN);
+        await expectRestartedOnce();
+      } finally {
+        allowRestrictionWrites();
+      }
+
+      await repairAtStart({ node: mainBox.node, nodeId: self });
+      gate = createHandoverGate();
+      const nextStart = realBox();
+
+      expect(await saleStatus(nextStart)).toBe(200);
+      expect(await statusRead(nextStart)).toMatchObject({ state: "abandoned" });
+      const query = signEnvelope(
+        "query",
+        { nonce: "n".repeat(20), atMs: 1, operationId: OP },
+        { nodeId: spare, privateKey: spareKey },
+      );
+      const read = await nextStart.request(QUERY_PATH, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(query),
+      });
+      expect(await read.json()).toMatchObject({
+        body: { requestedOperation: { operationId: OP, state: "abandoned" } },
+      });
+      expect(await start({}, nextStart)).toEqual(
+        refusal(409, "handover.restarted_before_stepdown"),
+      );
+    });
+
+    it("a write refused with the first check's own code still records nothing further", async () => {
+      duties = {
+        aborts: [
+          {
+            name: "changes the operation after the first check",
+            abort: () => {
+              mainBox.node.update(nodeHandoverOperations).set({ fingerprint: "changed" }).run();
+            },
+          },
+        ],
+        closers: [],
+      };
+      const box = realBox();
+
+      expect(await start({}, box)).toEqual(
+        refusal(409, "handover.operation_conflict", { operationId: OP }),
+      );
+
+      expect(stateOf()).toBe("prepared");
+      expect(eventKinds()).toEqual(["offer"]);
+      expect(gate.isClosed()).toBe(true);
+      await expectRestartedOnce();
+    });
+  });
+
+  describe("a stepdown whose write is refused because the operation moved", () => {
+    it("answers a conflict, not a malformed request, and records nothing further", async () => {
+      duties = {
+        aborts: [
+          {
+            name: "moves the operation after the first check",
+            abort: () => {
+              mainBox.node.update(nodeHandoverOperations).set({ state: "abandoned" }).run();
+            },
+          },
+        ],
+        closers: [],
+      };
+
+      const answer = await start({}, realBox());
+
+      expect(answer).toEqual(
+        refusal(409, "handover.step_out_of_order", {
+          from: "abandoned",
+          to: "source_stepped_down",
+        }),
+      );
+      expect(eventKinds()).toEqual(["offer"]);
+      expect(gate.isClosed()).toBe(true);
+      await expectRestartedOnce();
+    });
+  });
+
+  describe("another stepdown that got there first", () => {
+    it("a first check refused behind a closed gate records nothing further", async () => {
+      const stepDownDeps = {
+        node: mainBox.node as NodeDatabase,
+        nodeId: self,
+        gate,
+        duties,
+        close,
+        restart,
+        log: () => undefined,
+      };
+      exchange = offerAnswers(async (path, init) => {
+        await stepDown(stepDownDeps, {
+          kind: "superseded",
+          successorNodeId: OTHER_BOX,
+          membershipTerm: 4,
+          self: {} as Context,
+        });
+        return toSpare(path, init);
+      });
+
+      expect(await start({}, realBox())).toEqual(refusal(409, "handover.restriction_conflict"));
+
+      expect(stateOf()).toBe("prepared");
+      expect(eventKinds()).toEqual(["offer"]);
+      expect(await readHandoverRestriction(mainBox.node, self)).toMatchObject({
+        kind: "superseded",
+      });
+      await expectRestartedOnce();
+    });
+  });
+
+  describe("a stepdown whose signal to the duties fails", () => {
+    it("records nothing further, restarts restricted, and a retry reads the status", async () => {
+      duties = {
+        aborts: [
+          {
+            name: "throws",
+            abort: () => {
+              throw new Error("the signal fails here");
+            },
+          },
+        ],
+        closers: [],
+      };
+      const box = realBox();
+
+      expect(await start({}, box)).toEqual(INTERNAL);
+
+      expect(stateOf()).toBe("source_stepped_down");
+      expect(eventKinds()).toEqual(["offer", "source_stepped_down"]);
+      expect(await readHandoverRestriction(mainBox.node, self)).toMatchObject({ operationId: OP });
+      expect(gate.isClosed()).toBe(true);
+      await expectRestartedOnce();
+
+      expect(await start({}, box)).toEqual(STEPPING_DOWN);
+      expect(await statusRead(box)).toMatchObject({
+        state: "source_stepped_down",
+        handoverPage: SPARE_PAGE.handoverPage,
+      });
+    });
+  });
+
+  describe("a request admitted before the gate closed, running after", () => {
+    /** Runs a first start while a second waits just past the gate, then lets the second go on. */
+    async function secondAfterFirst(
+      box: Hono,
+      second: Record<string, unknown> = {},
+    ): Promise<{ first: unknown; second: unknown }> {
+      let release!: () => void;
+      holdNextStart = new Promise((resolve) => (release = resolve));
+      const held = start(second, box);
+      await aTurnLater();
+      const first = await start({}, box);
+      expect(gate.isClosed()).toBe(true);
+      exchanged = [];
+      release();
+      return { first, second: await held };
+    }
+
+    it("after a stepdown: the same operation answers the page, asking the spare nothing", async () => {
+      const answers = await secondAfterFirst(realBox());
+
+      expect(answers).toEqual({
+        first: { status: 200, body: SPARE_PAGE },
+        second: { status: 200, body: SPARE_PAGE },
+      });
+      expect(exchanged).toEqual([]);
+      await expectRestartedOnce();
+    });
+
+    it("after a failed write: the same operation answers the failure and records nothing further", async () => {
+      failRestrictionWrites();
+      try {
+        const answers = await secondAfterFirst(realBox());
+
+        expect(answers).toEqual({ first: INTERNAL, second: INTERNAL });
+        expect(stateOf()).toBe("prepared");
+        expect(eventKinds()).toEqual(["offer"]);
+        await expectRestartedOnce();
+      } finally {
+        allowRestrictionWrites();
+      }
+    });
+
+    it("after a stepdown: another operation is refused and records nothing", async () => {
+      const answers = await secondAfterFirst(realBox(), { operationId: NEXT_OP });
+
+      expect(answers).toEqual({
+        first: { status: 200, body: SPARE_PAGE },
+        second: refusal(409, "handover.operation_in_progress", { operationId: OP }),
+      });
+      expect(operations().map((row) => row.operationId)).toEqual([OP]);
+      expect(stateOf()).toBe("source_stepped_down");
+      await expectRestartedOnce();
+    });
   });
 });
