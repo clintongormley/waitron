@@ -8492,6 +8492,34 @@ export function liveKitchenDish(): SQL | undefined {
   );
 }
 
+/**
+ * The groups of `groupIds`, across every bill, holding a live dish the pass controls, or one not yet
+ * asked for at a station that waits for the pass now.
+ */
+export async function groupsWithPassFood(
+  tx: Transaction,
+  groupIds: readonly string[],
+): Promise<ReadonlySet<string>> {
+  if (groupIds.length === 0) return new Set();
+  const rows = await tx
+    .selectDistinct({ groupId: workingOrderLines.groupId })
+    .from(ticketItems)
+    .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
+    .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .innerJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
+    .where(
+      and(
+        inArray(workingOrderLines.groupId, [...groupIds]),
+        liveKitchenDish(),
+        or(
+          eq(ticketItems.passControlled, true),
+          and(isNull(ticketItems.requestedAt), eq(kitchenStations.waitsForPass, true)),
+        ),
+      ),
+    );
+  return new Set(rows.map((row) => row.groupId!));
+}
+
 /** The stored facts the closed-station test reads, beside the row. */
 export type PassRowRead = Omit<PassRow, "zoneId" | "stationWaitsNow" | "stationClosed"> & {
   stationChosenAt: string | null;

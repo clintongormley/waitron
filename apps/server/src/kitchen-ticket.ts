@@ -36,6 +36,8 @@ export interface KitchenTicketItem {
   groupLabel?: string;
   /** The dish's own course, named on its group's heading. */
   course?: { name: string; order: number };
+  /** Its group has kitchen food at the pass while this dish is not pass-controlled. */
+  goesWithKitchenFood?: true;
   /** Printed as sold, never merged or split. */
   printedAsSold?: boolean;
   /** The period the dish was agreed to be sent after. */
@@ -96,6 +98,7 @@ function entryKey(item: KitchenTicketItem): string {
     item.groupId ?? null,
     item.groupLabel ?? null,
     item.course?.name ?? null,
+    item.goesWithKitchenFood ?? false,
     item.modifiers ?? [],
     item.crossRefs ?? [],
     item.afterPeriod ?? null,
@@ -293,6 +296,18 @@ function emitGroup(
     b.line(line);
 }
 
+/** "Goes with kitchen food" under a heading, when a dish under it carries the flag. */
+function emitCue(
+  b: ReturnType<typeof esc>,
+  under: readonly KitchenTicketItem[],
+  columns: number,
+  locale: string,
+): void {
+  if (!under.some((item) => item.goesWithKitchenFood === true)) return;
+  for (const line of wrapText(prepareText(kitchenTicketWords(locale).goesWithKitchenFood), columns))
+    b.line(line);
+}
+
 function emitLateMark(
   b: ReturnType<typeof esc>,
   period: string,
@@ -317,6 +332,7 @@ function emitGrouped(
   current: KitchenTicketItem | undefined,
   locale: string,
   lateMarks: boolean,
+  cues = false,
 ): void {
   let mark: string | undefined;
   for (const [index, item] of items.entries()) {
@@ -325,7 +341,9 @@ function emitGrouped(
       (current === undefined || groupKey(item) !== groupKey(current))
     ) {
       const end = items.findIndex((next, at) => at > index && groupKey(next) !== groupKey(item));
-      emitGroup(b, item, items.slice(index, end === -1 ? undefined : end), columns, locale);
+      const run = items.slice(index, end === -1 ? undefined : end);
+      emitGroup(b, item, run, columns, locale);
+      if (cues) emitCue(b, run, columns, locale);
       mark = undefined;
     }
     current = item;
@@ -371,7 +389,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
     ticket.scope === "station" ? [ticket.items] : ticket.stations.map((station) => station.items);
   const onlyGroup = onlyGroupOf(lists.flat());
   const emitList = (items: readonly KitchenTicketItem[]): void =>
-    emitGrouped(b, items, columns, onlyGroup, ticket.locale, true);
+    emitGrouped(b, items, columns, onlyGroup, ticket.locale, true, true);
 
   emitAllergyHeading(b, lists.flat(), columns, ticket.locale);
   if (ticket.reprintedAt !== undefined)
@@ -395,7 +413,10 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
   if (ticket.from !== undefined)
     text(`${kitchenTicketWords(ticket.from.locale).fromStation} ${ticket.from.stationName}`);
   emitKitchenNote(b, ticket.kitchenNote, columns);
-  if (onlyGroup !== undefined) emitGroup(b, onlyGroup, lists.flat(), columns, ticket.locale);
+  if (onlyGroup !== undefined) {
+    emitGroup(b, onlyGroup, lists.flat(), columns, ticket.locale);
+    emitCue(b, lists.flat(), columns, ticket.locale);
+  }
 
   if (ticket.scope === "station") emitList(ticket.items);
   else {

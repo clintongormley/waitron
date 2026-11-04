@@ -2041,3 +2041,82 @@ describe("A773 fire paper: group headings name their dishes' courses", () => {
     expect(note.filter((line) => line.startsWith("GROUP"))).toEqual(["GROUP 2 · MAINS, DRINKS"]);
   });
 });
+
+describe("A773 fire paper: Goes with kitchen food", () => {
+  const at = new Date(2026, 7, 17, 14, 30);
+  const desserts = { name: "Desserts", order: 4 };
+  const ticket = (
+    items: KitchenTicketItem[],
+    locale = "en-GB",
+    mark?: "HOLD" | "FIRE",
+  ): KitchenTicket => ({
+    locale,
+    ...(mark === undefined ? {} : { mark }),
+    scope: "station",
+    stationName: "Bar",
+    tableLabel: "Table 4",
+    orderNumber: "A-17",
+    firedAt: at,
+    items,
+  });
+  const lines = (t: KitchenTicket) => printedLines(formatKitchenTicket(t, KITCHEN_80));
+
+  it("A773 fire paper: the cue prints once under its group's heading", () => {
+    const flagged: KitchenTicketItem[] = [
+      { qty: 2, name: "Moscatel", group: 4, course: desserts, goesWithKitchenFood: true },
+      { qty: 1, name: "Cava", group: 4, course: desserts, goesWithKitchenFood: true },
+    ];
+    expect(lines(ticket(flagged))).toEqual([
+      "Bar",
+      "Table 4",
+      "A-17",
+      "14:30",
+      "GROUP 4 · DESSERTS",
+      "Goes with kitchen food",
+      "2 x Moscatel",
+      "1 x Cava",
+      "",
+    ]);
+    expect(lines(ticket(flagged, "es-ES")).slice(4, 6)).toEqual([
+      `${kitchenTicketWords("es").group} 4 · DESSERTS`,
+      "Sale con la comida de cocina",
+    ]);
+
+    const spanning = lines(
+      ticket([
+        { qty: 1, name: "Caña", group: 3 },
+        { qty: 2, name: "Moscatel", group: 4, course: desserts, goesWithKitchenFood: true },
+      ]),
+    );
+    expect(spanning.slice(4)).toEqual([
+      "GROUP 3",
+      "1 x Caña",
+      "GROUP 4 · DESSERTS",
+      "Goes with kitchen food",
+      "2 x Moscatel",
+      "",
+    ]);
+
+    expect(lines(ticket([{ qty: 2, name: "Moscatel", group: 4, course: desserts }]))).not.toContain(
+      "Goes with kitchen food",
+    );
+    expect(lines(ticket(flagged, "en-GB", "HOLD"))).toContain("Goes with kitchen food");
+
+    const slip = printedLines(
+      formatCorrectionSlip(
+        {
+          kind: "VOID",
+          locale: "en-GB",
+          stationName: "Bar",
+          tableLabel: "Table 4",
+          orderNumber: "A-17",
+          at: at.toISOString(),
+          item: flagged[0]!,
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(slip).toContain("GROUP 4 · DESSERTS");
+    expect(slip).not.toContain("Goes with kitchen food");
+  });
+});

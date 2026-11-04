@@ -65,6 +65,7 @@ import { heldPaperStations, readGroupNumberLabels } from "./order-groups.js";
 import { freezeKitchenAllergyItems } from "./kitchen-allergy.js";
 import type { KitchenTicketItem, MovedSlip, OtherStationItem } from "./kitchen-ticket.js";
 import type { TradingContext } from "./trading-context.js";
+import { groupsWithPassFood } from "./working-order.js";
 import "./errors.js";
 
 /**
@@ -187,6 +188,8 @@ async function buildTicketItems(
       group: number | null;
       position: number | null;
       item: KitchenTicketItem;
+      passControlled: boolean;
+      madeHere: boolean;
     }
   >
 > {
@@ -222,6 +225,8 @@ async function buildTicketItems(
       parentStationName: parentStation.name,
       courseName: ownCourse.name,
       courseOrder: ownCourse.displayOrder,
+      passControlled: ownRecord.passControlled,
+      madeHere: ownRecord.madeHere,
     })
     .from(workingOrderLines)
     .leftJoin(ownRecord, eq(ownRecord.workingOrderLineId, workingOrderLines.id))
@@ -313,7 +318,14 @@ async function buildTicketItems(
 
   const byLine = new Map<
     string,
-    { lineNo: number; group: number | null; position: number | null; item: KitchenTicketItem }
+    {
+      lineNo: number;
+      group: number | null;
+      position: number | null;
+      item: KitchenTicketItem;
+      passControlled: boolean;
+      madeHere: boolean;
+    }
   >();
   for (const row of lineRows) {
     const unit =
@@ -324,6 +336,8 @@ async function buildTicketItems(
       lineNo: row.lineNo,
       group: row.group,
       position: row.position,
+      passControlled: row.passControlled === true,
+      madeHere: row.madeHere === true,
       item: {
         allergy:
           row.ticketItemId === null
@@ -592,6 +606,12 @@ async function planKitchenTickets(
 
   const language = await readKitchenLanguage(tx);
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds, language);
+  const passFood =
+    mark === "HOLD"
+      ? new Set<string>()
+      : await groupsWithPassFood(tx, [
+          ...new Set([...itemsByLine.values()].flatMap(({ item }) => item.groupId ?? [])),
+        ]);
   const stationNames =
     known === undefined
       ? await readStations(tx, stationIds)
@@ -610,7 +630,14 @@ async function planKitchenTickets(
   >();
   for (const fired of firedItems) {
     const entry = itemsByLine.get(fired.workingOrderLineId)!;
-    const item = atFiredQuantity(entry.item, fired);
+    const fresh = atFiredQuantity(entry.item, fired);
+    const item =
+      fresh.groupId !== undefined &&
+      passFood.has(fresh.groupId) &&
+      !entry.passControlled &&
+      !entry.madeHere
+        ? { ...fresh, goesWithKitchenFood: true as const }
+        : fresh;
     const bucket = itemsByStation.get(fired.stationId) ?? [];
     bucket.push({
       lineNo: entry.lineNo,
