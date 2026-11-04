@@ -40,6 +40,7 @@ import {
   FISCAL_RECOVERY_PACK_PAGE,
   FISCAL_HOUR_BACKUP_STATE,
   FISCAL_BACKUP_VERIFICATION,
+  VERIFACTU_HANDOVER,
   assertFiscalRestoreCommitted,
   FISCAL_ROUTES,
   FISCAL_PERMISSIONS,
@@ -71,6 +72,7 @@ import {
   paymentsBackupVerification,
   PAYMENTS_CONFIGURATION_TRANSFER,
   PAYMENTS_CHANGE_SOURCES,
+  PAYMENTS_HANDOVER,
 } from "@waitron/payments";
 import { SCHEDULER_CLASSIFICATION, SCHEDULER_BACKUP_VERIFICATION } from "@waitron/scheduler";
 import {
@@ -273,6 +275,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     changes: PAYMENTS_CHANGE_SOURCES,
     configurationTransfer: PAYMENTS_CONFIGURATION_TRANSFER,
     alerts: PAYMENTS_ALERTS,
+    handover: PAYMENTS_HANDOVER,
   },
   {
     name: "scheduler",
@@ -328,6 +331,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
       verification: FISCAL_BACKUP_VERIFICATION,
       assertRestoreCommitted: assertFiscalRestoreCommitted,
     },
+    handover: VERIFACTU_HANDOVER,
     alerts: FISCAL_ALERTS,
     staffNotices: FISCAL_STAFF_NOTICES,
     configurationTransfer: { kind: "none" },

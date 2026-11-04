@@ -104,6 +104,8 @@ export { IN_PROGRESS_PAYMENT_STATES, refundLookupOf } from "./provider.js";
 export { ChargeNotSavedError, saveCharge } from "./charge-not-saved.js";
 export type { ManualCardPaymentParams, ManualCardPaymentResult } from "./manual.js";
 export { PAYMENTS_ALERTS } from "./alerts.js";
+export { PAYMENTS_HANDOVER, summariseOpenPayments } from "./handover-summary.js";
+export type { OpenPayments, OpenPaymentState } from "./handover-summary.js";
 export { PAYMENTS_MIGRATIONS } from "./migrations.js";
 export { getPaymentPolicy, resolveOfflineDecision } from "./policy.js";
 export type { PaymentPolicyRow } from "./policy.js";

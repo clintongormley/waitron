@@ -209,6 +209,7 @@ import { startRestricted } from "./restricted-start.js";
 import { createHandoverGate } from "./handover-gate.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
+import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { mountNodeMembershipApi } from "./node-membership-api.js";
 import { readPeerNames } from "./waiting-page.js";
 import { startWaiting, WAIT_RECHECK_MS } from "./waiting-start.js";
@@ -962,8 +963,8 @@ export interface StartServerSeams {
   /** Every card provider the till and the card sweeps reach, built on the server's own handle. */
   cardPool?: (deps: { db: Database }) => CardProviderPool;
   /**
-   * The full start's stepdown, handed to a test that mounts its own route behind the handover gate
-   * (no production route asks for a stepdown yet); `restart` stands in for the SIGTERM.
+   * The full start's stepdown, handed to a test that mounts its own route behind the handover gate;
+   * `restart` stands in for the SIGTERM.
    */
   stepdown?: {
     mount(app: Hono, stepDown: (request: StepDownRequest) => Promise<StepDownResult>): void;
@@ -1770,6 +1771,19 @@ async function bootServer(
           ),
         (restrictedApp) =>
           mountNodeMembershipApi(restrictedApp, { db, node: store.node, nodeId: node.nodeId }, log),
+        (restrictedApp) =>
+          mountHandoverSourceApi(
+            restrictedApp,
+            {
+              venue: db,
+              node: store.node,
+              stateDir: config.stateDir,
+              ring,
+              nodeId: node.nodeId,
+              modules: setsToMigrate,
+            },
+            log,
+          ),
       ],
       log,
       listen: (restrictedApp) => {

@@ -6,6 +6,8 @@ describe("the package barrel", () => {
     expect(Object.keys(handover).sort()).toEqual([
       "HANDOVER_KINDS",
       "HANDOVER_STATES",
+      "NODE_LOCAL_MANIFEST",
+      "assembleIndicator",
       "bindingFingerprint",
       "envelopeDigest",
       "initialState",
@@ -14,6 +16,7 @@ describe("the package barrel", () => {
       "parseBinding",
       "sha256Hex",
       "signEnvelope",
+      "signIndicator",
       "verifyEnvelope",
     ]);
   });

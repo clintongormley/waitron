@@ -249,6 +249,25 @@ describe("the restricted box's own page", () => {
     expect(html).not.toContain("<li>");
   });
 
+  it("words the final copy's step in English and in Spanish", async () => {
+    await handOver(await seedSuccessor("Bar counter box"));
+    await withNodeTransaction(suite.node, (tx) =>
+      appendHandoverEventTx(tx, {
+        nodeId: NODE,
+        operationId: OP,
+        kind: "final_state",
+        detail: {},
+        envelope: "{}",
+      }),
+    );
+    const english = await page("en-GB");
+    inOrder(english.html, ["Stopped taking sales", "Final copy of the venue taken"]);
+    expect(english.html).not.toContain("final_state");
+    const spanish = await page("es-ES");
+    inOrder(spanish.html, ["Ha dejado de vender", "Copia final del local hecha"]);
+    expect(spanish.html).not.toContain("final_state");
+  });
+
   it("shows a step this version has no words for by its recorded name", async () => {
     await handOver(await seedSuccessor("Bar counter box"));
     await withNodeTransaction(suite.node, (tx) =>

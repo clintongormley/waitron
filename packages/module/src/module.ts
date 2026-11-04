@@ -38,6 +38,7 @@ import type {
 } from "./operation-preparation.js";
 import type { RestoreHook } from "./restore.js";
 import type { BackupVerificationContribution } from "./backup-verification.js";
+import type { ModuleHandoverContribution } from "./handover.js";
 import type { ModuleAlerts } from "./alerts.js";
 import type { StaffNoticeSource } from "./staff-notices.js";
 import "./errors.js";
@@ -1710,6 +1711,8 @@ export interface WaitronModule {
   readonly operations?: ModuleOperationPreparation;
   /** The module's contribution to the fiscal slot — `fiscalSlot` selects exactly one. */
   readonly fiscal?: FiscalContribution;
+  /** What this module vouches for, and checks, in the copy a handover sends to the next box. */
+  readonly handover?: ModuleHandoverContribution;
   readonly routes?: ModuleRoutes;
   readonly timeRecordExport?: ModuleTimeRecordExport;
   /** Read only from enabled modules: a disabled module's tables are not migrated. */

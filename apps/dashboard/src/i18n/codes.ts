@@ -1342,8 +1342,24 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este equipo ya ha pasado el local a otro equipo. No puede seguir como equipo principal.",
   },
   "handover.peer_unknown": {
-    en: "This server does not know the server that asked for its state, so it did not answer. Nothing was changed.",
-    es: "Este servidor no conoce al servidor que preguntó por su estado, así que no ha respondido. No se ha cambiado nada.",
+    en: "This server does not accept that request from the server that sent it, so it did not answer. Nothing was changed.",
+    es: "Este servidor no acepta esa solicitud del servidor que la ha enviado, así que no ha respondido. No se ha cambiado nada.",
+  },
+  "handover.not_stepped_down": {
+    en: "The old box has not handed over its work in this handover, so it will not send its final copy of the venue. Nothing was changed.",
+    es: "El equipo antiguo no ha pasado su trabajo en este cambio de servidor, así que no enviará su copia final del local. No se ha cambiado nada.",
+  },
+  "handover.operation_unknown": {
+    en: "The old box holds no record of that handover, so it sent nothing. Nothing was changed.",
+    es: "El equipo antiguo no tiene constancia de ese cambio de servidor, así que no ha enviado nada. No se ha cambiado nada.",
+  },
+  "handover.final_copy_changed": {
+    en: "The old box's venue data changed after it made its final copy, so it did not send the copy. Nothing was changed.",
+    es: "Los datos del local en el equipo antiguo cambiaron después de hacer la copia final, así que no ha enviado la copia. No se ha cambiado nada.",
+  },
+  "handover.summary_failed": {
+    en: "The old box could not read part of the venue's data from its final copy, so it sent neither the copy nor its description. Its venue data is unchanged. Asking again makes it take a new copy and read that.",
+    es: "El equipo antiguo no ha podido leer parte de los datos del local en su copia final, así que no ha enviado ni la copia ni su descripción. Sus datos del local no han cambiado. Si se vuelve a pedir, hará una copia nueva y la leerá.",
   },
   "alert.not_found": {
     en: "This alert no longer exists. Refresh the list.",

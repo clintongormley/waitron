@@ -1,4 +1,4 @@
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import type { KeyRing } from "@waitron/credentials";
 import { readNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
 import { verifyEnvelope, type HandoverRole, type HandoverState } from "@waitron/handover";
@@ -74,6 +74,24 @@ function parseQuery(body: unknown): PeerQueryBody {
   return { nonce, atMs, operationId };
 }
 
+/**
+ * The request's `query` envelope, verified against the keys `peerKeyOf` vouches for, and its body.
+ * A malformed envelope or body is `handover.request_invalid`; any other failed check is
+ * `handover.peer_unknown`.
+ */
+export async function verifiedPeerQuery(
+  c: Context,
+  deps: PeerStatusApiDeps,
+): Promise<{ signerNodeId: string; query: PeerQueryBody }> {
+  const raw = await readRawJsonBody<unknown>(c);
+  const verdict = verifyEnvelope<unknown>(raw, "query", await peerKeyOf(deps));
+  if (!verdict.valid) {
+    if (verdict.reason === "malformed" || verdict.reason === "wrong_purpose") invalid("envelope");
+    throw new AppError("handover.peer_unknown", {});
+  }
+  return { signerNodeId: verdict.signerNodeId, query: parseQuery(verdict.body) };
+}
+
 function operationStatus(row: HandoverOperation | null): PeerOperationStatus | null {
   if (row === null) return null;
   return {
@@ -96,14 +114,7 @@ export function mountPeerStatusApi(app: Hono, deps: PeerStatusApiDeps, log: Logg
 
   app.post("/api/node/peer-status", (c) =>
     run(c, log, async () => {
-      const raw = await readRawJsonBody<unknown>(c);
-      const verdict = verifyEnvelope<unknown>(raw, "query", await peerKeyOf(deps));
-      if (!verdict.valid) {
-        if (verdict.reason === "malformed" || verdict.reason === "wrong_purpose")
-          invalid("envelope");
-        throw new AppError("handover.peer_unknown", {});
-      }
-      const query = parseQuery(verdict.body);
+      const { query } = await verifiedPeerQuery(c, deps);
       const held = await readNodeMembership(deps.db);
       const restriction = await readHandoverRestriction(deps.node, deps.nodeId);
       const open = await readOpenHandoverOperation(deps.node, deps.nodeId);

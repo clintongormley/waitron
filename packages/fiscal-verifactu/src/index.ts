@@ -9,6 +9,8 @@ export { FISCAL_PROVISIONING, WAITRON_ID_SISTEMA } from "./provisioning.js";
 export { FISCAL_OPERATIONS } from "./hour-configuration.js";
 export { FISCAL_HOUR_BACKUP_STATE } from "./hour-backup-state.js";
 export { FISCAL_BACKUP_VERIFICATION } from "./backup-verification.js";
+export { VERIFACTU_HANDOVER } from "./handover-summary.js";
+export type { ChainSummary, EnvioState } from "./handover-summary.js";
 export { FISCAL_RECOVERY_PACK } from "./recovery-pack.js";
 export { FISCAL_RECOVERY_PACK_PAGE } from "./completed-recovery-document.js";
 export { readCloudAllocationReceipt, verifyCloudAllocationEvidence } from "./cloud-evidence.js";

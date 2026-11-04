@@ -38,5 +38,7 @@ declare module "@waitron/shared" {
     "module.fiscal_slot_mismatch": { stamped: string; enabled: string };
     "module.venue_service_empty": Record<string, never>;
     "module.venue_service_ambiguous": { candidates: readonly string[] };
+    /** `module`'s handover summary could not be read from the copy. */
+    "handover.summary_failed": { module: string };
   }
 }

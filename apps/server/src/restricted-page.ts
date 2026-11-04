@@ -6,14 +6,17 @@ import {
   nodeHandoverEvents,
   readHandoverOperation,
   readHandoverRestriction,
-  type HandoverOperationState,
 } from "@waitron/node-db";
 import { codeOf } from "@waitron/server-kit";
 import { AppError, FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
 import { escapeHtml } from "./recovery-surface.js";
-import { RESTRICTED_PAGE_WORDS, RESTRICTED_STEP_WORDS } from "./i18n/restricted-page.js";
+import {
+  RESTRICTED_PAGE_WORDS,
+  RESTRICTED_STEP_WORDS,
+  type RestrictedStepKind,
+} from "./i18n/restricted-page.js";
 import { knownZone } from "./venue-time-zone.js";
 
 export interface RestrictedPageDeps {
@@ -24,7 +27,7 @@ export interface RestrictedPageDeps {
 }
 
 interface Step {
-  /** A handover state's name, as `node_handover_events.kind` recorded it. */
+  /** A handover state's name, or another event's kind, as `node_handover_events.kind` recorded it. */
   kind: string;
   at: Date;
 }
@@ -38,7 +41,7 @@ interface RestrictedView {
 /** `Object.hasOwn`: the kind is read from a file, and `toString` must not find an inherited value. */
 function stepText(kind: string, locale: SupportedLocale): string {
   if (!Object.hasOwn(RESTRICTED_STEP_WORDS, kind)) return kind;
-  return RESTRICTED_STEP_WORDS[kind as HandoverOperationState][locale];
+  return RESTRICTED_STEP_WORDS[kind as RestrictedStepKind][locale];
 }
 
 /**

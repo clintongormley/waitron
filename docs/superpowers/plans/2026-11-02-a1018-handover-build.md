@@ -311,7 +311,14 @@ the owner.
    own handover page for the clock reading and the activation; in an emergency the person is on
    M2's page throughout.
 7. **The minute name:** the next free minute in both scenarios (Q2, answered (a)). A controlled
-   handover's final copy holds every name M1 ever used; for the emergency, see Q2.
+   handover's final copy holds the names M1 activated, as `registro_sif` rows in `venue.db`, but
+   not a name M1 selected and never activated: that one lives only in M1's
+   `module-preparation-state.json`, which the copy does not carry. Slice 4's probe
+   (`apps/server/src/handover-minute-history.test.ts`) measured that a spare waits rather than
+   reuse a name in the copy (case 1); that a spare without M1's file reuses a selected but never
+   activated name when its clock reads that name's minute (case 2); that placing M1's history as `module-evidence/` the restore way does
+   not stop the reuse (case 2c); and that M1's revisions merged into the spare's own preparation
+   file do (case 2b). Task 5.7 is to make that merge. For the emergency, see Q2.
 8. **The returned records reach M2 as a full-state batch for every chain M1 holds**: every
    filing-state row and every AEAT answer M1 holds (A947 §7.1's rule, "not only the rows the
    receiver lacks"), M1's `envio_flujo` row (the AEAT wait time and the technical-incident token,
@@ -456,15 +463,16 @@ interface FinalStateIndicator {
 }
 ```
 
-The Veri*Factu module's summary is, per chain it holds (`registro_sif` row): `sifId`, `nodeId`,
+The Veri*Factu module's summary is, per (`node_id`, `sif_id`) pair that has a record: `sifId`, `nodeId`,
 `idSistemaInformatico`, `numeroInstalacion`, record count, head record id and head huella (by
 `secuencia`), `envios` counts per state, the SHA-256 of its `acks` rows in key order, and the ids
 of rows in `enviando`. The payments module's summary lists every external request whose outcome
 is still open, with the provider and the reference that anchors its retry: payments in
 `attempting`, `initiated` (a hosted payment minted but not yet paid) and `accepted_offline`
 (accepted by the reader offline, not yet forwarded) (`packages/payments/src/schema/payments.ts:20-40`,
-reference at `:62`), and card refunds still `pending` at a provider (`tender_refunds`, a core
-table, `packages/db/src/schema/tender-refunds.ts:23,88-98`). The snapshot is
+reference at `:62`), card refunds still `pending` at a provider (`tender_refunds`, a core
+table, `packages/db/src/schema/tender-refunds.ts:23,88-98`), and pending bill refunds
+(`bill_payment_refunds`, a core table, `packages/db/src/schema/bill-payments.ts`). The snapshot is
 `StoreHandle.archiveTo`'s `VACUUM INTO` copy (`packages/store/src/archive.ts:24-34`); a copy taken
 with every writer stopped is the "consistent snapshot" of design §3, committed journal changes
 included. It carries Litestream's `_litestream_seq` and `_litestream_lock` tables as they stood
@@ -530,7 +538,7 @@ modules' non-database state (`apps/server/src/backup-sources.ts:50-62`).
 | `node_signing_key` | `node.db` | source-only | M1's private key never leaves M1 (design §2) |
 | `node_handover_operations`, `_events`, `_restriction` (Slice 1) | `node.db` | destination-owned | each box keeps its own |
 | `join_requests` | `venue.db` | source-only, inside the copy | keyed by the receiving box's node id; M2 reads only its own rows, so M1's lie unused |
-| `change_log` | `venue.db` | rebuildable, inside the copy | a dashboard signal deleted by the transaction that wrote it; a leftover row is delivered once on M2, harmlessly |
+| `change_log` | `venue.db` | rebuildable, inside the copy | a dashboard signal deleted by the transaction that wrote it; a leftover row is delivered once on M2 |
 | `node_sealed_state` | `venue.db` | source-only, inside the copy | M1's state files sealed with M1's recovery key, which M2 cannot open; M2 writes its own row |
 | `recovery_packs` | `venue.db` | source-only, inside the copy | keyed by M1's node id; M2 reads its own or none |
 | `fiscal_certificate_installs`, `fiscal_certificate_reminders` | `venue.db` | source-only, inside the copy | keyed by M1's node id. The certificate itself is in `tenant_credentials`. What M2's certificate card shows after activation is asserted in Task 5.10; if it shows no certificate, that is reported as a follow-up FISCAL task, not patched here |
@@ -540,8 +548,8 @@ modules' non-database state (`apps/server/src/backup-sources.ts:50-62`).
 | `tls/ca.*`, `tls/server.*`, `tls/venue-ca.*` | state | destination-owned | M2 keeps its own; the venue authority reached it at joining |
 | `backup.env` | state | transferred, compared | the indicator carries its digest; a difference waits `handover.backup_settings_differ` |
 | `modules.json` | state | transferred, compared | as `backup.env`; M2 refuses a module set that differs |
-| `module-preparation-state.json` | state | source-only, summarised | it holds module operation history, including the minute selections (`packages/provisioning/src/module-preparation-state.ts:73-83`; backed up as `secrets/module-evidence/fiscal-verifactu/hour-history.json` through `FISCAL_HOUR_BACKUP_STATE`, `packages/fiscal-verifactu/src/hour-backup-state.ts:49`). M2 keeps its own file. Task 4.5 finds, by a test, whether M2's minute selection sees every name M1 used from the copy alone; if it does not, M1's projected history travels as the retained `module-evidence` file the restore path already places (`apps/server/src/first-setup-backup-recovery.ts:551-582`) |
-| Litestream's `.venue.db-litestream/` | state | rebuildable | never copied; the new primary opens a new generation |
+| `module-preparation-state.json` | state | transferred | it holds module operation history, including the minute selections. Slice 4's probe (`apps/server/src/handover-minute-history.test.ts`, cases 2 and 2c) measured that the copy does not carry M1's retained minute selections, and that placing the file as `module-evidence/` the restore way does not reach promotion; a name is reused only when the spare's checked clock reads an abandoned selection's minute: the selection was made in the promotion's own minute (an abandoned conflict-switch, for example), or the box and the machine confirming its clock are wrong by the same amount (which an earlier setup attempt's minute needs). Task 5.7 merges M1's retained selections into M2's own preparation file before activation (case 2b shows that stops the reuse). Owner question open |
+| Litestream's `.venue.db-litestream/` | venue folder | rebuildable | beside `venue.db` in the venue folder (default `<state>/venue`, `WAITRON_VENUE_DIR` overrides); never copied; the new primary opens a new generation |
 
 ### Crash windows: what a restart or a lost answer does at each step
 
@@ -1875,9 +1883,12 @@ fiscal chains".
 module's descriptor (`packages/composition/src/modules.ts:262`). Test
 `packages/payments/src/handover-summary.test.ts`.
 
-**Interfaces — Produces:** `summariseOpenPayments(tx): Promise<{ payments: { paymentId: string; provider: string; reference: string | null; state: "attempting" | "initiated" | "accepted_offline" }[]; refunds: { refundId: string; provider: string | null; providerPaymentRef: string | null }[] }>`,
-each ordered by id. `refunds` are `tender_refunds` rows in state `pending`
-(`packages/db/src/schema/tender-refunds.ts:23,88-98`).
+**Interfaces — Produces:** `summariseOpenPayments(query: BackupQuery): Promise<{ payments: { paymentId: string; provider: string; reference: string; state: "attempting" | "initiated" | "accepted_offline" }[]; refunds: { refundId: string; provider: string | null; providerPaymentRef: string | null }[]; billRefunds: { refundId: string; billPaymentId: string; provider: string | null; paymentRef: string | null; processorRef: string | null; sentAt: string | null }[] }>`,
+each ordered by id. `refunds` are `tender_refunds` rows with method `card` in state `pending`
+(`packages/db/src/schema/tender-refunds.ts:23,88-98`); `billRefunds` are every pending
+`bill_payment_refunds` row (only a card refund is saved pending, `apps/server/src/bill-refunds.ts`),
+with the provider, payment reference and processor reference (`external_ref`, else the payment
+reference) that `bill-payments-loop.ts` looks it up by, and `sent_at` (null: never sent).
 
 - [ ] **Step 1: Write the failing tests.** "lists every payment in `attempting`, `initiated` and
   `accepted_offline` with its provider reference"; "lists no payment in another state"; "lists
@@ -1894,7 +1905,7 @@ as data). Test `packages/handover/src/manifest.test.ts`, and a root guard
 `scripts/handover-manifest-complete.test.ts` (it reads every module's classification, so it
 belongs in the root project, CLAUDE.md §4).
 
-**Interfaces — Produces:** `NODE_LOCAL_MANIFEST: readonly { item: string; where: "node.db" | "venue.db" | "state"; class: "transferred" | "source-only" | "destination-owned" | "rebuildable"; treatment: string }[]`.
+**Interfaces — Produces:** `NODE_LOCAL_MANIFEST: readonly { item: string; where: "node.db" | "venue.db" | "state" | "venue-folder"; class: "transferred" | "source-only" | "destination-owned" | "rebuildable"; treatment: string }[]`.
 
 - [ ] **Step 1: Write the failing tests.** Root guard: "every table classified `local` in any
   migration set the composition lists, and every `node.db` table in `NODE_CLASSIFICATION`, appears
@@ -1973,6 +1984,50 @@ envelope signed by the binding's destination; any other signer is refused
   `@waitron/module`, `@waitron/fiscal-verifactu`, `@waitron/payments`, `@waitron/handover`. PR first
   line: FISCAL (read-only code in the fiscal package).
 - [ ] **Step 5: Commit** `git commit -s -m "server: only the selected box may fetch the final copy and its indicator"`.
+
+#### Slice 4 as built (2026-11-03)
+
+The build departed from the task texts above in these ways; the task texts are left as written,
+except that Tasks 4.4 and 4.5's interface lines were amended in place.
+
+- The module seat (`packages/module/src/handover.ts`), `collectHandoverSummaries` and
+  `summariseChains` take a read-only `BackupQuery` over the captured file, not a `Transaction`:
+  opening a copy read-write changes its bytes.
+- `captureFinalCopy(deps, operationId)` reads the binding from this box's stored operation row,
+  never from the request. It refuses `handover.not_stepped_down` unless the restriction is a
+  handed-over one for this operation, its successor and its membership term.
+- Besides Task 4.8's 403 and 404, the source routes answer 400 `handover.request_invalid` (a
+  malformed envelope or body, or a signed query whose `operationId` differs from the path's), 409 `handover.not_stepped_down`, 409
+  `handover.final_copy_changed` and 500 `handover.summary_failed`
+  (`apps/server/src/handover-source-api.ts`).
+- **The final-copy route checks the stored copy (Slice 4's Ruling R9)** against the indicator's
+  digest and size before streaming it. A missing or changed file is taken again from `venue.db`,
+  one retake at a time in this process, and served only if the retake's digest equals the stored
+  one; otherwise the route refuses `handover.final_copy_changed`.
+- A retried capture deletes the unsigned copy a failed attempt left before copying again.
+- Litestream's folder sits beside `venue.db` in the venue folder: its manifest row has
+  `where: "venue-folder"`.
+- **Other state-folder files are left out of the manifest (Slice 4's Ruling R5)**: `recovery.json`,
+  `setup-operation.json`, `restore-request.json`, `reset-request.json`, `cloud-replacement.json`,
+  `backup-room-note.json`, `spare-space` and `<state>/handover/<operationId>/`. A backlog entry asks
+  whether a handover needs rows for them.
+- **The minute names (Slice 4's Ruling R3).** Task 4.5's probe found that M2 reuses a name M1
+  selected and never activated when its clock reads that name's minute (case 2), and that placing
+  M1's history as `module-evidence/` the restore way does not stop it (case 2c), so Step 3's
+  fallback is not built. The manifest's `module-preparation-state.json` row is `transferred`, and
+  Task 5.7 is to merge M1's retained selections into M2's own preparation file (case 2b). Whether such
+  a name counts as used is an open owner question.
+- **The signed peer query is bound to neither a route nor a time window (Slice 4's Ruling R10).**
+  One envelope M2 signed was accepted by `peer-status` and twice by `final-copy`; Task 5.4's note
+  says its status reads must not sign the same shape.
+- **The source routes' refusal texts speak of "the old box" (Slice 4's Ruling R11)**:
+  `handover.not_stepped_down`, `handover.operation_unknown`, `handover.final_copy_changed` and
+  `handover.summary_failed` in `apps/dashboard/src/i18n/codes.ts`; `handover.peer_unknown` and
+  `handover.request_invalid` keep their own wording, because the every-start peer-status route
+  throws them too. Task 5.5's note says M2's own summary failure needs its own code or wording.
+- `packages/handover/src/manifest.ts`'s treatments name no refusal M2 does not yet raise: the
+  `secrets.env`, `backup.env` and `modules.json` rows leave out the table's refusals, which Task 5.5
+  adds.
 
 ---
 
@@ -2538,6 +2593,18 @@ a stepdown whose write failed — so the abandon M2 waits for always
 comes while M1 runs. A stepped-down M1 never reports `abandoned` (Task 1.3), so it is never left
 behind.
 
+Slice 4 notes (2026-11-03):
+- Slice 4's Ruling R10: the signed peer query (`PeerQueryBody` in `apps/server/src/peer-status-api.ts`:
+  `nonce`, `atMs`, optional `operationId`) names no route and its `atMs` is never compared with the clock, so one
+  envelope signed by M2 was accepted by `peer-status` and twice by `final-copy` (Task 4.8 review).
+  These status reads must not sign that same shape: bind a purpose field to the route, or use a
+  nonce that M1 accepts only once.
+- `handover.not_stepped_down`, `handover.operation_unknown`, `handover.summary_failed` and
+  `handover.final_copy_changed` (`apps/dashboard/src/i18n/codes.ts`) name no step the person can
+  take, because no screen shows them yet. The
+  screen that first shows them adds that step (CLAUDE.md §3, refusals name a self-service next
+  step).
+
 - [ ] **Step 1: Write the failing tests.** "fetches once M1's restricted start answers"; "a
   partial download is discarded and fetched again"; "stops when the operation leaves `prepared`";
   "M1's status reporting the operation `abandoned` closes M2's operation as `abandoned`";
@@ -2572,6 +2639,27 @@ acceptance envelope, and only then is the acceptance posted to M1. The posting i
 while the operation is at `copy_accepted`, every 5 seconds, so a lost answer or a restart of
 either box re-posts the same stored acceptance and gets M1's same stored relinquishment (Task
 5.6); on receiving it M2 records `filing_assumed` (Task 5.7).
+
+Slice 4 notes (2026-11-03):
+- `buildNodeLocalManifest` (`apps/server/src/handover-manifest.ts`) digests `backup.env`'s bytes,
+  not its values (Task 4.6 review). `writeRecoveryKey` keeps the file's existing key order, so two
+  boxes with the same values in another order or spacing differ; on a box whose backup settings
+  come from the environment the file may be absent on both, and `null` equals `null` whatever the
+  two environments hold. This task decides whether it compares bytes or parsed values.
+- `modules.json` missing and `{"modules":{}}` both read as no overrides, so the same module set
+  (`apps/server/src/module-config.ts`, `packages/module/src/config.ts`), but they digest
+  differently, so the digest check can wait on two equal module sets that `handover.modules_differ`
+  passed.
+- The manifest reads a state folder that holds neither file the same as one that does not exist:
+  both digests `null`. `captureFinalCopy` (`apps/server/src/handover-capture.ts`) refuses a missing
+  state folder before copying, and a path it cannot read fails; it does not detect an existing
+  folder that is the wrong one. When M2 builds its own manifest to compare, the same holds unless
+  this task adds a check.
+- When M2 recomputes the summaries from the copy it received, a module whose summary throws
+  surfaces as `handover.summary_failed` (`collectHandoverSummaries`, `packages/module/src/handover.ts`).
+  That code's text (`apps/dashboard/src/i18n/codes.ts`) speaks of the old box failing to read its
+  own final copy and sending nothing (Slice 4's Ruling R11), which is false on M2. This task gives M2's
+  failure its own code or wording rather than reusing `handover.summary_failed`.
 
 - [ ] **Step 1: Write the failing tests.** One per check, built from a real capture (Task 4.7) and
   then altered: "one row written after capture" (`handover.copy_mismatch`); "a copy whose bytes
@@ -2608,6 +2696,8 @@ acceptance for another indicator refuses `handover.indicator_mismatch`.
 
 #### Task 5.7: M2 places the accepted copy
 
+Slice 4 probe (2026-11-03): placing the file as module-evidence does not reach promotion; merge M1's retained selections into M2's own module-preparation-state.json before activation (handover-minute-history.test.ts case 2b) — owner question open.
+
 **Files:** Create `apps/server/src/handover-place-copy.ts`; modify `boot.ts` (before the store
 opens, as `runStagedRestore` does, `apps/server/src/restore-request.ts:344-642`, place
 `accepted.db` as `venue.db` when the operation is at `filing_assumed` and not yet placed; `node.db`
@@ -2622,8 +2712,8 @@ Litestream's folder removed) and records `copy_placed` as an event. `accepted.db
 into place and kept until `copy_placed` is recorded, and "already placed" is decided by the live
 `venue.db`'s SHA-256 equalling the indicator's digest — so a restart after the swap and before the
 event records the event without placing again, and a restart mid-swap places again from the kept
-file. If Task 4.5's probe made the minute history a transferred item, the retained
-`module-evidence` file is placed here too.
+file. M1's retained selections are merged into M2's own `module-preparation-state.json` (see the
+Slice 4 note above).
 
 - [ ] **Step 1: Write the failing tests.** "places once; a reboot between `filing_assumed` and
   placement places once"; **"a reboot after the swap and before `copy_placed` records the event
@@ -3813,8 +3903,9 @@ the joint specification and Cloud's half.
   position (Task 7.2).
 - **Whether `vf-recovery-hour` can drive a promotion** is found in Task 6.4; if not, that task
   touches fiscal UI code.
-- **Whether M2 sees every minute name M1 used from the copy alone** is found by Task 4.5's probe;
-  if not, the history file travels as the restore path already places it.
+- **Whether M2 sees every minute name M1 used from the copy alone**: no (Task 4.5's probe, case 2),
+  and the restore path's placement does not stop the reuse (case 2c); Task 5.7 is to merge M1's
+  retained selections into M2's preparation file (case 2b). Owner question open.
 - **What M2's certificate card shows after activation** is found by Task 5.10; if it shows no
   certificate, a FISCAL follow-up maps it.
 - **A return to a box other than the one the old box handed to** (M2 handed over to M3 before M1

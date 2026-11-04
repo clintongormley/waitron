@@ -35,9 +35,12 @@ export const RESTRICTED_PAGE_WORDS: Readonly<
   },
 };
 
-/** Keyed by every state, so a new state with no wording fails the typecheck. */
+/** Every event kind an operation records: its states, and the final copy's event. */
+export type RestrictedStepKind = HandoverOperationState | "final_state";
+
+/** Keyed by every kind, so a new state with no wording fails the typecheck. */
 export const RESTRICTED_STEP_WORDS: Readonly<
-  Record<HandoverOperationState, Readonly<Record<SupportedLocale, string>>>
+  Record<RestrictedStepKind, Readonly<Record<SupportedLocale, string>>>
 > = {
   prepared: { "en-GB": "Handover begun", "es-ES": "Traspaso iniciado" },
   source_stepped_down: { "en-GB": "Stopped taking sales", "es-ES": "Ha dejado de vender" },
@@ -79,4 +82,8 @@ export const RESTRICTED_STEP_WORDS: Readonly<
     "es-ES": "Sustituido por otro traspaso",
   },
   abandoned: { "en-GB": "Handover cancelled", "es-ES": "Traspaso cancelado" },
+  final_state: {
+    "en-GB": "Final copy of the venue taken",
+    "es-ES": "Copia final del local hecha",
+  },
 };
