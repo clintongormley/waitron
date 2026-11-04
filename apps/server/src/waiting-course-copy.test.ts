@@ -1298,8 +1298,17 @@ describe("A803 waiting copy: what the copy does afterwards", () => {
   });
 });
 
+function holderNow(tableId: string) {
+  return inTx(v, (tx) => holderOf(tx, tableId));
+}
+
 describe("A803 waiting copy: a move that fails", () => {
-  it("A803 waiting copy: a move refused before it writes leaves every row as it was", async () => {
+  /** Every party's groups: `rowsOf` names its parties, and a stray row would be at a new one. */
+  async function countOrderGroups() {
+    return (await v.db.select({ id: orderGroups.id }).from(orderGroups)).length;
+  }
+
+  it("A803 waiting copy: a move refused for a stale revision leaves every row as it was", async () => {
     const a = await seatWith([
       { names: ["Burger"], release: "fire" },
       { names: ["Flan"], release: "hold" },
@@ -1347,6 +1356,7 @@ describe("A803 waiting copy: a move that fails", () => {
         await inTx(v, (tx) => joinTables(tx, v.cfg, a.partyId, tableId, joining));
       }
       const before = await rowsOf([a.partyId], [a.billId]);
+      const groupCountBefore = await countOrderGroups();
       const marker = new Error("A803 waiting copy: failure after the copy");
       const real = groupWrites.printHoldTickets;
       let copiedBeforeFailure = false;
@@ -1383,6 +1393,8 @@ describe("A803 waiting copy: a move that fails", () => {
       }
 
       expect(copiedBeforeFailure).toBe(true);
+      expect(await holderNow(tableId)).toBe(path === "Move this bill" ? null : a.partyId);
+      expect(await countOrderGroups()).toBe(groupCountBefore);
       expect(await rowsOf([a.partyId], [a.billId])).toEqual(before);
       expect(outcome).toBe(marker);
     });
@@ -1489,14 +1501,20 @@ async function orderLineOf(billId: string): Promise<string> {
 describe("A803 waiting copy: kitchen paper", () => {
   afterEach(() => inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: false }, paperStations)));
 
-  /** Moves Bill 2 to a free table, returning the new party, the copy and each printer's mark. */
-  async function moveBill2(t: Awaited<ReturnType<typeof paperTable>>, label: string) {
+  /** Moves Bill 2 to `tableId` or a new free table; returns its party, copy and printer marks. */
+  async function moveBill2(
+    t: Awaited<ReturnType<typeof paperTable>>,
+    label: string,
+    tableId?: string,
+  ) {
     const marks = {
       grill: (await printed(t.grill.printer)).length,
       pastry: (await printed(t.pastry.printer)).length,
     };
     const from = (await partyOfBill(t.bill2))!;
-    const { partyId } = await moveWholeBill(t.bill2, from, { tableId: await v.table(label) });
+    const { partyId } = await moveWholeBill(t.bill2, from, {
+      tableId: tableId ?? (await v.table(label)),
+    });
     const copyId = (await lineOf(t.bill2, "Tarta")).groupId!;
     return { partyId: partyId!, copyId, marks };
   }
@@ -1571,13 +1589,12 @@ describe("A803 waiting copy: kitchen paper", () => {
 
     const { copyId, marks } = await moveBill2(t, mesa8);
 
-    const copyNumber = (await groupRow(copyId)).displayNumber;
-    expect(copyNumber).not.toBe((await groupRow(t.g)).displayNumber);
+    expect((await groupRow(copyId)).displayNumber).not.toBe((await groupRow(t.g)).displayNumber);
     expect((await printed(t.grill.printer)).slice(marks.grill)).toEqual([
       movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, mesa8, [
         "1.000 x BURG",
         words.hold,
-        `${words.group} ${copyNumber} · DESSERTS`,
+        `${words.group} 2 · DESSERTS`,
         "1.000 x TARTA",
       ]),
     ]);
@@ -1612,7 +1629,6 @@ describe("A803 waiting copy: kitchen paper", () => {
     const mesa8 = `Mesa 8 (${t.n})`;
     const { partyId, copyId } = await moveBill2(t, mesa8);
     await answerNoAllergies(partyId);
-    const copyNumber = (await groupRow(copyId)).displayNumber;
     const before = {
       grill: (await printed(t.grill.printer)).length,
       pastry: (await printed(t.pastry.printer)).length,
@@ -1621,7 +1637,7 @@ describe("A803 waiting copy: kitchen paper", () => {
     await fire(partyId, copyId);
 
     expect((await printed(t.grill.printer)).slice(before.grill)).toEqual([
-      fireTicket(t.grill.name, mesa8, await orderNumberOf(t.bill2), copyNumber, "1.000 x TARTA"),
+      fireTicket(t.grill.name, mesa8, await orderNumberOf(t.bill2), 2, "1.000 x TARTA"),
     ]);
     expect((await printed(t.pastry.printer)).slice(before.pastry)).toEqual([]);
 
@@ -1629,13 +1645,7 @@ describe("A803 waiting copy: kitchen paper", () => {
 
     expect((await printed(t.grill.printer)).slice(before.grill + 1)).toEqual([]);
     expect((await printed(t.pastry.printer)).slice(before.pastry)).toEqual([
-      fireTicket(
-        t.pastry.name,
-        t.label,
-        await orderNumberOf(t.bill1),
-        (await groupRow(t.g)).displayNumber,
-        "1.000 x FLAN",
-      ),
+      fireTicket(t.pastry.name, t.label, await orderNumberOf(t.bill1), 3, "1.000 x FLAN"),
     ]);
   });
 
@@ -1698,8 +1708,7 @@ describe("A803 waiting copy: kitchen paper", () => {
     await inTx(v, (tx) => splitTable(tx, v.cfg, t.partyId, tableId, t.bill2, splitting));
 
     const copyId = (await lineOf(t.bill2, "Tarta")).groupId!;
-    const copyNumber = (await groupRow(copyId)).displayNumber;
-    expect(copyNumber).not.toBe((await groupRow(t.g)).displayNumber);
+    expect((await groupRow(copyId)).displayNumber).not.toBe((await groupRow(t.g)).displayNumber);
     const orderLine = await orderLineOf(t.bill2);
     const slips = (await printed(t.grill.printer))
       .slice(mark)
@@ -1708,7 +1717,7 @@ describe("A803 waiting copy: kitchen paper", () => {
     expect(slips[0]!.slice(6)).toEqual([
       "1.000 x BURG",
       words.hold,
-      `${words.group} ${copyNumber} · DESSERTS`,
+      `${words.group} 2 · DESSERTS`,
       "1.000 x TARTA",
       "",
     ]);
@@ -1718,16 +1727,23 @@ describe("A803 waiting copy: kitchen paper", () => {
     const t = await paperTable(true);
     const mesa8 = `Mesa 8 (${t.n})`;
     const mesa9 = `Mesa 9 (${t.n})`;
+    const third = await v.table(mesa9);
+    // A group already there makes the copy number 3 here against 2 at the second table, so a slip
+    // printing the number the dish left behind cannot pass.
+    await orderForParty(v, (await seat(v, third)).partyId, ["Agua"]);
     const first = await moveBill2(t, mesa8);
 
-    const second = await moveBill2(t, mesa9);
+    const second = await moveBill2(t, mesa9, third);
 
     expect(second.copyId).not.toBe(first.copyId);
+    expect((await groupRow(second.copyId)).displayNumber).not.toBe(
+      (await groupRow(first.copyId)).displayNumber,
+    );
     expect((await printed(t.grill.printer)).slice(second.marks.grill)).toEqual([
       movedSlip(t.grill.name, await orderLineOf(t.bill2), mesa8, mesa9, [
         "1.000 x BURG",
         words.hold,
-        `${words.group} ${(await groupRow(second.copyId)).displayNumber} · DESSERTS`,
+        `${words.group} 3 · DESSERTS`,
         "1.000 x TARTA",
       ]),
     ]);
@@ -1827,20 +1843,17 @@ function movedNoticesOf(billIds: string[], before: Set<string>) {
     .then((rows) => rows.filter((row) => !before.has(row.id)));
 }
 
-function holderNow(tableId: string) {
-  return inTx(v, (tx) => holderOf(tx, tableId));
-}
-
 describe("A803 waiting copy: races", () => {
   afterEach(() => inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: false }, paperStations)));
 
-  /** Bill 2's Move this bill to `tableId`, read now from the party's current revision. */
+  /** Bill 2's Move this bill to `tableId`, carrying the revision and edit state read now. */
   async function moveOf(billId: string, partyId: string, tableId: string) {
     const options = {
       operatorId: OPERATOR,
       partyId,
       expectedPartyRevision: await revisionOf(v, partyId),
       otherPartyId: null,
+      expectedEdits: [await inTx(v, (tx) => readBillEditState(tx, billId))],
     };
     return (tx: Transaction) => moveBill(tx, v.cfg, billId, { tableId }, options);
   }
@@ -1888,12 +1901,11 @@ describe("A803 waiting copy: races", () => {
       ["BURG", labels[side]],
       ["TARTA", labels[side]],
     ]);
-    const copyNumber = (await groupRow(tarta.groupId!)).displayNumber;
     expect((await printed(t.grill.printer)).slice(marks.grill)).toEqual([
       movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, labels[side], [
         "1.000 x BURG",
         words.hold,
-        `${words.group} ${copyNumber} · DESSERTS`,
+        `${words.group} 2 · DESSERTS`,
         "1.000 x TARTA",
       ]),
     ]);
@@ -1930,6 +1942,7 @@ describe("A803 waiting copy: races", () => {
       });
 
       const { winner } = judge(task, outcomes, trace);
+      expect(winner).toBe(order[0]);
       const tarta = await lineOf(t.bill2, "Tarta");
       const newPrints = [
         ...(await printed(t.grill.printer)).slice(marks.grill),
@@ -1976,7 +1989,10 @@ describe("A803 waiting copy: races", () => {
       };
       await inTx(v, (tx) => joinTables(tx, v.cfg, a.partyId, joined, joining));
       const free = await v.table(`Copy ${++tableNumber}`);
-      const splitting = await commandFor(v, a.partyId);
+      const splitting = {
+        ...(await commandFor(v, a.partyId)),
+        expectedEdits: [await inTx(v, (tx) => readBillEditState(tx, a.billId))],
+      };
       const commands = {
         move: await moveOf(a.billId, a.partyId, free),
         split: (tx: Transaction) => splitTable(tx, v.cfg, a.partyId, joined, a.billId, splitting),
@@ -1988,6 +2004,7 @@ describe("A803 waiting copy: races", () => {
       });
 
       const { winner } = judge(task, outcomes, trace);
+      expect(winner).toBe(order[0]);
       const flan = await lineOf(a.billId, "Flan");
       const won = (await holderNow(winner === "move" ? free : joined))!;
       expect(won).not.toBe(a.partyId);
