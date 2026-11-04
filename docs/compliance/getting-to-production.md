@@ -384,8 +384,9 @@ No electronic signature is required on it: *"no se exige una firma electrónica 
 
 **Who does *not* issue one — verified 2026-07-27.** The duty attaches to production, not to use.
 A business that acquires a complete SIF and runs it unmodified is a **cliente**: art. 13.2
-requires the DR to be *"a disposición del cliente y del comercializador en el momento de la
-adquisición del producto"* — they receive it, they do not author it. The four-way split is:
+requires the DR to be visible *"para el cliente y el comercializador en el momento de la adquisición
+del producto"*, and AEAT's FAQ says *"a disposición del cliente y del comercializador"* (wording checked
+against both texts on 2026-11-04) — they receive it, they do not author it. The four-way split is:
 
 | Party | Duty |
 | --- | --- |

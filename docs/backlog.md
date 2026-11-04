@@ -240,8 +240,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 
 - **A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1 landed 2026-10-23 (#2000).**
-  Still open: the producer's name and NIF (Task 8 of the plan), then slices 1b to 6, and A993's plan.
-  Still needed from outside: his name, NIF and publishable address, and the asesor's answer to Q53.
+  Still open: how the producer's name and tax number reach a box (Task 8; a proposal is with the owner, 2026-11-04), then slices 1b to 6, and A993's plan.
+  Still needed from outside: the owner's publishable address, and the asesor's answer to Q53.
   [Detail](backlog/fiscal.md#a940-waitrons-declaración-responsable--design-approved-2026-10-22-slice-1-landed-2026-10-23-2000).
 
 - **A993. A change of the system's identity opens a new installation by itself — designed in A940 §5.6, approved 2026-10-22; fiscal, the owner lands it.**

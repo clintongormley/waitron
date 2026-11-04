@@ -1287,8 +1287,9 @@ his name and NIF: meanwhile records still carry the taxpayer's name and NIF ther
 published build set to production refuses to trade (`sif.producer_unset`). Two test checks
 changed with it: the Spanish practice sales were re-recorded (only their software block moved),
 and the pinned digest of the shipped XML in `apps/server/src/full-comp.fiscal-identity.test.ts`
-changed (the owner accepted it on 2026-10-23). Still open: the producer's name and NIF (Task 8 of the plan), then
-slices 1b to 6, and A993's plan. Still needed from outside: his name, NIF and publishable
+changed (the owner accepted it on 2026-10-23). Still open: how the producer's name and tax number
+reach a box without entering anything public ([Task 8's proposal of 2026-11-04](../superpowers/plans/2026-10-22-a940-1-software-identity.md),
+with the owner), then slices 1b to 6, and A993's plan. Still needed from outside: the owner's publishable
 address, and the asesor's answer to Q53.
 
 ## A993. A change of the system's identity opens a new installation by itself — designed in A940 §5.6, approved 2026-10-22; fiscal, the owner lands it.

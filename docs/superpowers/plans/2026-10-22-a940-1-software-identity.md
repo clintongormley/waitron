@@ -579,6 +579,12 @@ taxpayer.
 
 ### Task 8, amended (2026-11-03): the producer's name and tax number reach a box privately
 
+> **2026-11-04: the owner did not take the question below as posed.** Their answer asks for the venue
+> database, a mirror taking the values from the main box, and an official install with no manual step.
+> "Task 8, proposal of 2026-11-04", below, answers it and, once approved, replaces this section's table
+> and its "Disclosed" and "Later slices" paragraphs. `--producer-file` stays as "How they get there" defines
+> it. Nothing here is built.
+
 **Why it changed.** The owner gave the two values on 2026-11-02 and chose to keep them out of
 everything public ("let's do b"): the repository is public, and so are the images
 `ghcr.io/clintongormley/waitron` and `waitron-print-agent`, so writing the values into
@@ -672,3 +678,210 @@ private configuration.
   case list.
 - [ ] Commit — `fiscal: the records name the software's producer from the box's private settings`.
   Its own fiscal pull request, which the owner lands.
+
+### Task 8, proposal of 2026-11-04: stored in the venue database, delivered on the owner's own stick
+
+**Status: a proposal for the owner. Not approved, not built.** The owner's answer, 2026-11-04 about
+05:50: "I'm unsure of the mechanism but these values need to be set during the install process from the
+usb as well, whether it is on the usb or from the containers that the usb downloads. But if somebody
+forks the code and builds their own version then they need to set these values independently. Also,
+when somebody starts a mirror node then that node's values need to be the same as for the primary.
+Either that is set but the installer usb or container, or by taking the value from the primary. I'm
+leaning towards the value being stored in the dB and the mirror taking the value from the primary."
+
+Installer facts below are read from the approved B3 design, which is not fully built, and code facts
+are read from `main`. Nothing here was run except the measurements and downloads it names.
+
+**Where the values live.** One new row in the venue database: a table in `fiscal-verifactu`'s own
+migration set, one row at most, holding the name, the tax number and the origin of the build that wrote
+it. It is classified `state`, the first such table in that set (the rest are `ledger` or `local`), with
+no append-only trigger, because A993 and a fork's restore replace it. `fiscal-verifactu` is declared
+`kind: "none"` for configuration transfer (`packages/composition/src/modules.ts:337`), so a
+configuration copy does not carry it. The box's private `.env` settings and `--producer-file` from the
+2026-11-03 amendment stay, as the way the values first enter a box.
+
+**The rule: once the row exists, it decides, and a box's settings play no part.** That is the owner's
+"taking the value from the primary", and it means a wrong setting can never stop a working venue.
+
+| The row | The box's settings | What happens |
+| --- | --- | --- |
+| None, and no fiscal record yet | Valid | Written, and every later record names these values. Each path below writes it before it creates the box's filing identity |
+| None, with fiscal records | Valid | In development or preproduction: not written, and records go on naming the taxpayer, so a chain never changes producer. In production: written on a restore, since it starts a new chain; otherwise refuses `sif.producer_unset` |
+| None | Unset, on a published build, with production asked for or running | Refuses `sif.producer_unset`, at Live setup before anything is created (below) and at any start, as today |
+| None | Unset, in development or preproduction | Records name the taxpayer, as today |
+| None | Half-set or invalid | Refuses `sif.producer_invalid`, in every environment |
+| Present, its own shape invalid | Anything | Refuses `sif.producer_invalid`, before anything is filed. This checks shape only, so a tightened rule in a later release does not stop every box |
+| Present, written by a build of the same origin | Anything | The row is used. A setting that differs from it, or is invalid, raises an alert (new, with its English and Spanish wording), and sales go on |
+| Present, another origin, on a restore in production | Valid | The row is replaced, because a restore starts a new chain anyway (CLAUDE.md §5) |
+| Present, another origin, otherwise in production | Anything | Refuses `sif.producer_other_build`. Preproduction uses the row, since a preproduction database is never promoted |
+
+Two consequences to state plainly:
+
+- This corrects the 2026-11-03 question, which said the settings win and the database copy is updated.
+  That would have put a new producer on an old chain, which A993's design forbids.
+- The first value sticks. A misspelt name of a valid shape is filed until A993 exists to change it
+  (or the venue is reset before go-live). The stick-making command checks the tax number and the name's
+  length, but no check can catch a misspelling.
+
+**When it is checked, so that a refusal never comes too late.** A takeover commits and only then restarts
+(`apps/server/src/boot.ts:3373-3403`), so a check left to the next start would stop the venue with the old box
+already stepped down. So the checks run before the point of no return:
+
+- **Live setup:** at its start (`setup-first-fiscal-api.ts`'s claim route, `:404`) and again before
+  `activateFirstFiscal` (`first-fiscal-activation.ts:99`) creates the filing identity. Prepare and a no-regime
+  Live, before `provision` (`setup-api.ts:905`). `waitron-provision venue`, before `applyVenue`
+  (`packages/provisioning/src/cli.ts:476`).
+- **A restore:** on every route (file, cloud, bucket, `waitron-restore`), once the copy is decrypted into its
+  scratch folder, beside the existing `refuseIfArchiveSourceLive` check, before anything is staged or placed.
+- **A spare:** at the main box's joining route before it reserves anything (3b Task 5.3's refusals, opened for
+  Veri\*Factu by 3b-F), comparing an origin the spare's existing request gains; Task 6.3's copy check is the
+  backstop.
+- **A promotion:** again before it writes anything.
+
+A joining spare returns before today's refusal (`boot.ts:1699-1745`, then `boot.ts:2066`, reaching `slot.ts:39`),
+and a placed copy holds the row, so a spare needs no exception there. Read, not run. A947 3b and A1018 each gain
+the one origin step named here.
+
+**The origin of a build.** The build stamp gains one field, read from a repository variable
+(`vars.WAITRON_BUILD_ORIGIN`) that the owner sets once on the official repository. Its value is a chosen word, not
+the repository's name, so a move only has to confirm the variable came along. The generator turns an empty value
+into `unknown`, and the publish job stops on an empty one, so a fork that publishes images has to choose its own
+word. Comparison is literal, `unknown` included. GitHub says a fork "has its own settings" but, in the pages read on
+2026-11-04, never says a repository variable stays behind, so this is tested on one real fork before anyone relies on
+it. This touches the generator (`scripts/generate-hour-release.mjs` refuses a new argument today), a new `ARG` in
+`deploy/Dockerfile` and the four build steps (`ci.yml:4048,4063`, `image-smoke.yml:140,155`). `waitron.sh install
+<ref>` needs no change: its on-box builds stamp `unknown`, so in production they are refused against an official row.
+
+It protects against an accident, not a lie, and it misses two accidents. A box that keeps an official `.env`, swaps its
+image for a fork's through `WAITRON_IMAGE` and starts with a new database writes the official values under the fork's
+origin. And `unknown` matches `unknown`, so a fork built on the box takes the row from a backup written by any on-box
+or unlabelled build, official values included. Only a fork that sets its own origin is protected.
+
+**A mirror takes the values from the main box, with no new call between boxes.** A spare's first full copy
+is the whole `venue.db` (3b plan, "The first full copy", Tasks 6.3 and 6.4, D10), and so is A1018's final
+copy (`handover-capture.ts:109`), a restore, and the bucket stream. The owner's 3b answer (c), that switch-on
+writes the dormant filing setup from the spare's copy, finds the row in that same copy. A spare needs no
+values of its own. Read, not run; a control with `VACUUM INTO` showed a one-row table being carried.
+
+**What is public, so what cannot carry the values.** The installer `waitron-installer-<n>.img`, the ready-made
+disk and its images are all published files, for anyone to download (B3 design §4, §13). So neither of the
+owner's two suggested places can hold them. Hiding them inside a public file does not work:
+
+- Encrypting them inside it needs a key on the stick, which is then the private thing.
+- Putting a fingerprint of the number in the image gives the number away. There are 30 million NIE forms (X, Y
+  or Z and seven digits; the letter follows). 3,000,000 SHA-256 hashes took 1.1 seconds on this Mac on
+  2026-11-04 (one thread), so all of them take about 11 seconds (a rerun: 12 to 13). A slow hash only delays it: at the 22.4 ms per
+  scrypt measured the same day, about 7.8 days on one thread.
+- A secret on the stick that unlocks a private server would expose less if a stick were lost, since it can be
+  revoked. It costs a server every official install depends on, and the number is readable on every terminal
+  anyway (below), so it is not recommended now.
+
+**So: one private file on the owner's own stick.** A public stick image, plus one file `producer.env` that the
+owner's stick-making command adds to the stick's `WAITRON` folder from the private file on their Mac. The person
+at the box does nothing new. The installer carries the values into the new disk's private `.env`, and the first
+Live setup copies them into the row. Until the installer is built, `--producer-file` stays the way for a box
+installed by hand. A venue Waitron Cloud hosts gets the same two settings from Cloud's private configuration.
+
+**What this asks of B3 (lane B owns it; its plan is not edited here).**
+
+1. A stick-making command that writes the published image and adds `WAITRON/producer.env` from a file the owner
+   names, after checking it. The stick's checksum list does not cover that file. It needs a writable partition with
+   room, which slice 2 should measure.
+2. The installer reads the file, if present, before it says «Ya puedes quitar el USB» (B3 §5, step 3), and keeps
+   it in memory. No file is not a refusal: a spare or a restored box needs none. A badly shaped file stops the
+   install before anything is erased, with a message on the screen and the status page.
+3. After the disk is written and checked (§5.5, so the check does not trip on the change), it writes both values
+   to the box's `.env` inside the encrypted container, mode 600. Neither value reaches a log, the status page or
+   anything under `/boot`. Until first start finishes the container opens with an empty passphrase (§7.3).
+4. B3 §4 ("the installer writes nothing to the stick") still holds; §4 and §1 goal 2's list of what differs per box
+   each need a sentence naming this one owner-added file.
+5. «Descarga uno nuevo» (§5.4, a too-old stick) points at a public download with no file. A box installed from it
+   reaches the refusal below unless it restores or joins, so that message needs to say so.
+6. The virtual-machine acceptance run (§13) uses made-up values and checks they reach the row.
+7. §12.2's move from Prepare to a fresh Live, which isolates practice connection settings, keeps the two `.env`
+   values.
+
+**A box with no values, at setup.** A blank stick-installed box starts unprovisioned and preproduction (B3 §12.1), and
+a setup request names its own environment (`setup-api.ts:595-596`), so the check reads the request. A box with no values
+may use Prepare. Asking for Live on a published build is refused at its start, before it creates anything; today's check
+would come only after the whole wizard. The page says what happened and offers what the person can do there: restore,
+join as a spare, or reinstall from a stick holding the file. The two new refusal codes get English and Spanish recovery
+wording the same way.
+
+**A fork.** Nothing official is in the source, the image or a public stick, so a fork has only what it supplies: its
+own file on its own stick, or `--producer-file`. A fork that stamps its build the way CI and `waitron.sh` do counts
+as published (`BUILD_COMMIT !== null`, `packages/fiscal-verifactu/src/slot.ts:74`) and refuses without values. A
+plain `docker build` is unstamped (`deploy/Dockerfile:4,29-30`): it does not refuse the producer, and production setup
+should stop at the clock check instead, with a message that does not mention the producer (the clock result was run;
+the stop at `hour-selection.ts:402` was read). A fork restoring an official backup hits the table's "another origin"
+rows. AEAT's FAQ puts a modifier under their own certification: «no están cubiertas por la certificación del
+productor del SIF original» (`docs/compliance/asesor-questions.md:2345`). A short note for forks goes in the operator
+docs with the build.
+
+**What stays private, and what cannot.** This limits what the whole mechanism buys.
+
+| Where | Is the number there? |
+| --- | --- |
+| The repository, commits, pull requests, CI logs | No |
+| The images, the published stick, the ready-made disk | No |
+| A stick the owner made, including one left at a venue | Yes, readable on any computer |
+| Backup archives | Yes, under the recovery key |
+| The bucket stream | Yes. Waitron does not encrypt it; the design's floor is the provider's server-side encryption (topology design §0.3), which nothing here sets or checks |
+| A box's own disk, and a spare's | Yes; encrypted on a stick-installed box, not on one installed by hand |
+| Every record filed with AEAT | Yes, as the law's software block |
+| **The declaration, on every till and dashboard** | **Yes. Orden HAC/1177/2024 art. 15.1 i) requires the number; art. 15.3 requires the declaration inside the system, and AEAT's FAQ says at every terminal. A940 §7.2 also serves it with no sign-in, over plain HTTP, on the box's landing page** |
+| **The declaration published with each release** | **Yes as A940 is designed: §5.3 commits each version's text to the public repository and renders it into the public image; §7.1 attaches it to the GitHub Release. This is the owner's decision below** |
+
+So anyone at a venue, or anyone who gets a box, can read the number. This mechanism keeps it from being collected off
+the internet, and no further. The 2026-11-03 sentence that "the published declaration text holds placeholders filled
+at run time" answered only part of this, and was never put to the owner.
+
+**What the law asks of the outside copy.** Read in the BOE's and AEAT's own text, downloaded 2026-11-04:
+
+- RD 1007/2023 art. 13.2: «así como para el cliente y el comercializador en el momento de la adquisición del producto».
+- Orden art. 15.3: «deberá ponerse a disposición del comercializador y del cliente, tanto en el momento de su adquisición
+  como posteriormente, en papel o electrónicamente».
+- AEAT's FAQ goes further. It must also be reachable outside the product «para que el comercializador, y el usuario o
+  potencial usuario del SIF puedan ver la misma en cualquier momento (por ejemplo, antes o en el momento de su adquisición)»,
+  «en formato papel o electrónico, bien en soporte físico … o siendo accesible a través de Internet».
+- Public copies are what it recommends: «se recomienda que, adicionalmente, todas las certificaciones sean accesibles
+  públicamente y localizables fácilmente a través de Internet».
+
+So a complete copy handed to each buyer fits the RD and the Orden, but may not fit the FAQ's "potential user", who has
+bought nothing yet. Giving it on request may be an answer; a public copy with the number withheld may not count as the
+declaration. This is not a lawyer's reading, the asesor has not been asked, and having no declaration costs €1,000 per
+system (design §2). The first venue is the owner's own company, so nobody else is a buyer yet.
+
+**The owner's decision.**
+
+- **(a) Recommended: keep the number private as far as the law lets it, and ask the asesor first.** The private stick file
+  above. The public declaration withholds the number and says how to get the complete one; each terminal shows the complete
+  one and each buyer is handed it. If the asesor says the public copy must carry it, (b) is what is left. Cost: this section's
+  work, B3's seven points, one command per stick, one repository variable, one asesor question, and a change to A940: rendering
+  moves from the image build to the box, which undoes §5.3's "same bytes" and its opaque-file rule, and §5.2, §5.4, §5.6, §7.1,
+  §7.2 and §8 follow. A box with no values shows the withheld copy before setup.
+- **(b) Publish it.** The release job writes the values into the official image from a private CI secret, and the declaration is
+  complete everywhere, as AEAT recommends. No stick file, no B3 work, no asesor question. The row stays for restores, and it still
+  needs the origin stamp, or a fork restoring an official backup files under the official producer. A fork built `FROM` the official
+  image inherits the values. Cost: the number is public for good in practice: AEAT recommends keeping old declarations public, and
+  anything published may have been copied.
+
+A company as producer would make (b) painless, because its tax number is not a person's. Moving the producer later costs every box
+a new installation (§5.6), on our reading of design §2, which asesor question Q53(d) asks them to confirm.
+
+**Which test checks change.** The golden hash test and the immutability suite run unedited, since with no row a record carries what
+it carries today. New cases: one per row of the table, the four check points, and a configuration export carrying no row. The three
+readers of the producer (`backend.ts:762`, `record-remedy-absent.ts:142`, `record-remedy-http.ts:129`) read the row. A grep of the
+repository found no other reader that builds or compares it (`drain.ts:1809-1815` compares AEAT's copy with the stored block;
+`backup-verification-chain.ts:107` skips it).
+
+**Order.** It adds a migration on a fiscal table: its own fiscal pull request, which the owner lands, not started while another of lane
+A's pull requests is parked (runbook H1). The row and `--producer-file` are common to (a) and (b). Building A947 3b and A1018 does not wait
+for it. But until it lands, no box that files with Veri\*Factu, on a published build set to production, gets past `boot.ts:2066`
+to trading, as main box or spare (the slot refusing was run; the route to that line was read). A no-regime venue is unaffected, and setup
+still opens. The postal address (item j)
+still has to come from the owner and follows the same decision.
+
+- [ ] Wait for the owner's answer.
+- [ ] Write the build tasks from the table, then build with implementers, test-first.
+- [ ] Hand lane B the seven points above as a queue note, if (a) is chosen.

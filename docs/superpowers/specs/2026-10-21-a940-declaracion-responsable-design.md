@@ -26,6 +26,11 @@ plan: [`2026-10-22-a940-1-software-identity.md`](../plans/2026-10-22-a940-1-soft
 
 **Mock-ups:** removed from the repository on 2026-11-02.
 
+> **2026-11-04, a pointer, not yet a decision:** the owner chose on 2026-11-02 to keep their tax number
+> out of everything public, which §5.2, §5.3, §5.4, §5.6's first table row, §7.1, §7.2 and §8 do not fit as written.
+> The proposal and the owner's open choice:
+> [the plan's "Task 8, proposal of 2026-11-04"](../plans/2026-10-22-a940-1-software-identity.md).
+
 > **Third revision 2026-10-22 — the owner's answers of 02:45 to 03:12.** Both of the second
 > revision's questions are answered, and two further directions apply to every clock wait. What
 > changed, section by section:
