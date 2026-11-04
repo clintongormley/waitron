@@ -53,6 +53,67 @@ async function select(el: VenueSettingsScreen, key: string): Promise<void> {
   await tabs(el)!.updateComplete;
 }
 
+it("moves an open dialog between its panel parents without closing it or losing modality", async () => {
+  const dialog = document.createElement("wt-dialog");
+  dialog.innerHTML = '<input aria-label="Kept field" />';
+  const retained = {
+    key: "retained",
+    tab: "venue-details",
+    render: () => html`${dialog}`,
+  } as VenueSettingsPanel;
+  const el = await mount([retained, panel("k", "kitchen")]);
+  await dialog.updateComplete;
+  dialog.open = true;
+  await dialog.updateComplete;
+  const closes = vi.fn();
+  dialog.addEventListener("wt-close", closes);
+  el.panels = [{ ...retained, tab: "kitchen" }, panel("r", "venue-details")];
+  await el.updateComplete;
+  await dialog.updateComplete;
+  expect(
+    el.shadowRoot!.querySelector('[data-test="venue-settings-kitchen"]')!.contains(dialog),
+  ).toBe(true);
+  expect(dialog.shadowRoot!.querySelector("dialog")!.matches(":modal")).toBe(true);
+  expect(closes).not.toHaveBeenCalled();
+});
+
+it("moving an editor between its panel parents leaves the question over it answerable", async () => {
+  const editor = document.createElement("wt-dialog");
+  editor.innerHTML = '<input aria-label="Editor field" />';
+  const retained = {
+    key: "retained",
+    tab: "venue-details",
+    render: () => html`${editor}`,
+  } as VenueSettingsPanel;
+  const el = await mount([retained, panel("k", "kitchen")]);
+  await editor.updateComplete;
+  editor.open = true;
+  await editor.updateComplete;
+  const question = document.createElement("wt-modal");
+  question.innerHTML = '<button data-choice="keep">Keep</button>';
+  el.parentNode!.appendChild(question);
+  await question.updateComplete;
+  question.open = true;
+  await question.updateComplete;
+  let answer!: (allow: boolean) => void;
+  editor.beforeClose = () => new Promise<boolean>((resolve) => (answer = resolve));
+  const pending = editor.requestClose("cancel");
+  const keep = question.querySelector("button")!;
+  keep.focus();
+  el.panels = [{ ...retained, tab: "kitchen" }, panel("r", "venue-details")];
+  await el.updateComplete;
+  await editor.updateComplete;
+  expect(keep.matches(":focus"), "the question keeps its focused button").toBe(true);
+  expect(editor.shadowRoot!.querySelector("dialog")!.matches(":modal")).toBe(true);
+  const field = editor.querySelector("input")!;
+  field.focus();
+  expect(field.matches(":focus"), "the editor under the question is inert").toBe(false);
+  expect(question.open).toBe(true);
+  answer(false);
+  expect(await pending).toBe(false);
+  question.remove();
+});
+
 describe("the Venue settings page", () => {
   it("has no Tables tab and no Adjustment reasons tab: Voids and comps is a page of its own", () => {
     expect(isVenueSettingsTab("tables")).toBe(false);

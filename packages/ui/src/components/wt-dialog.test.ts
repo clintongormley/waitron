@@ -1,5 +1,7 @@
 import { expect, test, afterEach, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { html, render } from "lit";
+import { repeat } from "lit/directives/repeat.js";
 import { cleanup, formMessageOf, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import { WtDialog } from "./wt-dialog.js";
 import "./wt-button.js";
@@ -293,11 +295,14 @@ test("closes on a real Escape press when dismissible", async () => {
   await el.updateComplete;
   const closes = vi.fn();
   el.addEventListener("wt-close", closes);
+  const closed = new Promise((resolve) => el.addEventListener("wt-close", resolve));
 
-  await pressEscape();
+  await userEvent.keyboard("{Escape}");
+  await closed;
 
   expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(false);
   expect(el.open).toBe(false);
+  await closeReportsDelivered();
   expect(closes).toHaveBeenCalledOnce();
 });
 
@@ -1835,7 +1840,9 @@ for (const tag of ["wt-dialog", "wt-modal"] as const) {
     const parent = el.parentNode as ParentNode & {
       moveBefore(node: Node, child: Node | null): void;
     };
+    const shown = vi.spyOn(nativeOf(el), "showModal");
     parent.moveBefore(el, null);
+    expect(shown).not.toHaveBeenCalled();
     expect(nativeOf(el).matches(":modal")).toBe(true);
     expect(input.matches(":focus")).toBe(true);
   });
@@ -1874,7 +1881,7 @@ test("an open dialog put back leaves its opener as where focus goes on close", a
 async function stacked(arrangement: "inside" | "beside" | "before") {
   const inner = `<wt-modal class="child" heading="Child"><input class="in-child" aria-label="Child" /></wt-modal>`;
   const outer = (content: string) =>
-    `<wt-modal class="parent" heading="Parent"><input class="in-parent" aria-label="Parent" />${content}</wt-modal>`;
+    `<wt-modal class="parent" heading="Parent"><input class="first-in-parent" aria-label="First" /><input class="in-parent" aria-label="Parent" />${content}</wt-modal>`;
   await mount("<div></div>");
   host.innerHTML = `<div class="around">${
     arrangement === "inside"
@@ -1889,68 +1896,322 @@ async function stacked(arrangement: "inside" | "beside" | "before") {
   await child.updateComplete;
   parent.open = true;
   await parent.updateComplete;
+  const inParent = host.querySelector<HTMLInputElement>(".in-parent")!;
+  inParent.focus();
   child.open = true;
   await child.updateComplete;
   return {
     around: host.querySelector<HTMLElement>(".around")!,
     parent,
     child,
-    inParent: host.querySelector<HTMLInputElement>(".in-parent")!,
+    inParent,
     inChild: host.querySelector<HTMLInputElement>(".in-child")!,
   };
 }
 
-for (const arrangement of ["inside", "beside"] as const) {
-  test(`a dialog opened over another, ${arrangement} it, ends on top when both are put back`, async () => {
-    const { around, parent, child, inParent, inChild } = await stacked(arrangement);
+async function settledBoth(parent: WtDialog, child: WtDialog) {
+  await parent.updateComplete;
+  await child.updateComplete;
+}
+
+function expectChildOnTop(parent: WtDialog, child: WtDialog, inChild: HTMLInputElement) {
+  expect(nativeOf(parent).matches(":modal")).toBe(true);
+  expect(nativeOf(child).matches(":modal")).toBe(true);
+  expect(takesFocus(inChild)).toBe(true);
+  const inParent = parent.querySelector("input")!;
+  inParent.focus();
+  expect(inParent.matches(":focus"), "the dialog underneath is inert").toBe(false);
+}
+
+for (const arrangement of ["inside", "beside", "before"] as const) {
+  test(`a dialog opened over another, drawn ${arrangement} it, ends on top when both are put back`, async () => {
+    const { around, parent, child, inChild } = await stacked(arrangement);
     takeOut(around)();
-    await parent.updateComplete;
-    await child.updateComplete;
-    expect(nativeOf(parent).matches(":modal")).toBe(true);
-    expect(nativeOf(child).matches(":modal")).toBe(true);
-    expect(takesFocus(inParent)).toBe(false);
-    expect(takesFocus(inChild)).toBe(true);
+    await settledBoth(parent, child);
+    expectChildOnTop(parent, child, inChild);
   });
 
-  test(`a dialog opened over another, ${arrangement} it, ends on top when it alone is put back`, async () => {
-    const { parent, child, inParent, inChild } = await stacked(arrangement);
+  test(`a dialog opened over another, drawn ${arrangement} it, ends on top when it alone is put back`, async () => {
+    const { parent, child, inChild } = await stacked(arrangement);
     takeOut(child)();
-    await child.updateComplete;
-    expect(nativeOf(parent).matches(":modal")).toBe(true);
-    expect(nativeOf(child).matches(":modal")).toBe(true);
-    expect(takesFocus(inParent)).toBe(false);
-    expect(takesFocus(inChild)).toBe(true);
+    await settledBoth(parent, child);
+    expectChildOnTop(parent, child, inChild);
   });
 }
 
-test("a dialog opened over another and inside it comes back over it when the outer one is put back", async () => {
-  const { parent, child, inParent, inChild } = await stacked("inside");
+for (const arrangement of ["inside", "beside", "before"] as const) {
+  test(`the lower of two dialogs, the other drawn ${arrangement} it, put back alone stays under it`, async () => {
+    const { parent, child, inChild } = await stacked(arrangement);
+    takeOut(parent)();
+    await settledBoth(parent, child);
+    expectChildOnTop(parent, child, inChild);
+  });
+}
+
+test("the dialog above one put back keeps its focused field, caret and selection, and reports no close", async () => {
+  const { parent, child, inChild } = await stacked("beside");
+  const closes = vi.fn();
+  child.addEventListener("wt-close", closes);
+  inChild.focus();
+  await userEvent.keyboard("abcdef");
+  inChild.setSelectionRange(1, 3);
   takeOut(parent)();
-  await parent.updateComplete;
-  await child.updateComplete;
-  expect(nativeOf(parent).matches(":modal")).toBe(true);
+  await settledBoth(parent, child);
+  expect(deepActiveElement()).toBe(inChild);
+  expect([inChild.selectionStart, inChild.selectionEnd]).toEqual([1, 3]);
+  await userEvent.keyboard("Z");
+  expect(inChild.value).toBe("aZdef");
+  await closeReportsDelivered();
+  expect(closes).not.toHaveBeenCalled();
+  expect(child.open).toBe(true);
   expect(nativeOf(child).matches(":modal")).toBe(true);
-  expect(takesFocus(inParent)).toBe(false);
-  expect(takesFocus(inChild)).toBe(true);
 });
 
-test("the lower of two dialogs beside each other, put back alone, ends on top and takes typing", async () => {
-  const { parent, child, inParent, inChild } = await stacked("beside");
+test("Escape goes to the dialog above one put back, and focus then lands in the one underneath", async () => {
+  const { parent, child, inParent } = await stacked("beside");
+  const parentCloses = vi.fn();
+  parent.addEventListener("wt-close", parentCloses);
   takeOut(parent)();
-  await parent.updateComplete;
+  await settledBoth(parent, child);
+  const closed = new Promise((resolve) => child.addEventListener("wt-close", resolve));
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  expect(child.open).toBe(false);
+  expect(parent.open).toBe(true);
   expect(nativeOf(parent).matches(":modal")).toBe(true);
-  expect(nativeOf(child).matches(":modal")).toBe(true);
-  expect(takesFocus(inChild)).toBe(false);
-  expect(takesFocus(inParent)).toBe(true);
+  expect(parentCloses).not.toHaveBeenCalled();
+  expect(deepActiveElement()).toBe(inParent);
 });
 
-test("two dialogs put back together stack by their place in the page, not by which opened last", async () => {
-  const { around, parent, child, inParent, inChild } = await stacked("before");
-  takeOut(around)();
-  await parent.updateComplete;
-  await child.updateComplete;
-  expect(nativeOf(parent).matches(":modal")).toBe(true);
-  expect(nativeOf(child).matches(":modal")).toBe(true);
-  expect(takesFocus(inChild)).toBe(false);
-  expect(takesFocus(inParent)).toBe(true);
+test("a dialog above one put back, closed by the browser but not yet reported, is not shown again", async () => {
+  const { parent, child } = await stacked("beside");
+  const closes = vi.fn();
+  child.addEventListener("wt-close", closes);
+  nativeOf(child).close();
+  takeOut(parent)();
+  expect(nativeOf(child).open).toBe(false);
+  await closeReportsDelivered();
+  expect(nativeOf(child).open).toBe(false);
+  expect(child.open).toBe(false);
+  expect(closes).toHaveBeenCalledTimes(1);
 });
+
+test("a dialog put back after the lower one moved goes back above it", async () => {
+  const { parent, child, inChild } = await stacked("beside");
+  const putChildBack = takeOut(child);
+  takeOut(parent)();
+  await parent.updateComplete;
+  putChildBack();
+  await settledBoth(parent, child);
+  expectChildOnTop(parent, child, inChild);
+});
+
+test("three dialogs keep their opening order when the lowest is put back", async () => {
+  const { parent, child, inChild } = await stacked("beside");
+  const top = document.createElement("wt-modal");
+  top.innerHTML = `<input aria-label="Top" />`;
+  host.append(top);
+  await top.updateComplete;
+  top.open = true;
+  await top.updateComplete;
+  const inTop = top.querySelector("input")!;
+  takeOut(parent)();
+  await settledBoth(parent, child);
+  await top.updateComplete;
+  expect(takesFocus(inChild)).toBe(false);
+  expect(takesFocus(inTop)).toBe(true);
+  top.open = false;
+  await top.updateComplete;
+  expectChildOnTop(parent, child, inChild);
+});
+
+test("dialogs above one put back go back in opening order, whatever moved before", async () => {
+  const { parent, child, inChild } = await stacked("beside");
+  const top = document.createElement("wt-modal");
+  top.innerHTML = `<input aria-label="Top" />`;
+  host.append(top);
+  await top.updateComplete;
+  top.open = true;
+  await top.updateComplete;
+  takeOut(child)();
+  takeOut(parent)();
+  await settledBoth(parent, child);
+  await top.updateComplete;
+  const inTop = top.querySelector("input")!;
+  expect(takesFocus(inChild)).toBe(false);
+  expect(takesFocus(inTop)).toBe(true);
+});
+
+for (const how of ["taken out and put back", "moved by a keyed list"] as const) {
+  test(`an open dialog ${how} gives focus back to the field being edited, caret and selection kept`, async () => {
+    await mount("<div></div>");
+    const draw = (ids: string[]) =>
+      render(
+        html`${repeat(
+          ids,
+          (id) => id,
+          (id) =>
+            html`<section>
+              ${
+                id === "a"
+                  ? html`<wt-dialog
+                      ><input aria-label="First" /><input aria-label="Editing"
+                    /></wt-dialog>`
+                  : "other"
+              }
+            </section>`,
+        )}`,
+        host,
+      );
+    draw(["a", "b"]);
+    const el = host.querySelector<WtDialog>("wt-dialog")!;
+    await el.updateComplete;
+    el.open = true;
+    await el.updateComplete;
+    const editing = el.querySelectorAll("input")[1]!;
+    editing.focus();
+    await userEvent.keyboard("abcdef");
+    editing.setSelectionRange(2, 4);
+    if (how === "moved by a keyed list") draw(["b", "a"]);
+    else takeOut(el)();
+    await el.updateComplete;
+    expect(nativeOf(el).matches(":modal")).toBe(true);
+    expect(deepActiveElement()).toBe(editing);
+    expect([editing.selectionStart, editing.selectionEnd]).toEqual([2, 4]);
+    await userEvent.keyboard("Z");
+    expect(editing.value).toBe("abZef");
+  });
+}
+
+test("a field removed from a dialog while it was out takes no focus back", async () => {
+  const el = (await mount(
+    `<wt-dialog heading="Edit"><input aria-label="First" /><input aria-label="Second" /></wt-dialog>`,
+  )) as WtDialog;
+  el.open = true;
+  await el.updateComplete;
+  const [first, second] = el.querySelectorAll("input");
+  second!.focus();
+  const putBack = takeOut(el);
+  second!.remove();
+  putBack();
+  await el.updateComplete;
+  expect(deepActiveElement()).toBe(first);
+});
+
+test("moving a dialog while its close waits on a question keeps the question answerable", async () => {
+  const { parent, child, inChild } = await stacked("beside");
+  let answer!: (allow: boolean) => void;
+  parent.beforeClose = () => new Promise<boolean>((resolve) => (answer = resolve));
+  const request = parent.requestClose("cancel");
+  inChild.focus();
+  takeOut(parent)();
+  await settledBoth(parent, child);
+  expect(deepActiveElement()).toBe(inChild);
+  answer(false);
+  expect(await request).toBe(false);
+  expect(parent.open).toBe(true);
+});
+
+test("what records opening order holds only dialogs that are open and on the page", async () => {
+  const openDialogs = WtDialog["openDialogs"];
+  const before = openDialogs.size;
+  const el = (await mount(`<wt-dialog heading="Edit"><input /></wt-dialog>`)) as WtDialog;
+  expect(openDialogs.size).toBe(before);
+  el.open = true;
+  await el.updateComplete;
+  expect(openDialogs.has(el)).toBe(true);
+
+  const putBack = takeOut(el);
+  expect(openDialogs.has(el)).toBe(false);
+  putBack();
+  expect(openDialogs.has(el)).toBe(true);
+
+  const closed = new Promise((resolve) => el.addEventListener("wt-close", resolve));
+  el.open = false;
+  await el.updateComplete;
+  expect(openDialogs.has(el)).toBe(false);
+  await closed;
+
+  el.open = true;
+  await el.updateComplete;
+  const dismissed = new Promise((resolve) => el.addEventListener("wt-close", resolve));
+  await userEvent.keyboard("{Escape}");
+  await dismissed;
+  await el.updateComplete;
+  expect(openDialogs.has(el)).toBe(false);
+
+  el.open = true;
+  await el.updateComplete;
+  el.remove();
+  expect(openDialogs.has(el)).toBe(false);
+  el.open = false;
+  await el.updateComplete;
+
+  // The browser refuses to show a dialog that is off the page.
+  el.open = true;
+  await expect(el.updateComplete).rejects.toThrow("not in a Document");
+  expect(openDialogs.has(el)).toBe(false);
+  expect(openDialogs.size).toBe(before);
+});
+
+test("an open long dialog put back stays within the screen", async () => {
+  const el = (await mount(
+    `<wt-dialog><div style="height: 5000px">Long body</div></wt-dialog>`,
+  )) as WtDialog;
+  el.open = true;
+  await el.updateComplete;
+  takeOut(el)();
+  await el.updateComplete;
+  expect(nativeOf(el).getBoundingClientRect().height).toBeLessThanOrEqual(innerHeight);
+});
+
+test("a close asked for before a put-back cannot close it or release a later request", async () => {
+  const el = (await mount(`<wt-dialog><input /></wt-dialog>`)) as WtDialog;
+  const closes = vi.fn();
+  el.addEventListener("wt-close", closes);
+  const answers: ((allow: boolean) => void)[] = [];
+  const guard = vi.fn(() => new Promise<boolean>((resolve) => answers.push(resolve)));
+  el.beforeClose = guard;
+  el.open = true;
+  await el.updateComplete;
+  const old = el.requestClose("cancel");
+  takeOut(el)();
+  const current = el.requestClose("cancel");
+  answers[0]!(true);
+  expect(await old).toBe(false);
+  expect(await el.requestClose("cancel")).toBe(false);
+  expect(guard).toHaveBeenCalledTimes(2);
+  expect(nativeOf(el).matches(":modal")).toBe(true);
+  answers[1]!(false);
+  expect(await current).toBe(false);
+  await closeReportsDelivered();
+  expect(closes).not.toHaveBeenCalled();
+});
+
+for (const [where, sibling] of [
+  ["alone in its box", false],
+  ["after another button in its box", true],
+] as const) {
+  test(`with no opener, focus on closing after a put-back goes to the first thing near what had it at opening: a button ${where}`, async () => {
+    await mount("<div></div>");
+    const box = document.createElement("div");
+    host.append(box);
+    const earlier = document.createElement("button");
+    if (sibling) box.append(earlier);
+    const button = document.createElement("button");
+    box.append(button);
+    const el = document.createElement("wt-dialog");
+    el.innerHTML = `<input aria-label="Name" />`;
+    host.append(el);
+    await el.updateComplete;
+    button.focus();
+    el.open = true;
+    await el.updateComplete;
+    takeOut(el)();
+    await el.updateComplete;
+    const closed = new Promise((resolve) => el.addEventListener("wt-close", resolve));
+    await userEvent.keyboard("{Escape}");
+    await closed;
+    expect(deepActiveElement()).toBe(sibling ? earlier : button);
+  });
+}
