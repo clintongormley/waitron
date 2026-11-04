@@ -1718,6 +1718,17 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   value suits a printer-only station too. Spanish «Cambios tras el envío», «No permitidos», «Solo
   en espera», «En espera o sin empezar». Say if other words read better (A756 PR 8).
 
+- **A1318. `wt-data-table` has no per-column heading wrap, and the Prep stations table scrolls
+  sideways at 390 px.** With two stations that have printers and screens it scrolls 343 px in
+  English and 342 px in Spanish; the "Waits for the pass" heading alone takes about 130 px and does
+  not wrap. `wrap-to-fit` narrows every column and still scrolled at 320 px. Left open by A773-2 PR C.
+
+- **A1319. The station editor's three switches show their hint line without linking it as the
+  switch's accessible description** ("Waits for the pass", "Also list the order's dishes from other
+  stations" and "Print held groups in advance", `station-editor.ts`): each hint is a separate
+  paragraph, and the switch has no `description`. Department settings passes its hint as
+  `.description` (`department-settings.ts:897`). Fix all three together. Left open by A773-2 PR C.
+
 - **A1079. Owner question: should a supervisor see each station's "Changes after sending"?** The
   Kitchen tab let a supervisor read it (owner, 2026-10-04); since #2044 it lives only in the station
   editor, which needs `venue_service.manage`. Decide whether a supervisor gets a read-only view

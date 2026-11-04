@@ -986,4 +986,17 @@ rejected.
   (`toHaveLength(4)` → `5`), added to Changed test checks; its 390 px width check passes unedited.
 - Task 6's control "put the column after Actions" cannot go red: `wt-data-table` always draws an
   end-pinned column last (`packages/ui/src/components/wt-data-table.ts:1414-1434`). The substitute
-  control moved the column before Shown on, which turned every heading pin red.
+  control moved the column before Shown on, which turned the six order pins red (the count pin
+  cannot fail on a reorder).
+
+## Revision 4 (2026-11-04, Task 5 and 6 reviews)
+
+- **The column stays as built (lead's decision).** The Task 6 review measured, at 390 px with two
+  stations that have printers and screens, sideways scrolling of 213 → 343 px in English and
+  232 → 342 px in Spanish; the heading "Waits for the pass" takes about 130 px and does not wrap.
+  The stations table already scrolled sideways on a phone before this task, with Actions pinned at
+  the trailing edge. The phone-width cases in `station-table.test.ts` compare only the table's
+  outer right edge with the viewport, so they say nothing about whether the columns fit. A
+  per-column heading wrap is backlog A1318.
+- **Task 5 M1:** the switch's hint line is not linked as the switch's `description`; the editor's
+  other two switches share the gap. Backlog A1319.
