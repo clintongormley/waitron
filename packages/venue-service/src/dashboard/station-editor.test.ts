@@ -707,6 +707,14 @@ it("A773 station policy: a refusal naming waitsForPass keeps the draft and shows
   expect(formMessage(el)).toBe("The change could not be saved.");
   expect(nameField(el).error).toBe("");
   expect(printersField(el)!.error).toBe("");
+  expect(picker(el).error).toBe("");
+  for (const name of [
+    "warmAfterMinutes",
+    "overdueAfterMinutes",
+    "forgottenAfterMinutes",
+    "readyWarningAfterMinutes",
+  ])
+    expect(timingField(el, name).error).toBe("");
   expect(saveButton(el).disabled).toBe(false);
 });
 

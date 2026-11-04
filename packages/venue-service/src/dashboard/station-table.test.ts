@@ -17,6 +17,7 @@ function station(overrides: Partial<PrepStation> & Pick<PrepStation, "id" | "nam
     active: true,
     isDefault: false,
     colour: "blue",
+    waitsForPass: false,
     ...overrides,
   } as PrepStation;
 }
