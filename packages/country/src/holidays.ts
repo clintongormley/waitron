@@ -4,6 +4,7 @@ export interface ShippedHolidayFact {
   readonly id: string;
   readonly date: string;
   readonly name: string;
+  readonly englishName?: string;
   readonly scope: ShippedHolidayScope;
   readonly sourceId: string;
 }
@@ -34,6 +35,7 @@ export interface HolidaySourceReference {
 export interface HolidayAreaOption {
   readonly key: string;
   readonly name: string;
+  readonly englishName?: string;
 }
 
 export interface CountryHolidayCalendar {
@@ -41,6 +43,7 @@ export interface CountryHolidayCalendar {
   readonly localEntryLimit: number;
   readonly sources: readonly HolidaySourceReference[];
   regionForProvince(provinceCode: string): string | undefined;
+  englishNameFor(name: string): string | undefined;
   areasForProvince(provinceCode: string): readonly HolidayAreaOption[];
   read(input: {
     readonly provinceCode: string;
@@ -60,6 +63,7 @@ export interface HolidayDatasetRow {
   readonly key: string;
   readonly date: string;
   readonly name: string;
+  readonly englishName?: string;
   readonly scope: ShippedHolidayScope;
   readonly regions: readonly string[];
   readonly onlyAreas?: readonly string[];
@@ -174,6 +178,9 @@ function compareFacts(a: ShippedHolidayFact, b: ShippedHolidayFact): number {
 export function createHolidayCalendar(dataset: HolidayDataset): CountryHolidayCalendar {
   checkDataset(dataset);
   const regionByProvince = new Map(Object.entries(dataset.provinceRegions));
+  const englishNames = new Map(
+    dataset.years.flatMap((year) => year.rows.map((row) => [row.name, row.englishName] as const)),
+  );
   const yearByNumber = new Map(dataset.years.map((year) => [year.year, year]));
   const areasOf = (provinceCode: string) =>
     dataset.areas.filter(({ provinces }) => provinces.includes(provinceCode));
@@ -182,8 +189,13 @@ export function createHolidayCalendar(dataset: HolidayDataset): CountryHolidayCa
     localEntryLimit: dataset.localEntryLimit,
     sources: dataset.sources,
     regionForProvince: (provinceCode) => regionByProvince.get(provinceCode),
+    englishNameFor: (name) => englishNames.get(name),
     areasForProvince: (provinceCode) =>
-      areasOf(provinceCode).map(({ key, name }) => ({ key, name })),
+      areasOf(provinceCode).map(({ key, name, englishName }) => ({
+        key,
+        name,
+        ...(englishName === undefined ? {} : { englishName }),
+      })),
     read({ provinceCode, areaKey, from, to }) {
       if (!isRealDate(from) || !isRealDate(to) || from > to)
         throw new RangeError(`holiday range ${from}..${to} is not two real dates in order`);
@@ -214,6 +226,7 @@ export function createHolidayCalendar(dataset: HolidayDataset): CountryHolidayCa
               id: `shipped:${row.key}`,
               date: row.date,
               name: row.name,
+              ...(row.englishName === undefined ? {} : { englishName: row.englishName }),
               scope: row.scope,
               sourceId: row.sourceId,
             });

@@ -1,9 +1,10 @@
+import { currentLocale } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
-import { holidayDateName } from "../holiday-naming.js";
+import { holidayDateName, holidayDisplayName } from "../holiday-naming.js";
 import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursYear, OpeningHoursYearDay } from "../opening-hours-calendar.js";
@@ -278,7 +279,12 @@ export class OpeningHoursYearView extends LitElement {
               ${week.map((date) => {
                 if (!date.startsWith(key)) return html`<td></td>`;
                 const day = days.get(date);
-                const holidayName = holidayDateName([...(day?.holidays ?? [])], date, "");
+                const holidayName = holidayDateName(
+                  [...(day?.holidays ?? [])],
+                  date,
+                  "",
+                  currentLocale(),
+                );
                 return html`<td
                   class=${
                     [
@@ -326,10 +332,11 @@ export class OpeningHoursYearView extends LitElement {
         ? nothing
         : html`<p class="note" data-test="area-address">${areaAddress(model.area.readiness)}</p>`;
     if (!model.area.options.length) return explanation;
+    const chosen = model.area.options.find((item) => item.key === model.area.chosen);
     if (this.readOnly)
       return html`${explanation}
         <p class="note" data-test="area-chosen">
-          ${model.area.options.find((item) => item.key === model.area.chosen)?.name ?? t("holidays.area_none")}
+          ${chosen === undefined ? t("holidays.area_none") : holidayDisplayName(chosen, currentLocale())}
         </p>`;
     return html`${explanation}<wt-combobox
         name="holidayArea"
@@ -338,7 +345,7 @@ export class OpeningHoursYearView extends LitElement {
         search="never"
         ?required=${model.area.required}
         .value=${model.area.chosen ?? ""}
-        .options=${model.area.options.map(({ key, name }) => ({ value: key, label: name }))}
+        .options=${model.area.options.map((option) => ({ value: option.key, label: holidayDisplayName(option, currentLocale()) }))}
         ?disabled=${this.areaBusy || model.area.readiness !== "ready"}
         error=${this.areaError}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
@@ -409,7 +416,10 @@ export class OpeningHoursYearView extends LitElement {
         (missing) =>
           html`<li class="warning" data-test="missing-holiday">
             ${format("venue.readiness.holiday_missing", {
-              name: missing.holidayName,
+              name: holidayDisplayName(
+                { name: missing.holidayName, englishName: missing.englishName },
+                currentLocale(),
+              ),
               year: String(model.year),
             })}
           </li>`,

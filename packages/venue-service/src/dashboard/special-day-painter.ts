@@ -561,7 +561,7 @@ export class SpecialDayPainter extends LitElement {
     if (id === null) {
       this.loading = false;
       const date = this.date && isLocalDate(this.date) ? this.date : undefined;
-      const name = date ? holidayDateName(this.holidays, date, "") : "";
+      const name = date ? holidayDateName(this.holidays, date, "", currentLocale()) : "";
       this.adopt(undefined, this.newDates(), name);
       if (name) this.offerExisting(name);
       return;

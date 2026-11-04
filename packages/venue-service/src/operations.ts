@@ -255,6 +255,7 @@ export type VenueReadinessIssue =
       code: "special_day.holiday_missing";
       specialDayId: string;
       holidayName: string;
+      englishName?: string;
       year: number;
     }
   | {

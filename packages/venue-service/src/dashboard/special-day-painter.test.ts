@@ -1685,3 +1685,19 @@ describe("the heading names the day, says it is a special day and lists its date
     }
   });
 });
+
+it.each(["en", "es"])(
+  "starts a new special day with its %s holiday display name",
+  async (locale) => {
+    setLocale(locale);
+    const { painter } = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      holidays: [{ ...holiday("2026-12-25", "Official holiday"), englishName: "English holiday" }],
+    });
+    expect(
+      painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!
+        .value,
+    ).toBe(locale === "en" ? "English holiday" : "Official holiday");
+  },
+);

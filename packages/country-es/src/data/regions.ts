@@ -85,13 +85,23 @@ export const BOE_COLUMNS: readonly { boe: string; ine: string; region: string }[
  * `cod_islas.htm`; the note names Lanzarote and La Graciosa together, so they are one choice, in
  * Lanzarote's province. Arán is in Lleida by Ley 1/2015's preamble (BOE-A-2015-2294). */
 export const HOLIDAY_AREAS: readonly HolidayAreaDefinition[] = [
-  { key: "fuerteventura", name: "Fuerteventura", provinces: ["35"] },
-  { key: "gran-canaria", name: "Gran Canaria", provinces: ["35"] },
-  { key: "lanzarote-la-graciosa", name: "Lanzarote y La Graciosa", provinces: ["35"] },
-  { key: "el-hierro", name: "El Hierro", provinces: ["38"] },
-  { key: "la-gomera", name: "La Gomera", provinces: ["38"] },
-  { key: "la-palma", name: "La Palma", provinces: ["38"] },
-  { key: "tenerife", name: "Tenerife", provinces: ["38"] },
-  { key: "aran", name: "Arán", provinces: ["25"] },
-  { key: "lleida-except-aran", name: "Lleida, fuera del territorio de Arán", provinces: ["25"] },
+  { key: "fuerteventura", name: "Fuerteventura", englishName: "Fuerteventura", provinces: ["35"] },
+  { key: "gran-canaria", name: "Gran Canaria", englishName: "Gran Canaria", provinces: ["35"] },
+  {
+    key: "lanzarote-la-graciosa",
+    name: "Lanzarote y La Graciosa",
+    englishName: "Lanzarote and La Graciosa",
+    provinces: ["35"],
+  },
+  { key: "el-hierro", name: "El Hierro", englishName: "El Hierro", provinces: ["38"] },
+  { key: "la-gomera", name: "La Gomera", englishName: "La Gomera", provinces: ["38"] },
+  { key: "la-palma", name: "La Palma", englishName: "La Palma", provinces: ["38"] },
+  { key: "tenerife", name: "Tenerife", englishName: "Tenerife", provinces: ["38"] },
+  { key: "aran", name: "Arán", englishName: "Aran", provinces: ["25"] },
+  {
+    key: "lleida-except-aran",
+    name: "Lleida, fuera del territorio de Arán",
+    englishName: "Lleida, outside Aran",
+    provinces: ["25"],
+  },
 ];

@@ -457,3 +457,25 @@ it("offers no column chooser", async () => {
   expect(list.shadowRoot!.querySelector(".table-search")).toBeNull();
   expect(list.columns.filter((column) => column.choosable !== undefined)).toEqual([]);
 });
+
+it.each(["en", "es"])(
+  "uses %s for a stored holiday warning without renaming its annual rule",
+  async (locale) => {
+    setLocale(locale);
+    const el = await setup({
+      ...model,
+      readiness: [
+        {
+          code: "special_day.holiday_missing",
+          specialDayId: "special",
+          holidayName: "Official holiday",
+          englishName: "English holiday",
+          year: 2027,
+        },
+      ],
+    });
+    const warning = find(el, '[data-test="holiday-missing"]')!.textContent!;
+    expect(warning).toContain(locale === "en" ? "English holiday" : "Official holiday");
+    expect(warning).not.toContain(locale === "en" ? "Official holiday" : "English holiday");
+  },
+);

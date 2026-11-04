@@ -38,6 +38,19 @@ paused helper alive with a timer made both probes reach the timeout; removing fr
 isolation then failed with `shallow.lock: File exists`. The helper's cleanup stops its recorded
 processes.
 
+## Capture browser screenshots inside the package before moving them
+
+For this workspace's Vitest browser tests, capture to a relative path under the package's
+`__screenshots__/` first, then move only your captures into local receipts. Keep the temporary
+browser probe and the images out of the commit.
+
+On 4 November 2026, A971's temporary `a971.look.test.ts` called `page.screenshot` with an absolute
+campaign-receipt path outside the worktree. Vite refused it with `Access denied` and its
+`server.fs` documentation pointer. The same probe captured both language/theme/width sets after
+changing only the path to `__screenshots__/a971/`. The same refusal had cost A1301 S16 and
+W41s-10a time on 2 November. This is a receipt for the workspace's configured browser server,
+not a claim that every Vite configuration refuses outside paths.
+
 **Asking for a database**
 
 ## There is one database target, and a helper opens it.

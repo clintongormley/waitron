@@ -1105,3 +1105,59 @@ describe("Opening hours year holiday area", () => {
     );
   });
 });
+
+describe("country-pack display names", () => {
+  it.each(["en-GB", "es-ES"])("uses %s for holiday titles and area choices", async (locale) => {
+    setLocale(locale);
+    const model = yearModel();
+    model.days = model.days.map((day) =>
+      day.date === "2027-01-06"
+        ? {
+            ...day,
+            holidays: [
+              { ...holiday(day.date, "Official holiday"), englishName: "English holiday" },
+            ],
+          }
+        : day,
+    );
+    model.area = {
+      ...model.area,
+      options: [{ key: "island", name: "Official island", englishName: "English island" }],
+      chosen: "island",
+    };
+    const el = await mount(model);
+    expect(dayButton(el, "2027-01-06").title).toBe(
+      locale === "en-GB" ? "English holiday" : "Official holiday",
+    );
+    const chooser = root(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "wt-combobox[name=holidayArea]",
+    )!;
+    expect(chooser.options).toEqual([
+      { value: "island", label: locale === "en-GB" ? "English island" : "Official island" },
+    ]);
+    el.readOnly = true;
+    await el.updateComplete;
+    expect(text(root(el).querySelector('[data-test="area-chosen"]')!)).toBe(
+      locale === "en-GB" ? "English island" : "Official island",
+    );
+  });
+});
+
+it.each(["en", "es"])("uses %s for warnings naming a stored official holiday", async (locale) => {
+  setLocale(locale);
+  const el = await mount(
+    yearModel({
+      missingHolidays: [
+        {
+          specialDayId: "special",
+          name: "My special day",
+          holidayName: "Official holiday",
+          englishName: "English holiday",
+        },
+      ],
+    }),
+  );
+  const warning = text(root(el).querySelector('[data-test="missing-holiday"]')!);
+  expect(warning).toContain(locale === "en" ? "English holiday" : "Official holiday");
+  expect(warning).not.toContain(locale === "en" ? "Official holiday" : "English holiday");
+});

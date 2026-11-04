@@ -14,17 +14,25 @@ export function compareHolidayFacts(a: HolidayFact, b: HolidayFact): number {
   return a.id < b.id ? -1 : 1;
 }
 
+export function holidayDisplayName(
+  fact: { readonly name: string; readonly englishName?: string },
+  language?: string,
+): string {
+  return language?.split("-")[0] === "en" ? (fact.englishName ?? fact.name) : fact.name;
+}
+
 /** The holiday labels on `date` joined with ` · `, each text once, or `original` when there are none. */
 export function holidayDateName(
   facts: readonly HolidayFact[],
   date: LocalDate,
   original: string,
+  language?: string,
 ): string {
   const labels = new Set(
     facts
       .filter((fact) => fact.date === date)
       .sort(compareHolidayFacts)
-      .map(({ name }) => name),
+      .map((fact) => holidayDisplayName(fact, language)),
   );
   return labels.size === 0 ? original : [...labels].join(" · ");
 }

@@ -47,7 +47,12 @@ export interface OpeningHoursYear extends BusinessDayScheduleStatus {
   /** False when the official list for `year` has not shipped. */
   publicHolidaysAvailable: boolean;
   /** Each repeating date following a holiday's name that `year`'s list places nowhere. */
-  missingHolidays: readonly { specialDayId: string; name: string; holidayName: string }[];
+  missingHolidays: readonly {
+    specialDayId: string;
+    name: string;
+    holidayName: string;
+    englishName?: string;
+  }[];
   holidayCoverage: readonly HolidayCoverage[];
   area: SpecialDaysModel["area"];
 }
@@ -91,10 +96,11 @@ export async function readOpeningHoursYear(
     publicHolidaysAvailable: !holidays.coverage.some(
       (coverage) => coverage.year === year && coverage.nationalRegional === "missing_year",
     ),
-    missingHolidays: missing.map(({ specialDayId, name, holidayName }) => ({
+    missingHolidays: missing.map(({ specialDayId, name, holidayName, englishName }) => ({
       specialDayId,
       name,
       holidayName,
+      ...(englishName === undefined ? {} : { englishName }),
     })),
     holidayCoverage: holidays.coverage,
     area: holidayAreaSummary(area),

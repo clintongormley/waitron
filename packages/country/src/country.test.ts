@@ -320,6 +320,36 @@ describe("holiday calendar", () => {
     sourceIds: state === "complete" || state === "area_required" ? ["XY-source"] : [],
   });
 
+  it("carries separate English labels through fact and area reads without changing official names", () => {
+    const translated = createHolidayCalendar({
+      ...dataset,
+      areas: dataset.areas.map((area) => ({ ...area, englishName: "English area" })),
+      years: dataset.years.map((year) => ({
+        ...year,
+        rows: year.rows.map((row) => ({ ...row, englishName: "English holiday" })),
+      })),
+    });
+    expect(translated.englishNameFor?.("R2 Day")).toBe("English holiday");
+    expect(calendar.englishNameFor?.("R2 Day")).toBeUndefined();
+    expect(translated.areasForProvince("02")).toEqual([
+      { key: "isle-a", name: "Isle A", englishName: "English area" },
+      { key: "isle-b", name: "Isle B", englishName: "English area" },
+    ]);
+    expect(
+      translated.read({ provinceCode: "03", areaKey: null, from: "2030-05-05", to: "2030-05-05" })
+        .facts,
+    ).toEqual([
+      {
+        id: "shipped:r2-day",
+        date: "2030-05-05",
+        name: "R2 Day",
+        englishName: "English holiday",
+        scope: "regional",
+        sourceId: "XY-source",
+      },
+    ]);
+  });
+
   it("maps a province to its region and nothing else", () => {
     expect(calendar.regionForProvince("01")).toBe("R1");
     expect(calendar.regionForProvince("03")).toBe("R2");

@@ -12,6 +12,7 @@ export interface HolidayFact {
   id: string;
   date: LocalDate;
   name: string;
+  englishName?: string;
   scope: "national" | "regional" | "local";
   sourceId: string;
 }

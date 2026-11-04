@@ -1,3 +1,4 @@
+import type { HolidayAreaOption } from "@waitron/country";
 import type { BusinessDayScheduleStatus } from "./service-day-context.js";
 // Public-holiday types and constants only, safe to import in the browser.
 import type { CalendarDay, HolidayFact, LocalDate } from "./hours-types.js";
@@ -42,7 +43,7 @@ export interface HolidayAreaModel {
     "ready" | "missing_city" | "unresolved_province" | "unresolved_address" | "unsupported_country";
   venue: { country: string; provinceCode: string | null; city: string | null };
   localHolidaysPerYear: number;
-  areaOptions: readonly { key: string; name: string }[];
+  areaOptions: readonly HolidayAreaOption[];
   areaRequired: boolean;
   chosen: string | null;
 }
@@ -58,7 +59,7 @@ export interface SpecialDaysModel extends BusinessDayScheduleStatus {
   area: {
     readiness: HolidayAreaModel["readiness"];
     addressKey: string;
-    options: readonly { key: string; name: string }[];
+    options: readonly HolidayAreaOption[];
     required: boolean;
     chosen: string | null;
   };
