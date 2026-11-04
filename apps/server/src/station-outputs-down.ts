@@ -15,7 +15,6 @@ import { printJobInTrouble } from "./print-job-trouble.js";
 import { compareStationNames } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { firedPassDishes, passScopeOf, passSees } from "./pass-board.js";
-import type { TradingContext } from "./trading-context.js";
 
 export interface DownPrinter {
   stationId: string;
@@ -180,11 +179,7 @@ export async function stationScreensDark(tx: Transaction, now: Date): Promise<Da
 /** Active kitchen displays running a pass screen or pass monitor, unseen for `SCREEN_DARK_MS`,
  *  whose own board would list a dish fired, or requested and waiting for the pass, within
  *  `WAITING_WINDOW_MS`. A held dish has neither time, so it never counts. */
-export async function passScreensDark(
-  tx: Transaction,
-  cfg: TradingContext,
-  now: Date,
-): Promise<DarkPass[]> {
+export async function passScreensDark(tx: Transaction, now: Date): Promise<DarkPass[]> {
   const darkBefore = new Date(now.getTime() - SCREEN_DARK_MS).toISOString();
   const silent = await tx
     .select({ id: devices.id, label: devices.label, lastSeenAt: devices.lastSeenAt })
@@ -213,7 +208,6 @@ export async function passScreensDark(
   const since = new Date(now.getTime() - WAITING_WINDOW_MS).toISOString();
   const dishes = await firedPassDishes(
     tx,
-    cfg,
     since,
     passes.some((pass) => pass.scope.zoneIds !== null),
   );

@@ -950,9 +950,7 @@ describe("a returning disabled device", () => {
   it("refuses to enable a kitchen screen on its deleted station and retains the empty bound", async () => {
     const venue = await setupVenue(suite.db);
     const kds = await seedProfile("kds");
-    const station = await withTransaction(suite.db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Oven" }),
-    );
+    const station = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Oven" }));
     await withTransaction(suite.db, (tx) => offerOnProfile(tx, kds, stationScreen(station.id)));
     const deviceId = await withTransaction(suite.db, async (tx) => {
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Oven" });
@@ -1105,9 +1103,7 @@ describe("a returning disabled device", () => {
   it("carries the returning device's kitchen screens, and an accept re-choosing them stores the new choice", async () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("kds");
-    const grill = await withTransaction(suite.db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Grill" }),
-    );
+    const grill = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Grill" }));
     await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
         pass: { stationIds: null, zoneIds: null },
@@ -1156,9 +1152,7 @@ describe("a returning disabled device", () => {
   it("reads several returning devices' kitchen screens in one batch, each its own", async () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("kds");
-    const grill = await withTransaction(suite.db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Grill" }),
-    );
+    const grill = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Grill" }));
     await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
         pass: { stationIds: null, zoneIds: null },

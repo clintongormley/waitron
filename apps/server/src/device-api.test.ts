@@ -865,7 +865,7 @@ describe("Device API — the device-guarded routes", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const cold = await withTransaction(suite.db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Cold", isDefault: false }),
+      createStation(tx, { name: "Cold", isDefault: false }),
     );
     const { orderId } = await fireOrder(venue);
     // One notice at the display's own station and one at another, as a void of each line records.
@@ -955,7 +955,7 @@ describe("Device API — the device-guarded routes", () => {
     const app = mountApp(venue.cfg);
 
     const cold = await withTransaction(suite.db, async (tx) => {
-      return createStation(tx, venue.cfg, { name: "Cold", isDefault: false });
+      return createStation(tx, { name: "Cold", isDefault: false });
     });
     const { items } = await fireOrder(venue);
     const [ownItem, foreignItem] = items;
@@ -1028,7 +1028,7 @@ describe("Device API — the device-guarded routes", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const other = await withTransaction(suite.db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Cold", isDefault: false }),
+      createStation(tx, { name: "Cold", isDefault: false }),
     );
     const { orderId, items } = await fireOrder(venue);
     await moveItemToStation(items[1]!, other.id);
@@ -1057,7 +1057,7 @@ describe("Device API — the device-guarded routes", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const bar = await withTransaction(suite.db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Bar", isDefault: false }),
+      createStation(tx, { name: "Bar", isDefault: false }),
     );
     const { orderId, items } = await fireOrder(venue);
     await moveItemToStation(items[1]!, bar.id);
@@ -1084,8 +1084,8 @@ describe("Device API — the device-guarded routes", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const [cold, pastry] = await withTransaction(suite.db, async (tx) => [
-      await createStation(tx, venue.cfg, { name: "Cold", isDefault: false }),
-      await createStation(tx, venue.cfg, { name: "Pastry", isDefault: false }),
+      await createStation(tx, { name: "Cold", isDefault: false }),
+      await createStation(tx, { name: "Pastry", isDefault: false }),
     ]);
     const { items } = await fireOrder(venue);
     await moveItemToStation(items[1]!, cold!.id);
@@ -1157,7 +1157,7 @@ describe("Device API — the device-guarded routes", () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const cold = await withTransaction(suite.db, (tx) =>
-        createStation(tx, venue.cfg, { name: "Cold", isDefault: false }),
+        createStation(tx, { name: "Cold", isDefault: false }),
       );
       const { orderId, items } = await fireOrder(venue);
       await moveItemToStation(items[1]!, cold.id);
@@ -1373,7 +1373,7 @@ describe("Device API — the device-guarded routes", () => {
     it("lists it on an every-station screen under an every-station profile only while dishes wait there", async () => {
       const { venue, app, cold, orderId, items } = await seed();
       const pastry = await withTransaction(suite.db, (tx) =>
-        createStation(tx, venue.cfg, { name: "Pastry", isDefault: false }),
+        createStation(tx, { name: "Pastry", isDefault: false }),
       );
       const { jar } = await enrolStationScreen(app, venue, null);
       await switchStationOff(cold);
@@ -1448,7 +1448,7 @@ describe("Device API — the device-guarded routes", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const cold = await withTransaction(suite.db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Cold", isDefault: false }),
+      createStation(tx, { name: "Cold", isDefault: false }),
     );
     const { jar, profileId } = await enrolStationScreen(
       app,
@@ -1490,8 +1490,8 @@ describe("Device API — the device-guarded routes", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const [cold, pastry] = await withTransaction(suite.db, async (tx) => [
-      await createStation(tx, venue.cfg, { name: "Cold", isDefault: false }),
-      await createStation(tx, venue.cfg, { name: "Pastry", isDefault: false }),
+      await createStation(tx, { name: "Cold", isDefault: false }),
+      await createStation(tx, { name: "Pastry", isDefault: false }),
     ]);
     const { orderId, items } = await fireOrder(venue);
     await moveItemToStation(items[1]!, cold!.id);
@@ -1556,8 +1556,8 @@ describe("Device API — the device-guarded routes", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const [cold, pastry] = await withTransaction(suite.db, async (tx) => [
-      await createStation(tx, venue.cfg, { name: "Cold", isDefault: false }),
-      await createStation(tx, venue.cfg, { name: "Pastry", isDefault: false }),
+      await createStation(tx, { name: "Cold", isDefault: false }),
+      await createStation(tx, { name: "Pastry", isDefault: false }),
     ]);
     const { items } = await fireOrder(venue);
     await moveItemToStation(items[1]!, pastry!.id);
@@ -1753,8 +1753,8 @@ describe("Device management routes (device.manage)", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const [liveStation, offStation] = await withTransaction(suite.db, async (tx) => [
-      await createStation(tx, venue.cfg, { name: "Grill" }),
-      await createStation(tx, venue.cfg, { name: "Oven" }),
+      await createStation(tx, { name: "Grill" }),
+      await createStation(tx, { name: "Oven" }),
     ]);
     const live = await enrolKds(app, venue, liveStation!.id, "Grill screen");
     const off = await enrolKds(app, venue, offStation!.id, "Oven screen");
@@ -1778,9 +1778,7 @@ describe("Device management routes (device.manage)", () => {
   it("GET /management-api/devices reads every device's kitchen screens in one batch, each its own", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const cold = await withTransaction(suite.db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Cold" }),
-    );
+    const cold = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Cold" }));
     const one = await enrolStationScreen(app, venue, [venue.defaultStationId], "kds", "One");
     const two = await enrolStationScreen(app, venue, [cold.id], "kds", "Two");
     const every = await enrolStationScreen(app, venue, null, "kds", "All");
@@ -2266,8 +2264,8 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
      * Grill, and Off is switched off. */
     async function narrowedKds(venue: Venue, app: Hono) {
       const [off, grill] = await withTransaction(suite.db, async (tx) => [
-        await createStation(tx, venue.cfg, { name: "Off" }),
-        await createStation(tx, venue.cfg, { name: "Grill" }),
+        await createStation(tx, { name: "Off" }),
+        await createStation(tx, { name: "Grill" }),
       ]);
       const profileId = await seedProfile("kds");
       const offer = (stationIds: string[]) =>
@@ -2397,9 +2395,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     it("a PATCH moving a till to a profile without a station it chose, and a second moving it back, gives the station back", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
-      const deli = await withTransaction(suite.db, (tx) =>
-        createStation(tx, venue.cfg, { name: "Deli" }),
-      );
+      const deli = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Deli" }));
       const [wide, narrow] = [await seedProfile("till"), await seedProfile("till")];
       await withTransaction(suite.db, (tx) =>
         VENUE_SERVICE.setProfileKitchenScreens(tx, narrow, {
@@ -2450,9 +2446,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         },
       });
       expect(await shown(deviceId)).toEqual(before);
-      const other = await withTransaction(suite.db, (tx) =>
-        createStation(tx, venue.cfg, { name: "Other" }),
-      );
+      const other = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Other" }));
       await switchStationOff(other.id);
       const res = await edit(app, venue.managerCookie, deviceId, {
         kitchenScreens: [{ kind: "station", stationIds: [other.id], zoneIds: null }],
@@ -2565,9 +2559,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
 
     /** A kitchen display running a pass monitor on Cocina and Grill, both offered on its profile. */
     async function monitorKds(venue: Venue, app: Hono) {
-      const grill = await withTransaction(suite.db, (tx) =>
-        createStation(tx, venue.cfg, { name: "Grill" }),
-      );
+      const grill = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Grill" }));
       const profileId = await seedProfile("kds");
       const monitor: DeviceKitchenScreen = {
         kind: "pass_monitor",
@@ -2720,9 +2712,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
   it("renames a kitchen screen whose station was deleted, keeping its empty bound and made-here choice", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const off = await withTransaction(suite.db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Off" }),
-    );
+    const off = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Off" }));
     const { deviceId } = await enrolKds(app, venue, off.id);
     expect(
       (
@@ -2753,9 +2743,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
   it("refuses switching a kitchen screen to a switched-off station that is not its own", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const off = await withTransaction(suite.db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Off" }),
-    );
+    const off = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Off" }));
     const { deviceId } = await enrolStationScreen(app, venue, null);
     await switchStationOff(off.id);
 
@@ -2788,9 +2776,8 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     /** A kitchen display profile offering a station screen, a pass and a pass monitor, the pass
      * offered on Cocina and Grill; `passValue` is the profile's own choice for its pass. */
     async function displayProfile(venue: Venue, passValue = true) {
-      const grill = (
-        await withTransaction(suite.db, (tx) => createStation(tx, venue.cfg, { name: "Grill" }))
-      ).id;
+      const grill = (await withTransaction(suite.db, (tx) => createStation(tx, { name: "Grill" })))
+        .id;
       const profileId = await seedProfile("kds");
       const offer = (passStations: string[] | null) =>
         withTransaction(suite.db, (tx) =>
@@ -3013,11 +3000,11 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
   });
 
   describe("a kitchen screen's station, chosen from its profile's", () => {
-    async function kitchenProfile(venue: Venue) {
+    async function kitchenProfile() {
       const [grill, cold, pastry] = await withTransaction(suite.db, async (tx) => [
-        await createStation(tx, venue.cfg, { name: "Grill" }),
-        await createStation(tx, venue.cfg, { name: "Cold" }),
-        await createStation(tx, venue.cfg, { name: "Pastry" }),
+        await createStation(tx, { name: "Grill" }),
+        await createStation(tx, { name: "Cold" }),
+        await createStation(tx, { name: "Pastry" }),
       ]);
       const profileId = await seedProfile("kds", ["prepare-orders"]);
       await withTransaction(suite.db, (tx) =>
@@ -3031,7 +3018,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     it("gives two screens on one Kitchen profile different listed stations, and refuses a third", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
-      const { profileId, grill, cold, pastry } = await kitchenProfile(venue);
+      const { profileId, grill, cold, pastry } = await kitchenProfile();
       const on = (stationId: string): DeviceKitchenScreen[] => [
         { kind: "station", stationIds: [stationId], zoneIds: null },
       ];
@@ -3070,9 +3057,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId } = await enrolTill(app, venue);
-    const bar = await withTransaction(suite.db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Bar" }),
-    );
+    const bar = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Bar" }));
     const res = await edit(app, venue.managerCookie, deviceId, { madeHereStationIds: [bar.id] });
     expect(res.status).toBe(204);
     const get = await send(app, "GET", "/management-api/devices", { cookie: venue.managerCookie });
@@ -3088,9 +3073,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId } = await enrolTill(app, venue, "Till");
-    const off = await withTransaction(suite.db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Off" }),
-    );
+    const off = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Off" }));
     expect(
       (await edit(app, venue.managerCookie, deviceId, { madeHereStationIds: [off.id] })).status,
     ).toBe(204);
@@ -3110,8 +3093,8 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     const app = mountApp(venue.cfg);
     const { deviceId } = await enrolTill(app, venue, "Till");
     const [bar, off] = await withTransaction(suite.db, async (tx) => [
-      await createStation(tx, venue.cfg, { name: "Bar" }),
-      await createStation(tx, venue.cfg, { name: "Off" }),
+      await createStation(tx, { name: "Bar" }),
+      await createStation(tx, { name: "Off" }),
     ]);
     expect(
       (
@@ -4452,9 +4435,7 @@ describe("a device's approved profiles and switching its active one", () => {
       const t = await till(app, venue);
       const before = await signIn(t.deviceId);
       const [listing, other] = [await seedProfile("kds"), await seedProfile("kds")];
-      const grill = await withTransaction(suite.db, (tx) =>
-        createStation(tx, venue.cfg, { name: "Grill" }),
-      );
+      const grill = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Grill" }));
       const stationScreen = (stationId: string): DeviceKitchenScreen => ({
         kind: "station",
         stationIds: [stationId],
@@ -4516,9 +4497,7 @@ describe("a device's approved profiles and switching its active one", () => {
     it("switching to a profile without a station the till chose and back gives the station back, unless the till was picked on in between", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
-      const deli = await withTransaction(suite.db, (tx) =>
-        createStation(tx, venue.cfg, { name: "Deli" }),
-      );
+      const deli = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Deli" }));
       const [wide, narrow] = [await seedProfile("till"), await seedProfile("till")];
       await withTransaction(suite.db, (tx) =>
         VENUE_SERVICE.setProfileKitchenScreens(tx, narrow, {

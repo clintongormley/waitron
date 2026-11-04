@@ -23,7 +23,6 @@ import { todayOf } from "./floor-today-table.js";
 import { blocksPlace, joinedPlaceAfter } from "./joined-split-layout.js";
 import { holdersOf } from "./parties.js";
 import type { Placement } from "./floor-reset-plan.js";
-import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 /**
@@ -35,12 +34,11 @@ import "./errors.js";
  */
 export async function resetTable(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   now: Date,
   { tableId, partIds, seats }: { tableId: string; partIds: string[]; seats: number | null },
 ): Promise<void> {
-  const today = await todayOf(tx, cfg, tableId);
+  const today = await todayOf(tx, tableId);
   const parts = await partsOf(tx, tableId);
   if (parts.length === 0) throw new AppError("joined_table.not_found", { tableId });
   // `partsOf` reached the parts through this row, and `table_id` is unique there.

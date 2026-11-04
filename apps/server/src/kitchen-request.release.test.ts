@@ -426,8 +426,8 @@ describe("A773 waiter request: release", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      const later = await createCourse(tx, venue.cfg, { name: "Later", displayOrder: 2 });
-      await setProductCourse(tx, venue.cfg, venue.products.water, later.id);
+      const later = await createCourse(tx, { name: "Later", displayOrder: 2 });
+      await setProductCourse(tx, venue.products.water, later.id);
       await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
       await addTabRound(tx, venue.cfg, venue.party.tabId, [
         { ...dish(venue, "water", true), courseId: later.id, hold: true },
@@ -474,8 +474,8 @@ describe("A773 waiter request: release", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      const later = await createCourse(tx, venue.cfg, { name: "Later", displayOrder: 2 });
-      await setProductCourse(tx, venue.cfg, venue.products.water, later.id);
+      const later = await createCourse(tx, { name: "Later", displayOrder: 2 });
+      await setProductCourse(tx, venue.products.water, later.id);
       await addTabRound(tx, venue.cfg, venue.party.tabId, [
         { ...dish(venue, "water", true), courseId: later.id, hold: true },
       ]);
@@ -509,8 +509,8 @@ describe("A773 waiter request: release", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      const later = await createCourse(tx, venue.cfg, { name: "Later", displayOrder: 2 });
-      await setProductCourse(tx, venue.cfg, venue.products.water, later.id);
+      const later = await createCourse(tx, { name: "Later", displayOrder: 2 });
+      await setProductCourse(tx, venue.products.water, later.id);
       await addTabRound(tx, venue.cfg, venue.party.tabId, [
         { ...dish(venue, "water", true), courseId: later.id, hold: true },
         { ...dish(venue, "water", true), courseId: later.id, hold: true },

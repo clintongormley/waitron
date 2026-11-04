@@ -114,9 +114,9 @@ async function sent(
   return { ...party, tickets };
 }
 
-const passBoard = (scope: PassScope) => inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, scope));
+const passBoard = (scope: PassScope) => inTx(v, (tx) => readScopedPassBoard(tx, scope));
 const monitorBoard = (scope: PassScope) =>
-  inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, scope, { release: false }));
+  inTx(v, (tx) => readScopedPassBoard(tx, scope, { release: false }));
 
 /** A Side product offered as an extra on the Burger and routed to its own station. */
 const routedExtra = () =>
@@ -151,7 +151,7 @@ const routedExtra = () =>
       v.cfg.locale,
     );
     await writeProductModifiers(tx, v.productId("Burger"), [{ kind: "extras", id: list.id }]);
-    const station = await createStation(tx, v.cfg, { name: "Side station" });
+    const station = await createStation(tx, { name: "Side station" });
     await routeProductTo(tx, side.id, station.id);
     await republishMenus(tx);
     return { side, list, station };
@@ -204,7 +204,7 @@ describe("A669 reads", () => {
 
   it("returns original copies and explicit null on single and batched station reads", async () => {
     const p = await sent();
-    const empty = await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Empty station" }));
+    const empty = await inTx(v, (tx) => createStation(tx, { name: "Empty station" }));
     const single = await inTx(v, (tx) => listStationQueue(tx, stationId));
     const batch = await inTx(v, (tx) => listStationQueues(tx, [stationId, empty.id]));
     expect(batch.get(stationId)).toEqual(single);
@@ -274,7 +274,7 @@ describe("A669 reads", () => {
   it("gives a narrowed scope's dishes no other station's allergy, keeps that station's dish on a shared card out of view with its own copy, and reads an empty scope as an empty board", async () => {
     await sent();
     const other = await inTx(v, async (tx) => {
-      const station = await createStation(tx, v.cfg, { name: "Other cook" });
+      const station = await createStation(tx, { name: "Other cook" });
       await routeProductTo(tx, v.productId("Burger"), station.id);
       return station;
     });

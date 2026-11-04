@@ -89,8 +89,8 @@ beforeEach(async () => {
       manager: admin!.id,
       staff: operator!.id,
       bar: fallback!.id,
-      grill: (await createStation(tx, v.cfg, { name: "Grill" })).id,
-      pastry: (await createStation(tx, v.cfg, { name: "Pastry" })).id,
+      grill: (await createStation(tx, { name: "Grill" })).id,
+      pastry: (await createStation(tx, { name: "Pastry" })).id,
     };
   });
   ({ manager, staff, bar, grill, pastry } = fixture);

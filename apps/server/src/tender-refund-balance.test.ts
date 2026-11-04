@@ -142,8 +142,8 @@ async function refund(
     .returning();
   return row!;
 }
-const read = (saleId: string, config = cfg) =>
-  withTransaction(store.db, (tx) => readRefundableTenders(tx, config, saleId));
+const read = (saleId: string) =>
+  withTransaction(store.db, (tx) => readRefundableTenders(tx, saleId));
 
 describe("settled-tender refundable balances", () => {
   it("reads applied cash and tip separately from immutable tender facts without changing invoice rows", async () => {
@@ -614,9 +614,7 @@ describe("cash refund balance without the optional payments module", () => {
         sql`select name from sqlite_master where type = 'table' and name in ('payments', 'payment_refunds')`,
       ),
     ).toEqual([]);
-    expect(
-      await withTransaction(db, (tx) => readRefundableTenders(tx, { ...cfg, nodeId }, sale!.id)),
-    ).toEqual([
+    expect(await withTransaction(db, (tx) => readRefundableTenders(tx, sale!.id))).toEqual([
       {
         tenderId: tender!.id,
         method: "cash",

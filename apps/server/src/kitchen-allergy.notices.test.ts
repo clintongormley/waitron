@@ -393,7 +393,7 @@ describe("A669 notices", () => {
           v.cfg.locale,
         );
         await writeProductModifiers(tx, v.productId("Burger"), [{ kind: "extras", id: list.id }]);
-        const station = await createStation(tx, v.cfg, { name: "Sides kitchen" });
+        const station = await createStation(tx, { name: "Sides kitchen" });
         await routeProductTo(tx, side.id, station.id);
         await republishMenus(tx);
         return { side, list, station };
@@ -833,7 +833,7 @@ describe("A803 portions", () => {
   it("A803 portions: moving two identical, corrected portions to another station tells each station once", async () => {
     const p = await sentTwo(true);
     await edit(p, patch(p, { note: "Fresh tools" }));
-    const next = await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Next cook" }));
+    const next = await inTx(v, (tx) => createStation(tx, { name: "Next cook" }));
     await inTx(v, (tx) =>
       moveDishesToStation(
         tx,

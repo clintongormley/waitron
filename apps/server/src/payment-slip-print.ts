@@ -71,7 +71,7 @@ export async function printSalePaymentSlip(
     /* v8 ignore start -- the taxpayer row is the database's one row; presentation still degrades */
     if (taxpayer === null) return;
     /* v8 ignore stop */
-    const order = await readReceiptOrder(tx, cfg, workingOrderId);
+    const order = await readReceiptOrder(tx, workingOrderId);
     const venueId = await venueLocationId(tx);
     for (const payment of cards) {
       const card: CardDetails | null =

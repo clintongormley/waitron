@@ -372,7 +372,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
   it("refuses a card from a session whose device has been revoked before any charge", async () => {
     const billId = await tabWithDishes("Paella");
     const calls = venue.card.collectCalls.length;
-    const cookie = await revokedDeviceSessionCookie(venue.db, venue.cfg, venue.operatorId, "5555");
+    const cookie = await revokedDeviceSessionCookie(venue.db, venue.operatorId, "5555");
 
     const paid = await cardContribution(billId, "10.00", { cookie });
 

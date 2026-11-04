@@ -280,18 +280,18 @@ describe("bookings seat route → real seatTable", () => {
         shape: "rect" as const,
         rotation: 0,
       });
-      const { ids, revision } = await saveLayout(tx, v.tillCfg, removals, layout, {
+      const { ids, revision } = await saveLayout(tx, removals, layout, {
         revision: 0,
         tables: [{ key: "t", label: "9", seats: 4, fixed: false, placement: at(0), partKeys: [] }],
       });
-      const plan = await readLayout(tx, v.tillCfg, layout);
+      const plan = await readLayout(tx, layout);
       const id = plan.tables.find((t) => t.id === ids.t)!.liveTableId!;
       const seated = await seatTable(
         tx,
         { ...v.tillCfg, origin: jobOrigin("dashboard") },
         { tableId: id, guestCount: 2, operatorId: v.managerId },
       );
-      await saveLayout(tx, v.tillCfg, removals, layout, {
+      await saveLayout(tx, removals, layout, {
         revision,
         tables: [
           {
@@ -305,14 +305,14 @@ describe("bookings seat route → real seatTable", () => {
           },
         ],
       });
-      await resetZone(tx, v.tillCfg, removals, zoneId, now, "due");
+      await resetZone(tx, removals, zoneId, now, "due");
       await finishTable(tx, {
         partyId: seated.partyId,
         expectedPartyRevision: seated.revision,
         operatorId: v.managerId,
       });
       await markTableCleared(tx, id);
-      await ensureToday(tx, v.tillCfg, removals, now);
+      await ensureToday(tx, removals, now);
       return id;
     });
     const created = await post(app, "/management-api/bookings", v.managerCookie, {
@@ -365,7 +365,7 @@ describe("bookings seat route → real seatTable", () => {
         partKeys,
       });
       const layout = await defaultLayout(tx, v.tillCfg, zoneId);
-      const { ids } = await saveLayout(tx, v.tillCfg, enabledTableRemovals(ALL_MODULES), layout, {
+      const { ids } = await saveLayout(tx, enabledTableRemovals(ALL_MODULES), layout, {
         revision: 0,
         tables: [
           entry("c3", "Counter 3", 2),
@@ -374,7 +374,7 @@ describe("bookings seat route → real seatTable", () => {
           entry("long", "Long table", 10, ["c3", "c4", "c5"]),
         ],
       });
-      const plan = await readLayout(tx, v.tillCfg, layout);
+      const plan = await readLayout(tx, layout);
       const live = (key: string) => plan.tables.find((t) => t.id === ids[key])!.liveTableId!;
       return { long: live("long"), c3: live("c3") };
     });

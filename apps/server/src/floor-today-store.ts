@@ -122,13 +122,12 @@ export interface ResetOnto {
  */
 export async function resetZone(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   zoneId: string,
   now: Date,
   onto: ResetOnto | "due",
 ): Promise<number | null> {
-  await requireZone(tx, cfg, zoneId);
+  await requireZone(tx, zoneId);
   const day = await todayBusinessDay(tx, now);
   if (day === null) return null;
   if (onto !== "due") return resetZoneOn(tx, removals, zoneId, day, now, onto);
@@ -970,7 +969,6 @@ function mergedWith(
  */
 export async function ensureToday(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   now: Date,
 ): Promise<string | null> {
@@ -1008,7 +1006,7 @@ export async function ensureToday(
   const resetting = zones.flatMap((z) => (resets(z.businessDay) ? [z.zoneId] : []));
   const catchingUp = zones.flatMap((z) => (resets(z.businessDay) ? [] : [z.zoneId]));
   const layouts = await zoneLayoutsOn(tx, resetting, now, day);
-  const before = catchingUp.length === 0 ? null : await roomPrints(tx, cfg, catchingUp);
+  const before = catchingUp.length === 0 ? null : await roomPrints(tx, catchingUp);
   for (const { zoneId, businessDay } of zones) {
     if (resets(businessDay)) {
       const layout = layouts.rows.get(zoneId);
@@ -1021,7 +1019,7 @@ export async function ensureToday(
     } else await catchUpZone(tx, removals, zoneId, now);
   }
   if (before === null) return day;
-  const after = await roomPrints(tx, cfg, catchingUp);
+  const after = await roomPrints(tx, catchingUp);
   const changed = catchingUp.filter((zoneId) => after.get(zoneId) !== before.get(zoneId));
   if (changed.length > 0) {
     await moveChangedRooms(tx, await roomRevisions(tx, changed), before, after);
@@ -1161,11 +1159,10 @@ function placeTaken(r: ResetAlias): SQL {
 /** Moves the table's top-left corner to `at`; a merge's members all move by the same distance. */
 export async function moveToday(
   tx: Transaction,
-  cfg: TradingContext,
   tableId: string,
   at: { x: number; y: number },
 ): Promise<void> {
-  const today = await todayOf(tx, cfg, tableId);
+  const today = await todayOf(tx, tableId);
   refuseUnmovable(today);
   const members = (today.merge?.members ?? [today.row]).filter((m) => m.x !== null);
   const { dx, dy } = groupStep(
@@ -1181,12 +1178,8 @@ export async function moveToday(
 }
 
 /** Turns the table 15° clockwise about its centre: its corner, `x` and `y`, does not change. */
-export async function rotateToday(
-  tx: Transaction,
-  cfg: TradingContext,
-  tableId: string,
-): Promise<void> {
-  const today = await todayOf(tx, cfg, tableId);
+export async function rotateToday(tx: Transaction, tableId: string): Promise<void> {
+  const today = await todayOf(tx, tableId);
   refuseUnmovable(today);
   if (today.merge !== null) throw new AppError("table.merged", { tableId });
   await tx
@@ -1198,11 +1191,10 @@ export async function rotateToday(
 /** Puts a spare on the map with its top-left corner at `at`; a table with a place is left alone. */
 export async function placeSpareToday(
   tx: Transaction,
-  cfg: TradingContext,
   tableId: string,
   at: { x: number; y: number },
 ): Promise<void> {
-  const { row } = await todayOf(tx, cfg, tableId);
+  const { row } = await todayOf(tx, tableId);
   await refuseInJoinedTable(tx, [tableId]);
   if (row.takenOff) throw new AppError("table.taken_off", { tableId });
   if (row.x !== null) return;
@@ -1252,12 +1244,8 @@ async function refuseSplitOff(tx: Transaction, tableId: string): Promise<void> {
 }
 
 /** Takes a free table off today's plan, keeping its place; one already taken off is left as it is. */
-export async function takeOffToday(
-  tx: Transaction,
-  cfg: TradingContext,
-  tableId: string,
-): Promise<void> {
-  const today = await todayOf(tx, cfg, tableId);
+export async function takeOffToday(tx: Transaction, tableId: string): Promise<void> {
+  const today = await todayOf(tx, tableId);
   if (today.row.takenOff) return;
   if (today.merge !== null) throw new AppError("table.merged", { tableId });
   await refuseInJoinedTable(tx, [tableId]);
@@ -1270,23 +1258,14 @@ export async function takeOffToday(
     .where(eq(floorTodayTables.id, today.row.id));
 }
 
-export async function putBackToday(
-  tx: Transaction,
-  cfg: TradingContext,
-  tableId: string,
-): Promise<void> {
-  const { row } = await todayOf(tx, cfg, tableId);
+export async function putBackToday(tx: Transaction, tableId: string): Promise<void> {
+  const { row } = await todayOf(tx, tableId);
   await tx.update(floorTodayTables).set({ takenOff: false }).where(eq(floorTodayTables.id, row.id));
 }
 
 /** Today's seats for the table, or for its merge when it is in one. */
-export async function seatsToday(
-  tx: Transaction,
-  cfg: TradingContext,
-  tableId: string,
-  seats: number,
-): Promise<void> {
-  const today = await todayOf(tx, cfg, tableId);
+export async function seatsToday(tx: Transaction, tableId: string, seats: number): Promise<void> {
+  const today = await todayOf(tx, tableId);
   if (today.row.takenOff) throw new AppError("table.taken_off", { tableId });
   if (today.merge !== null) {
     await tx
@@ -1311,8 +1290,8 @@ export async function backToSaved(
   tableId: string,
   now: Date,
 ): Promise<void> {
-  const { zoneId, row, merge } = await todayOf(tx, cfg, tableId);
-  if (await tableNeedsMoving(tx, tableId)) return markMoved(tx, cfg, removals, tableId, now);
+  const { zoneId, row, merge } = await todayOf(tx, tableId);
+  if (await tableNeedsMoving(tx, tableId)) return markMoved(tx, removals, tableId, now);
   await refuseSplitOff(tx, tableId);
   const [splitOff] = await tx
     .select({ id: floorTodaySplitParts.id })

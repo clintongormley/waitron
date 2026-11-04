@@ -1185,7 +1185,7 @@ describe("cross-till end-to-end", () => {
     // validated against a read summed in JS (`draftAggregate`), not the SQL under test.
     const agg = await draftAggregate(orderId);
     expect(agg.ordered).toBe(2);
-    const heldOnB = await listHeldOrders({ db: suite.db }, tillB);
+    const heldOnB = await listHeldOrders({ db: suite.db });
     expect(heldOnB).toContainEqual(
       expect.objectContaining({
         id: orderId,
@@ -1228,7 +1228,7 @@ describe("cross-till end-to-end", () => {
     });
 
     // Once paid it leaves EVERY register's held list — till B no longer shows it.
-    expect((await listHeldOrders({ db: suite.db }, tillB)).map((o) => o.id)).not.toContain(orderId);
+    expect((await listHeldOrders({ db: suite.db })).map((o) => o.id)).not.toContain(orderId);
 
     // THE CHAIN: the two sales on this node (A/1 walk-up on till A, A/2 cross-till on till B) verify as
     // one intact huella chain.
@@ -1243,7 +1243,7 @@ describe("cross-till end-to-end", () => {
     const { cfg: nodeA, cafe, zoneId } = await setupVenue();
     // A second node under the SAME tenant. Reads are venue-wide, so both nodes see the order — a
     // promoted node inherits the venue's open tabs regardless of the `node_id` they carry.
-    const nodeB = await addNode(nodeA);
+    await addNode(nodeA);
 
     const orderId = randomUUID();
     await parkOrder({ db: suite.db }, nodeA, {
@@ -1252,8 +1252,8 @@ describe("cross-till end-to-end", () => {
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
-    expect((await listHeldOrders({ db: suite.db }, nodeA)).map((o) => o.id)).toContain(orderId);
-    expect((await listHeldOrders({ db: suite.db }, nodeB)).map((o) => o.id)).toContain(orderId);
+    expect((await listHeldOrders({ db: suite.db })).map((o) => o.id)).toContain(orderId);
+    expect((await listHeldOrders({ db: suite.db })).map((o) => o.id)).toContain(orderId);
   });
 
   it("venue-wide reads: the by-id family (get/update/abandon) reaches a foreign-node order", async () => {
@@ -2627,7 +2627,7 @@ describe("the pass board — venue-wide", () => {
 
     const orderIdsOn = (cfg: DeviceRequestConfig) =>
       asTenant(cfg, async (tx) =>
-        boardCards(await readScopedPassBoard(tx, cfg, EVERY)).flatMap((card) =>
+        boardCards(await readScopedPassBoard(tx, EVERY)).flatMap((card) =>
           card.orders.map((order) => order.orderId),
         ),
       );
@@ -2801,10 +2801,10 @@ describe("paying a counter order never sent, in a zone that sends before payment
       const { cfg, cafe, agua, zoneId } = await modeVenue(mode);
       const printerId = await kitchenPrinter(cfg);
       const { primeros, segundos } = await withTransaction(suite.db, async (tx) => {
-        const primeros = (await createCourse(tx, cfg, { name: "Primeros", displayOrder: 1 })).id;
-        const segundos = (await createCourse(tx, cfg, { name: "Segundos", displayOrder: 2 })).id;
-        await setProductCourse(tx, cfg, cafe.id, primeros);
-        await setProductCourse(tx, cfg, agua.id, segundos);
+        const primeros = (await createCourse(tx, { name: "Primeros", displayOrder: 1 })).id;
+        const segundos = (await createCourse(tx, { name: "Segundos", displayOrder: 2 })).id;
+        await setProductCourse(tx, cafe.id, primeros);
+        await setProductCourse(tx, agua.id, segundos);
         return { primeros, segundos };
       });
       const id = randomUUID();
@@ -3128,9 +3128,9 @@ describe("coursing editing verbs — setLineCourse racing selected line release"
     async (sequence) => {
       const { cfg, cafe } = await setupVenue();
       const { original, other, tabId } = await withTransaction(suite.db, async (tx) => {
-        const original = await createCourse(tx, cfg, { name: "Desserts", displayOrder: 9 });
-        const other = await createCourse(tx, cfg, { name: "Other", displayOrder: 10 });
-        await setProductCourse(tx, cfg, cafe.id, original.id);
+        const original = await createCourse(tx, { name: "Desserts", displayOrder: 9 });
+        const other = await createCourse(tx, { name: "Other", displayOrder: 10 });
+        await setProductCourse(tx, cafe.id, original.id);
         const tables = await offerProducts(tx, cfg, { zone: "tables" });
         const tableId = await addTable(tx, cfg, tables.zoneId);
         const { tabId } = await openPartyTab(tx, cfg, { tableId });
@@ -3197,8 +3197,8 @@ describe("coursing editing verbs — recallLines racing selected line release", 
         });
       });
       const { course, tabId } = await withTransaction(suite.db, async (tx) => {
-        const course = await createCourse(tx, cfg, { name: "Desserts", displayOrder: 9 });
-        await setProductCourse(tx, cfg, cafe.id, course.id);
+        const course = await createCourse(tx, { name: "Desserts", displayOrder: 9 });
+        await setProductCourse(tx, cafe.id, course.id);
         const tables = await offerProducts(tx, cfg, { zone: "tables" });
         const tableId = await addTable(tx, cfg, tables.zoneId);
         const { tabId } = await openPartyTab(tx, cfg, { tableId });

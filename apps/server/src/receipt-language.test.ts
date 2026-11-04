@@ -248,7 +248,7 @@ async function venueWith(
     body: JSON.stringify({ personId: staffId, pin: "5555" }),
   });
   const tillSession = login.headers.get("set-cookie")!.split(";")[0]!;
-  const sessionDeviceId = await seedSessionDevice(db, cfg);
+  const sessionDeviceId = await seedSessionDevice(db);
   const session = await withTransaction(db, (tx) =>
     loginWithPin(tx, { deviceId: sessionDeviceId, personId: staffId, pin: "5555" }),
   );

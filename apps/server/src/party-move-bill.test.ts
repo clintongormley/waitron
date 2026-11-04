@@ -858,7 +858,7 @@ describe("move a bill to the counter (A82)", () => {
       label: "Ana",
       status: "open",
     });
-    const held = await listHeldOrders({ db: v.db }, v.cfg);
+    const held = await listHeldOrders({ db: v.db });
     expect(held.find((h) => h.id === second)).toMatchObject({
       label: "Ana",
       counts: expect.objectContaining({ ordered: 1 }),
@@ -1148,8 +1148,8 @@ describe("the dishes of an open bill moved between service modes", () => {
 
   it("leaves a table bill's no-preparation dish waiting in a later course unsent when it moves to another table-service party", async () => {
     const [entrantes, postres] = await inTx(v, async (tx) => [
-      (await createCourse(tx, v.cfg, { name: "Entrantes envío", displayOrder: 1 })).id,
-      (await createCourse(tx, v.cfg, { name: "Postres envío", displayOrder: 2 })).id,
+      (await createCourse(tx, { name: "Entrantes envío", displayOrder: 1 })).id,
+      (await createCourse(tx, { name: "Postres envío", displayOrder: 2 })).id,
     ]);
     const ana = await seat(v, await v.table("Mesa curso 1"));
     const mesa = await v.table("Mesa curso 2");

@@ -119,7 +119,7 @@ describe("A738 order previews", () => {
         query.mockRestore();
       }
     });
-    const parked = await listHeldOrders({ db: venue.db }, venue.cfg);
+    const parked = await listHeldOrders({ db: venue.db });
     const waiting = await listCounterWaiting({ db: venue.db });
     for (const [i, list] of [
       [0, parked],

@@ -180,7 +180,6 @@ describe("real module floor deletion", () => {
     await run((tx) =>
       saveLayout(
         tx,
-        venue.cfg,
         enabledTableRemovals(ALL_MODULES),
         { setId: dinner, zoneId: f.zoneId },
         { revision: 0, tables: [] },
@@ -363,7 +362,6 @@ describe("real module floor deletion", () => {
       enteredSave = true;
       return saveLayout(
         tx,
-        venue.cfg,
         enabledTableRemovals(ALL_MODULES),
         layout,
         { revision: 0, tables: [] },
@@ -644,7 +642,6 @@ describe("mounted authenticated service deletion races", () => {
                 if (kind === "master")
                   await saveLayout(
                     tx,
-                    venue.cfg,
                     enabledTableRemovals(ALL_MODULES),
                     layout!,
                     {
@@ -807,14 +804,7 @@ describe("mounted authenticated service deletion races", () => {
         }),
       ),
       run((tx) =>
-        saveLayout(
-          tx,
-          venue.cfg,
-          enabledTableRemovals(ALL_MODULES),
-          layout,
-          { revision: 0, tables: [] },
-          NOW,
-        ),
+        saveLayout(tx, enabledTableRemovals(ALL_MODULES), layout, { revision: 0, tables: [] }, NOW),
       ),
     ].map((promise) =>
       promise.then(
@@ -950,7 +940,7 @@ it.each(["zone", "department"] as const)(
           .update(diningTables)
           .set({ planTableId: masters[i]!.id })
           .where(eq(diningTables.id, tableId));
-      await resetZone(tx, venue.cfg, removals, f.zoneId, NOW, "due");
+      await resetZone(tx, removals, f.zoneId, NOW, "due");
       return { plan: plan!, masters };
     });
     const seated = await seat(venue, f.tableId);
@@ -972,7 +962,6 @@ it.each(["zone", "department"] as const)(
       run(async (tx) =>
         saveLayout(
           tx,
-          venue.cfg,
           removals,
           await defaultLayout(tx, venue.cfg, f.zoneId),
           { revision, tables: [kept] },
@@ -982,9 +971,7 @@ it.each(["zone", "department"] as const)(
     await expect(save(1)).resolves.toEqual({ revision: 2, ids: { kept: kept.id } });
     expect(
       (
-        await run(async (tx) =>
-          readLayout(tx, venue.cfg, await defaultLayout(tx, venue.cfg, f.zoneId)),
-        )
+        await run(async (tx) => readLayout(tx, await defaultLayout(tx, venue.cfg, f.zoneId)))
       ).tables.map((table) => table.id),
     ).toEqual([kept.id]);
     expect(
@@ -1009,7 +996,7 @@ it.each(["zone", "department"] as const)(
     expect(await run(completeSnapshot)).toEqual(unchanged);
     await join(venue, seated.partyId, second);
     await run((tx) => leaveTables(tx, [f.tableId]));
-    await run((tx) => resetZone(tx, venue.cfg, removals, f.zoneId, NOW, "due"));
+    await run((tx) => resetZone(tx, removals, f.zoneId, NOW, "due"));
     expect(
       await run((tx) =>
         tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, f.tableId)),
@@ -1149,7 +1136,6 @@ it.each(["zone", "department"] as const)(
       run(async (tx) =>
         saveLayout(
           tx,
-          venue.cfg,
           removals,
           await defaultLayout(tx, venue.cfg, replacementZone.id),
           {
@@ -1265,13 +1251,13 @@ it.each(["zone", "department"] as const)(
     expect(
       await run(async (tx) => {
         const nextDay = new Date("2026-10-12T12:00:00Z");
-        await ensureToday(tx, venue.cfg, removals, nextDay);
+        await ensureToday(tx, removals, nextDay);
         return listTablesWithState(tx, enabledFloorAnnotators(ALL_MODULES), nextDay);
       }),
     ).toEqual([]);
     expect(await run(completeSnapshot)).toEqual(after);
     await expect(
-      run((tx) => readLayout(tx, venue.cfg, { setId: master.plan.setId!, zoneId: f.zoneId })),
+      run((tx) => readLayout(tx, { setId: master.plan.setId!, zoneId: f.zoneId })),
     ).rejects.toMatchObject({
       code: "zone.not_found",
     });
@@ -1280,7 +1266,7 @@ it.each(["zone", "department"] as const)(
     });
     await replacementSave();
     const replacementPlan = await run(async (tx) =>
-      readLayout(tx, venue.cfg, await defaultLayout(tx, venue.cfg, replacementZone.id)),
+      readLayout(tx, await defaultLayout(tx, venue.cfg, replacementZone.id)),
     );
     const replacementId = replacementPlan.tables[0]!.liveTableId!;
     expect(replacementId).not.toBe(f.tableId);
@@ -1314,11 +1300,11 @@ it("rechecks an upcoming booking added after the master editor opened, but allow
       .update(diningTables)
       .set({ planTableId: master!.id })
       .where(eq(diningTables.id, f.tableId));
-    await resetZone(tx, venue.cfg, removals, f.zoneId, NOW, "due");
+    await resetZone(tx, removals, f.zoneId, NOW, "due");
     return master!.id;
   });
   const opened = await run(async (tx) =>
-    readLayout(tx, venue.cfg, await defaultLayout(tx, venue.cfg, f.zoneId)),
+    readLayout(tx, await defaultLayout(tx, venue.cfg, f.zoneId)),
   );
   expect(opened.tables[0]!.id).toBe(masterId);
   const http = await mounted();
@@ -1329,7 +1315,6 @@ it("rechecks an upcoming booking added after the master editor opened, but allow
     run(async (tx) =>
       saveLayout(
         tx,
-        venue.cfg,
         removals,
         await defaultLayout(tx, venue.cfg, f.zoneId),
         { revision: opened.revision, tables: [] },

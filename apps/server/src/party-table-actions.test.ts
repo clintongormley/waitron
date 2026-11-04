@@ -890,7 +890,7 @@ describe("MOVED notices for a paid bill left on a party combined away", () => {
     expect(noticesOn([ana.tabId])).toEqual([
       { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoM 7" },
     ]);
-    const onPass = boardCards(await act((tx) => readScopedPassBoard(tx, v.cfg, EVERY)))
+    const onPass = boardCards(await act((tx) => readScopedPassBoard(tx, EVERY)))
       .flatMap((card) => card.orders)
       .find((entry) => entry.orderId === ana.tabId);
     expect(onPass?.tableLabel).toBe("PagoM 7");

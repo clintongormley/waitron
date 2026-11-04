@@ -70,10 +70,10 @@ export async function setupSplitExtrasVenue() {
   const { cfg, catalogueId } = await setupVenue();
   const built = await withTransaction(db, async (tx) => {
     const stations = {
-      grill: (await createStation(tx, cfg, { name: "Grill" })).id,
-      fryer: (await createStation(tx, cfg, { name: "Fryer" })).id,
-      kitchen: (await createStation(tx, cfg, { name: "Kitchen", isDefault: true })).id,
-      bar: (await createStation(tx, cfg, { name: "Bar" })).id,
+      grill: (await createStation(tx, { name: "Grill" })).id,
+      fryer: (await createStation(tx, { name: "Fryer" })).id,
+      kitchen: (await createStation(tx, { name: "Kitchen", isDefault: true })).id,
+      bar: (await createStation(tx, { name: "Bar" })).id,
     };
     const printers = {} as Record<"grill" | "fryer" | "kitchen" | "bar" | "pass", string>;
     for (const station of ["grill", "fryer", "kitchen", "bar"] as const) {

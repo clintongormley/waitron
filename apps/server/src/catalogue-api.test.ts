@@ -660,8 +660,7 @@ function mountWithVenueDefaults(): Hono {
 /** A live kitchen course of the seeded venue. */
 async function seedRouting(): Promise<{ courseId: string }> {
   return withTransaction(suite.db, async (tx) => {
-    const cfg = venueCfg();
-    const course = await createCourse(tx, cfg, { name: `Course ${crypto.randomUUID()}` });
+    const course = await createCourse(tx, { name: `Course ${crypto.randomUUID()}` });
     return { courseId: course.id };
   });
 }

@@ -181,7 +181,7 @@ describe("corrections through order actions on a station's printers", () => {
   });
   it("routes beer VOID only to a printer on its station, and steak VOID to a Grill-only printer too", async () => {
     const { beerId, printerIds, listed } = await inTx(venue, async (tx) => {
-      const bar = await createStation(tx, venue.cfg, { name: `Bar ${randomUUID()}` });
+      const bar = await createStation(tx, { name: `Bar ${randomUUID()}` });
       const [beer] = await tx
         .select({ id: products.id })
         .from(products)

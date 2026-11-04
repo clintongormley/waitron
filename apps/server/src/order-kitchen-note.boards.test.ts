@@ -37,7 +37,7 @@ describe("canonical kitchen instructions on preparation boards", () => {
     );
     const read = () =>
       inTx(v, async (tx) => {
-        const board = await readScopedPassBoard(tx, v.cfg, EVERY);
+        const board = await readScopedPassBoard(tx, EVERY);
         return {
           station: [...(await listStationQueues(tx, stationIds)).values()].flat(),
           pass: boardCards(board).flatMap((card) => card.orders),

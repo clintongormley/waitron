@@ -11,7 +11,6 @@ import {
 } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
-import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 /** The `zoneRevision` a till body carries; undefined when it carries none. */
@@ -62,7 +61,6 @@ export async function roomRevisions(
  */
 export async function roomPrints(
   tx: Transaction,
-  _cfg: TradingContext,
   zoneIds: readonly string[],
 ): Promise<Map<string, string>> {
   const rows = await tx
@@ -135,11 +133,7 @@ export async function moveChangedRooms(
   return moved;
 }
 
-export async function zonesOf(
-  tx: Transaction,
-  _cfg: TradingContext,
-  tableIds: readonly string[],
-): Promise<string[]> {
+export async function zonesOf(tx: Transaction, tableIds: readonly string[]): Promise<string[]> {
   const rows = await tx
     .selectDistinct({ zoneId: diningTables.zoneId })
     .from(diningTables)

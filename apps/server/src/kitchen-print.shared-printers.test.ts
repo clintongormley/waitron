@@ -80,10 +80,10 @@ async function makeDish(
  * Three stations, named so their name order is X, Y, Z: X (Cold, dish Salad), Y (Grill, dish Steak)
  * and Z (Pastry, dish Tart), each with a printer of its own (PX, PY, PZ).
  */
-async function threeStations(tx: Transaction, cfg: OriginConfig, catalogueId: string) {
-  const x = await createStation(tx, cfg, { name: "Cold", isDefault: true });
-  const y = await createStation(tx, cfg, { name: "Grill" });
-  const z = await createStation(tx, cfg, { name: "Pastry" });
+async function threeStations(tx: Transaction, catalogueId: string) {
+  const x = await createStation(tx, { name: "Cold", isDefault: true });
+  const y = await createStation(tx, { name: "Grill" });
+  const z = await createStation(tx, { name: "Pastry" });
   const px = await makePrinter(tx, "PX");
   const py = await makePrinter(tx, "PY");
   const pz = await makePrinter(tx, "PZ");
@@ -169,7 +169,7 @@ describe("a printer shared by several stations", () => {
   it("prints one ticket per send, with a section for each of its stations in this send", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const result = await withTransaction(db, async (tx) => {
-      const venue = await threeStations(tx, cfg, catalogueId);
+      const venue = await threeStations(tx, catalogueId);
       const p = await makePrinter(tx, "P");
       await attachPrinterToStation(tx, {
         stationId: venue.y,
@@ -206,7 +206,7 @@ describe("a printer shared by several stations", () => {
   it("prints one ticket with every station's section on a printer every station uses", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const result = await withTransaction(db, async (tx) => {
-      const venue = await threeStations(tx, cfg, catalogueId);
+      const venue = await threeStations(tx, catalogueId);
       const everywhere = await makePrinter(tx, "Everywhere");
       for (const stationId of [venue.x, venue.y, venue.z]) {
         await attachPrinterToStation(tx, {
@@ -238,7 +238,7 @@ describe("a printer shared by several stations", () => {
   it("prints the plain station ticket when only one of its stations is in the send", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const result = await withTransaction(db, async (tx) => {
-      const venue = await threeStations(tx, cfg, catalogueId);
+      const venue = await threeStations(tx, catalogueId);
       const p = await makePrinter(tx, "P");
       await attachPrinterToStation(tx, {
         stationId: venue.y,
@@ -266,7 +266,7 @@ describe("a printer shared by several stations", () => {
   it("prints one ticket on each of two shared printers of different widths", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const result = await withTransaction(db, async (tx) => {
-      const venue = await threeStations(tx, cfg, catalogueId);
+      const venue = await threeStations(tx, catalogueId);
       const wide = await makePrinter(tx, "Wide");
       const narrow = await makePrinter(tx, "Narrow");
       await updatePrinter(tx, narrow, { paperWidth: "58mm" });
@@ -306,8 +306,8 @@ describe("a printer shared by several stations", () => {
     const { cfg, catalogueId } = await setupVenue();
     cfg.locale = "en-GB";
     const result = await withTransaction(db, async (tx) => {
-      const venue = await threeStations(tx, cfg, catalogueId);
-      await updateStation(tx, cfg, venue.y, { showsRestOfOrder: true });
+      const venue = await threeStations(tx, catalogueId);
+      await updateStation(tx, venue.y, { showsRestOfOrder: true });
       const p = await makePrinter(tx, "P");
       await attachPrinterToStation(tx, {
         stationId: venue.y,
@@ -345,8 +345,8 @@ describe("a printer shared by several stations, on the rest of the order", () =>
     const { cfg, catalogueId } = await setupVenue();
     cfg.locale = "en-GB";
     const result = await withTransaction(db, async (tx) => {
-      const venue = await threeStations(tx, cfg, catalogueId);
-      await updateStation(tx, cfg, venue.z, { showsRestOfOrder: true });
+      const venue = await threeStations(tx, catalogueId);
+      await updateStation(tx, venue.z, { showsRestOfOrder: true });
       const p = await makePrinter(tx, "P");
       await attachPrinterToStation(tx, {
         stationId: venue.y,
@@ -379,8 +379,8 @@ describe("a printer shared by several stations, on the rest of the order", () =>
     const { cfg, catalogueId } = await setupVenue();
     cfg.locale = "en-GB";
     const result = await withTransaction(db, async (tx) => {
-      const venue = await threeStations(tx, cfg, catalogueId);
-      await updateStation(tx, cfg, venue.y, { showsRestOfOrder: true });
+      const venue = await threeStations(tx, catalogueId);
+      await updateStation(tx, venue.y, { showsRestOfOrder: true });
       const p = await makePrinter(tx, "P");
       await attachPrinterToStation(tx, {
         stationId: venue.y,
@@ -416,7 +416,7 @@ describe("a reprint on a printer shared by several stations", () => {
   it("prints the order once on the shared printer, linked to each of its stations", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const result = await withTransaction(db, async (tx) => {
-      const venue = await threeStations(tx, cfg, catalogueId);
+      const venue = await threeStations(tx, catalogueId);
       const p = await makePrinter(tx, "P");
       await attachPrinterToStation(tx, {
         stationId: venue.y,
@@ -464,7 +464,7 @@ describe("a reprint on a printer shared by several stations", () => {
     async ({ fired, held }) => {
       const { cfg, catalogueId } = await setupVenue();
       const result = await withTransaction(db, async (tx) => {
-        const venue = await threeStations(tx, cfg, catalogueId);
+        const venue = await threeStations(tx, catalogueId);
         const p = await makePrinter(tx, "P");
         await attachPrinterToStation(tx, {
           stationId: venue.y,
@@ -521,7 +521,7 @@ describe("a correction slip on a printer shared by several stations", () => {
   it("prints a voided dish's slip once on the shared printer and once on its station's own", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const result = await withTransaction(db, async (tx) => {
-      const venue = await threeStations(tx, cfg, catalogueId);
+      const venue = await threeStations(tx, catalogueId);
       const p = await makePrinter(tx, "P");
       await attachPrinterToStation(tx, {
         stationId: venue.y,
@@ -569,9 +569,9 @@ describe("the rest of the order on a reprint that joins fired and held work on o
       const { cfg, catalogueId } = await setupVenue();
       cfg.locale = "en-GB";
       const result = await withTransaction(db, async (tx) => {
-        const venue = await threeStations(tx, cfg, catalogueId);
+        const venue = await threeStations(tx, catalogueId);
         for (const station of showing) {
-          await updateStation(tx, cfg, venue[station], { showsRestOfOrder: true });
+          await updateStation(tx, venue[station], { showsRestOfOrder: true });
         }
         const p = await makePrinter(tx, "P");
         await attachPrinterToStation(tx, {
@@ -641,8 +641,8 @@ describe("a printer shared by several stations, and dishes made at the till", ()
 it("fires and reprints through a replaced station printer set with no drawer pulse", async () => {
   const { cfg, catalogueId } = await setupVenue();
   const result = await withTransaction(db, async (tx) => {
-    const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
-    const other = await createStation(tx, cfg, { name: "Bar" });
+    const station = await createStation(tx, { name: "Kitchen", isDefault: true });
+    const other = await createStation(tx, { name: "Bar" });
     const ids: string[] = [];
     for (const name of ["Old", "New", "Shared"]) {
       const id = await makePrinter(tx, name);

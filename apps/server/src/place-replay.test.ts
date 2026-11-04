@@ -36,7 +36,7 @@ beforeEach(async () => {
   venue = await provisionBillVenue(suite.db);
   const [product] = await suite.db.select({ id: products.id }).from(products).limit(1);
   const offer = await withTransaction(suite.db, async (tx) => {
-    const station = await createStation(tx, venue.cfg, { name: "Kitchen", isDefault: true });
+    const station = await createStation(tx, { name: "Kitchen", isDefault: true });
     const [printer] = await tx.select({ id: printers.id }).from(printers).limit(1);
     await attachPrinterToStation(tx, {
       stationId: station.id,

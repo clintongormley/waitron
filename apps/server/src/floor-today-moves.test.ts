@@ -31,10 +31,10 @@ useVenueDb({
 });
 
 const move = (tableId: string, at: { x: number; y: number }) =>
-  inTx(v, (tx) => moveToday(tx, v.cfg, tableId, at));
-const rotate = (tableId: string) => inTx(v, (tx) => rotateToday(tx, v.cfg, tableId));
+  inTx(v, (tx) => moveToday(tx, tableId, at));
+const rotate = (tableId: string) => inTx(v, (tx) => rotateToday(tx, tableId));
 const placeSpare = (tableId: string, at: { x: number; y: number }) =>
-  inTx(v, (tx) => placeSpareToday(tx, v.cfg, tableId, at));
+  inTx(v, (tx) => placeSpareToday(tx, tableId, at));
 
 async function setToday(
   tableId: string,
@@ -287,7 +287,7 @@ describe("today's moves", () => {
     await placeSpare(table.spare!, { x: 20, y: 10 });
     expect(await todayRow(v, table.spare!)).toMatchObject({ x: 20 });
 
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
+    await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, NOW, "due"));
 
     expect(await todayRow(v, table.spare!)).toMatchObject({
       x: null,

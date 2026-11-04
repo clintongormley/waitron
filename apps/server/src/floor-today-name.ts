@@ -22,7 +22,7 @@ export async function nameToday(
   tableId: string,
   name: string | null,
 ): Promise<void> {
-  const today = await todayOf(tx, cfg, tableId);
+  const today = await todayOf(tx, tableId);
   if (today.row.takenOff) throw new AppError("table.taken_off", { tableId });
   await refuseInJoinedTable(tx, [tableId]);
   let wanted = normalisePartyName(name);

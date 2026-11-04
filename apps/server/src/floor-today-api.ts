@@ -152,9 +152,9 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
   ): Promise<{ zoneId: string; revision: number }> => {
     const from = await roomRevision(tx, zoneId);
     refuseStale(zoneId, sent, from);
-    const before = (await roomPrints(tx, deps.cfg, [zoneId])).get(zoneId);
+    const before = (await roomPrints(tx, [zoneId])).get(zoneId);
     await write();
-    const after = (await roomPrints(tx, deps.cfg, [zoneId])).get(zoneId);
+    const after = (await roomPrints(tx, [zoneId])).get(zoneId);
     return { zoneId, revision: after === before ? from : await moveRoom(tx, zoneId, from) };
   };
 
@@ -176,8 +176,8 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
             { tableId },
             ...others.map((other) => ({ tableId: other })),
           ]);
-          await ensureToday(tx, deps.cfg, removals, deps.clock.now().instant);
-          const zoneId = await zoneOfTable(tx, deps.cfg, tableId);
+          await ensureToday(tx, removals, deps.clock.now().instant);
+          const zoneId = await zoneOfTable(tx, tableId);
           return changeRoom(tx, zoneId, sent, () => write(tx, tableId));
         });
         return c.json(answer);
@@ -186,27 +186,27 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
 
   tableRoute("move", (body) => {
     const at = corner(body);
-    return { write: (tx, tableId) => moveToday(tx, deps.cfg, tableId, at) };
+    return { write: (tx, tableId) => moveToday(tx, tableId, at) };
   });
-  tableRoute("rotate", () => ({ write: (tx, tableId) => rotateToday(tx, deps.cfg, tableId) }));
-  tableRoute("take-off", () => ({ write: (tx, tableId) => takeOffToday(tx, deps.cfg, tableId) }));
-  tableRoute("put-back", () => ({ write: (tx, tableId) => putBackToday(tx, deps.cfg, tableId) }));
+  tableRoute("rotate", () => ({ write: (tx, tableId) => rotateToday(tx, tableId) }));
+  tableRoute("take-off", () => ({ write: (tx, tableId) => takeOffToday(tx, tableId) }));
+  tableRoute("put-back", () => ({ write: (tx, tableId) => putBackToday(tx, tableId) }));
   tableRoute("place", (body) => {
     const at = corner(body);
-    return { write: (tx, tableId) => placeSpareToday(tx, deps.cfg, tableId, at) };
+    return { write: (tx, tableId) => placeSpareToday(tx, tableId, at) };
   });
   tableRoute("seats", (body) => {
     const seats = seatsOf(body);
-    return { write: (tx, tableId) => seatsToday(tx, deps.cfg, tableId, seats) };
+    return { write: (tx, tableId) => seatsToday(tx, tableId, seats) };
   });
   tableRoute("back", () => ({
     write: (tx, tableId) => backToSaved(tx, deps.cfg, removals, tableId, deps.clock.now().instant),
   }));
   tableRoute("mark-moved", () => ({
-    write: (tx, tableId) => markMoved(tx, deps.cfg, removals, tableId, deps.clock.now().instant),
+    write: (tx, tableId) => markMoved(tx, removals, tableId, deps.clock.now().instant),
   }));
   tableRoute("leave-here", () => ({
-    write: (tx, tableId) => leaveHere(tx, deps.cfg, removals, tableId, deps.clock.now().instant),
+    write: (tx, tableId) => leaveHere(tx, removals, tableId, deps.clock.now().instant),
   }));
   tableRoute("name", (body) => {
     if (body.name === undefined) throw invalid("name");
@@ -242,7 +242,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
     const { partIds, seats } = partsBody(body);
     return {
       write: (tx, joinedId) =>
-        resetTable(tx, deps.cfg, removals, deps.clock.now().instant, {
+        resetTable(tx, removals, deps.clock.now().instant, {
           tableId: joinedId,
           partIds,
           seats,
@@ -262,7 +262,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         await checkZones(tx, session, [{ zoneId }]);
         const active = await zoneActive(tx, zoneId);
         const now = deps.clock.now().instant;
-        const day = await ensureToday(tx, deps.cfg, removals, now);
+        const day = await ensureToday(tx, removals, now);
         const from = await roomRevision(tx, zoneId);
         await refuseStaleZone(tx, zoneId, sent, from);
         if (!active || day === null) return from;
@@ -291,7 +291,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         await checkZones(tx, session, [{ zoneId }]);
         const active = await zoneActive(tx, zoneId);
         const now = deps.clock.now().instant;
-        const day = await ensureToday(tx, deps.cfg, removals, now);
+        const day = await ensureToday(tx, removals, now);
         const from = await roomRevision(tx, zoneId);
         await refuseStaleZone(tx, zoneId, sent, from);
         if (!active) return from;

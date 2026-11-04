@@ -54,7 +54,7 @@ describe("party table join order", () => {
 
   it("watches the first-written table's zone when join times tie", async () => {
     const { partyId } = await joinedTables("2026-10-14T12:00:00.000Z");
-    expect(await inTx(v, (tx) => partyWatchZones(tx, v.cfg, [partyId]))).toEqual(
+    expect(await inTx(v, (tx) => partyWatchZones(tx, [partyId]))).toEqual(
       new Map([[partyId, v.tables.zoneId]]),
     );
   });
@@ -74,7 +74,7 @@ describe("party table join order", () => {
     const { partyId, first, second } = await joinedTables("2026-10-14T11:59:59.999Z");
     expect(await inTx(v, (tx) => memberTables(tx, partyId))).toEqual([second, first]);
     expect(await inTx(v, (tx) => partyZone(tx, v.cfg, partyId))).toBe(v.counter.zoneId);
-    expect(await inTx(v, (tx) => partyWatchZones(tx, v.cfg, [partyId]))).toEqual(
+    expect(await inTx(v, (tx) => partyWatchZones(tx, [partyId]))).toEqual(
       new Map([[partyId, v.counter.zoneId]]),
     );
     const floor = await inTx(v, (tx) => listTablesWithState(tx));

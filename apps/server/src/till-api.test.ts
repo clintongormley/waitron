@@ -943,7 +943,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   });
 
   it("records a sighting of the session's device when one is due, at most once a minute", async () => {
-    const deviceId = await seedSessionDevice(suite.db, cfg);
+    const deviceId = await seedSessionDevice(suite.db);
     const token = await openSession(suite.db, deviceId);
     const request = () =>
       guardApp(suite.db).request("/whoami", { headers: { cookie: `${SESSION_COOKIE}=${token}` } });
@@ -976,7 +976,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   });
 
   it("REJECTS (401 device.unauthorized) an open session whose device has since been revoked", async () => {
-    const deviceId = await seedSessionDevice(suite.db, cfg);
+    const deviceId = await seedSessionDevice(suite.db);
     const token = await openSession(suite.db, deviceId);
     const request = () =>
       guardApp(suite.db).request("/whoami", { headers: { cookie: `${SESSION_COOKIE}=${token}` } });
@@ -1061,7 +1061,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
 
   /** An open session on a freshly seeded device that has never been seen. */
   async function sessionOnUnseenDevice() {
-    const deviceId = await seedSessionDevice(suite.db, cfg);
+    const deviceId = await seedSessionDevice(suite.db);
     const token = await openSession(suite.db, deviceId);
     const lastSeen = async () =>
       (
@@ -1094,7 +1094,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   });
 
   it("a deactivated person is still refused", async () => {
-    const deviceId = await seedSessionDevice(suite.db, cfg);
+    const deviceId = await seedSessionDevice(suite.db);
     const [admin] = await suite.db
       .insert(persons)
       .values({ displayName: "Admin", pinHash: hashPin("8181"), role: "admin" })
@@ -2378,7 +2378,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
   });
 
   it("401s device.unauthorized on /api/pay from a session whose device has been revoked", async () => {
-    const cookie = await revokedDeviceSessionCookie(suite.db, cfg, ana.id, "5555");
+    const cookie = await revokedDeviceSessionCookie(suite.db, ana.id, "5555");
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 

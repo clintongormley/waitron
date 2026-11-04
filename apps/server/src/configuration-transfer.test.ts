@@ -984,7 +984,7 @@ describe("configuration transfer database path", () => {
     expect(printerSettings.rows).toEqual([{ paper_width: "58mm", resolution: "203dpi" }]);
 
     const fiscal = ALL_MODULES.find((module) => module.fiscal?.id === "verifactu")!.fiscal!;
-    const origin = deviceOrigin(await seedSessionDevice(targetSuite.db, target));
+    const origin = deviceOrigin(await seedSessionDevice(targetSuite.db));
     await withTransaction(targetSuite.db, (tx) =>
       recordSale(
         tx,
@@ -3803,7 +3803,6 @@ async function shortNamedBundle(taxId: string) {
     await createTable(tx, cfg, { label: "Rt table 1", zoneId: zone.id, shortName: "Rt1" });
     await saveLayout(
       tx,
-      cfg,
       enabledTableRemovals(ALL_MODULES),
       await defaultLayout(tx, cfg, zone.id),
       {
@@ -5999,18 +5998,7 @@ describe("special days in a configuration transfer", () => {
     const pass = { kind: "station" as const, id: stations.get("Pass")! };
     await withTransaction(suite.db, async (tx) => {
       await insertSpecialDay(tx, cfg, { date: "2026-12-31", name: "New Year's Eve" });
-      await setDefaultStation(
-        tx,
-        {
-          nodeId: nodeId(source.nodeId),
-          locationId: cfg.locationId,
-          locale: "es-ES",
-          invoiceLocales: ["es-ES"],
-          tipsEnabled: false,
-          simplifiedInvoiceLimit: null,
-        },
-        pass.id,
-      );
+      await setDefaultStation(tx, pass.id);
     });
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
@@ -7096,17 +7084,10 @@ it("round-trips deleted kitchen configuration and preserves archived products an
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const cfg: TradingContext = {
-    locationId: locationId(source.locationId),
-    nodeId: nodeId(source.nodeId),
-    locale: "es-ES",
-    invoiceLocales: ["es-ES"],
-    tipsEnabled: false,
-    simplifiedInvoiceLimit: null,
-  };
+  nodeId(source.nodeId);
   const ids = await withTransaction(suite.db, async (tx) => {
-    const course = await createCourse(tx, cfg, { name: "Retired dessert", displayOrder: 2 });
-    const station = await createStation(tx, cfg, { name: "Retired pastry" });
+    const course = await createCourse(tx, { name: "Retired dessert", displayOrder: 2 });
+    const station = await createStation(tx, { name: "Retired pastry" });
     const catalogue = await createCatalogue(tx, { name: "Archive menu" });
     const product = await createProduct(tx, {
       catalogueId: catalogue.id,
@@ -7116,7 +7097,7 @@ it("round-trips deleted kitchen configuration and preserves archived products an
       unitPrice: "5.00",
       vatClass: "general",
     });
-    await setProductCourse(tx, cfg, product.id, course.id);
+    await setProductCourse(tx, product.id, course.id);
     await updateProduct(tx, product.id, { active: false });
     const [profile] = await tx
       .insert(deviceProfiles)
@@ -7132,7 +7113,7 @@ it("round-trips deleted kitchen configuration and preserves archived products an
     );
     await deleteCourse(tx, course.id);
     await deleteStation(tx, station.id);
-    const live = await createCourse(tx, cfg, { name: "Live starters", displayOrder: 0 });
+    const live = await createCourse(tx, { name: "Live starters", displayOrder: 0 });
     return {
       course: course.id,
       station: station.id,
@@ -7277,7 +7258,6 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     await createTable(tx, cfg, { label: "Live table", zoneId: liveZone.id });
     await saveLayout(
       tx,
-      cfg,
       removals,
       await defaultLayout(tx, cfg, liveZone.id),
       {
@@ -7393,7 +7373,6 @@ it("carries Long table's parts, naming the imported tables", async () => {
     });
     const { ids } = await saveLayout(
       tx,
-      cfg,
       removals,
       await defaultLayout(tx, cfg, zone.id),
       {
@@ -7469,7 +7448,6 @@ it("carries a kept size, naming the imported table", async () => {
     });
     const { ids } = await saveLayout(
       tx,
-      cfg,
       enabledTableRemovals(ALL_MODULES),
       await defaultLayout(tx, cfg, zone.id),
       {

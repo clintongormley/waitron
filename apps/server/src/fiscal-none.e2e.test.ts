@@ -146,7 +146,7 @@ async function setupGbVenue(): Promise<GbVenue> {
     sql`select id from persons where role = 'admin'`,
   );
   const adminPersonId = adminRows[0]!.id;
-  const sessionDeviceId = await seedSessionDevice(suite.db, venue);
+  const sessionDeviceId = await seedSessionDevice(suite.db);
   const { id: adminSessionId } = await asApp((tx) =>
     loginWithPin(tx, {
       deviceId: sessionDeviceId,

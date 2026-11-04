@@ -141,7 +141,7 @@ export interface ManagementApiDeps {
   db: Database;
   cfg: { nodeId: string };
   /**
-   * The venue config the zone, table, station and course routes use — the same value
+   * The venue config the department receipt settings routes use — the same value
    * `mountTillApi` receives. Optional so harnesses that never reach those routes can omit it; a
    * request that does reach one without it fails closed (`requireVenueCfg`).
    */
@@ -344,10 +344,12 @@ function requireDeviceProfileId(id: string): string {
 }
 
 function requireVenueCfg(deps: ManagementApiDeps): TradingContext {
-  /* v8 ignore start -- boot always threads venueCfg; only a harness that omits it AND hits a zone/table
-     route reaches this, which no suite does — a config error, surfaced as an opaque 500 by `run`. */
+  /* v8 ignore start -- boot always threads venueCfg; only a harness that omits it AND hits a department
+     receipt settings route reaches this, which no suite does — a config error, surfaced as an opaque 500 by `run`. */
   if (deps.venueCfg === undefined) {
-    throw new Error("mountManagementApi: venueCfg is required for the zone/table config routes");
+    throw new Error(
+      "mountManagementApi: venueCfg is required for the department receipt settings routes",
+    );
   }
   /* v8 ignore stop */
   return deps.venueCfg;
@@ -1425,8 +1427,7 @@ export function mountManagementApi(
   app.get("/management-api/zones", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
-      const zones = await withVenueAuth(deps, sessionId, (tx) => listZones(tx, cfg));
+      const zones = await withVenueAuth(deps, sessionId, (tx) => listZones(tx));
       return c.json(zones);
     }),
   );
@@ -1435,7 +1436,6 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireZoneId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
       const body = await readJsonBody<{ name?: unknown; displayOrder?: unknown; active?: unknown }>(
         c,
       );
@@ -1454,7 +1454,7 @@ export function mountManagementApi(
         patch.displayOrder = parseDisplayOrder(body.displayOrder);
       await withVenueAuth(deps, sessionId, async (tx) => {
         await requireLiveZone(tx, id);
-        if (Object.keys(patch).length > 0) await updateZone(tx, cfg, id, patch);
+        if (Object.keys(patch).length > 0) await updateZone(tx, id, patch);
       });
       return c.body(null, 204);
     }),
@@ -1500,8 +1500,7 @@ export function mountManagementApi(
         setId: requireSetId(c.req.param("setId")),
         zoneId: requireZoneId(c.req.param("zoneId")),
       };
-      const cfg = requireVenueCfg(deps);
-      return c.json(await withVenueAuth(deps, sessionId, (tx) => readLayout(tx, cfg, at)));
+      return c.json(await withVenueAuth(deps, sessionId, (tx) => readLayout(tx, at)));
     }),
   );
 
@@ -1512,11 +1511,10 @@ export function mountManagementApi(
         setId: requireSetId(c.req.param("setId")),
         zoneId: requireZoneId(c.req.param("zoneId")),
       };
-      const cfg = requireVenueCfg(deps);
       const input = parseZonePlanSave(await readJsonBody<unknown>(c));
       const now = new Date();
       const saved = await withVenueAuth(deps, sessionId, (tx) =>
-        saveLayout(tx, cfg, deps.tableRemovals ?? [], at, input, now),
+        saveLayout(tx, deps.tableRemovals ?? [], at, input, now),
       );
       return c.json(saved);
     }),
@@ -1525,9 +1523,8 @@ export function mountManagementApi(
   app.get("/management-api/tables", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
       const tables = await withVenueAuth(deps, sessionId, (tx) =>
-        listTables(tx, cfg, new Date(), {
+        listTables(tx, new Date(), {
           includeDisabled: c.req.query("includeDisabled") === "true",
         }),
       );
@@ -1539,7 +1536,6 @@ export function mountManagementApi(
   app.post("/management-api/stations", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
       const body = await readJsonBody<{
         name?: unknown;
         displayOrder?: unknown;
@@ -1577,7 +1573,7 @@ export function mountManagementApi(
       const printerIds = parseStationPrinterIds(body.printerIds);
       const result = await withVenueAuth(deps, sessionId, async (tx) => {
         await authorizeStationPrinters(tx, sessionId, printerIds);
-        return createStation(tx, cfg, {
+        return createStation(tx, {
           name,
           isDefault,
           colour,
@@ -1593,8 +1589,7 @@ export function mountManagementApi(
   app.get("/management-api/stations", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
-      const stations = await withVenueReadAuth(deps, sessionId, (tx) => listStations(tx, cfg));
+      const stations = await withVenueReadAuth(deps, sessionId, (tx) => listStations(tx));
       return c.json(stations);
     }),
   );
@@ -1614,8 +1609,7 @@ export function mountManagementApi(
   app.get("/management-api/stations/pass-coverage", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
-      const result = await withVenueAuth(deps, sessionId, (tx) => readPassCoverage(tx, cfg));
+      const result = await withVenueAuth(deps, sessionId, (tx) => readPassCoverage(tx));
       return c.json(result);
     }),
   );
@@ -1624,7 +1618,6 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireStationId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
       const body = await readJsonBody<{
         name?: unknown;
         displayOrder?: unknown;
@@ -1703,7 +1696,7 @@ export function mountManagementApi(
       if (printerIds !== undefined) patch.printerIds = printerIds;
       await withVenueAuth(deps, sessionId, async (tx) => {
         await authorizeStationPrinters(tx, sessionId, patch.printerIds);
-        await updateStation(tx, cfg, id, patch);
+        await updateStation(tx, id, patch);
       });
       return c.body(null, 204);
     }),
@@ -1731,8 +1724,7 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireStationId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
-      await withVenueAuth(deps, sessionId, (tx) => setDefaultStation(tx, cfg, id));
+      await withVenueAuth(deps, sessionId, (tx) => setDefaultStation(tx, id));
       return c.body(null, 204);
     }),
   );
@@ -1741,7 +1733,6 @@ export function mountManagementApi(
   app.post("/management-api/courses", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
       const body = await readJsonBody<{
         name?: unknown;
         displayOrder?: unknown;
@@ -1757,7 +1748,7 @@ export function mountManagementApi(
       const displayOrder = parseDisplayOrder(body.displayOrder);
       const { name, heldUntilFired } = body;
       const result = await withVenueAuth(deps, sessionId, (tx) =>
-        createCourse(tx, cfg, { name, displayOrder, heldUntilFired }),
+        createCourse(tx, { name, displayOrder, heldUntilFired }),
       );
       return c.json(result, 201);
     }),
@@ -1766,8 +1757,7 @@ export function mountManagementApi(
   app.get("/management-api/courses", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
-      const courses = await withVenueReadAuth(deps, sessionId, (tx) => listCourses(tx, cfg));
+      const courses = await withVenueReadAuth(deps, sessionId, (tx) => listCourses(tx));
       return c.json(courses);
     }),
   );
@@ -1776,7 +1766,6 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireCourseId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
       const body = await readJsonBody<{
         name?: unknown;
         displayOrder?: unknown;
@@ -1802,7 +1791,7 @@ export function mountManagementApi(
           throw new AppError("management.request_invalid", { field: "heldUntilFired" });
         patch.heldUntilFired = body.heldUntilFired;
       }
-      await withVenueAuth(deps, sessionId, (tx) => updateCourse(tx, cfg, id, patch));
+      await withVenueAuth(deps, sessionId, (tx) => updateCourse(tx, id, patch));
       return c.body(null, 204);
     }),
   );
@@ -1829,7 +1818,6 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireCourseId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
       const body = await readJsonBody<{ to?: unknown }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -1838,7 +1826,7 @@ export function mountManagementApi(
       if (typeof to !== "number" || !Number.isInteger(to) || to < 0) {
         throw new AppError("management.request_invalid", { field: "to" });
       }
-      return c.json(await withVenueAuth(deps, sessionId, (tx) => moveCourse(tx, cfg, id, to)));
+      return c.json(await withVenueAuth(deps, sessionId, (tx) => moveCourse(tx, id, to)));
     }),
   );
 
@@ -1847,7 +1835,6 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireProductId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
       const body = await readJsonBody<{ courseId?: unknown }>(c);
       if (typeof body.courseId !== "string" && body.courseId !== null) {
         throw new AppError("management.request_invalid", { field: "courseId" });
@@ -1856,7 +1843,7 @@ export function mountManagementApi(
       if (courseId !== null && !isUuid(courseId)) {
         throw new AppError("course.not_found", { courseId });
       }
-      await withVenueAuth(deps, sessionId, (tx) => setProductCourse(tx, cfg, id, courseId));
+      await withVenueAuth(deps, sessionId, (tx) => setProductCourse(tx, id, courseId));
       return c.body(null, 204);
     }),
   );

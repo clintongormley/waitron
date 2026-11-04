@@ -2318,7 +2318,7 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
       tx.update(partyTables).set({ leftAt: nowIso() }).where(eq(partyTables.partyId, partyId)),
     );
 
-    const { orderLabel } = await inTx(v, (tx) => readReceiptOrder(tx, v.cfg, checkId));
+    const { orderLabel } = await inTx(v, (tx) => readReceiptOrder(tx, checkId));
 
     expect(orderLabel).toBe("Mesa 4");
   });
@@ -2331,7 +2331,7 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
       createOpenOrder(tx, v.cfg, orderId, [], null, { deliveryTableId: terraza }),
     );
 
-    const { orderLabel } = await inTx(v, (tx) => readReceiptOrder(tx, v.cfg, orderId));
+    const { orderLabel } = await inTx(v, (tx) => readReceiptOrder(tx, orderId));
 
     expect(orderLabel).toBe("Terraza 2");
   });

@@ -20,7 +20,7 @@ export async function splitJoinedTable(
   read?: { today: Today; parts: Part[] },
 ): Promise<void> {
   const { tableId, partIds, seats } = args;
-  const today = read?.today ?? (await todayOf(tx, cfg, tableId));
+  const today = read?.today ?? (await todayOf(tx, tableId));
   let row = placementOf(today.row);
   if (row === null) throw new AppError("table.not_on_today_plan", { tableId });
   if (today.row.takenOff) throw new AppError("table.taken_off", { tableId });
@@ -49,7 +49,7 @@ export async function splitJoinedTable(
       const members = today.merge.members.map((member) => member.tableId);
       await refuseHeld(tx, members);
       await leaveMergesRestoring(tx, members);
-      row = placementOf((await todayOf(tx, cfg, tableId)).row)!;
+      row = placementOf((await todayOf(tx, tableId)).row)!;
     }
   }
 

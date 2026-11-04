@@ -287,7 +287,7 @@ const RING = loadKeyRing({
  * (`CollectParams.readerRef`). The caching is what lets the two-readers-one-provider case prove
  * the ref is not baked in.
  */
-function fakePool(_cfg: TradingContext, client: FakeStripe): CardProviderPool {
+function fakePool(client: FakeStripe): CardProviderPool {
   const cache = new Map<string, StripeTerminalProvider>();
   return {
     get: (providerId) => {
@@ -766,7 +766,7 @@ describe("sale-time device from the authenticated session (SP-A.2 cutover)", () 
 
     // A `kds_station` device's profile carries no `take-cash`. Provisioning already seeds "Cocina".
     const station = await withTransaction(suite.db, async (tx) => {
-      return createStation(tx, cfg, { name: "Pass", isDefault: false });
+      return createStation(tx, { name: "Pass", isDefault: false });
     });
     const profileId = await seedProfileFF("kds");
     const dev = await enrolDeviceForTest(suite.db, cfg, {
@@ -998,7 +998,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
     const app = new Hono();
-    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
@@ -1027,7 +1027,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
-    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
@@ -1059,7 +1059,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
-    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
@@ -1094,7 +1094,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const app = new Hono();
     // One pool, one FakeStripe: the pay path calls `pool.get("stripe")` for BOTH sales and must get
     // the SAME cached provider, so the only thing distinguishing the two collects is `readerRef`.
-    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, client)), noopLog);
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(client)), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
@@ -1129,7 +1129,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     // then gets the SAME cached instance, which the sweep must leave usable.
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
-    const pool = fakePool(cfg, new FakeStripe());
+    const pool = fakePool(new FakeStripe());
     const app = new Hono();
     mountTillApi(app, apiDepsWithPool(cfg, pool), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
@@ -1162,7 +1162,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
-    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     // No `device_card_readers` row and no `readerId` in the body → nothing resolves.
@@ -1185,7 +1185,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
-    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     const reader = await seedReader(); // active reader, but provider not connected
@@ -1212,7 +1212,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const client = new FakeStripe();
     client.declineNext();
     const app = new Hono();
-    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, client)), noopLog);
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(client)), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
@@ -1295,7 +1295,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       await declinedPay(
         (cfg, log) => {
           const app = new Hono();
-          mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, client)), log);
+          mountTillApi(app, apiDepsWithPool(cfg, fakePool(client)), log);
           return app;
         },
         async (deviceCookie) => {
@@ -1337,7 +1337,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
-    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
@@ -1689,7 +1689,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
   it("still 400s an empty walk-up basket — a genuine fault, mapped through run, not a payment outcome", async () => {
     const { cfg, operatorId } = await setupVenue();
     const app = new Hono();
-    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
@@ -1810,7 +1810,7 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
   it("maps the device's chosen reader's provider to the till union and lists active readers", async () => {
     const { cfg } = await setupVenue();
     const app = new Hono();
-    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const reader = await seedReader(); // provider "stripe"
     await setChosenReader(deviceIdOf(deviceCookie), reader.id);
@@ -1839,7 +1839,7 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
   it("a device with no chosen reader and no profile default gets cardProvider 'none'", async () => {
     const { cfg } = await setupVenue();
     const app = new Hono();
-    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
 
     const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
@@ -3096,7 +3096,7 @@ describe("card readers the till cannot drive, and readers named by id", () => {
   it("GET /api/till maps a chosen SumUp reader and leaves out a reader whose provider it does not know", async () => {
     const { cfg } = await setupVenue();
     const app = new Hono();
-    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const sumup = await seedReader({ provider: "sumup", name: "SumUp Solo" });
     await seedReader({ provider: "carrier_pigeon", name: "Unknown" });
@@ -3120,7 +3120,7 @@ describe("card readers the till cannot drive, and readers named by id", () => {
   it("GET /api/till reports no card provider for a device whose chosen reader's provider is unknown", async () => {
     const { cfg } = await setupVenue();
     const app = new Hono();
-    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const unknown = await seedReader({ provider: "carrier_pigeon", name: "Unknown" });
     await setChosenReader(deviceIdOf(deviceCookie), unknown.id);
@@ -3137,7 +3137,7 @@ describe("card readers the till cannot drive, and readers named by id", () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
-    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
@@ -3163,7 +3163,7 @@ describe("card readers the till cannot drive, and readers named by id", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     const withoutSeats: TillApiDeps = {
-      ...apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())),
+      ...apiDepsWithPool(cfg, fakePool(new FakeStripe())),
       providers: undefined,
     };
     mountTillApi(app, withoutSeats, noopLog);
@@ -3194,7 +3194,7 @@ describe("POST /api/session by device kind", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const station = await withTransaction(suite.db, (tx) =>
-      createStation(tx, cfg, { name: "Pass", isDefault: false }),
+      createStation(tx, { name: "Pass", isDefault: false }),
     );
     const dev = await enrolDeviceForTest(suite.db, cfg, {
       name: "Pass screen",

@@ -497,23 +497,17 @@ describe("stale floor identifiers", () => {
     string,
     (tx: Transaction, f: Awaited<ReturnType<typeof floorTarget>>) => Promise<unknown>,
   ][] = [
-    [
-      "zone rename",
-      "zone.not_found",
-      (tx, f) => updateZone(tx, v.cfg, f.zoneId, { name: "Reborn" }),
-    ],
+    ["zone rename", "zone.not_found", (tx, f) => updateZone(tx, f.zoneId, { name: "Reborn" })],
     [
       "zone activate",
       "zone.not_found",
       (tx, f) =>
-        updateZone(tx, v.cfg, f.zoneId, { active: true } as unknown as Parameters<
-          typeof updateZone
-        >[3]),
+        updateZone(tx, f.zoneId, { active: true } as unknown as Parameters<typeof updateZone>[2]),
     ],
     [
       "floor read",
       "zone.not_found",
-      (tx, f) => readLayout(tx, v.cfg, { setId: randomUUID(), zoneId: f.zoneId }),
+      (tx, f) => readLayout(tx, { setId: randomUUID(), zoneId: f.zoneId }),
     ],
     [
       "floor save",
@@ -521,20 +515,19 @@ describe("stale floor identifiers", () => {
       (tx, f) =>
         saveLayout(
           tx,
-          v.cfg,
           [],
           { setId: randomUUID(), zoneId: f.zoneId },
           { revision: 1, tables: [] },
           now,
         ),
     ],
-    ["floor reset", "zone.not_found", (tx, f) => resetZone(tx, v.cfg, [], f.zoneId, now, "due")],
+    ["floor reset", "zone.not_found", (tx, f) => resetZone(tx, [], f.zoneId, now, "due")],
     ["floor catch-up", "zone.not_found", (tx, f) => catchUpZone(tx, [], f.zoneId, now)],
-    ["table move", "table.not_found", (tx, f) => moveToday(tx, v.cfg, f.tableId, { x: 2, y: 2 })],
-    ["table rotate", "table.not_found", (tx, f) => rotateToday(tx, v.cfg, f.tableId)],
-    ["table take off", "table.not_found", (tx, f) => takeOffToday(tx, v.cfg, f.tableId)],
-    ["table put back", "table.not_found", (tx, f) => putBackToday(tx, v.cfg, f.tableId)],
-    ["table seats", "table.not_found", (tx, f) => seatsToday(tx, v.cfg, f.tableId, 4)],
+    ["table move", "table.not_found", (tx, f) => moveToday(tx, f.tableId, { x: 2, y: 2 })],
+    ["table rotate", "table.not_found", (tx, f) => rotateToday(tx, f.tableId)],
+    ["table take off", "table.not_found", (tx, f) => takeOffToday(tx, f.tableId)],
+    ["table put back", "table.not_found", (tx, f) => putBackToday(tx, f.tableId)],
+    ["table seats", "table.not_found", (tx, f) => seatsToday(tx, f.tableId, 4)],
     [
       "table back to saved",
       "table.not_found",
@@ -543,7 +536,7 @@ describe("stale floor identifiers", () => {
     [
       "table spare placement",
       "table.not_found",
-      (tx, f) => placeSpareToday(tx, v.cfg, f.tableId, { x: 2, y: 2 }),
+      (tx, f) => placeSpareToday(tx, f.tableId, { x: 2, y: 2 }),
     ],
     [
       "table seat",
@@ -565,18 +558,18 @@ describe("stale floor identifiers", () => {
   it("keeps management spare/taken-off tables but hides deleted zones with old list flags", async () => {
     const deleted = await floorTarget();
     const live = await floorTarget(false);
-    await run((tx) => takeOffToday(tx, v.cfg, live.tableId));
-    const tables = await run((tx) => listTables(tx, v.cfg, new Date(), { includeDisabled: true }));
+    await run((tx) => takeOffToday(tx, live.tableId));
+    const tables = await run((tx) => listTables(tx, new Date(), { includeDisabled: true }));
     expect(tables).not.toContainEqual(expect.objectContaining({ id: deleted.tableId }));
     expect(tables).toContainEqual(expect.objectContaining({ id: live.tableId }));
-    expect(await run((tx) => listZones(tx, v.cfg, { includeInactive: true }))).not.toContainEqual(
+    expect(await run((tx) => listZones(tx, { includeInactive: true }))).not.toContainEqual(
       expect.objectContaining({ id: deleted.zoneId }),
     );
-    await expect(
-      run((tx) => moveToday(tx, v.cfg, live.tableId, { x: 3, y: 3 })),
-    ).rejects.toMatchObject({ code: "table.taken_off" });
-    await run((tx) => putBackToday(tx, v.cfg, live.tableId));
-    await run((tx) => moveToday(tx, v.cfg, live.tableId, { x: 3, y: 3 }));
+    await expect(run((tx) => moveToday(tx, live.tableId, { x: 3, y: 3 }))).rejects.toMatchObject({
+      code: "table.taken_off",
+    });
+    await run((tx) => putBackToday(tx, live.tableId));
+    await run((tx) => moveToday(tx, live.tableId, { x: 3, y: 3 }));
     expect(
       (
         await run((tx) =>
@@ -585,7 +578,7 @@ describe("stale floor identifiers", () => {
       )[0],
     ).toMatchObject({ x: 3, y: 3, takenOff: false });
     const before = await run(rows);
-    await run((tx) => ensureToday(tx, v.cfg, [], now));
+    await run((tx) => ensureToday(tx, [], now));
     expect(
       (await run(rows)).allTables.floor_plans.filter(
         (row: unknown) => (row as { zone_id: string }).zone_id === deleted.zoneId,

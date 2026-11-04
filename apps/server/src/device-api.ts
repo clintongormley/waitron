@@ -570,7 +570,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           const { screen } = await kitchenScreenOf(tx, c, device, "pass");
-          const board = await readScopedPassBoard(tx, deps.cfg, passScopeOf(screen), {
+          const board = await readScopedPassBoard(tx, passScopeOf(screen), {
             showNonPassStations: screen.showNonPassStations,
           });
           return passBoardAnswer(board, screen);
@@ -585,7 +585,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           const { screen } = await kitchenScreenOf(tx, c, device, "pass_monitor");
-          const board = await readScopedPassBoard(tx, deps.cfg, passScopeOf(screen), {
+          const board = await readScopedPassBoard(tx, passScopeOf(screen), {
             release: false,
             showNonPassStations: screen.showNonPassStations,
           });
@@ -735,7 +735,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           await stationScreenOf(tx, c, device);
-          return listStationsToday(tx, deps.cfg);
+          return listStationsToday(tx);
         }),
       );
     }),
@@ -944,7 +944,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
           });
         }
         if (madeHere !== undefined) {
-          await setMadeHereStations(tx, deps.cfg, id, madeHere as string[]);
+          await setMadeHereStations(tx, id, madeHere as string[]);
         }
         await keepApprovedAfterSwitch(tx, id, device.deviceProfileId, profileId);
         if (approvedIds !== undefined) await approveDeviceProfiles(tx, id, approvedIds as string[]);

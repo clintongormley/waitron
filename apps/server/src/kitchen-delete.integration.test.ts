@@ -66,24 +66,24 @@ it("keeps retained draft, group, course and ready station history through manage
   const v = await setupPartyVenue(suite.db);
   const seated = await seat(v, await v.table("Table history"));
   const { course, station, defaultStation } = await inTx(v, async (tx) => {
-    const createdCourse = await createCourse(tx, v.cfg, {
+    const createdCourse = await createCourse(tx, {
       name: "Recorded dessert",
       displayOrder: 3,
       heldUntilFired: true,
     });
     const station = {
-      ...(await createStation(tx, v.cfg, { name: "Recorded pastry" })),
+      ...(await createStation(tx, { name: "Recorded pastry" })),
       name: "Recorded pastry",
     };
     const course = { ...createdCourse, name: "Recorded dessert", displayOrder: 3 };
-    const defaultStation = (await listStations(tx, v.cfg)).find((row) => row.isDefault)!;
+    const defaultStation = (await listStations(tx)).find((row) => row.isDefault)!;
     const department = (await listDepartments(tx))[0]!;
     const period = await saveMenuPeriod(tx, department.id, {
       name: "Dessert service",
       menuId: v.tables.menuId,
       staffMenuIds: [],
     });
-    await setProductCourse(tx, v.cfg, v.productId("Flan"), course.id);
+    await setProductCourse(tx, v.productId("Flan"), course.id);
     await republishMenus(tx);
     const [flan] = await tx
       .select({ categoryId: products.categoryId })
@@ -206,7 +206,7 @@ it("keeps retained draft, group, course and ready station history through manage
     events: await v.db.select().from(orderDraftEvents),
     groups: await inTx(v, (tx) => listOrderGroups(tx, seated.partyId)),
     tab: await inTx(v, (tx) => readTabLines(tx, submitted.tabId)),
-    pass: await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY)),
+    pass: await inTx(v, (tx) => readScopedPassBoard(tx, EVERY)),
     rest: await inTx(v, (tx) => readRestOfOrder(tx, [submitted.tabId])),
   });
   const before = await history();
@@ -282,10 +282,10 @@ it("keeps retained draft, group, course and ready station history through manage
     state: "ready",
     held: false,
   });
-  expect(await inTx(v, (tx) => listCourses(tx, v.cfg))).toEqual([]);
-  expect(
-    (await inTx(v, (tx) => listStations(tx, v.cfg))).some((row) => row.id === station.id),
-  ).toBe(false);
+  expect(await inTx(v, (tx) => listCourses(tx))).toEqual([]);
+  expect((await inTx(v, (tx) => listStations(tx))).some((row) => row.id === station.id)).toBe(
+    false,
+  );
   const oldEdit = await app.request(`/management-api/stations/${station.id}`, {
     method: "PATCH",
     headers: { cookie, "content-type": "application/json" },
@@ -295,7 +295,7 @@ it("keeps retained draft, group, course and ready station history through manage
   expect(await oldEdit.json()).toEqual({
     error: { code: "station.not_found", params: { stationId: station.id } },
   });
-  const reusedStation = await inTx(v, (tx) => createStation(tx, v.cfg, { name: station.name }));
+  const reusedStation = await inTx(v, (tx) => createStation(tx, { name: station.name }));
   expect(reusedStation.id).not.toBe(station.id);
   await inTx(v, (tx) => republishMenus(tx));
   await inTx(v, (tx) =>
@@ -313,9 +313,7 @@ it("keeps retained draft, group, course and ready station history through manage
   )!;
   expect(freshLine.courseId).toBeNull();
   expect(freshTickets.find((row) => row.id === before.tickets[0]!.id)).toEqual(before.tickets[0]);
-  const reused = await inTx(v, (tx) =>
-    createCourse(tx, v.cfg, { name: course.name, displayOrder: 0 }),
-  );
+  const reused = await inTx(v, (tx) => createCourse(tx, { name: course.name, displayOrder: 0 }));
   expect(reused.id).not.toBe(course.id);
   expect((await inTx(v, (tx) => readTabLines(tx, submitted.tabId)))[0]!.course).toEqual(
     held!.course,
@@ -324,7 +322,7 @@ it("keeps retained draft, group, course and ready station history through manage
 
 it("recomputes course impact after a queued product-default write commits", async () => {
   const v = await setupPartyVenue(suite.db);
-  const course = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Queued dessert" }));
+  const course = await inTx(v, (tx) => createCourse(tx, { name: "Queued dessert" }));
   expect(await inTx(v, (tx) => readCourseDeleteImpact(tx, course.id))).toEqual({
     target: { id: course.id, name: "Queued dessert" },
     refusals: [],
@@ -336,7 +334,7 @@ it("recomputes course impact after a queued product-default write commits", asyn
   const writer = inTx(v, async (tx) => {
     entered.resolve();
     await release.promise;
-    await setProductCourse(tx, v.cfg, v.productId("Flan"), course.id);
+    await setProductCourse(tx, v.productId("Flan"), course.id);
   });
   await entered.promise;
   const asked = deferred();
@@ -371,7 +369,7 @@ it("recomputes course impact after a queued product-default write commits", asyn
 it("refuses a queued station delete after another writer sends preparing food", async () => {
   const v = await setupPartyVenue(suite.db);
   const station = await inTx(v, async (tx) => {
-    const row = await createStation(tx, v.cfg, { name: "Queued pastry" });
+    const row = await createStation(tx, { name: "Queued pastry" });
     await setRoutingCell(
       tx,
       { row: { kind: "product", productId: v.productId("Flan") }, zoneId: null },
@@ -412,9 +410,7 @@ it("refuses a queued station delete after another writer sends preparing food", 
     params: { stationId: station.id, count: 1 },
   });
   expect(await v.db.select().from(ticketItems)).toEqual(beforeTickets);
-  expect(
-    (await inTx(v, (tx) => listStations(tx, v.cfg))).some((row) => row.id === station.id),
-  ).toBe(true);
+  expect((await inTx(v, (tx) => listStations(tx))).some((row) => row.id === station.id)).toBe(true);
   expect((await v.db.select().from(routingCells)).map((row) => row.stationId)).toEqual([
     station.id,
   ]);

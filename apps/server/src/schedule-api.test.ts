@@ -41,7 +41,7 @@ const suite = useVenueDb({
       operationDescription: "Retail",
     });
     locationId = await venueLocationId(db);
-    deviceId = await seedSessionDevice(db, { locationId });
+    deviceId = await seedSessionDevice(db);
     const [meRow] = await db
       .insert(persons)
       .values({ displayName: "Me", pinHash: hashPin("1111"), role: "staff" })

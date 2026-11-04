@@ -273,7 +273,7 @@ describe("seedFloor", () => {
       nodeId: "unused",
       seriesId: "unused",
       locationId: brandLocationId(locationId),
-    } as unknown as Parameters<typeof readLayout>[1];
+    } as unknown as Parameters<typeof defaultLayout>[1];
 
     const res = await withTransaction(suite.db, async (tx) => {
       await seedFloor(tx, {
@@ -287,7 +287,7 @@ describe("seedFloor", () => {
       );
       const plans = [];
       for (const { zone_id } of zones)
-        plans.push(await readLayout(tx, cfg, await defaultLayout(tx, cfg, zone_id)));
+        plans.push(await readLayout(tx, await defaultLayout(tx, cfg, zone_id)));
       const { rows: today } = await tx.execute<{
         label: string;
         zone_id: string;
@@ -378,12 +378,6 @@ describe("seedFloor", () => {
     "gives each department a Standard set holding its zones' tables (%s)",
     async (locale, setName) => {
       const { locationId } = await provisionVenue();
-      const cfg = {
-        nodeId: "unused",
-        seriesId: "unused",
-        locationId: brandLocationId(locationId),
-      } as unknown as Parameters<typeof readLayout>[1];
-
       const res = await withTransaction(suite.db, async (tx) => {
         await seedFloor(tx, {
           locationId,
@@ -398,7 +392,7 @@ describe("seedFloor", () => {
         const placed: Record<string, string[]> = {};
         for (const set of sets) {
           for (const zoneId of set.zoneIds) {
-            const layout = await readLayout(tx, cfg, { setId: set.setId, zoneId });
+            const layout = await readLayout(tx, { setId: set.setId, zoneId });
             placed[zoneId] = layout.tables
               .filter((t) => t.placement !== null)
               .map((t) => t.label)

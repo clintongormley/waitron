@@ -44,7 +44,6 @@ import {
   stationsWithWaitingDishes,
 } from "./station-outputs-down.js";
 import { FIRST_START_PENDING } from "./stream-host.js";
-import type { TradingContext } from "./trading-context.js";
 import type { TtlCache } from "./ttl-cache.js";
 import "./errors.js";
 
@@ -722,12 +721,12 @@ export function stationOutputAlertSource(deps: {
   };
 }
 
-export function passScreenAlertSource(deps: { cfg: TradingContext }): AlertSource {
+export function passScreenAlertSource(): AlertSource {
   return {
     area: "kitchen",
     permission: "venue_service.manage",
     async read({ tx, now }): Promise<readonly OngoingAlert[]> {
-      return (await passScreensDark(tx, deps.cfg, now)).map((p) => ({
+      return (await passScreensDark(tx, now)).map((p) => ({
         key: `kitchen_screen.pass_dark:${p.deviceId}`,
         ...(p.kind === "pass"
           ? { code: "kitchen_screen.pass_dark" }

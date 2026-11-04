@@ -50,10 +50,10 @@ const RUNS_THE_PASS = ["take-orders", "prepare-orders", "hand-over-orders"] as c
 async function fixture() {
   const v = await setupPartyVenue(suite.db);
   const mains = await inTx(v, async (tx) => {
-    const starters = await createCourse(tx, v.cfg, { name: "Starters", displayOrder: 0 });
-    await setProductCourse(tx, v.cfg, v.productId("Caña"), starters.id);
-    const course = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 1 });
-    await setProductCourse(tx, v.cfg, v.productId("Burger"), course.id);
+    const starters = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+    await setProductCourse(tx, v.productId("Caña"), starters.id);
+    const course = await createCourse(tx, { name: "Mains", displayOrder: 1 });
+    await setProductCourse(tx, v.productId("Burger"), course.id);
     return course.id;
   });
   const profile = async (formFactor: "kds" | "till", capabilities: readonly string[]) => {
@@ -525,7 +525,7 @@ describe("a kitchen display's retained Ready actions", () => {
   it("requires an effective pass screen for Ready, excluding station and monitor screens", async () => {
     const f = await fixture();
     const held = await f.heldBurger();
-    const grill = await inTx(f.v, (tx) => createStation(tx, f.v.cfg, { name: "Grill" }));
+    const grill = await inTx(f.v, (tx) => createStation(tx, { name: "Grill" }));
     for (const choice of [
       { stationId: grill.id },
       { kitchenScreen: { kind: "pass_monitor" as const, stationIds: null, zoneIds: null } },

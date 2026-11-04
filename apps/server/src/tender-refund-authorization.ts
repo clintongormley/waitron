@@ -106,7 +106,7 @@ export async function withTenderRefundAuthorization<T>(
         throw new AppError("device.forbidden_action", { action: "refund" });
       if (!(await canUseDeviceProfile(tx, device.deviceProfileId, operator.personId)))
         throw new AppError("device_profile.not_admitted", {});
-      const scope = await resolveTransactionScope(tx, cfg, saleId);
+      const scope = await resolveTransactionScope(tx, saleId);
       await assertSubjectZones(
         tx,
         device.deviceProfileId,

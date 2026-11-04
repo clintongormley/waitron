@@ -130,7 +130,7 @@ export async function readInvoiceDocument(
     result: {
       ...(sale.workingOrderId === null
         ? { orderLabel: null, orderNumber: 0 }
-        : await readReceiptOrder(tx, cfg, sale.workingOrderId)),
+        : await readReceiptOrder(tx, sale.workingOrderId)),
       invoiceType: "F1",
       issuer,
       recipient: {

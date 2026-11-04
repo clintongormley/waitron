@@ -151,8 +151,8 @@ describe("splitting a dish with split-off extras", () => {
   it("refuses to split a whole water whose course holds its chips record", async () => {
     const venue = await setupSplitExtrasVenue();
     const courseId = await withTransaction(db, async (tx) => {
-      const course = await createCourse(tx, venue.cfg, { name: "Later", displayOrder: 2 });
-      await setProductCourse(tx, venue.cfg, venue.products.water, course.id);
+      const course = await createCourse(tx, { name: "Later", displayOrder: 2 });
+      await setProductCourse(tx, venue.products.water, course.id);
       return course.id;
     });
     await withTransaction(db, (tx) =>

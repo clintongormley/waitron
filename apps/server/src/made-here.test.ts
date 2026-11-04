@@ -88,8 +88,8 @@ describe("device made-here stations", () => {
   it("prints at today's chosen destination when a made-here station closes by hand", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const bar = await createStation(tx, venue.cfg, { name: "Bar" });
-      const downstairs = await createStation(tx, venue.cfg, { name: "Downstairs bar" });
+      const bar = await createStation(tx, { name: "Bar" });
+      const downstairs = await createStation(tx, { name: "Downstairs bar" });
       await routeProductTo(tx, venue.cafeId, bar.id);
       const downstairsPrinter = await stationPrinter(tx, downstairs.id);
       const deviceId = await deviceAt(tx, bar.id);
@@ -113,12 +113,12 @@ describe("device made-here stations", () => {
   it("releases a made-here later-course drink immediately and never prints it on line release or reprint", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const grill = await createStation(tx, venue.cfg, { name: "Grill" });
+      const grill = await createStation(tx, { name: "Grill" });
       await routeProductTo(tx, venue.aguaId, grill.id);
       const barPrinter = await stationPrinter(tx, venue.defaultStationId);
       const grillPrinter = await stationPrinter(tx, grill.id);
-      const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
-      const second = await createCourse(tx, venue.cfg, { name: "Second", displayOrder: 2 });
+      const first = await createCourse(tx, { name: "First", displayOrder: 1 });
+      const second = await createCourse(tx, { name: "Second", displayOrder: 2 });
       const deviceId = await deviceAt(tx, venue.defaultStationId);
       const cfg = { ...venue.cfg, sendingDeviceId: deviceId };
       const orderId = randomUUID();
@@ -227,7 +227,7 @@ describe("device made-here stations", () => {
   it("makes Bar work here and prints Grill work in the same send", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const grill = await createStation(tx, venue.cfg, { name: "Grill" });
+      const grill = await createStation(tx, { name: "Grill" });
       await routeProductTo(tx, venue.aguaId, grill.id);
       const barPrinter = await stationPrinter(tx, venue.defaultStationId);
       const grillPrinter = await stationPrinter(tx, grill.id);
@@ -263,7 +263,7 @@ describe("device made-here stations", () => {
   it("uses the final routed station and the device list for a new item", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const downstairs = await createStation(tx, venue.cfg, { name: "Downstairs bar" });
+      const downstairs = await createStation(tx, { name: "Downstairs bar" });
       await routeProductTo(tx, venue.cafeId, downstairs.id);
       const printer = await stationPrinter(tx, downstairs.id);
       const deviceId = await deviceAt(tx, venue.defaultStationId);
@@ -392,12 +392,12 @@ describe("device made-here stations", () => {
   it("keeps a made-here first course ahead of a later course", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const grill = await createStation(tx, venue.cfg, { name: "Grill" });
+      const grill = await createStation(tx, { name: "Grill" });
       await routeProductTo(tx, venue.aguaId, grill.id);
       const barPrinter = await stationPrinter(tx, venue.defaultStationId);
       const grillPrinter = await stationPrinter(tx, grill.id);
-      const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
-      const second = await createCourse(tx, venue.cfg, { name: "Second", displayOrder: 2 });
+      const first = await createCourse(tx, { name: "First", displayOrder: 1 });
+      const second = await createCourse(tx, { name: "Second", displayOrder: 2 });
       const deviceId = await deviceAt(tx, venue.defaultStationId);
       const orderId = await createTableKitchenOrder(tx, venue.cfg);
       const drink = await rawLine(tx, orderId, venue.cafeId, 1, first.id);
@@ -436,10 +436,10 @@ describe("device made-here stations", () => {
   it("does not count a made-here later course as started for a later round", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const grill = await createStation(tx, venue.cfg, { name: "Grill" });
+      const grill = await createStation(tx, { name: "Grill" });
       await routeProductTo(tx, venue.aguaId, grill.id);
-      const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
-      const second = await createCourse(tx, venue.cfg, { name: "Second", displayOrder: 2 });
+      const first = await createCourse(tx, { name: "First", displayOrder: 1 });
+      const second = await createCourse(tx, { name: "Second", displayOrder: 2 });
       const deviceId = await deviceAt(tx, venue.defaultStationId);
       const orderId = await createTableKitchenOrder(tx, venue.cfg);
       const burger = await rawLine(tx, orderId, venue.aguaId, 1, first.id);
@@ -471,7 +471,7 @@ describe("device made-here stations", () => {
       const device = {
         id: (await seedDevice(tx, { profileId: profile!.id, label: "Bar till" })).deviceId,
       };
-      await setMadeHereStations(tx, venue.cfg, device!.id, [venue.defaultStationId]);
+      await setMadeHereStations(tx, device!.id, [venue.defaultStationId]);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
       const [line] = await tx
@@ -529,19 +529,15 @@ describe("device made-here stations", () => {
       const device = {
         id: (await seedDevice(tx, { profileId: profile!.id, label: "Counter" })).deviceId,
       };
-      const bar = await createStation(tx, venue.cfg, { name: "Bar" });
-      await setMadeHereStations(tx, venue.cfg, device!.id, [
-        bar.id,
-        venue.defaultStationId,
-        bar.id,
-      ]);
+      const bar = await createStation(tx, { name: "Bar" });
+      await setMadeHereStations(tx, device!.id, [bar.id, venue.defaultStationId, bar.id]);
       expect(await readMadeHereStations(tx, device!.id)).toEqual(
         new Set([bar.id, venue.defaultStationId]),
       );
       expect((await listMadeHereStations(tx)).get(device!.id)).toEqual(
         [bar.id, venue.defaultStationId].sort(),
       );
-      await setMadeHereStations(tx, venue.cfg, device!.id, [bar.id]);
+      await setMadeHereStations(tx, device!.id, [bar.id]);
       expect(await readMadeHereStations(tx, device!.id)).toEqual(new Set([bar.id]));
       expect(await readMadeHereStations(tx, undefined)).toEqual(new Set());
     });
@@ -557,10 +553,10 @@ describe("device made-here stations", () => {
       const device = {
         id: (await seedDevice(tx, { profileId: profile!.id, label: "Counter" })).deviceId,
       };
-      const off = await createStation(tx, venue.cfg, { name: "Off" });
-      await setMadeHereStations(tx, venue.cfg, device!.id, [venue.defaultStationId]);
+      const off = await createStation(tx, { name: "Off" });
+      await setMadeHereStations(tx, device!.id, [venue.defaultStationId]);
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, off.id));
-      await expect(setMadeHereStations(tx, venue.cfg, device!.id, [off.id])).rejects.toMatchObject({
+      await expect(setMadeHereStations(tx, device!.id, [off.id])).rejects.toMatchObject({
         code: "station.not_found",
       });
       expect(await readMadeHereStations(tx, device!.id)).toEqual(new Set([venue.defaultStationId]));
@@ -578,7 +574,7 @@ describe("device made-here stations", () => {
         { id: (await seedDevice(tx, { profileId: profile!.id, label: "A" })).deviceId },
         { id: (await seedDevice(tx, { profileId: profile!.id, label: "B" })).deviceId },
       ];
-      await setMadeHereStations(tx, venue.cfg, a!.id, [venue.defaultStationId]);
+      await setMadeHereStations(tx, a!.id, [venue.defaultStationId]);
       expect(await readMadeHereStations(tx, a!.id)).toEqual(new Set([venue.defaultStationId]));
       expect(await readMadeHereStations(tx, b!.id)).toEqual(new Set());
     });

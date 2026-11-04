@@ -564,7 +564,7 @@ describe("A773 hold paper: extras off and moves", () => {
       const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, pass.deviceId)).find(
         (candidate) => candidate.kind === "pass",
       )!;
-      return (await readScopedPassBoard(tx, venue.cfg, passScopeOf(screen))).toFire.find(
+      return (await readScopedPassBoard(tx, passScopeOf(screen))).toFire.find(
         (found) => found.target.kind === "group" && found.target.groupId === groupId,
       )!;
     });
@@ -1385,7 +1385,7 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
       profileId: profile!.id,
     });
     await withTransaction(db, async (tx) => {
-      await setMadeHereStations(tx, venue.cfg, here.deviceId, [venue.stations.grill]);
+      await setMadeHereStations(tx, here.deviceId, [venue.stations.grill]);
       await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
       await setStationPrinting(tx, { printHeldWork: true }, [venue.stations.kitchen]);
       const placed = await placeGroups(

@@ -49,8 +49,8 @@ beforeEach(async () => {
       .where(eq(kitchenStations.id, defaultStation!.id));
     return {
       bar: defaultStation!.id,
-      grill: (await createStation(tx, v.cfg, { name: "Grill" })).id,
-      pastry: (await createStation(tx, v.cfg, { name: "Pastry" })).id,
+      grill: (await createStation(tx, { name: "Grill" })).id,
+      pastry: (await createStation(tx, { name: "Pastry" })).id,
     };
   }));
   app = new Hono();

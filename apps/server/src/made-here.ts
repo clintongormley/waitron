@@ -247,12 +247,11 @@ export async function listMadeHereStations(tx: Transaction): Promise<Map<string,
 /** Replace one device's list after checking every station is live. */
 export async function setMadeHereStations(
   tx: Transaction,
-  cfg: TradingContext,
   deviceId: string,
   stationIds: readonly string[],
 ): Promise<void> {
   const ids = [...new Set(stationIds)];
-  for (const stationId of ids) await requireLiveStation(tx, cfg, stationId);
+  for (const stationId of ids) await requireLiveStation(tx, stationId);
   await tx.delete(deviceMadeHereStations).where(eq(deviceMadeHereStations.deviceId, deviceId));
   if (ids.length > 0) {
     await tx

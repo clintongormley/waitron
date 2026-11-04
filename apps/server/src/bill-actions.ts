@@ -179,7 +179,7 @@ export async function splitBill(
   await requireUnreservedTransfers(tx, billId, transfers, edit);
 
   const newBillId = randomUUID();
-  await createOpenOrder(tx, cfg, newBillId, [], await orderTableLabel(tx, cfg, billId), {
+  await createOpenOrder(tx, cfg, newBillId, [], await orderTableLabel(tx, billId), {
     partyId: path.partyId,
     existingService: true,
     copyServiceContextFrom: billId,
@@ -398,7 +398,7 @@ export async function moveDishes(
   let destinationId = toBillId;
   if (destinationId === null) {
     destinationId = randomUUID();
-    await createOpenOrder(tx, cfg, destinationId, [], await orderTableLabel(tx, cfg, fromBillId), {
+    await createOpenOrder(tx, cfg, destinationId, [], await orderTableLabel(tx, fromBillId), {
       partyId: path.partyId,
       existingService: true,
       copyServiceContextFrom: fromBillId,

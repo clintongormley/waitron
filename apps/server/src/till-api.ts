@@ -1224,20 +1224,19 @@ function refuseKitchenSignIn(device: DeviceBinding): void {
  */
 async function movingRooms<T extends object>(
   tx: Transaction,
-  cfg: TradingContext,
   tableIds: readonly string[],
   check: { tableId: string; sent: number } | undefined,
   write: () => Promise<T>,
 ): Promise<T | (T & { zoneRevisions: Record<string, number> })> {
-  const rooms = await zonesOf(tx, cfg, tableIds);
+  const rooms = await zonesOf(tx, tableIds);
   const revisions = await roomRevisions(tx, rooms);
   if (check !== undefined) {
-    const zoneId = await zoneOfTable(tx, cfg, check.tableId);
+    const zoneId = await zoneOfTable(tx, check.tableId);
     refuseStale(zoneId, check.sent, revisions.get(zoneId)!);
   }
-  const before = await roomPrints(tx, cfg, rooms);
+  const before = await roomPrints(tx, rooms);
   const result = await write();
-  const after = await roomPrints(tx, cfg, rooms);
+  const after = await roomPrints(tx, rooms);
   const moved = await moveChangedRooms(tx, revisions, before, after);
   return moved.size === 0 ? result : { ...result, zoneRevisions: Object.fromEntries(moved) };
 }
@@ -1271,7 +1270,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   const app = new Hono();
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
   const catchUpFloor = (tx: Transaction) =>
-    ensureToday(tx, deps.cfg, deps.tableRemovals ?? [], deps.clock.now().instant);
+    ensureToday(tx, deps.tableRemovals ?? [], deps.clock.now().instant);
   app.use("/api/*", madeHereAnswer(deps.db, deps.cfg.locale));
   if (deps.boxClock !== undefined)
     mountTillBoxClockApi(
@@ -1944,7 +1943,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/working-orders", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
-      const orders = await listHeldOrders({ db: deps.db }, deps.cfg);
+      const orders = await listHeldOrders({ db: deps.db });
       return c.json(await visibleOrders(deps, session, orders));
     }),
   );
@@ -2205,7 +2204,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/stations", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      return c.json(await withTransaction(deps.db, (tx) => listStationsToday(tx, deps.cfg)));
+      return c.json(await withTransaction(deps.db, (tx) => listStationsToday(tx)));
     }),
   );
 
@@ -2307,7 +2306,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const board = await withTransaction(deps.db, (tx) =>
-        readScopedPassBoard(tx, deps.cfg, { stationIds: null, zoneIds: null }, { release: false }),
+        readScopedPassBoard(tx, { stationIds: null, zoneIds: null }, { release: false }),
       );
       return c.json({ board });
     }),
@@ -2790,7 +2789,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const { device } = await requireSession(deps, c);
       const tables = await withTransaction(deps.db, async (tx) => {
         const scope = await readZoneScope(tx, device.deviceProfileId);
-        return (await listTables(tx, deps.cfg, deps.clock.now().instant)).filter((table) =>
+        return (await listTables(tx, deps.clock.now().instant)).filter((table) =>
           inScope(scope, table.zoneId),
         );
       });
@@ -2817,7 +2816,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const { device } = await requireSession(deps, c);
       const zones = await withTransaction(deps.db, async (tx) => {
         const scope = await readZoneScope(tx, device.deviceProfileId);
-        const visible = (await listZones(tx, deps.cfg)).filter((zone) => inScope(scope, zone.id));
+        const visible = (await listZones(tx)).filter((zone) => inScope(scope, zone.id));
         const ids = visible.map((zone) => zone.id);
         if (ids.length === 0) return [];
         const at = deps.clock.now().instant;
@@ -3097,7 +3096,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           await checkZones(tx, session, [{ partyId }, { tableId }]);
           const heldBefore = await memberTables(tx, partyId);
           const check = sent === undefined ? undefined : { tableId, sent };
-          return movingRooms(tx, deps.cfg, [...heldBefore, tableId], check, async () => {
+          return movingRooms(tx, [...heldBefore, tableId], check, async () => {
             const actAndMerge = async (slipsLater?: SlipsLater) => {
               const acted = await act(tx, sendCfg, partyId, tableId, { ...command, slipsLater });
               await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId, slipsLater);
@@ -3161,7 +3160,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         await catchUpFloor(tx);
         await checkZones(tx, session, [{ partyId }]);
         const held = [...(await memberTables(tx, partyId)), tableId.toLowerCase()];
-        return movingRooms(tx, deps.cfg, held, undefined, () =>
+        return movingRooms(tx, held, undefined, () =>
           splitTable(
             tx,
             sendCfg,
@@ -3892,7 +3891,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.put("/api/working-orders/:id/make-at", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
-      const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       const body = await readJsonBody<{
         revision: unknown;
@@ -3932,7 +3930,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           if (!unsent.has(lineId)) throw invalid("lines");
           if (stationId !== null) {
             if (typeof stationId !== "string") throw invalid("lines");
-            await requireMakeAtStation(tx, cfg, stationId);
+            await requireMakeAtStation(tx, stationId);
           }
         }
         const previousChoices =

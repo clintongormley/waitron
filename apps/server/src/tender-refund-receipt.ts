@@ -13,18 +13,16 @@ import { formatMoney } from "./receipt-money.js";
 import { toTenderRefundView } from "./tender-refunds.js";
 import type { TenderRefundAcknowledgment } from "./tender-refund-types.js";
 import type { TillSaleResult } from "./till-sale.js";
-import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 export async function readTenderRefundAcknowledgment(
   backend: FiscalBackend,
   tx: Transaction,
-  cfg: TradingContext,
   refundId: string,
 ): Promise<TenderRefundAcknowledgment> {
   const [row] = await tx.select().from(tenderRefunds).where(eq(tenderRefunds.id, refundId));
   if (row === undefined) throw new AppError("tender.refund_not_found", { refundId });
-  await resolveTransactionScope(tx, cfg, row.saleId);
+  await resolveTransactionScope(tx, row.saleId);
   if (row.state !== "completed")
     throw new AppError("tender.refund_unavailable", { tenderId: row.tenderId });
   const [sale] = await tx

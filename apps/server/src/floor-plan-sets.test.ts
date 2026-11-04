@@ -75,7 +75,7 @@ async function addSet(tx: Transaction, departmentId: string, name: string): Prom
 }
 
 function save(setId: string, zoneId: string, input: ZonePlanSave) {
-  return inTx(v, (tx) => saveLayout(tx, v.cfg, NONE, { setId, zoneId }, input, NOW));
+  return inTx(v, (tx) => saveLayout(tx, NONE, { setId, zoneId }, input, NOW));
 }
 
 /** Inside's tables 1–12 and the joined table 4+5, placed as `placed` says. */
@@ -146,9 +146,7 @@ describe("the floor plan sets port", () => {
       revision: 0,
       tables: [entry("a", fresh("1")), entry("b", fresh("2"), { placement: { ...PLACE, x: 20 } })],
     });
-    const first = await inTx(v, (tx) =>
-      readLayout(tx, v.cfg, { setId: d.dinner, zoneId: d.zoneId }),
-    );
+    const first = await inTx(v, (tx) => readLayout(tx, { setId: d.dinner, zoneId: d.zoneId }));
     await save(d.dinner, d.zoneId, {
       revision: first.revision,
       tables: first.tables.map((t) => ({
@@ -161,9 +159,7 @@ describe("the floor plan sets port", () => {
         partKeys: [],
       })),
     });
-    const dinner = await inTx(v, (tx) =>
-      readLayout(tx, v.cfg, { setId: d.dinner, zoneId: d.zoneId }),
-    );
+    const dinner = await inTx(v, (tx) => readLayout(tx, { setId: d.dinner, zoneId: d.zoneId }));
     expect(dinner.revision).toBeGreaterThan(1);
     expect(dinner.tables.find((t) => t.id === ids.a)!.keptSize).toEqual({ width: 8, height: 8 });
 
@@ -178,13 +174,13 @@ describe("the floor plan sets port", () => {
       return setId;
     });
 
-    const copied = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId: late, zoneId: d.zoneId }));
+    const copied = await inTx(v, (tx) => readLayout(tx, { setId: late, zoneId: d.zoneId }));
     expect(copied.revision).toBe(1);
     expect(copied.tables).toEqual(dinner.tables);
     expect(
-      (await inTx(v, (tx) => readLayout(tx, v.cfg, { setId: d.dinner, zoneId: d.zoneId }))).tables,
+      (await inTx(v, (tx) => readLayout(tx, { setId: d.dinner, zoneId: d.zoneId }))).tables,
     ).toEqual(dinner.tables);
-    const emptyCopy = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId: late, zoneId: bar.id }));
+    const emptyCopy = await inTx(v, (tx) => readLayout(tx, { setId: late, zoneId: bar.id }));
     expect(emptyCopy).toMatchObject({ revision: 1, tables: [] });
   });
 
@@ -208,7 +204,7 @@ describe("the floor plan sets port", () => {
             entry("b", fresh(`B${i}`), { placement: { ...PLACE, y: 10 * i } }),
           ],
         });
-        const saved = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId: d.dinner, zoneId }));
+        const saved = await inTx(v, (tx) => readLayout(tx, { setId: d.dinner, zoneId }));
         await save(d.dinner, zoneId, {
           revision: saved.revision,
           tables: saved.tables.map((t, n) => ({
@@ -236,8 +232,8 @@ describe("the floor plan sets port", () => {
         }
       });
       for (const zoneId of zoneIds) {
-        const source = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId: d.dinner, zoneId }));
-        const copied = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId: late, zoneId }));
+        const source = await inTx(v, (tx) => readLayout(tx, { setId: d.dinner, zoneId }));
+        const copied = await inTx(v, (tx) => readLayout(tx, { setId: late, zoneId }));
         expect(copied.revision).toBe(1);
         expect(copied.tables).toEqual(source.tables);
         expect(source.tables.some((t) => t.keptSize !== null)).toBe(true);
@@ -374,7 +370,7 @@ describe("the floor plan sets port", () => {
     const d = await department();
     await save(d.dinner, d.zoneId, { revision: 0, tables: [entry("a", fresh("1"))] });
     await inTx(v, (tx) =>
-      resetZone(tx, v.cfg, NONE, d.zoneId, NOW, { setId: d.dinner, occurrence: null }),
+      resetZone(tx, NONE, d.zoneId, NOW, { setId: d.dinner, occurrence: null }),
     );
 
     expect(await inTx(v, (tx) => sets().zonesShowing(tx, d.dinner))).toEqual([d.zoneId]);
@@ -387,9 +383,7 @@ describe("the floor plan sets port", () => {
       revision: 0,
       tables: [entry("a", fresh("1")), entry("b", fresh("2"))],
     });
-    const dinner = await inTx(v, (tx) =>
-      readLayout(tx, v.cfg, { setId: d.dinner, zoneId: d.zoneId }),
-    );
+    const dinner = await inTx(v, (tx) => readLayout(tx, { setId: d.dinner, zoneId: d.zoneId }));
     await save(d.dinner, d.zoneId, {
       revision: dinner.revision,
       tables: dinner.tables.map((t, i) => ({
@@ -403,7 +397,7 @@ describe("the floor plan sets port", () => {
       })),
     });
     await inTx(v, (tx) =>
-      resetZone(tx, v.cfg, NONE, d.zoneId, NOW, { setId: d.dinner, occurrence: null }),
+      resetZone(tx, NONE, d.zoneId, NOW, { setId: d.dinner, occurrence: null }),
     );
     const before = await inTx(v, async (tx) => {
       const reset = await tx

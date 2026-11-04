@@ -61,7 +61,7 @@ describe.each(["table", "counter"] as const)("A773 no dispatch projection: %s", 
       const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now());
       try {
         const read = () =>
-          inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY, { release: reader === "pass" }));
+          inTx(v, (tx) => readScopedPassBoard(tx, EVERY, { release: reader === "pass" }));
         const before = await read();
         expect(counts(before)).toEqual([{ id: item.id, qty: "1.000" }]);
         expect(boardItems(before).map((dish) => dish.state)).toEqual(["ready"]);
@@ -88,8 +88,8 @@ describe.each(["table", "counter"] as const)("A773 no dispatch projection: %s", 
 
 async function boards(v: Pick<PartyVenue, "db" | "cfg">, scope: PassScope = EVERY) {
   return inTx(v, async (tx) => {
-    const screen = await readScopedPassBoard(tx, v.cfg, scope);
-    const monitor = await readScopedPassBoard(tx, v.cfg, scope, { release: false });
+    const screen = await readScopedPassBoard(tx, scope);
+    const monitor = await readScopedPassBoard(tx, scope, { release: false });
     return { screen: counts(screen), monitor: counts(monitor) };
   });
 }

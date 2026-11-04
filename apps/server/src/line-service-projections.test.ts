@@ -45,7 +45,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionAdjustmentVenue(db);
     await inTx(venue, async (tx) => {
-      const station = await createStation(tx, venue.cfg, { name: "Extra station" });
+      const station = await createStation(tx, { name: "Extra station" });
       extraStationId = station.id;
       await setRoutingCell(
         tx,
@@ -196,7 +196,7 @@ describe("charged cancellation read projections", () => {
   it("retains the course of a held group whose remaining charges are all cancelled", async () => {
     const order = await fixture(3, "hold");
     const course = await inTx(venue, async (tx) => {
-      const created = await createCourse(tx, venue.cfg, {
+      const created = await createCourse(tx, {
         name: "Later mains",
         heldUntilFired: true,
       });
@@ -352,7 +352,7 @@ describe("charged cancellation read projections", () => {
       const items = queue.filter((row) => row.orderId === order.billId).flatMap((row) => row.items);
       expect(items.map((item) => item.quantity)).toEqual(cancelled === 3 ? [] : [quantity]);
     }
-    const pass = await inTx(venue, (tx) => readScopedPassBoard(tx, venue.cfg, EVERY));
+    const pass = await inTx(venue, (tx) => readScopedPassBoard(tx, EVERY));
     const items = boardItems(pass).filter((item) => item.orderId === order.billId);
     expect(items.map((item) => item.qty)).toEqual(cancelled === 3 ? [] : ["1.000", "2.000"]);
   });

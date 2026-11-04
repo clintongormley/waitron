@@ -77,8 +77,8 @@ useVenueDb({
       writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
     );
     await inTx(venue, async (tx) => {
-      bar = (await createStation(tx, venue.cfg, { name: "Bar", isDefault: true })).id;
-      grill = (await createStation(tx, venue.cfg, { name: "Grill" })).id;
+      bar = (await createStation(tx, { name: "Bar", isDefault: true })).id;
+      grill = (await createStation(tx, { name: "Grill" })).id;
       barPrinter = (
         await createPrinter(tx, {
           name: "Bar printer",
@@ -609,8 +609,8 @@ describe("release", () => {
   it("fires a held course group at the replacement station without correcting an unprinted HOLD", async () => {
     await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: false }));
     await inTx(venue, async (tx) => {
-      const course = await createCourse(tx, venue.cfg, { name: `Course ${randomUUID()}` });
-      await setProductCourse(tx, venue.cfg, venue.productId("Burger"), course.id);
+      const course = await createCourse(tx, { name: `Course ${randomUUID()}` });
+      await setProductCourse(tx, venue.productId("Burger"), course.id);
     });
     const group = await heldBurger();
     const at = new Date("2026-10-02T18:45:00.000Z");
@@ -643,7 +643,7 @@ describe("release", () => {
           .update(kitchenStations)
           .set({ isDefault: true })
           .where(eq(kitchenStations.id, bar));
-        await setProductCourse(tx, venue.cfg, venue.productId("Burger"), null);
+        await setProductCourse(tx, venue.productId("Burger"), null);
       });
     }
   });
@@ -1496,7 +1496,7 @@ describe("moveDishesToStation", () => {
   it("releases a rerouted HOLD dish on each station printer with the right correction or heading", async () => {
     await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const downstairs = await inTx(venue, (tx) =>
-      createStation(tx, venue.cfg, {
+      createStation(tx, {
         name: `Downstairs bar ${randomUUID()}`,
       }),
     );
@@ -2312,7 +2312,7 @@ describe("moveDishesToStation", () => {
   it("refuses a deleted station but accepts one closed for today", async () => {
     const { tabId, item } = await burger();
     const inactive = await inTx(venue, async (tx) => {
-      const station = await createStation(tx, venue.cfg, { name: `Off ${randomUUID()}` });
+      const station = await createStation(tx, { name: `Off ${randomUUID()}` });
       await tx
         .update(kitchenStations)
         .set({ active: false })
@@ -2904,7 +2904,7 @@ describe("moveDishesToStation", () => {
     const split = await setupSplitExtrasVenue();
     split.cfg.locale = "en-GB";
     const downstairs = await splitTx(async (tx) => {
-      const station = await createStation(tx, split.cfg, { name: "Downstairs grill" });
+      const station = await createStation(tx, { name: "Downstairs grill" });
       const printer = await createPrinter(tx, {
         name: "Downstairs printer",
         transport: "cloud_poll",
@@ -3020,7 +3020,7 @@ describe("moveDishesToStation", () => {
 
   it("prints one destination ticket per old station in a two-dish move", async () => {
     const fryer = await inTx(venue, async (tx) => {
-      const station = await createStation(tx, venue.cfg, { name: `Fryer ${randomUUID()}` });
+      const station = await createStation(tx, { name: `Fryer ${randomUUID()}` });
       await routeProductTo(tx, venue.productId("Vino"), station.id);
       const printer = await createPrinter(tx, {
         name: "Fryer printer",
@@ -3084,8 +3084,8 @@ describe("moveDishesToStation", () => {
           .where(eq(kitchenStations.id, bar)),
       );
       const cells = await inTx(venue, async (tx) => {
-        kitchen = (await createStation(tx, venue.cfg, { name: kitchenName })).id;
-        screen = (await createStation(tx, venue.cfg, { name: screenName })).id;
+        kitchen = (await createStation(tx, { name: kitchenName })).id;
+        screen = (await createStation(tx, { name: screenName })).id;
         kitchenPrinter = (
           await createPrinter(tx, {
             name: `${kitchenName} printer`,

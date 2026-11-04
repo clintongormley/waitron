@@ -79,7 +79,7 @@ const cards = (board: PassBoard): PassCard[] => [
 ];
 
 let current: Venue;
-const board = () => withTransaction(db, (tx) => readScopedPassBoard(tx, current.cfg, EVERY));
+const board = () => withTransaction(db, (tx) => readScopedPassBoard(tx, EVERY));
 
 const bandAt = async (when: Date, itemId: string) => {
   vi.setSystemTime(when);
@@ -224,7 +224,7 @@ describe("A773 pass board: ages and party", () => {
       expect(surviving.revision).not.toBe(closed.revision);
       return surviving;
     });
-    const merged = await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY));
+    const merged = await inTx(v, (tx) => readScopedPassBoard(tx, EVERY));
     const card = groupCard(merged, placed.groups[0]!.id);
     expect(card.target).toMatchObject({ kind: "group", partyId: target.id });
     expect(card.party).toEqual({ id: target.id, revision: target.revision });
@@ -267,8 +267,7 @@ describe("A773 pass board: dimming", () => {
     expect(found).toHaveLength(1);
     return found[0]!;
   };
-  const read = (scope: PassScope) =>
-    withTransaction(db, (tx) => readScopedPassBoard(tx, current.cfg, scope));
+  const read = (scope: PassScope) => withTransaction(db, (tx) => readScopedPassBoard(tx, scope));
 
   it("1. dims nothing at a venue where no station waits, and counts every dish", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: at("12:00") });

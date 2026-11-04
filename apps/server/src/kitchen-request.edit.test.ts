@@ -236,9 +236,9 @@ describe("A773 requested lifecycle: edit", () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
     const { starters, mains } = await withTransaction(db, async (tx) => {
-      const starters = await createCourse(tx, venue.cfg, { name: "Starters", displayOrder: 1 });
-      const mains = await createCourse(tx, venue.cfg, { name: "Mains", displayOrder: 2 });
-      await setProductCourse(tx, venue.cfg, venue.products.burger, mains.id);
+      const starters = await createCourse(tx, { name: "Starters", displayOrder: 1 });
+      const mains = await createCourse(tx, { name: "Mains", displayOrder: 2 });
+      await setProductCourse(tx, venue.products.burger, mains.id);
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
       await addTabRound(tx, venue.cfg, id, [
         { ...line(venue, "burger"), courseId: starters.id, release: true },

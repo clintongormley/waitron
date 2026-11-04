@@ -260,7 +260,6 @@ async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
 /** The split-flow deps with a real `StripeTerminalProvider` over `FakeStripe`. A tips-on test
  * overrides `cfg.tipsEnabled`. */
 function integratedDeps(
-  _cfg: TradingContext,
   app: Database,
   client = new FakeStripe(),
 ): { deps: IntegratedPayDeps; client: FakeStripe } {
@@ -315,7 +314,7 @@ function cannedProvider(
  * Pay's outcome; `reader` is the client it would have asked.
  */
 function chargedThenFiledBySecondPay(cfg: DeviceRequestConfig) {
-  const { deps, client: reader } = integratedDeps(cfg, suite.db);
+  const { deps, client: reader } = integratedDeps(suite.db);
   let second: IntegratedPayOutcome | undefined;
   const provider: PaymentProvider = {
     ...cannedProvider(() => Promise.resolve(), "captured"),
@@ -563,7 +562,7 @@ function rectificativeSeries(cfg: DeviceRequestConfig): string {
 async function correctToZero(cfg: DeviceRequestConfig, saleId: string): Promise<void> {
   const adminId = suite.db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!
     .id;
-  const deviceId = await seedSessionDevice(suite.db, cfg);
+  const deviceId = await seedSessionDevice(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const session = await loginWithPin(tx, {
       deviceId,
@@ -1184,7 +1183,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   it("walk-up: captures, files an immediate card sale, links the payment, settles the order", async () => {
     const { cfg, cafe } = await setupVenue();
     const app = suite.db;
-    const { deps } = integratedDeps(cfg, app);
+    const { deps } = integratedDeps(app);
     const id = randomUUID();
 
     const out = await payWorkingOrderIntegrated(deps, cfg, {
@@ -1219,7 +1218,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const app = suite.db;
     const client = new FakeStripe();
     client.declineNext();
-    const { deps } = integratedDeps(cfg, app, client);
+    const { deps } = integratedDeps(app, client);
     const id = randomUUID();
 
     const out = await payWorkingOrderIntegrated(deps, cfg, {
@@ -1239,7 +1238,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   it("reads the active series after a card capture that overlaps a series switch", async () => {
     const { cfg, cafe, seriesId } = await setupVenue();
     await anotherNodeSeries();
-    const { deps } = integratedDeps(cfg, suite.db);
+    const { deps } = integratedDeps(suite.db);
     const provider = deps.provider;
     let activeId: string | undefined;
     const switchingProvider: PaymentProvider = {
@@ -1305,7 +1304,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
         })
         .returning();
     });
-    const { deps } = integratedDeps(cfg, suite.db);
+    const { deps } = integratedDeps(suite.db);
     const first = await payWorkingOrderIntegrated(deps, cfg, {
       id,
       zoneId: cafe.zoneId,
@@ -1335,7 +1334,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   it("a settled order replays its ticket without re-collecting", async () => {
     const { cfg, cafe } = await setupVenue();
     const app = suite.db;
-    const { deps, client } = integratedDeps(cfg, app);
+    const { deps, client } = integratedDeps(app);
     const id = randomUUID();
     const req = {
       id,
@@ -1369,7 +1368,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const { cfg, cafe } = await setupVenue();
     const printerId = await makeReceiptPrinter(cfg);
     const app = suite.db;
-    const { deps } = integratedDeps(cfg, app);
+    const { deps } = integratedDeps(app);
     const id = randomUUID();
     const req = {
       id,
@@ -1400,7 +1399,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const { cfg: baseCfg, cafe } = await setupVenue();
     const cfg = { ...baseCfg, tipsEnabled: true };
     const app = suite.db;
-    const { deps, client } = integratedDeps(cfg, app);
+    const { deps, client } = integratedDeps(app);
     const id = randomUUID();
 
     const out = await payWorkingOrderIntegrated(deps, cfg, {
@@ -1419,7 +1418,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   it("tips off: a client-supplied tip is clamped to 0 — charges and settles at the exact total", async () => {
     const { cfg, cafe } = await setupVenue();
     const app = suite.db;
-    const { deps, client } = integratedDeps(cfg, app); // cfg.tipsEnabled: false (setupVenue's default)
+    const { deps, client } = integratedDeps(app); // cfg.tipsEnabled: false (setupVenue's default)
     const id = randomUUID();
 
     const out = await payWorkingOrderIntegrated(deps, cfg, {
@@ -1445,7 +1444,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       label: "Mesa 4",
     });
 
-    const { deps } = integratedDeps(cfg, app);
+    const { deps } = integratedDeps(app);
     // No client basket — a retrieved order files from its stored lock (2 × 1.50 = 3.00).
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
@@ -1472,7 +1471,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       ],
     });
     setListUnitPrice(id, 1, 200);
-    const { deps } = integratedDeps(cfg, suite.db);
+    const { deps } = integratedDeps(suite.db);
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
@@ -1492,7 +1491,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       zoneId: cafe.zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    const { deps } = integratedDeps(cfg, suite.db);
+    const { deps } = integratedDeps(suite.db);
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
@@ -1529,7 +1528,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(await stationQueueOrderIds(station)).toEqual([id]);
     expect(await collectedAtSet(id)).toBe(false);
 
-    const { deps } = integratedDeps(cfg, app);
+    const { deps } = integratedDeps(app);
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
     expect(out.outcome).toBe("captured");
@@ -1556,7 +1555,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     });
     suite.db.run(sql`update working_orders set status = 'abandoned' where id = ${id}`);
 
-    const { deps, client } = integratedDeps(cfg, app);
+    const { deps, client } = integratedDeps(app);
     await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
       code: "working_order.not_open",
       params: { workingOrderId: id },
@@ -1571,7 +1570,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   it("refuses an empty walk-up basket (sale.empty_basket) before any DB write or collect", async () => {
     const { cfg } = await setupVenue();
     const app = suite.db;
-    const { deps, client } = integratedDeps(cfg, app);
+    const { deps, client } = integratedDeps(app);
     const id = randomUUID();
 
     await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
@@ -1774,7 +1773,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
         fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
         jobs: suite.db.all(sql`select * from print_jobs order by id`),
       };
-      const { deps, client } = integratedDeps(cfg, suite.db);
+      const { deps, client } = integratedDeps(suite.db);
 
       await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
         code: "sale.full_invoice_unavailable",
@@ -1805,7 +1804,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       sql`update departments set trading_name = 'Deli Counter' where location_id = ${cfg.locationId}`,
     );
     const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
-    const { deps } = integratedDeps(cfg, suite.db);
+    const { deps } = integratedDeps(suite.db);
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
@@ -1828,7 +1827,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   it("recovers a lost-T2 captured payment: files from locked lines, no re-charge, links the existing row", async () => {
     const { cfg, cafe } = await setupVenue();
     const app = suite.db;
-    const { deps, client } = integratedDeps(cfg, app);
+    const { deps, client } = integratedDeps(app);
     // Locked total 1.50; the captured charge was exactly the total (no tip).
     const { id, externalRef } = await seedLostCapture(cfg, cafe, "1", "1.50");
 
@@ -1858,7 +1857,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
 
   it("recovers a lost-T2 captured payment storing each line's unit price before any discount", async () => {
     const { cfg, cafe } = await setupVenue();
-    const { deps, client } = integratedDeps(cfg, suite.db);
+    const { deps, client } = integratedDeps(suite.db);
     const id = randomUUID();
     await withTransaction(suite.db, async (tx) => {
       await createOpenOrder(
@@ -1897,7 +1896,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
 
   it("files a recovered capture under the device that took the card, not the one retrying", async () => {
     const { cfg, cafe } = await setupVenue();
-    const { deps } = integratedDeps(cfg, suite.db);
+    const { deps } = integratedDeps(suite.db);
     const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
     const retrying = await deviceRequestCfg(suite.db, cfg);
     expect(retrying.origin.deviceId).not.toBe(cfg.origin.deviceId);
@@ -1912,7 +1911,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
 
   it("recovers a lost capture on an open ticket_then_pay counter order: sends its dish once", async () => {
     const { cfg, cafe } = await modeVenue("ticket_then_pay");
-    const { deps, client } = integratedDeps(cfg, suite.db);
+    const { deps, client } = integratedDeps(suite.db);
     const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
@@ -1925,7 +1924,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
 
   it("recovers a lost capture whose product has since sold out: the card was charged, so it files", async () => {
     const { cfg, cafe } = await setupVenue();
-    const { deps } = integratedDeps(cfg, suite.db);
+    const { deps } = integratedDeps(suite.db);
     const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
     suite.db.run(sql`update products set available = 0 where id = ${cafe.id}`);
 
@@ -1937,7 +1936,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
 
   it("refuses a fresh card payment before the reader is asked when a line never sent has sold out", async () => {
     const { cfg, cafe } = await setupVenue();
-    const { deps, client } = integratedDeps(cfg, suite.db);
+    const { deps, client } = integratedDeps(suite.db);
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -1987,7 +1986,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(await stationQueueOrderIds(station)).toEqual([id]);
     expect(await collectedAtSet(id)).toBe(false);
 
-    const { deps, client } = integratedDeps(cfg, app);
+    const { deps, client } = integratedDeps(app);
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
     expect(out.outcome).toBe("captured");
@@ -2004,7 +2003,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   it("recovers with a reconstructed tip when the captured amount exceeds the locked total", async () => {
     const { cfg, cafe } = await setupVenue();
     const app = suite.db;
-    const { deps, client } = integratedDeps(cfg, app);
+    const { deps, client } = integratedDeps(app);
     // Locked total 1.50, captured 1.80 → the tip is reconstructed as 1.80 − 1.50 = 0.30.
     const { id } = await seedLostCapture(cfg, cafe, "1", "1.80");
 
@@ -2022,7 +2021,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   it("a captured amount BELOW the locked total is corruption: files nothing, leaves the payment for reconcile", async () => {
     const { cfg, cafe } = await setupVenue();
     const app = suite.db;
-    const { deps, client } = integratedDeps(cfg, app);
+    const { deps, client } = integratedDeps(app);
     // The charge cannot cover the locked total: there is no honest figure to file, so recovery
     // files NOTHING and throws, leaving the captured payment for reconciliation.
     const { id } = await seedLostCapture(cfg, cafe, "1", "1.00");
@@ -2086,8 +2085,8 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     // commit, reads `settled`, and replays — no second filing, no second association.
     const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
 
-    const { deps: depsA } = integratedDeps(cfg, suite.db);
-    const { deps: depsB } = integratedDeps(cfg, suite.db);
+    const { deps: depsA } = integratedDeps(suite.db);
+    const { deps: depsB } = integratedDeps(suite.db);
     const req = { id, lines: [] };
 
     const [a, b] = await Promise.allSettled([
@@ -2154,7 +2153,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     expect(await stationQueueOrderIds(station)).toEqual([id]);
     expect(await collectedAtSet(id)).toBe(false);
 
-    const { deps, client } = integratedDeps(cfg, app);
+    const { deps, client } = integratedDeps(app);
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
     expect(out.outcome).toBe("captured");
@@ -2183,7 +2182,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     const cfg = { ...baseCfg, tipsEnabled: true };
     const app = suite.db;
     const { id } = await placedIssuedBill(cfg, cafe);
-    const { deps, client } = integratedDeps(cfg, app);
+    const { deps, client } = integratedDeps(app);
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [], tip: "0.30" });
 
@@ -2201,7 +2200,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
 
     const client = new FakeStripe();
     client.declineNext();
-    const { deps } = integratedDeps(cfg, app, client);
+    const { deps } = integratedDeps(app, client);
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
     expect(out.outcome).toBe("declined");
@@ -2285,7 +2284,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
       expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "0.00" }]);
       expect(await stationQueueOrderIds(station)).toEqual([id]);
       expect(await collectedAtSet(id)).toBe(false);
-      const { deps, client } = integratedDeps(cfg, suite.db);
+      const { deps, client } = integratedDeps(suite.db);
 
       const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [], tip: "0.30" });
 
@@ -2310,7 +2309,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
       const cfg = { ...baseCfg, tipsEnabled: true };
       const { id, saleId } = await placedIssuedBill(cfg, cafe);
       await correctToZero(cfg, saleId);
-      const { deps, client } = integratedDeps(cfg, suite.db);
+      const { deps, client } = integratedDeps(suite.db);
 
       await expect(
         payWorkingOrderIntegrated(deps, cfg, { id, lines: [], tip: "not-money" }),
@@ -2328,8 +2327,8 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
       const { cfg, cafe } = await modeVenue("ticket_then_pay");
       const { id, saleId } = await placedIssuedBill(cfg, cafe);
       await correctToZero(cfg, saleId);
-      const { deps: depsA, client: clientA } = integratedDeps(cfg, suite.db);
-      const { deps: depsB, client: clientB } = integratedDeps(cfg, suite.db);
+      const { deps: depsA, client: clientA } = integratedDeps(suite.db);
+      const { deps: depsB, client: clientB } = integratedDeps(suite.db);
       const req = { id, lines: [] };
 
       const [a, b] = await Promise.allSettled([
@@ -2381,7 +2380,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
           correctsSaleId: saleId,
         });
       });
-      const { deps, client } = integratedDeps(cfg, suite.db);
+      const { deps, client } = integratedDeps(suite.db);
 
       await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
         code: "sale.tender_shortfall",
@@ -2404,7 +2403,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
       capturedAmount: string,
     ): Promise<string> {
       const externalRef = `pi_lost_${randomUUID()}`;
-      const origin = await orderDeviceOrigin(suite.db, id);
+      const origin = await orderDeviceOrigin(suite.db);
       await withTransaction(suite.db, async (tx) => {
         await insertCapturedPayment(tx, {
           origin,
@@ -2429,7 +2428,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
       expect(await stationQueueOrderIds(station)).toEqual([id]);
       expect(await collectedAtSet(id)).toBe(false);
 
-      const { deps, client } = integratedDeps(cfg, app);
+      const { deps, client } = integratedDeps(app);
       const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
       expect(out.outcome).toBe("captured");
@@ -2456,7 +2455,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
       const { id } = await placedIssuedBill(cfg, cafe);
       await seedLostCaptureOnPlaced(cfg, id, "1.80"); // amount due 1.50 → tip reconstructed as 0.30
 
-      const { deps, client } = integratedDeps(cfg, app);
+      const { deps, client } = integratedDeps(app);
       const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
       expect(out.outcome).toBe("captured");
@@ -2474,7 +2473,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
       const { id, saleId } = await placedIssuedBill(cfg, cafe);
       await seedLostCaptureOnPlaced(cfg, id, "1.00"); // below the 1.50 amount due — cannot even cover it
 
-      const { deps, client } = integratedDeps(cfg, app);
+      const { deps, client } = integratedDeps(app);
       await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toBeDefined();
 
       expect(client.lastCreateIntent).toBeUndefined(); // never re-charged
@@ -2492,8 +2491,8 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
 
       // ONE lost capture, TWO retries: one settles, and the other's transaction runs after that
       // commit, reads `settled`, and replays — one settlement, no second association.
-      const { deps: depsA } = integratedDeps(cfg, suite.db);
-      const { deps: depsB } = integratedDeps(cfg, suite.db);
+      const { deps: depsA } = integratedDeps(suite.db);
+      const { deps: depsB } = integratedDeps(suite.db);
       const req = { id, lines: [] };
 
       const [a, b] = await Promise.allSettled([
@@ -2973,7 +2972,7 @@ describe("an order being paid by card cannot be changed from another device (pla
 
     it("is cleared by the recovery that files the sale", async () => {
       const t = await crashedAfterCapture("3.00");
-      const { deps } = integratedDeps(t.cfg, suite.db);
+      const { deps } = integratedDeps(suite.db);
 
       const out = await payWorkingOrderIntegrated(deps, t.cfg, { id: t.tabId, lines: [] });
 
@@ -2984,7 +2983,7 @@ describe("an order being paid by card cannot be changed from another device (pla
 
     it("stays when the recovery cannot file, because the captured payment still waits to be filed", async () => {
       const t = await crashedAfterCapture("1.00");
-      const { deps } = integratedDeps(t.cfg, suite.db);
+      const { deps } = integratedDeps(suite.db);
 
       await expect(
         payWorkingOrderIntegrated(deps, t.cfg, { id: t.tabId, lines: [] }),
@@ -3142,7 +3141,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
 
   /** A captured card payment of the tab's 1.50 that no sale was filed for. */
   async function lostCapture(cfg: DeviceRequestConfig, tabId: string): Promise<void> {
-    const origin = await orderDeviceOrigin(suite.db, tabId);
+    const origin = await orderDeviceOrigin(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertCapturedPayment(tx, {
         origin,
@@ -3158,7 +3157,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
   }
 
   async function payByCard(cfg: DeviceRequestConfig, tabId: string, log?: Logger): Promise<void> {
-    const { deps } = integratedDeps(cfg, suite.db);
+    const { deps } = integratedDeps(suite.db);
     expect(
       (await payWorkingOrderIntegrated({ ...deps, log }, cfg, { id: tabId, lines: [] })).outcome,
     ).toBe("captured");
@@ -3465,7 +3464,7 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
           }),
         );
       }
-      const { deps, client } = integratedDeps(cfg, suite.db);
+      const { deps, client } = integratedDeps(suite.db);
       const req = {
         id,
         zoneId: cafe.zoneId,

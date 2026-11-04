@@ -84,7 +84,6 @@ async function readAsServedAllergens(
 
 export async function resolveKitchenAllergyBlocks(
   tx: Transaction,
-  _cfg: TradingContext,
   ticketItemIds: readonly string[],
 ): Promise<ReadonlyMap<string, KitchenAllergyBlock | null>> {
   if (ticketItemIds.length === 0) return new Map();
@@ -155,13 +154,12 @@ export async function resolveKitchenAllergyBlocks(
 
 export async function freezeKitchenAllergies(
   tx: Transaction,
-  cfg: TradingContext,
   ticketItemIds: readonly string[],
 ): Promise<void> {
   if (ticketItemIds.length === 0) return;
   const frozen = await VENUE_SERVICE.readTicketAllergies(tx, ticketItemIds);
   const missing = ticketItemIds.filter((id) => !frozen.has(id));
-  const blocks = await resolveKitchenAllergyBlocks(tx, cfg, missing);
+  const blocks = await resolveKitchenAllergyBlocks(tx, missing);
   await VENUE_SERVICE.recordTicketAllergies(
     tx,
     [...blocks].map(([ticketItemId, block]) => ({
@@ -190,7 +188,6 @@ export async function attachKitchenAllergyCopies(
 
 export async function freezeKitchenAllergyItems(
   tx: Transaction,
-  cfg: TradingContext,
   orderId: string,
   items: readonly { workingOrderLineId: string; stationId: string }[],
 ): Promise<void> {
@@ -214,7 +211,6 @@ export async function freezeKitchenAllergyItems(
   const selected = new Map(items.map((item) => [item.workingOrderLineId, item.stationId]));
   await freezeKitchenAllergies(
     tx,
-    cfg,
     tickets
       .filter((ticket) => selected.get(ticket.lineId) === ticket.stationId)
       .map((ticket) => ticket.id),
@@ -338,7 +334,6 @@ async function enqueueKitchenAllergyUpdates(
     source === "guest"
       ? await resolveKitchenAllergyBlocks(
           tx,
-          cfg,
           selected.map((row) => row.id),
         )
       : await changedIngredientBlocks(tx, selected, frozen);

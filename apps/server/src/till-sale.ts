@@ -897,7 +897,7 @@ export async function readSettledTicket(
   const billTenders = await readBillTenderLines(tx, brandSaleId(issued.saleId));
 
   return {
-    ...(await readReceiptOrder(tx, cfg, workingOrderId)),
+    ...(await readReceiptOrder(tx, workingOrderId)),
     ...(await readReceiptPresentation(tx, cfg, issued.saleId, issued.locale)),
     locale: issued.locale,
     namesLocale: issued.invoiceLocales[0]!,
@@ -1048,7 +1048,7 @@ async function fileImmediateSale(
   await tx
     .update(workingOrders)
     .set({
-      label: (await readReceiptOrder(tx, cfg, workingOrderId, { atIssuance: true })).orderLabel,
+      label: (await readReceiptOrder(tx, workingOrderId, { atIssuance: true })).orderLabel,
       status: "settled",
       settledAt: settledAt.toISOString(),
     })
@@ -1063,7 +1063,7 @@ async function fileImmediateSale(
   const ticket: TillSaleResult = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),
     ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
-    ...(await readReceiptOrder(tx, cfg, workingOrderId)),
+    ...(await readReceiptOrder(tx, workingOrderId)),
     locale: language.locale,
     namesLocale: language.invoiceLocales[0]!,
     invoiceNumber: await readInvoiceNumber(tx, saleId),
@@ -1680,7 +1680,7 @@ async function finalizeCapture(
         await tx
           .update(workingOrders)
           .set({
-            label: (await readReceiptOrder(tx, cfg, req.id, { atIssuance: true })).orderLabel,
+            label: (await readReceiptOrder(tx, req.id, { atIssuance: true })).orderLabel,
             status: "settled",
             settledAt: settledAt.toISOString(),
             ...(wasPlaced ? {} : { paymentAttemptAt: null }),
@@ -1706,7 +1706,7 @@ async function finalizeCapture(
         const ticket: TillSaleResult = {
           ...(await readReceiptIssuer(deps.backend, tx, saleId)),
           ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
-          ...(await readReceiptOrder(tx, cfg, req.id)),
+          ...(await readReceiptOrder(tx, req.id)),
           locale: language.locale,
           namesLocale: language.invoiceLocales[0]!,
           invoiceNumber: await readInvoiceNumber(tx, saleId),
@@ -1858,7 +1858,7 @@ async function finalizeRecovery(
       await tx
         .update(workingOrders)
         .set({
-          label: (await readReceiptOrder(tx, cfg, req.id, { atIssuance: true })).orderLabel,
+          label: (await readReceiptOrder(tx, req.id, { atIssuance: true })).orderLabel,
           status: "settled",
           settledAt: settledAt.toISOString(),
           ...(locked?.status === "placed" ? {} : { paymentAttemptAt: null }),
@@ -1884,7 +1884,7 @@ async function finalizeRecovery(
       const ticket: TillSaleResult = {
         ...(await readReceiptIssuer(deps.backend, tx, saleId)),
         ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
-        ...(await readReceiptOrder(tx, cfg, req.id)),
+        ...(await readReceiptOrder(tx, req.id)),
         locale: language.locale,
         namesLocale: language.invoiceLocales[0]!,
         invoiceNumber: await readInvoiceNumber(tx, saleId),

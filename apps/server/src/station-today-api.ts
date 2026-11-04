@@ -29,11 +29,10 @@ function stationId(value: string): string {
 /** Refuses a station the device's station screen does not show now. */
 async function assertScreenShowsStation(
   tx: Transaction,
-  cfg: TillApiDeps["cfg"],
   deviceId: string,
   id: string,
 ): Promise<void> {
-  await requireLiveStation(tx, cfg, id);
+  await requireLiveStation(tx, id);
   const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, deviceId)).find(
     (candidate) => candidate.kind === "station",
   );
@@ -55,10 +54,9 @@ export function mountStationTodayApi(
       const device = await requireDevice(deps, c);
       assertProfileAction(device, "prepare-orders");
       const id = stationId(c.req.param("stationId"));
-      const cfg = requestCfg(deps.cfg, device);
       return c.json(
         await withTransaction(deps.db, async (tx) => {
-          await assertScreenShowsStation(tx, cfg, device.deviceId, id);
+          await assertScreenShowsStation(tx, device.deviceId, id);
           const destinations = await VENUE_SERVICE.stationDestinations(tx, id, new Date());
           const authorizers = await listActivePersonsWithPermission(tx, "venue_service.manage");
           return {
@@ -92,7 +90,7 @@ export function mountStationTodayApi(
       const attempts = overridePinAttempts(pinThrottle, device.deviceId);
       await withPinCheckAhead(deps.db, authorizer, attempts, (checked) =>
         withTransaction(deps.db, async (tx) => {
-          await assertScreenShowsStation(tx, cfg, device.deviceId, id);
+          await assertScreenShowsStation(tx, device.deviceId, id);
           const { authorizedBy } = await authorizeByPin(
             tx,
             {

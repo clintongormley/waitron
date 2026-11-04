@@ -228,7 +228,7 @@ it("refuses clock.unusable with 409 under a clock in 2001", async () => {
 
 it("asks the provider nothing about a real stuck payment while the clock reads behind, and asks it a minute behind", async () => {
   const orderId = await tabWith(venue, "Caña");
-  const origin = await orderDeviceOrigin(venue.db, orderId);
+  const origin = await orderDeviceOrigin(venue.db);
   await withTransaction(venue.db, async (tx) =>
     insertAttempting(tx, {
       origin,

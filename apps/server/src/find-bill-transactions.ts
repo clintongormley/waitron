@@ -9,7 +9,6 @@ import type {
   TransactionsPage,
   TransactionsQuery,
 } from "./find-bill-types.js";
-import type { TradingContext } from "./trading-context.js";
 import type { OrderZoneCondition } from "./zone-access.js";
 import "./errors.js";
 
@@ -179,7 +178,6 @@ export async function readFindTransactions(
 
 export async function resolveTransactionScope(
   tx: Transaction,
-  _cfg: TradingContext,
   saleId: string,
 ): Promise<{ workingOrderIds: string[] }> {
   const { rows } = await tx.execute<{ order_ids: string }>(sql`${scopeRelation(saleId)}

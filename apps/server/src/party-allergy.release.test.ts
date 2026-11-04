@@ -30,10 +30,10 @@ useVenueDb({
   setup: async (db) => {
     v = await setupPartyVenue(db);
     await inTx(v, async (tx) => {
-      await createCourse(tx, v.cfg, { name: "Starters", displayOrder: 0 });
-      mains = (await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 1 })).id;
-      await setProductCourse(tx, v.cfg, v.productId("Burger"), mains);
-      await setProductCourse(tx, v.cfg, v.productId("Flan"), mains);
+      await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      mains = (await createCourse(tx, { name: "Mains", displayOrder: 1 })).id;
+      await setProductCourse(tx, v.productId("Burger"), mains);
+      await setProductCourse(tx, v.productId("Flan"), mains);
     });
   },
 });

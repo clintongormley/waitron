@@ -53,7 +53,7 @@ useVenueDb({
         ["arroces", "Arroces", "Paella"],
         ["barra", "Barra", "Vino"],
       ] as const) {
-        const { id } = await createStation(tx, v.cfg, { name });
+        const { id } = await createStation(tx, { name });
         stations[key] = id;
         await setRoutingCell(
           tx,
@@ -61,7 +61,7 @@ useVenueDb({
           { kind: "station", stationId: id },
         );
       }
-      await setMadeHereStations(tx, v.cfg, v.cfg.origin.deviceId, [stations.barra]);
+      await setMadeHereStations(tx, v.cfg.origin.deviceId, [stations.barra]);
     });
   },
 });
@@ -188,7 +188,7 @@ function boardOrder(board: PassBoard, billId: string) {
 }
 
 async function expoOrder(billId: string) {
-  return boardOrder(await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY)), billId);
+  return boardOrder(await inTx(v, (tx) => readScopedPassBoard(tx, EVERY)), billId);
 }
 
 async function stationGroup(station: keyof typeof stations, billId: string) {
@@ -288,10 +288,8 @@ describe("the numbers an order's sent dishes were sent under, on the kitchen rea
     await send(partyId, b28, "Burger");
     const n28 = await numberOf(b28);
     await merge(partyId, b27, b28);
-    const screen = await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY));
-    const monitor = await inTx(v, (tx) =>
-      readScopedPassBoard(tx, v.cfg, EVERY, { release: false }),
-    );
+    const screen = await inTx(v, (tx) => readScopedPassBoard(tx, EVERY));
+    const monitor = await inTx(v, (tx) => readScopedPassBoard(tx, EVERY, { release: false }));
 
     expect(boardOrder(screen, b27)).toMatchObject({ formerNumbers: [n28] });
     expect(boardOrder(monitor, b27)).toMatchObject({ formerNumbers: [n28] });
@@ -329,7 +327,7 @@ describe("the numbers an order's sent dishes were sent under, on the counter rea
     const { billId: o41 } = await inTx(v, (tx) =>
       splitBill(tx, v.cfg, o40, [{ lineNo: lineOf(o40, "Burger") }], { operatorId: OPERATOR }),
     );
-    const held = await listHeldOrders({ db: v.db }, v.cfg);
+    const held = await listHeldOrders({ db: v.db });
     expect(held.find((o) => o.id === o41)).toMatchObject({ formerNumbers: [n40] });
     expect(held.find((o) => o.id === o40)).not.toHaveProperty("formerNumbers");
 
@@ -348,7 +346,7 @@ describe("the numbers an order's sent dishes were sent under, on the counter rea
     const id = await counterOrder(v, "Burger");
     await fireAll(id);
 
-    const held = (await listHeldOrders({ db: v.db }, v.cfg)).find((o) => o.id === id);
+    const held = (await listHeldOrders({ db: v.db })).find((o) => o.id === id);
 
     expect(held).toBeDefined();
     expect(held).not.toHaveProperty("formerNumbers");

@@ -28,7 +28,7 @@ export function mountTransactionReceiptApi(
       const session = await requireSession(deps, c),
         id = parsedId(c.req.param("saleId"));
       const result = await withTransaction(deps.db, async (tx) => {
-        const scope = await resolveTransactionScope(tx, deps.cfg, id);
+        const scope = await resolveTransactionScope(tx, id);
         await checkZones(
           tx,
           session,
@@ -50,7 +50,7 @@ export function mountTransactionReceiptApi(
         throw new AppError("management.request_invalid", { field: "language" });
       const cfg = requestCfg(deps.cfg, session);
       await withTransaction(deps.db, async (tx) => {
-        const scope = await resolveTransactionScope(tx, cfg, id);
+        const scope = await resolveTransactionScope(tx, id);
         await checkZones(
           tx,
           session,

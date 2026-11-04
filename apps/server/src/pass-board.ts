@@ -9,7 +9,6 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { ResolvedKitchenScreen } from "@waitron/module";
-import type { TradingContext } from "./trading-context.js";
 import { kitchenPhase, requestedItem } from "./kitchen-phase.js";
 import { passWaitingStations } from "./kitchen-release.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -54,12 +53,11 @@ export function passScopeOf(screen: ResolvedKitchenScreen): PassScope {
 /** The pass's cards: every card one of whose live dishes the scope sees, each read whole. */
 export async function readScopedPassBoard(
   tx: Transaction,
-  cfg: TradingContext,
   scope: PassScope,
   options: Omit<PassBoardOptions, "aStationInViewWaits"> = {},
 ): Promise<PassBoard> {
   const nowMs = Date.now();
-  const { items: kept, zones } = await scopedItems(tx, cfg, scope);
+  const { items: kept, zones } = await scopedItems(tx, scope);
   const groupIds = [...new Set(kept.flatMap((item) => item.groupId ?? []))];
   const billIds = [
     ...new Set(kept.flatMap((item) => (item.groupId === null ? [item.orderId] : []))),
@@ -78,7 +76,7 @@ export async function readScopedPassBoard(
   const rows =
     keys.length === 0
       ? []
-      : await readCardRows(tx, cfg, or(...keys)!, nowMs, {
+      : await readCardRows(tx, or(...keys)!, nowMs, {
           waits: new Set(waiting.map((station) => station.id)),
           zones,
         });
@@ -93,14 +91,9 @@ export async function readScopedPassBoard(
 }
 
 /** One card's rows, for the release. */
-export async function readPassCardRows(
-  tx: Transaction,
-  cfg: TradingContext,
-  target: PassTarget,
-): Promise<PassRow[]> {
+export async function readPassCardRows(tx: Transaction, target: PassTarget): Promise<PassRow[]> {
   return readCardRows(
     tx,
-    cfg,
     target.kind === "group"
       ? and(eq(workingOrderLines.groupId, target.groupId), eq(orderGroups.partyId, target.partyId))!
       : and(eq(workingOrders.id, target.workingOrderId), isNull(workingOrderLines.groupId))!,
@@ -112,7 +105,6 @@ export async function readPassCardRows(
  *  watched zone is already read. */
 async function readCardRows(
   tx: Transaction,
-  cfg: TradingContext,
   cards: SQL,
   nowMs: number,
   known?: { waits: ReadonlySet<string>; zones: ReadonlyMap<string, string | null> },
@@ -122,7 +114,6 @@ async function readCardRows(
   const zones = new Map(known?.zones);
   for (const [id, zone] of await rowsWatchZones(
     tx,
-    cfg,
     read.filter((row) => !zones.has(row.orderId)),
   ))
     zones.set(id, zone);
@@ -164,7 +155,6 @@ async function readCardRows(
 /** The live kitchen dishes the scope sees, and the watched zone of each order read to decide it. */
 async function scopedItems(
   tx: Transaction,
-  cfg: TradingContext,
   scope: PassScope,
 ): Promise<{
   items: { id: string; orderId: string; groupId: string | null }[];
@@ -194,7 +184,7 @@ async function scopedItems(
       ),
     );
   if (scope.zoneIds === null) return { items: candidates, zones: none };
-  const zones = await rowsWatchZones(tx, cfg, candidates);
+  const zones = await rowsWatchZones(tx, candidates);
   return {
     items: candidates.filter((item) =>
       passSees(scope, { stationId: item.stationId, zoneId: zones.get(item.orderId)! }),
@@ -207,7 +197,6 @@ async function scopedItems(
  *  `firedSince`, with its order's watched zone when `withZones`, else a null zone. */
 export async function firedPassDishes(
   tx: Transaction,
-  cfg: TradingContext,
   firedSince: string,
   withZones: boolean,
 ): Promise<
@@ -237,7 +226,7 @@ export async function firedPassDishes(
         ),
       ),
     );
-  const zones = withZones ? await rowsWatchZones(tx, cfg, rows) : new Map<string, string>();
+  const zones = withZones ? await rowsWatchZones(tx, rows) : new Map<string, string>();
   return rows.map(({ id, orderId, stationId }) => ({
     id,
     stationId,
@@ -248,10 +237,9 @@ export async function firedPassDishes(
 /** The watched zone of each order the rows belong to, each order asked about once. */
 export function rowsWatchZones(
   tx: Transaction,
-  cfg: TradingContext,
   rows: readonly { orderId: string; partyId: string | null; deliveryTableId: string | null }[],
 ): Promise<Map<string, string | null>> {
-  return orderWatchZones(tx, cfg, [
+  return orderWatchZones(tx, [
     ...new Map(
       rows.map(({ orderId, partyId, deliveryTableId }) => [
         orderId,

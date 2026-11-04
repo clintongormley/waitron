@@ -342,7 +342,7 @@ function saladStation() {
       transport: "cloud_poll",
       pollId: `poll-${randomUUID()}`,
     });
-    const station = await createStation(tx, venue.cfg, {
+    const station = await createStation(tx, {
       name: "Salads",
       printerIds: [printer.id],
     });

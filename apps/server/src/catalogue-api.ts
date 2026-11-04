@@ -130,7 +130,6 @@ export interface CatalogueApiDeps {
   /** The content languages the venue must keep; none when absent. */
   contentLanguageRules?: ContentLanguageRules;
   db: Database;
-  /** Required where a product's course is saved; `requireVenueCfg` throws without it. */
   venueCfg?: TradingContext;
   venueLocale?: string;
 }
@@ -854,8 +853,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     routing: ProductRouting,
   ): Promise<ProductEditorValue> => {
     if (routing.courseId === undefined) return saved;
-    const cfg = requireVenueCfg(deps);
-    await setProductCourse(tx, cfg, saved.id, routing.courseId, "any");
+    await setProductCourse(tx, saved.id, routing.courseId, "any");
     return readProductEditor(tx, saved.id);
   };
 
@@ -1614,17 +1612,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       return c.json(created, 201);
     }),
   );
-}
-
-/** A misconfiguration guard, not a request fault: `boot.ts` always supplies `venueCfg`. */
-function requireVenueCfg(deps: CatalogueApiDeps): TradingContext {
-  /* v8 ignore start -- boot always threads a venueCfg; only a harness that omits it AND calls a route
-     that needs it reaches this, which no suite does — surfaced as a 500 by `run`. */
-  if (deps.venueCfg === undefined) {
-    throw new Error("mountCatalogueApi: venueCfg is required to save a product's course");
-  }
-  /* v8 ignore stop */
-  return deps.venueCfg;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

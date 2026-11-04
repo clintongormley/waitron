@@ -76,11 +76,11 @@ function entry(key: string, label: string, extra: Partial<SaveEntry> = {}): Save
 }
 
 function read(setId: string, zoneId: string): Promise<ZonePlan> {
-  return inTx(v, (tx) => readLayout(tx, v.cfg, { setId, zoneId }));
+  return inTx(v, (tx) => readLayout(tx, { setId, zoneId }));
 }
 
 function save(setId: string, zoneId: string, input: ZonePlanSave) {
-  return inTx(v, (tx) => saveLayout(tx, v.cfg, NONE, { setId, zoneId }, input, NOW));
+  return inTx(v, (tx) => saveLayout(tx, NONE, { setId, zoneId }, input, NOW));
 }
 
 /** The saved entries again, as the editor would send them back after a read. */
@@ -337,7 +337,7 @@ describe("a set's layout of a zone", () => {
     ).toBeNull();
 
     await s.onto(s.d.dinner);
-    await inTx(v, (tx) => takeOffToday(tx, v.cfg, ab));
+    await inTx(v, (tx) => takeOffToday(tx, ab));
 
     const [row] = await inTx(v, (tx) =>
       tx
@@ -395,9 +395,7 @@ describe("a saved edit of today's layout before Update layout", () => {
       ],
     });
     const listed = async () =>
-      new Set(
-        (await inTx(v, (tx) => listTables(tx, v.cfg, NOW))).map((table) => table.planTableId),
-      );
+      new Set((await inTx(v, (tx) => listTables(tx, NOW))).map((table) => table.planTableId));
     const before = await listed();
     expect([ids.four, ids.five, ids.joined].map((id) => before.has(id!))).toEqual([
       true,

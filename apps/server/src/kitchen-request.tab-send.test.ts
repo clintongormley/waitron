@@ -121,7 +121,7 @@ describe("A773 waiter request: tab send", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
-      const later = await createCourse(tx, venue.cfg, { name: "Later", displayOrder: 2 });
+      const later = await createCourse(tx, { name: "Later", displayOrder: 2 });
       await addTabRound(tx, venue.cfg, venue.party.tabId, [
         { ...burger(venue), courseId: later.id },
       ]);
@@ -226,7 +226,7 @@ describe("A773 waiter request: tab send", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
-      const later = await createCourse(tx, venue.cfg, { name: "Later", displayOrder: 2 });
+      const later = await createCourse(tx, { name: "Later", displayOrder: 2 });
       await addTabRound(tx, venue.cfg, venue.party.tabId, [
         { ...burger(venue), courseId: later.id, hold: true },
         { ...burger(venue), courseId: later.id, hold: true },

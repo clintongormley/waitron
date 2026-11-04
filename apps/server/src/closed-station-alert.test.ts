@@ -17,7 +17,7 @@ const suite = useVenueDb({
 it("records one release alert with staff names in line order until the open alert is handled", async () => {
   const venue = await setupPartyVenue(suite.db);
   const station = await inTx(venue, (tx) =>
-    createStation(tx, venue.cfg, { name: "Upstairs bar", isDefault: true }),
+    createStation(tx, { name: "Upstairs bar", isDefault: true }),
   );
   const tableId = await venue.table(`A-${randomUUID().slice(0, 8)}`);
   const { partyId, tabId } = await seat(venue, tableId);
@@ -97,7 +97,7 @@ it("records one release alert with staff names in line order until the open aler
 it("does not mistake an unrelated 1811 refusal for an expected alert constraint", async () => {
   const venue = await setupPartyVenue(suite.db);
   const station = await inTx(venue, (tx) =>
-    createStation(tx, venue.cfg, { name: "Upstairs bar", isDefault: true }),
+    createStation(tx, { name: "Upstairs bar", isDefault: true }),
   );
   const tableId = await venue.table(`A-${randomUUID().slice(0, 8)}`);
   const { partyId, tabId } = await seat(venue, tableId);
@@ -128,9 +128,7 @@ it("does not mistake an unrelated 1811 refusal for an expected alert constraint"
 
 it("records the waiting-for-the-pass alert under its own code, without the order's label", async () => {
   const venue = await setupPartyVenue(suite.db);
-  const station = await inTx(venue, (tx) =>
-    createStation(tx, venue.cfg, { name: "Fryer", isDefault: true }),
-  );
+  const station = await inTx(venue, (tx) => createStation(tx, { name: "Fryer", isDefault: true }));
   const tableId = await venue.table(`A-${randomUUID().slice(0, 8)}`);
   const { partyId, tabId } = await seat(venue, tableId);
   await orderForParty(venue, partyId, ["Burger"], tabId);
@@ -180,9 +178,9 @@ it("records the waiting-for-the-pass alert under its own code, without the order
 it("raises both alerts from one call, each naming only its own stations and dishes", async () => {
   const venue = await setupPartyVenue(suite.db);
   const bar = await inTx(venue, (tx) =>
-    createStation(tx, venue.cfg, { name: "Upstairs bar", isDefault: true }),
+    createStation(tx, { name: "Upstairs bar", isDefault: true }),
   );
-  const fryer = await inTx(venue, (tx) => createStation(tx, venue.cfg, { name: "Fryer" }));
+  const fryer = await inTx(venue, (tx) => createStation(tx, { name: "Fryer" }));
   const tableId = await venue.table(`A-${randomUUID().slice(0, 8)}`);
   const { partyId, tabId } = await seat(venue, tableId);
   await orderForParty(venue, partyId, ["Burger", "Vino", "Paella"], tabId);

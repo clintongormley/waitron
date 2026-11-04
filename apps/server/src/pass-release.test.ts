@@ -157,12 +157,12 @@ const passOn = (
 ) => device(venue, name, { kitchenScreen: { kind: "pass", stationIds, zoneIds } });
 
 /** The device's pass screen's To fire cards, read as its board reads them. */
-async function toFire(venue: AnyVenue, by: PassActor): Promise<PassCard[]> {
+async function toFire(by: PassActor): Promise<PassCard[]> {
   return withTransaction(db, async (tx) => {
     const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, by.deviceId)).find(
       (candidate) => candidate.kind === "pass",
     )!;
-    return (await readScopedPassBoard(tx, venue.cfg, passScopeOf(screen))).toFire;
+    return (await readScopedPassBoard(tx, passScopeOf(screen))).toFire;
   });
 }
 
@@ -213,7 +213,7 @@ async function hotAndCold() {
   vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
   const venue = await setupSplitExtrasVenue();
   const placed = await withTransaction(db, async (tx) => {
-    const cold = (await createStation(tx, venue.cfg, { name: "Cold" })).id;
+    const cold = (await createStation(tx, { name: "Cold" })).id;
     await routeProductTo(tx, venue.products.cheese, cold);
     await setStationsWaitForPass(tx, true, [venue.stations.grill, cold]);
     const group = (
@@ -248,8 +248,8 @@ function thrown(attempt: () => unknown): unknown {
 describe("A773 pass release: set and stamps", () => {
   it("releases disjoint sets from a hot and a cold pass on one zone", async () => {
     const f = await hotAndCold();
-    const [hotCard] = await toFire(f.venue, f.hot);
-    const [coldCard] = await toFire(f.venue, f.coldPass);
+    const [hotCard] = await toFire(f.hot);
+    const [coldCard] = await toFire(f.coldPass);
     expect(hotCard!.releaseTicketItemIds).toEqual([f.burger]);
     expect(coldCard!.releaseTicketItemIds).toEqual([f.salad]);
     const [burgerBefore, saladBefore] = [(await rows([f.burger]))[0]!, (await rows([f.salad]))[0]!];
@@ -281,7 +281,7 @@ describe("A773 pass release: set and stamps", () => {
   it("leaves the floor measuring a released dish from when it was asked for (D65)", async () => {
     const f = await hotAndCold();
     const every = await passOn(f.venue, "Pass", null);
-    const [card] = await toFire(f.venue, every);
+    const [card] = await toFire(every);
     expect([...card!.releaseTicketItemIds].sort()).toEqual([f.burger, f.salad].sort());
     vi.setSystemTime(new Date("2026-03-14T12:14:00.000Z"));
     await release(f.venue, every, askOf(card!));
@@ -297,7 +297,7 @@ describe("A773 pass release: set and stamps", () => {
 
   it("refuses a forged mixed batch whole", async () => {
     const f = await hotAndCold();
-    const [hotCard] = await toFire(f.venue, f.hot);
+    const [hotCard] = await toFire(f.hot);
     await refusedWhole(
       release(f.venue, f.hot, { ...askOf(hotCard!), ticketItemIds: [f.burger, f.salad] }),
       "ticket.pass_context_changed",
@@ -307,7 +307,7 @@ describe("A773 pass release: set and stamps", () => {
 
   it("refuses a pass on the wrong station, and a pass on the right station in another zone", async () => {
     const f = await hotAndCold();
-    const [hotCard] = await toFire(f.venue, f.hot);
+    const [hotCard] = await toFire(f.hot);
     const fryer = await passOn(f.venue, "Fryer pass", [f.venue.stations.fryer]);
     const elsewhere = await passOn(
       f.venue,
@@ -356,7 +356,7 @@ describe("A773 pass release: set and stamps", () => {
       kitchenScreen: { kind: "pass_monitor", stationIds: null, zoneIds: null },
     });
     const station = await device(venue, "Grill screen", { stationId: venue.stations.grill });
-    const cards = await toFire(venue, every);
+    const cards = await toFire(every);
     const tabCard = cards.find((card) => card.target.kind === "group")!;
     const counterCard = cards.find((card) => card.target.kind === "bill")!;
     expect(counterCard.target).toEqual({ kind: "bill", workingOrderId: placed.counterId });
@@ -488,7 +488,7 @@ describe("A773 pass release: set and stamps", () => {
       };
     });
     const every = await passOn(venue, "Every pass", null);
-    const card = (await toFire(venue, every)).find(
+    const card = (await toFire(every)).find(
       (entry) => entry.target.kind === "group" && entry.target.groupId === placed.mainGroup,
     )!;
     expect([...card.releaseTicketItemIds].sort()).toEqual([placed.burger, placed.chips].sort());
@@ -509,7 +509,7 @@ describe("A773 pass release: set and stamps", () => {
 
   it("neither sweeps a released dish nor offers it again", async () => {
     const f = await hotAndCold();
-    const [hotCard] = await toFire(f.venue, f.hot);
+    const [hotCard] = await toFire(f.hot);
     const ask = askOf(hotCard!);
     vi.setSystemTime(new Date(LATER));
     await release(f.venue, f.hot, ask);
@@ -522,7 +522,7 @@ describe("A773 pass release: set and stamps", () => {
       )!;
       return passCardRelease(
         hotCard!.target,
-        await readPassCardRows(tx, f.venue.cfg, hotCard!.target),
+        await readPassCardRows(tx, hotCard!.target),
         passScopeOf(screen),
       );
     });
@@ -606,7 +606,7 @@ async function serveElsewhere(profileId: string): Promise<void> {
 describe("A773 pass release: authority", () => {
   it("refuses a profile without the action, the flag, a person or the party's zone, writing nothing", async () => {
     const f = await hotAndCold();
-    const [hotCard] = await toFire(f.venue, f.hot);
+    const [hotCard] = await toFire(f.hot);
     const ask = askOf(hotCard!);
     const watched = [f.burger, f.salad];
     const noPrepare = await profiledPass(f.venue, "No prepare", "kds", [
@@ -640,10 +640,10 @@ describe("A773 pass release: authority", () => {
 
   it("refuses a pass screen a narrowing took, writing nothing", async () => {
     const f = await hotAndCold();
-    const [hotCard] = await toFire(f.venue, f.hot);
+    const [hotCard] = await toFire(f.hot);
     const narrowed = await profiledPass(f.venue, "Narrowed", "kds", ALL_PASS);
     const by: PassActor = { deviceId: narrowed.deviceId, personId: null };
-    expect((await toFire(f.venue, by)).map((card) => card.target)).toContainEqual(hotCard!.target);
+    expect((await toFire(by)).map((card) => card.target)).toContainEqual(hotCard!.target);
     await withTransaction(db, (tx) =>
       VENUE_SERVICE.setProfileKitchenScreens(tx, narrowed.profileId, {
         station: { stationIds: null, zoneIds: null },
@@ -690,7 +690,7 @@ describe("A773 pass release: authority", () => {
 
   it("checks the party's zone after the ask's shape", async () => {
     const f = await hotAndCold();
-    const [hotCard] = await toFire(f.venue, f.hot);
+    const [hotCard] = await toFire(f.hot);
     const ask = askOf(hotCard!);
     const elsewhere = await signedInTillPass(f.venue, "Elsewhere");
     await serveElsewhere(elsewhere.profileId);
@@ -745,7 +745,7 @@ describe("A773 pass release: authority", () => {
   it("records the signed-in person's kitchen work once per released bill, and none when refused", async () => {
     const { venue, billId } = await burgersOnTwoBills();
     const till = await signedInTillPass(venue, "Till pass");
-    const [card] = await toFire(venue, till.by);
+    const [card] = await toFire(till.by);
     expect(card!.orders.map((order) => order.orderId).sort()).toEqual(
       [venue.party.tabId, billId].sort(),
     );
@@ -770,7 +770,7 @@ describe("A773 pass release: authority", () => {
     const { venue } = await burgersOnTwoBills();
     const display = await profiledPass(venue, "Display pass", "kds", ALL_PASS);
     const by: PassActor = { deviceId: display.deviceId, personId: null };
-    const [card] = await toFire(venue, by);
+    const [card] = await toFire(by);
     const ask = askOf(card!);
     expect(await release(venue, by, ask, attendance())).toEqual({
       releasedTicketItemIds: card!.releaseTicketItemIds,
@@ -848,8 +848,8 @@ async function requestedBurger(venue: Venue) {
   });
 }
 
-const cardOf = async (venue: AnyVenue, by: PassActor, groupId: string) =>
-  (await toFire(venue, by)).find(
+const cardOf = async (by: PassActor, groupId: string) =>
+  (await toFire(by)).find(
     (card) => card.target.kind === "group" && card.target.groupId === groupId,
   )!;
 
@@ -875,7 +875,7 @@ describe("A773 pass release: paper", () => {
     const placed = await requestedBurger(venue);
     expect(gained(start, await printed(venue))).toEqual(nothing);
     const every = await passOn(venue, "Every pass", null);
-    const card = await cardOf(venue, every, placed.groupId);
+    const card = await cardOf(every, placed.groupId);
 
     const before = await printed(venue);
     vi.setSystemTime(new Date(LATER));
@@ -908,7 +908,7 @@ describe("A773 pass release: paper", () => {
     });
     expect((await printedAt(venue.printers.grill)).join("\n")).toContain("*** HOLD ***");
     const every = await passOn(venue, "Every pass", null);
-    const card = await cardOf(venue, every, groupId);
+    const card = await cardOf(every, groupId);
     const before = await printed(venue);
     await release(venue, every, askOf(card));
     const added = gained(before, await printed(venue));
@@ -942,7 +942,7 @@ describe("A773 pass release: paper", () => {
       return burger!.id;
     });
     const every = await passOn(venue, "Every pass", null);
-    const [card] = await toFire(venue, every);
+    const [card] = await toFire(every);
     expect(card!.items.find((item) => item.lineId === lineId)!.qty).toBe("1.000");
     const before = await printed(venue);
     await release(venue, every, askOf(card!));
@@ -1022,7 +1022,7 @@ describe("A773 pass release: paper", () => {
     expect(await notices()).toEqual([]);
 
     const every = await passOn(v, "Every pass", null);
-    await release(v, every, askOf(await cardOf(v, every, first)));
+    await release(v, every, askOf(await cardOf(every, first)));
     const added = (await printedAt(printerId)).slice(before);
     const words = KITCHEN_ALLERGY_WORDS.es;
     const guest = (who: string) => words.guestHeading.replace("{who}", who);
@@ -1041,7 +1041,7 @@ describe("A773 pass release: paper", () => {
     ).groups[0]!.id;
     const beforeSecond = await jobs();
     const noticesBefore = await notices();
-    await release(v, every, askOf(await cardOf(v, every, second)));
+    await release(v, every, askOf(await cardOf(every, second)));
     const secondAdded = (await printedAt(printerId)).slice(beforeSecond);
     expect(secondAdded).toHaveLength(1);
     expect(secondAdded[0]).toContain(guest(CURRENT.who));
@@ -1053,14 +1053,14 @@ describe("A773 pass release: paper", () => {
     const venue = await setupSplitExtrasVenue();
     const placed = await requestedBurger(venue);
     const every = await passOn(venue, "Every pass", null);
-    const stale = await cardOf(venue, every, placed.groupId);
+    const stale = await cardOf(every, placed.groupId);
     await withTransaction(db, (tx) =>
       setStationToday(tx, venue.stations.grill, "closed", new Date(AT)),
     );
     await refusedWhole(release(venue, every, askOf(stale)), "ticket.pass_context_changed", [
       placed.item,
     ]);
-    const refreshed = await cardOf(venue, every, placed.groupId);
+    const refreshed = await cardOf(every, placed.groupId);
     expect(refreshed.releaseTicketItemIds).toEqual([]);
     expect(refreshed.releaseContext).toBeNull();
     expect(refreshed.items.find((item) => item.id === placed.item)!.stationClosed).toBe(true);
@@ -1079,7 +1079,7 @@ describe("A773 pass release: paper", () => {
       requestedAt: AT,
       firedAt: null,
     });
-    const moved = await cardOf(venue, every, placed.groupId);
+    const moved = await cardOf(every, placed.groupId);
     expect(moved.releaseTicketItemIds).toEqual([placed.item]);
     const before = await printed(venue);
     await release(venue, every, askOf(moved));
@@ -1105,7 +1105,7 @@ describe("A773 pass release: paper", () => {
       ),
     );
     const every = await passOn(venue, "Every pass", null);
-    const card = await cardOf(venue, every, placed.groupId);
+    const card = await cardOf(every, placed.groupId);
     expect(card.releaseTicketItemIds).toEqual([placed.item]);
     const before = await printed(venue);
     await release(venue, every, askOf(card));
@@ -1138,7 +1138,7 @@ describe("A773 pass release: paper", () => {
     );
     expect(line!.makeAtStationId).not.toBe(venue.stations.bar);
     const every = await passOn(venue, "Every pass", null);
-    const card = await cardOf(venue, every, placed.groupId);
+    const card = await cardOf(every, placed.groupId);
     expect(card.releaseTicketItemIds).toEqual([placed.item]);
     const before = await printed(venue);
     await release(venue, every, askOf(card));
@@ -1182,7 +1182,7 @@ describe("A773 pass release: paper", () => {
       }),
     ]);
     const every = await passOn(venue, "Every pass", null);
-    const card = await cardOf(venue, every, placed.groupId);
+    const card = await cardOf(every, placed.groupId);
     expect(card.releaseTicketItemIds).toEqual([placed.chips]);
     expect(card.releaseContext).toMatch(/^[0-9a-f]{64}$/);
     await expect(
@@ -1252,7 +1252,7 @@ describe("A773 pass release: paper", () => {
       ]);
       if (!waits) return;
       const every = await passOn(venue, "Every pass", null);
-      const card = await cardOf(venue, every, placed.groupId);
+      const card = await cardOf(every, placed.groupId);
       expect(card.releaseTicketItemIds).toEqual([]);
       await expect(
         release(venue, every, {
@@ -1377,7 +1377,7 @@ describe("A773 pass release: paper", () => {
       tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
     );
     const every = await passOn(venue, "Every pass", null);
-    const card = await cardOf(venue, every, placed.groupId);
+    const card = await cardOf(every, placed.groupId);
     const header = card.orders.find((order) => order.orderId === billId)!;
     expect(header).not.toHaveProperty("formerNumbers");
     const before = await printed(venue);
@@ -1436,7 +1436,7 @@ describe("A773 pass release: paper", () => {
     const [tabNumber, billNumber] = [await numberOf(venue.party.tabId), await numberOf(billId)];
     expect(tabNumber).not.toBe(billNumber);
     const every = await passOn(venue, "Every pass", null);
-    const card = await cardOf(venue, every, placed.groupId);
+    const card = await cardOf(every, placed.groupId);
     expect(card.releaseTicketItemIds).toHaveLength(3);
 
     const before = await printed(venue);
@@ -1531,7 +1531,7 @@ describe("A773 pass release: races", () => {
   for (const order of ["first", "second"] as const)
     it(`lets one of two Fires of the same card win, the ${order} submitted committing first`, async () => {
       const f = await hotAndCold();
-      const [card] = await toFire(f.venue, f.hot);
+      const [card] = await toFire(f.hot);
       const asks = [askOf(card!), askOf(card!)];
       const [winner, loser] = order === "first" ? asks : [asks[1]!, asks[0]!];
       const before = await rows([f.burger, f.salad]);
@@ -1569,8 +1569,8 @@ describe("A773 pass release: races", () => {
         });
         return printer.id;
       });
-      const [hotCard] = await toFire(f.venue, f.hot);
-      const [coldCard] = await toFire(f.venue, f.coldPass);
+      const [hotCard] = await toFire(f.hot);
+      const [coldCard] = await toFire(f.coldPass);
       const hot = (tx: Transaction) => releasePassItems(tx, f.venue.cfg, f.hot, askOf(hotCard!));
       const cold = (tx: Transaction) =>
         releasePassItems(tx, f.venue.cfg, f.coldPass, askOf(coldCard!));
@@ -1606,7 +1606,7 @@ describe("A773 pass release: races", () => {
     const pass = onTill
       ? await signedInTillPass(venue, "Till pass")
       : await passWithProfile(venue, "Hot pass", shown);
-    const card = await cardOf(venue, pass.by, placed.groupId);
+    const card = await cardOf(pass.by, placed.groupId);
     expect(card.releaseTicketItemIds).toEqual([placed.item]);
     const fire = (tx: Transaction) => releasePassItems(tx, venue.cfg, pass.by, askOf(card));
     return {
@@ -1765,7 +1765,7 @@ describe("A773 pass release: races", () => {
     });
     const pass = await passWithProfile(venue, "Hot pass", [venue.stations.grill]);
     const card = async () => {
-      const cards = await toFire(venue, pass.by);
+      const cards = await toFire(pass.by);
       expect(cards.map((one) => one.releaseTicketItemIds)).toEqual([[placed.item]]);
       return cards[0]!;
     };
@@ -1880,7 +1880,7 @@ describe("A773 pass release: races", () => {
 
   it("rolls the whole Fire back when its ticket cannot be queued, and the same Fire then prints once", async () => {
     const f = await burgerCard();
-    const ask = askOf(await cardOf(f.venue, f.pass.by, f.placed.groupId));
+    const ask = askOf(await cardOf(f.pass.by, f.placed.groupId));
     const commands = () =>
       withTransaction(db, (tx) =>
         tx.select().from(serviceCommands).where(eq(serviceCommands.submissionId, ask.submissionId)),
@@ -1948,7 +1948,7 @@ describe("A773 pass release: races", () => {
         .where(eq(workingOrderLines.productId, f.venue.products.water));
       return line!.id;
     });
-    const card = await cardOf(f.venue, f.pass.by, f.placed.groupId);
+    const card = await cardOf(f.pass.by, f.placed.groupId);
     const fire = (tx: Transaction) => releasePassItems(tx, f.venue.cfg, f.pass.by, askOf(card));
     return { ...f, water, fire, start: await printed(f.venue) };
   }
@@ -1989,7 +1989,7 @@ describe("A773 pass release: races", () => {
 
   it("fires a dish whose note changed after its card was read, printing the note as it now reads", async () => {
     const f = await burgerAndWater();
-    const read = await cardOf(f.venue, f.pass.by, f.placed.groupId);
+    const read = await cardOf(f.pass.by, f.placed.groupId);
     expect(read.items.map((item) => item.note)).toEqual([null]);
     const edit = await pendingEdit(f.venue, f.placed.line, { note: "No salt" });
     expect(await race(edit, f.fire)).toMatchObject([fulfilled, fulfilled]);
@@ -2006,7 +2006,7 @@ describe("A773 pass release: races", () => {
       const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, f.pass.by.deviceId)).find(
         (candidate) => candidate.kind === "pass",
       )!;
-      return readScopedPassBoard(tx, f.venue.cfg, passScopeOf(screen));
+      return readScopedPassBoard(tx, passScopeOf(screen));
     });
     expect(board.toFire).toEqual([]);
     expect(board.inProgress.map((card) => [card.key, card.items.map((item) => item.note)])).toEqual(

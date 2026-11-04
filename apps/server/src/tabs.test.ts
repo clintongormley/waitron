@@ -764,13 +764,13 @@ describe("readTabLines", () => {
   it("carries each line's course + fired/held state (KDS-2 §5b) for the tab's waiter-fire", async () => {
     const { cfg, cafeId, aguaId, tableId, cafeOffer, aguaOffer } = await setupVenue();
     const entrantes = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 }),
+      createCourse(tx, { name: "Entrantes", displayOrder: 0 }),
     );
     const postres = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Postres", displayOrder: 1 }),
+      createCourse(tx, { name: "Postres", displayOrder: 1 }),
     );
-    await asApp(cfg, (tx) => setProductCourse(tx, cfg, cafeId, entrantes.id));
-    await asApp(cfg, (tx) => setProductCourse(tx, cfg, aguaId, postres.id));
+    await asApp(cfg, (tx) => setProductCourse(tx, cafeId, entrantes.id));
+    await asApp(cfg, (tx) => setProductCourse(tx, aguaId, postres.id));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -1211,10 +1211,8 @@ describe("addTabRound ring-time course resolution (override ?? product default ?
     // Bread's `courseId: null` is the same as no override: it is null because it has no default.
     const { cfg, cafeId: steak, aguaId: bread, tableId, offerFor } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
-    const c = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Principales", displayOrder: 1 }),
-    );
-    await asApp(cfg, (tx) => setProductCourse(tx, cfg, steak, c.id));
+    const c = await asApp(cfg, (tx) => createCourse(tx, { name: "Principales", displayOrder: 1 }));
+    await asApp(cfg, (tx) => setProductCourse(tx, steak, c.id));
     const o = await asApp(cfg, (tx) =>
       addTabRoundWith(tx, cfg, tabId, [
         line(offerFor(steak)),
@@ -1228,13 +1226,11 @@ describe("addTabRound ring-time course resolution (override ?? product default ?
   it("a non-null line override WINS over the product's default course", async () => {
     const { cfg, cafeId: prod, tableId, offerFor } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
-    const def = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 }),
-    );
+    const def = await asApp(cfg, (tx) => createCourse(tx, { name: "Entrantes", displayOrder: 0 }));
     const override = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Postres", displayOrder: 2 }),
+      createCourse(tx, { name: "Postres", displayOrder: 2 }),
     );
-    await asApp(cfg, (tx) => setProductCourse(tx, cfg, prod, def.id));
+    await asApp(cfg, (tx) => setProductCourse(tx, prod, def.id));
     const o = await asApp(cfg, (tx) =>
       addTabRoundWith(tx, cfg, tabId, [line(offerFor(prod), { courseId: override.id })]),
     );
@@ -1358,9 +1354,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
   it("stamps neither held dish until selected line release, then both", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
     await routeToNoPreparation(aguaId);
-    const course = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
-    );
+    const course = await asApp(cfg, (tx) => createCourse(tx, { name: "Postres", displayOrder: 3 }));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -1379,9 +1373,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("releases only the selected held dish among two sharing a course", async () => {
     const { cfg, tableId, cafeOffer, aguaOffer } = await setupVenue();
-    const course = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Mains", displayOrder: 3 }),
-    );
+    const course = await asApp(cfg, (tx) => createCourse(tx, { name: "Mains", displayOrder: 3 }));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -1406,9 +1398,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
   it("stamps a held course's no-route line when its routed line is sent by sendLines", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
     await routeToNoPreparation(aguaId);
-    const course = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
-    );
+    const course = await asApp(cfg, (tx) => createCourse(tx, { name: "Postres", displayOrder: 3 }));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -1425,9 +1415,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
   it("sending everything held stamps a held no-route line even when nothing routed is held beside it", async () => {
     const { cfg, tableId, aguaId, aguaOffer } = await setupVenue();
     await routeToNoPreparation(aguaId);
-    const course = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
-    );
+    const course = await asApp(cfg, (tx) => createCourse(tx, { name: "Postres", displayOrder: 3 }));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -1445,9 +1433,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
   it("sending one held line of a course stamps the course's no-route line only once nothing routed in it is still held", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
     await routeToNoPreparation(aguaId);
-    const course = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
-    );
+    const course = await asApp(cfg, (tx) => createCourse(tx, { name: "Postres", displayOrder: 3 }));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -1562,7 +1548,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     const queued = async () =>
       asApp(cfg, async (tx) => ({
         station: (await listStationQueue(tx, stationId!))[0]!.items[0]!.quantity,
-        expo: boardItems(await readScopedPassBoard(tx, cfg, EVERY))[0]!.qty,
+        expo: boardItems(await readScopedPassBoard(tx, EVERY))[0]!.qty,
       }));
 
     expect(await queued()).toEqual({ station: "2.000", expo: "2.000" });
@@ -1791,7 +1777,7 @@ async function heldDishWithExtraApart() {
     .select()
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId));
-  const sideId = (await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Side" }))).id;
+  const sideId = (await asApp(cfg, (tx) => createStation(tx, { name: "Side" }))).id;
   const extraId = randomUUID();
   await db.insert(workingOrderLines).values({
     id: extraId,
@@ -1997,9 +1983,7 @@ describe("a line with no fired ticket whose product sold out cannot be sent", ()
   it("refuses selected held line release when its extra sold out", async () => {
     const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
-    const course = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
-    );
+    const course = await asApp(cfg, (tx) => createCourse(tx, { name: "Postres", displayOrder: 3 }));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -2698,13 +2682,13 @@ async function tabWithFiredMains() {
   const venue = await setupVenue();
   const { cfg, cafeId, aguaId, tableId, cafeOffer, aguaOffer } = venue;
   const starters = await asApp(cfg, (tx) =>
-    createCourse(tx, cfg, { name: "Entrantes", displayOrder: 1 }),
+    createCourse(tx, { name: "Entrantes", displayOrder: 1 }),
   );
   const mains = await asApp(cfg, (tx) =>
-    createCourse(tx, cfg, { name: "Principales", displayOrder: 2 }),
+    createCourse(tx, { name: "Principales", displayOrder: 2 }),
   );
-  await asApp(cfg, (tx) => setProductCourse(tx, cfg, aguaId, starters.id));
-  await asApp(cfg, (tx) => setProductCourse(tx, cfg, cafeId, mains.id));
+  await asApp(cfg, (tx) => setProductCourse(tx, aguaId, starters.id));
+  await asApp(cfg, (tx) => setProductCourse(tx, cafeId, mains.id));
   const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
   await asApp(cfg, (tx) =>
     addTabRound(tx, cfg, tabId, [
@@ -2860,9 +2844,7 @@ describe("new work an edit adds reaches the kitchen as a round's would (plan D10
 async function twoTabs() {
   const venue = await setupVenue();
   const { cfg, tableId, cafeOffer } = venue;
-  const course = await asApp(cfg, (tx) =>
-    createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
-  );
+  const course = await asApp(cfg, (tx) => createCourse(tx, { name: "Postres", displayOrder: 3 }));
   const { tabId, partyId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
   const otherId: string = randomUUID();
   await asApp(cfg, async (tx) => {
@@ -3277,7 +3259,7 @@ describe("the kitchen screen and the expo board are told which lines were sold i
   it("marks each pass board item the same way", async () => {
     const { cfg } = await fiveDishesOnATab();
 
-    const items = boardItems(await asApp(cfg, (tx) => readScopedPassBoard(tx, cfg, EVERY)));
+    const items = boardItems(await asApp(cfg, (tx) => readScopedPassBoard(tx, EVERY)));
     expect(items.map((item) => [item.name, item.soldInEach])).toEqual([
       ["Croquette", true],
       ["Gilda", true],

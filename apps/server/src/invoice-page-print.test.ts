@@ -165,19 +165,14 @@ async function queueA4(saleId: string, pagePrinterId: string, ms = 0) {
   return delivery.id;
 }
 
-function pull(
-  agentId: string,
-  _locationId: string,
-  ms: number,
-  exceptPrinterIds: readonly string[] = [],
-) {
+function pull(agentId: string, ms: number, exceptPrinterIds: readonly string[] = []) {
   return withTransaction(suite.db, (tx) =>
     claimInvoicePagePrint(tx, agentId, { exceptPrinterIds }, at(ms)),
   );
 }
 
-async function claim(agentId: string, locationId: string, ms: number) {
-  return (await pull(agentId, locationId, ms)).job;
+async function claim(agentId: string, ms: number) {
+  return (await pull(agentId, ms)).job;
 }
 
 function renew(held: InvoiceDeliveryClaim, ms: number, hold: A4HoldCode | null = null) {
@@ -224,7 +219,7 @@ describe("claiming an A4 delivery", () => {
     const oldest = await queueA4(oldestSale, office, 1_000);
     const notDue = await queueA4(await fullInvoice(v.nodeId), office, 10_000);
 
-    const job = await claim(v.agentOne, v.locationId, 5_000);
+    const job = await claim(v.agentOne, 5_000);
 
     expect(job).toEqual({
       claim: { deliveryId: oldest, generation: 1, token: expect.any(String), holder: v.agentOne },
@@ -249,13 +244,13 @@ describe("claiming an A4 delivery", () => {
     });
     expect((await row(later)).status).toBe("queued");
     expect((await row(notDue)).status).toBe("queued");
-    expect(await claim(v.agentOne, v.locationId, 5_000)).toBeUndefined();
+    expect(await claim(v.agentOne, 5_000)).toBeUndefined();
     await report(job!.claim, { status: "sent" }, 5_000);
-    const second = await claim(v.agentOne, v.locationId, 5_000);
+    const second = await claim(v.agentOne, 5_000);
     expect(second?.claim.deliveryId).toBe(later);
     await report(second!.claim, { status: "sent" }, 5_000);
-    expect(await claim(v.agentOne, v.locationId, 5_000)).toBeUndefined();
-    expect((await claim(v.agentOne, v.locationId, 10_000))?.claim.deliveryId).toBe(notDue);
+    expect(await claim(v.agentOne, 5_000)).toBeUndefined();
+    expect((await claim(v.agentOne, 10_000))?.claim.deliveryId).toBe(notDue);
   });
 
   it("claims a due A4 delivery whatever the printer's location column holds", async () => {
@@ -287,7 +282,7 @@ describe("claiming an A4 delivery", () => {
     const ahead = await queueA4(await fullInvoice(v.nodeId), office, 400 * 86_400_000);
     const inside = await queueA4(await fullInvoice(v.nodeId), office, 600_000);
 
-    const job = await claim(v.agentOne, v.locationId, 0);
+    const job = await claim(v.agentOne, 0);
 
     expect(job?.claim.deliveryId).toBe(ahead);
     expect((await row(inside)).status).toBe("queued");
@@ -300,12 +295,12 @@ describe("claiming an A4 delivery", () => {
     const id = await queueA4(await fullInvoice(v.nodeId), theirs);
     const unclaimed = await queueA4(await fullInvoice(v.nodeId), nobodys);
 
-    expect(await claim(v.agentOne, v.locationId, 1_000)).toBeUndefined();
+    expect(await claim(v.agentOne, 1_000)).toBeUndefined();
     expect((await row(id)).status).toBe("queued");
 
-    const job = await claim(v.agentTwo, v.locationId, 1_000);
+    const job = await claim(v.agentTwo, 1_000);
     expect(job?.claim).toMatchObject({ deliveryId: id, holder: v.agentTwo });
-    expect(await claim(v.agentTwo, v.locationId, 1_000)).toBeUndefined();
+    expect(await claim(v.agentTwo, 1_000)).toBeUndefined();
     expect(await row(unclaimed)).toMatchObject({ status: "queued", claimTokenHash: null });
   });
 
@@ -319,7 +314,7 @@ describe("claiming an A4 delivery", () => {
     await suite.db.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, disabled));
     const before = await row(dead);
 
-    const job = await claim(v.agentOne, v.locationId, 5_000);
+    const job = await claim(v.agentOne, 5_000);
 
     expect(job?.claim.deliveryId).toBe(live);
     expect(await row(dead)).toEqual({
@@ -334,11 +329,11 @@ describe("claiming an A4 delivery", () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
-    await claim(v.agentOne, v.locationId, 1_000);
+    await claim(v.agentOne, 1_000);
     const held = await row(id);
 
-    expect(await claim(v.agentOne, v.locationId, 60_999)).toBeUndefined();
-    expect(await claim(v.agentTwo, v.locationId, 60_999)).toBeUndefined();
+    expect(await claim(v.agentOne, 60_999)).toBeUndefined();
+    expect(await claim(v.agentTwo, 60_999)).toBeUndefined();
     expect(await row(id)).toEqual(held);
   });
 
@@ -346,9 +341,9 @@ describe("claiming an A4 delivery", () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
-    await claim(v.agentOne, v.locationId, 1_000);
+    await claim(v.agentOne, 1_000);
 
-    expect(await claim(v.agentTwo, v.locationId, 61_000)).toBeUndefined();
+    expect(await claim(v.agentTwo, 61_000)).toBeUndefined();
     expect(await row(id)).toMatchObject({
       status: "unknown",
       failureCode: "timeout",
@@ -362,7 +357,7 @@ describe("renewing an A4 claim", () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
-    const job = await claim(v.agentOne, v.locationId, 0);
+    const job = await claim(v.agentOne, 0);
 
     expect(await renew(job!.claim, 40_000)).toBe("renewed");
     expect((await row(id)).claimedAt).toBe(at(40_000).toISOString());
@@ -382,7 +377,7 @@ describe("renewing an A4 claim", () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
-    const job = await claim(v.agentOne, v.locationId, 0);
+    const job = await claim(v.agentOne, 0);
 
     expect(await expire(60_000)).toBe(1);
     expect(await row(id)).toMatchObject({ status: "unknown", failureCode: "timeout" });
@@ -394,7 +389,7 @@ describe("renewing an A4 claim", () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
-    const job = await claim(v.agentOne, v.locationId, 0);
+    const job = await claim(v.agentOne, 0);
 
     expect(await renew(job!.claim, 60_000)).toBe("lost");
     expect(await row(id)).toMatchObject({ status: "unknown", claimedAt: at(0).toISOString() });
@@ -404,7 +399,7 @@ describe("renewing an A4 claim", () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
-    const job = await claim(v.agentOne, v.locationId, 0);
+    const job = await claim(v.agentOne, 0);
     const held = job!.claim;
 
     expect(await renew({ ...held, token: randomUUID() }, 10_000)).toBe("lost");
@@ -456,7 +451,7 @@ describe("reporting an A4 delivery", () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
-    const job = await claim(v.agentOne, v.locationId, 0);
+    const job = await claim(v.agentOne, 0);
 
     expect(
       await report(job!.claim, { status: "failed", failureCode: "printer_refused" }, 5_000),
@@ -471,14 +466,14 @@ describe("reporting an A4 delivery", () => {
         completedAt: null,
       }),
     ]);
-    expect(await claim(v.agentOne, v.locationId, 600_000)).toBeUndefined();
+    expect(await claim(v.agentOne, 600_000)).toBeUndefined();
   });
 
   it("answers a repeat of an accepted report as repeated, agreeing or not, and changes nothing", async () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
-    const job = await claim(v.agentOne, v.locationId, 0);
+    const job = await claim(v.agentOne, 0);
 
     expect(await report(job!.claim, { status: "sent" }, 5_000)).toEqual({
       updated: true,
@@ -499,7 +494,7 @@ describe("reporting an A4 delivery", () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
-    const job = await claim(v.agentOne, v.locationId, 0);
+    const job = await claim(v.agentOne, 0);
     await report(job!.claim, { status: "sent" }, 5_000);
     const other = await queueA4(await fullInvoice(v.nodeId), office, 9_000);
     const done = await row(id);
@@ -524,7 +519,7 @@ describe("reporting an A4 delivery", () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
-    const job = await claim(v.agentOne, v.locationId, 0);
+    const job = await claim(v.agentOne, 0);
     // Guards against a future writer that ends a claimed A4 row without recording a report.
     await suite.db
       .update(invoiceDeliveries)
@@ -545,7 +540,7 @@ describe("reporting an A4 delivery", () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
-    const job = await claim(v.agentOne, v.locationId, 0);
+    const job = await claim(v.agentOne, 0);
 
     await report(job!.claim, { status: "failed", failureCode: "printer_unreachable" }, 61_000);
     expect(await row(id)).toMatchObject({
@@ -559,7 +554,7 @@ describe("reporting an A4 delivery", () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
-    const job = await claim(v.agentOne, v.locationId, 0);
+    const job = await claim(v.agentOne, 0);
     await expire(60_000);
 
     expect(await report(job!.claim, { status: "sent" }, 70_000)).toEqual({
@@ -578,7 +573,7 @@ describe("reporting an A4 delivery", () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
-    const job = await claim(v.agentOne, v.locationId, 0);
+    const job = await claim(v.agentOne, 0);
     await expire(60_000);
 
     await report(job!.claim, { status: "failed", failureCode: "printer_refused" }, 70_000);
@@ -596,10 +591,10 @@ describe("reporting an A4 delivery", () => {
     const office = await printer(v.locationId, v.agentOne);
     const saleId = await fullInvoice(v.nodeId);
     const first = await queueA4(saleId, office);
-    const old = await claim(v.agentOne, v.locationId, 0);
+    const old = await claim(v.agentOne, 0);
     await expire(60_000);
     const retry = await queueA4(saleId, office, 61_000);
-    const fresh = await claim(v.agentOne, v.locationId, 62_000);
+    const fresh = await claim(v.agentOne, 62_000);
     expect(fresh?.claim).toMatchObject({ deliveryId: retry, generation: 2 });
 
     expect(await renew(old!.claim, 63_000)).toBe("lost");
@@ -623,10 +618,10 @@ describe("reporting an A4 delivery", () => {
     const office = await printer(v.locationId, v.agentOne);
     const saleId = await fullInvoice(v.nodeId);
     const first = await queueA4(saleId, office);
-    const old = await claim(v.agentOne, v.locationId, 0);
+    const old = await claim(v.agentOne, 0);
     await expire(60_000);
     const retry = await queueA4(saleId, office, 61_000);
-    const fresh = await claim(v.agentOne, v.locationId, 62_000);
+    const fresh = await claim(v.agentOne, 62_000);
     await report(fresh!.claim, { status: "failed", failureCode: "printer_unreachable" }, 63_000);
     const current = await row(retry);
 
@@ -648,7 +643,7 @@ describe("reporting an A4 delivery", () => {
       const office = await printer(v.locationId, v.agentOne);
       const saleId = await fullInvoice(v.nodeId);
       await queueA4(saleId, office);
-      const job = await claim(v.agentOne, v.locationId, 0);
+      const job = await claim(v.agentOne, 0);
       await report(job!.claim, { status: "sent" }, 5_000);
 
       const next = await withTransaction(suite.db, async (tx) => {
@@ -695,7 +690,7 @@ describe("reporting an A4 delivery", () => {
     });
     const handedOut = await queueA4(await fullInvoice(v.nodeId), office);
     const waiting = await queueA4(await fullInvoice(v.nodeId), office, 1_000);
-    const job = await claim(v.agentOne, v.locationId, 2_000);
+    const job = await claim(v.agentOne, 2_000);
     expect(job?.claim.deliveryId).toBe(handedOut);
 
     const repointed = await withTransaction(suite.db, (tx) =>
@@ -730,8 +725,8 @@ describe("reporting an A4 delivery", () => {
       repeated: false,
     });
     expect((await row(handedOut)).status).toBe("sent");
-    expect(await claim(v.agentOne, v.locationId, 41_000)).toBeUndefined();
-    const next = await claim(v.agentTwo, v.locationId, 41_000);
+    expect(await claim(v.agentOne, 41_000)).toBeUndefined();
+    const next = await claim(v.agentTwo, 41_000);
     expect(next?.claim).toMatchObject({ deliveryId: waiting, holder: v.agentTwo });
     expect(await row(waiting)).toMatchObject({ claimedAgentId: v.agentTwo });
   });
@@ -746,11 +741,11 @@ describe("one A4 job per printer", () => {
     const olderOnX = await queueA4(await fullInvoice(v.nodeId), x, 1_000);
     const youngerOnY = await queueA4(await fullInvoice(v.nodeId), y, 2_000);
 
-    expect((await pull(v.agentOne, v.locationId, 5_000)).job?.claim.deliveryId).toBe(first);
-    const second = await pull(v.agentOne, v.locationId, 5_000);
+    expect((await pull(v.agentOne, 5_000)).job?.claim.deliveryId).toBe(first);
+    const second = await pull(v.agentOne, 5_000);
     expect(second.job?.claim.deliveryId).toBe(youngerOnY);
     expect(second.busyPrinterIds).toEqual([x]);
-    const third = await pull(v.agentOne, v.locationId, 5_000);
+    const third = await pull(v.agentOne, 5_000);
     expect(third.job).toBeUndefined();
     expect([...third.busyPrinterIds].sort()).toEqual([x, y].sort());
     expect((await row(olderOnX)).status).toBe("queued");
@@ -760,11 +755,11 @@ describe("one A4 job per printer", () => {
     const v = await venue();
     const x = await printer(v.locationId, v.agentTwo);
     await queueA4(await fullInvoice(v.nodeId), x, 0);
-    expect((await pull(v.agentTwo, v.locationId, 1_000)).job).toBeDefined();
+    expect((await pull(v.agentTwo, 1_000)).job).toBeDefined();
     const later = await queueA4(await fullInvoice(v.nodeId), x, 1_000);
     await suite.db.update(pagePrinters).set({ agentId: v.agentOne }).where(eq(pagePrinters.id, x));
 
-    expect(await pull(v.agentOne, v.locationId, 2_000)).toEqual({
+    expect(await pull(v.agentOne, 2_000)).toEqual({
       job: undefined,
       busyPrinterIds: [x],
     });
@@ -778,13 +773,13 @@ describe("one A4 job per printer", () => {
     const onX = await queueA4(await fullInvoice(v.nodeId), x, 0);
     const onY = await queueA4(await fullInvoice(v.nodeId), y, 1_000);
 
-    expect((await pull(v.agentOne, v.locationId, 5_000, [x])).job?.claim.deliveryId).toBe(onY);
-    expect(await pull(v.agentOne, v.locationId, 5_000, [x])).toEqual({
+    expect((await pull(v.agentOne, 5_000, [x])).job?.claim.deliveryId).toBe(onY);
+    expect(await pull(v.agentOne, 5_000, [x])).toEqual({
       job: undefined,
       busyPrinterIds: [y],
     });
     expect((await row(onX)).status).toBe("queued");
-    expect((await pull(v.agentOne, v.locationId, 5_000)).job?.claim.deliveryId).toBe(onX);
+    expect((await pull(v.agentOne, 5_000)).job?.claim.deliveryId).toBe(onX);
   });
 
   it("hands out the printer's next invoice once the one out is reported", async () => {
@@ -792,12 +787,12 @@ describe("one A4 job per printer", () => {
     const x = await printer(v.locationId, v.agentOne);
     await queueA4(await fullInvoice(v.nodeId), x, 0);
     const next = await queueA4(await fullInvoice(v.nodeId), x, 1_000);
-    const job = await claim(v.agentOne, v.locationId, 5_000);
-    expect(await claim(v.agentOne, v.locationId, 6_000)).toBeUndefined();
+    const job = await claim(v.agentOne, 5_000);
+    expect(await claim(v.agentOne, 6_000)).toBeUndefined();
 
     await report(job!.claim, { status: "failed", failureCode: "printer_refused" }, 7_000);
 
-    expect(await pull(v.agentOne, v.locationId, 8_000)).toMatchObject({
+    expect(await pull(v.agentOne, 8_000)).toMatchObject({
       job: { claim: { deliveryId: next } },
       busyPrinterIds: [],
     });
@@ -808,10 +803,10 @@ describe("one A4 job per printer", () => {
     const x = await printer(v.locationId, v.agentOne);
     const lapsed = await queueA4(await fullInvoice(v.nodeId), x, 0);
     const next = await queueA4(await fullInvoice(v.nodeId), x, 1_000);
-    await claim(v.agentOne, v.locationId, 1_000);
-    expect(await claim(v.agentOne, v.locationId, 60_999)).toBeUndefined();
+    await claim(v.agentOne, 1_000);
+    expect(await claim(v.agentOne, 60_999)).toBeUndefined();
 
-    expect(await pull(v.agentOne, v.locationId, 61_000)).toMatchObject({
+    expect(await pull(v.agentOne, 61_000)).toMatchObject({
       job: { claim: { deliveryId: next } },
       busyPrinterIds: [],
     });
@@ -824,7 +819,7 @@ describe("the hold a renewal reports", () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
-    const job = await claim(v.agentOne, v.locationId, 0);
+    const job = await claim(v.agentOne, 0);
     expect((await row(id)).printerHold).toBeNull();
 
     expect(await renew(job!.claim, 20_000, "paper_out")).toBe("renewed");
@@ -846,7 +841,7 @@ describe("the hold a renewal reports", () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
-    const job = await claim(v.agentOne, v.locationId, 0);
+    const job = await claim(v.agentOne, 0);
     const held = job!.claim;
     expect(await renew(held, 10_000, "paper_out")).toBe("renewed");
 
@@ -864,7 +859,7 @@ describe("the hold a renewal reports", () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const id = await queueA4(await fullInvoice(v.nodeId), office);
-    const job = await claim(v.agentOne, v.locationId, 0);
+    const job = await claim(v.agentOne, 0);
 
     for (let ms = 20_000; ms <= 30 * 60_000; ms += 20_000) {
       expect(await renew(job!.claim, ms, "paper_out")).toBe("renewed");
@@ -881,13 +876,13 @@ describe("the hold a renewal reports", () => {
     const v = await venue();
     const office = await printer(v.locationId, v.agentOne);
     const reported = await queueA4(await fullInvoice(v.nodeId), office);
-    const job = await claim(v.agentOne, v.locationId, 0);
+    const job = await claim(v.agentOne, 0);
     await renew(job!.claim, 20_000, "paper_out");
     await report(job!.claim, { status: "sent" }, 30_000);
     expect(await row(reported)).toMatchObject({ status: "sent", printerHold: "paper_out" });
 
     const lapsed = await queueA4(await fullInvoice(v.nodeId), office, 30_000);
-    const next = await claim(v.agentOne, v.locationId, 30_000);
+    const next = await claim(v.agentOne, 30_000);
     expect(next!.claim.deliveryId).toBe(lapsed);
     await renew(next!.claim, 40_000, "paper_jam");
     expect(await expire(100_000)).toBe(1);

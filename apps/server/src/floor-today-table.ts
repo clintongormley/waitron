@@ -10,7 +10,6 @@ import {
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { holdersOf } from "./parties.js";
-import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 export interface Today {
@@ -22,11 +21,7 @@ export interface Today {
 }
 
 /** The table, with its today's row and its merge. */
-export async function todayOf(
-  tx: Transaction,
-  _cfg: TradingContext,
-  tableId: string,
-): Promise<Today> {
+export async function todayOf(tx: Transaction, tableId: string): Promise<Today> {
   const [table] = await tx
     .select({
       zoneId: diningTables.zoneId,
@@ -52,11 +47,7 @@ export async function todayOf(
 }
 
 /** The zone of a table in an active zone, as `todayOf` finds it. */
-export async function zoneOfTable(
-  tx: Transaction,
-  _cfg: TradingContext,
-  tableId: string,
-): Promise<string> {
+export async function zoneOfTable(tx: Transaction, tableId: string): Promise<string> {
   const [table] = await tx
     .select({ zoneId: diningTables.zoneId })
     .from(diningTables)

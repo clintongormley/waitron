@@ -86,7 +86,7 @@ beforeAll(async () => {
     },
     () => {},
   );
-  const deviceId = await seedSessionDevice(v.db, v.cfg);
+  const deviceId = await seedSessionDevice(v.db);
   const session = await inTx(v, async (tx) => {
     const [person] = await tx
       .insert(persons)
@@ -1082,7 +1082,7 @@ async function longAroundHeldCounter3(long: PlannedEntry["place"]) {
   await giveKeptSize(v, master.c4!, { width: 2, height: 2 });
   await seat(v, zone.table.c3!);
   await inTx(v, async (tx) => {
-    const plan = await readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId));
+    const plan = await readLayout(tx, await defaultLayout(tx, v.cfg, zoneId));
     const tables = plan.tables.map((t) => ({
       id: t.id,
       key: t.id,
@@ -1094,14 +1094,13 @@ async function longAroundHeldCounter3(long: PlannedEntry["place"]) {
     }));
     await saveLayout(
       tx,
-      v.cfg,
       REMOVALS,
       await defaultLayout(tx, v.cfg, zoneId),
       { revision: plan.revision, tables },
       NOW,
     );
   });
-  await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
+  await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, NOW, "due"));
   return zone;
 }
 
@@ -1132,7 +1131,7 @@ describe("Reset table on a joined table come apart around a table with guests a 
     await seat(v, table.c6!);
     await inTx(v, async (tx) => {
       const layout = await defaultLayout(tx, v.cfg, zoneId);
-      const plan = await readLayout(tx, v.cfg, layout);
+      const plan = await readLayout(tx, layout);
       const tables = plan.tables.map((t) => ({
         id: t.id,
         key: t.id,
@@ -1143,9 +1142,9 @@ describe("Reset table on a joined table come apart around a table with guests a 
         partKeys:
           t.id === master.long ? [master.c3!, master.c4!, master.c5!, master.c6!] : t.partIds,
       }));
-      await saveLayout(tx, v.cfg, REMOVALS, layout, { revision: plan.revision, tables }, NOW);
+      await saveLayout(tx, REMOVALS, layout, { revision: plan.revision, tables }, NOW);
     });
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
+    await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, NOW, "due"));
     expect(await apart(table.long!)).toBe(1);
     expect(await splitRowsOf(table.long!)).toEqual([table.c3!, table.c4!, table.c5!].sort());
     expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 8, height: 8 });
@@ -1284,7 +1283,7 @@ describe("Reset table and the room's reset", () => {
     await seat(v, table.long!);
     await ok(splitOff(table.long!, [table.c4!, table.c5!]));
     const before = (await zoneRevisionOf(v, zoneId))!;
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
+    await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, NOW, "due"));
     expect(await zoneRevisionOf(v, zoneId)).toBe(before + 1);
 
     await settles(() => reset(table.long!, [table.c4!, table.c5!], 8), zoneId);
@@ -1305,7 +1304,7 @@ describe("Reset table and the room's reset", () => {
     await ok(splitOff(table.long!, [table.c4!, table.c5!]));
     await ok(reset(table.long!, [table.c4!, table.c5!], 8));
 
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
+    await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, NOW, "due"));
 
     expect(await placeOf(table.long!)).toEqual({ x: 12, y: 20, width: 4, height: 2 });
     expect(await seatsOf(table.long!)).toBe(8);

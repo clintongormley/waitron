@@ -180,7 +180,7 @@ describe("splitting parts off a joined table", () => {
   it("splits Counter 5 at the size the saved plan places it at, once the owner has taken it out of Long table there and placed it", async () => {
     const { zoneId, table, master } = await LONG_PLUS_BAR();
     await inTx(v, async (tx) => {
-      const plan = await readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId));
+      const plan = await readLayout(tx, await defaultLayout(tx, v.cfg, zoneId));
       const tables = plan.tables.map((t) => ({
         id: t.id,
         key: t.id,
@@ -195,7 +195,6 @@ describe("splitting parts off a joined table", () => {
       }));
       await saveLayout(
         tx,
-        v.cfg,
         enabledTableRemovals(ALL_MODULES),
         await defaultLayout(tx, v.cfg, zoneId),
         { revision: plan.revision, tables },
@@ -211,7 +210,7 @@ describe("splitting parts off a joined table", () => {
   it("keeps a part already split off where staff moved it at a later split", async () => {
     const { table } = await LONG_PLUS_BAR();
     await split(table.long!, [table.c5!], 8);
-    await inTx(v, (tx) => moveToday(tx, v.cfg, table.c5!, { x: 60, y: 60 }));
+    await inTx(v, (tx) => moveToday(tx, table.c5!, { x: 60, y: 60 }));
     const longAfterFirst = await todayRow(v, table.long!);
 
     await split(table.long!, [table.c4!], null);
@@ -226,7 +225,7 @@ describe("splitting parts off a joined table", () => {
   it("works a later split from where Long table stands now", async () => {
     const { table } = await LONG_PLUS_BAR();
     await split(table.long!, [table.c5!], 8);
-    await inTx(v, (tx) => moveToday(tx, v.cfg, table.long!, { x: 15, y: 25 }));
+    await inTx(v, (tx) => moveToday(tx, table.long!, { x: 15, y: 25 }));
 
     await split(table.long!, [table.c4!], null);
 
@@ -295,7 +294,7 @@ describe("splitting parts off a joined table", () => {
     ],
     [
       "Long table taken off today",
-      (z) => inTx(v, (tx) => takeOffToday(tx, v.cfg, t(z, "long"))),
+      (z) => inTx(v, (tx) => takeOffToday(tx, t(z, "long"))),
       (z) => ({ tableId: t(z, "long"), partIds: [t(z, "c5")], seats: 6 }),
       (z) => ({ code: "table.taken_off", params: { tableId: t(z, "long") } }),
     ],
@@ -451,7 +450,7 @@ describe("Back to its saved place on a joined table", () => {
     expect(error?.params).toEqual({ tableId: table.long! });
     expect(await todayRow(v, table.long!)).toEqual(longBefore);
 
-    await inTx(v, (tx) => moveToday(tx, v.cfg, table.bar!, { x: 60, y: 60 }));
+    await inTx(v, (tx) => moveToday(tx, table.bar!, { x: 60, y: 60 }));
     await inTx(v, (tx) => backToSaved(tx, v.cfg, [], table.bar!, new Date()));
     expect(await todayRow(v, table.bar!)).toMatchObject({ x: 40, y: 0 });
   });
@@ -601,7 +600,7 @@ describe("guests at a joined table that is split", () => {
 });
 
 describe("taking a joined table's tables off for today", () => {
-  const takeOff = (tableId: string) => inTx(v, (tx) => takeOffToday(tx, v.cfg, tableId));
+  const takeOff = (tableId: string) => inTx(v, (tx) => takeOffToday(tx, tableId));
 
   it("refuses a part still joined to Long table, writing nothing", async () => {
     const { table } = await LONG_PLUS_BAR();
@@ -684,7 +683,7 @@ describe("taking a joined table's tables off for today", () => {
         .where(eq(floorTodayTables.tableId, table.c5!)),
     );
 
-    await inTx(v, (tx) => putBackToday(tx, v.cfg, table.c5!));
+    await inTx(v, (tx) => putBackToday(tx, table.c5!));
 
     expect((await todayRow(v, table.c5!))?.takenOff).toBe(false);
   });
@@ -704,11 +703,10 @@ describe("a part's size in today's split", () => {
     const label = (base: string) => `${base} ${randomUUID().slice(0, 6)}`;
     const removals = enabledTableRemovals(ALL_MODULES);
     const save = async (setId: string, tables: ZonePlanSave["tables"]) => {
-      const plan = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId, zoneId: d.zoneId }));
+      const plan = await inTx(v, (tx) => readLayout(tx, { setId, zoneId: d.zoneId }));
       return inTx(v, (tx) =>
         saveLayout(
           tx,
-          v.cfg,
           removals,
           { setId, zoneId: d.zoneId },
           { revision: plan.revision, tables },
@@ -734,9 +732,7 @@ describe("a part's size in today's split", () => {
         partKeys: partKeys.map((k) => ids[k] ?? k),
       }));
     const { ids } = await save(d.standard, entries());
-    const standard = await inTx(v, (tx) =>
-      readLayout(tx, v.cfg, { setId: d.standard, zoneId: d.zoneId }),
-    );
+    const standard = await inTx(v, (tx) => readLayout(tx, { setId: d.standard, zoneId: d.zoneId }));
     await save(
       d.dinner,
       standard.tables.map((t) => ({
@@ -752,7 +748,7 @@ describe("a part's size in today's split", () => {
     await giveKeptSize(v, ids.c4!, { width: 8, height: 8 }, d.standard);
     await giveKeptSize(v, ids.c4!, { width: 12, height: 6 }, d.dinner);
     await inTx(v, (tx) =>
-      resetZone(tx, v.cfg, removals, d.zoneId, NOW, { setId: d.dinner, occurrence: null }),
+      resetZone(tx, removals, d.zoneId, NOW, { setId: d.dinner, occurrence: null }),
     );
     const live = async (masterId: string) =>
       (

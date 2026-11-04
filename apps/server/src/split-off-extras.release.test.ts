@@ -81,9 +81,8 @@ async function fryerTickets(tx: Transaction, venue: Venue) {
 }
 async function laterCourse(venue: Venue, ...products: ("burger" | "water")[]) {
   return withTransaction(db, async (tx) => {
-    const course = await createCourse(tx, venue.cfg, { name: "Later", displayOrder: 2 });
-    for (const product of products)
-      await setProductCourse(tx, venue.cfg, venue.products[product], course.id);
+    const course = await createCourse(tx, { name: "Later", displayOrder: 2 });
+    for (const product of products) await setProductCourse(tx, venue.products[product], course.id);
     return course.id;
   });
 }
@@ -174,7 +173,7 @@ describe("releasing split-off extras", () => {
     const venue = await setupSplitExtrasVenue();
     const first = await laterCourse(venue, "burger");
     await withTransaction(db, async (tx) => {
-      const second = await createCourse(tx, venue.cfg, { name: "Third", displayOrder: 3 });
+      const second = await createCourse(tx, { name: "Third", displayOrder: 3 });
       await addTabRound(tx, venue.cfg, venue.party.tabId, [
         { ...pick(venue, "burger"), courseId: first, hold: true },
       ]);
@@ -195,7 +194,7 @@ describe("releasing split-off extras", () => {
   it("refuses to re-course a sent water while its chips are cooking", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      const later = await createCourse(tx, venue.cfg, { name: "Later", displayOrder: 2 });
+      const later = await createCourse(tx, { name: "Later", displayOrder: 2 });
       await addTabRound(tx, venue.cfg, venue.party.tabId, [pick(venue, "water")]);
       const dish = (await rows(tx, venue.party.tabId)).lines.find(
         (line) => line.parentLineId === null,

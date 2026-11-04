@@ -65,7 +65,7 @@ beforeAll(async () => {
     },
     () => {},
   );
-  const deviceId = await seedSessionDevice(v.db, v.cfg);
+  const deviceId = await seedSessionDevice(v.db);
   const session = await inTx(v, async (tx) => {
     const [person] = await tx
       .insert(persons)
@@ -114,7 +114,7 @@ function twoSets(at: Date = LUNCH) {
 }
 
 async function updateToDue(zoneId: string, at: Date): Promise<void> {
-  await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, at, "due"));
+  await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, at, "due"));
 }
 
 /** A layout row of the zone in a set no department holds, which a lookup by zone alone counts. */
@@ -157,11 +157,10 @@ describe("GET /api/zones offers the due layout", () => {
   it("offers an edit saved to the running set without naming a period", async () => {
     const { d } = await twoSets();
     const layout = { setId: d.standard, zoneId: d.zoneId };
-    const plan = await inTx(v, (tx) => readLayout(tx, v.cfg, layout));
+    const plan = await inTx(v, (tx) => readLayout(tx, layout));
     await inTx(v, (tx) =>
       saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         layout,
         {

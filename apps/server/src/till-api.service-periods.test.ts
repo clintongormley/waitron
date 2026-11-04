@@ -2033,7 +2033,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
       ).id;
       await publishWorkingMenu(tx, v.menus["Midday menu"]);
       const stationWithPrinter = async (name: string) => {
-        const stationId = (await createStation(tx, v.cfg, { name })).id;
+        const stationId = (await createStation(tx, { name })).id;
         const printerId = (
           await createPrinter(tx, {
             name: `${name} printer`,

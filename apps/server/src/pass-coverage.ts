@@ -17,7 +17,6 @@ import { passScopeOf, passSees, rowsWatchZones, type PassScope } from "./pass-bo
 import { requestedItem } from "./kitchen-phase.js";
 import { passReleaseRefusal } from "./pass-release.js";
 import { byText } from "./text-order.js";
-import type { TradingContext } from "./trading-context.js";
 import { liveKitchenDish } from "./working-order.js";
 
 /** A waiting station and zone no pass device could fire. */
@@ -36,10 +35,7 @@ export interface PassCoverageGap {
  *  the pass though its Fire would answer; it covers a station and zone its screen sees, where its
  *  profile's zone list allows that zone. A pair in no zone needs no allowance from the list, as at
  *  the Fire (`assertSubjectZones`). */
-export async function readPassCoverage(
-  tx: Transaction,
-  cfg: TradingContext,
-): Promise<PassCoverageGap[]> {
+export async function readPassCoverage(tx: Transaction): Promise<PassCoverageGap[]> {
   const stations = await tx
     .select({ id: kitchenStations.id, name: kitchenStations.name })
     .from(kitchenStations)
@@ -107,7 +103,7 @@ export async function readPassCoverage(
         zoneId: zone.id,
         zoneName: zone.name,
       });
-  const dishZones = await rowsWatchZones(tx, cfg, dishes);
+  const dishZones = await rowsWatchZones(tx, dishes);
   const zoneNames = new Map(allZones.map((zone) => [zone.id, zone.name]));
   for (const dish of dishes) {
     const zoneId = dishZones.get(dish.orderId) ?? null;

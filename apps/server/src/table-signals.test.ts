@@ -79,7 +79,7 @@ const suite = useVenueDb({
 /** A bar station taking every Caña. */
 async function withBar(v: PartyVenue): Promise<string> {
   return inTx(v, async (tx) => {
-    const { id } = await createStation(tx, v.cfg, { name: "Barra" });
+    const { id } = await createStation(tx, { name: "Barra" });
     await routeProductTo(tx, v.productId("Caña"), id);
     return id;
   });
@@ -1031,7 +1031,7 @@ describe("each station's oldest ready time", () => {
   ) {
     const v = await setupPartyVenue(suite.db);
     const bar = await inTx(v, async (tx) => {
-      const { id } = await createStation(tx, v.cfg, {
+      const { id } = await createStation(tx, {
         name: "Barra",
         thresholds: { readyWarningAfterMinutes: 6 },
       });
@@ -1186,7 +1186,7 @@ describe("the counter's tab list", () => {
     await makeReady(v, counterBill, "Caña");
     await queuedAgo(v, counterBill, 20);
 
-    const listed = await listHeldOrders({ db: v.db }, v.cfg);
+    const listed = await listHeldOrders({ db: v.db });
     const ana = listed.find((row) => row.id === counterBill)!;
 
     expect(ana).toMatchObject({ label: "Ana", partyId: null });

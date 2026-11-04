@@ -542,7 +542,7 @@ describe("a table action tells the kitchen of every bill of the party", () => {
  */
 async function stationWithPrinter(v: PartyVenue, name: string, dishes: string[]): Promise<string> {
   return inTx(v, async (tx) => {
-    const station = await createStation(tx, v.cfg, { name });
+    const station = await createStation(tx, { name });
     const { id } = await createPrinter(tx, {
       name: `${name} printer`,
       transport: "cloud_poll",
@@ -1089,7 +1089,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     const kitchen = await stationWithPrinter(v, "Kitchen", ["Burger"]);
     const bar = await stationWithPrinter(v, "Bar", ["Paella"]);
     const screenId = await inTx(v, async (tx) => {
-      const station = await createStation(tx, v.cfg, { name: "Screen" });
+      const station = await createStation(tx, { name: "Screen" });
       await setRoutingCell(
         tx,
         { row: { kind: "product", productId: v.productId("Flan") }, zoneId: null },
@@ -1569,7 +1569,7 @@ describe("a prep station's own print-MOVED-slips choice", () => {
 
   async function stationPrints(v: PartyVenue, name: string, printMovedSlips: boolean) {
     const id = await stationIdOf(v, name);
-    await inTx(v, (tx) => updateStation(tx, v.cfg, id, { printMovedSlips }));
+    await inTx(v, (tx) => updateStation(tx, id, { printMovedSlips }));
   }
 
   /**

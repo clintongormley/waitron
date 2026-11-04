@@ -43,7 +43,7 @@ export async function splitOff(
   now: Date,
   args: SplitArgs,
 ): Promise<void> {
-  const today = await todayOf(tx, cfg, args.tableId);
+  const today = await todayOf(tx, args.tableId);
   const parts = await partsOf(tx, args.tableId);
   if (today.merge !== null && !parts.some((part) => part.stillJoined)) {
     return splitGroup(tx, cfg, removals, now, { zoneId: today.zoneId, merge: today.merge }, args);

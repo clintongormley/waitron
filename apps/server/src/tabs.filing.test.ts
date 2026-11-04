@@ -526,7 +526,7 @@ describe("a sent line is payable whatever its availability; an unsent one is not
         { row: { kind: "product", productId: beer.id }, zoneId: null },
         { kind: "no_preparation" },
       );
-      const mains = await createCourse(tx, cfg, { name: "Principales", displayOrder: 2 });
+      const mains = await createCourse(tx, { name: "Principales", displayOrder: 2 });
       return { burgerId: burger.id, beerId: beer.id, offers, courseId: mains.id };
     });
     expect(offers.zoneId).toBe(tables.zoneId);

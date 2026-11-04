@@ -443,7 +443,7 @@ describe("Split a table and the floor-wide reset on a flattened group", () => {
     const { table, zoneId } = await LONG_TABLE();
     await push(table.bar!, table.long!, "left");
 
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
+    await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, NOW, "due"));
 
     expect(await todayRow(v, table.long!)).toMatchObject({
       x: 10,
@@ -466,7 +466,7 @@ describe("Split a table and the floor-wide reset on a flattened group", () => {
     const { partyId } = await seat(v, table.bar!);
     const before = await everything();
 
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
+    await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, NOW, "due"));
 
     expect(await everything()).toEqual(before);
 

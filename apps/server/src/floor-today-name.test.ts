@@ -384,7 +384,7 @@ describe("nameToday refuses a name in use, writing nothing", () => {
     const { table } = await LONG_TABLE();
     const name = suffixed("Window");
     await rename(table.bar!, name);
-    await inTx(v, (tx) => takeOffToday(tx, v.cfg, table.bar!));
+    await inTx(v, (tx) => takeOffToday(tx, table.bar!));
     const before = await everything();
 
     expect(await refused(rename(table.long!, name))).toEqual({
@@ -429,7 +429,7 @@ describe("nameToday ignores a stale name on a joined table off the map", () => {
 describe("nameToday refuses a table the map does not offer", () => {
   it("a table taken off", async () => {
     const { table } = await LONG_TABLE();
-    await inTx(v, (tx) => takeOffToday(tx, v.cfg, table.bar!));
+    await inTx(v, (tx) => takeOffToday(tx, table.bar!));
     const before = await everything();
 
     expect(await refused(rename(table.bar!, suffixed("Window")))).toEqual({
@@ -725,12 +725,12 @@ describe("what moves, ends or keeps today's name", () => {
 
     await inTx(v, (tx) => backToSaved(tx, v.cfg, [], table.window!, new Date()));
     expect(await nameOf(table.window!)).toBe(window);
-    await inTx(v, (tx) => takeOffToday(tx, v.cfg, table.window!));
-    await inTx(v, (tx) => putBackToday(tx, v.cfg, table.window!));
+    await inTx(v, (tx) => takeOffToday(tx, table.window!));
+    await inTx(v, (tx) => putBackToday(tx, table.window!));
     expect(await nameOf(table.window!)).toBe(window);
-    await inTx(v, (tx) => moveToday(tx, v.cfg, table.window!, { x: 64, y: 4 }));
-    await inTx(v, (tx) => rotateToday(tx, v.cfg, table.window!));
-    await inTx(v, (tx) => seatsToday(tx, v.cfg, table.window!, 3));
+    await inTx(v, (tx) => moveToday(tx, table.window!, { x: 64, y: 4 }));
+    await inTx(v, (tx) => rotateToday(tx, table.window!));
+    await inTx(v, (tx) => seatsToday(tx, table.window!, 3));
     expect(await nameOf(table.window!)).toBe(window);
   });
 
@@ -765,8 +765,8 @@ describe("a reset clears today's name", () => {
 
   const nameOf = async (tableId: string) => (await todayRow(v, tableId))!.name;
   const resetRoom = (zoneId: string, now = new Date()) =>
-    inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, now, "due"));
-  const newDay = (now: Date) => inTx(v, (tx) => ensureToday(tx, v.cfg, REMOVALS, now));
+    inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, now, "due"));
+  const newDay = (now: Date) => inTx(v, (tx) => ensureToday(tx, REMOVALS, now));
   const finish = async (partyId: string) => {
     const command = await commandFor(v, partyId);
     await inTx(v, (tx) => finishTable(tx, { partyId, ...command }));
@@ -838,7 +838,7 @@ describe("a reset clears today's name", () => {
     await rename(table.long!, suffixed("Long window"));
 
     await inTx(v, (tx) =>
-      resetTable(tx, v.cfg, REMOVALS, new Date(), {
+      resetTable(tx, REMOVALS, new Date(), {
         tableId: table.long!,
         partIds: [table.c5!],
         seats: null,
@@ -899,11 +899,11 @@ describe("a reset clears today's name", () => {
     const corner = suffixed("Corner");
     await rename(table.c5!, corner);
     await finish(partyId);
-    await inTx(v, (tx) => ensureToday(tx, v.cfg, REMOVALS, new Date()));
+    await inTx(v, (tx) => ensureToday(tx, REMOVALS, new Date()));
     expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
     expect(await nameOf(table.c5!)).toBe(corner);
 
-    await inTx(v, (tx) => markMoved(tx, v.cfg, REMOVALS, table.long!, new Date()));
+    await inTx(v, (tx) => markMoved(tx, REMOVALS, table.long!, new Date()));
 
     expect(await splitRowsOf(table.long!)).toEqual([]);
     expect(await nameOf(table.c5!)).toBeNull();

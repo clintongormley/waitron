@@ -259,9 +259,7 @@ describe("A669 lifecycle", () => {
   );
   it("rerouting unchanged instructions adds no allergy notice and a later edit reaches only the new cook", async () => {
     const p = await sent();
-    const destination = await inTx(v, (tx) =>
-      createStation(tx, v.cfg, { name: "Unchanged destination" }),
-    );
+    const destination = await inTx(v, (tx) => createStation(tx, { name: "Unchanged destination" }));
     const lineIds = (await portionLines(p)).map((line) => line.id);
     await inTx(v, (tx) =>
       moveDishesToStation(
@@ -294,7 +292,7 @@ describe("A669 lifecycle", () => {
       await edit(p, remove);
       const old = (await notices(stationId)).find((row) => row.kind.startsWith("allergy_"))!;
       await inTx(v, (tx) => VENUE_SERVICE.acknowledgeKitchenNotice(tx, old.id, { stationId }));
-      const destination = await inTx(v, (tx) => createStation(tx, v.cfg, { name: "New cook" }));
+      const destination = await inTx(v, (tx) => createStation(tx, { name: "New cook" }));
       const request = {
         submissionId: randomUUID(),
         lineIds: (await portionLines(p)).map((line) => line.id),
@@ -335,7 +333,7 @@ describe("A669 lifecycle", () => {
       await inTx(v, (tx) => VENUE_SERVICE.acknowledgeKitchenNotice(tx, old.id));
       const destination = reroute
         ? await inTx(v, async (tx) => {
-            const station = await createStation(tx, v.cfg, { name: "Release cook" });
+            const station = await createStation(tx, { name: "Release cook" });
             await setStationPrinting(tx, { printHeldWork: true }, [station.id]);
             await routeProductTo(tx, v.productId("Burger"), station.id);
             await tx
@@ -399,7 +397,7 @@ describe("A669 lifecycle", () => {
         v.cfg.locale,
       );
       await writeProductModifiers(tx, v.productId("Burger"), [{ kind: "extras", id: list.id }]);
-      const station = await createStation(tx, v.cfg, { name: "Side cook" });
+      const station = await createStation(tx, { name: "Side cook" });
       await routeProductTo(tx, side.id, station.id);
       await republishMenus(tx);
       return { list, side, station };

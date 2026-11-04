@@ -182,8 +182,8 @@ describe("an order whose delivery table was let go", () => {
     await inTx(v, (tx) => handOverOrder(tx, v.cfg, id));
     await inTx(v, (tx) => releaseDeliveries(tx, t7, "Terrace 7"));
 
-    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, id))).toBe("Terrace 7");
-    expect((await inTx(v, (tx) => readReceiptOrder(tx, v.cfg, id))).orderLabel).toBe("Terrace 7");
+    expect(await inTx(v, (tx) => orderTableLabel(tx, id))).toBe("Terrace 7");
+    expect((await inTx(v, (tx) => readReceiptOrder(tx, id))).orderLabel).toBe("Terrace 7");
 
     await collectOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, {
       id,

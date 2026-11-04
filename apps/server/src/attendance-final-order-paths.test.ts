@@ -78,7 +78,7 @@ async function state() {
 }
 async function awaitingPrep() {
   const station = await withTransaction(suite.db, (tx) =>
-    createStation(tx, v.cfg, { name: "Prep", isDefault: true }),
+    createStation(tx, { name: "Prep", isDefault: true }),
   );
   await suite.db
     .update(kitchenStations)

@@ -195,7 +195,7 @@ async function populate(db: Database) {
 
 it("A725 drops only station order with populated cascading and restrictive children", async () => {
   const db = suite.db;
-  const cfg = await populate(db);
+  await populate(db);
   await db.execute(
     sql`update kitchen_stations set display_order = case name when 'Zulu' then 0 when 'Bar' then 1 else 2 end`,
   );
@@ -264,5 +264,5 @@ it("A725 drops only station order with populated cascading and restrictive child
         when === requested.when,
     ),
   );
-  expect((await listStations(db, cfg)).map(({ name }) => name)).toEqual(["Alpha", "Bar", "Zulu"]);
+  expect((await listStations(db)).map(({ name }) => name)).toEqual(["Alpha", "Bar", "Zulu"]);
 });

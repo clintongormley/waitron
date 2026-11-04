@@ -161,7 +161,7 @@ describe("receipt order grouping", () => {
         const { orderNumber } = await createOpenOrder(tx, cfg, id, [], label, {
           zoneId: offersByCfg.get(cfg)!.zoneId,
         });
-        expect(await readReceiptOrder(tx, cfg, id)).toEqual({ orderLabel: label, orderNumber });
+        expect(await readReceiptOrder(tx, id)).toEqual({ orderLabel: label, orderNumber });
       });
     }
   });
@@ -173,14 +173,14 @@ describe("receipt order grouping", () => {
       const { orderNumber } = await createOpenOrder(tx, cfg, id, [], "Operator label", {
         deliveryTableId: tableId,
       });
-      expect(await readReceiptOrder(tx, cfg, id)).toEqual({ orderLabel: "T1", orderNumber });
+      expect(await readReceiptOrder(tx, id)).toEqual({ orderLabel: "T1", orderNumber });
     });
   });
 
   it("refuses a missing order", async () => {
     const { cfg } = await setupVenue();
     const missing = randomUUID();
-    await expect(asApp(cfg, (tx) => readReceiptOrder(tx, cfg, missing))).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => readReceiptOrder(tx, missing))).rejects.toMatchObject({
       code: "working_order.not_found",
       params: { workingOrderId: missing },
     });
@@ -543,7 +543,7 @@ describe("splitting a line the kitchen has", () => {
     const { cfg, waterId, tableId } = await setupVenue();
     const stationId = await withKitchen(cfg);
     const course = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Principales", displayOrder: 1 }),
+      createCourse(tx, { name: "Principales", displayOrder: 1 }),
     );
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
@@ -840,7 +840,7 @@ describe("splitting a line the kitchen has", () => {
     // The party's table wins over the order's own label.
     await db.update(workingOrders).set({ label: "Terraza" }).where(eq(workingOrders.id, tabId));
 
-    const board = await asApp(cfg, (tx) => readScopedPassBoard(tx, cfg, EVERY));
+    const board = await asApp(cfg, (tx) => readScopedPassBoard(tx, EVERY));
     const orders = boardCards(board).flatMap((card) => card.orders);
 
     expect(Object.fromEntries(orders.map((order) => [order.orderId, order.tableLabel]))).toEqual({

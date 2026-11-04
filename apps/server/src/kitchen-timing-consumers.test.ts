@@ -52,7 +52,7 @@ describe("each station's own minutes across consumers", () => {
           .update(kitchenStations)
           .set({ warmAfterMinutes: 2, overdueAfterMinutes: 4, forgottenAfterMinutes: 6 })
           .where(eq(kitchenStations.id, kitchen!.id));
-        const bar = await createStation(tx, v.cfg, { name: "Bar" });
+        const bar = await createStation(tx, { name: "Bar" });
         await tx
           .update(kitchenStations)
           .set({ warmAfterMinutes: 3, overdueAfterMinutes: 5, forgottenAfterMinutes: 7 })
@@ -89,7 +89,7 @@ describe("each station's own minutes across consumers", () => {
           const [queue] = await listStationQueue(tx, stationId);
           expect.soft(queue!.thresholds).toEqual(thresholds);
           expect.soft(queue!.items[0]!.band).toBe(band);
-          const passItems = boardItems(await readScopedPassBoard(tx, v.cfg, EVERY)).filter(
+          const passItems = boardItems(await readScopedPassBoard(tx, EVERY)).filter(
             (item) => item.orderId === billId,
           );
           expect.soft(passItems.map((item) => item.band)).toEqual([band]);
@@ -139,7 +139,7 @@ describe("each station's own minutes across consumers", () => {
     const reads = async () => {
       const readers = await inTx(v, async (tx) => ({
         queue: (await listStationQueue(tx, station!.id))[0]!.items[0]!.band,
-        pass: boardItems(await readScopedPassBoard(tx, v.cfg, EVERY))
+        pass: boardItems(await readScopedPassBoard(tx, EVERY))
           .filter((item) => item.orderId === tabId)
           .map((item) => item.band),
         signals: (await readBillSignals(tx, [tabId], now)).get(tabId),
@@ -196,9 +196,9 @@ describe("each station's own minutes across consumers", () => {
       const [card] = await listStationQueue(tx, kitchen!.id);
       expect(card!.queuedAt > heldAt).toBe(true);
       expect(card!.items.map((item) => item.band)).toEqual(["fresh"]);
-      expect(
-        boardItems(await readScopedPassBoard(tx, v.cfg, EVERY)).map((item) => item.band),
-      ).toEqual(["fresh"]);
+      expect(boardItems(await readScopedPassBoard(tx, EVERY)).map((item) => item.band)).toEqual([
+        "fresh",
+      ]);
       expect(await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId })).toEqual([]);
     });
   });

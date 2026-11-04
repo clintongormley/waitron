@@ -133,8 +133,8 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       .values([{ tableId: closed!.id }, { tableId: takenOff!.id, takenOff: true }]);
     await withTransaction(db, async (tx) => {
       const floor = await listTablesWithState(tx);
-      const plain = await listTables(tx, cfg, new Date());
-      const all = await listTables(tx, cfg, new Date(), { includeDisabled: true });
+      const plain = await listTables(tx, new Date());
+      const all = await listTables(tx, new Date(), { includeDisabled: true });
       expect(floor.map((t) => t.id).sort()).toEqual([tableId, takenOff!.id].sort());
       expect(plain.map((t) => t.id).sort()).toEqual([tableId, takenOff!.id].sort());
       expect(all.map((t) => t.id).sort()).toEqual([tableId, absent!.id, takenOff!.id].sort());
@@ -177,7 +177,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
   });
 
   it("puts the order on the pass board under its table", async () => {
-    const board = await withTransaction(db, (tx) => readScopedPassBoard(tx, cfg, EVERY));
+    const board = await withTransaction(db, (tx) => readScopedPassBoard(tx, EVERY));
     const cards = boardCards(board);
     expect(cards).toHaveLength(1);
     expect(cards[0]!.orders.map((order) => order.tableLabel)).toEqual(["Table 1"]);
@@ -215,7 +215,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       async (tx) =>
         [
           await listStationQueue(tx, stationId),
-          await readScopedPassBoard(tx, cfg, EVERY),
+          await readScopedPassBoard(tx, EVERY),
           await listTablesWithState(tx),
         ] as const,
     );
@@ -225,7 +225,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
     expect(floor[0]).toMatchObject({ pendingToServe: 2, readyToServe: 0, timingBand: "fresh" });
 
     await db.update(ticketItems).set({ state: "ready" }).where(eq(ticketItems.id, burger!.id));
-    const afterReady = await withTransaction(db, (tx) => readScopedPassBoard(tx, cfg, EVERY));
+    const afterReady = await withTransaction(db, (tx) => readScopedPassBoard(tx, EVERY));
     expect(boardOrderIds(afterReady)).toContain(order!.id);
   });
 
@@ -261,7 +261,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       queuedAt: nowIso(),
       firedAt: nowIso(),
     });
-    const board = await withTransaction(db, (tx) => readScopedPassBoard(tx, cfg, EVERY));
+    const board = await withTransaction(db, (tx) => readScopedPassBoard(tx, EVERY));
     expect(boardOrderIds(board)).not.toContain(orderId);
     const [table] = await withTransaction(db, (tx) => listTablesWithState(tx));
     expect(table).toMatchObject({ pendingDeliveries: 0 });

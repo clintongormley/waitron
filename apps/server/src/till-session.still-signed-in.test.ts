@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { devices, nowIso, venueLocationId, withTransaction } from "@waitron/db";
+import { devices, nowIso, withTransaction } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sessions } from "@waitron/identity";
@@ -14,7 +14,6 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-let locationId: string;
 let deviceId: string;
 let personId: string;
 let sessionId: string;
@@ -25,8 +24,7 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
-  locationId = await venueLocationId(suite.db);
-  deviceId = await seedSessionDevice(suite.db, { locationId });
+  deviceId = await seedSessionDevice(suite.db);
   personId = randomUUID();
   sessionId = await openTillSession(suite.db, { deviceId, personId });
 });
@@ -58,7 +56,7 @@ describe("assertStillSignedIn", () => {
   });
 
   it("refuses session.required when the session is open on another device", async () => {
-    const other = await seedSessionDevice(suite.db, { locationId });
+    const other = await seedSessionDevice(suite.db);
     const elsewhere = await openTillSession(suite.db, { deviceId: other, personId });
     await expect(check({ sessionId: elsewhere })).rejects.toMatchObject({
       code: "session.required",
