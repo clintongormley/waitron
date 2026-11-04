@@ -2,7 +2,6 @@ import { and, eq, inArray } from "drizzle-orm";
 import { kitchenStations, products } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import type { TradingContext } from "./trading-context.js";
 import { VENUE_SERVICE } from "./modules.js";
 
 export interface DeadEnd {
@@ -21,11 +20,7 @@ export interface DeadEndAnswer {
   readonly revision?: number;
 }
 
-export async function requireMakeAtStation(
-  tx: Transaction,
-  _cfg: TradingContext,
-  stationId: string,
-): Promise<void> {
+export async function requireMakeAtStation(tx: Transaction, stationId: string): Promise<void> {
   const [station] = await tx
     .select({ id: kitchenStations.id })
     .from(kitchenStations)

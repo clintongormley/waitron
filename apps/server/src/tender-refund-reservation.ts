@@ -129,7 +129,7 @@ export async function reserveTenderRefund(
     manualConfirmed: request.manualConfirmed === true,
     ...(cancellationIds === undefined ? {} : { cancellationIds: [...cancellationIds].sort() }),
   });
-  await resolveTransactionScope(tx, cfg, saleId);
+  await resolveTransactionScope(tx, saleId);
   const [earlier] = await tx
     .select()
     .from(tenderRefunds)
@@ -139,7 +139,7 @@ export async function reserveTenderRefund(
     return { refund: earlier, replayed: true };
   }
 
-  const refundable = (await readRefundableTenders(tx, cfg, saleId)).find(
+  const refundable = (await readRefundableTenders(tx, saleId)).find(
     (row) => row.tenderId === tenderId,
   );
   if (refundable === undefined) throw new AppError("tender.refund_unavailable", { tenderId });

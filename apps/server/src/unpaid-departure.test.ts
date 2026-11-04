@@ -127,7 +127,7 @@ useVenueDb({
     `);
     const [, ...device] = venue.cookie.split("; ");
     supervisorCookie = [`${SESSION_COOKIE}=${session.token}`, ...device].join("; ");
-    const staffDeviceId = await seedSessionDevice(db, venue.cfg);
+    const staffDeviceId = await seedSessionDevice(db);
     // On the printer the venue's other devices print their receipts on.
     db.run(sql`
       update devices set receipt_printer_id =
@@ -388,12 +388,7 @@ describe("recording that a table left without paying", () => {
 
   it("refuses a request from a session whose device has been revoked, and writes nothing", async () => {
     const party = await seatedWith(venue, "Botella tinto");
-    const revoked = await revokedDeviceSessionCookie(
-      venue.db,
-      venue.cfg,
-      supervisorId,
-      SUPERVISOR_PIN,
-    );
+    const revoked = await revokedDeviceSessionCookie(venue.db, supervisorId, SUPERVISOR_PIN);
 
     const answer = await depart(
       party.partyId,

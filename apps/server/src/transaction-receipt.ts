@@ -73,7 +73,7 @@ export async function readTransactionReceipt(
   cfg: TradingContext,
   saleId: string,
 ): Promise<TillSaleResult> {
-  const scope = await resolveTransactionScope(tx, cfg, saleId);
+  const scope = await resolveTransactionScope(tx, saleId);
   const [issued] = await tx
     .select({ sale: sales, code: invoiceSeries.code })
     .from(sales)
@@ -135,7 +135,7 @@ export async function readTransactionReceipt(
   return {
     ...(groupId === undefined
       ? { orderLabel: null, orderNumber: 0 }
-      : await readReceiptOrder(tx, cfg, groupId)),
+      : await readReceiptOrder(tx, groupId)),
     ...(await readReceiptPresentation(tx, cfg, saleId, sale.locale)),
     ...issuer,
     ...(issuer.issuer === undefined && taxpayer !== null

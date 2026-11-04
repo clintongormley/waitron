@@ -937,7 +937,7 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
   it("A803 portions: two croquetas from two rounds, one in a course, are refused the same way", async () => {
     const { billId } = await portionsBill([{ name: "Croquetas" }]);
     await inTx(venue, async (tx) => {
-      const course = await createCourse(tx, venue.cfg, { name: "Starters", displayOrder: 90 });
+      const course = await createCourse(tx, { name: "Starters", displayOrder: 90 });
       await addPortionRound(tx, venue.cfg, billId, [
         { ...roundOf([{ name: "Croquetas" }])[0]!, courseId: course.id },
       ]);
@@ -3327,7 +3327,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
     const bill = await portionsBill(burgerRow("2"));
     const members = await dishesNamed(bill.billId, "Burger");
     await inTx(venue, async (tx) => {
-      const course = await createCourse(tx, venue.cfg, {
+      const course = await createCourse(tx, {
         name: `Mains ${randomUUID()}`,
         displayOrder: 91,
       });

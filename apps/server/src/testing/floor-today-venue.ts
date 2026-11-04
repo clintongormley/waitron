@@ -111,9 +111,9 @@ export async function plannedZone(
   }
   const layout = await inTx(v, (tx) => defaultLayout(tx, v.cfg, zoneId));
   const { revision, ids } = await inTx(v, (tx) =>
-    saveLayout(tx, v.cfg, REMOVALS, layout, { revision: 0, tables }, now),
+    saveLayout(tx, REMOVALS, layout, { revision: 0, tables }, now),
   );
-  const plan = await inTx(v, (tx) => readLayout(tx, v.cfg, layout));
+  const plan = await inTx(v, (tx) => readLayout(tx, layout));
   for (const entry of entries) {
     table[entry.key] = plan.tables.find((t) => t.id === ids[entry.key])!.liveTableId!;
   }
@@ -237,11 +237,10 @@ export async function standardAndDinner(
   type Entry = ZonePlanSave["tables"][number];
   const d = await setsDepartment(v, new Date("2026-10-09T06:00:00Z"));
   const saveSet = async (setId: string, entries: Entry[]) => {
-    const plan = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId, zoneId: d.zoneId }));
+    const plan = await inTx(v, (tx) => readLayout(tx, { setId, zoneId: d.zoneId }));
     return inTx(v, (tx) =>
       saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         { setId, zoneId: d.zoneId },
         { revision: plan.revision, tables: entries },
@@ -262,9 +261,7 @@ export async function standardAndDinner(
       partKeys: t.partKeys ?? [],
     })),
   );
-  const standard = await inTx(v, (tx) =>
-    readLayout(tx, v.cfg, { setId: d.standard, zoneId: d.zoneId }),
-  );
+  const standard = await inTx(v, (tx) => readLayout(tx, { setId: d.standard, zoneId: d.zoneId }));
   const keyOf = new Map(Object.entries(ids).map(([key, id]) => [id, key]));
   await saveSet(
     d.dinner,
@@ -281,7 +278,7 @@ export async function standardAndDinner(
   const live = (key: string) => standard.tables.find((t) => t.id === ids[key])!.liveTableId!;
   const onto = (setId: string) =>
     inTx(v, (tx) =>
-      resetZone(tx, v.cfg, REMOVALS, d.zoneId, now, {
+      resetZone(tx, REMOVALS, d.zoneId, now, {
         setId,
         occurrence: null,
       } satisfies ResetOnto),
@@ -293,7 +290,7 @@ export async function standardAndDinner(
         .update(menuPeriods)
         .set({ floorPlanSetId: setId })
         .where(eq(menuPeriods.id, d.lunchPeriod));
-      const { revision } = await readLayout(tx, v.cfg, { setId, zoneId: d.zoneId });
+      const { revision } = await readLayout(tx, { setId, zoneId: d.zoneId });
       const day = await todayBusinessDay(tx, now);
       return updateLayout(tx, REMOVALS, d.zoneId, day, now, {
         setId,
@@ -320,10 +317,9 @@ export async function needingMoving(v: PartyVenue, now: Date = new Date()) {
   const { partyId, revision } = await seat(v, tableId);
   await inTx(v, async (tx) => {
     const layout = await defaultLayout(tx, v.cfg, z.zoneId);
-    const plan = await readLayout(tx, v.cfg, layout);
+    const plan = await readLayout(tx, layout);
     await saveLayout(
       tx,
-      v.cfg,
       REMOVALS,
       layout,
       {
@@ -343,12 +339,12 @@ export async function needingMoving(v: PartyVenue, now: Date = new Date()) {
       },
       now,
     );
-    await resetZone(tx, v.cfg, REMOVALS, z.zoneId, now, "due");
+    await resetZone(tx, REMOVALS, z.zoneId, now, "due");
   });
   await inTx(v, async (tx) => {
     await finishTable(tx, { partyId, expectedPartyRevision: revision, operatorId: OPERATOR });
     await markTableCleared(tx, tableId);
-    await ensureToday(tx, v.cfg, REMOVALS, now);
+    await ensureToday(tx, REMOVALS, now);
   });
   return { ...z, tableId, spare };
 }

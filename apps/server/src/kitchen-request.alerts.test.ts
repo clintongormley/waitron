@@ -181,7 +181,7 @@ describe("A773 requested lifecycle: alerts and slips", () => {
       stationIds: null,
       zoneIds: [venue.party.zoneId],
     });
-    const read = (now: Date) => withTransaction(db, (tx) => passScreensDark(tx, venue.cfg, now));
+    const read = (now: Date) => withTransaction(db, (tx) => passScreensDark(tx, now));
     expect(await read(minutesAfterAt(5))).toEqual([
       expect.objectContaining({ deviceId: pass, kind: "pass", lastSeenAt: null }),
     ]);

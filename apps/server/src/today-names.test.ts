@@ -73,7 +73,7 @@ useVenueDb({
   setup: async (db) => {
     v = await setupPartyVenue(db);
     await inTx(v, async (tx) => {
-      const grill = await createStation(tx, v.cfg, { name: "Grill" });
+      const grill = await createStation(tx, { name: "Grill" });
       kitchenPrinter = (
         await createPrinter(tx, {
           name: "Grill printer",
@@ -109,7 +109,7 @@ beforeAll(async () => {
     },
     () => {},
   );
-  const deviceId = await seedSessionDevice(v.db, v.cfg);
+  const deviceId = await seedSessionDevice(v.db);
   const session = await inTx(v, async (tx) => {
     const [person] = await tx
       .insert(persons)
@@ -322,7 +322,7 @@ describe("a group renamed for today, as the kitchen sees it", () => {
 });
 
 async function receiptLabel(billId: string): Promise<string | null> {
-  return (await inTx(v, (tx) => readReceiptOrder(tx, v.cfg, billId))).orderLabel;
+  return (await inTx(v, (tx) => readReceiptOrder(tx, billId))).orderLabel;
 }
 
 async function finish(partyId: string): Promise<void> {

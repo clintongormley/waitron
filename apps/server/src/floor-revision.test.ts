@@ -79,10 +79,10 @@ async function LONG_TABLE() {
 }
 
 const printOf = async (zoneId: string) =>
-  (await inTx(v, (tx) => roomPrints(tx, v.cfg, [zoneId]))).get(zoneId);
-const readFloor = (now = NOW) => inTx(v, (tx) => ensureToday(tx, v.cfg, REMOVALS, now));
+  (await inTx(v, (tx) => roomPrints(tx, [zoneId]))).get(zoneId);
+const readFloor = (now = NOW) => inTx(v, (tx) => ensureToday(tx, REMOVALS, now));
 const resetToSaved = (zoneId: string) =>
-  inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
+  inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, NOW, "due"));
 
 async function finish(partyId: string): Promise<void> {
   const sent = await commandFor(v, partyId);
@@ -94,9 +94,7 @@ async function resave(
   zoneId: string,
   change: (tables: ZonePlanSave["tables"]) => ZonePlanSave["tables"],
 ): Promise<void> {
-  const plan = await inTx(v, async (tx) =>
-    readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
-  );
+  const plan = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)));
   const tables = plan.tables.map((table) => ({
     id: table.id,
     key: table.id,
@@ -109,7 +107,6 @@ async function resave(
   await inTx(v, async (tx) =>
     saveLayout(
       tx,
-      v.cfg,
       REMOVALS,
       await defaultLayout(tx, v.cfg, zoneId),
       { revision: plan.revision, tables: change(tables) },
@@ -243,10 +240,10 @@ describe("roomPrints", () => {
     const { zoneId, table } = await LONG_TABLE();
     const before = await printOf(zoneId);
 
-    await inTx(v, (tx) => moveToday(tx, v.cfg, table.bar!, { x: 40, y: 0 }));
+    await inTx(v, (tx) => moveToday(tx, table.bar!, { x: 40, y: 0 }));
     expect(await printOf(zoneId)).toBe(before);
 
-    await inTx(v, (tx) => moveToday(tx, v.cfg, table.bar!, { x: 50, y: 0 }));
+    await inTx(v, (tx) => moveToday(tx, table.bar!, { x: 50, y: 0 }));
     expect(await printOf(zoneId)).not.toBe(before);
   });
 
@@ -329,7 +326,7 @@ describe("roomPrints", () => {
   it("answers one print per zone asked for", async () => {
     const one = await LONG_TABLE();
     const two = await LONG_TABLE();
-    const prints = await inTx(v, (tx) => roomPrints(tx, v.cfg, [one.zoneId, two.zoneId]));
+    const prints = await inTx(v, (tx) => roomPrints(tx, [one.zoneId, two.zoneId]));
     expect([...prints.keys()].sort()).toEqual([one.zoneId, two.zoneId].sort());
     expect(prints.get(one.zoneId)).toBe(await printOf(one.zoneId));
     expect(prints.get(one.zoneId)).not.toBe(prints.get(two.zoneId));
@@ -343,9 +340,9 @@ describe("moving rooms", () => {
     const zones = [one.zoneId, two.zoneId];
     const moved = await inTx(v, async (tx) => {
       const revisions = await roomRevisions(tx, zones);
-      const before = await roomPrints(tx, v.cfg, zones);
-      await moveToday(tx, v.cfg, one.table.bar!, { x: 50, y: 0 });
-      const after = await roomPrints(tx, v.cfg, zones);
+      const before = await roomPrints(tx, zones);
+      await moveToday(tx, one.table.bar!, { x: 50, y: 0 });
+      const after = await roomPrints(tx, zones);
       return moveChangedRooms(tx, revisions, before, after);
     });
 
@@ -407,7 +404,7 @@ describe("moving rooms", () => {
     const one = await LONG_TABLE();
     const two = await LONG_TABLE();
     const zones = await inTx(v, (tx) =>
-      zonesOf(tx, v.cfg, [one.table.bar!, one.table.long!, two.table.c3!]),
+      zonesOf(tx, [one.table.bar!, one.table.long!, two.table.c3!]),
     );
     expect(zones.sort()).toEqual([one.zoneId, two.zoneId].sort());
   });

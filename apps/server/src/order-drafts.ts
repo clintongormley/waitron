@@ -196,7 +196,7 @@ export async function splitDraft(
       if (selected.length !== lineIds.length) throw invalid("lineIds");
       const revision = await checkAndBumpParty(tx, partyId, input.expectedPartyRevision, "open");
       const newBillId = newId();
-      await createOpenOrder(tx, cfg, newBillId, [], await orderTableLabel(tx, cfg, billId), {
+      await createOpenOrder(tx, cfg, newBillId, [], await orderTableLabel(tx, billId), {
         partyId,
         existingService: true,
         copyServiceContextFrom: billId,
@@ -536,7 +536,7 @@ export async function saveDraft(
   }
   const freshLines = lines.filter(isFresh);
   await validateDraftPlaces(tx, partyId, lines);
-  await requireCourses(tx, cfg, freshLines, previous.filter(isFresh));
+  await requireCourses(tx, freshLines, previous.filter(isFresh));
   const choiceOffers = lines.flatMap((line) =>
     line.sourceLineId !== null && (line.options !== undefined || line.extras !== undefined)
       ? [(owned.get(line.id)! as RecalledDraftLine).source.line.menuItemId!]
@@ -602,7 +602,7 @@ export async function saveDraft(
     const key = JSON.stringify([line.menuItemId, line.variantId, line.makeAt]);
     const held = priorChoices.get(key) ?? 0;
     if (held > 0) priorChoices.set(key, held - 1);
-    else await requireMakeAtStation(tx, cfg, line.makeAt);
+    else await requireMakeAtStation(tx, line.makeAt);
   }
   const sources = lines.filter((line) => line.sourceLineId !== null);
   const families =
@@ -1446,7 +1446,6 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
 
 async function requireCourses(
   tx: Transaction,
-  cfg: TradingContext,
   lines: readonly FreshDraftLineInput[],
   previous: readonly FreshDraftLine[],
 ): Promise<void> {
@@ -1467,9 +1466,9 @@ async function requireCourses(
     const count = retained.get(key) ?? 0;
     if (count > 0) {
       retained.set(key, count - 1);
-      await requireCourse(tx, cfg, line.courseId);
+      await requireCourse(tx, line.courseId);
     } else {
-      await requireLiveCourse(tx, cfg, line.courseId);
+      await requireLiveCourse(tx, line.courseId);
     }
   }
 }

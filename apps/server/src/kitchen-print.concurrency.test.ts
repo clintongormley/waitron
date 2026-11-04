@@ -122,7 +122,7 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
       async (tx) => {
         const cat = await createCatalogue(tx, { name: "Menu" });
         await assignCatalogueToVenue(tx, cat.id);
-        const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+        const kitchen = await createStation(tx, { name: "Kitchen", isDefault: true });
         const { id: printerId } = await createPrinter(tx, {
           name: "Kitchen printer",
           transport: "cloud_poll",
@@ -248,7 +248,7 @@ describe("A773 pass release: a printer two pass screens share", () => {
         const pass = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, by.deviceId)).find(
           (candidate) => candidate.kind === "pass",
         )!;
-        return readScopedPassBoard(tx, venue.cfg, passScopeOf(pass));
+        return readScopedPassBoard(tx, passScopeOf(pass));
       });
     const front = await screen("Front pass");
     const back = await screen("Back pass");

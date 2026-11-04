@@ -357,7 +357,7 @@ describe("sending split-off extras", () => {
   it("does not give an extra no cell decides a separate record", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const grill = await createStation(tx, cfg, { name: "Grill", isDefault: true });
+      const grill = await createStation(tx, { name: "Grill", isDefault: true });
       const burger = await createProduct(tx, {
         catalogueId,
         categoryId: null,
@@ -390,8 +390,8 @@ describe("sending split-off extras", () => {
   it("prints a claimed extra when its no-preparation dish has no kitchen record", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
-      const fryer = await createStation(tx, cfg, { name: "Fryer" });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const fryer = await createStation(tx, { name: "Fryer" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       const sides = await createCategory(tx, { name: "Sides" });
       await setRoutingCell(
@@ -452,7 +452,7 @@ describe("sending split-off extras", () => {
   it("gives a no-preparation dish with an extra no cell decides no kitchen records", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
       const drinks = await createCategory(tx, { name: "Drinks" });
       await setRoutingCell(
         tx,
@@ -510,8 +510,8 @@ describe("sending split-off extras", () => {
   it("releases an existing held extra when a no-preparation dish is sent again", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
-      const fryer = await createStation(tx, cfg, { name: "Fryer" });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const fryer = await createStation(tx, { name: "Fryer" });
       const printer = await createPrinter(tx, {
         name: "Fryer printer",
         transport: "cloud_poll",
@@ -539,8 +539,8 @@ describe("sending split-off extras", () => {
         unitPrice: "2.00",
         vatClass: "general",
       });
-      const later = await createCourse(tx, cfg, { name: "Later", displayOrder: 2 });
-      await setProductCourse(tx, cfg, water.id, later.id);
+      const later = await createCourse(tx, { name: "Later", displayOrder: 2 });
+      await setProductCourse(tx, water.id, later.id);
       const {
         listId,
         productIds: [chips],
@@ -595,8 +595,8 @@ describe("sending split-off extras", () => {
   it("opens one routing snapshot to decide both dish and extra, without the wrappers", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
-      const fryer = await createStation(tx, cfg, { name: "Fryer" });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const fryer = await createStation(tx, { name: "Fryer" });
       const sides = await createCategory(tx, { name: "Sides" });
       await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
@@ -643,9 +643,9 @@ describe("sending split-off extras", () => {
   it("keeps an extra with its dish at the default, then sends it to today's chosen destination", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const grill = await createStation(tx, cfg, { name: "Grill", isDefault: true });
-      const fryer = await createStation(tx, cfg, { name: "Fryer" });
-      const kitchen = await createStation(tx, cfg, { name: "Kitchen" });
+      const grill = await createStation(tx, { name: "Grill", isDefault: true });
+      const fryer = await createStation(tx, { name: "Fryer" });
+      const kitchen = await createStation(tx, { name: "Kitchen" });
       const burgers = await createCategory(tx, { name: "Burgers" });
       const sides = await createCategory(tx, { name: "Sides" });
       await routeCategoryTo(tx, burgers.id, grill.id);
@@ -693,9 +693,9 @@ describe("sending split-off extras", () => {
   it("uses the dish's chosen station when deciding whether chips split off", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, cfg, { name: "Grill", isDefault: true });
-      const fryer = await createStation(tx, cfg, { name: "Fryer" });
-      const bar = await createStation(tx, cfg, { name: "Bar" });
+      await createStation(tx, { name: "Grill", isDefault: true });
+      const fryer = await createStation(tx, { name: "Fryer" });
+      const bar = await createStation(tx, { name: "Bar" });
       const sides = await createCategory(tx, { name: "Sides" });
       await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
@@ -750,8 +750,8 @@ describe("sending split-off extras", () => {
   it("sets aside an unroutable dish with its otherwise routable extra", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
-      const fryer = await createStation(tx, cfg, { name: "Fryer" });
+      const kitchen = await createStation(tx, { name: "Kitchen", isDefault: true });
+      const fryer = await createStation(tx, { name: "Fryer" });
       const sides = await createCategory(tx, { name: "Sides" });
       await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
@@ -797,9 +797,9 @@ describe("sending split-off extras", () => {
   it("refuses a dish with no replacement before writing its extra's record", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
-      const grill = await createStation(tx, cfg, { name: "Grill" });
-      const fryer = await createStation(tx, cfg, { name: "Fryer" });
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const grill = await createStation(tx, { name: "Grill" });
+      const fryer = await createStation(tx, { name: "Fryer" });
       const burgers = await createCategory(tx, { name: "Burgers" });
       const sides = await createCategory(tx, { name: "Sides" });
       await routeCategoryTo(tx, burgers.id, grill.id);
@@ -850,7 +850,7 @@ describe("sending split-off extras", () => {
     const tableId = await venue.table(`T-${randomUUID().slice(0, 6)}`);
     const { partyId } = await seat(venue, tableId);
     await withTransaction(db, async (tx) => {
-      const fryer = await createStation(tx, venue.cfg, { name: "Fryer" });
+      const fryer = await createStation(tx, { name: "Fryer" });
       const sides = await createCategory(tx, { name: "Sides" });
       await routeCategoryTo(tx, sides.id, fryer.id);
       const [burger] = await tx
@@ -951,8 +951,8 @@ describe("sending split-off extras", () => {
   it("makes a split-off extra here immediately even while its dish is held", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const grill = await createStation(tx, cfg, { name: "Grill", isDefault: true });
-      const bar = await createStation(tx, cfg, { name: "Bar" });
+      const grill = await createStation(tx, { name: "Grill", isDefault: true });
+      const bar = await createStation(tx, { name: "Bar" });
       const sides = await createCategory(tx, { name: "Sides" });
       await routeCategoryTo(tx, sides.id, bar.id);
       const burger = await createProduct(tx, {

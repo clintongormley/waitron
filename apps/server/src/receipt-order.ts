@@ -9,7 +9,6 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { AppError, partyReceiptLabel } from "@waitron/shared";
-import type { TradingContext } from "./trading-context.js";
 
 /**
  * Resolve the commercial grouping shown on receipts and payment slips. A party bill shows the party's
@@ -18,7 +17,6 @@ import type { TradingContext } from "./trading-context.js";
  */
 export async function readReceiptOrder(
   tx: Transaction,
-  _cfg: TradingContext,
   workingOrderId: string,
   opts: { atIssuance?: boolean } = {},
 ): Promise<{ orderLabel: string | null; orderNumber: number }> {

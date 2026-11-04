@@ -134,9 +134,9 @@ export async function saveRecalledLine(
     [line, ...children].map((part) => ({ id: part.id, lineNo: part.lineNo, keeps: 0 })),
   );
   if (input.courseId !== null && input.courseId !== line.courseId)
-    await requireLiveCourse(tx, cfg, input.courseId);
+    await requireLiveCourse(tx, input.courseId);
   if (input.makeAt != null && input.makeAt !== line.makeAtStationId)
-    await requireMakeAtStation(tx, cfg, input.makeAt);
+    await requireMakeAtStation(tx, input.makeAt);
   const before =
     (quantity !== line.quantity || extrasChanged) && cfg.simplifiedInvoiceLimit !== null
       ? await storedOrderTotal(tx, line.workingOrderId)

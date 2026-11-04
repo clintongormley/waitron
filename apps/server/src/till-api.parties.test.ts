@@ -112,7 +112,7 @@ function app(db: Database, log: Logger = () => {}): Hono {
 }
 
 async function cookie(): Promise<string> {
-  const deviceId = await seedSessionDevice(suite.db, cfg);
+  const deviceId = await seedSessionDevice(suite.db);
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId: ana.id, pin: "5555" }),
   );
@@ -193,7 +193,7 @@ describe("POST /api/tables/:id/seat", () => {
   });
 
   it("opens the tab as the device that seated it, at the venue's location", async () => {
-    const deviceId = await seedSessionDevice(suite.db, cfg);
+    const deviceId = await seedSessionDevice(suite.db);
     const session = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: ana.id, pin: "5555" }),
     );
@@ -835,7 +835,7 @@ describe("GET /api/parties/:id/bills", () => {
       .insert(invoiceSeries)
       .values({ nodeId: cfg.nodeId, code: `R${randomUUID()}` })
       .returning({ id: invoiceSeries.id });
-    const deviceId = await seedSessionDevice(suite.db, cfg);
+    const deviceId = await seedSessionDevice(suite.db);
     await suite.db.insert(sales).values({
       source: "device",
       deviceId,

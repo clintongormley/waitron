@@ -770,7 +770,7 @@ async function issueWhenFullyPaid(
   const settledAt = received
     .map((row) => row.receivedAt!)
     .reduce((latest, at) => (at > latest ? at : latest));
-  const receiptOrder = await readReceiptOrder(tx, cfg, workingOrderId, { atIssuance: true });
+  const receiptOrder = await readReceiptOrder(tx, workingOrderId, { atIssuance: true });
   await tx
     .update(workingOrders)
     .set({ label: receiptOrder.orderLabel, status: "settled", settledAt })

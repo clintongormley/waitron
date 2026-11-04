@@ -22,7 +22,6 @@ import {
 } from "./floor-today-store.js";
 import { refuseUnfree, zoneOfTable } from "./floor-today-table.js";
 import { refusedByAModule } from "./table-removal.js";
-import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 const joinedRow = alias(floorResetTables, "mark_moved_joined");
@@ -44,12 +43,11 @@ export async function tableNeedsMoving(tx: Transaction, tableId: string): Promis
  */
 export async function markMoved(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   tableId: string,
   now: Date,
 ): Promise<void> {
-  const zoneId = await zoneOfTable(tx, cfg, tableId);
+  const zoneId = await zoneOfTable(tx, tableId);
   if (!(await tableNeedsMoving(tx, tableId))) return;
   const [own] = await tx
     .select({ id: floorResetTables.id })
@@ -135,12 +133,11 @@ export async function markMoved(
  */
 export async function leaveHere(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   tableId: string,
   now: Date,
 ): Promise<void> {
-  const zoneId = await zoneOfTable(tx, cfg, tableId);
+  const zoneId = await zoneOfTable(tx, tableId);
   if (!(await tableNeedsMoving(tx, tableId))) return;
   const [own] = await tx
     .select({ id: floorResetTables.id })

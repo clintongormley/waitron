@@ -215,7 +215,7 @@ describe("A773 requested lifecycle: bill move", () => {
   it("refuses to change the course of a Requested dish, as for a released one (D43)", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      const postres = await createCourse(tx, venue.cfg, { name: "Postres", displayOrder: 9 });
+      const postres = await createCourse(tx, { name: "Postres", displayOrder: 9 });
       const [burger] = await requestedBurgers(tx, venue, ["burger"]);
       const before = await itemOf(tx, burger!.id);
 
@@ -237,7 +237,7 @@ describe("A773 requested lifecycle: bill move", () => {
   it("still lets a held dish change course", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      const postres = await createCourse(tx, venue.cfg, { name: "Postres", displayOrder: 9 });
+      const postres = await createCourse(tx, { name: "Postres", displayOrder: 9 });
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
       await placeGroups(tx, venue.cfg, venue.party.partyId, {
         operatorId: OPERATOR,

@@ -318,7 +318,7 @@ describe("station queue bump mode", () => {
       .insert(persons)
       .values({ displayName: "Ana", pinHash: fixturePinHash("5555"), role: "staff" })
       .returning();
-    const deviceId = await seedSessionDevice(db, cfg);
+    const deviceId = await seedSessionDevice(db);
     const { token } = await withTransaction(db, (tx) =>
       loginWithPin(tx, { deviceId, personId: cook!.id, pin: "5555" }),
     );
@@ -334,7 +334,7 @@ describe("station queue bump mode", () => {
     expect(await bumpModes(grillId)).toEqual([[orderId, "ticket"]]);
     expect(await bumpModes(barId)).toEqual([[orderId, "line"]]);
 
-    await withTransaction(db, (tx) => updateStation(tx, cfg, barId, { bumpMode: "ticket" }));
+    await withTransaction(db, (tx) => updateStation(tx, barId, { bumpMode: "ticket" }));
     expect(await bumpModes(barId)).toEqual([[orderId, "ticket"]]);
   });
 });

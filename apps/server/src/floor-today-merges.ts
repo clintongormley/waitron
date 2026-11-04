@@ -161,8 +161,8 @@ export async function writeMerge(
   if (args.movingId === args.targetId) {
     throw new AppError("management.request_invalid", { field: "targetId" });
   }
-  const moving = await todayOf(tx, cfg, args.movingId);
-  const target = await todayOf(tx, cfg, args.targetId);
+  const moving = await todayOf(tx, args.movingId);
+  const target = await todayOf(tx, args.targetId);
   const { zoneId } = target;
   refuseUnmovable(moving, target);
   await refuseInJoinedTable(tx, [moving.tableId, target.tableId]);

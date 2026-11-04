@@ -21,7 +21,6 @@ import { assertProductWritable, productWithId, type ProductScope } from "@waitro
 export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { replaceStationPrinters } from "./station-printers.js";
-import type { TradingContext } from "./trading-context.js";
 import { assertStationTiming } from "./kitchen-timing.js";
 import type { StationTimingPatch } from "./kitchen-timing.js";
 
@@ -57,11 +56,7 @@ export interface Station {
  * `station.not_found`. The foreign keys to a station enforce existence only, so this read is what
  * rejects a retired station.
  */
-export async function requireLiveStation(
-  tx: Transaction,
-  _cfg: TradingContext,
-  stationId: string,
-): Promise<void> {
+export async function requireLiveStation(tx: Transaction, stationId: string): Promise<void> {
   const { rows } = await tx.execute<{ active: boolean | null }>(
     sql`select (select ${kitchenStations.active} from ${kitchenStations}
       where ${kitchenStations.id} = ${stationId}) as active`,
@@ -84,7 +79,6 @@ async function clearDefault(tx: Transaction): Promise<void> {
 
 export async function createStation(
   tx: Transaction,
-  _cfg: TradingContext,
   input: {
     name: string;
     isDefault?: boolean;
@@ -131,11 +125,7 @@ export async function createStation(
   }
 }
 
-export async function listStations(
-  tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: TradingContext,
-): Promise<Station[]> {
+export async function listStations(tx: Transaction): Promise<Station[]> {
   const stations = await tx
     .select({
       id: kitchenStations.id,
@@ -164,8 +154,8 @@ export async function listStations(
 }
 
 /** The active stations, each with how it stands today. */
-export async function listStationsToday(tx: Transaction, cfg: TradingContext) {
-  const listed = await listStations(tx, cfg);
+export async function listStationsToday(tx: Transaction) {
+  const listed = await listStations(tx);
   const states = await VENUE_SERVICE.stationStates(tx, new Date());
   return listed.map((station) => {
     const state = states.get(station.id);
@@ -181,7 +171,6 @@ export async function listStationsToday(tx: Transaction, cfg: TradingContext) {
 
 export async function updateStation(
   tx: Transaction,
-  cfg: TradingContext,
   id: string,
   patch: {
     name?: string;
@@ -198,7 +187,7 @@ export async function updateStation(
 ): Promise<void> {
   if (Object.hasOwn(patch, "active"))
     throw new AppError("management.request_invalid", { field: "active" });
-  await requireLiveStation(tx, cfg, id);
+  await requireLiveStation(tx, id);
   const {
     warmAfterMinutes,
     overdueAfterMinutes,
@@ -241,12 +230,8 @@ export async function updateStation(
   if (printerIds !== undefined) await replaceStationPrinters(tx, id, printerIds);
 }
 
-export async function setDefaultStation(
-  tx: Transaction,
-  cfg: TradingContext,
-  id: string,
-): Promise<void> {
-  await requireLiveStation(tx, cfg, id);
+export async function setDefaultStation(tx: Transaction, id: string): Promise<void> {
+  await requireLiveStation(tx, id);
   await clearDefault(tx);
   await tx.update(kitchenStations).set({ isDefault: true }).where(eq(kitchenStations.id, id));
 }
@@ -266,11 +251,7 @@ export interface Course {
  * Assert `courseId` names a LIVE course of this venue — present and `active`; otherwise
  * `course.not_found`.
  */
-export async function requireLiveCourse(
-  tx: Transaction,
-  _cfg: TradingContext,
-  courseId: string,
-): Promise<void> {
+export async function requireLiveCourse(tx: Transaction, courseId: string): Promise<void> {
   const { rows } = await tx.execute<{ active: boolean | null }>(
     sql`select (select ${kitchenCourses.active} from ${kitchenCourses}
       where ${kitchenCourses.id} = ${courseId}) as active`,
@@ -286,11 +267,7 @@ export async function requireLiveCourse(
  * course, so releasing it needs the course to exist, not to be offered. A NEW routing target uses
  * {@link requireLiveCourse}.
  */
-export async function requireCourse(
-  tx: Transaction,
-  _cfg: TradingContext,
-  courseId: string,
-): Promise<void> {
+export async function requireCourse(tx: Transaction, courseId: string): Promise<void> {
   const { rows } = await tx.execute<{ active: boolean | null }>(
     sql`select (select ${kitchenCourses.active} from ${kitchenCourses}
       where ${kitchenCourses.id} = ${courseId}) as active`,
@@ -303,7 +280,6 @@ export async function requireCourse(
 /** Create a kitchen course. A duplicate live name is `course.name_taken`. */
 export async function createCourse(
   tx: Transaction,
-  _cfg: TradingContext,
   input: { name: string; displayOrder?: number; heldUntilFired?: boolean },
 ): Promise<{ id: string }> {
   try {
@@ -326,11 +302,7 @@ export async function createCourse(
 }
 
 /** Active courses in firing order: lowest `display_order` first, then `name`. */
-export async function listCourses(
-  tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: TradingContext,
-): Promise<Course[]> {
+export async function listCourses(tx: Transaction): Promise<Course[]> {
   return tx
     .select({
       id: kitchenCourses.id,
@@ -349,13 +321,8 @@ export async function listCourses(
  * renumber every active course's `displayOrder` to its index. An absent, inactive or other venue's
  * id throws `course.not_found`.
  */
-export async function moveCourse(
-  tx: Transaction,
-  cfg: TradingContext,
-  id: string,
-  to: number,
-): Promise<Course[]> {
-  const courses = await listCourses(tx, cfg);
+export async function moveCourse(tx: Transaction, id: string, to: number): Promise<Course[]> {
+  const courses = await listCourses(tx);
   const from = courses.findIndex((course) => course.id === id);
   if (from === -1) {
     throw new AppError("course.not_found", { courseId: id });
@@ -379,14 +346,13 @@ export async function moveCourse(
  */
 export async function updateCourse(
   tx: Transaction,
-  cfg: TradingContext,
   id: string,
   patch: { name?: string; displayOrder?: number; heldUntilFired?: boolean },
 ): Promise<void> {
   if (Object.hasOwn(patch, "active")) {
     throw new AppError("management.request_invalid", { field: "active" });
   }
-  await requireLiveCourse(tx, cfg, id);
+  await requireLiveCourse(tx, id);
   const set: { name?: string; displayOrder?: number; heldUntilFired?: boolean } = {};
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.displayOrder !== undefined) set.displayOrder = patch.displayOrder;
@@ -414,7 +380,6 @@ export async function updateCourse(
 
 export async function setProductCourse(
   tx: Transaction,
-  cfg: TradingContext,
   productId: string,
   courseId: string | null,
   scope: ProductScope = "top-level",
@@ -426,7 +391,7 @@ export async function setProductCourse(
     .where(productWithId(productId, scope));
   if (product === undefined) throw new AppError("product.not_found", { productId });
   if (courseId !== null) {
-    await requireLiveCourse(tx, cfg, courseId);
+    await requireLiveCourse(tx, courseId);
   }
   await tx.update(products).set({ courseId }).where(productWithId(productId, scope));
 }

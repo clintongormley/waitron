@@ -68,7 +68,7 @@ describe("split extra queues", () => {
       expect(fryer[0]!.items[0]!.crossRefs).toEqual([
         { kind: "for", name: "BURG", stationName: "Grill" },
       ]);
-      const items = boardItems(await readScopedPassBoard(tx, venue.cfg, EVERY));
+      const items = boardItems(await readScopedPassBoard(tx, EVERY));
       expect(items.map((item) => item.name).sort()).toEqual(["BURG", "CHIPS"]);
       expect(items.find((item) => item.name === "BURG")!.modifiers).toHaveLength(1);
       expect(items.find((item) => item.name === "BURG")!.crossRefs).toEqual(

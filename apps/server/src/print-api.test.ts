@@ -4955,7 +4955,7 @@ describe("a deleted printer's alerts", () => {
   it("raises no waiting-jobs or station-down alert for the jobs its deletion ended, while a live printer's still do", async () => {
     const app = mountApp();
     const station = await withTransaction(suite.db, (tx) =>
-      createStation(tx, cfg, { name: `Grill ${randomUUID()}` }),
+      createStation(tx, { name: `Grill ${randomUUID()}` }),
     );
     const deleted = await createNetworkPrinter(app, "10.78.0.1", 9100, "Old kitchen");
     const live = await createNetworkPrinter(app, "10.78.0.2", 9100, "Live kitchen");

@@ -420,11 +420,7 @@ async function readStations(
 }
 
 /** The order's table, as {@link orderTableLabels} names it. */
-export async function orderTableLabel(
-  tx: Transaction,
-  _cfg: TradingContext,
-  orderId: string,
-): Promise<string | null> {
+export async function orderTableLabel(tx: Transaction, orderId: string): Promise<string | null> {
   return (await readOrderHeader(tx, orderId)).tableLabel;
 }
 
@@ -596,7 +592,6 @@ async function planKitchenTickets(
     const receiving = new Set(mappingRows.map((mapping) => mapping.stationId));
     await freezeKitchenAllergyItems(
       tx,
-      cfg,
       orderId,
       firedItems.filter((item) => receiving.has(item.stationId)),
     );
@@ -1304,7 +1299,6 @@ async function printCorrectionSlips(
     const receiving = new Set(mappingRows.map((mapping) => mapping.stationId));
     await freezeKitchenAllergyItems(
       tx,
-      cfg,
       orderId,
       items.filter((item) => receiving.has(item.stationId)),
     );

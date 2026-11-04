@@ -1366,7 +1366,7 @@ describe("a kitchen display", () => {
     const restRound = await fire(await restTable(), v.item("Agua"));
     // One more order from each department, its dish then moved to another station.
     const pastry = await inTx(v, (tx) =>
-      createStation(tx, v.cfg, { name: `Pastry ${randomUUID().slice(0, 4)}` }),
+      createStation(tx, { name: `Pastry ${randomUUID().slice(0, 4)}` }),
     );
     const elsewhere = [
       await fire(
@@ -1477,7 +1477,7 @@ describe("a kitchen display's pass levers", () => {
 describe("A773 pass board", () => {
   it("lists no card for a Requested burger outside the pass screen's or pass monitor's zones", async () => {
     const grill = await inTx(v, (tx) =>
-      createStation(tx, v.cfg, { name: `Grill ${randomUUID().slice(0, 4)}` }),
+      createStation(tx, { name: `Grill ${randomUUID().slice(0, 4)}` }),
     );
     const deliTablesBurger = await inTx(v, async (tx) => {
       await routeProductTo(tx, v.productId("Burger"), grill.id);

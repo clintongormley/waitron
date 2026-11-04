@@ -485,7 +485,6 @@ function deviceIn(cookie: string): string {
 /** Ring a cash sale under a KNOWN client-minted `workingOrderId` (the reprint route keys on it). */
 async function ringSale(
   app: Hono,
-  _cfg: TradingContext,
   cookie: string,
   menuItemId: string,
   method: "cash" | "card" = "cash",
@@ -526,7 +525,7 @@ describe("GET /api/sales/:id (filed ticket recovery)", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const orderId = await ringSale(app, cookie, each.menuItemId);
     const readerCookie = await loginOnDevice(app, await enrolTillCookie(cfg, []), operatorId);
     const snapshot = () =>
       withTransaction(suite.db, async (tx) => ({
@@ -595,7 +594,7 @@ describe("GET /api/sales/:id/receipt (original print status)", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const orderId = await ringSale(app, cookie, each.menuItemId);
     const get = () => app.request(`/api/sales/${orderId}/receipt`, { headers: { cookie } });
     const missing = await get();
     expect(missing.status).toBe(200);
@@ -641,7 +640,7 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const orderId = await ringSale(app, cookie, each.menuItemId);
     await suite.db.update(printJobs).set({ status: "done" });
     const jobsBefore = await suite.db.select().from(printJobs);
     const salesBefore = await suite.db.select().from(sales);
@@ -700,7 +699,7 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const orderId = await ringSale(app, cookie, each.menuItemId);
     const refused = async () => {
       const res = await app.request(`/api/sales/${orderId}/receipt/handover`, {
         method: "POST",
@@ -743,7 +742,7 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const orderId = await ringSale(app, cookie, each.menuItemId);
     await suite.db.update(printJobs).set({ status: "done" });
     expect(
       (await app.request(`/api/sales/${orderId}/receipt/handover`, { method: "POST" })).status,
@@ -884,7 +883,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const orderId = await ringSale(app, cookie, each.menuItemId);
     const [original] = await suite.db.select().from(printJobs);
     await suite.db
       .update(printJobs)
@@ -925,7 +924,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const orderId = await ringSale(app, cookie, each.menuItemId);
     const retry = () =>
       app.request(`/api/sales/${orderId}/receipt/retry`, { method: "POST", headers: { cookie } });
     const absent = await retry();
@@ -991,7 +990,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const orderId = await ringSale(app, cookie, each.menuItemId);
     await suite.db.update(printJobs).set({ status: "failed", attempts: 5 });
     const before = await suite.db.select().from(printJobs);
     const denied = await app.request(`/api/sales/${orderId}/receipt/retry`, { method: "POST" });
@@ -1052,7 +1051,7 @@ describe("an original receipt whose printer was deleted", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const orderId = await ringSale(app, cookie, each.menuItemId);
     return { app, cfg, orderId, cookie, printerId, menuItemId: each.menuItemId };
   }
 
@@ -1127,7 +1126,7 @@ describe("an original receipt whose printer was deleted", () => {
     await deleteVia(printerId);
     const jobsBefore = await suite.db.select().from(printJobs);
 
-    const orderId = await ringSale(app, cfg, cookie, menuItemId);
+    const orderId = await ringSale(app, cookie, menuItemId);
     const status = await app.request(`/api/sales/${orderId}/receipt`, { headers: { cookie } });
     expect(await status.json()).toEqual({ status: "not_queued" });
     const deletedReprint = await app.request(`/api/sales/${orderId}/reprint`, {
@@ -1190,7 +1189,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       noopLog,
     );
     const cookie = await login(app, cfg, operatorId);
-    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const orderId = await ringSale(app, cookie, each.menuItemId);
     const retained = () => ({
       sales: suite.db.all(sql`select * from sales order by id`),
       lines: suite.db.all(sql`select * from sale_lines order by id`),
@@ -1284,7 +1283,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const orderId = await ringSale(app, cookie, each.menuItemId);
     const [header] = await suite.db
       .select({ departmentId: saleReceiptHeaders.departmentId })
       .from(saleReceiptHeaders)
@@ -1363,7 +1362,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
 
-    const workingOrderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const workingOrderId = await ringSale(app, cookie, each.menuItemId);
     // The filed sale exists, but mode 'on_request' enqueued no auto job.
     expect(await registroCount(cfg)).toBe(1);
     expect(await saleCount(cfg)).toBe(1);
@@ -1400,7 +1399,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const workingOrderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const workingOrderId = await ringSale(app, cookie, each.menuItemId);
 
     for (let i = 0; i < 2; i++) {
       const res = await app.request(`/api/sales/${workingOrderId}/reprint`, {
@@ -1439,7 +1438,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const workingOrderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const workingOrderId = await ringSale(app, cookie, each.menuItemId);
 
     const res = await app.request(`/api/sales/${workingOrderId}/reprint`, {
       method: "POST",
@@ -2243,7 +2242,7 @@ describe("original receipt and payment slip actions", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const id = await ringSale(app, cfg, cookie, each.menuItemId);
+    const id = await ringSale(app, cookie, each.menuItemId);
     for (const action of ["receipt", "reprint", "payment-slip"]) {
       const res = await app.request(`/api/sales/${id}/${action}`, {
         method: "POST",
@@ -2366,7 +2365,7 @@ describe("payment slip persisted capture facts", () => {
       const app = new Hono();
       mountTillApi(app, apiDeps(cfg), noopLog);
       const cookie = await login(app, cfg, operatorId);
-      const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
+      const id = await ringSale(app, cookie, each.menuItemId, "card");
       // Seed the same persisted columns an integrated provider supplies, without contacting hardware.
       await suite.db.execute(
         sql`update payments set provider = 'sumup', card_scheme = ${withCard ? "VISA" : null}, card_last4 = ${withCard ? "5838" : null}, card_entry_mode = ${withCard ? "contactless" : null}, card_auth_code = ${withCard ? "328600" : null} where working_order_id = ${id}`,
@@ -2397,7 +2396,7 @@ describe("payment slip persisted capture facts", () => {
       const app = new Hono();
       mountTillApi(app, apiDeps(cfg), noopLog);
       const cookie = await login(app, cfg, operatorId);
-      const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
+      const id = await ringSale(app, cookie, each.menuItemId, "card");
       await suite.db.execute(
         sql`insert into card_readers (id, provider, provider_ref, name, active, prints_own_slip_automatically, created_at) values (${randomUUID()}, 'sumup', ${randomUUID()}, 'Counter', 1, ${automatic ? 1 : 0}, ${new Date().toISOString()})`,
       );
@@ -2421,7 +2420,7 @@ describe("payment slip persisted capture facts", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
+    const id = await ringSale(app, cookie, each.menuItemId, "card");
     expect(
       (await app.request(`/api/sales/${id}/payment-slip`, { method: "POST", headers: { cookie } }))
         .status,
@@ -2441,7 +2440,7 @@ describe("payment slip persisted capture facts", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
+    const id = await ringSale(app, cookie, each.menuItemId, "card");
     await suite.db.execute(
       sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
     );
@@ -2473,7 +2472,7 @@ describe("payment slip with nothing to print", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
+    const id = await ringSale(app, cookie, each.menuItemId, "card");
     await suite.db.execute(
       sql`update payments set provider = 'sumup' where working_order_id = ${id}`,
     );
@@ -2491,7 +2490,7 @@ describe("payment slip with nothing to print", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
+    const id = await ringSale(app, cookie, each.menuItemId, "card");
     await suite.db.execute(
       sql`update payments set provider = 'sumup', settled_at = null where working_order_id = ${id}`,
     );
@@ -2591,7 +2590,7 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
   const app = new Hono();
   mountTillApi(app, apiDeps(cfg), noopLog);
   const cookie = await login(app, cfg, operatorId);
-  const id = await ringSale(app, cfg, cookie, each.menuItemId);
+  const id = await ringSale(app, cookie, each.menuItemId);
   const originalTaxId = (
     await suite.db.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`)
   ).rows[0]!.tax_id;
@@ -2889,8 +2888,8 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     return app.request(path, { method: "POST", headers: { cookie } });
   }
 
-  async function cardSaleWithCapture(app: Hono, cfg: TradingContext, cookie: string, item: string) {
-    const id = await ringSale(app, cfg, cookie, item, "card");
+  async function cardSaleWithCapture(app: Hono, cookie: string, item: string) {
+    const id = await ringSale(app, cookie, item, "card");
     await suite.db.execute(
       sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
     );
@@ -2911,13 +2910,13 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     });
     const onA = await signIn(a.cookie);
     const onB = await signIn(b.cookie);
-    const id = await ringSale(app, cfg, onA, each.menuItemId);
+    const id = await ringSale(app, onA, each.menuItemId);
 
     expect((await post(app, onA, `/api/sales/${id}/receipt`)).status).toBe(200);
     expect((await post(app, onB, `/api/sales/${id}/receipt`)).status).toBe(200);
     expect((await jobs()).map((job) => [job.printerId, job.kind])).toEqual([[r1, "document"]]);
 
-    const onBSale = await ringSale(app, cfg, onB, each.menuItemId);
+    const onBSale = await ringSale(app, onB, each.menuItemId);
     expect((await post(app, onB, `/api/sales/${onBSale}/receipt`)).status).toBe(200);
 
     const printed = await jobs();
@@ -2935,7 +2934,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       slip: [s1],
     });
     const onA = await signIn(a.cookie);
-    const id = await cardSaleWithCapture(app, cfg, onA, each.menuItemId);
+    const id = await cardSaleWithCapture(app, onA, each.menuItemId);
 
     expect((await post(app, onA, `/api/sales/${id}/payment-slip`)).status).toBe(200);
 
@@ -2950,7 +2949,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       slip: [s1],
     });
     const onA = await signIn(a.cookie);
-    const id = await ringSale(app, cfg, onA, each.menuItemId);
+    const id = await ringSale(app, onA, each.menuItemId);
 
     expect((await post(app, onA, `/api/sales/${id}/reprint`)).status).toBe(200);
 
@@ -2965,7 +2964,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       slip: [s1, r1],
     });
     const onA = await signIn(a.cookie);
-    const id = await cardSaleWithCapture(app, cfg, onA, each.menuItemId);
+    const id = await cardSaleWithCapture(app, onA, each.menuItemId);
 
     const switched = await app.request("/api/device/equipment", {
       method: "PUT",
@@ -2990,7 +2989,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     });
     await suite.db.update(printers).set({ hasCashDrawer: false }).where(eq(printers.id, detached));
 
-    await ringSale(app, cfg, await signIn(device.cookie), each.menuItemId);
+    await ringSale(app, await signIn(device.cookie), each.menuItemId);
 
     expect(await jobs()).toEqual([]);
     expect(await drawerOpensFor(cfg)).toEqual([]);
@@ -3007,7 +3006,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       drawer: [drawer],
     });
 
-    await ringSale(app, cfg, await signIn(handheld.cookie), each.menuItemId);
+    await ringSale(app, await signIn(handheld.cookie), each.menuItemId);
 
     expect((await jobs()).map((job) => [job.printerId, job.kind, job.payload])).toEqual([
       [drawer, "drawer", [...DRAWER_KICK]],
@@ -3027,7 +3026,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       drawer: [drawer],
     });
 
-    await ringSale(app, cfg, await signIn(till.cookie), each.menuItemId);
+    await ringSale(app, await signIn(till.cookie), each.menuItemId);
 
     expect(await jobs()).toEqual([]);
     expect(await drawerOpensFor(cfg)).toEqual([]);
@@ -3357,7 +3356,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const orderId = await ringSale(app, cookie, each.menuItemId);
     expect(
       (await app.request(`/api/sales/${orderId}/receipt`, { method: "POST", headers: { cookie } }))
         .status,

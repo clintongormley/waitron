@@ -65,7 +65,6 @@ for (const [mode, status] of [
           const layout = await defaultLayout(tx, venue.cfg, zone.id);
           await saveLayout(
             tx,
-            venue.cfg,
             [],
             layout,
             {
@@ -83,9 +82,9 @@ for (const [mode, status] of [
             },
             now,
           );
-          const plan = await readLayout(tx, venue.cfg, layout);
+          const plan = await readLayout(tx, layout);
           const tableId = plan.tables[0]!.liveTableId!;
-          await resetZone(tx, venue.cfg, [], zone.id, now, "due");
+          await resetZone(tx, [], zone.id, now, "due");
           let bookingId: string | undefined;
           if (installed) {
             const [booking] = await tx
@@ -103,7 +102,7 @@ for (const [mode, status] of [
               .returning({ id: bookings.id });
             bookingId = booking!.id;
           }
-          await saveLayout(tx, venue.cfg, [], layout, { revision: 1, tables: [] }, now);
+          await saveLayout(tx, [], layout, { revision: 1, tables: [] }, now);
           if (!installed) {
             await tx
               .update(floorResetTables)
@@ -111,7 +110,7 @@ for (const [mode, status] of [
               .where(eq(floorResetTables.tableId, tableId));
           }
           if (installed) {
-            await resetZone(tx, venue.cfg, [], zone.id, now, "due");
+            await resetZone(tx, [], zone.id, now, "due");
             expect(
               await tx
                 .select({ id: diningTables.id })

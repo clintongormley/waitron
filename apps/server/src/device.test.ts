@@ -51,7 +51,7 @@ async function setupVenue(): Promise<SeededVenue> {
     simplifiedInvoiceLimit: null,
   };
   const st = await withTransaction(admin, async (tx) => {
-    return createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+    return createStation(tx, { name: "Kitchen", isDefault: true });
   });
   return { cfg, stationId: st.id };
 }
@@ -160,9 +160,7 @@ describe("device join-and-accept binds the device by its profile's form factor",
   it("accepting a kds device refuses a station its profile does not list, and the request survives", async () => {
     const { cfg, stationId } = await setupVenue();
     const profileId = await seedProfile("kds", "KDS profile");
-    const grill = await withTransaction(suite.db, (tx) =>
-      createStation(tx, cfg, { name: "Grill" }),
-    );
+    const grill = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Grill" }));
     await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
         station: { stationIds: [grill.id], zoneIds: null },
@@ -235,7 +233,7 @@ describe("accepting a device writes its kitchen screens", () => {
   it("a kitchen display's station screen on two stations is stored", async () => {
     const { cfg, stationId } = await setupVenue();
     const grill = await withTransaction(suite.db, (tx) =>
-      createStation(tx, cfg, { name: "Rotisserie" }),
+      createStation(tx, { name: "Rotisserie" }),
     );
     const profileId = await offering("kds", "KDS profile");
     const { deviceId } = await accept(cfg, profileId, [
@@ -291,7 +289,7 @@ describe("accepting a device writes its kitchen screens", () => {
   it("the enrol helper adds each station it is given to the profile's station screen, and the device shows it", async () => {
     const { cfg, stationId } = await setupVenue();
     const grill = await withTransaction(suite.db, (tx) =>
-      createStation(tx, cfg, { name: "Rotisserie" }),
+      createStation(tx, { name: "Rotisserie" }),
     );
     const profileId = await seedProfile("kds", "KDS profile");
     const first = await enrolDeviceForTest(suite.db, cfg, {

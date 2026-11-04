@@ -209,7 +209,7 @@ async function strayPartyRow(partyId: string, tableId: string): Promise<void> {
 }
 
 const reset = (zoneId: string, removals: readonly TableRemoval[] = NONE) =>
-  inTx(v, (tx) => resetZone(tx, v.cfg, removals, zoneId, NOW, "due"));
+  inTx(v, (tx) => resetZone(tx, removals, zoneId, NOW, "due"));
 const catchUp = (zoneId: string, removals: readonly TableRemoval[] = NONE) =>
   inTx(v, (tx) => catchUpZone(tx, removals, zoneId, NOW));
 
@@ -513,7 +513,7 @@ describe("removing a table of a joined table split today", () => {
   /** Saves the zone's plan again without master table `masterId`, and without it as a part. */
   async function saveWithout(zoneId: string, masterId: string): Promise<void> {
     const plan = await inTx(v, async (tx) =>
-      readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+      readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)),
     );
     const tables = plan.tables
       .filter((table) => table.id !== masterId)
@@ -529,7 +529,6 @@ describe("removing a table of a joined table split today", () => {
     await inTx(v, async (tx) =>
       saveLayout(
         tx,
-        v.cfg,
         NONE,
         await defaultLayout(tx, v.cfg, zoneId),
         { revision: plan.revision, tables },

@@ -222,9 +222,7 @@ async function extraFixture(separate: boolean) {
       v.cfg.locale,
     );
     await writeProductModifiers(tx, v.productId("Burger"), [{ kind: "extras", id: list.id }]);
-    const station = separate
-      ? (await createStation(tx, v.cfg, { name: "Sides station" })).id
-      : stationId;
+    const station = separate ? (await createStation(tx, { name: "Sides station" })).id : stationId;
     await routeProductTo(tx, extra.id, station);
     await republishMenus(tx);
     return { extraId: extra.id, listId: list.id, stationId: station };
@@ -334,8 +332,8 @@ describe("A669 capture", () => {
     async (path) => {
       const p = await party();
       await inTx(v, async (tx) => {
-        const result = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 1 });
-        await setProductCourse(tx, v.cfg, v.productId("Burger"), result.id);
+        const result = await createCourse(tx, { name: "Mains", displayOrder: 1 });
+        await setProductCourse(tx, v.productId("Burger"), result.id);
       });
       const ask = await command(p, "hold");
       const result = await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, ask));
@@ -1003,10 +1001,10 @@ describe("A669 capture", () => {
     const rows = copies(p.tabId);
     const { freezeKitchenAllergies, freezeKitchenAllergyItems } =
       await import("./kitchen-allergy.js");
-    await inTx(v, (tx) => freezeKitchenAllergies(tx, v.cfg, []));
-    await inTx(v, (tx) => freezeKitchenAllergies(tx, v.cfg, [randomUUID()]));
+    await inTx(v, (tx) => freezeKitchenAllergies(tx, []));
+    await inTx(v, (tx) => freezeKitchenAllergies(tx, [randomUUID()]));
     await inTx(v, (tx) =>
-      freezeKitchenAllergyItems(tx, v.cfg, p.tabId, [
+      freezeKitchenAllergyItems(tx, p.tabId, [
         {
           workingOrderLineId: rows[0]!.lineId,
           stationId: randomUUID(),
@@ -1054,9 +1052,9 @@ describe("A669 capture", () => {
       Object.assign(ALLERGEN_NAMES.milk, { en: "Updated milk name", es: "Updated alternate name" });
       const { freezeKitchenAllergies, resolveKitchenAllergyBlocks } =
         await import("./kitchen-allergy.js");
-      await inTx(v, (tx) => freezeKitchenAllergies(tx, v.cfg, [row.id]));
+      await inTx(v, (tx) => freezeKitchenAllergies(tx, [row.id]));
       expect(copies(p.tabId)).toEqual([row]);
-      const next = await inTx(v, (tx) => resolveKitchenAllergyBlocks(tx, v.cfg, [row.id]));
+      const next = await inTx(v, (tx) => resolveKitchenAllergyBlocks(tx, [row.id]));
       expect(next.get(row.id)?.labels.en.avoids).toEqual([
         "Cereals containing gluten (Wheat)",
         "Updated milk name",

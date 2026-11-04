@@ -35,8 +35,8 @@ const log = () => {};
 async function fixture() {
   const v = await setupPartyVenue(suite.db);
   const { grill, bar, terraceWine } = await inTx(v, async (tx) => {
-    const grill = (await createStation(tx, v.cfg, { name: "Grill" })).id;
-    const bar = (await createStation(tx, v.cfg, { name: "Bar" })).id;
+    const grill = (await createStation(tx, { name: "Grill" })).id;
+    const bar = (await createStation(tx, { name: "Bar" })).id;
     await routeProductTo(tx, v.productId("Burger"), grill);
     await routeProductTo(tx, v.productId("Vino"), bar);
     const [policy] = await tx

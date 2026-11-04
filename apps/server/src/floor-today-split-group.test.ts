@@ -86,7 +86,7 @@ beforeAll(async () => {
     },
     () => {},
   );
-  const deviceId = await seedSessionDevice(v.db, v.cfg);
+  const deviceId = await seedSessionDevice(v.db);
   const session = await inTx(v, async (tx) => {
     const [person] = await tx
       .insert(persons)
@@ -798,13 +798,12 @@ describe("Split tables… on a group with nobody seated", () => {
     await inTx(v, async (tx) => {
       await saveLayout(
         tx,
-        v.cfg,
         removals,
         await defaultLayout(tx, v.cfg, zoneId),
         { revision, tables: saved },
         NOW,
       );
-      await resetZone(tx, v.cfg, removals, zoneId, NOW, "due");
+      await resetZone(tx, removals, zoneId, NOW, "due");
     });
     const waiting = () =>
       inTx(v, (tx) =>

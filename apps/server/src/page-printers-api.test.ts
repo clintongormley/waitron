@@ -656,9 +656,7 @@ describe("a page printer is never a receipt printer", () => {
     expect(patch.status).toBe(404);
     expect(await patch.json()).toMatchObject({ error: { code: "printer.not_found" } });
 
-    const station = await withTransaction(suite.db, (tx) =>
-      createStation(tx, cfg, { name: "Grill" }),
-    );
+    const station = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Grill" }));
     const attach = await send(
       app,
       "POST",

@@ -35,7 +35,7 @@ import {
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 async function course(v: PartyVenue, name = "Desserts"): Promise<string> {
-  return (await inTx(v, (tx) => createCourse(tx, v.cfg, { name, displayOrder: 3 }))).id;
+  return (await inTx(v, (tx) => createCourse(tx, { name, displayOrder: 3 }))).id;
 }
 
 async function courseRow(v: PartyVenue, id: string) {
@@ -63,7 +63,7 @@ describe("removing a course", () => {
   it("retains a deleted course a product names as its default, keeping the row", async () => {
     const v = await setupPartyVenue(suite.db);
     const id = await course(v);
-    await inTx(v, (tx) => setProductCourse(tx, v.cfg, v.productId("Flan"), id));
+    await inTx(v, (tx) => setProductCourse(tx, v.productId("Flan"), id));
     expect(await inTx(v, (tx) => coursesInUse(tx, [id]))).toEqual(new Set([id]));
     await inTx(v, (tx) => deleteCourse(tx, id));
     expect(await courseRow(v, id)).toMatchObject([{ id, name: "Desserts", active: false }]);
@@ -164,7 +164,7 @@ describe("removing a course", () => {
     const id = await course(v);
     expect(await inTx(v, (tx) => coursesInUse(tx, [id]))).toEqual(new Set());
     await expect(
-      inTx(v, (tx) => updateCourse(tx, v.cfg, id, { active: false } as never)),
+      inTx(v, (tx) => updateCourse(tx, id, { active: false } as never)),
     ).rejects.toMatchObject({
       code: "management.request_invalid",
       params: { field: "active" },
@@ -176,7 +176,7 @@ describe("removing a course", () => {
     const v = await setupPartyVenue(suite.db);
     const used = await course(v, "Used");
     const free = await course(v, "Free");
-    await inTx(v, (tx) => setProductCourse(tx, v.cfg, v.productId("Flan"), used));
+    await inTx(v, (tx) => setProductCourse(tx, v.productId("Flan"), used));
     const queries = (ids: string[]) =>
       inTx(v, async (tx) => {
         const spy = vi.spyOn(tx, "selectDistinct");
@@ -214,7 +214,7 @@ describe("removing a course", () => {
   it("refuses repeated removal even once nothing refers to the retained row", async () => {
     const v = await setupPartyVenue(suite.db);
     const id = await course(v);
-    await inTx(v, (tx) => setProductCourse(tx, v.cfg, v.productId("Flan"), id));
+    await inTx(v, (tx) => setProductCourse(tx, v.productId("Flan"), id));
     await inTx(v, (tx) => deleteCourse(tx, id));
     await inTx(v, (tx) =>
       tx.update(products).set({ courseId: null }).where(eq(products.courseId, id)),
@@ -241,28 +241,27 @@ describe("removing a course", () => {
     const v = await setupPartyVenue(suite.db);
     const used = await course(v, "Used");
     const free = await course(v, "Free");
-    await inTx(v, (tx) => setProductCourse(tx, v.cfg, v.productId("Flan"), used));
+    await inTx(v, (tx) => setProductCourse(tx, v.productId("Flan"), used));
     expect(await inTx(v, (tx) => coursesInUse(tx, [used, free]))).toEqual(new Set([used]));
     expect(await inTx(v, (tx) => coursesInUse(tx, []))).toEqual(new Set());
     await inTx(v, (tx) => deleteCourse(tx, used));
-    expect((await inTx(v, (tx) => listCourses(tx, v.cfg))).map((c) => c.id)).toEqual([free]);
+    expect((await inTx(v, (tx) => listCourses(tx))).map((c) => c.id)).toEqual([free]);
     expect(
       (
         await inTx(v, (tx) =>
           (
             listCourses as (
               tx: Parameters<typeof listCourses>[0],
-              cfg: Parameters<typeof listCourses>[1],
               obsoleteFlag: boolean,
             ) => ReturnType<typeof listCourses>
-          )(tx, v.cfg, true),
+          )(tx, true),
         )
       ).map((c) => [c.id, c.active]),
     ).toEqual([[free, true]]);
-    await expect(inTx(v, (tx) => updateCourse(tx, v.cfg, used, {}))).rejects.toMatchObject({
+    await expect(inTx(v, (tx) => updateCourse(tx, used, {}))).rejects.toMatchObject({
       code: "course.not_found",
       params: { courseId: used },
     });
-    expect((await inTx(v, (tx) => listCourses(tx, v.cfg))).map((c) => c.id)).toEqual([free]);
+    expect((await inTx(v, (tx) => listCourses(tx))).map((c) => c.id)).toEqual([free]);
   });
 });

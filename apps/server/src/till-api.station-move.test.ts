@@ -36,8 +36,8 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     await inTx(venue, async (tx) => {
-      bar = (await createStation(tx, venue.cfg, { name: "Bar", isDefault: true })).id;
-      grill = (await createStation(tx, venue.cfg, { name: "Grill" })).id;
+      bar = (await createStation(tx, { name: "Bar", isDefault: true })).id;
+      grill = (await createStation(tx, { name: "Grill" })).id;
     });
   },
 });
@@ -282,7 +282,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
     expect(unknownStation.status).toBe(404);
     expect(unknownStation.json).toMatchObject({ code: "station.not_found" });
     const inactive = await inTx(venue, async (tx) => {
-      const station = await createStation(tx, venue.cfg, { name: `Off ${randomUUID()}` });
+      const station = await createStation(tx, { name: `Off ${randomUUID()}` });
       await tx
         .update(kitchenStations)
         .set({ active: false })

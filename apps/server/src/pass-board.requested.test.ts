@@ -147,7 +147,7 @@ describe("A773 pass board: reads", () => {
         thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
         band: "fresh",
       };
-      const [card, ...others] = cards(await readScopedPassBoard(tx, venue.cfg, EVERY));
+      const [card, ...others] = cards(await readScopedPassBoard(tx, EVERY));
       expect(others).toEqual([]);
       expect(card).toEqual({
         key: `group:${placed.groupId}`,
@@ -223,7 +223,7 @@ describe("A773 pass board: reads", () => {
         .mockReturnValueOnce(tenMinutes - 1)
         .mockReturnValue(tenMinutes);
       try {
-        const [card] = cards(await readScopedPassBoard(tx, venue.cfg, EVERY));
+        const [card] = cards(await readScopedPassBoard(tx, EVERY));
         const bands = new Map(card!.items.map((dish) => [dish.id, dish.band]));
         // Ten minutes is Overdue, so a second reading of the clock would tip either dish over.
         expect([bands.get(placed.burgerItem), bands.get(placed.waterItem)]).toEqual([
@@ -282,7 +282,7 @@ describe("A773 pass board: reads", () => {
         })
       ).groups[0]!;
       const laterItem = await ticketItemOf(tx, later.lineIds[0]!);
-      const course = await createCourse(tx, venue.cfg, { name: "Mains", displayOrder: 3 });
+      const course = await createCourse(tx, { name: "Mains", displayOrder: 3 });
       await tx
         .update(ticketItems)
         .set({ courseId: course.id })
@@ -432,7 +432,7 @@ describe("A773 pass board: scoped", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       const placed = await burgerAndWater(tx, venue);
-      const board = await readScopedPassBoard(tx, venue.cfg, EVERY);
+      const board = await readScopedPassBoard(tx, EVERY);
       expect(cards(board)).toHaveLength(1);
       const [card] = board.toFire;
       expect(card!.target).toEqual({
@@ -474,7 +474,7 @@ describe("A773 pass board: scoped", () => {
         [second],
         await billCommand(tx, venue),
       );
-      const board = await readScopedPassBoard(tx, venue.cfg, EVERY);
+      const board = await readScopedPassBoard(tx, EVERY);
       expect(cards(board)).toHaveLength(1);
       const [card] = board.toFire;
       expect(card!.releaseTicketItemIds).toEqual(
@@ -496,7 +496,7 @@ describe("A773 pass board: scoped", () => {
         groups: [{ lines: [dish(venue, "burger")], release: "hold" }],
       });
       const burgerItem = await ticketItemOf(tx, placed.groups[0]!.lineIds[0]!);
-      const waiting = await readScopedPassBoard(tx, venue.cfg, EVERY);
+      const waiting = await readScopedPassBoard(tx, EVERY);
       expect(cards(waiting)).toHaveLength(1);
       expect(waiting.held[0]).toMatchObject({
         kind: "held",
@@ -508,13 +508,13 @@ describe("A773 pass board: scoped", () => {
       ]);
 
       await setStationsWaitForPass(tx, false, [venue.stations.grill]);
-      const notWaiting = await readScopedPassBoard(tx, venue.cfg, EVERY);
+      const notWaiting = await readScopedPassBoard(tx, EVERY);
       expect(notWaiting.held[0]!.items).toEqual([
         expect.objectContaining({ id: burgerItem, phase: "held", informational: false }),
       ]);
 
       await setStationsWaitForPass(tx, true, [venue.stations.bar]);
-      const barWaiting = await readScopedPassBoard(tx, venue.cfg, EVERY);
+      const barWaiting = await readScopedPassBoard(tx, EVERY);
       expect(barWaiting.held[0]!.items).toEqual([
         expect.objectContaining({ id: burgerItem, phase: "held", informational: true }),
       ]);
@@ -529,7 +529,7 @@ describe("A773 pass board: scoped", () => {
       const orderId = await fireNewOrder(tx, venue.cfg, [
         { productId: venue.products.burger, quantity: "1" },
       ]);
-      const board = await readScopedPassBoard(tx, venue.cfg, EVERY);
+      const board = await readScopedPassBoard(tx, EVERY);
       expect(cards(board)).toHaveLength(1);
       expect(board.toFire[0]).toMatchObject({
         target: { kind: "bill", workingOrderId: orderId },
@@ -544,12 +544,12 @@ describe("A773 pass board: scoped", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       const placed = await burgerAndWater(tx, venue);
-      const fryer = await readScopedPassBoard(tx, venue.cfg, {
+      const fryer = await readScopedPassBoard(tx, {
         stationIds: [venue.stations.fryer],
         zoneIds: null,
       });
       expect(cards(fryer)).toEqual([]);
-      const grill = await readScopedPassBoard(tx, venue.cfg, {
+      const grill = await readScopedPassBoard(tx, {
         stationIds: [venue.stations.grill],
         zoneIds: null,
       });
@@ -563,12 +563,12 @@ describe("A773 pass board: scoped", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       const placed = await burgerAndWater(tx, venue);
-      const counter = await readScopedPassBoard(tx, venue.cfg, {
+      const counter = await readScopedPassBoard(tx, {
         stationIds: null,
         zoneIds: [venue.counter.zoneId],
       });
       expect(cards(counter)).toEqual([]);
-      const tables = await readScopedPassBoard(tx, venue.cfg, {
+      const tables = await readScopedPassBoard(tx, {
         stationIds: null,
         zoneIds: [venue.party.zoneId],
       });
@@ -595,7 +595,7 @@ describe("A773 pass board: scoped", () => {
       await sendLines(tx, venue.cfg, venue.party.tabId, [loose!.lineNo]);
       const looseItem = await ticketItemOf(tx, loose!.id);
 
-      const board = await readScopedPassBoard(tx, venue.cfg, EVERY);
+      const board = await readScopedPassBoard(tx, EVERY);
       const groupCard = cards(board).find((card) => card.target.kind === "group")!;
       const billCard = cards(board).find((card) => card.target.kind === "bill")!;
       expect(cards(board)).toHaveLength(2);
@@ -606,11 +606,11 @@ describe("A773 pass board: scoped", () => {
       );
 
       const idsOf = async (card: PassCard) =>
-        (await readPassCardRows(tx, venue.cfg, card.target)).map((row) => row.item.id).sort();
+        (await readPassCardRows(tx, card.target)).map((row) => row.item.id).sort();
       expect(await idsOf(groupCard)).toEqual(groupCard.items.map((item) => item.id).sort());
       expect(await idsOf(billCard)).toEqual([looseItem]);
       expect(
-        await readPassCardRows(tx, venue.cfg, {
+        await readPassCardRows(tx, {
           kind: "group",
           partyId: randomUUID(),
           groupId: placed.groupId,
@@ -630,7 +630,7 @@ describe("A773 pass board: scoped", () => {
       });
       const burgerItem = await ticketItemOf(tx, placed.groups[0]!.lineIds[0]!);
       await setStationToday(tx, venue.stations.grill, "closed", new Date(AT));
-      const { held } = await readScopedPassBoard(tx, venue.cfg, EVERY);
+      const { held } = await readScopedPassBoard(tx, EVERY);
       expect(held).toHaveLength(1);
       expect(held[0]!.items.find((item) => item.id === burgerItem)).toMatchObject({
         phase: "held",
@@ -643,7 +643,7 @@ describe("A773 pass board: scoped", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      const cold = (await createStation(tx, venue.cfg, { name: "Cold" })).id;
+      const cold = (await createStation(tx, { name: "Cold" })).id;
       await routeProductTo(tx, venue.products.cheese, cold);
       await setRoutingCell(
         tx,
@@ -683,7 +683,7 @@ describe("A773 pass board: scoped", () => {
       await tx.update(ticketItems).set({ state: "preparing" }).where(eq(ticketItems.id, saladItem));
       const scope = { stationIds: [venue.stations.grill], zoneIds: null };
 
-      const board = await readScopedPassBoard(tx, venue.cfg, scope);
+      const board = await readScopedPassBoard(tx, scope);
       expect(cards(board)).toHaveLength(1);
       const [card] = board.toFire;
       expect(card!.items.map((item) => item.id).sort()).toEqual(
@@ -700,7 +700,7 @@ describe("A773 pass board: scoped", () => {
         .update(ticketItems)
         .set({ firedAt: AT, state: "ready", readyAt: AT })
         .where(eq(ticketItems.id, burgerItem));
-      const after = await readScopedPassBoard(tx, venue.cfg, scope);
+      const after = await readScopedPassBoard(tx, scope);
       expect(after.ready).toEqual([]);
       expect(after.inProgress.map((entry) => entry.key)).toEqual([card!.key]);
       expect(after.inProgress[0]!.allReady).toBe(false);
@@ -713,7 +713,7 @@ describe("A773 pass board: scoped", () => {
     await withTransaction(db, async (tx) => {
       const placed = await burgerAndWater(tx, venue);
       const burger = async () => {
-        const { toFire } = await readScopedPassBoard(tx, venue.cfg, EVERY);
+        const { toFire } = await readScopedPassBoard(tx, EVERY);
         expect(toFire).toHaveLength(1);
         const [card] = toFire;
         return { card: card!, item: card!.items.find((item) => item.id === placed.burgerItem)! };
@@ -756,7 +756,7 @@ describe("A773 pass board: scoped", () => {
       await setStationToday(tx, venue.stations.grill, "closed", new Date(twoDaysBefore));
       const now = vi.spyOn(Date, "now").mockReturnValueOnce(twoDaysBefore);
       try {
-        const { toFire } = await readScopedPassBoard(tx, venue.cfg, EVERY);
+        const { toFire } = await readScopedPassBoard(tx, EVERY);
         expect(toFire).toHaveLength(1);
         expect(toFire[0]!.items.find((item) => item.id === placed.burgerItem)!.stationClosed).toBe(
           true,
@@ -793,7 +793,7 @@ describe("A773 pass board: scoped", () => {
         stationChosenAt: null,
       });
 
-      const { toFire } = await readScopedPassBoard(tx, venue.cfg, EVERY);
+      const { toFire } = await readScopedPassBoard(tx, EVERY);
       expect(toFire).toHaveLength(1);
       const [card] = toFire;
       expect(card!.items.find((item) => item.id === chipsItem)).toMatchObject({
@@ -814,7 +814,7 @@ describe("A773 pass board: scoped", () => {
         .update(parties)
         .set({ revision: sql`${parties.revision} + 7` })
         .where(eq(parties.id, venue.party.partyId));
-      const { toFire } = await readScopedPassBoard(tx, venue.cfg, EVERY);
+      const { toFire } = await readScopedPassBoard(tx, EVERY);
       expect(toFire).toHaveLength(1);
       const [card] = toFire;
       expect(card!.party).toEqual(await partyRow(tx, venue.party.partyId));

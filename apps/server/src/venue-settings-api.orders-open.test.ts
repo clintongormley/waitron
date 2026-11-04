@@ -355,7 +355,7 @@ describe("a receipt-language change while orders are open", () => {
   it("accepts a change while a paid sale holds an unsent dish beside one a station took, which the send route refuses", async () => {
     reset();
     await withTransaction(venue.db, async (tx) => {
-      const grill = await createStation(tx, venue.cfg, { name: "Plancha" });
+      const grill = await createStation(tx, { name: "Plancha" });
       await setRoutingCell(
         tx,
         { row: { kind: "product", productId: productId("Paella") }, zoneId: null },

@@ -71,7 +71,7 @@ beforeAll(async () => {
     },
     () => {},
   );
-  const deviceId = await seedSessionDevice(v.db, v.cfg);
+  const deviceId = await seedSessionDevice(v.db);
   const session = await inTx(v, async (tx) => {
     const [person] = await tx
       .insert(persons)
@@ -353,10 +353,9 @@ describe("Mark moved", () => {
     const partyId = await seatAt(c3);
     await inTx(v, async (tx) => {
       const layout = await defaultLayout(tx, v.cfg, z.zoneId);
-      const plan = await readLayout(tx, v.cfg, layout);
+      const plan = await readLayout(tx, layout);
       await saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         layout,
         {
@@ -383,7 +382,7 @@ describe("Mark moved", () => {
         },
         NOW,
       );
-      await resetZone(tx, v.cfg, REMOVALS, z.zoneId, NOW, "due");
+      await resetZone(tx, REMOVALS, z.zoneId, NOW, "due");
     });
     await finish(partyId);
     expect(await needsMoving(c4)).toBe(true);
@@ -406,10 +405,9 @@ describe("Mark moved", () => {
     const partyId = await seatAt(c3);
     await inTx(v, async (tx) => {
       const layout = await defaultLayout(tx, v.cfg, z.zoneId);
-      const plan = await readLayout(tx, v.cfg, layout);
+      const plan = await readLayout(tx, layout);
       await saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         layout,
         {
@@ -436,7 +434,7 @@ describe("Mark moved", () => {
         },
         NOW,
       );
-      await resetZone(tx, v.cfg, REMOVALS, z.zoneId, NOW, "due");
+      await resetZone(tx, REMOVALS, z.zoneId, NOW, "due");
     });
     await finish(partyId);
     expect(await needsMoving(c4)).toBe(true);
@@ -480,10 +478,9 @@ describe("Mark moved", () => {
     });
     await inTx(v, async (tx) => {
       const layout = await defaultLayout(tx, v.cfg, z.zoneId);
-      const plan = await readLayout(tx, v.cfg, layout);
+      const plan = await readLayout(tx, layout);
       await saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         layout,
         {
@@ -518,7 +515,7 @@ describe("Mark moved", () => {
         },
         NOW,
       );
-      await resetZone(tx, v.cfg, REMOVALS, z.zoneId, NOW, "due");
+      await resetZone(tx, REMOVALS, z.zoneId, NOW, "due");
     });
     await finish(partyId);
     expect(await needsMoving(c4)).toBe(true);
@@ -631,11 +628,10 @@ describe("Mark moved", () => {
     const renamed = fresh("Renamed");
     await inTx(v, async (tx) => {
       const layout = await defaultLayout(tx, v.cfg, zoneId);
-      const plan = await readLayout(tx, v.cfg, layout);
+      const plan = await readLayout(tx, layout);
       const saved = plan.tables.find((t) => t.id === master.a)!;
       await saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         layout,
         {
@@ -654,7 +650,7 @@ describe("Mark moved", () => {
         },
         NOW,
       );
-      await resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due");
+      await resetZone(tx, REMOVALS, zoneId, NOW, "due");
     });
     await finish(partyId);
     expect(await needsMoving(table.a!)).toBe(true);
@@ -693,10 +689,9 @@ describe("Leave it here", () => {
     const partyId = await seatAt(z.table.c3!);
     await inTx(v, async (tx) => {
       const layout = await defaultLayout(tx, v.cfg, z.zoneId);
-      const plan = await readLayout(tx, v.cfg, layout);
+      const plan = await readLayout(tx, layout);
       await saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         layout,
         {
@@ -723,7 +718,7 @@ describe("Leave it here", () => {
         },
         NOW,
       );
-      await resetZone(tx, v.cfg, REMOVALS, z.zoneId, NOW, "due");
+      await resetZone(tx, REMOVALS, z.zoneId, NOW, "due");
     });
     await finish(partyId);
     expect(await needsMoving(z.table.c4!)).toBe(true);
@@ -732,9 +727,7 @@ describe("Leave it here", () => {
 
   it("leaves a table whose Mark moved was refused where it stands, seatable, and the saved layout unchanged", async () => {
     const z = await threeBlocked();
-    const saved = await inTx(v, (tx) =>
-      readLayout(tx, v.cfg, { setId: z.d.dinner, zoneId: z.d.zoneId }),
-    );
+    const saved = await inTx(v, (tx) => readLayout(tx, { setId: z.d.dinner, zoneId: z.d.zoneId }));
     const before = (await zoneRevisionOf(v, z.d.zoneId))!;
 
     await expectRevision(v, leaveHere(z.t3), z.d.zoneId, before + 1);
@@ -743,7 +736,7 @@ describe("Leave it here", () => {
     expect(await needsMoving(z.t3)).toBe(false);
     expect(await rowStateOf(z.t3)).toEqual(ended);
     expect(
-      await inTx(v, (tx) => readLayout(tx, v.cfg, { setId: z.d.dinner, zoneId: z.d.zoneId })),
+      await inTx(v, (tx) => readLayout(tx, { setId: z.d.dinner, zoneId: z.d.zoneId })),
     ).toEqual(saved);
     await seatAt(z.t3);
   });
@@ -876,11 +869,10 @@ describe("Leave it here", () => {
     const renamed = fresh("Renamed");
     await inTx(v, async (tx) => {
       const layout = await defaultLayout(tx, v.cfg, zoneId);
-      const plan = await readLayout(tx, v.cfg, layout);
+      const plan = await readLayout(tx, layout);
       const saved = plan.tables.find((t) => t.id === master.a)!;
       await saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         layout,
         {
@@ -899,7 +891,7 @@ describe("Leave it here", () => {
         },
         NOW,
       );
-      await resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due");
+      await resetZone(tx, REMOVALS, zoneId, NOW, "due");
     });
     await finish(partyId);
     expect(await needsMoving(table.a!)).toBe(true);
@@ -924,11 +916,10 @@ describe("Leave it here", () => {
     const save = async (shortName: string, x: number, at: number) =>
       inTx(v, async (tx) => {
         const layout = await defaultLayout(tx, v.cfg, zoneId);
-        const plan = await readLayout(tx, v.cfg, layout);
+        const plan = await readLayout(tx, layout);
         const saved = plan.tables.find((t) => t.id === master.a)!;
         const next = await saveLayout(
           tx,
-          v.cfg,
           REMOVALS,
           layout,
           {
@@ -948,7 +939,7 @@ describe("Leave it here", () => {
           },
           NOW,
         );
-        await resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due");
+        await resetZone(tx, REMOVALS, zoneId, NOW, "due");
         return next.revision;
       });
     let at = revision;
@@ -996,11 +987,10 @@ describe("Leave it here", () => {
     const partyId = await seatAt(table.a!);
     await inTx(v, async (tx) => {
       const layout = await defaultLayout(tx, v.cfg, zoneId);
-      const plan = await readLayout(tx, v.cfg, layout);
+      const plan = await readLayout(tx, layout);
       const saved = plan.tables.find((t) => t.id === master.a)!;
       await saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         layout,
         {
@@ -1019,7 +1009,7 @@ describe("Leave it here", () => {
         },
         NOW,
       );
-      await resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due");
+      await resetZone(tx, REMOVALS, zoneId, NOW, "due");
     });
     await finish(partyId);
     expect(await needsMoving(table.a!)).toBe(true);

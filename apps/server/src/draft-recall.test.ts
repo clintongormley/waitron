@@ -159,7 +159,7 @@ describe("party Recall to draft", () => {
           .delete(workingLineContexts)
           .where(eq(workingLineContexts.workingOrderLineId, p.line.id));
       const course = await inTx(venue, (tx) =>
-        createCourse(tx, venue.cfg, { name: `Edited-${randomUUID()}` }),
+        createCourse(tx, { name: `Edited-${randomUUID()}` }),
       );
       const answer = await recall(p.partyId, p.line.id);
       expect(answer.status).toBe(200);
@@ -221,9 +221,7 @@ describe("party Recall to draft", () => {
 
   it("clears a recalled course and station without repricing or changing its group destination", async () => {
     const p = await setup("hold");
-    const course = await inTx(venue, (tx) =>
-      createCourse(tx, venue.cfg, { name: `Clear-${randomUUID()}` }),
-    );
+    const course = await inTx(venue, (tx) => createCourse(tx, { name: `Clear-${randomUUID()}` }));
     await venue.db
       .update(workingOrderLines)
       .set({ courseId: course.id, makeAtStationId: stationId })
@@ -256,9 +254,7 @@ describe("party Recall to draft", () => {
 
   it("keeps an unchanged retired course and disabled station while editing only a recalled note", async () => {
     const p = await setup("hold");
-    const course = await inTx(venue, (tx) =>
-      createCourse(tx, venue.cfg, { name: `Retired-${randomUUID()}` }),
-    );
+    const course = await inTx(venue, (tx) => createCourse(tx, { name: `Retired-${randomUUID()}` }));
     await venue.db
       .update(workingOrderLines)
       .set({ courseId: course.id, makeAtStationId: stationId })
@@ -305,7 +301,7 @@ describe("party Recall to draft", () => {
       let targetId: string = randomUUID();
       if (kind === "retired course") {
         const course = await inTx(venue, (tx) =>
-          createCourse(tx, venue.cfg, { name: `Refused-${randomUUID()}` }),
+          createCourse(tx, { name: `Refused-${randomUUID()}` }),
         );
         await venue.db
           .update(kitchenCourses)
@@ -596,8 +592,8 @@ describe("party Recall to draft", () => {
     async (kind) => {
       const p = await setup("fire");
       const [earlier, course] = await inTx(venue, async (tx) => [
-        await createCourse(tx, venue.cfg, { name: `First-${randomUUID()}`, displayOrder: 1 }),
-        await createCourse(tx, venue.cfg, {
+        await createCourse(tx, { name: `First-${randomUUID()}`, displayOrder: 1 }),
+        await createCourse(tx, {
           name: `Next-${randomUUID()}`,
           displayOrder: 2,
           heldUntilFired: kind !== "immediate course",
@@ -838,7 +834,7 @@ describe("party Recall to draft", () => {
     // Grouped, as an order stored before portions.
     const p = await setup("hold", 1, "grouped");
     const course = await inTx(venue, (tx) =>
-      createCourse(tx, venue.cfg, { name: `M-${randomUUID()}`, displayOrder: 7 }),
+      createCourse(tx, { name: `M-${randomUUID()}`, displayOrder: 7 }),
     );
     await venue.db
       .update(workingOrderLines)
@@ -859,7 +855,7 @@ describe("party Recall to draft", () => {
   it("places a fired source with the matching held course instead of blindly choosing Fire now", async () => {
     const p = await setup("fire");
     const course = await inTx(venue, (tx) =>
-      createCourse(tx, venue.cfg, { name: `C-${randomUUID()}`, displayOrder: 3 }),
+      createCourse(tx, { name: `C-${randomUUID()}`, displayOrder: 3 }),
     );
     await venue.db
       .update(workingOrderLines)
@@ -1181,9 +1177,8 @@ describe("party Recall to draft", () => {
   it("a split-off extra's station can refuse its dish's Recall", async () => {
     // Grouped, as an order stored before portions.
     const p = await setup("hold", 1, "grouped");
-    const sideId = (
-      await inTx(venue, (tx) => createStation(tx, venue.cfg, { name: `Side-${randomUUID()}` }))
-    ).id;
+    const sideId = (await inTx(venue, (tx) => createStation(tx, { name: `Side-${randomUUID()}` })))
+      .id;
     const extraId = randomUUID();
     await venue.db.insert(workingOrderLines).values({
       id: extraId,
@@ -1293,8 +1288,8 @@ describe("party Recall to draft", () => {
     const kitchenPrinter = `Kitchen-${randomUUID()}`;
     const barPrinterName = `Bar-${randomUUID()}`;
     const { barId, screenId, printerIds, routed } = await inTx(venue, async (tx) => {
-      const barId = (await createStation(tx, venue.cfg, { name: `Bar-${randomUUID()}` })).id;
-      const screenId = (await createStation(tx, venue.cfg, { name: `Screen-${randomUUID()}` })).id;
+      const barId = (await createStation(tx, { name: `Bar-${randomUUID()}` })).id;
+      const screenId = (await createStation(tx, { name: `Screen-${randomUUID()}` })).id;
       const printerIds: string[] = [];
       const routed: string[] = [];
       for (const [name, station] of [

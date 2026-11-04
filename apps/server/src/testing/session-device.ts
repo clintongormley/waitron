@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { devices, withTransaction, workingOrders, type Database } from "@waitron/db";
+import { devices, withTransaction, type Database } from "@waitron/db";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { hashSessionToken, loginWithPin, sessions } from "@waitron/identity";
 import { CAPABILITY_FLAGS, type ProfileAction } from "@waitron/layouts";
@@ -33,11 +33,7 @@ export const BASIC_ACTIONS = [
  * A till device at the venue whose profile allows every capability: the device a fixture
  * opens its shift session on when the test is about something other than the device.
  */
-export async function seedSessionDevice(
-  db: Database,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: { locationId: string },
-): Promise<string> {
+export async function seedSessionDevice(db: Database): Promise<string> {
   return (
     await seedDevice(db, {
       capabilities: [...CAPABILITY_FLAGS],
@@ -64,11 +60,10 @@ export async function openTillSession(
  */
 export async function revokedDeviceSessionCookie(
   db: Database,
-  cfg: { locationId: string },
   personId: string,
   pin: string,
 ): Promise<string> {
-  const deviceId = await seedSessionDevice(db, cfg);
+  const deviceId = await seedSessionDevice(db);
   const session = await withTransaction(db, (tx) => loginWithPin(tx, { deviceId, personId, pin }));
   await db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
   return `${SESSION_COOKIE}=${session.token}`;
@@ -79,19 +74,12 @@ export async function deviceRequestCfg<C extends TradingContext>(
   db: Database,
   cfg: C,
 ): Promise<C & { origin: DeviceOrigin }> {
-  return { ...cfg, origin: deviceOrigin(await seedSessionDevice(db, cfg)) };
+  return { ...cfg, origin: deviceOrigin(await seedSessionDevice(db)) };
 }
 
-/** The origin of a device seeded at the venue, for a payment a fixture writes by hand to `workingOrderId`. */
-export async function orderDeviceOrigin(
-  db: Database,
-  workingOrderId: string,
-): Promise<DeviceOrigin> {
-  const [order] = await db
-    .select({ locationId: workingOrders.locationId })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, workingOrderId));
-  return deviceOrigin(await seedSessionDevice(db, order!));
+/** The origin of a device seeded at the venue, for a payment a fixture writes by hand. */
+export async function orderDeviceOrigin(db: Database): Promise<DeviceOrigin> {
+  return deviceOrigin(await seedSessionDevice(db));
 }
 
 /** The origin and place of an order a fixture writes straight to the table: the dashboard, at `locationId`. */

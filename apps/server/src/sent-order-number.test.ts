@@ -54,7 +54,7 @@ useVenueDb({
     // At a station of its own, the Cheese has a kitchen item of its own rather than riding on the
     // Caña's.
     const cheeseStation = await inTx(v, async (tx) => {
-      const { id: stationId } = await createStation(tx, v.cfg, { name: "Quesos" });
+      const { id: stationId } = await createStation(tx, { name: "Quesos" });
       await setRoutingCell(
         tx,
         { row: { kind: "product", productId: cheese.productId }, zoneId: null },
@@ -63,13 +63,13 @@ useVenueDb({
       return stationId;
     });
     await inTx(v, async (tx) => {
-      const { id: barStation } = await createStation(tx, v.cfg, { name: "Barra" });
+      const { id: barStation } = await createStation(tx, { name: "Barra" });
       await setRoutingCell(
         tx,
         { row: { kind: "product", productId: v.productId("Vino") }, zoneId: null },
         { kind: "station", stationId: barStation },
       );
-      await setMadeHereStations(tx, v.cfg, v.cfg.origin.deviceId, [barStation, cheeseStation]);
+      await setMadeHereStations(tx, v.cfg.origin.deviceId, [barStation, cheeseStation]);
     });
     madeHereCfg = { ...v.cfg, sendingDeviceId: v.cfg.origin.deviceId };
     offers = await inTx(v, (tx) => offerProducts(tx, v.cfg, { zone: "tables" }));

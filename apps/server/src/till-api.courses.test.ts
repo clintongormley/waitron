@@ -87,8 +87,8 @@ const suite = useVenueDb({
     // Through the verbs rather than direct inserts, so the course FK and the active/assignment
     // filters are real.
     await withTransaction(db, async (tx) => {
-      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
-      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const ent = await createCourse(tx, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, { name: "Principales", displayOrder: 1 });
       entCourseId = ent.id;
       priCourseId = pri.id;
       const catalogue = await createCatalogue(tx, { name: "Carta" });
@@ -107,8 +107,8 @@ const suite = useVenueDb({
       const sopa = await mk(SOPA);
       const filete = await mk(FILETE);
       await mk(PAN); // loose — no course assigned
-      await setProductCourse(tx, cfg, sopa, ent.id);
-      await setProductCourse(tx, cfg, filete, pri.id);
+      await setProductCourse(tx, sopa, ent.id);
+      await setProductCourse(tx, filete, pri.id);
       await assignCatalogueToVenue(tx, catalogue.id);
       counterOffers = await offerProducts(tx, cfg);
       tablesZoneId = (await offerProducts(tx, cfg, { zone: "tables" })).zoneId;
@@ -168,7 +168,7 @@ function deps(db: Database): TillApiDeps {
 }
 
 async function openSession(db: Database): Promise<string> {
-  const deviceId = await seedSessionDevice(db, cfg);
+  const deviceId = await seedSessionDevice(db);
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
       deviceId,

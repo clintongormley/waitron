@@ -1192,10 +1192,8 @@ describe("readCurrentOrders (spec §4)", () => {
   it("reads a held group's distinct recorded courses across bills, including a deleted course", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const mains = await inTx((tx) => createCourse(tx, v.cfg, { name: "Mains", displayOrder: 2 }));
-    const desserts = await inTx((tx) =>
-      createCourse(tx, v.cfg, { name: "Desserts", displayOrder: 3 }),
-    );
+    const mains = await inTx((tx) => createCourse(tx, { name: "Mains", displayOrder: 2 }));
+    const desserts = await inTx((tx) => createCourse(tx, { name: "Desserts", displayOrder: 3 }));
     const held = await groupedGroup(v, s, "hold", [
       { ...line(v, "steak", "2"), courseId: mains.id },
       { ...line(v, "flan"), courseId: desserts.id },
@@ -1221,11 +1219,11 @@ describe("readCurrentOrders (spec §4)", () => {
   it("carries retained course ordering and held settings even when the course is no longer active", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const mains = await inTx((tx) => createCourse(tx, v.cfg, { name: "Mains", displayOrder: 2 }));
+    const mains = await inTx((tx) => createCourse(tx, { name: "Mains", displayOrder: 2 }));
     const starter = await inTx((tx) =>
-      createCourse(tx, v.cfg, { name: "Starter", displayOrder: 1, heldUntilFired: false }),
+      createCourse(tx, { name: "Starter", displayOrder: 1, heldUntilFired: false }),
     );
-    const unused = await inTx((tx) => createCourse(tx, v.cfg, { name: "Unused", displayOrder: 0 }));
+    const unused = await inTx((tx) => createCourse(tx, { name: "Unused", displayOrder: 0 }));
     await group(v, s.partyId, "hold", [
       { ...line(v, "steak"), courseId: mains.id },
       { ...line(v, "water"), courseId: starter.id },
@@ -1254,7 +1252,7 @@ describe("readCurrentOrders (spec §4)", () => {
     async ({ dish, deleted }) => {
       const v = await setupVenue();
       const s = await seated(v);
-      const mains = await inTx((tx) => createCourse(tx, v.cfg, { name: "Mains" }));
+      const mains = await inTx((tx) => createCourse(tx, { name: "Mains" }));
       const held = await group(v, s.partyId, "hold", [{ ...line(v, dish), courseId: mains.id }]);
       if (deleted) await inTx((tx) => deleteCourse(tx, mains.id));
 

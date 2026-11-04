@@ -572,8 +572,8 @@ describe("cancelling an extra of a held dish (B11g)", () => {
 
   it("cancelling a held dish's extra prints only at a station recorded for the group", async () => {
     const { barId, screenId, barPrinterId, offers } = await inTx(venue, async (tx) => {
-      const barId = (await createStation(tx, venue.cfg, { name: `Bar-${randomUUID()}` })).id;
-      const screenId = (await createStation(tx, venue.cfg, { name: `Screen-${randomUUID()}` })).id;
+      const barId = (await createStation(tx, { name: `Bar-${randomUUID()}` })).id;
+      const screenId = (await createStation(tx, { name: `Screen-${randomUUID()}` })).id;
       const printer = await createPrinter(tx, {
         name: `Bar ${randomUUID()}`,
         transport: "cloud_poll",

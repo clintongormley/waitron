@@ -98,9 +98,7 @@ async function setupStation(): Promise<{ cfg: TradingContext; stationId: string 
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
-  const st = await asApp(admin, (tx) =>
-    createStation(tx, cfg, { name: "Kitchen", isDefault: true }),
-  );
+  const st = await asApp(admin, (tx) => createStation(tx, { name: "Kitchen", isDefault: true }));
   return { cfg, stationId: st.id };
 }
 

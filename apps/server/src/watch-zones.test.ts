@@ -58,7 +58,7 @@ describe("orderWatchZones", () => {
     });
     await placeByHand(v, presented);
     const orders = [partyBill(tabId, partyId), partyBill(presented, partyId)];
-    expect(await inTx(v, (tx) => orderWatchZones(tx, v.cfg, orders))).toEqual(
+    expect(await inTx(v, (tx) => orderWatchZones(tx, orders))).toEqual(
       new Map([
         [tabId, terrace],
         [presented, terrace],
@@ -75,7 +75,7 @@ describe("orderWatchZones", () => {
     expect(await inTx(v, (tx) => VENUE_SERVICE.findOrderZones(tx, [presented]))).toEqual(
       new Map([[presented, v.tables.zoneId]]),
     );
-    expect(await inTx(v, (tx) => orderWatchZones(tx, v.cfg, orders))).toEqual(
+    expect(await inTx(v, (tx) => orderWatchZones(tx, orders))).toEqual(
       new Map([
         [tabId, v.tables.zoneId],
         [presented, v.tables.zoneId],
@@ -115,7 +115,7 @@ describe("orderWatchZones", () => {
       new Map([[merged.tabId, terrace]]),
     );
     expect(
-      await inTx(v, (tx) => orderWatchZones(tx, v.cfg, [partyBill(merged.tabId, actualPartyId!)])),
+      await inTx(v, (tx) => orderWatchZones(tx, [partyBill(merged.tabId, actualPartyId!)])),
     ).toEqual(new Map([[merged.tabId, v.tables.zoneId]]));
   });
 
@@ -140,7 +140,7 @@ describe("orderWatchZones", () => {
       counterBill(noZone),
     ];
 
-    expect(await inTx(v, (tx) => orderWatchZones(tx, v.cfg, orders))).toEqual(
+    expect(await inTx(v, (tx) => orderWatchZones(tx, orders))).toEqual(
       new Map([
         [tabId, v.tables.zoneId],
         [delivered, terrace],
@@ -151,10 +151,10 @@ describe("orderWatchZones", () => {
     expect(batch).toHaveBeenCalledTimes(1);
     expect(batch.mock.calls[0]?.[1]).toEqual([recorded, noZone]);
     batch.mockClear();
-    expect(await inTx(v, (tx) => orderWatchZones(tx, v.cfg, [partyBill(tabId, partyId)]))).toEqual(
+    expect(await inTx(v, (tx) => orderWatchZones(tx, [partyBill(tabId, partyId)]))).toEqual(
       new Map([[tabId, v.tables.zoneId]]),
     );
-    expect(await inTx(v, (tx) => orderWatchZones(tx, v.cfg, []))).toEqual(new Map());
+    expect(await inTx(v, (tx) => orderWatchZones(tx, []))).toEqual(new Map());
     expect(batch).not.toHaveBeenCalled();
     batch.mockRestore();
   });

@@ -760,8 +760,8 @@ async function get(path: string) {
 /** Where a waiting order shows: the pass, its monitor, the station, Waiting orders and Find a bill. */
 async function whereItShows(billId: string, itemId: string, label: string) {
   const boards = await inTx(venue, async (tx) => {
-    const pass = await readScopedPassBoard(tx, venue.cfg, EVERY);
-    const monitor = await readScopedPassBoard(tx, venue.cfg, EVERY, { release: false });
+    const pass = await readScopedPassBoard(tx, EVERY);
+    const monitor = await readScopedPassBoard(tx, EVERY, { release: false });
     return {
       screen: boardItems(pass, { inView: true }).filter((item) => item.id === itemId),
       monitor: boardItems(monitor, { inView: true }).filter((item) => item.id === itemId),

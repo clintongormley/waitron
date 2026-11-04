@@ -839,9 +839,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
-    const grill = await withTransaction(suite.db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Grill" }),
-    );
+    const grill = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Grill" }));
     await withTransaction(suite.db, (tx) =>
       offerOnProfile(tx, profileId, {
         kind: "station",

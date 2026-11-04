@@ -98,7 +98,7 @@ describe("table CRUD", () => {
     const cfg = await setupVenue();
     const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
     const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "12", zoneId }));
-    const tables = await asApp(cfg, (tx) => listTables(tx, cfg, new Date()));
+    const tables = await asApp(cfg, (tx) => listTables(tx, new Date()));
     expect(tables).toEqual([
       expect.objectContaining({
         id,
@@ -131,7 +131,7 @@ describe("a joined table's parts", () => {
       partKeys,
     });
     await asApp(cfg, async (tx) =>
-      saveLayout(tx, cfg, enabledTableRemovals(ALL_MODULES), await defaultLayout(tx, cfg, zoneId), {
+      saveLayout(tx, enabledTableRemovals(ALL_MODULES), await defaultLayout(tx, cfg, zoneId), {
         revision: 0,
         tables: [
           entry("c3", "Counter 3", 2),
@@ -142,9 +142,7 @@ describe("a joined table's parts", () => {
       }),
     );
     const labels = async (options?: { includeDisabled: boolean }) =>
-      (await asApp(cfg, (tx) => listTables(tx, cfg, new Date(), options))).map(
-        (table) => table.label,
-      );
+      (await asApp(cfg, (tx) => listTables(tx, new Date(), options))).map((table) => table.label);
     expect(await labels()).toEqual(["Long table"]);
     expect(await labels({ includeDisabled: true })).toEqual([
       "Counter 3",
@@ -163,13 +161,13 @@ describe("zone CRUD", () => {
     );
     await asApp(cfg, (tx) => createZone(tx, { name: "Terrace", displayOrder: 0 }));
     // Ordered by display_order: Terrace (0) before Dining room (1).
-    expect((await asApp(cfg, (tx) => listZones(tx, cfg))).map((z) => z.name)).toEqual([
+    expect((await asApp(cfg, (tx) => listZones(tx))).map((z) => z.name)).toEqual([
       "Terrace",
       "Dining room",
     ]);
-    await asApp(cfg, (tx) => updateZone(tx, cfg, id, { name: "Lounge", displayOrder: 2 }));
+    await asApp(cfg, (tx) => updateZone(tx, id, { name: "Lounge", displayOrder: 2 }));
     // Renamed and reordered (Terrace 0, Lounge 2), both still active.
-    expect((await asApp(cfg, (tx) => listZones(tx, cfg))).map((z) => z.name)).toEqual([
+    expect((await asApp(cfg, (tx) => listZones(tx))).map((z) => z.name)).toEqual([
       "Terrace",
       "Lounge",
     ]);
@@ -177,17 +175,7 @@ describe("zone CRUD", () => {
       tx.execute(sql`update floor_zones set active = false where id = ${id}`),
     );
     // Inactive hidden.
-    expect((await asApp(cfg, (tx) => listZones(tx, cfg))).map((z) => z.name)).toEqual(["Terrace"]);
-  });
-
-  // A1301: deleted with cfg in S18
-  it("listZones lists the venue's active zones whatever location the scope names", async () => {
-    const cfg = await setupVenue();
-    await asApp(cfg, (tx) => createZone(tx, { name: "Terrace", displayOrder: 0 }));
-    const elsewhere = { ...cfg, locationId: brandLocationId(randomUUID()) };
-    expect((await asApp(cfg, (tx) => listZones(tx, elsewhere))).map((z) => z.name)).toEqual([
-      "Terrace",
-    ]);
+    expect((await asApp(cfg, (tx) => listZones(tx))).map((z) => z.name)).toEqual(["Terrace"]);
   });
 
   it("listZones returns exactly the FloorZone shape (id/name/displayOrder/active — no createdAt)", async () => {
@@ -195,7 +183,7 @@ describe("zone CRUD", () => {
     const { id } = await asApp(cfg, (tx) =>
       createZone(tx, { name: "Dining room", displayOrder: 3 }),
     );
-    const [z] = await asApp(cfg, (tx) => listZones(tx, cfg));
+    const [z] = await asApp(cfg, (tx) => listZones(tx));
     expect(z).toEqual({ id, name: "Dining room", displayOrder: 3, active: true });
   });
 
@@ -205,8 +193,8 @@ describe("zone CRUD", () => {
     await asApp(cfg, async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${id}`),
     );
-    expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([]);
-    expect(await asApp(cfg, (tx) => listZones(tx, cfg, { includeInactive: true }))).toEqual([]);
+    expect(await asApp(cfg, (tx) => listZones(tx))).toEqual([]);
+    expect(await asApp(cfg, (tx) => listZones(tx, { includeInactive: true }))).toEqual([]);
     expect(await db.select().from(floorZones).where(eq(floorZones.id, id))).toContainEqual(
       expect.objectContaining({ id, name: "Closed room", displayOrder: 0, active: false }),
     );
@@ -215,7 +203,7 @@ describe("zone CRUD", () => {
   it("createZone defaults displayOrder to 0 when omitted", async () => {
     const cfg = await setupVenue();
     await asApp(cfg, (tx) => createZone(tx, { name: "Solo" }));
-    const [z] = await asApp(cfg, (tx) => listZones(tx, cfg));
+    const [z] = await asApp(cfg, (tx) => listZones(tx));
     expect(z).toMatchObject({ name: "Solo", displayOrder: 0 });
   });
 
@@ -226,9 +214,10 @@ describe("zone CRUD", () => {
       { code: "zone.name_taken", params: { name: "Dining room" } },
     );
     const missing = randomUUID();
-    await expect(
-      asApp(cfg, (tx) => updateZone(tx, cfg, missing, { name: "X" })),
-    ).rejects.toMatchObject({ code: "zone.not_found", params: { zoneId: missing } });
+    await expect(asApp(cfg, (tx) => updateZone(tx, missing, { name: "X" }))).rejects.toMatchObject({
+      code: "zone.not_found",
+      params: { zoneId: missing },
+    });
   });
 
   it("createZone keeps a primary-key clash as an internal database error", async () => {
@@ -245,7 +234,7 @@ describe("zone CRUD", () => {
     } finally {
       generateId.mockRestore();
     }
-    expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([
+    expect(await asApp(cfg, (tx) => listZones(tx))).toEqual([
       { id: existing.id, name: "Terrace", displayOrder: 0, active: true },
     ]);
   });
@@ -261,7 +250,7 @@ describe("zone CRUD", () => {
       end`);
     try {
       await expect(
-        asApp(cfg, (tx) => updateZone(tx, cfg, existing.id, { name: "Trigger collision" })),
+        asApp(cfg, (tx) => updateZone(tx, existing.id, { name: "Trigger collision" })),
       ).rejects.toMatchObject({
         errcode: 1555,
         message: "UNIQUE constraint failed: floor_zones.id",
@@ -269,7 +258,7 @@ describe("zone CRUD", () => {
     } finally {
       await db.execute(sql`drop trigger test_zone_key_clash`);
     }
-    expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([
+    expect(await asApp(cfg, (tx) => listZones(tx))).toEqual([
       { id: existing.id, name: "Terrace", displayOrder: 0, active: true },
     ]);
   });
@@ -285,7 +274,7 @@ describe("zone CRUD", () => {
       end`);
     try {
       await expect(
-        asApp(cfg, (tx) => updateZone(tx, cfg, existing.id, { displayOrder: 4 })),
+        asApp(cfg, (tx) => updateZone(tx, existing.id, { displayOrder: 4 })),
       ).rejects.toMatchObject({
         errcode: 2067,
         message: "UNIQUE constraint failed: floor_zones.location_id, floor_zones.name",
@@ -293,7 +282,7 @@ describe("zone CRUD", () => {
     } finally {
       await db.execute(sql`drop trigger test_zone_name_clash`);
     }
-    expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([
+    expect(await asApp(cfg, (tx) => listZones(tx))).toEqual([
       { id: existing.id, name: "Terrace", displayOrder: 0, active: true },
     ]);
   });
@@ -302,7 +291,7 @@ describe("zone CRUD", () => {
     const cfg = await setupVenue();
     await asApp(cfg, (tx) => createZone(tx, { name: "A" }));
     const { id } = await asApp(cfg, (tx) => createZone(tx, { name: "B" }));
-    await expect(asApp(cfg, (tx) => updateZone(tx, cfg, id, { name: "A" }))).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => updateZone(tx, id, { name: "A" }))).rejects.toMatchObject({
       code: "zone.name_taken",
       params: { name: "A" },
     });
@@ -314,17 +303,17 @@ describe("zone CRUD", () => {
     await asApp(cfg, async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${id}`),
     );
-    expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([]);
+    expect(await asApp(cfg, (tx) => listZones(tx))).toEqual([]);
     const before = await db.select().from(floorZones).where(eq(floorZones.id, id));
     await expect(
       asApp(cfg, (tx) =>
-        updateZone(tx, cfg, id, { active: true, displayOrder: 9 } as unknown as Parameters<
+        updateZone(tx, id, { active: true, displayOrder: 9 } as unknown as Parameters<
           typeof updateZone
-        >[3]),
+        >[2]),
       ),
     ).rejects.toMatchObject({ code: "zone.not_found" });
     expect(await db.select().from(floorZones).where(eq(floorZones.id, id))).toEqual(before);
-    expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([]);
+    expect(await asApp(cfg, (tx) => listZones(tx))).toEqual([]);
   });
 
   it("deactivating a zone takes its tables out of service", async () => {
@@ -378,7 +367,7 @@ describe("zone CRUD", () => {
       create trigger floor_zones_refuse_update before update on floor_zones
       begin select raise(abort, 'zone update refused'); end`);
     try {
-      const err = await asApp(cfg, (tx) => updateZone(tx, cfg, id, { name: "Patio" })).catch(
+      const err = await asApp(cfg, (tx) => updateZone(tx, id, { name: "Patio" })).catch(
         (e: unknown) => e,
       );
       expect(err).toBeInstanceOf(Error);
@@ -655,17 +644,17 @@ it("renames a zone onto a deleted name while retaining the deleted row", async (
   await asApp(cfg, async (tx) =>
     tx.execute(sql`update floor_zones set active = false where id = ${target.id}`),
   );
-  await asApp(cfg, (tx) => updateZone(tx, cfg, source.id, { name: "Terrace" }));
+  await asApp(cfg, (tx) => updateZone(tx, source.id, { name: "Terrace" }));
   expect(source.id).not.toBe(target.id);
   expect(await db.select().from(floorZones).where(eq(floorZones.id, target.id))).toContainEqual(
     expect.objectContaining({ id: target.id, name: "Terrace", active: false }),
   );
-  expect(await asApp(cfg, (tx) => listZones(tx, cfg, { includeInactive: true }))).toEqual(
+  expect(await asApp(cfg, (tx) => listZones(tx, { includeInactive: true }))).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ id: source.id, name: "Terrace", active: true }),
     ]),
   );
-  await asApp(cfg, (tx) => updateZone(tx, cfg, source.id, { name: "Dining" }));
+  await asApp(cfg, (tx) => updateZone(tx, source.id, { name: "Dining" }));
 });
 
 it("refuses zone removal while an open party occupies a table there", async () => {

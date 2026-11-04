@@ -174,7 +174,7 @@ function deps(db: Database): TillApiDeps {
 }
 
 async function openSession(db: Database, who = { personId: ana.id, pin: "5555" }): Promise<string> {
-  const deviceId = await seedSessionDevice(db, cfg);
+  const deviceId = await seedSessionDevice(db);
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, { deviceId, ...who });
   });

@@ -13,7 +13,6 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { todayBusinessDay } from "./floor-today-store.js";
-import type { TradingContext } from "./trading-context.js";
 
 /** `createdAt` is an ISO string. */
 export interface DiningTable {
@@ -26,7 +25,6 @@ export interface DiningTable {
 
 export async function listTables(
   tx: Transaction,
-  _cfg: TradingContext,
   now: Date,
   options: { includeDisabled?: boolean } = {},
 ): Promise<DiningTable[]> {
@@ -61,7 +59,6 @@ export interface FloorZone {
 
 export async function listZones(
   tx: Transaction,
-  _cfg: TradingContext,
   _options: { includeInactive?: boolean } = {},
 ): Promise<FloorZone[]> {
   void _options;
@@ -79,7 +76,6 @@ export async function listZones(
 
 export async function updateZone(
   tx: Transaction,
-  _cfg: TradingContext,
   id: string,
   patch: { name?: string; displayOrder?: number },
 ): Promise<void> {

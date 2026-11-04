@@ -215,7 +215,7 @@ describe("A773 requested lifecycle: cancel", () => {
       expect((await jobs()).slice(before)).toHaveLength(1);
       const beforeMove = (await jobs()).length;
       const elsewhere = await inTx(venue, async (tx) => {
-        const station = await createStation(tx, venue.cfg, { name: "No HOLD paper here" });
+        const station = await createStation(tx, { name: "No HOLD paper here" });
         await moveDishesToStation(
           tx,
           venue.cfg,

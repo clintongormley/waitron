@@ -142,7 +142,7 @@ it("deleted department reprints its original receipt configuration and frozen he
   );
   expect(sent[0]!.summary.sourceDepartmentName).toBe(original!.name);
   const detail = await run((tx) => readOrderDetail(tx, billId, "all", false));
-  const grouping = await run((tx) => readReceiptOrder(tx, venue.cfg, billId));
+  const grouping = await run((tx) => readReceiptOrder(tx, billId));
   await run(async (tx) => {
     const profiles = await tx
       .select()
@@ -182,7 +182,7 @@ it("deleted department reprints its original receipt configuration and frozen he
   const afterPrint = (await run((tx) => tx.select().from(printJobs)))[1]!;
   expect(decodeTicket(afterPrint.payload)).toBe(beforeText);
   expect(previewPrintJob(afterPrint.payload)).toEqual(previewPrintJob(beforePrint.payload));
-  expect(await run((tx) => readReceiptOrder(tx, venue.cfg, billId))).toEqual(grouping);
+  expect(await run((tx) => readReceiptOrder(tx, billId))).toEqual(grouping);
   const afterDetail = await run((tx) => readOrderDetail(tx, billId, "all", false));
   expect(afterDetail.row).toEqual(detail.row);
   expect(afterDetail.lines).toEqual(detail.lines);
@@ -204,9 +204,7 @@ it("deleted department reprints its original receipt configuration and frozen he
   ).toEqual(sent);
   expect(
     (
-      await run((tx) =>
-        orderWatchZones(tx, venue.cfg, [{ id: billId, partyId: null, deliveryTableId: null }]),
-      )
+      await run((tx) => orderWatchZones(tx, [{ id: billId, partyId: null, deliveryTableId: null }]))
     ).get(billId),
   ).toBe(venue.counter.zoneId);
   const after = await run(async (tx) => ({

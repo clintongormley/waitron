@@ -423,8 +423,8 @@ describe("A773 requested lifecycle: serving", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 5 });
-      const later = await createCourse(tx, venue.cfg, { name: "Later", displayOrder: 6 });
+      const first = await createCourse(tx, { name: "First", displayOrder: 5 });
+      const later = await createCourse(tx, { name: "Later", displayOrder: 6 });
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
       await addTabRound(tx, venue.cfg, venue.party.tabId, [
         { ...dish(venue, "burger"), courseId: first.id, hold: true },

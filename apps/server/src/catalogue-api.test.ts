@@ -613,9 +613,8 @@ beforeEach(async () => {
 });
 
 /**
- * The venue the product editor's kitchen routing is checked against. Only `locationId` is read by
- * `setProductCourse`; the fiscal ids are shape-fillers, as they are in the other
- * route suites.
+ * The venue's location id, for the kitchen stations and zones these cases insert and look up
+ * directly; the other fields only fill the type.
  */
 function venueCfg(): TradingContext {
   return {
@@ -660,8 +659,7 @@ function mountWithVenueDefaults(): Hono {
 /** A live kitchen course of the seeded venue. */
 async function seedRouting(): Promise<{ courseId: string }> {
   return withTransaction(suite.db, async (tx) => {
-    const cfg = venueCfg();
-    const course = await createCourse(tx, cfg, { name: `Course ${crypto.randomUUID()}` });
+    const course = await createCourse(tx, { name: `Course ${crypto.randomUUID()}` });
     return { courseId: course.id };
   });
 }

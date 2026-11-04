@@ -41,12 +41,12 @@ async function onStationQueue(v: PartyVenue, stationId: string, billId: string):
 
 /** The till's All stations board, which names nothing to release. */
 async function onPass(v: PartyVenue, billId: string): Promise<boolean> {
-  const board = await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY, { release: false }));
+  const board = await inTx(v, (tx) => readScopedPassBoard(tx, EVERY, { release: false }));
   return boardOrderIds(board).includes(billId);
 }
 
 async function onPassScreen(v: PartyVenue, billId: string): Promise<boolean> {
-  const board = await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY));
+  const board = await inTx(v, (tx) => readScopedPassBoard(tx, EVERY));
   return boardOrderIds(board).includes(billId);
 }
 
@@ -54,7 +54,7 @@ describe("what takes a paid table bill's dishes off today's kitchen screens", ()
   it("leaves a table bill paid at the till on the station queue and pass until collection", async () => {
     const v = await setupPartyVenue(suite.db);
     const stationId = await cocina(v);
-    await seedSessionDevice(suite.db, v.cfg);
+    await seedSessionDevice(suite.db);
     const { partyId, tabId } = await seat(v, await v.table("Mesa 1"));
     await orderForParty(v, partyId, ["Burger"], tabId);
     await pay(v, tabId, "12.00");
@@ -75,7 +75,7 @@ describe("what takes a paid table bill's dishes off today's kitchen screens", ()
   it("leaves a table bill paid through a full bill payment on both until collection", async () => {
     const v = await setupPartyVenue(suite.db);
     const stationId = await cocina(v);
-    await seedSessionDevice(suite.db, v.cfg);
+    await seedSessionDevice(suite.db);
     const { partyId, tabId } = await seat(v, await v.table("Mesa 2"));
     await orderForParty(v, partyId, ["Burger"], tabId);
     await takeBillPayment(

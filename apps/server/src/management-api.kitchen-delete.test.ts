@@ -28,8 +28,8 @@ let station: string;
 let course: string;
 beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
-  station = (await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Grill" }))).id;
-  course = (await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Main" }))).id;
+  station = (await inTx(v, (tx) => createStation(tx, { name: "Grill" }))).id;
+  course = (await inTx(v, (tx) => createCourse(tx, { name: "Main" }))).id;
   app = new Hono();
   mountManagementApi(
     app,

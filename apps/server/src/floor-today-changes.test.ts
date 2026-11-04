@@ -52,12 +52,11 @@ useVenueDb({
   },
 });
 
-const takeOff = (tableId: string) => inTx(v, (tx) => takeOffToday(tx, v.cfg, tableId));
-const putBack = (tableId: string) => inTx(v, (tx) => putBackToday(tx, v.cfg, tableId));
-const seats = (tableId: string, n: number) => inTx(v, (tx) => seatsToday(tx, v.cfg, tableId, n));
+const takeOff = (tableId: string) => inTx(v, (tx) => takeOffToday(tx, tableId));
+const putBack = (tableId: string) => inTx(v, (tx) => putBackToday(tx, tableId));
+const seats = (tableId: string, n: number) => inTx(v, (tx) => seatsToday(tx, tableId, n));
 const back = (tableId: string) => inTx(v, (tx) => backToSaved(tx, v.cfg, REMOVALS, tableId, NOW));
-const reset = (zoneId: string) =>
-  inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
+const reset = (zoneId: string) => inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, NOW, "due"));
 
 async function setToday(
   tableId: string,
@@ -125,14 +124,7 @@ async function labelOf(tableId: string): Promise<string | undefined> {
 
 function save(zoneId: string, revision: number, tables: ZonePlanSave["tables"]) {
   return inTx(v, async (tx) =>
-    saveLayout(
-      tx,
-      v.cfg,
-      REMOVALS,
-      await defaultLayout(tx, v.cfg, zoneId),
-      { revision, tables },
-      NOW,
-    ),
+    saveLayout(tx, REMOVALS, await defaultLayout(tx, v.cfg, zoneId), { revision, tables }, NOW),
   );
 }
 
@@ -278,8 +270,8 @@ describe("today's changes", () => {
       [{ key: "a", seats: 4, place: { x: 10, y: 10 } }],
       NOW,
     );
-    await inTx(v, (tx) => moveToday(tx, v.cfg, table.a!, { x: 30, y: 30 }));
-    await inTx(v, (tx) => rotateToday(tx, v.cfg, table.a!));
+    await inTx(v, (tx) => moveToday(tx, table.a!, { x: 30, y: 30 }));
+    await inTx(v, (tx) => rotateToday(tx, table.a!));
     await seats(table.a!, 9);
     await takeOff(table.a!);
     await setToday(table.a!, { fixed: true });
@@ -390,7 +382,7 @@ describe("today's changes", () => {
 
   it("sends a table the last reset copied as a spare back to the spares", async () => {
     const { table } = await plannedZone(v, [{ key: "spare", place: null }], NOW);
-    await inTx(v, (tx) => placeSpareToday(tx, v.cfg, table.spare!, { x: 20, y: 10 }));
+    await inTx(v, (tx) => placeSpareToday(tx, table.spare!, { x: 20, y: 10 }));
     expect(await todayRow(v, table.spare!)).toMatchObject({ x: 20 });
 
     await back(table.spare!);

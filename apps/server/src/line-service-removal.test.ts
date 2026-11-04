@@ -41,7 +41,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionAdjustmentVenue(db);
     await inTx(venue, async (tx) => {
-      const extra = await createStation(tx, venue.cfg, { name: "Extra station" });
+      const extra = await createStation(tx, { name: "Extra station" });
       await setRoutingCell(
         tx,
         { row: { kind: "product", productId: venue.olivesId }, zoneId: null },

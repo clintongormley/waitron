@@ -163,7 +163,7 @@ function deps(db: Database): TillApiDeps {
 }
 
 async function openSession(db: Database): Promise<string> {
-  const deviceId = await seedSessionDevice(db, cfg);
+  const deviceId = await seedSessionDevice(db);
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
       deviceId,

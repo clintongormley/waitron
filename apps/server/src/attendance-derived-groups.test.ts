@@ -42,8 +42,8 @@ beforeEach(async () => {
   vi.setSystemTime(new Date("2026-01-05T09:00:00Z"));
   v = await provisionBillVenue(suite.db);
   await withTransaction(suite.db, async (tx) => {
-    await createStation(tx, v.cfg, { name: "Kitchen", isDefault: true });
-    courseId = (await createCourse(tx, v.cfg, { name: "Main", displayOrder: 0 })).id;
+    await createStation(tx, { name: "Kitchen", isDefault: true });
+    courseId = (await createCourse(tx, { name: "Main", displayOrder: 0 })).id;
   });
   const reading = v.clock.now();
   vi.spyOn(v.clock, "now").mockReturnValue({

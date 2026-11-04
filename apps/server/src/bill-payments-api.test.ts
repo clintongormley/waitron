@@ -3412,7 +3412,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
       "POST",
       `/api/working-orders/${billId}/adjustments`,
       await cancelBody(suite.db, billId, 2),
-      await revokedDeviceSessionCookie(suite.db, venue.cfg, venue.staffId, "5555"),
+      await revokedDeviceSessionCookie(suite.db, venue.staffId, "5555"),
     );
 
     expect(refused.status).toBe(401);

@@ -103,7 +103,6 @@ describe("the till's table-state answer carries today's plan", () => {
     await inTx(v, async (tx) =>
       saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         await defaultLayout(tx, v.cfg, zoneId),
         { revision: 0, tables: entries },
@@ -111,7 +110,7 @@ describe("the till's table-state answer carries today's plan", () => {
       ),
     );
     const plan = await inTx(v, async (tx) =>
-      readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+      readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)),
     );
     const liveId = (label: string) => plan.tables.find((t) => t.label === label)!.liveTableId!;
     const [a, b, spare, off] = [la, lb, ls, lo].map(liveId) as [string, string, string, string];
@@ -235,7 +234,6 @@ describe("the till's table-state answer carries today's plan", () => {
     await inTx(v, async (tx) =>
       saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         await defaultLayout(tx, v.cfg, zoneId),
         { revision: 0, tables: entries },
@@ -243,7 +241,7 @@ describe("the till's table-state answer carries today's plan", () => {
       ),
     );
     const plan = await inTx(v, async (tx) =>
-      readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+      readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)),
     );
     const liveId = (label: string) => plan.tables.find((t) => t.label === label)!.liveTableId!;
 
@@ -405,7 +403,7 @@ describe("the till's table-state answer carries the room's revision", () => {
     expect(first.has(noToday)).toBe(false);
 
     await onNextDay(async () => {
-      await inTx(v, (tx) => ensureToday(tx, v.cfg, REMOVALS, NEXT_DAY));
+      await inTx(v, (tx) => ensureToday(tx, REMOVALS, NEXT_DAY));
       const two = await LONG_TABLE(NEXT_DAY);
       const next = await inTx(v, (tx) => listTablesWithState(tx, [], NEXT_DAY)).then(
         (states) => new Map(states.map((s) => [s.id, s])),
@@ -463,7 +461,7 @@ async function seatAndFinishAcross(tableId: string, reset: () => Promise<unknown
   );
 }
 
-const catchUp = () => inTx(v, (tx) => ensureToday(tx, v.cfg, REMOVALS, NOW));
+const catchUp = () => inTx(v, (tx) => ensureToday(tx, REMOVALS, NOW));
 
 async function readyToMoveOf(tableId: string): Promise<boolean | undefined> {
   const [row] = await inTx(v, (tx) =>
@@ -574,8 +572,8 @@ describe("the till's table-state answer says what needs moving", () => {
     await catchUp();
     expect(await readyToMoveOf(t45)).toBe(true);
 
-    await inTx(v, (tx) => takeOffToday(tx, v.cfg, t45));
-    await inTx(v, (tx) => placeSpareToday(tx, v.cfg, t5, { x: 99, y: 0 }));
+    await inTx(v, (tx) => takeOffToday(tx, t45));
+    await inTx(v, (tx) => placeSpareToday(tx, t5, { x: 99, y: 0 }));
     expect((await todayRow(v, t5))!.x).toBe(99);
 
     const due = await inTx(v, (tx) =>
@@ -611,8 +609,8 @@ describe("the till's table-state answer says what needs moving", () => {
     await catchUp();
     expect(await readyToMoveOf(t45)).toBe(true);
 
-    await inTx(v, (tx) => takeOffToday(tx, v.cfg, t45));
-    await inTx(v, (tx) => placeSpareToday(tx, v.cfg, t5, { x: 99, y: 0 }));
+    await inTx(v, (tx) => takeOffToday(tx, t45));
+    await inTx(v, (tx) => placeSpareToday(tx, t5, { x: 99, y: 0 }));
     expect((await todayRow(v, t5))!.x).toBe(99);
 
     const due = await inTx(v, (tx) =>

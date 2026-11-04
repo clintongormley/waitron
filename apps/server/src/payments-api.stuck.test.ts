@@ -344,7 +344,7 @@ async function strandPayment(
 /** An `attempting` payment of `provider` on a marked order, with no PaymentIntent. */
 async function strandBarePayment(v: Venue, orderId: string, provider: string): Promise<string> {
   const paymentRef = randomUUID();
-  const origin = await orderDeviceOrigin(suite.db, orderId);
+  const origin = await orderDeviceOrigin(suite.db);
   await withTransaction(suite.db, (tx) =>
     insertAttempting(tx, {
       origin,

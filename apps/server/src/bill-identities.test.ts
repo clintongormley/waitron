@@ -1198,7 +1198,7 @@ describe("A803 parked orders list", () => {
     await moveTo(leaving.bills[1]!, { counter: { zoneId: null } }, { partyId: leaving.partyId });
 
     const parked = new Map(
-      (await listHeldOrders({ db: v.db }, v.cfg)).map((order) => [
+      (await listHeldOrders({ db: v.db })).map((order) => [
         order.id,
         [order.billNumber, order.billName],
       ]),

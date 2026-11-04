@@ -108,7 +108,7 @@ async function release(
   asked: readonly string[],
   attendance: OrderAttendance | undefined,
 ): Promise<PassReleaseResult> {
-  const cardRows = await readPassCardRows(tx, cfg, ask.target);
+  const cardRows = await readPassCardRows(tx, ask.target);
   const offered = passCardRelease(ask.target, cardRows, passScope);
   if (
     offered.context === null ||

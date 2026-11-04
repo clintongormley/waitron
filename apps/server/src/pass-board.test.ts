@@ -55,16 +55,15 @@ async function passDevices(v: PartyVenue, count: number): Promise<string[]> {
 /** The dishes the board's scope sees. */
 const names = (board: PassBoard) => boardItems(board, { inView: true }).map((i) => i.name);
 const ids = (board: PassBoard) => boardItems(board, { inView: true }).map((i) => i.id);
-const read = (v: PartyVenue, scope: PassScope) =>
-  inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, scope));
+const read = (v: PartyVenue, scope: PassScope) => inTx(v, (tx) => readScopedPassBoard(tx, scope));
 
 /** A Grill and a Bar station, a Terrace zone, and three fired orders: Burger and Caña on the
  *  terrace, Burger inside, and a Burger counter sale. */
 async function terraceVenue() {
   const v = await setupPartyVenue(suite.db);
   const { grill, bar, terrace } = await inTx(v, async (tx) => {
-    const grill = (await createStation(tx, v.cfg, { name: "Grill" })).id;
-    const bar = (await createStation(tx, v.cfg, { name: "Bar" })).id;
+    const grill = (await createStation(tx, { name: "Grill" })).id;
+    const bar = (await createStation(tx, { name: "Bar" })).id;
     await routeProductTo(tx, v.productId("Burger"), grill);
     await routeProductTo(tx, v.productId("Caña"), bar);
     const terrace = (await createZone(tx, { name: "Terrace" })).id;
@@ -99,14 +98,14 @@ async function terraceVenue() {
 async function twoSectionVenue() {
   const v = await setupPartyVenue(suite.db);
   const grill = await inTx(v, async (tx) => {
-    const grill = (await createStation(tx, v.cfg, { name: "Grill" })).id;
-    const bar = (await createStation(tx, v.cfg, { name: "Bar" })).id;
+    const grill = (await createStation(tx, { name: "Grill" })).id;
+    const bar = (await createStation(tx, { name: "Bar" })).id;
     await routeProductTo(tx, v.productId("Burger"), grill);
     await routeProductTo(tx, v.productId("Caña"), bar);
-    const starters = await createCourse(tx, v.cfg, { name: "Starters", displayOrder: 0 });
-    await setProductCourse(tx, v.cfg, v.productId("Caña"), starters.id);
-    const mains = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 1 });
-    await setProductCourse(tx, v.cfg, v.productId("Burger"), mains.id);
+    const starters = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+    await setProductCourse(tx, v.productId("Caña"), starters.id);
+    const mains = await createCourse(tx, { name: "Mains", displayOrder: 1 });
+    await setProductCourse(tx, v.productId("Burger"), mains.id);
     return grill;
   });
   const counterId = randomUUID();
@@ -238,13 +237,13 @@ describe("the pass board", () => {
   it("lists a card's dishes in no course first, then in course order, whatever order they were sent in", async () => {
     const v = await setupPartyVenue(suite.db);
     await inTx(v, async (tx) => {
-      const grill = (await createStation(tx, v.cfg, { name: "Grill" })).id;
+      const grill = (await createStation(tx, { name: "Grill" })).id;
       for (const name of ["Burger", "Caña", "Flan"])
         await routeProductTo(tx, v.productId(name), grill);
-      const starters = await createCourse(tx, v.cfg, { name: "Starters", displayOrder: 0 });
-      await setProductCourse(tx, v.cfg, v.productId("Caña"), starters.id);
-      const mains = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 1 });
-      await setProductCourse(tx, v.cfg, v.productId("Burger"), mains.id);
+      const starters = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      await setProductCourse(tx, v.productId("Caña"), starters.id);
+      const mains = await createCourse(tx, { name: "Mains", displayOrder: 1 });
+      await setProductCourse(tx, v.productId("Burger"), mains.id);
     });
     const counterId = randomUUID();
     await inTx(v, async (tx) => {
@@ -267,7 +266,7 @@ describe("the pass board", () => {
         .where(eq(workingOrderLines.workingOrderId, counterId));
       await fireLines(tx, v.cfg, counterId, lines);
     });
-    const board = await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY));
+    const board = await inTx(v, (tx) => readScopedPassBoard(tx, EVERY));
     const cards = [...board.held, ...board.toFire, ...board.inProgress, ...board.ready];
     expect(cards.map((card) => card.target)).toEqual([{ kind: "bill", workingOrderId: counterId }]);
     expect(cards[0]!.items.map((item) => item.name)).toEqual(["FLAN", "CANA", "BURG"]);

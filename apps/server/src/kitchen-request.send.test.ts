@@ -397,8 +397,8 @@ describe("A773 waiter request: send", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
-      const starters = await createCourse(tx, venue.cfg, { name: "Starters", displayOrder: 0 });
-      const mains = await createCourse(tx, venue.cfg, { name: "Mains", displayOrder: 1 });
+      const starters = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mains = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       await addTabRound(tx, venue.cfg, venue.party.tabId, [
         { ...burgerLine(venue), courseId: starters.id, release: true },
         { ...burgerLine(venue), courseId: mains.id, release: true },
@@ -424,8 +424,8 @@ describe("A773 waiter request: send", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
-      const starters = await createCourse(tx, venue.cfg, { name: "Starters", displayOrder: 0 });
-      const mains = await createCourse(tx, venue.cfg, { name: "Mains", displayOrder: 1 });
+      const starters = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mains = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       await addTabRound(tx, venue.cfg, venue.party.tabId, [
         { ...burgerLine(venue), courseId: starters.id },
         { ...burgerLine(venue), courseId: mains.id },

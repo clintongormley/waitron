@@ -29,7 +29,7 @@ async function venueWithSteps(
   steps: (courseId: string) => ServiceStepInput[],
 ): Promise<{ v: PartyVenue; id: string; departmentId: string }> {
   const v = await setupPartyVenue(suite.db);
-  const { id } = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Desserts" }));
+  const { id } = await inTx(v, (tx) => createCourse(tx, { name: "Desserts" }));
   const departmentId = await inTx(v, async (tx: Transaction) => {
     const department = await createDepartment(tx, { name: "Steps", orderStart: "table" });
     await saveServiceSteps(tx, department.id, steps(id));
@@ -65,7 +65,7 @@ const courseRows = (v: PartyVenue, id: string) =>
 describe("deleting a course with service steps", () => {
   it("deleting a course nothing names deletes the row outright", async () => {
     const v = await setupPartyVenue(suite.db);
-    const { id } = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Unused" }));
+    const { id } = await inTx(v, (tx) => createCourse(tx, { name: "Unused" }));
     await inTx(v, (tx) => deleteCourse(tx, id));
     expect(await courseRows(v, id)).toEqual([]);
   });

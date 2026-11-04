@@ -59,7 +59,7 @@ function asApp<T>(cfg: TradingContext, fn: (tx: Transaction) => Promise<T>): Pro
 }
 
 function station(cfg: TradingContext, name: string): Promise<string> {
-  return asApp(cfg, (tx) => createStation(tx, cfg, { name })).then((r) => r.id);
+  return asApp(cfg, (tx) => createStation(tx, { name })).then((r) => r.id);
 }
 
 /** `cloud_poll` needs only a `poll_id`, no agent to seed. */

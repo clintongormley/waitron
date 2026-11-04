@@ -1,6 +1,5 @@
 import { readBusinessDayScheduleRevision } from "@waitron/venue-service";
 
-import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { categories, diningTables, kitchenStations, type Transaction } from "@waitron/db";
 import {
@@ -17,12 +16,10 @@ import {
   STARTER_OPEN_PERIOD_NAMES,
   zoneSalePolicies,
 } from "@waitron/venue-service";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { CountryDemoIdentity, DemoPlainText } from "@waitron/country";
 import { saveLayout } from "../../src/floor-plan.js";
 import { floorPlanSetsFor } from "../../src/floor-plan-sets.js";
-import type { TradingContext } from "../../src/trading-context.js";
-import { SEED_INVOICE_LOCALE, type SeedLocale } from "./locale.js";
+import type { SeedLocale } from "./locale.js";
 import { demoPlainText, type DemoDataSet } from "./data-set.js";
 
 export interface SeedFloorInput {
@@ -33,23 +30,11 @@ export interface SeedFloorInput {
   menuIds?: { restaurant: string; lunch: string; deli: string };
 }
 
-function toTableCfg(locationId: string, locale: SeedLocale): TradingContext {
-  return {
-    nodeId: brandNodeId(randomUUID()),
-    locationId: brandLocationId(locationId),
-    locale: SEED_INVOICE_LOCALE[locale],
-    invoiceLocales: [SEED_INVOICE_LOCALE[locale]],
-    tipsEnabled: false,
-    simplifiedInvoiceLimit: null,
-  };
-}
-
 export async function seedFloor(
   tx: Transaction,
   { locationId, locale, departmentTradingNames, dataSet, menuIds }: SeedFloorInput,
 ): Promise<void> {
   const plain = (text: DemoPlainText) => demoPlainText(text, dataSet, locale);
-  const cfg = toTableCfg(locationId, locale);
 
   const { rows: defaults } = await tx.execute<{ department_id: string; zone_id: string }>(sql`
     select department_id, zone_id from zone_service_policies
@@ -253,7 +238,7 @@ export async function seedFloor(
     const layout = { setId: setOf.get(defaultPolicy.department_id)!, zoneId };
     const tables = floor.tables.filter((table) => table.zoneKey === zoneKey);
     if (tables.length === 0) continue;
-    await saveLayout(tx, cfg, [], layout, {
+    await saveLayout(tx, [], layout, {
       revision: 0,
       tables: tables.map((table) => ({
         key: table.label,

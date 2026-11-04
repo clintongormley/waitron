@@ -497,12 +497,12 @@ describe("Find Transactions SQL paging", () => {
     expect((await list()).rows.find((r) => r.saleId === substitute)!.scopeOrderIds).toEqual(
       [counter, party.tabId].sort(),
     );
-    expect(await inTx(venue, (tx) => resolveTransactionScope(tx, venue.cfg, correction))).toEqual({
+    expect(await inTx(venue, (tx) => resolveTransactionScope(tx, correction))).toEqual({
       workingOrderIds: [party.tabId],
     });
-    expect(
-      await inTx(venue, (tx) => resolveTransactionScope(tx, venue.cfg, correctedSubstitute)),
-    ).toEqual({ workingOrderIds: [counter, party.tabId].sort() });
+    expect(await inTx(venue, (tx) => resolveTransactionScope(tx, correctedSubstitute))).toEqual({
+      workingOrderIds: [counter, party.tabId].sort(),
+    });
     const empty = (id: ReturnType<typeof sql>) => VENUE_SERVICE.orderInZones(id, []);
     expect(
       (await inTx(venue, (tx) => readFindTransactions(tx, query(), empty))).rows.map(
@@ -516,11 +516,11 @@ describe("Find Transactions SQL paging", () => {
     const own = await invoice({ operatorId: missingPerson });
     expect((await list()).rows.map((r) => r.saleId)).toEqual([own]);
     expect((await list()).rows[0]!.staff).toEqual({ id: missingPerson, name: null });
-    expect(await inTx(venue, (tx) => resolveTransactionScope(tx, venue.cfg, own))).toEqual({
+    expect(await inTx(venue, (tx) => resolveTransactionScope(tx, own))).toEqual({
       workingOrderIds: [],
     });
     await expect(
-      inTx(venue, (tx) => resolveTransactionScope(tx, venue.cfg, randomUUID())),
+      inTx(venue, (tx) => resolveTransactionScope(tx, randomUUID())),
     ).rejects.toMatchObject({ code: "sale.not_found" });
   });
 });

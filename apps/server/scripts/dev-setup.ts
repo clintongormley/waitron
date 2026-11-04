@@ -291,7 +291,7 @@ async function seedDemoDevices(
 
   const { profiles, stations } = await withTransaction(db, async (tx) => ({
     profiles: await listDeviceProfiles(tx),
-    stations: await listStations(tx, cfg),
+    stations: await listStations(tx),
   }));
   const profileFor = (formFactor: "till" | "kds" | "phone-portrait"): string => {
     const profile = profiles.find((p) => p.formFactor === formFactor);

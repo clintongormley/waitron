@@ -17,8 +17,8 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 async function counterWithCourses() {
   const v = await setupPartyVenue(suite.db);
   const courses = await inTx(v, async (tx) => ({
-    first: await createCourse(tx, v.cfg, { name: "First", displayOrder: 1 }),
-    last: await createCourse(tx, v.cfg, { name: "Last", displayOrder: 2 }),
+    first: await createCourse(tx, { name: "First", displayOrder: 1 }),
+    last: await createCourse(tx, { name: "Last", displayOrder: 2 }),
   }));
   const id = randomUUID();
   await parkOrder({ db: v.db }, v.cfg, {

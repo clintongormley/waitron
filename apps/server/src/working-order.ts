@@ -993,8 +993,8 @@ export async function priceOrderLines(
     if (!isUuid(courseId)) {
       throw new AppError("course.not_found", { courseId });
     }
-    if (line[RETAINED_COURSE] === true) await requireCourse(tx, cfg, courseId);
-    else await requireLiveCourse(tx, cfg, courseId);
+    if (line[RETAINED_COURSE] === true) await requireCourse(tx, courseId);
+    else await requireLiveCourse(tx, courseId);
   }
 
   const gross = grossBasketWithOptions(items);
@@ -2051,7 +2051,6 @@ export async function insertSplitExtras(
     await attachKitchenAllergyCopies(tx, inserted, keepAllergies);
     await freezeKitchenAllergies(
       tx,
-      cfg,
       inserted
         .filter((row) => !row.madeHere && (row.firedAt ?? row.requestedAt) !== null)
         .map((row) => row.id),
@@ -2415,7 +2414,7 @@ export async function fireLines(
     .filter((row) => row.firedAt === null && row.requestedAt !== null)
     .map((row) => ({ workingOrderLineId: row.workingOrderLineId, stationId: row.stationId }))
     .concat(heldExtras.requested.map(placeOf));
-  await freezeKitchenAllergyItems(tx, cfg, orderId, [...firedItems, ...requestedItems]);
+  await freezeKitchenAllergyItems(tx, orderId, [...firedItems, ...requestedItems]);
   await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
   return unrouted;
 }
@@ -2659,7 +2658,7 @@ async function finishRelease(
   const ordinary = [...fired, ...extras.filter((item) => item.firedAt !== null)].filter(
     (item) => !rerouted.has(item.workingOrderLineId),
   );
-  await freezeKitchenAllergyItems(tx, cfg, orderId, [
+  await freezeKitchenAllergyItems(tx, orderId, [
     ...fired,
     ...requested,
     ...extras.filter((item) => item.firedAt !== null),
@@ -3641,7 +3640,7 @@ export async function setLineCourse(
   await assertPartyBillOpen(tx, cfg, tabId);
   await requireOrderBillEditor(tx, tabId, authority);
   if (courseId !== null) {
-    await requireLiveCourse(tx, cfg, courseId);
+    await requireLiveCourse(tx, courseId);
   }
   const [line] = await tx
     .select({
@@ -5220,11 +5219,7 @@ export interface HeldOrder {
 }
 
 /** List the venue's open bills, a party's bill and lineless ones included. */
-export async function listHeldOrders(
-  deps: WorkingOrderDeps,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: TradingContext,
-): Promise<HeldOrderSummary[]> {
+export async function listHeldOrders(deps: WorkingOrderDeps): Promise<HeldOrderSummary[]> {
   return withTransaction(deps.db, async (tx) => {
     const rows = await tx
       .select({
@@ -6028,7 +6023,7 @@ async function applyLineEdits(
         intent.makeAt !== parent.makeAtStationId) ||
         ((parent.sentAt !== null || parent.ticket !== null) && rise > 0))
     )
-      await requireMakeAtStation(tx, cfg, intent.makeAt);
+      await requireMakeAtStation(tx, intent.makeAt);
     const modifiers = needsModifiers ? modifiersOf(parent) : NO_MODIFIERS;
     let optionSnapshots = parent.optionSnapshots;
     if (intent.options !== null) {
@@ -6198,7 +6193,7 @@ async function applyLineEdits(
 
   // Priced before anything is written, so a refused line leaves the order as it was.
   for (const line of plan.fresh)
-    if (line.makeAt != null) await requireMakeAtStation(tx, cfg, line.makeAt);
+    if (line.makeAt != null) await requireMakeAtStation(tx, line.makeAt);
   const priced = await priceOrderLines(
     tx,
     cfg,
@@ -7226,7 +7221,7 @@ export async function issueUnpaidInvoice(
     { saleId, workingOrderId: id, counterparty: selected.sale.counterparty },
     undefined,
   );
-  const order = await readReceiptOrder(tx, cfg, id, { atIssuance: true });
+  const order = await readReceiptOrder(tx, id, { atIssuance: true });
   await tx
     .update(workingOrders)
     .set({ label: order.orderLabel })

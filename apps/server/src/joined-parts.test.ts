@@ -115,7 +115,7 @@ describe("a part still in a joined table", () => {
   it("refuses putting Counter 4 on today's map", async () => {
     const { table } = await LONG_AND_BAR();
     await expect(
-      inTx(v, (tx) => placeSpareToday(tx, v.cfg, table.c4!, { x: 1, y: 1 })),
+      inTx(v, (tx) => placeSpareToday(tx, table.c4!, { x: 1, y: 1 })),
     ).rejects.toMatchObject(inJoinedTable(table.c4!));
     expect((await todayRow(v, table.c4!))?.x).toBeNull();
   });
@@ -191,7 +191,7 @@ describe("a part still in a joined table", () => {
     expect(await partyAt(v, table.long!)).toBe(atLong.partyId);
 
     const plan = await inTx(v, async (tx) =>
-      readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+      readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)),
     );
     const tables: ZonePlanSave["tables"] = plan.tables
       .filter((entry) => entry.id !== master.long)
@@ -207,14 +207,13 @@ describe("a part still in a joined table", () => {
     await inTx(v, async (tx) =>
       saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         await defaultLayout(tx, v.cfg, zoneId),
         { revision: plan.revision, tables },
         NOW,
       ),
     );
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
+    await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, NOW, "due"));
 
     const atCounter = await seat(v, table.c3!);
     expect(await partyAt(v, table.c3!)).toBe(atCounter.partyId);
@@ -304,7 +303,7 @@ describe("a joined table come apart", () => {
     await seat(v, table.c3!);
     await seat(v, table.c4!);
     const plan = await inTx(v, async (tx) =>
-      readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+      readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)),
     );
     const tables: ZonePlanSave["tables"] = plan.tables.map((entry) => ({
       id: entry.id,
@@ -324,18 +323,11 @@ describe("a joined table come apart", () => {
       partKeys: [master.c3!, master.c4!, master.c5!],
     });
     const { ids } = await inTx(v, async (tx) =>
-      saveLayout(
-        tx,
-        v.cfg,
-        REMOVALS,
-        await defaultLayout(tx, v.cfg, zoneId),
-        { revision, tables },
-        NOW,
-      ),
+      saveLayout(tx, REMOVALS, await defaultLayout(tx, v.cfg, zoneId), { revision, tables }, NOW),
     );
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
+    await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, NOW, "due"));
     const after = await inTx(v, async (tx) =>
-      readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+      readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)),
     );
     expect(after.tables.find((entry) => entry.id === ids.long)!.liveTableId).toBeNull();
     const { partyId } = await seat(v, table.c5!);
@@ -349,11 +341,10 @@ describe("a layout that stands a joined table's tables", () => {
     const d = await setsDepartment(v, new Date("2026-10-09T06:00:00Z"));
     const label = (base: string) => `${base} ${randomUUID().slice(0, 6)}`;
     const save = async (setId: string, tables: ZonePlanSave["tables"]) => {
-      const plan = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId, zoneId: d.zoneId }));
+      const plan = await inTx(v, (tx) => readLayout(tx, { setId, zoneId: d.zoneId }));
       return inTx(v, (tx) =>
         saveLayout(
           tx,
-          v.cfg,
           REMOVALS,
           { setId, zoneId: d.zoneId },
           { revision: plan.revision, tables },
@@ -381,9 +372,7 @@ describe("a layout that stands a joined table's tables", () => {
         partKeys: ["t4", "t5"],
       },
     ]);
-    const standard = await inTx(v, (tx) =>
-      readLayout(tx, v.cfg, { setId: d.standard, zoneId: d.zoneId }),
-    );
+    const standard = await inTx(v, (tx) => readLayout(tx, { setId: d.standard, zoneId: d.zoneId }));
     await save(
       d.dinner,
       standard.tables.map((t) => ({
@@ -397,11 +386,9 @@ describe("a layout that stands a joined table's tables", () => {
       })),
     );
     await inTx(v, (tx) =>
-      resetZone(tx, v.cfg, REMOVALS, d.zoneId, NOW, { setId: d.standard, occurrence: null }),
+      resetZone(tx, REMOVALS, d.zoneId, NOW, { setId: d.standard, occurrence: null }),
     );
-    const after = await inTx(v, (tx) =>
-      readLayout(tx, v.cfg, { setId: d.standard, zoneId: d.zoneId }),
-    );
+    const after = await inTx(v, (tx) => readLayout(tx, { setId: d.standard, zoneId: d.zoneId }));
     const live = (key: string) => after.tables.find((t) => t.id === ids[key])!.liveTableId!;
     return { t4: live("t4"), t5: live("t5"), t45: live("t45") };
   }
@@ -416,7 +403,7 @@ describe("a layout that stands a joined table's tables", () => {
 
   it("lists 4 and 5 among the tables, and not 4+5", async () => {
     const table = await underStandard();
-    const ids = (await inTx(v, (tx) => listTables(tx, v.cfg, NOW))).map((t) => t.id);
+    const ids = (await inTx(v, (tx) => listTables(tx, NOW))).map((t) => t.id);
     expect(ids).toContain(table.t4);
     expect(ids).toContain(table.t5);
     expect(ids).not.toContain(table.t45);
@@ -434,7 +421,7 @@ describe("a layout that stands a joined table's tables", () => {
   it("refuses putting 4+5 on today's map", async () => {
     const table = await underStandard();
     await expect(
-      inTx(v, (tx) => placeSpareToday(tx, v.cfg, table.t45, { x: 60, y: 60 })),
+      inTx(v, (tx) => placeSpareToday(tx, table.t45, { x: 60, y: 60 })),
     ).rejects.toMatchObject(inJoinedTable(table.t45));
     expect((await todayRow(v, table.t45))?.x).toBeNull();
   });

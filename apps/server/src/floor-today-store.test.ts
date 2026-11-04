@@ -261,8 +261,8 @@ const reset = (
   zoneId: string,
   removals: readonly TableRemoval[] = NONE,
   now = NOW,
-  onto: Parameters<typeof resetZone>[5] = "due",
-) => inTx(v, (tx) => resetZone(tx, v.cfg, removals, zoneId, now, onto));
+  onto: Parameters<typeof resetZone>[4] = "due",
+) => inTx(v, (tx) => resetZone(tx, removals, zoneId, now, onto));
 const catchUp = (zoneId: string, removals: readonly TableRemoval[] = NONE) =>
   inTx(v, (tx) => catchUpZone(tx, removals, zoneId, NOW));
 
@@ -294,9 +294,7 @@ async function resave(
   zoneId: string,
   change: (tables: ZonePlanSave["tables"]) => ZonePlanSave["tables"],
 ): Promise<Record<string, string>> {
-  const plan = await inTx(v, async (tx) =>
-    readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
-  );
+  const plan = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)));
   const tables = plan.tables.map((table) => ({
     id: table.id,
     key: table.id,
@@ -309,7 +307,6 @@ async function resave(
   const { ids } = await inTx(v, async (tx) =>
     saveLayout(
       tx,
-      v.cfg,
       REMOVALS,
       await defaultLayout(tx, v.cfg, zoneId),
       { revision: plan.revision, tables: change(tables) },
@@ -539,7 +536,7 @@ describe("building today's plan from a zone's layout", () => {
     const z = await zone();
     await v.table("Bare 1", z);
 
-    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
 
     expect(await todayZone(z)).toBeUndefined();
   });
@@ -558,7 +555,7 @@ describe("building today's plan from a zone's layout", () => {
       tx.update(locations).set({ dayCutover: "04:00" }).where(eq(locations.id, v.cfg.locationId)),
     );
     // Europe/Madrid is two hours ahead of UTC on these dates.
-    const at = (utc: string) => inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, new Date(utc)));
+    const at = (utc: string) => inTx(v, (tx) => ensureToday(tx, NONE, new Date(utc)));
 
     try {
       await at("2026-10-09T01:30:00Z");
@@ -579,7 +576,7 @@ describe("building today's plan from a zone's layout", () => {
     const t1 = await v.table("Wait 1", z);
     await masterOf(z, [{ label: "Wait 1b", live: t1 }]);
     const { partyId } = await seat(v, t1);
-    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
     await finish(partyId);
     const resetRowIds = async () =>
       (
@@ -592,7 +589,7 @@ describe("building today's plan from a zone's layout", () => {
       ).map((row) => row.id);
     const copied = await resetRowIds();
 
-    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
 
     expect((await tableRow(v, t1)).label).toBe("Wait 1b");
     // A reset rewrites the zone's copy of the saved plan under new ids; a catch-up keeps them.
@@ -612,7 +609,7 @@ describe("building today's plan from a zone's layout", () => {
     );
     try {
       expect(await inTx(v, (tx) => todayBusinessDay(tx, NOW))).toBeNull();
-      await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+      await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
       await reset(z);
       expect(await todayZone(z)).toBeUndefined();
       expect(await todayRow(t1)).toBeUndefined();
@@ -1017,7 +1014,7 @@ describe("a deleted zone", () => {
     const z = await zone();
     const tableId = await v.table("Unchanged", z);
     await masterOf(z, [{ label: "Unchanged", live: tableId }]);
-    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
     const before = await tableRow(v, tableId);
     const todayBefore = await todayRow(tableId);
     await inTx(v, async (tx) =>
@@ -1027,7 +1024,7 @@ describe("a deleted zone", () => {
     expect(await todayRow(tableId)).toEqual(todayBefore);
     await expect(
       inTx(v, (tx) =>
-        updateZone(tx, v.cfg, z, { active: true } as unknown as Parameters<typeof updateZone>[3]),
+        updateZone(tx, z, { active: true } as unknown as Parameters<typeof updateZone>[2]),
       ),
     ).rejects.toMatchObject({ code: "zone.not_found" });
     expect(await tableRow(v, tableId)).toEqual(before);
@@ -1041,14 +1038,14 @@ describe("a deleted zone", () => {
     const onTable = await v.table("On 1", on);
     await masterOf(off, [{ label: "Off 1", live: offTable }]);
     await masterOf(on, [{ label: "On 1", live: onTable }]);
-    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
     await inTx(v, async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${off}`),
     );
     expect(await inService(offTable)).toBe(false);
 
     const nextDay = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
-    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, nextDay));
+    await inTx(v, (tx) => ensureToday(tx, NONE, nextDay));
 
     expect(await inService(offTable)).toBe(false);
     expect(await todayZone(off)).toMatchObject({ businessDay: "2026-10-10", revision: 1 });
@@ -1063,7 +1060,7 @@ describe("a deleted zone", () => {
       { label: "Reopen 1", live: planned },
       { label: "Reopen 2", live: hidden },
     ]);
-    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
     const never = await v.table("Reopen 3", z, { today: false });
     // A pending removal has no row on today's plan.
     await deleteFromMaster(master.get("Reopen 2")!);
@@ -1076,14 +1073,14 @@ describe("a deleted zone", () => {
 
     await expect(
       inTx(v, (tx) =>
-        updateZone(tx, v.cfg, z, { active: true } as unknown as Parameters<typeof updateZone>[3]),
+        updateZone(tx, z, { active: true } as unknown as Parameters<typeof updateZone>[2]),
       ),
     ).rejects.toMatchObject({ code: "zone.not_found" });
 
     expect(await inService(planned)).toBe(false);
     expect(await inService(hidden)).toBe(false);
     expect(await inService(never)).toBe(false);
-    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
     const floor = await inTx(v, (tx) => listTablesWithState(tx, [], NOW));
     expect(floor.map((t) => t.id)).not.toContain(planned);
   });
@@ -1221,16 +1218,16 @@ it.each(["03:00", "07:00"])(
       });
     });
     try {
-      await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, new Date("2026-11-03T12:00:00Z")));
+      await inTx(v, (tx) => ensureToday(tx, NONE, new Date("2026-11-03T12:00:00Z")));
       const original = await todayZone(z);
       expect(original).toMatchObject({ businessDay: "2026-11-03" });
       for (const time of cutover === "07:00"
         ? ["2026-11-04T05:00:00Z", "2026-11-04T06:59:00Z"]
         : ["2026-11-04T02:59:00Z"]) {
-        await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, new Date(time)));
+        await inTx(v, (tx) => ensureToday(tx, NONE, new Date(time)));
         expect(await todayZone(z)).toEqual(original);
       }
-      await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, new Date(`2026-11-04T${cutover}:00Z`)));
+      await inTx(v, (tx) => ensureToday(tx, NONE, new Date(`2026-11-04T${cutover}:00Z`)));
       expect(await todayZone(z)).toMatchObject({
         businessDay: "2026-11-04",
         revision: original!.revision + 1,
@@ -1399,7 +1396,7 @@ describe("the parts of joined tables in the till's copy", () => {
     const { zoneId, master, table } = await plannedZone(v, [{ key: "t9", label: "T9" }], NOW);
     await seat(v, table.t9!);
     const [t9] = (
-      await inTx(v, async (tx) => readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)))
+      await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)))
     ).tables;
     await resave(zoneId, (tables) => [
       ...tables.filter((entry) => entry.id !== master.t9),
@@ -1646,7 +1643,7 @@ describe("a reset over a joined table split today", () => {
     const { zoneId, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
     await mergeC5WithBar(table);
-    await inTx(v, (tx) => moveToday(tx, v.cfg, table.bar!, { x: 50, y: 30 }));
+    await inTx(v, (tx) => moveToday(tx, table.bar!, { x: 50, y: 30 }));
 
     await reset(zoneId);
     await catchUp(zoneId);
@@ -1904,7 +1901,7 @@ describe("a reset over a joined table split today", () => {
       ),
     );
     const saved = await inTx(v, async (tx) =>
-      readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+      readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)),
     );
     expect(saved.tables.find((entry) => entry.id === master.long)!.partIds.sort()).toEqual(
       [master.c3!, master.c4!].sort(),
@@ -1997,8 +1994,7 @@ describe("a reset over a joined table split today", () => {
     expect(await readyToMoveIn(zoneId)).toEqual([table.long!, table.c3!, table.c4!].sort());
   });
 
-  const markMovedOn = (tableId: string) =>
-    inTx(v, (tx) => markMoved(tx, v.cfg, NONE, tableId, NOW));
+  const markMovedOn = (tableId: string) => inTx(v, (tx) => markMoved(tx, NONE, tableId, NOW));
 
   it("a split part's group marked once its guests leave is taken back into Long table by Mark moved", async () => {
     const { zoneId, table } = await longTable();
@@ -2131,7 +2127,7 @@ describe("a reset over a joined table split today", () => {
       release: () => Promise.resolve(),
     };
 
-    const refused = await inTx(v, (tx) => markMoved(tx, v.cfg, [bookings], table.long!, NOW)).then(
+    const refused = await inTx(v, (tx) => markMoved(tx, [bookings], table.long!, NOW)).then(
       () => null,
       (error: unknown) => error as AppError,
     );
@@ -2190,7 +2186,7 @@ describe("resets onto a set's layout", () => {
     change: (tables: ZonePlanSave["tables"]) => ZonePlanSave["tables"],
     now = NOW,
   ): Promise<Record<string, string>> {
-    const plan = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId, zoneId }));
+    const plan = await inTx(v, (tx) => readLayout(tx, { setId, zoneId }));
     const tables = plan.tables.map((table) => ({
       id: table.id,
       key: table.id,
@@ -2203,7 +2199,6 @@ describe("resets onto a set's layout", () => {
     const { ids } = await inTx(v, (tx) =>
       saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         { setId, zoneId },
         { revision: plan.revision, tables: change(tables) },
@@ -2264,7 +2259,7 @@ describe("resets onto a set's layout", () => {
     const d = await twoLayouts(FRIDAY_NIGHT);
     expect(await todayZone(d.zoneId)).toMatchObject({ businessDay: "2026-10-09", setId: d.dinner });
 
-    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
 
     expect(await todayZone(d.zoneId)).toMatchObject({
       businessDay: "2026-10-10",
@@ -2353,7 +2348,6 @@ describe("resets onto a set's layout", () => {
       const name = `A ${randomUUID().slice(0, 6)}`;
       const { ids } = await saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         await defaultLayout(tx, v.cfg, zone.id),
         {
@@ -2389,7 +2383,7 @@ describe("resets onto a set's layout", () => {
     const rowBefore = await todayRow(live!.id);
     expect(rowBefore).toMatchObject({ x: 30 });
 
-    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
     expect(await todayZone(zoneId)).toEqual(recordBefore);
     expect(await todayRow(live!.id)).toEqual(rowBefore);
 
@@ -2405,14 +2399,13 @@ describe("resets onto a set's layout", () => {
       });
       return set!.id;
     });
-    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
     expect(await todayZone(zoneId)).toEqual(recordBefore);
     expect(await todayRow(live!.id)).toEqual(rowBefore);
 
     await inTx(v, (tx) =>
       saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         { setId, zoneId },
         {
@@ -2432,7 +2425,7 @@ describe("resets onto a set's layout", () => {
         NOW,
       ),
     );
-    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
     expect(await todayZone(zoneId)).toMatchObject({
       businessDay: "2026-10-10",
       setId,
@@ -2454,7 +2447,6 @@ describe("resets onto a set's layout", () => {
       const from = await defaultLayout(tx, v.cfg, zone.id);
       await saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         from,
         {
@@ -2497,7 +2489,7 @@ describe("resets onto a set's layout", () => {
     expect(recordBefore).toMatchObject({ businessDay: "2026-10-09", setId: fromSet });
     expect(rowBefore).toMatchObject({ x: 30 });
 
-    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
 
     expect(await todayZone(zoneId)).toEqual(recordBefore);
     expect(await todayRow(live!.id)).toEqual(rowBefore);

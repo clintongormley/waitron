@@ -34,8 +34,8 @@ describe("arriving dishes whose course no longer holds them", () => {
       const tableId = await venue.table(`Destination ${kind}`);
       const target = await seat(venue, tableId);
       const [starter, course] = await inTx(venue, async (tx) => [
-        await createCourse(tx, venue.cfg, { name: `Starter ${kind}`, displayOrder: 1 }),
-        await createCourse(tx, venue.cfg, { name: `Later ${kind}`, displayOrder: 2 }),
+        await createCourse(tx, { name: `Starter ${kind}`, displayOrder: 1 }),
+        await createCourse(tx, { name: `Later ${kind}`, displayOrder: 2 }),
       ]);
       await inTx(venue, (tx) =>
         addTabRound(tx, venue.cfg, source.tabId, [
@@ -62,9 +62,7 @@ describe("arriving dishes whose course no longer holds them", () => {
       ).toBeNull();
       if (kind === "inactive") await inTx(venue, (tx) => deleteCourse(tx, course!.id));
       if (kind === "unheld")
-        await inTx(venue, (tx) =>
-          updateCourse(tx, venue.cfg, course!.id, { heldUntilFired: false }),
-        );
+        await inTx(venue, (tx) => updateCourse(tx, course!.id, { heldUntilFired: false }));
 
       await inTx(venue, (tx) =>
         moveBill(

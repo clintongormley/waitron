@@ -1450,8 +1450,8 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   describe("a kitchen display profile's kitchen screens", () => {
     async function kitchenChoices() {
       return withTransaction(suite.db, async (tx) => ({
-        grill: (await createStation(tx, venueCfg, { name: uniqueName("Grill") })).id,
-        cold: (await createStation(tx, venueCfg, { name: uniqueName("Cold") })).id,
+        grill: (await createStation(tx, { name: uniqueName("Grill") })).id,
+        cold: (await createStation(tx, { name: uniqueName("Cold") })).id,
       }));
     }
 

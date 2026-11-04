@@ -122,7 +122,7 @@ async function setupVenue(): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   } satisfies TradingContext);
   return inTx(async (tx) => {
-    const { id: barStationId } = await createStation(tx, cfg, { name: "Bar" });
+    const { id: barStationId } = await createStation(tx, { name: "Bar" });
     const catalogue = await createCatalogue(tx, { name: "Menu" });
     const category = await createCategory(tx, { name: "Dishes" });
     const productId = {} as Record<Dish, string>;

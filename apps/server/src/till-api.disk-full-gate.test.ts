@@ -29,9 +29,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    await withTransaction(db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Kitchen", isDefault: true }),
-    );
+    await withTransaction(db, (tx) => createStation(tx, { name: "Kitchen", isDefault: true }));
   },
 });
 

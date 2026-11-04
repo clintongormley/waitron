@@ -21,7 +21,6 @@ import { placementOf, resetZone, spareLabels } from "./floor-today-store.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { refusedByAModule } from "./table-removal.js";
 import { resolveShortNames } from "./table-short-names.js";
-import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 export interface PlanTable {
@@ -69,11 +68,7 @@ export interface ZonePlanSave {
   }[];
 }
 
-export async function requireZone(
-  tx: Transaction,
-  _cfg: TradingContext,
-  zoneId: string,
-): Promise<void> {
+export async function requireZone(tx: Transaction, zoneId: string): Promise<void> {
   const [zone] = await tx
     .select({ id: floorZones.id })
     .from(floorZones)
@@ -223,12 +218,8 @@ export function placedAsRead(masters: readonly LayoutTable[]): LayoutTable[] {
 }
 
 /** A set's layout of a zone; with no layout row yet, the zone's tables all off, at revision 0. */
-export async function readLayout(
-  tx: Transaction,
-  cfg: TradingContext,
-  at: LayoutRef,
-): Promise<ZonePlan> {
-  await requireZone(tx, cfg, at.zoneId);
+export async function readLayout(tx: Transaction, at: LayoutRef): Promise<ZonePlan> {
+  await requireZone(tx, at.zoneId);
   const set = await requireSetOf(tx, at);
   const plan = await planOf(tx, at);
   return {
@@ -354,25 +345,23 @@ interface CheckedZonePlanSave {
 /** Checks a save of a set's layout without writing it. */
 export async function checkLayoutSave(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   at: LayoutRef,
   input: ZonePlanSave,
   now: Date = new Date(),
 ): Promise<void> {
-  await checkSave(tx, cfg, removals, at, input, now);
+  await checkSave(tx, removals, at, input, now);
 }
 
 async function checkSave(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   at: LayoutRef,
   input: ZonePlanSave,
   now: Date,
 ): Promise<CheckedZonePlanSave> {
   const { zoneId } = at;
-  await requireZone(tx, cfg, zoneId);
+  await requireZone(tx, zoneId);
   const { departmentId } = await requireSetOf(tx, at);
   const plan = await planOf(tx, at);
   const revision = plan?.revision ?? 0;
@@ -448,7 +437,6 @@ function masterColumns(table: CheckedTable) {
 /** A zone's first save builds today's plan at once, from the layout due now. */
 async function firstSaveReset(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   zoneId: string,
   now: Date,
@@ -457,7 +445,7 @@ async function firstSaveReset(
     .select({ id: floorTodayZones.id })
     .from(floorTodayZones)
     .where(eq(floorTodayZones.zoneId, zoneId));
-  if (today === undefined) await resetZone(tx, cfg, removals, zoneId, now, "due");
+  if (today === undefined) await resetZone(tx, removals, zoneId, now, "due");
 }
 
 /**
@@ -468,13 +456,12 @@ async function firstSaveReset(
  */
 export async function saveLayout(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   at: LayoutRef,
   input: ZonePlanSave,
   now: Date = new Date(),
 ): Promise<{ revision: number; ids: Record<string, string> }> {
-  const checked = await checkSave(tx, cfg, removals, at, input, now);
+  const checked = await checkSave(tx, removals, at, input, now);
   const saved = await writeSave(tx, at, checked, now);
   if (saved.shared) {
     const sets = await VENUE_SERVICE.readFloorPlanSets(tx, {
@@ -504,7 +491,7 @@ export async function saveLayout(
       }
     }
   }
-  await firstSaveReset(tx, cfg, removals, at.zoneId, now);
+  await firstSaveReset(tx, removals, at.zoneId, now);
   return { revision: saved.revision, ids: saved.ids };
 }
 

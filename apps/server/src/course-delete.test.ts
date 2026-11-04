@@ -26,7 +26,7 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 describe("permanent course deletion", () => {
   it("deleting a product-default course clears all defaults and retains its row", async () => {
     const v = await setupPartyVenue(suite.db);
-    const { id } = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Desserts" }));
+    const { id } = await inTx(v, (tx) => createCourse(tx, { name: "Desserts" }));
     const parentId = v.productId("Flan");
     const [parent] = await inTx(v, (tx) =>
       tx.select().from(products).where(eq(products.id, parentId)),
@@ -65,12 +65,12 @@ describe("permanent course deletion", () => {
     expect(
       await inTx(v, (tx) => tx.select().from(kitchenCourses).where(eq(kitchenCourses.id, id))),
     ).toEqual(courseBefore.map((row) => ({ ...row, active: false })));
-    await inTx(v, (tx) => requireCourse(tx, v.cfg, id));
+    await inTx(v, (tx) => requireCourse(tx, id));
     for (const action of [
       () => inTx(v, (tx) => deleteCourse(tx, id)),
       () => inTx(v, (tx) => readCourseDeleteImpact(tx, id)),
       ...[{}, { name: "Changed" }, { displayOrder: 9 }].map(
-        (patch) => () => inTx(v, (tx) => updateCourse(tx, v.cfg, id, patch)),
+        (patch) => () => inTx(v, (tx) => updateCourse(tx, id, patch)),
       ),
     ]) {
       await expect(action()).rejects.toMatchObject({
@@ -78,14 +78,14 @@ describe("permanent course deletion", () => {
         params: { courseId: id },
       });
     }
-    expect(await inTx(v, (tx) => listCourses(tx, v.cfg))).toEqual([]);
+    expect(await inTx(v, (tx) => listCourses(tx))).toEqual([]);
   });
 
   it.each(["product", "draft", "order", "ticket"] as const)(
     "retains a course referenced only by %s without rewriting recorded rows",
     async (reference) => {
       const v = await setupPartyVenue(suite.db);
-      const { id } = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Retained" }));
+      const { id } = await inTx(v, (tx) => createCourse(tx, { name: "Retained" }));
       const table =
         reference === "product"
           ? products
@@ -174,7 +174,7 @@ describe("permanent course deletion", () => {
 
   it("unreferenced course is physically removed and omits zero impact", async () => {
     const v = await setupPartyVenue(suite.db);
-    const { id } = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Unused" }));
+    const { id } = await inTx(v, (tx) => createCourse(tx, { name: "Unused" }));
     const expected = { target: { id, name: "Unused" }, refusals: [], ends: [], removes: [] };
     expect(await inTx(v, (tx) => readCourseDeleteImpact(tx, id))).toEqual(expected);
     expect(await inTx(v, (tx) => deleteCourse(tx, id))).toEqual(expected);
@@ -189,7 +189,7 @@ describe("permanent course deletion", () => {
 
   it("recomputes product cleanup after the preview", async () => {
     const v = await setupPartyVenue(suite.db);
-    const { id } = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Latest" }));
+    const { id } = await inTx(v, (tx) => createCourse(tx, { name: "Latest" }));
     expect(await inTx(v, (tx) => readCourseDeleteImpact(tx, id))).toEqual({
       target: { id, name: "Latest" },
       refusals: [],
@@ -222,11 +222,11 @@ describe("permanent course deletion", () => {
     "rejects an own active patch key with value %s",
     async (active) => {
       const v = await setupPartyVenue(suite.db);
-      const { id } = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Live" }));
+      const { id } = await inTx(v, (tx) => createCourse(tx, { name: "Live" }));
       await expect(
-        inTx(v, (tx) => updateCourse(tx, v.cfg, id, { active, name: "Changed" } as never)),
+        inTx(v, (tx) => updateCourse(tx, id, { active, name: "Changed" } as never)),
       ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "active" } });
-      expect(await inTx(v, (tx) => listCourses(tx, v.cfg))).toEqual([
+      expect(await inTx(v, (tx) => listCourses(tx))).toEqual([
         { id, name: "Live", displayOrder: 0, active: true, heldUntilFired: true },
       ]);
     },
@@ -234,7 +234,7 @@ describe("permanent course deletion", () => {
 
   it("refuses unknown impact/delete/empty edits without changing rows", async () => {
     const v = await setupPartyVenue(suite.db);
-    const { id } = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Scoped" }));
+    const { id } = await inTx(v, (tx) => createCourse(tx, { name: "Scoped" }));
     await inTx(v, (tx) =>
       tx
         .update(products)
@@ -245,13 +245,13 @@ describe("permanent course deletion", () => {
     const beforeCourses = await inTx(v, (tx) =>
       tx.select().from(kitchenCourses).orderBy(kitchenCourses.id),
     );
-    for (const [cfg, target] of [[v.cfg, randomUUID()]] as const) {
+    for (const target of [randomUUID()]) {
       for (const action of [readCourseDeleteImpact, deleteCourse])
         await expect(inTx(v, (tx) => action(tx, target))).rejects.toMatchObject({
           code: "course.not_found",
           params: { courseId: target },
         });
-      await expect(inTx(v, (tx) => updateCourse(tx, cfg, target, {}))).rejects.toMatchObject({
+      await expect(inTx(v, (tx) => updateCourse(tx, target, {}))).rejects.toMatchObject({
         code: "course.not_found",
         params: { courseId: target },
       });
@@ -266,7 +266,7 @@ describe("permanent course deletion", () => {
 
   it("creates and renames to deleted names while refusing duplicate live names", async () => {
     const v = await setupPartyVenue(suite.db);
-    const { id } = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Reusable" }));
+    const { id } = await inTx(v, (tx) => createCourse(tx, { name: "Reusable" }));
     await inTx(v, (tx) =>
       tx
         .update(products)
@@ -274,16 +274,17 @@ describe("permanent course deletion", () => {
         .where(eq(products.id, v.productId("Flan"))),
     );
     await inTx(v, (tx) => deleteCourse(tx, id));
-    const replacement = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Reusable" }));
+    const replacement = await inTx(v, (tx) => createCourse(tx, { name: "Reusable" }));
     expect(replacement.id).not.toBe(id);
-    await inTx(v, (tx) => updateCourse(tx, v.cfg, replacement.id, { name: "Other" }));
-    const renamed = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Rename me" }));
-    await inTx(v, (tx) => updateCourse(tx, v.cfg, renamed.id, { name: "Reusable" }));
+    await inTx(v, (tx) => updateCourse(tx, replacement.id, { name: "Other" }));
+    const renamed = await inTx(v, (tx) => createCourse(tx, { name: "Rename me" }));
+    await inTx(v, (tx) => updateCourse(tx, renamed.id, { name: "Reusable" }));
+    await expect(inTx(v, (tx) => createCourse(tx, { name: "Reusable" }))).rejects.toMatchObject({
+      code: "course.name_taken",
+      params: { name: "Reusable" },
+    });
     await expect(
-      inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Reusable" })),
-    ).rejects.toMatchObject({ code: "course.name_taken", params: { name: "Reusable" } });
-    await expect(
-      inTx(v, (tx) => updateCourse(tx, v.cfg, replacement.id, { name: "Reusable" })),
+      inTx(v, (tx) => updateCourse(tx, replacement.id, { name: "Reusable" })),
     ).rejects.toMatchObject({ code: "course.name_taken", params: { name: "Reusable" } });
   });
 });

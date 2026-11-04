@@ -34,7 +34,7 @@ export type TillSetupRead = Awaited<ReturnType<typeof readTillSetup>>;
 
 async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: DeviceBinding | null) {
   const taxpayer = await readTenant(tx);
-  const courses = (await listCourses(tx, deps.cfg)).map((course) => ({
+  const courses = (await listCourses(tx)).map((course) => ({
     id: course.id,
     name: course.name,
     displayOrder: course.displayOrder,

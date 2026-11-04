@@ -36,7 +36,6 @@ import type { TenderRefundRequest } from "./tender-refund-types.js";
 import { overridePinAttempts, parseOverrideField, STATUS, type TillApiDeps } from "./till-api.js";
 import { assertRequestDevice, assertStillSignedIn, requireSession } from "./till-session.js";
 import { assertSubjectZones } from "./zone-access.js";
-import type { DeviceRequestConfig } from "./trading-context.js";
 import { enqueuePrintJob } from "@waitron/printing";
 import { resolveReceiptPrinter } from "./receipt-print.js";
 import {
@@ -55,12 +54,7 @@ function pathId(value: string, kind: "sale" | "refund"): string {
   return value.toLowerCase();
 }
 
-async function checkAccess(
-  tx: Transaction,
-  cfg: DeviceRequestConfig,
-  session: Session,
-  saleId: string,
-) {
+async function checkAccess(tx: Transaction, session: Session, saleId: string) {
   await assertStillSignedIn(tx, session);
   const [row] = await tx
     .select(deviceBindingColumns)
@@ -73,7 +67,7 @@ async function checkAccess(
     throw new AppError("device.forbidden_action", { action: "refund" });
   if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
     throw new AppError("device_profile.not_admitted", {});
-  const scope = await resolveTransactionScope(tx, cfg, saleId);
+  const scope = await resolveTransactionScope(tx, saleId);
   await assertSubjectZones(
     tx,
     device.deviceProfileId,
@@ -141,11 +135,10 @@ export function mountTenderRefundApi(
   app.get("/api/transactions/:saleId/refundable-tenders", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { passive: true });
-      const cfg = requestCfg(deps.cfg, session),
-        id = pathId(c.req.param("saleId"), "sale");
+      const id = pathId(c.req.param("saleId"), "sale");
       const result = await withTransaction(deps.db, async (tx) => {
-        await checkAccess(tx, cfg, session, id);
-        return readRefundableTenders(tx, cfg, id);
+        await checkAccess(tx, session, id);
+        return readRefundableTenders(tx, id);
       });
       return c.json(result);
     }),
@@ -169,11 +162,10 @@ export function mountTenderRefundApi(
   app.get("/api/tender-refunds/:refundId", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { passive: true });
-      const cfg = requestCfg(deps.cfg, session),
-        id = pathId(c.req.param("refundId"), "refund");
+      const id = pathId(c.req.param("refundId"), "refund");
       const result = await withTransaction(deps.db, async (tx) => {
         const row = await readRefund(tx, id);
-        await checkAccess(tx, cfg, session, row.saleId);
+        await checkAccess(tx, session, row.saleId);
         return toTenderRefundView(row);
       });
       return c.json(result);
@@ -182,12 +174,11 @@ export function mountTenderRefundApi(
   app.get("/api/tender-refunds/:refundId/receipt", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { passive: true });
-      const cfg = requestCfg(deps.cfg, session),
-        id = pathId(c.req.param("refundId"), "refund");
+      const id = pathId(c.req.param("refundId"), "refund");
       const result = await withTransaction(deps.db, async (tx) => {
         const row = await readRefund(tx, id);
-        await checkAccess(tx, cfg, session, row.saleId);
-        return readTenderRefundAcknowledgment(deps.backend, tx, cfg, id);
+        await checkAccess(tx, session, row.saleId);
+        return readTenderRefundAcknowledgment(deps.backend, tx, id);
       });
       return c.json(result);
     }),
@@ -205,8 +196,8 @@ export function mountTenderRefundApi(
         throw new AppError("management.request_invalid", { field: "language" });
       await withTransaction(deps.db, async (tx) => {
         const row = await readRefund(tx, id);
-        await checkAccess(tx, cfg, session, row.saleId);
-        const acknowledgment = await readTenderRefundAcknowledgment(deps.backend, tx, cfg, id);
+        await checkAccess(tx, session, row.saleId);
+        const acknowledgment = await readTenderRefundAcknowledgment(deps.backend, tx, id);
         const [sale] = await tx
           .select({ locale: sales.locale })
           .from(sales)
@@ -241,7 +232,7 @@ export function mountTenderRefundApi(
       const override = overrideOf(asObject(await readRawJsonBody<unknown>(c)));
       const row = await withTransaction(deps.db, async (tx) => {
         const found = await readRefund(tx, id);
-        await checkAccess(tx, cfg, session, found.saleId);
+        await checkAccess(tx, session, found.saleId);
         return found;
       });
       const req: TenderRefundRequest = {

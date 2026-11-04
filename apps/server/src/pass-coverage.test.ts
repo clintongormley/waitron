@@ -85,7 +85,7 @@ const passOn = (
   zoneIds: string[] | null = null,
 ) => kitchenDisplay(venue, name, { kind: "pass", stationIds, zoneIds });
 
-const coverage = (venue: Venue) => withTransaction(db, (tx) => readPassCoverage(tx, venue.cfg));
+const coverage = () => withTransaction(db, (tx) => readPassCoverage(tx));
 
 const waiting = (venue: Venue, ...stations: (keyof typeof STATION_NAMES)[]) =>
   withTransaction(db, (tx) =>
@@ -129,9 +129,9 @@ async function gaps(
 
 describe("A773 station policy: pass coverage", () => {
   it("case 1: no station waits, so nothing is a gap, even with no pass device", async () => {
-    const venue = await setupSplitExtrasVenue();
+    await setupSplitExtrasVenue();
     expect(await zonesInOrder()).toHaveLength(2);
-    expect(await coverage(venue)).toEqual([]);
+    expect(await coverage()).toEqual([]);
   });
 
   it("case 2: a waiting station with no pass device is a gap in every zone", async () => {
@@ -139,7 +139,7 @@ describe("A773 station policy: pass coverage", () => {
     await waiting(venue, "grill");
     const T = venue.party.zoneId;
     const C = venue.counter.zoneId;
-    expect(await coverage(venue)).toEqual(
+    expect(await coverage()).toEqual(
       await gaps(venue, [
         ["grill", T],
         ["grill", C],
@@ -151,21 +151,21 @@ describe("A773 station policy: pass coverage", () => {
     const venue = await setupSplitExtrasVenue();
     await waiting(venue, "grill", "fryer");
     await passOn(venue, "Every pass", null);
-    expect(await coverage(venue)).toEqual([]);
+    expect(await coverage()).toEqual([]);
   });
 
   it("case 4: a pass on Grill in the tables zone leaves Grill in the counter zone", async () => {
     const venue = await setupSplitExtrasVenue();
     await waiting(venue, "grill");
     await passOn(venue, "Tables pass", [venue.stations.grill], [venue.party.zoneId]);
-    expect(await coverage(venue)).toEqual(await gaps(venue, [["grill", venue.counter.zoneId]]));
+    expect(await coverage()).toEqual(await gaps(venue, [["grill", venue.counter.zoneId]]));
   });
 
   it("case 4: a pass on Bar alone leaves Grill in both zones", async () => {
     const venue = await setupSplitExtrasVenue();
     await waiting(venue, "grill");
     await passOn(venue, "Bar pass", [venue.stations.bar]);
-    expect(await coverage(venue)).toEqual(
+    expect(await coverage()).toEqual(
       await gaps(venue, [
         ["grill", venue.party.zoneId],
         ["grill", venue.counter.zoneId],
@@ -180,7 +180,7 @@ describe("A773 station policy: pass coverage", () => {
     await withTransaction(db, (tx) =>
       tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, venue.party.zoneId)),
     );
-    expect(await coverage(venue)).toEqual(await gaps(venue, [["grill", venue.counter.zoneId]]));
+    expect(await coverage()).toEqual(await gaps(venue, [["grill", venue.counter.zoneId]]));
   });
 
   it("case 5: hot and cold passes each cover their own station", async () => {
@@ -188,7 +188,7 @@ describe("A773 station policy: pass coverage", () => {
     await waiting(venue, "grill", "fryer");
     await passOn(venue, "Hot pass", [venue.stations.grill]);
     await passOn(venue, "Cold pass", [venue.stations.fryer], [venue.party.zoneId]);
-    expect(await coverage(venue)).toEqual(await gaps(venue, [["fryer", venue.counter.zoneId]]));
+    expect(await coverage()).toEqual(await gaps(venue, [["fryer", venue.counter.zoneId]]));
   });
 
   it("case 6: a pass monitor covers nothing", async () => {
@@ -199,7 +199,7 @@ describe("A773 station policy: pass coverage", () => {
       stationIds: null,
       zoneIds: null,
     });
-    expect(await coverage(venue)).toEqual(
+    expect(await coverage()).toEqual(
       await gaps(venue, [
         ["grill", venue.party.zoneId],
         ["grill", venue.counter.zoneId],
@@ -216,7 +216,7 @@ describe("A773 station policy: pass coverage", () => {
     await kitchenDisplay(venue, "Short pass", { kind: "pass", stationIds: null, zoneIds: null }, [
       ...capabilities,
     ]);
-    expect(await coverage(venue)).toEqual(
+    expect(await coverage()).toEqual(
       await gaps(venue, [
         ["grill", venue.party.zoneId],
         ["grill", venue.counter.zoneId],
@@ -231,7 +231,7 @@ describe("A773 station policy: pass coverage", () => {
     await withTransaction(db, (tx) =>
       tx.update(devices).set({ active: false }).where(eq(devices.id, pass.deviceId)),
     );
-    expect(await coverage(venue)).toEqual(
+    expect(await coverage()).toEqual(
       await gaps(venue, [
         ["grill", venue.party.zoneId],
         ["grill", venue.counter.zoneId],
@@ -252,7 +252,7 @@ describe("A773 station policy: pass coverage", () => {
       VENUE_SERVICE.readDeviceKitchenScreens(tx, pass.deviceId),
     );
     expect(screens.find((screen) => screen.kind === "pass")).toMatchObject({ available: false });
-    expect(await coverage(venue)).toEqual(
+    expect(await coverage()).toEqual(
       await gaps(venue, [
         ["grill", venue.party.zoneId],
         ["grill", venue.counter.zoneId],
@@ -264,7 +264,7 @@ describe("A773 station policy: pass coverage", () => {
     const venue = await setupSplitExtrasVenue();
     await waiting(venue, "grill");
     await tablesTillPass(venue);
-    expect(await coverage(venue)).toEqual(await gaps(venue, [["grill", venue.counter.zoneId]]));
+    expect(await coverage()).toEqual(await gaps(venue, [["grill", venue.counter.zoneId]]));
   });
 
   it("case 14: a till or handheld whose profile has the Pass button off covers nothing, though its Fire still releases", async () => {
@@ -278,14 +278,14 @@ describe("A773 station policy: pass coverage", () => {
     await kitchenDisplay(venue, "Handheld pass", every, ALL_PASS, "phone-portrait");
     await burgerAtTable(venue, "fire");
     const pass = await tablesTillPass(venue, ALL_PASS);
-    expect(await coverage(venue)).toEqual(both);
-    const [card] = await toFire(venue, pass.by);
+    expect(await coverage()).toEqual(both);
+    const [card] = await toFire(pass.by);
     expect(card!.releaseTicketItemIds).toHaveLength(1);
     expect(await release(venue, pass.by, card!)).toEqual({
       releasedTicketItemIds: card!.releaseTicketItemIds,
     });
     await kitchenDisplay(venue, "Handheld pass on", every, TILL_PASS, "phone-portrait");
-    expect(await coverage(venue)).toEqual([]);
+    expect(await coverage()).toEqual([]);
   });
 
   it("case 13: the till pass's Fire refuses the counter dish and releases the table's", async () => {
@@ -313,7 +313,7 @@ describe("A773 station policy: pass coverage", () => {
       return { counterId, tableBurger: tableItem!.id };
     });
     const pass = await tablesTillPass(venue);
-    const cards = await toFire(venue, pass.by);
+    const cards = await toFire(pass.by);
     const counterCard = cards.find((card) => card.target.kind === "bill")!;
     const tableCard = cards.find((card) => card.target.kind === "group")!;
     expect(counterCard.target).toEqual({ kind: "bill", workingOrderId: placed.counterId });
@@ -336,7 +336,7 @@ describe("A773 station policy: pass coverage", () => {
       .from(kitchenStations)
       .where(eq(kitchenStations.id, venue.stations.grill));
     expect(grill).toEqual({ active: false, waitsForPass: true });
-    expect(await coverage(venue)).toEqual(
+    expect(await coverage()).toEqual(
       await gaps(venue, [
         ["fryer", venue.party.zoneId],
         ["fryer", venue.counter.zoneId],
@@ -366,7 +366,7 @@ describe("A773 station policy: pass coverage", () => {
       zoneId,
       zoneName: nameOf(zoneId),
     });
-    expect(await coverage(venue)).toEqual([
+    expect(await coverage()).toEqual([
       gap("fryer", T),
       gap("grill", T),
       gap("fryer", C),
@@ -404,7 +404,7 @@ describe("A773 station policy: pass coverage", () => {
       zoneId,
       zoneName,
     });
-    expect(await coverage(venue)).toEqual([
+    expect(await coverage()).toEqual([
       gap("grill", T, "Test tables"),
       gap("bar", C, "Test counter"),
       gap("fryer", C, "Test counter"),
@@ -422,11 +422,11 @@ describe("A773 station policy: pass coverage", () => {
       tx.update(floorZones).set({ active: false }).where(eq(floorZones.active, true)),
     );
     expect(await zonesInOrder()).toEqual([]);
-    expect(await coverage(venue)).toEqual([
+    expect(await coverage()).toEqual([
       { stationId: venue.stations.grill, stationName: "Grill", zoneId: null, zoneName: null },
     ]);
     await passOn(venue, "Every pass", null);
-    expect(await coverage(venue)).toEqual([]);
+    expect(await coverage()).toEqual([]);
   });
 
   it("case 12: with no active zone, a till pass whose zone list is left empty still covers the no-zone pair", async () => {
@@ -439,7 +439,7 @@ describe("A773 station policy: pass coverage", () => {
     expect(
       await withTransaction(db, (tx) => VENUE_SERVICE.readProfilesZones(tx, [pass.profileId])),
     ).toEqual(new Map([[pass.profileId, []]]));
-    expect(await coverage(venue)).toEqual([]);
+    expect(await coverage()).toEqual([]);
   });
 
   it("dishes case 1: a dish waiting at the tables keeps its gap after its station stops waiting", async () => {
@@ -447,7 +447,7 @@ describe("A773 station policy: pass coverage", () => {
     await waiting(venue, "grill");
     await burgerAtTable(venue, "fire");
     await stopWaiting(venue);
-    expect(await coverage(venue)).toEqual(await gaps(venue, [["grill", venue.party.zoneId]]));
+    expect(await coverage()).toEqual(await gaps(venue, [["grill", venue.party.zoneId]]));
   });
 
   it("dishes case 2: only a pass that sees the dish's zone covers it", async () => {
@@ -456,9 +456,9 @@ describe("A773 station policy: pass coverage", () => {
     await burgerAtTable(venue, "fire");
     await stopWaiting(venue);
     await passOn(venue, "Counter pass", [venue.stations.grill], [venue.counter.zoneId]);
-    expect(await coverage(venue)).toEqual(await gaps(venue, [["grill", venue.party.zoneId]]));
+    expect(await coverage()).toEqual(await gaps(venue, [["grill", venue.party.zoneId]]));
     await passOn(venue, "Tables pass", [venue.stations.grill], [venue.party.zoneId]);
-    expect(await coverage(venue)).toEqual([]);
+    expect(await coverage()).toEqual([]);
   });
 
   it("dishes case 3: a released dish is no gap", async () => {
@@ -468,12 +468,12 @@ describe("A773 station policy: pass coverage", () => {
     await stopWaiting(venue);
     const pass = await passOn(venue, "Every pass", null);
     const by: PassActor = { deviceId: pass.deviceId, personId: null };
-    const [card] = await toFire(venue, by);
+    const [card] = await toFire(by);
     await release(venue, by, card!);
     await withTransaction(db, (tx) =>
       tx.update(devices).set({ active: false }).where(eq(devices.id, pass.deviceId)),
     );
-    expect(await coverage(venue)).toEqual([]);
+    expect(await coverage()).toEqual([]);
   });
 
   it("dishes case 4: a held dish at a station that no longer waits is no gap", async () => {
@@ -481,7 +481,7 @@ describe("A773 station policy: pass coverage", () => {
     await waiting(venue, "grill");
     await burgerAtTable(venue, "hold");
     await stopWaiting(venue);
-    expect(await coverage(venue)).toEqual([]);
+    expect(await coverage()).toEqual([]);
   });
 
   it("dishes case 5: a dish in no zone needs an every-zone pass", async () => {
@@ -491,11 +491,11 @@ describe("A773 station policy: pass coverage", () => {
     await stopWaiting(venue);
     await passOn(venue, "Tables pass", [venue.stations.grill], [venue.party.zoneId]);
     await passOn(venue, "Counter pass", [venue.stations.grill], [venue.counter.zoneId]);
-    expect(await coverage(venue)).toEqual([
+    expect(await coverage()).toEqual([
       { stationId: venue.stations.grill, stationName: "Grill", zoneId: null, zoneName: null },
     ]);
     await passOn(venue, "Every pass", null);
-    expect(await coverage(venue)).toEqual([]);
+    expect(await coverage()).toEqual([]);
   });
 
   it("dishes case 5: a till pass limited to the tables zone covers a dish in no zone, and its Fire releases it", async () => {
@@ -504,10 +504,8 @@ describe("A773 station policy: pass coverage", () => {
     const counterId = await counterDishInNoZone(venue);
     await stopWaiting(venue);
     const pass = await tablesTillPass(venue);
-    expect(await coverage(venue)).toEqual([]);
-    const card = (await toFire(venue, pass.by)).find(
-      (candidate) => candidate.target.kind === "bill",
-    )!;
+    expect(await coverage()).toEqual([]);
+    const card = (await toFire(pass.by)).find((candidate) => candidate.target.kind === "bill")!;
     expect(card.target).toEqual({ kind: "bill", workingOrderId: counterId });
     const [item] = await db
       .select({ id: ticketItems.id })
@@ -538,7 +536,7 @@ describe("A773 station policy: pass coverage", () => {
         },
       );
     });
-    expect(await coverage(venue)).toEqual([]);
+    expect(await coverage()).toEqual([]);
   });
 
   it("dishes case 6: a dish whose order was abandoned is no gap", async () => {
@@ -552,14 +550,14 @@ describe("A773 station policy: pass coverage", () => {
         .set({ status: "abandoned" })
         .where(eq(workingOrders.id, placed.orderId)),
     );
-    expect(await coverage(venue)).toEqual([]);
+    expect(await coverage()).toEqual([]);
   });
 
   it("dishes case 7: a pair both configured and with a dish waiting is listed once", async () => {
     const venue = await setupSplitExtrasVenue();
     await waiting(venue, "grill");
     await burgerAtTable(venue, "fire");
-    expect(await coverage(venue)).toEqual(
+    expect(await coverage()).toEqual(
       await gaps(venue, [
         ["grill", venue.party.zoneId],
         ["grill", venue.counter.zoneId],
@@ -643,12 +641,12 @@ async function tablesTillPass(venue: Venue, capabilities: CapabilityFlag[] = TIL
 }
 
 /** The device's pass screen's To fire cards, read as its board reads them. */
-async function toFire(venue: Venue, by: PassActor): Promise<PassCard[]> {
+async function toFire(by: PassActor): Promise<PassCard[]> {
   return withTransaction(db, async (tx) => {
     const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, by.deviceId)).find(
       (candidate) => candidate.kind === "pass",
     )!;
-    return (await readScopedPassBoard(tx, venue.cfg, passScopeOf(screen))).toFire;
+    return (await readScopedPassBoard(tx, passScopeOf(screen))).toFire;
   });
 }
 

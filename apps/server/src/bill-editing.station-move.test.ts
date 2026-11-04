@@ -34,8 +34,8 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     await inTx(venue, async (tx) => {
-      bar = (await createStation(tx, venue.cfg, { name: "Bar", isDefault: true })).id;
-      grill = (await createStation(tx, venue.cfg, { name: "Grill" })).id;
+      bar = (await createStation(tx, { name: "Bar", isDefault: true })).id;
+      grill = (await createStation(tx, { name: "Grill" })).id;
     });
   },
 });

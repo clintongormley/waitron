@@ -90,9 +90,9 @@ async function setup() {
     ])
     .returning();
   const stocked = await withTransaction(db, async (tx) => {
-    const early = await createCourse(tx, cfg, { name: "Starters", displayOrder: 0 });
-    const late = await createCourse(tx, cfg, { name: "Recorded mains", displayOrder: 7 });
-    const other = await createCourse(tx, cfg, { name: "Other deleted", displayOrder: 9 });
+    const early = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+    const late = await createCourse(tx, { name: "Recorded mains", displayOrder: 7 });
+    const other = await createCourse(tx, { name: "Other deleted", displayOrder: 9 });
     const catalogue = await createCatalogue(tx, { name: "Menu" });
     const category = await createCategory(tx, { name: "Food" });
     const dish = await createProduct(tx, {
@@ -128,9 +128,9 @@ async function setup() {
       "es-ES",
     );
     await writeProductModifiers(tx, dish.id, [{ kind: "extras", id: list.id }]);
-    await setProductCourse(tx, cfg, dish.id, late.id);
+    await setProductCourse(tx, dish.id, late.id);
     // Keep a reference so deletion retains the other row as well.
-    await setProductCourse(tx, cfg, sauce.id, other.id);
+    await setProductCourse(tx, sauce.id, other.id);
     await assignCatalogueToVenue(tx, catalogue.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const counter = await offerProducts(tx, cfg);
@@ -151,7 +151,7 @@ async function setup() {
     () => {},
   );
   async function session(person: typeof ana, pin: string) {
-    const deviceId = await seedSessionDevice(db, cfg);
+    const deviceId = await seedSessionDevice(db);
     const token = await withTransaction(db, (tx) =>
       loginWithPin(tx, { deviceId, personId: person!.id, pin }),
     );
@@ -578,7 +578,7 @@ it("routing preview of a saved draft keeps its deleted course", async () => {
 it("routed child extras inherit and release their dish's retained deleted course", async () => {
   const v = await setup();
   const station = await withTransaction(v.db, async (tx) => {
-    const station = await createStation(tx, v.cfg, { name: "Sauce kitchen" });
+    const station = await createStation(tx, { name: "Sauce kitchen" });
     await routeProductTo(tx, v.sauce.id, station.id);
     return station;
   });

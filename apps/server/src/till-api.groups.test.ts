@@ -952,11 +952,11 @@ describe("the tab routes that release lines, on a party with groups", () => {
         .where(eq(products.name, "Tarta")),
     );
     const courseId = await inTx(venue, async (tx) => {
-      const course = await createCourse(tx, venue.cfg, {
+      const course = await createCourse(tx, {
         name: `Desserts-${randomUUID().slice(0, 6)}`,
         displayOrder: 9,
       });
-      await setProductCourse(tx, venue.cfg, cake!.id, course.id);
+      await setProductCourse(tx, cake!.id, course.id);
       return course.id;
     });
     try {
@@ -994,7 +994,7 @@ describe("the tab routes that release lines, on a party with groups", () => {
     } finally {
       // The venue is shared by the whole file.
       await inTx(venue, async (tx) => {
-        await setProductCourse(tx, venue.cfg, cake!.id, cake!.courseId);
+        await setProductCourse(tx, cake!.id, cake!.courseId);
         await deleteCourse(tx, courseId);
       });
     }
@@ -1725,9 +1725,7 @@ async function remindAts(partyId: string) {
 describe("POST /api/parties/:id/groups/:gid/snooze and GET /api/parties/:id/current-orders", () => {
   it("includes each sent line's recorded course in the Current orders response", async () => {
     const party = await seated();
-    const mains = await inTx(venue, (tx) =>
-      createCourse(tx, venue.cfg, { name: `Mains-${randomUUID()}` }),
-    );
+    const mains = await inTx(venue, (tx) => createCourse(tx, { name: `Mains-${randomUUID()}` }));
     const submitted = await call("POST", `/api/parties/${party.partyId}/groups`, {
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(party.partyId),

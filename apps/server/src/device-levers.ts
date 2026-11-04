@@ -32,11 +32,7 @@ export async function requireKitchenDisplay(
   return device;
 }
 
-async function orderZone(
-  tx: Transaction,
-  cfg: TradingContext,
-  orderId: string,
-): Promise<string | null> {
+async function orderZone(tx: Transaction, orderId: string): Promise<string | null> {
   const [order] = await tx
     .select({
       id: workingOrders.id,
@@ -48,7 +44,7 @@ async function orderZone(
   if (order === undefined) {
     throw new AppError("working_order.not_found", { workingOrderId: orderId });
   }
-  return (await orderWatchZones(tx, cfg, [order])).get(order.id) ?? null;
+  return (await orderWatchZones(tx, [order])).get(order.id) ?? null;
 }
 
 /** A kitchen display's Ready actions use its pass screen's zones. */
@@ -68,7 +64,7 @@ export function mountDeviceLevers(
       const courseId = c.req.param("courseId");
       if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
       await withTransaction(deps.db, async (tx) => {
-        const zoneId = await orderZone(tx, deps.cfg, orderId);
+        const zoneId = await orderZone(tx, orderId);
         await VENUE_SERVICE.assertPassScreenZone(tx, device.deviceId, zoneId);
         await bumpCourseReady(tx, cfg, orderId, courseId, { deviceId: device.deviceId });
       });
@@ -86,7 +82,7 @@ export function mountDeviceLevers(
       const body = asObject(await readRawJsonBody<unknown>(c));
       const args = groupCommand(device.deviceId, body);
       const answer = await withTransaction(deps.db, async (tx) => {
-        const zoneId = (await partyWatchZones(tx, deps.cfg, [partyId])).get(partyId) ?? null;
+        const zoneId = (await partyWatchZones(tx, [partyId])).get(partyId) ?? null;
         await VENUE_SERVICE.assertPassScreenZone(tx, device.deviceId, zoneId);
         return bumpGroupReady(tx, cfg, partyId, groupId, args, { deviceId: device.deviceId });
       });

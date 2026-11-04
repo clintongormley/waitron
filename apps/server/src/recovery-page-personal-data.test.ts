@@ -663,7 +663,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
       },
       r.log,
     );
-    const deviceId = await seedSessionDevice(v.db, v.cfg);
+    const deviceId = await seedSessionDevice(v.db);
     const session = await inTx(v, async (tx) => {
       const [person] = await tx
         .insert(persons)

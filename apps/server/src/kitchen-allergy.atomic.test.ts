@@ -158,9 +158,7 @@ describe("A669 atomic", () => {
     "reroute and edit address the cook that owns work at each transaction (move first %s)",
     async (moveFirst) => {
       const f = await kitchenFixture(suite.db);
-      const destination = await inTx(f.v, (tx) =>
-        createStation(tx, f.v.cfg, { name: "Next cook" }),
-      );
+      const destination = await inTx(f.v, (tx) => createStation(tx, { name: "Next cook" }));
       const move = (tx: Transaction) =>
         moveDishesToStation(
           tx,

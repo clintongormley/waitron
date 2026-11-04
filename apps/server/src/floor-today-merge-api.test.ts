@@ -49,7 +49,7 @@ beforeAll(async () => {
     },
     () => {},
   );
-  const deviceId = await seedSessionDevice(v.db, v.cfg);
+  const deviceId = await seedSessionDevice(v.db);
   const session = await inTx(v, async (tx) => {
     const [person] = await tx
       .insert(persons)

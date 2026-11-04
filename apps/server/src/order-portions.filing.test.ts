@@ -1084,7 +1084,7 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
   it("A803 portion grouping: a portion in another course stays apart", async () => {
     const { billId, portions } = await seed(croquetas("2"));
     await inTx(venue, async (tx) => {
-      const course = await createCourse(tx, venue.cfg, { name: "Starters", displayOrder: 90 });
+      const course = await createCourse(tx, { name: "Starters", displayOrder: 90 });
       await tx
         .update(workingOrderLines)
         .set({ courseId: course.id })
@@ -1430,7 +1430,6 @@ describe("A803 portions: raising a dish", () => {
           .orderBy(workingOrderLines.lineNo);
         const blocks = await resolveKitchenAllergyBlocks(
           tx,
-          venue.cfg,
           items.map((item) => item.id),
         );
         return items.map((item) => [item.quantity, blocks.get(item.id) ?? null] as const);

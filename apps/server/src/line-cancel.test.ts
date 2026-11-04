@@ -55,7 +55,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionAdjustmentVenue(db);
     await inTx(venue, async (tx) => {
-      const station = await createStation(tx, venue.cfg, { name: "Extra preparation" });
+      const station = await createStation(tx, { name: "Extra preparation" });
       await setRoutingCell(
         tx,
         { row: { kind: "product", productId: venue.olivesId }, zoneId: null },
@@ -1088,8 +1088,8 @@ describe("Cancel item service command", () => {
 
   it("a keep-charge cancel of printed held work prints HOLD CANCELLED only at a station recorded for the group, and every station's screen is told", async () => {
     const { barId, screenId, barPrinterId, cells } = await inTx(venue, async (tx) => {
-      const barId = (await createStation(tx, venue.cfg, { name: `Bar ${randomUUID()}` })).id;
-      const screenId = (await createStation(tx, venue.cfg, { name: `Screen ${randomUUID()}` })).id;
+      const barId = (await createStation(tx, { name: `Bar ${randomUUID()}` })).id;
+      const screenId = (await createStation(tx, { name: `Screen ${randomUUID()}` })).id;
       const printer = await createPrinter(tx, {
         name: `Bar ${randomUUID()}`,
         transport: "cloud_poll",

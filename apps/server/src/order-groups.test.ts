@@ -181,7 +181,7 @@ async function setupVenue(): Promise<Venue> {
     const courseIds: Record<string, string> = {};
     let displayOrder = 1;
     for (const [key, name] of Object.entries(COURSES)) {
-      courseIds[key] = (await createCourse(tx, cfg, { name, displayOrder: displayOrder++ })).id;
+      courseIds[key] = (await createCourse(tx, { name, displayOrder: displayOrder++ })).id;
     }
     const productId = {} as Record<Dish, string>;
     for (const [dish, names] of Object.entries(DISHES) as [Dish, (typeof DISHES)[Dish]][]) {
@@ -196,7 +196,7 @@ async function setupVenue(): Promise<Venue> {
         vatClass: "general",
       });
       productId[dish] = product.id;
-      await setProductCourse(tx, cfg, product.id, courseIds[COURSE_OF[dish]]!);
+      await setProductCourse(tx, product.id, courseIds[COURSE_OF[dish]]!);
     }
     const extras = await createExtraList(
       tx,
@@ -341,8 +341,8 @@ async function groupsOf(partyId: string) {
   return inTx((tx) => listOrderGroups(tx, partyId));
 }
 
-async function passBoard(v: Venue): Promise<PassBoard> {
-  return inTx((tx) => readScopedPassBoard(tx, v.cfg, EVERY));
+async function passBoard(): Promise<PassBoard> {
+  return inTx((tx) => readScopedPassBoard(tx, EVERY));
 }
 
 function groupIdOf(card: PassCard): string | null {
@@ -561,7 +561,7 @@ describe("permanent group numbers on kitchen work", () => {
       "Terrace 4, 9",
       "Terrace 7",
     ]);
-    const pass = await passBoard(v);
+    const pass = await passBoard();
     expect(
       [a.id, b.id].map((id) => cardOf(pass, (card) => groupIdOf(card) === id).group),
     ).toMatchObject([{ numberPartyLabel: "Terrace 4, 9" }, { numberPartyLabel: "Terrace 7" }]);
@@ -694,7 +694,7 @@ describe("permanent group numbers on kitchen work", () => {
       displayNumber: 5,
       numberPartyId: s.partyId,
     });
-    const cards = groupCardsOf(await passBoard(v), s.partyId);
+    const cards = groupCardsOf(await passBoard(), s.partyId);
     expect(
       cards.map((card) => [
         card.group!.position,
@@ -2876,8 +2876,8 @@ describe("sending lines on their own", () => {
 });
 
 describe("a device as the firer", () => {
-  async function firingDevice(v: Venue): Promise<{ id: string; label: string }> {
-    const id = await seedSessionDevice(db, v.cfg);
+  async function firingDevice(): Promise<{ id: string; label: string }> {
+    const id = await seedSessionDevice(db);
     const [row] = await db.select({ label: devices.label }).from(devices).where(eq(devices.id, id));
     return { id, label: row!.label };
   }
@@ -2885,7 +2885,7 @@ describe("a device as the firer", () => {
   it("records the device, not a person, on a historical group release, and shows it as the sender", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
-    const device = await firingDevice(v);
+    const device = await firingDevice();
     const command = await args(s.partyId, { operatorId: device.id });
     await inTx((tx) => fireGroup(tx, v.cfg, s.partyId, s.mains, command, { deviceId: device.id }));
 
@@ -2904,7 +2904,7 @@ describe("a device as the firer", () => {
   it("records the device when a group fires, keeping the device's id as the command's operator", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
-    const device = await firingDevice(v);
+    const device = await firingDevice();
     const command = await args(s.partyId, { operatorId: device.id });
 
     await inTx((tx) => fireGroup(tx, v.cfg, s.partyId, s.warm, command, { deviceId: device.id }));
@@ -4031,7 +4031,7 @@ describe("the kitchen and the pass read a party's groups", () => {
     const s = await specExample(v);
     const revision = await revisionOf(s.partyId);
 
-    const cards = groupCardsOf(await passBoard(v), s.partyId);
+    const cards = groupCardsOf(await passBoard(), s.partyId);
 
     for (const card of cards) expect(card.party).toEqual({ id: s.partyId, revision });
     expect(
@@ -4073,7 +4073,7 @@ describe("the kitchen and the pass read a party's groups", () => {
     const s = await specExample(v);
     await reorder(s.partyId, [s.desserts, s.mains, s.warm]);
 
-    const board = await passBoard(v);
+    const board = await passBoard();
 
     expect(
       board.held
@@ -4098,7 +4098,7 @@ describe("the kitchen and the pass read a party's groups", () => {
     const s = await specExampleOnTwoBills(v);
     await ready(v, s.partyId, s.cold);
 
-    const board = await passBoard(v);
+    const board = await passBoard();
     const cold = cardOf(board, (card) => groupIdOf(card) === s.cold);
     expect(cold.group).toMatchObject({ position: 2 });
     expect(cold.kind).not.toBe("held");
@@ -4113,7 +4113,7 @@ describe("the kitchen and the pass read a party's groups", () => {
     // A round, not a group submission, leaves the fired line in no group.
     await inTx((tx) => addTabRound(tx, v.cfg, s.tabId, [line(v, "steak")]));
 
-    const board = await passBoard(v);
+    const board = await passBoard();
     const loose = cardOf(
       board,
       (card) => card.target.kind === "bill" && card.target.workingOrderId === s.tabId,
@@ -4138,7 +4138,7 @@ describe("the kitchen and the pass read a party's groups", () => {
     );
 
     const pass = cardOf(
-      await passBoard(v),
+      await passBoard(),
       (card) => card.target.kind === "bill" && card.target.workingOrderId === tabId,
     );
     const [card] = (await inTx((tx) => listStationQueue(tx, v.stationId))).filter(

@@ -92,9 +92,9 @@ useVenueDb({
       ).zoneId;
     });
     [entrantes, principales, postres] = await inTx(v, async (tx) => [
-      (await createCourse(tx, v.cfg, { name: "Entrantes", displayOrder: 1 })).id,
-      (await createCourse(tx, v.cfg, { name: "Principales", displayOrder: 2 })).id,
-      (await createCourse(tx, v.cfg, { name: "Postres", displayOrder: 3 })).id,
+      (await createCourse(tx, { name: "Entrantes", displayOrder: 1 })).id,
+      (await createCourse(tx, { name: "Principales", displayOrder: 2 })).id,
+      (await createCourse(tx, { name: "Postres", displayOrder: 3 })).id,
     ]);
   },
 });
@@ -168,7 +168,7 @@ async function firedTicketsOf(billId: string) {
 
 /** The groups of the pass cards holding a bill's dishes; null for a card that is the bill's own. */
 async function passGroupsOf(billId: string) {
-  const board = await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY));
+  const board = await inTx(v, (tx) => readScopedPassBoard(tx, EVERY));
   return boardCards(board)
     .filter((card) => card.items.some((item) => item.orderId === billId))
     .map((card) => (card.target.kind === "group" ? card.target.groupId : null));
@@ -490,7 +490,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
   it("fires moved inactive and no-course dishes while keeping an active held course held", async () => {
     const retired = await inTx(
       v,
-      async (tx) => (await createCourse(tx, v.cfg, { name: "Segundos", displayOrder: 2 })).id,
+      async (tx) => (await createCourse(tx, { name: "Segundos", displayOrder: 2 })).id,
     );
     const ana = await seat(v, await v.table("Sin curso 5"));
     try {
@@ -535,8 +535,8 @@ describe("dishes arriving in a party (A96, P16)", () => {
 
   it("fires all moved inactive courses and no-course dishes without creating held groups", async () => {
     const [terceros, cuartos] = await inTx(v, async (tx) => [
-      (await createCourse(tx, v.cfg, { name: "Terceros", displayOrder: 2 })).id,
-      (await createCourse(tx, v.cfg, { name: "Cuartos", displayOrder: 4 })).id,
+      (await createCourse(tx, { name: "Terceros", displayOrder: 2 })).id,
+      (await createCourse(tx, { name: "Cuartos", displayOrder: 4 })).id,
     ]);
     const ana = await seat(v, await v.table("Sin curso 7"));
     try {
@@ -647,7 +647,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
     const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
     const [vino] = await lineRows(b2);
-    const display = await seedSessionDevice(v.db, v.cfg);
+    const display = await seedSessionDevice(v.db);
     await inTx(v, async (tx) => {
       await tx.update(devices).set({ label: "Kitchen screen" }).where(eq(devices.id, display));
       await tx
@@ -682,7 +682,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
     const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
     const [vino] = await lineRows(b2);
-    const display = await seedSessionDevice(v.db, v.cfg);
+    const display = await seedSessionDevice(v.db);
     await inTx(v, (tx) =>
       tx
         .update(orderGroups)

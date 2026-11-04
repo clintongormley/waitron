@@ -101,7 +101,7 @@ beforeAll(async () => {
     },
     () => {},
   );
-  const deviceId = await seedSessionDevice(v.db, v.cfg);
+  const deviceId = await seedSessionDevice(v.db);
   const session = await inTx(v, async (tx) => {
     const [person] = await tx
       .insert(persons)
@@ -421,7 +421,6 @@ describe("the table routes' revision", () => {
     await inTx(v, async (tx) =>
       saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         await defaultLayout(tx, v.cfg, zoneId),
         {
@@ -573,7 +572,6 @@ describe("today's routes", () => {
     await inTx(v, async (tx) =>
       saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         await defaultLayout(tx, v.cfg, zoneId),
         {
@@ -846,7 +844,6 @@ describe("the zone reset's revision", () => {
     await inTx(v, async (tx) =>
       saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         await defaultLayout(tx, v.cfg, zoneId),
         {
@@ -1389,15 +1386,14 @@ describe("Reset to … plan", () => {
   }
 
   async function layoutRevision(setId: string, zoneId: string): Promise<number> {
-    return (await inTx(v, (tx) => readLayout(tx, v.cfg, { setId, zoneId }))).revision;
+    return (await inTx(v, (tx) => readLayout(tx, { setId, zoneId }))).revision;
   }
 
   async function moveInLayout(setId: string, zoneId: string, tableId: string, x: number) {
     await inTx(v, async (tx) => {
-      const plan = await readLayout(tx, v.cfg, { setId, zoneId });
+      const plan = await readLayout(tx, { setId, zoneId });
       await saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         { setId, zoneId },
         {
@@ -1541,7 +1537,7 @@ describe("Reset to … plan", () => {
     fixedAt = LUNCH;
     const d = await setsDepartment(v, new Date("2026-10-09T06:00:00Z"));
     await inTx(v, (tx) =>
-      resetZone(tx, v.cfg, REMOVALS, d.zoneId, LUNCH, { setId: d.standard, occurrence: null }),
+      resetZone(tx, REMOVALS, d.zoneId, LUNCH, { setId: d.standard, occurrence: null }),
     );
     expect(await recordOf(d.zoneId)).toMatchObject({ setId: d.standard, revision: 1 });
 
@@ -1725,13 +1721,10 @@ describe("Update layout", () => {
   it("applies null for a room whose running layout stands none of its tables, and records the due layout", async () => {
     fixedAt = LUNCH;
     const d = await setsDepartment(v, new Date("2026-10-09T06:00:00Z"));
-    const empty = await inTx(v, (tx) =>
-      readLayout(tx, v.cfg, { setId: d.standard, zoneId: d.zoneId }),
-    );
+    const empty = await inTx(v, (tx) => readLayout(tx, { setId: d.standard, zoneId: d.zoneId }));
     await inTx(v, (tx) =>
       saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         { setId: d.standard, zoneId: d.zoneId },
         { revision: empty.revision, tables: [] },
@@ -1740,13 +1733,10 @@ describe("Update layout", () => {
     );
     expect((await send("GET", "/api/tables/state")).status).toBe(200);
     expect(await recordOf(d.zoneId)).toMatchObject({ setId: d.standard });
-    const plan = await inTx(v, (tx) =>
-      readLayout(tx, v.cfg, { setId: d.dinner, zoneId: d.zoneId }),
-    );
+    const plan = await inTx(v, (tx) => readLayout(tx, { setId: d.dinner, zoneId: d.zoneId }));
     const { ids } = await inTx(v, (tx) =>
       saveLayout(
         tx,
-        v.cfg,
         REMOVALS,
         { setId: d.dinner, zoneId: d.zoneId },
         {
@@ -1785,9 +1775,7 @@ describe("Update layout", () => {
       from + 1,
     );
 
-    const dinner = await inTx(v, (tx) =>
-      readLayout(tx, v.cfg, { setId: d.dinner, zoneId: d.zoneId }),
-    );
+    const dinner = await inTx(v, (tx) => readLayout(tx, { setId: d.dinner, zoneId: d.zoneId }));
     const one = dinner.tables.find((t) => t.id === ids.one)!.liveTableId!;
     expect(await todayRow(v, one)).toMatchObject({ x: 100 });
     expect(await recordOf(d.zoneId)).toMatchObject({

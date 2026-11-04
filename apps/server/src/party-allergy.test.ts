@@ -387,8 +387,8 @@ describe("A669 candidate sets", () => {
     const p = await party();
     const lines = await held(p, 4);
     const [a, b] = await inTx(v, async (tx) => [
-      await createCourse(tx, v.cfg, { name: `First ${randomUUID().slice(0, 8)}`, displayOrder: 1 }),
-      await createCourse(tx, v.cfg, { name: `Later ${randomUUID().slice(0, 8)}`, displayOrder: 2 }),
+      await createCourse(tx, { name: `First ${randomUUID().slice(0, 8)}`, displayOrder: 1 }),
+      await createCourse(tx, { name: `Later ${randomUUID().slice(0, 8)}`, displayOrder: 2 }),
     ]);
     await v.db
       .update(workingOrderLines)

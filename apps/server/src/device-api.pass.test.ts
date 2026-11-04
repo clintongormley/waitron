@@ -83,7 +83,7 @@ async function fixture() {
     );
     return row!.id;
   };
-  const grill = (await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Grill" }))).id;
+  const grill = (await inTx(v, (tx) => createStation(tx, { name: "Grill" }))).id;
   const kds = await profile("kds");
   const till = await profile("till");
   const device = async (
@@ -500,7 +500,7 @@ describe("the till's watcher routes", () => {
       },
       log,
     );
-    const sessionDeviceId = await seedSessionDevice(suite.db, f.v.cfg);
+    const sessionDeviceId = await seedSessionDevice(suite.db);
     const [person] = await inTx(f.v, (tx) => tx.select({ id: persons.id }).from(persons).limit(1));
     const session = await inTx(f.v, (tx) =>
       loginWithPin(tx, { deviceId: sessionDeviceId, personId: person!.id, pin: "1234" }),
@@ -648,7 +648,7 @@ describe("A773 pass display policy", () => {
     f: Awaited<ReturnType<typeof fixture>>,
     grillWaits: boolean,
   ): Promise<{ burger: string; paella: string }> {
-    const cold = (await inTx(f.v, (tx) => createStation(tx, f.v.cfg, { name: "Cold" }))).id;
+    const cold = (await inTx(f.v, (tx) => createStation(tx, { name: "Cold" }))).id;
     await inTx(f.v, async (tx) => {
       await routeProductTo(tx, f.v.productId("Burger"), f.grill);
       await routeProductTo(tx, f.v.productId("Paella"), cold);
@@ -874,7 +874,7 @@ describe("A773 pass display policy: the device's own route", () => {
 
   it("sets and clears a kitchen display's own choice, read back on its next board, touching no other device and no narrowing's removal", async () => {
     const f = await fixture();
-    const cold = (await inTx(f.v, (tx) => createStation(tx, f.v.cfg, { name: "Cold" }))).id;
+    const cold = (await inTx(f.v, (tx) => createStation(tx, { name: "Cold" }))).id;
     await suite.db.execute(
       sql`insert into device_kitchen_screen_removals (id, device_id, screen, station_id, removed_at) values (${randomUUID()}, ${f.a.id}, 'pass', ${cold}, ${new Date().toISOString()})`,
     );

@@ -185,7 +185,7 @@ useVenueDb({
         "es-ES",
       );
       await writeProductModifiers(tx, cake, [{ kind: "extras", id: list.id }]);
-      const grill = await createStation(tx, venue.cfg, { name: "Grill" });
+      const grill = await createStation(tx, { name: "Grill" });
       await routeProductTo(tx, sauce.id, grill.id);
       sauces = { listId: list.id, productId: sauce.id };
       await republishMenus(tx);
@@ -802,7 +802,7 @@ describe("readOrderStateCounts on a party's bill", () => {
     const { partyId, billId } = await seatParty();
     await sendRound(billId, [plain("Caña")]);
     const totalOf = async () =>
-      (await listHeldOrders(deps(), venue.cfg)).find((order) => order.id === billId)!.total;
+      (await listHeldOrders(deps())).find((order) => order.id === billId)!.total;
     const before = await totalOf();
 
     const draft = await saveBillDraft(partyId, billId, [draftLine("Tarta")]);

@@ -183,13 +183,9 @@ describe("the till's setup revision", () => {
   it("the revision moves when a course is added and when one is renamed", async () => {
     const till = await setupTill();
     const seen = [await menuStateRevision(till)];
-    const course = await withTransaction(suite.db, (tx) =>
-      createCourse(tx, till.cfg, { name: "Entrantes" }),
-    );
+    const course = await withTransaction(suite.db, (tx) => createCourse(tx, { name: "Entrantes" }));
     seen.push(await menuStateRevision(till));
-    await withTransaction(suite.db, (tx) =>
-      updateCourse(tx, till.cfg, course.id, { name: "Primeros" }),
-    );
+    await withTransaction(suite.db, (tx) => updateCourse(tx, course.id, { name: "Primeros" }));
     seen.push(await menuStateRevision(till));
     expect(seen.every((revision) => typeof revision === "string")).toBe(true);
     expect(new Set(seen).size).toBe(seen.length);

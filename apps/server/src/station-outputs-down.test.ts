@@ -47,7 +47,7 @@ async function setup() {
   const venue = await setupVenue(suite.db);
   const grill = venue.defaultStationId;
   const bar = await withTransaction(suite.db, (tx) =>
-    createStation(tx, venue.cfg, { name: "Bar", isDefault: false }),
+    createStation(tx, { name: "Bar", isDefault: false }),
   );
   const printer = async (stationId: string, name: string) => {
     const [p] = await suite.db
@@ -551,14 +551,13 @@ describe("passScreensDark", () => {
     );
   }
 
-  const read = (f: Awaited<ReturnType<typeof passFixture>>) =>
-    withTransaction(suite.db, (tx) => passScreensDark(tx, f.venue.cfg, at));
+  const read = () => withTransaction(suite.db, (tx) => passScreensDark(tx, at));
 
   it("lists a pass screen unseen for four minutes with a dish waiting in its zone", async () => {
     const f = await passFixture();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     const pass = await passDevice(f, "pass", { label: "Pass" });
-    expect(await read(f)).toEqual([
+    expect(await read()).toEqual([
       { deviceId: pass, deviceName: "Pass", kind: "pass", lastSeenAt: dark },
     ]);
   });
@@ -567,14 +566,14 @@ describe("passScreensDark", () => {
     const f = await passFixture();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     await passDevice(f, "pass", { lastSeenAt: "2026-10-02T18:04:00.000Z" });
-    expect(await read(f)).toEqual([]);
+    expect(await read()).toEqual([]);
   });
 
   it("lists a pass screen never seen", async () => {
     const f = await passFixture();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     const pass = await passDevice(f, "pass", { lastSeenAt: null });
-    expect(await read(f)).toEqual([
+    expect(await read()).toEqual([
       { deviceId: pass, deviceName: "pass", kind: "pass", lastSeenAt: null },
     ]);
   });
@@ -583,7 +582,7 @@ describe("passScreensDark", () => {
     const f = await passFixture();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     const monitor = await passDevice(f, "pass_monitor", { label: "Monitor" });
-    expect(await read(f)).toEqual([
+    expect(await read()).toEqual([
       { deviceId: monitor, deviceName: "Monitor", kind: "pass_monitor", lastSeenAt: dark },
     ]);
   });
@@ -592,14 +591,14 @@ describe("passScreensDark", () => {
     const f = await passFixture();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     await passDevice(f, "pass", { zoneIds: [f.tablesZone] });
-    expect(await read(f)).toEqual([]);
+    expect(await read()).toEqual([]);
   });
 
   it("does not count a dish fired over an hour ago", async () => {
     const f = await passFixture();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:05:00.000Z");
     await passDevice(f, "pass");
-    expect(await read(f)).toEqual([]);
+    expect(await read()).toEqual([]);
   });
 
   it("does not count a held dish", async () => {
@@ -610,7 +609,7 @@ describe("passScreensDark", () => {
       .set({ firedAt: null, requestedAt: null })
       .where(eq(ticketItems.workingOrderId, orderId));
     await passDevice(f, "pass");
-    expect(await read(f)).toEqual([]);
+    expect(await read()).toEqual([]);
   });
 
   it("does not count a dish made at the till", async () => {
@@ -621,7 +620,7 @@ describe("passScreensDark", () => {
       .set({ madeHere: true })
       .where(eq(ticketItems.workingOrderId, orderId));
     await passDevice(f, "pass");
-    expect(await read(f)).toEqual([]);
+    expect(await read()).toEqual([]);
   });
 
   it.each([
@@ -632,7 +631,7 @@ describe("passScreensDark", () => {
     const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     await suite.db.execute(sql`update working_orders set ${change} where id = ${orderId}`);
     await passDevice(f, "pass");
-    expect(await read(f)).toEqual([]);
+    expect(await read()).toEqual([]);
   });
 
   it("A773 no dispatch state: a dark pass is listed while its waiting dish is unserved, and not once it is fully served", async () => {
@@ -640,11 +639,11 @@ describe("passScreensDark", () => {
     const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     const pass = await passDevice(f, "pass", { label: "Pass" });
     await passDevice(f, "pass", { label: "Other", lastSeenAt: at.toISOString() });
-    expect((await read(f)).map((row) => row.deviceId)).toEqual([pass]);
+    expect((await read()).map((row) => row.deviceId)).toEqual([pass]);
     await suite.db.execute(
       sql`update working_order_lines set served_quantity = 1000, served_at = '2026-10-02T18:00:00.000Z' where working_order_id = ${orderId}`,
     );
-    expect(await read(f)).toEqual([]);
+    expect(await read()).toEqual([]);
   });
 
   it.each(["pass", "pass_monitor"] as const)(
@@ -661,12 +660,12 @@ describe("passScreensDark", () => {
         .update(workingOrderLines)
         .set({ servedQuantity: 500, servedAt: "2026-10-02T18:00:00.000Z" })
         .where(eq(workingOrderLines.workingOrderId, orderId));
-      expect(await read(f)).toEqual([{ deviceId, deviceName: kind, kind, lastSeenAt: dark }]);
+      expect(await read()).toEqual([{ deviceId, deviceName: kind, kind, lastSeenAt: dark }]);
       await suite.db
         .update(workingOrderLines)
         .set({ servedQuantity: 1000 })
         .where(eq(workingOrderLines.workingOrderId, orderId));
-      expect(await read(f)).toEqual([]);
+      expect(await read()).toEqual([]);
     },
   );
 
@@ -674,7 +673,7 @@ describe("passScreensDark", () => {
     const f = await passFixture();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     await passDevice(f, "pass", { formFactor: "till" });
-    expect(await read(f)).toEqual([]);
+    expect(await read()).toEqual([]);
   });
 
   it("does not list a switched-off device", async () => {
@@ -682,7 +681,7 @@ describe("passScreensDark", () => {
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     const pass = await passDevice(f, "pass");
     await suite.db.update(devices).set({ active: false }).where(eq(devices.id, pass));
-    expect(await read(f)).toEqual([]);
+    expect(await read()).toEqual([]);
   });
 
   it("does not list a kitchen display running a station screen", async () => {
@@ -696,7 +695,7 @@ describe("passScreensDark", () => {
       tokenHash: "hash",
       lastSeenAt: dark,
     });
-    expect(await read(f)).toEqual([]);
+    expect(await read()).toEqual([]);
   });
 
   it("does not list a pass a narrowing took", async () => {
@@ -711,18 +710,18 @@ describe("passScreensDark", () => {
     expect(
       await withTransaction(suite.db, (tx) => VENUE_SERVICE.readDeviceKitchenScreens(tx, pass)),
     ).toMatchObject([{ kind: "pass", available: false }]);
-    expect(await read(f)).toEqual([]);
+    expect(await read()).toEqual([]);
   });
 
   describe("passScreenAlertSource", () => {
-    const alerts = (f: Awaited<ReturnType<typeof passFixture>>) => {
-      const source = passScreenAlertSource({ cfg: f.venue.cfg });
+    const alerts = () => {
+      const source = passScreenAlertSource();
       return withTransaction(suite.db, (tx) => source.read({ tx, now: at }));
     };
 
     it("is a kitchen alert for venue_service.manage", async () => {
-      const f = await passFixture();
-      const source = passScreenAlertSource({ cfg: f.venue.cfg });
+      await passFixture();
+      const source = passScreenAlertSource();
       expect([source.area, source.permission]).toEqual(["kitchen", "venue_service.manage"]);
     });
 
@@ -730,7 +729,7 @@ describe("passScreensDark", () => {
       const f = await passFixture();
       await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
       const pass = await passDevice(f, "pass", { label: "Pass" });
-      expect(await alerts(f)).toEqual([
+      expect(await alerts()).toEqual([
         {
           key: `kitchen_screen.pass_dark:${pass}`,
           code: "kitchen_screen.pass_dark",
@@ -746,7 +745,7 @@ describe("passScreensDark", () => {
       const f = await passFixture();
       await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
       const monitor = await passDevice(f, "pass_monitor", { label: "Monitor", lastSeenAt: null });
-      expect(await alerts(f)).toEqual([
+      expect(await alerts()).toEqual([
         {
           key: `kitchen_screen.pass_dark:${monitor}`,
           code: "kitchen_screen.pass_monitor_dark",

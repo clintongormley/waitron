@@ -87,7 +87,7 @@ useVenueDb({
         stationId,
         printerId: printer.id,
       });
-      const grill = await createStation(tx, venue.cfg, { name: "Grill" });
+      const grill = await createStation(tx, { name: "Grill" });
       grillStationId = grill.id;
       const [paella] = await tx
         .select({ id: products.id })
@@ -635,8 +635,8 @@ describe("made-here route wiring", () => {
   });
   it("keeps every counter course released when edited beside a made-here dish", async () => {
     const [first, later] = await inTx(venue, async (tx) => [
-      await createCourse(tx, venue.cfg, { name: `First ${randomUUID()}`, displayOrder: 1 }),
-      await createCourse(tx, venue.cfg, { name: `Later ${randomUUID()}`, displayOrder: 2 }),
+      await createCourse(tx, { name: `First ${randomUUID()}`, displayOrder: 1 }),
+      await createCourse(tx, { name: `Later ${randomUUID()}`, displayOrder: 2 }),
     ]);
     const orderId = randomUUID();
     const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {

@@ -81,14 +81,14 @@ interface Kitchen {
 async function kitchen(grillWaits: boolean): Promise<Kitchen> {
   const v = await setupPartyVenue(db);
   const stations = await inTx(v, async (tx) => {
-    const { id: grill } = await createStation(tx, v.cfg, { name: "Grill" });
-    const { id: bar } = await createStation(tx, v.cfg, { name: "Bar" });
-    const desserts = await createCourse(tx, v.cfg, { name: "Desserts", displayOrder: 3 });
+    const { id: grill } = await createStation(tx, { name: "Grill" });
+    const { id: bar } = await createStation(tx, { name: "Bar" });
+    const desserts = await createCourse(tx, { name: "Desserts", displayOrder: 3 });
     await routeProductTo(tx, v.productId("Tarta"), grill);
     await routeProductTo(tx, v.productId("Vino"), bar);
     await routeProductTo(tx, v.productId("Caña"), bar);
-    await setProductCourse(tx, v.cfg, v.productId("Tarta"), desserts.id);
-    await setProductCourse(tx, v.cfg, v.productId("Vino"), desserts.id);
+    await setProductCourse(tx, v.productId("Tarta"), desserts.id);
+    await setProductCourse(tx, v.productId("Vino"), desserts.id);
     const printer = async (name: string, stationId: string) => {
       const { id } = await createPrinter(tx, {
         name,
@@ -117,12 +117,12 @@ async function kitchen(grillWaits: boolean): Promise<Kitchen> {
  */
 async function withPastry(k: Kitchen): Promise<string> {
   return inTx(k.v, async (tx) => {
-    const { id: created } = await createStation(tx, k.v.cfg, { name: "Pastry" });
+    const { id: created } = await createStation(tx, { name: "Pastry" });
     const pastry = `00000000${randomUUID().slice(8)}`;
     await tx.update(kitchenStations).set({ id: pastry }).where(eq(kitchenStations.id, created));
     expect(pastry < k.grill).toBe(true);
     await routeProductTo(tx, k.v.productId("Flan"), pastry);
-    await setProductCourse(tx, k.v.cfg, k.v.productId("Flan"), k.desserts);
+    await setProductCourse(tx, k.v.productId("Flan"), k.desserts);
     await setStationsWaitForPass(tx, true, [pastry]);
     return pastry;
   });
@@ -197,7 +197,7 @@ async function releaseAtPass(k: Kitchen, groupId: string): Promise<void> {
     const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, by.deviceId)).find(
       (candidate) => candidate.kind === "pass",
     )!;
-    const card = (await readScopedPassBoard(tx, k.v.cfg, passScopeOf(screen))).toFire.find(
+    const card = (await readScopedPassBoard(tx, passScopeOf(screen))).toFire.find(
       (candidate) => candidate.target.kind === "group" && candidate.target.groupId === groupId,
     )!;
     await releasePassItems(tx, k.v.cfg, by, {
@@ -520,7 +520,7 @@ describe("A773 fire paper: the cue on the station card", () => {
       const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, by.deviceId)).find(
         (candidate) => candidate.kind === "pass",
       )!;
-      return readScopedPassBoard(tx, k.v.cfg, passScopeOf(screen));
+      return readScopedPassBoard(tx, passScopeOf(screen));
     });
     expect(JSON.stringify(board.toFire)).toContain(desserts!);
     expect(JSON.stringify(board)).not.toContain("goesWith");
@@ -531,8 +531,8 @@ describe("A773 fire paper: the station names in the cue", () => {
   it("A773 fire paper: the cue orders its stations as the stations list does", async () => {
     const k = await kitchen(true);
     await withPastry(k);
-    await inTx(k.v, (tx) => updateStation(tx, k.v.cfg, k.grill, { name: "asador" }));
-    const listed = (await inTx(k.v, (tx) => listStations(tx, k.v.cfg)))
+    await inTx(k.v, (tx) => updateStation(tx, k.grill, { name: "asador" }));
+    const listed = (await inTx(k.v, (tx) => listStations(tx)))
       .map((station) => station.name)
       .filter((name) => name === "asador" || name === "Pastry");
     expect(listed).toEqual(["asador", "Pastry"]);
@@ -564,7 +564,7 @@ describe("A773 fire paper: the station names in the cue", () => {
         .set({ state: "ready", readyAt: new Date().toISOString() })
         .where(eq(ticketItems.stationId, pastry));
       await deleteStation(tx, pastry);
-      await updateStation(tx, k.v.cfg, k.grill, { name: "Pastry" });
+      await updateStation(tx, k.grill, { name: "Pastry" });
     });
     const named = await inTx(k.v, (tx) =>
       tx

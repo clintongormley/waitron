@@ -54,7 +54,7 @@ describe("A964 venue language", () => {
       const cfg = { ...v.cfg, locale: "de-DE" };
       await withTransaction(suite.db, async (tx) => {
         await writeContentLanguages(tx, { defaultLanguage: language, languages: ["en", "es"] });
-        await updateStation(tx, cfg, v.stations.grill, { showsRestOfOrder: true });
+        await updateStation(tx, v.stations.grill, { showsRestOfOrder: true });
         await fireNewOrder(tx, cfg, [
           {
             productId: v.products.burger,

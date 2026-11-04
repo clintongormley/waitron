@@ -41,7 +41,7 @@ useVenueDb({
   setup: async (db) => {
     v = await setupPartyVenue(db);
     await inTx(v, async (tx) => {
-      grill = (await createStation(tx, v.cfg, { name: "Grill" })).id;
+      grill = (await createStation(tx, { name: "Grill" })).id;
       await setRoutingCell(
         tx,
         { row: { kind: "product", productId: v.productId("Burger") }, zoneId: null },
@@ -217,7 +217,7 @@ describe("the till's station route carries the short names", () => {
       },
       () => {},
     );
-    const deviceId = await seedSessionDevice(v.db, v.cfg);
+    const deviceId = await seedSessionDevice(v.db);
     const session = await inTx(v, async (tx) => {
       const [person] = await tx
         .insert(persons)

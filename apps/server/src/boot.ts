@@ -3001,7 +3001,7 @@ async function bootServer(
     stationOutputAlertSource({
       stationStates: (tx, at) => VENUE_SERVICE.stationStates(tx, at),
     }),
-    passScreenAlertSource({ cfg: tradingContext }),
+    passScreenAlertSource(),
     batteryAlertSource({
       providers: CARD_PROVIDERS,
       runtimeDeps: cardRuntimeDeps,

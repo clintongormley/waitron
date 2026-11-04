@@ -48,7 +48,7 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 const at = "2026-10-10T12:00:00.000Z";
 async function fixture() {
   const v = await setupPartyVenue(suite.db);
-  const { id } = await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Delete me" }));
+  const { id } = await inTx(v, (tx) => createStation(tx, { name: "Delete me" }));
   return { v, id };
 }
 async function food(
@@ -172,7 +172,7 @@ async function snapshot(v: PartyVenue) {
 describe("permanent station deletion", () => {
   it("reports all refusals in fixed order and refuses before changing any settings", async () => {
     const { v, id } = await fixture();
-    await inTx(v, (tx) => setDefaultStation(tx, v.cfg, id));
+    await inTx(v, (tx) => setDefaultStation(tx, id));
     const display = await binding(v, id);
     const { order } = await food(v, id);
     const before = await snapshot(v);
@@ -258,7 +258,7 @@ describe("permanent station deletion", () => {
     async (kind) => {
       const { v, id } = await fixture();
       expect((await inTx(v, (tx) => readStationDeleteImpact(tx, id))).refusals).toEqual([]);
-      if (kind === "default") await inTx(v, (tx) => setDefaultStation(tx, v.cfg, id));
+      if (kind === "default") await inTx(v, (tx) => setDefaultStation(tx, id));
       if (kind === "screen") await binding(v, id);
       if (kind === "ticket") await food(v, id);
       const before = await snapshot(v);
@@ -390,25 +390,22 @@ describe("permanent station deletion", () => {
     });
     for (const table of [stationPrinters, deviceMadeHereStations])
       expect(await inTx(v, (tx) => tx.select().from(table))).toEqual([]);
-    expect((await inTx(v, (tx) => listStations(tx, v.cfg))).some((row) => row.id === id)).toBe(
-      false,
-    );
+    expect((await inTx(v, (tx) => listStations(tx))).some((row) => row.id === id)).toBe(false);
     for (const action of [
       () => inTx(v, (tx) => deleteStation(tx, id)),
-      () => inTx(v, (tx) => updateStation(tx, v.cfg, id, {})),
-      () => inTx(v, (tx) => setDefaultStation(tx, v.cfg, id)),
+      () => inTx(v, (tx) => updateStation(tx, id, {})),
+      () => inTx(v, (tx) => setDefaultStation(tx, id)),
       () => inTx(v, (tx) => listStationPrinters(tx, { stationId: id })),
     ])
       await expect(action()).rejects.toMatchObject({
         code: "station.not_found",
         params: { stationId: id },
       });
-    await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Delete me" }));
+    await inTx(v, (tx) => createStation(tx, { name: "Delete me" }));
   });
   it("removes module settings without changing other stations or dates", async () => {
     const { v, id } = await fixture();
-    const otherId = (await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Surviving station" })))
-      .id;
+    const otherId = (await inTx(v, (tx) => createStation(tx, { name: "Surviving station" }))).id;
     const ownedCell = randomUUID(),
       survivingCell = randomUUID();
     await inTx(v, async (tx) => {
@@ -523,7 +520,7 @@ describe("permanent station deletion", () => {
   it("keeps ready tickets, move notices and pending or completed kitchen print records exactly", async () => {
     const { v, id } = await fixture();
     const ready = await food(v, id, { state: "ready" });
-    const origin = (await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Origin" }))).id;
+    const origin = (await inTx(v, (tx) => createStation(tx, { name: "Origin" }))).id;
     await inTx(v, async (tx) => {
       await tx.insert(ticketItemMoves).values({
         workingOrderLineId: ready.line.id,
@@ -617,7 +614,7 @@ describe("permanent station deletion", () => {
     async (active) => {
       const { v, id } = await fixture();
       await expect(
-        inTx(v, (tx) => updateStation(tx, v.cfg, id, { active } as never)),
+        inTx(v, (tx) => updateStation(tx, id, { active } as never)),
       ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "active" } });
     },
   );
@@ -696,7 +693,7 @@ describe("A773 no dispatch state", () => {
   it("requires a closing choice for a ready dish", async () => {
     const { v, id } = await fixture();
     await food(v, id, { state: "ready" });
-    const destination = await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Destination" }));
+    const destination = await inTx(v, (tx) => createStation(tx, { name: "Destination" }));
     const before = await snapshot(v);
     await expect(
       inTx(v, (tx) =>
@@ -719,7 +716,7 @@ describe("A773 no dispatch state", () => {
 
   it("closing sends only queued unserved food and retains started work", async () => {
     const { v, id } = await fixture();
-    const destination = await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Destination" }));
+    const destination = await inTx(v, (tx) => createStation(tx, { name: "Destination" }));
     const queued = await food(v, id);
     const preparing = await food(v, id, { state: "preparing" });
     const ready = await food(v, id, { state: "ready" });

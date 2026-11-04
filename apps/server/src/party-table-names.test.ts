@@ -117,7 +117,7 @@ describe("a closing party keeps its table names", () => {
       }),
     );
     expect(page.rows[0]!.tables).toEqual(["Porch 4"]);
-    const receipt = await inTx(v, (tx) => readReceiptOrder(tx, v.cfg, tabId));
+    const receipt = await inTx(v, (tx) => readReceiptOrder(tx, tabId));
     expect(receipt.orderLabel).toContain("Porch 4");
   });
 
