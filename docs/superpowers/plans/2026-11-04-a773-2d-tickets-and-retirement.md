@@ -1145,3 +1145,14 @@ D128's till bullets and renames; the Prose paragraph. Files: `apps/till/src/api/
 - [ ] Final grep, empty outside historical plans/specs and the Owner-answers section above:
   `grep -rn "kitchen food\|comida de cocina\|goesWithKitchenFood\|goes_with_kitchen_food\|groupsWithPassFood" apps packages docs/backlog.md docs/backlog`.
 - [ ] Commit: `git commit -s -m "The station card and guide name the stations a dish goes out with"`.
+
+## Revision 6 (2026-11-04, Task R1 review)
+
+The review is `~/waitron-campaign-c/a773-2d-reviews/task-r1.md`.
+
+| Finding | Change |
+| --- | --- |
+| R1 review I1: name order | D127's "ordered by station name, then id, as the stations list is" means the stations list's own comparison, `compareStationNames` (case- and accent-blind), then id, not the database's byte order. `passStationsByGroup` sorts each group's names in JavaScript with it. |
+| R1 review I2: two stations sharing a name | Possible (a station can be deleted while its dish waits at the pass, and its name reused). D127 now reads: a name shared by two stations appears once. `passStationsByGroup` drops repeated names, so paper and the station queue carry the same list. |
+| R1 review M1: the "no cue" checks | The prefix test trims its trailing space, so a cue wrapped right after "con" or a cue with no names is still caught. |
+| R1 review M2: the replacer | Pinned by a station name containing `$&`. |
