@@ -2,7 +2,7 @@
 
 Status: reviewed; ready to build
 
-_Revision 2, 2026-11-04: the fresh plan review (0 critical, 7 important, 9 minor) folded; each finding's change is in the commit message._
+_Revision 2, 2026-11-04: the fresh plan review (0 critical, 7 important, 9 minor) folded. Revision 3, the same day: a round-3 claim check of revision 2 (6 false, 5 smaller) folded. Each finding's change is in its commit message._
 
 **Goal.** Delete every piece of the repair page's own recovery from backup — the recovery folder
 `<state>/first-setup-resolutions/backup-recovery/`, its journal, its fingerprint of the box's files,
@@ -145,9 +145,12 @@ Everything below was run on this tree (`03a1198150`) on 2026-11-04 unless it say
     shows the reinstall page, including a box trading normally.** A Start again that discarded an
     old recovery KEEPS that folder (its `current.json` pointer and the emptied recovery folders):
     `backupRecoveryKept` and `if (kept && record.name === BACKUP) continue;` in `itemsOnDisk`
-    (`packages/provisioning/src/first-setup-start-again-deletion.ts:260-279,331-347`, read), and
-    slice 3's server test "held + stopped recovery wiped then restore" found the state folder's
-    record folder kept after the fresh-box restore (slice 3 build ledger, Task 0). So a box that
+    (`packages/provisioning/src/first-setup-start-again-deletion.ts:260-279,331-350`, read), and the
+    server test "a held setup database beside a stopped recovery, wiped (discarding the recovery),
+    then the fresh-box restore writes into the usual folders"
+    (`apps/server/src/first-setup-start-again-held-wipe.test.ts:154`, as of main `03a1198150`)
+    asserts it at `:162-163`: "Start again keeps the discarded recovery's record folder in the state
+    folder", `exists(<state>/first-setup-resolutions)` true after the restore. B1 deletes that test. So a box that
     discarded an old recovery — through Start again, or through slice 3's Recover from backup beside
     a stopped recovery — and then set up or restored, now trades with that folder, and after PR B it
     is refused at start (`first-setup-entry.ts:172`) and at boot (`boot.ts:1076`). PR B's first line
@@ -431,10 +434,10 @@ draws the refusal, nothing sent), `:1867`, `:1876`, `:1884` (a summary read refu
 `storage.disk_full` says the disk is full / keeps the server's word on restarting / says nothing
 without the field — now drawn under Start again, as `setup-app-wipe.test.ts:205` draws a failed
 summary with no recovery). Retitle each converted case to drop "beside a stopped recovery".
-`setup-app-resolution.unsaved.test.ts:75` and `setup-app-recover.test.ts:49` look for a
-`setup-first-backup` element: keep the case, replace that check by "no request matched
-`/resolution/backup/`" (the element no longer exists after A5, so the old check would pass
-vacuously).
+`setup-app-resolution.unsaved.test.ts:75` looks for a `setup-first-backup` element: keep the case,
+replace that check by "no request matched `/resolution/backup/`" (the element no longer exists after
+A5, so the old check would pass vacuously). `setup-app-recover.test.ts`'s helper of the same kind is
+A4's.
 
 Any other case that turns red: apply the same rule and list it in the commit with its reason.
 **Checks:** the three files green (count read); `pnpm --filter @waitron/setup typecheck` errors
@@ -482,7 +485,14 @@ A4's files. **Commit:** "Setup page tests: the missing-database suites without t
 - `first-setup-browser.ts:104`: delete the `/resolution/backup/activity` answer.
 - `setup-app-wipe.test.ts`: delete `:132` (running when pressed), `:181` (beside a stopped recovery,
   disk_full and Check again), `:377` (a journal the summary does not name); keep `:205`, `:305`.
-- `setup-app-recover.test.ts`: delete `:204` (journal `selected`/`uncertain`), `:282`, `:302`
+- `setup-app-recover.test.ts`: the `oldRecoveryMounted` helper (`:48-49`) looks for the
+  `setup-first-backup` element, which A5 deletes, so its 8 assertions would pass vacuously. Replace
+  its body so it reads the fixture's request log — `(requests) => requests.some((r) =>
+  OLD_RECOVERY_ROUTE.test(r.path))`, with A1's widened pattern — and pass `requests` at every call:
+  `:62`, `:64`, `:76` (case `:55`, "…Recover sends exactly what Start again sends…"), `:185` (the
+  `it.each(refusals)` at `:167`), `:200` (the `it.each` at `:189`), `:421` (case `:408`, "after
+  Recover from backup's wipe, Reconnect opens Join or recover"), `:605`, `:613` (case `:601`); each
+  stays `toBe(false)`. Delete `:204` (journal `selected`/`uncertain`), `:282`, `:302`
   (Check again from Recover), `:344` (Cancel beside a stopped recovery); keep `:218`, `:243` (drop
   the stopped row if it has one), `:601`. CONVERT `:465` ("beside a stopped recovery, after Recover,
   a failed summary read and Check again, the wipe's Reconnect still opens Join or recover"): no
@@ -624,7 +634,7 @@ No production code changes, so every kept case must pass on unchanged code.
   goes; `askStartAgain`'s default send (`:175`) becomes `{}`; `abandonUnemptied` (`:367-376`) and
   `heldActions`' lock option (`:343-355`) go if nothing else uses them.
 - `start-again-deleted.ts`: `expectStartAgainRefused` (`:99-107`) reads `f.workspace.readChain()`
-  before and after (`:101,104`); delete those two lines (the journal-unchanged check). Its file,
+  before and after (`:102,105`); delete those two lines (the journal-unchanged check). Its file,
   marker and record checks stay.
 - Delete (subject only exists with a recovery):
   `held-setup-database.test.ts` "recovery: false leaves the held database with no recovery beside
@@ -635,7 +645,9 @@ No production code changes, so every kept case must pass on unchanged code.
   `first-setup-start-again-held-recovery.test.ts` "in the held state, Start again confirming the
   summary deletes the setup, and keeps whose setup it was" (`:32`: a discard's `present` record);
   `first-setup-start-again-held-damaged.test.ts` `:80` and `:109` (a damaged database beside a
-  stopped recovery);
+  stopped recovery), and the `it.each` "finishing a recovery abandoned over %s database: the damaged
+  database is deleted only with the page's confirmation, which writes its own record" (`:124-157`),
+  which calls `abandonUnemptied` (`:132`) on the recovery `heldSetup()` builds by default;
   `first-setup-start-again-held-wipe.test.ts` `:154` (wiped, discarding the recovery);
   `start-again-full-disk.e2e.test.ts` `:252` (held, with the spare released for a discard).
 - Convert in `first-setup-start-again-held-recovery.test.ts` (drop the discard key; the refusal or
@@ -666,7 +678,8 @@ setup database no longer comes with a stopped recovery beside it".
 `apps/server/src/first-setup-entry.ts` (the fence mount and `backupRecovery` only),
 `apps/server/src/boot.ts` (the owner-write fence only, `:1260-1262,1384`), tests
 `apps/server/src/first-setup-start-again.test.ts`, `first-setup-resolution.route.test.ts`,
-`first-setup-entry.spare.test.ts` (one case); delete `first-setup-start-again-backup.test.ts`,
+`first-setup-entry.spare.test.ts` (one case), `start-again-full-disk.e2e.test.ts` (two cases); delete
+`first-setup-start-again-backup.test.ts`,
 `first-setup-start-again-backup-discard.test.ts`, `first-setup-start-again-backup-restart.test.ts`,
 `first-setup-start-again-damaged-recovery.test.ts`, and any other PR B delete-list file this task
 turns red ("When each file goes").
@@ -699,7 +712,7 @@ turns red ("When each file goes").
   (`:416`), `confirmsUnreadable` becomes `databaseUnreadable`, `finishing`, the `discardsStopped`
   conflicts, `refuseRunning`, the running checks, the record's `"present"` branch (the record is
   written for `missing || databaseUnreadable`), and the whole `if (found !== undefined)` block
-  (`:483-511`). `StartAgainFirstSetupRequest.confirmRecoveryDiscard` (`:47`) goes. `summaryOf`
+  (`:481-511`). `StartAgainFirstSetupRequest.confirmRecoveryDiscard` (`:47`) goes. `summaryOf`
   (`:173-184`) loses its `recovery` parameter.
 - `setup-first-fiscal-api.ts`: delete `recoveryDiscardConfirmation`, `shownRecovery` and `recovery`
   in `shownSummary` (`:84-138`); `FencedRecovery`, `fenceWrite`, `RESOLUTION_ROOT`,
@@ -725,10 +738,17 @@ turns red ("When each file goes").
     `confirmMissingDatabase` half stays.
   - `first-setup-entry.spare.test.ts`: delete "the release runs before the fence" (`:301`): it
     counts calls the fence makes (`holdsInMemory`), and the fence is gone.
+  - `start-again-full-disk.e2e.test.ts`: delete "with the box's spare file, the summary and Start
+    again both work on a full disk, and the stopped recovery's copy is emptied" (`:139`) and "a
+    recovery whose placement fills the disk stops, and Start again on the same page, still on a full
+    disk, discards it and deletes the spare" (`:174`): both assert `shown.recovery` (`:161`, `:203`)
+    and the abandon and emptying (`:163-167`, `:205-208`) that this task removes.
 **Checks:** red cases green; `pnpm --filter @waitron/server exec vitest run
 src/first-setup-start-again src/first-setup-resolution src/recovery-start-again
-src/first-setup-entry.spare.test.ts src/first-setup-backup src/setup-first-backup` green, count read
-(the last two only to find files to delete now); `pnpm --filter @waitron/server typecheck`; `pnpm exec
+src/first-setup-entry.spare.test.ts src/start-again-full-disk.e2e.test.ts src/first-setup-backup
+src/setup-first-backup` green, count read (the last two only to find files to delete now; the
+full-disk file needs `WAITRON_FULL_DISK_DIR` on Linux, and makes its own image on macOS: say whether
+it ran or skipped); `pnpm --filter @waitron/server typecheck`; `pnpm exec
 vitest run scripts/errors-reachable.test.ts scripts/start-again-records-writers.test.ts`.
 **Commit:** "Start again no longer finds, fences or discards a recovery from backup".
 
@@ -749,7 +769,8 @@ until B4: this task only stops the START and the BOOT reading the folder.
 Build the link explicitly, so the case crosses one on every system (on Linux CI `tmpdir()` is not
 a link; on macOS it is): `real = await mkdtemp(...)`, `await symlink(real, link)`,
 `stateDir = join(link, "state")` (a linked PARENT: `canonicalFirstSetupDirectory` refuses a folder
-that is itself a link, `packages/provisioning/src/first-setup-resolution.ts:108-109`), and do not
+that is itself a link, `packages/provisioning/src/first-setup-resolution.ts:108-109`), and create
+`link/state` with `mkdir` before the start, because the start's spare top-up writes into it; do not
 `realpath` it. Fails today: the canonical folders differ from the configured ones, so the start
 counts as moved and sets `WAITRON_SPARE_SPACE_DIR` (`node-entry.ts:437-438`).
 
@@ -782,7 +803,15 @@ counts as moved and sets `WAITRON_SPARE_SPACE_DIR` (`node-entry.ts:437-438`).
     (`:444,447,462,470,588,595,650,665`); the cases stay.
   - `first-setup-entry.spare.test.ts`: delete `:189` (now the same as `:217`), `:196`, `:203` (the
     repair stage), `:224` (a selected recovery), `:250` (reading the stage throws); retitle `:217`
-    "…says it does below the floor, whatever the log folder"; keep `:234`, `:241`.
+    "…says it does below the floor, whatever the log folder". CONVERT `:234` ("…cannot say when the
+    disk reads as having room, where the next start deletes no log") and `:241` ("…cannot say when
+    free space cannot be read"): each builds only `stoppedRecovery()`, with no `first-setup.json`,
+    and so reaches the repair app only through the old entry's repair stage, which this task
+    removes; make each write `first-setup.json` instead, as `:217` and `:274` do, keeping its
+    assertion. DELETE here, not in B4, "the repair app releases the spare on its inspection read
+    when a stopped recovery fills the disk" (`:258`) and "the repair app with room keeps the spare"
+    (`:288`): they too build only `stoppedRecovery()` and lose the repair app now. `:274` (it writes
+    `first-setup.json`) still passes here and goes in B4.
   - `start-again-full-disk.e2e.test.ts` `:211` ("without a spare file, the password step of the
     Start-again flow on a full disk answers 507 storage.disk_full"): its expected
     `restartDeletesLogs: false` (`:248`) becomes `true`, because the answer no longer depends on a
@@ -831,11 +860,15 @@ the repair page's old recovery folder or switch into it".
   `discardedCopy` use (`:32,448-449,463,545,582-590,615-617`).
 - D16: `node-entry.ts` `onClose: admission.dispose` (`:420,538`), `first-setup-launch.ts:112`, and
   in `recovery-listener.ts` `closeWithCleanup` (`:30-49`), the `onClose` option (`:73`) and its use
-  (`:202`).
+  (`:202`). Every test caller of the repair app's `dispose` changes with it (`/usr/bin/grep -n
+  'dispose()' apps/server/src/first-setup-entry*.test.ts`): `first-setup-entry.test.ts:502,658,705`
+  (`if (entry.kind === "resolution") await entry.dispose();`, deleted), and in
+  `first-setup-entry.spare.test.ts` the helper's `dispose: entry.dispose` (`:186`) and every kept
+  case's `await repair.dispose()` or `await entry.dispose()`.
 - Tests:
   - `spare-space.test.ts`: delete `describe("releaseSpareBeforeStartAgain")` (`:500` to the end).
   - `first-setup-entry.spare.test.ts`: delete `:103`, `:117`, `:130`, `:141`, `:150` (the discarded
-    copy's emptying) and `:258`, `:274`, `:288` (the repair host's release); delete the
+    copy's emptying) and `:274` (the repair host's release; `:258` and `:288` went in B3); delete the
     `emptyAbandonedBackupRecovery` spy helper (`:88-98`), the import and mock of
     `./first-setup-backup-entry.js` (`:14,20`) and the `importActual` of it (`:306`, gone with the
     case B2 deleted), and the provisioning imports (`:10-11`) the rest no longer uses.
@@ -902,9 +935,9 @@ vitest run scripts/backup-room-note.test.ts scripts/vitest-duration-sequencer.te
   must print only the files this task edits or deletes.
 - `first-setup-start-again-deletion.ts`: delete the imports (`:25-28`), `BACKUP` and `POINTER`
   (`:40-41`), the `discarding` option (`:86-91`), `backupRecoveryKept` (`:255-279`),
-  `venuePointerOnly` (`:281-298`), their uses in `itemsOnDisk` (`:331-339,346`: every
+  `venuePointerOnly` (`:281-298`), their uses in `itemsOnDisk` (`:331-339,350`: every
   `first-setup-resolutions/<name>` must be a uuid record, and the folder is always deleted) and in
-  `assertStartAgainAllowedOnDisk` (`:543-544` the target check; `:550` the venue-pointer exception).
+  `assertStartAgainAllowedOnDisk` (`:543-544` the target check; `:549` the venue-pointer exception).
 - `first-setup-start-again-confirmation.ts`: delete `StartAgainSummary.recovery`,
   `StartAgainRecoveryShown`, `recoveryShown` (`:17-28,75-91`); `database` is `"missing" |
   "unreadable"`; the `present` rule (`:115-116`) and `recovery` copy (`:135`) go.
@@ -915,7 +948,17 @@ vitest run scripts/backup-room-note.test.ts scripts/vitest-duration-sequencer.te
 - Tests:
   - `first-setup-start-again-deletion.test.ts`: delete `:128`, `:147`, `:160`, `:170`, `:184`,
     `:205`, `:218`, `:228`, `:241`, `:251`, `:310`, `:322`, `:337`, `:352`, `:367` (tombstones,
-    pointers and `discarding`). CONVERT "reports a recovery folder it cannot read as a failed check,
+    pointers and `discarding`), the `it.each` "refuses a recovery folder holding %s" (`:263`, every
+    row a tombstone) and the `it.each` "with discarding, refuses venue records holding %s" (`:290`,
+    the `discarding` option). In the `it.each` "reports %s as a failed check when building the marker,
+    naming the error and the path" (`:381`): delete its first row ("a pointer whose recovery folder
+    is gone", a tombstone) and convert its second ("a records folder that is a file"): today its
+    error comes from reading `first-setup-resolutions/backup-recovery` beneath the file (`ENOTDIR`,
+    path `<state>/first-setup-resolutions/backup-recovery`); after this task `entries` reads the
+    records folder itself, finds a file and throws `layout unexpected: <state>/first-setup-resolutions`
+    (`first-setup-start-again-deletion.ts:237-242`, read, not run). Move that row into its own case,
+    "reports a records folder that is a file as an unexpected layout when building the marker", with
+    the reason the run prints. CONVERT "reports a recovery folder it cannot read as a failed check,
     naming the error and the path" (`:411`) to "reports a first-setup record folder it cannot read
     as a failed check, naming the error and the path": `chmod 000` a
     `first-setup-resolutions/<uuid>/` record folder instead of a tombstone's target, and keep the
@@ -972,8 +1015,11 @@ the same line turns the old recovery's own suites red, since they build that fol
    `startingBox`: `"old-recovery"` writes `<state>/first-setup-resolutions/backup-recovery/current.json`
    (`{}`) beside a claimed setup; `"old-tombstone"` writes the same pointer plus an empty
    `<state>/first-setup-resolutions/backup-recovery/<id>/` beside NO setup (a box trading normally
-   after a discard, D4). Add "a box holding the repair page's old recovery folder serves the
-   reinstall page, in every entry mode (%s)" for both boxes, with `expectRefusedPage(port,
+   after a discard, D4). Both new boxes RETURN before `startingBox` writes its Start-again marker
+   (`:390-396`, written today for every box but `"archive"`), as `"archive"` does at `:384-387`, so
+   neither box carries a pending deletion and each fails before the change for the stated reason
+   only. Add "a box holding the repair page's old recovery folder serves the reinstall page, in
+   every entry mode (%s)" for both boxes, with `expectRefusedPage(port,
    "setup.workspace_unsupported")`, `startServer` not called and no `recovery.json` (copy of
    `:523-532`). Before the change both fail: the first serves the repair app, the second starts the
    server.
@@ -1212,9 +1258,18 @@ its replacement; line numbers are on `03a1198150`.
 scripts/spare-space.test.ts`; `pnpm exec prettier --check CLAUDE.md`; `pnpm format:check`. The
 closing search, over the docs and code a reader sees:
 `git grep -n -i -E 'backup recovery|repair stage|selected (its own|stage)|originals walk|discarded|first-setup-backup|setup-first-backup|backup-recovery/|releaseSpareBeforeStartAgain|WAITRON_SPARE_SPACE_DIR' -- docs/developers docs/operations deploy apps/server/README.md apps/server/src/guide CLAUDE.md`.
-Expected hits, and only these: the dated lines added above; `ci-and-gates.md:496` and
-`design-system.md:4177` ("discarded" in another sense); `en/backup-recovery.md:139` ("backup
-recovery key"); the historical `docs/operations/a6*-changed-checks.md`. Run the same search over
+Expected hits, and only these (the search was run on `03a1198150` to list them; a hit not listed
+here is a sentence still to fix):
+- the lines this task adds: the dated notes under conventions-data's two `### Spare file…`
+  headings, after `conventions-ui.md:48-49`, after `ci-and-gates.md:1838-1848`, and after "Why 8
+  MiB"; conventions-data's rewritten "Which walks see it" sentence ("…deleted the originals walk");
+  and the new `hour-recovery.md` sentence ("…discarded by Start again");
+- history that stays: `ci-and-gates.md:1841,1845`; `conventions-data.md:5670,5674,5787,5791` (the
+  dated copies of the old root rule); `conventions-ui.md:49` (an audit example at a fixed commit);
+  `docs/operations/a679-changed-checks.md` and `a682-changed-checks.md`;
+- other senses of the words: `ci-and-gates.md:496`, `design-system.md:4177`,
+  `testing-guide.md:1724`, `hour-recovery.md:51` ("discarded drafts"), `hour-recovery.md:90` (the
+  link text "backup recovery guide"), `en/backup-recovery.md:139` ("backup recovery key"). Run the same search over
 `docs/backlog.md docs/backlog/` and account for every hit (a dated pointer, a historical table, or
 an entry changed above). **Commit:** "Docs and backlog: the repair page's old recovery from backup
 is gone".
@@ -1267,10 +1322,10 @@ with the repair page's old recovery.
 | same | new: "the repair page sends nothing under /resolution/backup/…" (with a resumed-session row) | added, red first | the removal's proof | A1 |
 | `apps/setup/src/setup-app-recover.test.ts` | 204, 282, 302, 344 | deleted | old path | A4 |
 | same | 465 | converted: "after Recover, a failed summary read and Recover again, the wipe's Reconnect still opens Join or recover" | no twin without a recovery | A4 |
-| same | 55 (its `setup-first-backup` check, 49) | check replaced as above | vacuous after A5 | A2 |
+| same | the `oldRecoveryMounted` helper (48-49) and its 8 assertions in cases 55, 167, 189, 408, 601 | helper now reads the request log for `/resolution/backup/`; each assertion stays `false` | the element no longer exists after A5, so the old check would pass vacuously | A4 |
 | `apps/setup/src/setup-app-recover.a11y.test.ts` | stopped states | deleted | old path | A4 |
 | `apps/setup/src/setup-app-held-refusals.test.ts`, `setup-app-held-database.a11y.test.ts` | 90, 106, 128; 35, 77 | retitled; fixture has no recovery | held refusals do not depend on a recovery since slice 2 | A4 |
-| `apps/server/test/start-again-deleted.ts` | `expectStartAgainRefused` (101, 104) | the journal-unchanged check deleted | the fixture has no journal | B1 |
+| `apps/server/test/start-again-deleted.ts` | `expectStartAgainRefused` (102, 105) | the journal-unchanged check deleted | the fixture has no journal | B1 |
 | `apps/server/src/held-setup-database.test.ts` | 82 | deleted | the option is gone | B1 |
 | same | 38, 58, 64, 73 | `liveness()` assertion deleted; 38 retitled | old path | B1 |
 | `apps/server/src/first-setup-start-again-held.test.ts` | 19 | deleted | the summary naming the recovery | B1 |
@@ -1278,7 +1333,7 @@ with the repair page's old recovery.
 | same | 50 | discard key dropped; "one record, database present" → "no record"; journal assertion deleted | a present database writes no record without a discard (`first-setup-resolution.ts:470`) | B1 |
 | same | the `it.each` "in the held state, %s, is refused setup.attempt_conflict…" (70-91), 92, 118, 203, 217 | discard key dropped from the send | refusals unchanged | B1 |
 | same | 231 | retitled "…the Start again route starts again over HTTPS with only the inspection ids"; body loses the discard; journal assertion deleted | no summary is sent for a held present database | B1 |
-| `apps/server/src/first-setup-start-again-held-damaged.test.ts` | 80, 109 | deleted | old path | B1 |
+| `apps/server/src/first-setup-start-again-held-damaged.test.ts` | 80, 109; the `it.each` "finishing a recovery abandoned over %s database…" (124) | deleted | old path (124 needs `abandonUnemptied` and the default recovery) | B1 |
 | `apps/server/src/first-setup-start-again-held-wipe.test.ts` | 154 | deleted | old path | B1 |
 | `apps/server/src/start-again-full-disk.e2e.test.ts` | 252 | deleted | the release it tested is deleted | B1 |
 | same | 211 | `restartDeletesLogs: false` → `true` (B3); then held database, no recovery, retitled "on a full disk, Continue's password step answers 507 storage.disk_full" (B4) | no repair stage; Continue's refusal survives | B3, B4 |
@@ -1288,9 +1343,12 @@ with the repair page's old recovery.
 | same | new: "with the database missing, a confirmation record that cannot be written deletes nothing and writes no marker"; new: "with the database present and empty, a %s public fiscal record refuses the summary and Start again setup.not_ready, and nothing is written" | added (ports of `…-backup-discard.test.ts:784` and `:676-682`) | surviving behaviour kept; A1161's receipt | B2 |
 | `apps/server/src/first-setup-resolution.route.test.ts` | "a shown summary carrying held counts is refused setup.request_invalid" (288) | the `confirmRecoveryDiscard` half of its loop deleted | the key leaves the contract | B2 |
 | `apps/server/src/first-setup-entry.spare.test.ts` | "the release runs before the fence" (301) | deleted | the fence is deleted | B2 |
-| same | 189, 196, 203, 224, 250 | deleted | stages | B3 |
+| same | 189, 196, 203, 224, 250, 258, 288 | deleted | stages; 258 and 288 build only a stopped recovery and need the old repair stage | B3 |
+| same | 234, 241 | setup writes `first-setup.json` instead of relying on the stopped recovery; assertion kept | the free-space answers survive | B3 |
 | same | 217 | retitled "…says it does below the floor, whatever the log folder" | only free space decides now | B3 |
-| same | 103, 117, 130, 141, 150, 258, 274, 288; the spy helper (88-98) and the old-entry import and mock (14, 20) | deleted | emptying and the repair host's release | B4 |
+| same | 103, 117, 130, 141, 150, 274; the spy helper (88-98) and the old-entry import and mock (14, 20) | deleted | emptying and the repair host's release | B4 |
+| same | the helper's `dispose` (186) and every kept case's `repair.dispose()` / `entry.dispose()` | removed | the repair app has no `dispose` (D16) | B4 |
+| `apps/server/src/first-setup-entry.test.ts` | `entry.dispose()` at 502, 658, 705 | removed; cases kept | D16 | B4 |
 | `apps/server/src/node-entry.test.ts` | 2348 | "did not move" → "folders below a linked folder" (explicit symlinked parent) | D5, red first on every system | B3 |
 | same | describe 2437 (2 cases) | deleted | the discarded-copy line | B4 |
 | `apps/server/src/node-entry.full-disk-order.test.ts` | it.each repair/selected (258) | deleted | no stages | B3 |
@@ -1304,7 +1362,8 @@ with the repair page's old recovery.
 | `apps/server/src/cloud-recovery.test.ts` / `cloud-recovery-v2.test.ts` | describes 607 / 712 | deleted | `reconcileRestored` (D7) | B5 |
 | `apps/server/src/setup-api.cloud-recovery.test.ts`, `setup-api.recovery-input.test.ts` | client fakes (41, 40) | `reconcileRestored` dropped | D7 | B5 |
 | `apps/server/src/first-fiscal-evidence.test.ts` | 392, the `it.each` at 400 | deleted | D7 | B5 |
-| `packages/provisioning/src/first-setup-start-again-deletion.test.ts` | 128, 147, 160, 170, 184, 205, 218, 228, 241, 251, 310, 322, 337, 352, 367 | deleted | tombstones, pointers, `discarding` | B6 |
+| `packages/provisioning/src/first-setup-start-again-deletion.test.ts` | 128, 147, 160, 170, 184, 205, 218, 228, 241, 251, 310, 322, 337, 352, 367; the `it.each` at 263 and at 290; the first row of the `it.each` at 381 | deleted | tombstones, pointers, `discarding` | B6 |
+| same | the second row of the `it.each` at 381 ("a records folder that is a file") | moved to its own case; reason `check failed: ENOTDIR …/backup-recovery` → `layout unexpected: …/first-setup-resolutions` | nothing reads beneath the records folder any more | B6 |
 | same | 411 | converted to an unreadable `first-setup-resolutions/<uuid>/` record folder | the EACCES report survives for A731's records | B6 |
 | `packages/provisioning/src/first-setup-start-again-marker.test.ts` | 805 | deleted | `insideBackupRepairTarget` | B6 |
 | `packages/provisioning/src/first-setup-start-again-confirmation.test.ts` | 255, 296 | deleted | `recovery` and `present` | B6 |
