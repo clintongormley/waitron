@@ -13,7 +13,6 @@ const recovery = {
   failed: false,
   cloud: false,
 } as const;
-const stopped = { ...shown, recovery } as const satisfies StartAgainSummary;
 const unreadable = { ...shown, databaseUnreadable: true } as const satisfies StartAgainSummary;
 const damagedRecord = {
   ...shown,
@@ -46,13 +45,7 @@ function fixture(
   return { api, requests, sent };
 }
 
-it.each<StartAgainSummary>([
-  shown,
-  damagedRecord,
-  stopped,
-  unreadable,
-  { ...stopped, ...unreadable },
-])(
+it.each<StartAgainSummary>([shown, damagedRecord, unreadable])(
   "readWipeSummary reads the summary %j for the snapshot alone, with no owner header",
   async (summary) => {
     const { api, requests } = fixture({ summary });
@@ -73,22 +66,6 @@ it.each([
     summary: { reached: "named", recoveryRecordDamaged: false },
   },
   { name: "a false unreadable flag", summary: { reached: "named", databaseUnreadable: false } },
-  {
-    name: "a recovery missing a field",
-    summary: { reached: "named", recovery: { ...recovery, cloud: undefined } },
-  },
-  {
-    name: "an unknown recovery activity source",
-    summary: { reached: "named", recovery: { ...recovery, lastActiveSource: "guess" } },
-  },
-  {
-    name: "a recovery start that is not text",
-    summary: { reached: "named", recovery: { ...recovery, startedAt: 1 } },
-  },
-  {
-    name: "a recovery with an extra key",
-    summary: { reached: "named", recovery: { ...recovery, extra: true } },
-  },
   { name: "null", summary: null },
 ])("readWipeSummary refuses an unreadable summary ($name)", async ({ summary }) => {
   const { api } = fixture({ summary });
@@ -128,28 +105,10 @@ it.each<{
     confirm: { confirmMissingDatabase: { nothingFiledOrSold: true, shown: damagedRecord } },
   },
   {
-    name: "a missing database beside a stopped recovery",
-    database: "missing",
-    summary: stopped,
-    confirm: { confirmMissingDatabase: { nothingFiledOrSold: true, shown: stopped } },
-  },
-  {
-    name: "a present database beside a stopped recovery",
-    database: "occupied",
-    summary: stopped,
-    confirm: { confirmRecoveryDiscard: { shown: stopped } },
-  },
-  {
     name: "a damaged database",
     database: "corrupt",
     summary: unreadable,
     confirm: { confirmUnreadableDatabase: { shown: unreadable } },
-  },
-  {
-    name: "a damaged database beside a stopped recovery",
-    database: "corrupt",
-    summary: { ...stopped, ...unreadable },
-    confirm: { confirmRecoveryDiscard: { shown: { ...stopped, ...unreadable } } },
   },
   {
     name: "a readable held database with no stopped recovery",
@@ -168,15 +127,6 @@ it.each<{
     database: "no-venue-rows",
     summary: damagedRecord,
     confirm: { recoveryRecordDamagedShown: true },
-  },
-  {
-    name: "a stopped recovery and a damaged recovery-key record",
-    database: "no-venue-rows",
-    summary: { ...stopped, ...damagedRecord },
-    confirm: {
-      confirmRecoveryDiscard: { shown: { ...stopped, ...damagedRecord } },
-      recoveryRecordDamagedShown: true,
-    },
   },
   {
     name: "a damaged database and a damaged recovery-key record",
@@ -203,48 +153,21 @@ it.each<{
     expect(requests.some((r) => r.headers.has("X-Waitron-Setup-Owner"))).toBe(false);
   },
 );
-it("a stopped recovery and a damaged recovery-key record send confirmRecoveryDiscard and recoveryRecordDamagedShown together", async () => {
-  const both = { ...stopped, ...damagedRecord };
-  const { api, sent } = fixture({ summary: both });
-  await sendWipe(api, snapshot, "occupied", both);
-  expect(sent()[0]!.body).toEqual({
-    ...snapshot,
-    confirmRecoveryDiscard: { shown: both },
-    recoveryRecordDamagedShown: true,
+it("a summary carrying recovery is refused as unreadable", async () => {
+  const { api, sent } = fixture({ summary: { ...shown, recovery } });
+  await expect(readWipeSummary(api, snapshot)).rejects.toMatchObject({
+    code: "setup.attempt_invalid",
   });
+  await expect(sendWipe(api, snapshot, "occupied", shown)).rejects.toMatchObject({
+    code: "setup.attempt_invalid",
+  });
+  expect(sent()).toHaveLength(0);
 });
 
 it.each<{ name: string; summary: StartAgainSummary; shown: StartAgainSummary }>([
   { name: "what the setup reached", summary: { reached: "fiscal-finished" }, shown },
   { name: "a recovery-key record turned damaged", summary: damagedRecord, shown },
   { name: "a recovery-key record no longer damaged", summary: shown, shown: damagedRecord },
-  { name: "a stopped recovery appeared", summary: stopped, shown },
-  { name: "the stopped recovery gone", summary: shown, shown: stopped },
-  {
-    name: "the stopped recovery's last activity",
-    summary: { ...stopped, recovery: { ...recovery, lastActiveAt: "2026-10-16T13:20:00.000Z" } },
-    shown: stopped,
-  },
-  {
-    name: "the stopped recovery now failed",
-    summary: { ...stopped, recovery: { ...recovery, failed: true } },
-    shown: stopped,
-  },
-  {
-    name: "the stopped recovery's start",
-    summary: { ...stopped, recovery: { ...recovery, startedAt: "2026-10-16T12:00:00.000Z" } },
-    shown: stopped,
-  },
-  {
-    name: "where the stopped recovery's last activity was read from",
-    summary: { ...stopped, recovery: { ...recovery, lastActiveSource: "saved-step" } },
-    shown: stopped,
-  },
-  {
-    name: "the stopped recovery now from the cloud",
-    summary: { ...stopped, recovery: { ...recovery, cloud: true } },
-    shown: stopped,
-  },
   { name: "the database turned unreadable", summary: unreadable, shown },
   { name: "the database readable again", summary: shown, shown: unreadable },
 ])(

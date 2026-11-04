@@ -150,12 +150,6 @@ it("Start again's confirmation words are the design's, in English and Spanish", 
   );
   expect(en.retireRecover).toBe("Delete the old attempt and recover from a backup.");
   expect(es.retireRecover).toBe("Borrar el intento anterior y recuperar desde una copia.");
-  expect(en.recoveryStoppedRecover).toBe(
-    "The previous recovery from backup started on {started} did not complete.",
-  );
-  expect(es.recoveryStoppedRecover).toBe(
-    "La recuperación anterior desde una copia, iniciada el {started}, no se completó.",
-  );
   for (const strings of [en, es])
     for (const key of [
       "heldNoInvoices",
@@ -170,8 +164,25 @@ it("Start again's confirmation words are the design's, in English and Spanish", 
       "startUnavailable",
       "startUnavailableOccupied",
       "damagedRecordPassword",
+      "recoveryRunning",
+      "recoveryLastActive",
+      "recoveryLastSaved",
+      "recoveryRunningNext",
+      "recoveryStopped",
+      "recoveryStoppedRefused",
+      "recoveryStoppedRecover",
+      "recoveryStoppedCloud",
+      "recoveryUnreadable",
+      "checkAgain",
+      "recoveryDetailsUnread",
     ])
       expect(Object.hasOwn(strings, key)).toBe(false);
+  for (const shell of [shellEn, shellEs])
+    for (const key of [
+      "shell.first_setup.recovery_in_progress",
+      "shell.first_setup.recovery_discarded",
+    ])
+      expect(Object.hasOwn(shell, key)).toBe(false);
   expect(en.keptFault).toBe(
     "The setup database holds records that Waitron never deletes. An unfinished setup should hold none, so this is a fault in Waitron. Deleting this setup is not offered. Reconnect keeps everything as it is.",
   );

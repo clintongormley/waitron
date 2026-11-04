@@ -122,25 +122,15 @@ export interface BackupRepairSession {
   binding: RecoveryRestoreCredentials["recoveryOperation"]["binding"];
   input?: unknown;
 }
-/** A stopped backup recovery that Start again would discard, as the summary names it. */
-export interface StartAgainRecoveryShown {
-  startedAt: string;
-  lastActiveAt: string;
-  lastActiveSource: "memory" | "saved-step";
-  failed: boolean;
-  cloud: boolean;
-}
 export interface StartAgainSummary {
   reached: "claimed" | "named" | "fiscal-started" | "fiscal-finished";
   recoveryRecordDamaged?: true;
-  recovery?: StartAgainRecoveryShown;
   databaseUnreadable?: true;
 }
 /** What Start again sends beside the snapshot; at most one `confirm*` field. */
 export interface StartAgainConfirm {
   confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary };
   recoveryRecordDamagedShown?: true;
-  confirmRecoveryDiscard?: { shown: StartAgainSummary };
   confirmUnreadableDatabase?: { shown: StartAgainSummary };
 }
 /** Why the server refused Start again with `setup.start_again_refused`. */

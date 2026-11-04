@@ -6,7 +6,7 @@ import { setLocale } from "./i18n/t.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { shellEn } from "./i18n/strings/shell.js";
 import type { BackupRepairActivity } from "./api/first-setup-types.js";
-import { initial } from "../test/first-setup-browser.js";
+import { initial, wizardApi } from "../test/first-setup-browser.js";
 import {
   click,
   namedSummary,
@@ -16,6 +16,7 @@ import {
 } from "../test/missing-database-browser.js";
 import { refusedCause, settled } from "../test/held-database-browser.js";
 import {
+  OLD_RECOVERY_ROUTE,
   OWNER_HEADER,
   cases,
   confirmation,
@@ -26,8 +27,10 @@ import {
   t,
   text,
   wipeFixture,
+  type Sent,
 } from "../test/wipe-browser.js";
-import { cleanupWidgets } from "./widgets/test-helpers.js";
+import type { SetupApp } from "./setup-app.js";
+import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -63,6 +66,54 @@ for (const c of cases)
     expect(requests.some((r) => r.path.endsWith("/resolution/recover"))).toBe(false);
     await expect.poll(() => text(app)).toContain(t.restarting);
   });
+
+it("the repair page sends nothing under /resolution/backup/: on load, on Start again, on Recover from backup, with the setup database present and missing, and for an ordinary first setup resumed in a tab that holds its session", async () => {
+  const oldRoutes = (requests: Sent[]) =>
+    requests.filter((r) => OLD_RECOVERY_ROUTE.test(r.path)).map((r) => r.path);
+  const reset = async () => {
+    cleanupWidgets();
+    sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
+    await navigator.locks.request(`waitron:first-setup:attempt:${initial.attemptId}`, () => {});
+  };
+  for (const database of ["occupied", "missing"] as const)
+    for (const [press, confirm] of [
+      ["start-again", "confirm-start-again"],
+      ["recover-backup", "confirm-recover"],
+    ] as const) {
+      const { app, requests } = await wipeFixture({ inspection: { database } });
+      expect(oldRoutes(requests)).toEqual([]);
+      await click(app, press);
+      await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+      await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
+      await click(app, confirm);
+      await expect.poll(() => sends(requests).length).toBe(1);
+      expect(oldRoutes(requests)).toEqual([]);
+      await reset();
+    }
+  sessionStorage.setItem(
+    FIRST_SETUP_SESSION_KEY,
+    JSON.stringify({
+      version: 1,
+      clientClaimNonce: "N".repeat(43),
+      claimPending: false,
+      owner: {
+        attemptId: initial.attemptId,
+        revision: 1,
+        ownerGeneration: 1,
+        capability: "A".repeat(43),
+      },
+    }),
+  );
+  const { api, requests } = wizardApi({ claimed: true });
+  const { el: app } = await mountWidget<SetupApp>("setup-app", {
+    api,
+    browserLanguages: ["en-GB"],
+  });
+  await expect.poll(() => q(app, "resume")).not.toBeNull();
+  await settled(app);
+  expect(requests.some((r) => r.headers.has(OWNER_HEADER))).toBe(true);
+  expect(oldRoutes(requests)).toEqual([]);
+});
 
 it("with the setup database missing, no Continue or password field is drawn, before or after Start again", async () => {
   const { app } = await wipeFixture({ inspection: { database: "missing" } });

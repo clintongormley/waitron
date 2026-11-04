@@ -28,9 +28,8 @@ export const formErrors = (app: SetupApp) =>
     (f) => f.error,
   );
 export const OWNER_HEADER = "X-Waitron-Setup-Owner";
-/** A page request that would open, run or close the repair page's old recovery from backup. */
-export const OLD_RECOVERY_ROUTE =
-  /\/resolution\/backup\/(open|resume|prepare|commit|close|renew|cloud\/)/;
+/** Any page request to the repair page's old recovery from backup. */
+export const OLD_RECOVERY_ROUTE = /\/resolution\/backup\//;
 /** The confirmation's own elements: its first line through the actions holding its Confirm. */
 export const confirmation = (app: SetupApp, confirm = "confirm-start-again") => {
   const actions = q(app, confirm)!.closest("wt-form-actions")!;

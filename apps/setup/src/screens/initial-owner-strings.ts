@@ -15,21 +15,6 @@ export const initialOwnerStrings = {
     reachedFiscalStarted: "started activation, with no record that it finished",
     reachedFiscalFinished: "finished activation",
     missingBackup: "If you have a backup, recover from it.",
-    recoveryRunning: "A recovery from backup is in progress on another device (started {started}).",
-    recoveryLastActive: "Last active: {at}.",
-    recoveryLastSaved: "Last saved step: {at}.",
-    recoveryRunningNext: "If it stops before it finishes, you can start again here.",
-    recoveryStopped:
-      "A recovery from backup started on {started} and did not finish. Start again deletes it.",
-    recoveryStoppedRefused: "A recovery from backup started on {started} and did not finish.",
-    recoveryStoppedRecover:
-      "The previous recovery from backup started on {started} did not complete.",
-    recoveryStoppedCloud:
-      "Its approval in Waitron Cloud closes by itself within an hour of when it was given. Until then, Waitron Cloud cannot approve a new recovery for this box's venue.",
-    recoveryUnreadable: "This box found a recovery from backup whose records cannot be read.",
-    checkAgain: "Check again",
-    recoveryDetailsUnread:
-      "This box could not read the details of the recovery from backup. Check again.",
     missingConfirm: "Nothing was filed to AEAT and nothing was sold.",
     uncheckable: "This box cannot check the original setup password, so Continue is not offered.",
     finish: "Finish setup",
@@ -86,23 +71,6 @@ export const initialOwnerStrings = {
     reachedFiscalStarted: "empezó la activación, sin constancia de que terminara",
     reachedFiscalFinished: "terminó la activación",
     missingBackup: "Si tienes una copia, recupera desde ella.",
-    recoveryRunning:
-      "Hay una recuperación en curso en otro dispositivo, desde una copia (iniciada el {started}).",
-    recoveryLastActive: "Última actividad: {at}.",
-    recoveryLastSaved: "Último paso guardado: {at}.",
-    recoveryRunningNext: "Si se detiene antes de terminar, podrás empezar de nuevo aquí.",
-    recoveryStopped:
-      "Una recuperación desde una copia, iniciada el {started}, no terminó. Empezar de nuevo la borra.",
-    recoveryStoppedRefused: "Una recuperación desde una copia, iniciada el {started}, no terminó.",
-    recoveryStoppedRecover:
-      "La recuperación anterior desde una copia, iniciada el {started}, no se completó.",
-    recoveryStoppedCloud:
-      "Su aprobación en Waitron Cloud se cierra sola en menos de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para el local de este equipo.",
-    recoveryUnreadable:
-      "Este equipo encontró una recuperación desde una copia cuyos registros no se pueden leer.",
-    checkAgain: "Comprobar otra vez",
-    recoveryDetailsUnread:
-      "Este equipo no pudo leer los datos de la recuperación desde una copia. Comprueba otra vez.",
     missingConfirm: "No se envió nada a la AEAT ni se vendió nada.",
     uncheckable:
       "Este equipo no puede comprobar la contraseña original de configuración, así que no se ofrece Continuar.",
