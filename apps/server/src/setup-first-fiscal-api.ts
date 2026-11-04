@@ -628,18 +628,15 @@ export function mountFirstSetupResolutionApi(
     withPublication?: <T>(body: (deps: SetupDeps) => Promise<T>) => Promise<T>;
     /** The lower free space of the setup's folders; given, the Start-again flow can say the disk is full. */
     freeSpace?: () => Promise<number | null>;
-    /** Whether the box's next start deletes old logs; undefined where that cannot be read. */
-    restartDeletesLogs?: () => Promise<boolean | undefined>;
+    /** True where the box's next start deletes old logs; undefined otherwise. */
+    restartDeletesLogs?: () => Promise<true | undefined>;
   } = {},
 ) {
   const root = "/setup-api/first-setup";
   const freeSpace = async () => (await options.freeSpace?.().catch(() => null)) ?? null;
   const diskFull = async () => {
     const deletes = await options.restartDeletesLogs?.().catch(() => undefined);
-    return new AppError(
-      "storage.disk_full",
-      typeof deletes === "boolean" ? { restartDeletesLogs: deletes } : {},
-    );
+    return new AppError("storage.disk_full", deletes === true ? { restartDeletesLogs: true } : {});
   };
   // A refused record write reaches here as setup.attempt_invalid with no cause, so on a nearly full
   // disk it is taken for a full disk, as recovery-start-again.ts does for its own form.

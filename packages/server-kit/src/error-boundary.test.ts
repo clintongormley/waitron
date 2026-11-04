@@ -225,12 +225,12 @@ describe("createErrorBoundary (the shared error boundary till-api and management
       const lines: Line[] = [];
       const res = await respond(
         {},
-        new AppError("storage.disk_full", { restartDeletesLogs: false }),
+        new AppError("storage.disk_full", { restartDeletesLogs: true }),
         lines,
       );
       expect(res.status).toBe(507);
       expect(await res.json()).toEqual({
-        error: { code: "storage.disk_full", params: { restartDeletesLogs: false } },
+        error: { code: "storage.disk_full", params: { restartDeletesLogs: true } },
       });
     });
 

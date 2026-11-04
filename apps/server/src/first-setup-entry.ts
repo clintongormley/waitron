@@ -73,7 +73,7 @@ export interface SpareOption {
  * free space reads below the start's floor. Undefined while free space reads at or above the floor
  * or cannot be read.
  */
-async function restartDeletesLogs(spare: SpareOption): Promise<boolean | undefined> {
+async function restartDeletesLogs(spare: SpareOption): Promise<true | undefined> {
   const free = await lowestFreeBytes([spare.stateDir, spare.venueDir], spare.statfs);
   return free !== null && free < START_FREE_SPACE_FLOOR ? true : undefined;
 }

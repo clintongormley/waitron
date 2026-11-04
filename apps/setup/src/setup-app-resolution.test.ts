@@ -181,6 +181,7 @@ it("Start again's confirmation words are the design's, in English and Spanish", 
     for (const key of [
       "shell.first_setup.recovery_in_progress",
       "shell.first_setup.recovery_discarded",
+      "shell.first_setup.disk_full_restart_frees_nothing",
     ])
       expect(Object.hasOwn(shell, key)).toBe(false);
   expect(en.keptFault).toBe(
@@ -1134,12 +1135,6 @@ const DISK_FULL = {
   "es-ES":
     "El disco del equipo está lleno, así que Waitron no puede guardar nada. Reinicia el equipo: al arrancar, quita registros y avisos de fallo antiguos para hacer sitio. Después, vuelve a intentarlo. Si el disco sigue lleno, Waitron no puede liberar más espacio por sí solo. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
 } as const;
-const DISK_FULL_RESTART_FREES_NOTHING = {
-  "en-GB":
-    "The box's disk is full, so Waitron cannot save anything, and restarting the box frees no space. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
-  "es-ES":
-    "El disco del equipo está lleno, así que Waitron no puede guardar nada, y reiniciar el equipo no libera espacio. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
-} as const;
 const DISK_FULL_RESTART_UNKNOWN = {
   "en-GB":
     "The box's disk is full, so Waitron cannot save anything. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
@@ -1157,21 +1152,6 @@ async function confirmStartAgain(app: SetupApp) {
     q<WtButton>(app, "confirm-start-again").shadowRoot!.querySelector("button")!,
   );
 }
-
-it.each(["en-GB", "es-ES"] as const)(
-  "a Start again refused storage.disk_full where a restart deletes no logs says restarting frees no space, in %s",
-  async (locale) => {
-    const { app } = await mount({
-      intercept(path) {
-        if (path.endsWith("/start-again")) return diskFull({ restartDeletesLogs: false });
-      },
-    });
-    setLocale(locale);
-    await app.updateComplete;
-    await confirmStartAgain(app);
-    await expect.poll(() => formErrors(app)).toContain(DISK_FULL_RESTART_FREES_NOTHING[locale]);
-  },
-);
 
 it.each(["en-GB", "es-ES"] as const)(
   "a full-disk answer without the field says nothing about restarting, in %s",
@@ -1216,14 +1196,6 @@ it("with the database present, a summary read refused storage.disk_full says the
   await pressStartAgain(app);
   await expect.poll(() => formErrors(app)).toContain(DISK_FULL["en-GB"]);
   expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
-});
-
-it("with the database present, a summary read refused storage.disk_full keeps the server's word on restarting", async () => {
-  const { app } = await presentDatabase({
-    summary: (read) => (read === 0 ? diskFull({ restartDeletesLogs: false }) : undefined),
-  });
-  await pressStartAgain(app);
-  await expect.poll(() => formErrors(app)).toContain(DISK_FULL_RESTART_FREES_NOTHING["en-GB"]);
 });
 
 it("with the database present, a summary read refused storage.disk_full without the field says nothing about restarting", async () => {
