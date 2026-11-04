@@ -369,7 +369,7 @@ export async function splitTable(
   const sentWork = await readPartiesSentWork(tx, [partyId]);
   const wholeIds = new Set(wholeBillIds);
   const notWhole = new Map([...sentWork].filter(([billId]) => !wholeIds.has(billId)));
-  const namesOnPaper = await readNamesOnPaper(tx, notWhole);
+  const namesOnPaper = await readNamesOnPaper(tx, notWhole, tableId);
   await leaveTables(tx, [tableId]);
   const [table] = await tx
     .select({ zoneId: diningTables.zoneId })

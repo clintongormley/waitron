@@ -1955,6 +1955,7 @@ export async function enqueueMovedSlipsFor(
 export async function readNamesOnPaper(
   tx: Transaction,
   before: ReadonlyMap<string, SentWork>,
+  leavingTableId: string,
 ): Promise<Map<string, ReadonlySet<string>>> {
   if (before.size === 0) return new Map();
   const billIds = [...before.keys()];
@@ -2000,6 +2001,7 @@ export async function readNamesOnPaper(
     tx,
     items.flatMap((item) => item.sentParty ?? item.billParty ?? []),
     tableIds,
+    leavingTableId,
   );
   const shown = await tableNames(tx, tableIds);
 
@@ -2031,16 +2033,17 @@ export async function readNamesOnPaper(
 
 /**
  * A reader of which of `tableIds` a party held at a time, in epoch milliseconds, or, after it closed,
- * the next party along its merges. A closed party's rows are gone, and it keeps only the label of
- * every table it ever held, in the order it joined them, so up to its closing it answers the first
- * of those among `tableIds`, or nothing when none is. That leans towards telling, because a needless
- * slip costs a line of paper and a missed one can send a plate to the wrong guests. It can still
- * miss: a first table let go before the paper printed, back here through another party.
+ * the next party along its merges. A closed party's rows are gone and only the label of every table
+ * it ever held is kept, with no times, so what a paper of its printed cannot be read back. Up to its
+ * closing it answers no table when `leavingTableId` is on the list, so the dish is told, because a
+ * needless slip costs a line of paper and a missed one can send a plate to the wrong guests; and
+ * otherwise all of `tableIds`, so it is not.
  */
 async function readTablesHeldOverTime(
   tx: Transaction,
   partyIds: readonly string[],
   tableIds: readonly string[],
+  leavingTableId: string,
 ): Promise<(partyId: string, at: number) => ReadonlySet<string>> {
   const { rows } = await tx.execute<{ id: string }>(sql`
     with recursive chain(id, next) as (
@@ -2071,11 +2074,10 @@ async function readTablesHeldOverTime(
     })
     .from(partyTables)
     .where(inArray(partyTables.partyId, chainIds));
-  const tables = await tx
-    .select({ id: diningTables.id, label: diningTables.label })
+  const [leaving] = await tx
+    .select({ label: diningTables.label })
     .from(diningTables)
-    .where(inArray(diningTables.id, [...tableIds]));
-  const idByLabel = new Map(tables.map((table) => [table.label, table.id]));
+    .where(eq(diningTables.id, leavingTableId));
   return (partyId, at) => {
     const seen = new Set<string>();
     let party = partyById.get(partyId);
@@ -2095,7 +2097,7 @@ async function readTablesHeldOverTime(
         );
       }
       if (at < Date.parse(closedAt)) {
-        return new Set((tableNames ?? []).flatMap((name) => idByLabel.get(name) ?? []).slice(0, 1));
+        return new Set(tableNames?.includes(leaving!.label) ? [] : tableIds);
       }
       party = party.next === null ? undefined : partyById.get(party.next);
     }

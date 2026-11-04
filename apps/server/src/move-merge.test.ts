@@ -7,7 +7,6 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   captureError,
-  diningTables,
   floorTodayJoinTables,
   floorTodayJoins,
   kitchenStations,
@@ -1616,7 +1615,7 @@ describe("A803 split: what the kitchen is told", () => {
       });
     });
 
-    describe("a dish of a party combined into another goes by the earliest of its tables still here", () => {
+    describe("a dish of a party combined into another is told the first time a table on that party's list leaves", () => {
       /** `partyId` takes `tableId` from the party at it, which combines that party into this one. */
       async function joinTaken(v: PartyVenue, partyId: string, tableId: string, holder: string) {
         await nextMillisecond();
@@ -1634,6 +1633,17 @@ describe("A803 split: what the kitchen is told", () => {
       /** The last ticket printed has a line reading exactly `names`. */
       async function lastTicketReads(grill: string, names: string) {
         expect((await slipsSince(grill, 0)).at(-1)!).toContain(names);
+      }
+
+      /** Mesa `first` splits off `partyId` and its new party finishes, leaving the table free. */
+      async function letGoAndFree(v: PartyVenue, partyId: string, tableId: string) {
+        const { partyId: theirs } = await splitPicked(v, partyId, tableId, {
+          wholeBillIds: [],
+          loose: [],
+        });
+        const closing = await commandFor(v, theirs);
+        await inTx(v, (tx) => finishTable(tx, { partyId: theirs, ...closing }));
+        await nextMillisecond();
       }
 
       it("the only table on the ticket leaves, and a table that joined after the send stays: told", async () => {
@@ -1657,9 +1667,10 @@ describe("A803 split: what the kitchen is told", () => {
         ]);
       });
 
-      it("control: the table that joined after the send leaves and the ticket's table stays: not told", async () => {
+      it("an accepted extra slip: the table that joined after the send leaves, though the ticket's table stays", async () => {
         const { v, grill, first, partyId: from, tabId } = await oneTable(513);
         await orderForParty(v, from, ["Burger"], tabId);
+        await lastTicketReads(grill, "Mesa 513");
         const later = await v.table("Mesa 514");
         await join(v, from, later);
         const { partyId: into } = await seat(v, await v.table("Mesa 515"));
@@ -1668,8 +1679,14 @@ describe("A803 split: what the kitchen is told", () => {
 
         await splitPicked(v, into, later, { wholeBillIds: [], loose: [] });
 
-        expect(await noticesOf([tabId])).toEqual([]);
-        expect(await slipsSince(grill, before)).toEqual([]);
+        expect(await noticesOf([tabId])).toEqual([
+          { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 515, 513" },
+        ]);
+        expect(await slipsSince(grill, before)).toEqual([
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 515, 513, 514", "Mesa 515, 513", [
+            "1.000 x BURG",
+          ]),
+        ]);
       });
 
       it("an accepted extra slip: the ticket named both tables and the earlier leaves, though the later stays", async () => {
@@ -1693,19 +1710,26 @@ describe("A803 split: what the kitchen is told", () => {
         ]);
       });
 
-      it("the ticket named both tables and the later leaves: not told", async () => {
+      it("an accepted extra slip: the ticket named both tables and the later leaves, though the earlier stays", async () => {
         const { v, grill, first, partyId: from, tabId } = await oneTable(523);
         const later = await v.table("Mesa 524");
         await join(v, from, later);
         await orderForParty(v, from, ["Burger"], tabId);
+        await lastTicketReads(grill, "Mesa 523, 524");
         const { partyId: into } = await seat(v, await v.table("Mesa 525"));
         await joinTaken(v, into, first, from);
         const before = (await printedBy(grill)).length;
 
         await splitPicked(v, into, later, { wholeBillIds: [], loose: [] });
 
-        expect(await noticesOf([tabId])).toEqual([]);
-        expect(await slipsSince(grill, before)).toEqual([]);
+        expect(await noticesOf([tabId])).toEqual([
+          { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 525, 523" },
+        ]);
+        expect(await slipsSince(grill, before)).toEqual([
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 525, 523, 524", "Mesa 525, 523", [
+            "1.000 x BURG",
+          ]),
+        ]);
       });
 
       it("a table let go before the send comes back through another party, the ticket's table leaves: told", async () => {
@@ -1807,22 +1831,214 @@ describe("A803 split: what the kitchen is told", () => {
         ]);
       });
 
-      it("none of its tables answers to a name on its list any more: told, not read from the other party's tables", async () => {
-        const { v, grill, first, partyId: from, tabId } = await oneTable(580);
-        const { partyId: into } = await seat(v, await v.table("Mesa 581"));
+      it("a slip is the paper and no third party is needed: its table leaves after the party that split off takes it back", async () => {
+        const { v, grill, first, partyId: from, tabId } = await oneTable(811);
+        await orderForParty(v, from, ["Burger"], tabId);
+        const kept = await v.table("Mesa 812");
+        await join(v, from, kept);
+        const { partyId: theirs } = await splitPicked(v, from, first, {
+          wholeBillIds: [],
+          loose: [],
+        });
+        expect((await noticesOf([tabId])).map((notice) => notice.movedTo)).toEqual(["Mesa 812"]);
+        await joinTaken(v, theirs, kept, from);
+        const before = (await printedBy(grill)).length;
+
+        await splitPicked(v, theirs, kept, { wholeBillIds: [], loose: [] });
+
+        expect((await noticesOf([tabId])).map((notice) => notice.movedTo)).toEqual([
+          "Mesa 812",
+          "Mesa 811",
+        ]);
+        expect(await slipsSince(grill, before)).toEqual([
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 811, 812", "Mesa 811", [
+            "1.000 x BURG",
+          ]),
+        ]);
+      });
+
+      it("no split before the send: guests moved to the ticket's table, new guests at the old one take it, it leaves", async () => {
+        const { v, grill, first, partyId: from, tabId } = await oneTable(851);
+        const ticketed = await v.table("Mesa 852");
+        const moving = await commandFor(v, from);
+        await inTx(v, (tx) =>
+          moveGuests(tx, v.cfg, from, ticketed, { ...moving, otherPartyId: null }),
+        );
         await nextMillisecond();
         await orderForParty(v, from, ["Burger"], tabId);
+        await lastTicketReads(grill, "Mesa 852");
+        const { partyId: into } = await seat(v, first);
+        await joinTaken(v, into, ticketed, from);
+        const before = (await printedBy(grill)).length;
+
+        await splitPicked(v, into, ticketed, { wholeBillIds: [], loose: [] });
+
+        expect(await noticesOf([tabId])).toEqual([
+          { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 851" },
+        ]);
+        expect(await slipsSince(grill, before)).toEqual([
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 851, 852", "Mesa 851", [
+            "1.000 x BURG",
+          ]),
+        ]);
+      });
+
+      it("no third party: the party that split off takes the ticket's table back, and it leaves", async () => {
+        const { v, grill, first, partyId: from, tabId } = await oneTable(611);
+        const ticketed = await v.table("Mesa 610");
+        await join(v, from, ticketed);
+        const { partyId: theirs } = await splitPicked(v, from, first, {
+          wholeBillIds: [],
+          loose: [],
+        });
+        await nextMillisecond();
+        await orderForParty(v, from, ["Burger"], tabId);
+        await lastTicketReads(grill, "Mesa 610");
+        await joinTaken(v, theirs, ticketed, from);
+        const before = (await printedBy(grill)).length;
+
+        await splitPicked(v, theirs, ticketed, { wholeBillIds: [], loose: [] });
+
+        expect(await noticesOf([tabId])).toEqual([
+          { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 611" },
+        ]);
+        expect(await slipsSince(grill, before)).toEqual([
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 611, 610", "Mesa 611", [
+            "1.000 x BURG",
+          ]),
+        ]);
+      });
+
+      it("a table let go before the send, rejoined by the party's own join, then combined: the ticket's table leaves: told", async () => {
+        const { v, grill, first, partyId: from, tabId } = await oneTable(621);
+        const ticketed = await v.table("Mesa 620");
+        await join(v, from, ticketed);
+        await letGoAndFree(v, from, first);
+        await orderForParty(v, from, ["Burger"], tabId);
+        await lastTicketReads(grill, "Mesa 620");
+        await join(v, from, first);
+        const { partyId: into } = await seat(v, await v.table("Mesa 622"));
+        await joinTaken(v, into, ticketed, from);
+        const before = (await printedBy(grill)).length;
+
+        await splitPicked(v, into, ticketed, { wholeBillIds: [], loose: [] });
+
+        expect(await noticesOf([tabId])).toEqual([
+          { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 622, 621" },
+        ]);
+        expect(await slipsSince(grill, before)).toEqual([
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 622, 620, 621", "Mesa 622, 621", [
+            "1.000 x BURG",
+          ]),
+        ]);
+      });
+
+      it("a table let go before the send, joined back free by the party it was combined into: the ticket's table leaves: told", async () => {
+        const { v, grill, first, partyId: from, tabId } = await oneTable(631);
+        const ticketed = await v.table("Mesa 630");
+        await join(v, from, ticketed);
+        await letGoAndFree(v, from, first);
+        await orderForParty(v, from, ["Burger"], tabId);
+        await lastTicketReads(grill, "Mesa 630");
+        const { partyId: into } = await seat(v, await v.table("Mesa 632"));
+        await joinTaken(v, into, ticketed, from);
+        await join(v, into, first);
+        const before = (await printedBy(grill)).length;
+
+        await splitPicked(v, into, ticketed, { wholeBillIds: [], loose: [] });
+
+        expect(await noticesOf([tabId])).toEqual([
+          { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 632, 631" },
+        ]);
+        expect(await slipsSince(grill, before)).toEqual([
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 632, 630, 631", "Mesa 632, 631", [
+            "1.000 x BURG",
+          ]),
+        ]);
+      });
+
+      it("a table not on the list leaves: not told, whether it is the other party's or joined after the combine", async () => {
+        const { v, grill, first, partyId: from, tabId } = await oneTable(535);
+        await orderForParty(v, from, ["Burger"], tabId);
+        const otherPartys = await v.table("Mesa 536");
+        const { partyId: into } = await seat(v, otherPartys);
         await joinTaken(v, into, first, from);
-        await db.update(diningTables).set({ label: "Mesa 589" }).where(eq(diningTables.id, first));
+        const joinedAfter = await v.table("Mesa 537");
+        await join(v, into, joinedAfter);
+        const before = (await printedBy(grill)).length;
+
+        await splitPicked(v, into, joinedAfter, { wholeBillIds: [], loose: [] });
+        await splitPicked(v, into, otherPartys, { wholeBillIds: [], loose: [] });
+
+        expect(await noticesOf([tabId])).toEqual([]);
+        expect(await slipsSince(grill, before)).toEqual([]);
+      });
+
+      it("a listed table leaves and the group it sat in keeps its name: told, its ticket naming the table alone", async () => {
+        const { v, grill, first, partyId: from, tabId } = await oneTable(540);
+        await orderForParty(v, from, ["Burger"], tabId);
+        await lastTicketReads(grill, "Mesa 540");
+        const second = await v.table("Mesa 541");
+        const { partyId: into } = await seat(v, second);
+        const third = await v.table("Mesa 542");
+        await join(v, into, third);
+        await joinTaken(v, into, first, from);
+        await group(v, "Terraza", [first, second, third]);
         const before = (await printedBy(grill)).length;
 
         await splitPicked(v, into, first, { wholeBillIds: [], loose: [] });
 
         expect(await noticesOf([tabId])).toEqual([
-          { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 581" },
+          {
+            workingOrderId: tabId,
+            kind: "moved",
+            lineName: "BURG",
+            movedTo: "Terraza (Mesa 541, 542)",
+          },
         ]);
         expect(await slipsSince(grill, before)).toEqual([
-          movedSlip("Grill", await justOrderLine(tabId), "Mesa 581, 589", "Mesa 581", [
+          movedSlip(
+            "Grill",
+            await justOrderLine(tabId),
+            "Terraza (Mesa 541, 542, 540)",
+            "Terraza (Mesa 541, 542)",
+            ["1.000 x BURG"],
+          ),
+        ]);
+      });
+
+      it("told once for the same paper: after that a table on the slip goes by the slip, and a table not on it tells nothing", async () => {
+        const { v, grill, first, partyId: from, tabId } = await oneTable(530);
+        await orderForParty(v, from, ["Burger"], tabId);
+        const listed = await v.table("Mesa 531");
+        await join(v, from, listed);
+        const survivors = await v.table("Mesa 532");
+        const { partyId: into } = await seat(v, survivors);
+        await joinTaken(v, into, first, from);
+        await splitPicked(v, into, listed, { wholeBillIds: [], loose: [] });
+        expect((await noticesOf([tabId])).map((notice) => notice.movedTo)).toEqual([
+          "Mesa 532, 530",
+        ]);
+        const notOnSlip = await v.table("Mesa 533");
+        await join(v, into, notOnSlip);
+        const before = (await printedBy(grill)).length;
+
+        await splitPicked(v, into, notOnSlip, { wholeBillIds: [], loose: [] });
+        await splitPicked(v, into, first, { wholeBillIds: [], loose: [] });
+
+        expect(await noticesOf([tabId])).toHaveLength(1);
+        expect(await slipsSince(grill, before)).toEqual([]);
+
+        await join(v, into, await v.table("Mesa 534"));
+
+        await splitPicked(v, into, survivors, { wholeBillIds: [], loose: [] });
+
+        expect((await noticesOf([tabId])).map((notice) => notice.movedTo)).toEqual([
+          "Mesa 532, 530",
+          "Mesa 534",
+        ]);
+        expect(await slipsSince(grill, before)).toEqual([
+          movedSlip("Grill", await justOrderLine(tabId), "Mesa 532, 534", "Mesa 534", [
             "1.000 x BURG",
           ]),
         ]);
