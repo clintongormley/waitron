@@ -6,11 +6,9 @@ import {
   zoneServicePolicies,
   type ServiceStepInput,
 } from "@waitron/venue-service";
-import type { TradingContext } from "../trading-context.js";
 
 interface HasVenue {
   db: Database;
-  cfg: Pick<TradingContext, "locationId">;
 }
 
 export async function departmentOf(v: HasVenue, zoneId: string): Promise<string> {

@@ -3,7 +3,6 @@ import { diningTables, workingOrders } from "@waitron/db";
 import type { Database, SQL, Transaction } from "@waitron/db";
 import { VENUE_SERVICE } from "./modules.js";
 import { partyFamily, partyStateAndZone } from "./parties.js";
-import type { TradingContext } from "./trading-context.js";
 
 /** What a till request acts on, by where its service zone is read from. */
 export type ZoneSubject =
@@ -78,7 +77,7 @@ export async function checkZones(
  * It reads committed rows outside the transaction that acts, and takes no turn in the write queue.
  */
 export async function gateZones(
-  deps: { db: Database; cfg: TradingContext },
+  deps: { db: Database },
   session: { device: { deviceProfileId: string } },
   subjects: readonly ZoneSubject[],
 ): Promise<void> {
@@ -109,7 +108,7 @@ export async function orderZoneCondition(
 
 /** The orders the session's profile may see: those in its zones, and those in none. Read as {@link gateZones} reads. */
 export async function visibleOrders<T extends { id: string }>(
-  deps: { db: Database; cfg: TradingContext },
+  deps: { db: Database },
   session: { device: { deviceProfileId: string } },
   orders: readonly T[],
 ): Promise<T[]> {

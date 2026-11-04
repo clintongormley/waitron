@@ -318,16 +318,13 @@ export async function nameParty(v: HasDb, partyId: string, name: string): Promis
 }
 
 /** The table as the till's floor lists it. */
-export async function floorRow(v: Pick<PartyVenue, "db" | "cfg">, tableId: string) {
+export async function floorRow(v: HasDb, tableId: string) {
   const rows = await inTx(v, (tx) => listTablesWithState(tx));
   return rows.find((row) => row.id === tableId)!;
 }
 
 /** The bill the floor opens the party's tables on (`TableParty.openingBillId`). */
-export async function openingBillOfParty(
-  v: Pick<PartyVenue, "db" | "cfg">,
-  partyId: string,
-): Promise<string | null> {
+export async function openingBillOfParty(v: HasDb, partyId: string): Promise<string | null> {
   const rows = await inTx(v, (tx) => listTablesWithState(tx));
   const row = rows.find((candidate) => candidate.party?.id === partyId);
   if (row === undefined) throw new Error(`no table on the floor holds party ${partyId}`);
@@ -529,7 +526,7 @@ export async function paymentsOf(v: HasDb, billId: string) {
 }
 
 /** The service zone the bill's context names, or null when it has none. */
-export async function zoneOf(v: Pick<PartyVenue, "db" | "cfg">, billId: string) {
+export async function zoneOf(v: HasDb, billId: string) {
   const context = await inTx(v, (tx) => VENUE_SERVICE.findOrderContext(tx, billId));
   return context?.zoneId ?? null;
 }

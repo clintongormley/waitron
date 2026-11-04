@@ -75,7 +75,6 @@ async function venue() {
   });
   const venueId = await venueLocationId(db);
   const locationId = brandLocationId(venueId);
-  const cfg = { locationId };
   const [station] = await db
     .insert(kitchenStations)
     .values({ locationId, name: "Kitchen", isDefault: true })
@@ -110,7 +109,6 @@ async function venue() {
       seasonId: season("Winter"),
     });
     return {
-      cfg,
       locationId,
       stationId: station!.id,
       restaurant,

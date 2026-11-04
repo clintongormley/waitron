@@ -54,11 +54,9 @@ beforeEach(async () => {
   requestCookie = await sessionCookieForTest(suite.db, token);
   const zone = await createZone(suite.db, { name: "Tables" });
   const table = await createTable(suite.db, cfg, { label: "Table 1", zoneId: zone.id });
-  [stepId] = (await setSteps(
-    { db: suite.db, cfg },
-    await departmentOf({ db: suite.db, cfg }, zone.id),
-    [{ name: "Set up", start: "seated", courseId: null, minutes: 0 }],
-  )) as [string];
+  [stepId] = (await setSteps({ db: suite.db }, await departmentOf({ db: suite.db }, zone.id), [
+    { name: "Set up", start: "seated", courseId: null, minutes: 0 },
+  ])) as [string];
   const [party] = await suite.db.insert(parties).values({ openedBy: personId }).returning();
   partyId = party!.id;
   dueAt = new Date(Date.parse(party!.openedAt)).toISOString();

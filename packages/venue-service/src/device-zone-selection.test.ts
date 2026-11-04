@@ -9,11 +9,9 @@ import {
   floorZones,
   withTransaction,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, createServiceZone } from "./operations.js";
 import { readProfileServiceScopes, setProfileServiceAccess } from "./profile-access.js";
@@ -32,8 +30,6 @@ async function fixture() {
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(tx);
-    const cfg = { locationId: locationId(venueId) };
     const restaurant = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
     const deli = await createDepartment(tx, { name: "Deli", orderStart: "counter" });
     const dining = await createServiceZone(tx, {
@@ -65,7 +61,6 @@ async function fixture() {
       await seedDevice(tx, { profileId, label: "Till 1" }),
     ];
     return {
-      cfg,
       restaurant: restaurant.id,
       dining: dining.id,
       terrace: terrace.id,

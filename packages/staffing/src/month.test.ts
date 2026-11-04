@@ -280,9 +280,8 @@ describe("rota counts in the staffing month", () => {
     const v = await painted();
     const backend = new WorkforceBackend();
     await inTx(async (tx) => {
-      const id = await backend.createRosterVersion(tx, { ...v.cfg, period: "2026-08-10" });
+      const id = await backend.createRosterVersion(tx, { period: "2026-08-10" });
       const shiftId = await backend.addShift(tx, {
-        ...v.cfg,
         versionId: id,
         personId: v.ana,
         startsAt: "2026-08-14T10:00:00Z",

@@ -131,7 +131,6 @@ async function casaMarina() {
     dayCutover: "06:00:00",
   });
   const locationId = brandLocationId(await venueLocationId(db));
-  const cfg = { locationId };
   const fake = fakeCore(locationId);
   const app = new Hono();
   VENUE_SERVICE_ROUTES.mount(
@@ -221,7 +220,7 @@ async function casaMarina() {
     .update(menuPeriods)
     .set({ floorPlanSetId: dinnerSet })
     .where(eq(menuPeriods.id, made.dinner));
-  return { ...made, ...fake, cfg, send, standard, dinnerSet, privateParty, barStandard };
+  return { ...made, ...fake, send, standard, dinnerSet, privateParty, barStandard };
 }
 type Venue = Awaited<ReturnType<typeof casaMarina>>;
 

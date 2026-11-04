@@ -75,7 +75,6 @@ async function fixture() {
     );
     await tx.update(departments).set({ active: false }).where(eq(departments.id, inactive!.id));
     return {
-      cfg,
       department: department!.id,
       inactive: inactive!.id,
       period: period.id,

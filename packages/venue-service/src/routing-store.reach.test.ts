@@ -106,7 +106,6 @@ async function fixture(tx: Transaction) {
   await writeProductModifiers(tx, burger, [{ kind: "extras", id: list.id }]);
   await writeProductModifiers(tx, soup, [{ kind: "extras", id: list.id }]);
   return {
-    cfg,
     terrace: zones[0]!,
     patio: zones[1]!,
     bar: bar!.id,
