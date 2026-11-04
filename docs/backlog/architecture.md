@@ -407,9 +407,9 @@ until A977).
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Other private naming sites remain in the till's boot and counter-payment suites and
-  server till-API and order fixtures. These include accented line bindings in the move suites,
-  course helpers, fiscal-sale fixtures, and water-offer bindings in `tabs.test.ts` and
-  `working-order.test.ts`. Fixture strings remain separate from this naming work.
+  other server till-API, order and fiscal-sale fixtures. These include accented move-line bindings
+  and shared helper consumers such as `made-here.test.ts`.
+  Fixture strings remain separate from this naming work.
   Keep accented search fixtures unchanged. String-selected product keys stay with their fixture text
   under A976.
   Catalogue display names, recipe ingredient text, seasonal venue and zone names and printer-screen display labels
@@ -803,7 +803,8 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 ## A974. Finish the remaining English names in general code.
 
 - **A974. Finish the remaining English names in general code.** Remaining: till boot and
-  counter-payment suites, server till-API and order-fixture names, and file names.
+  counter-payment suites, other server till-API, order and fiscal-sale fixture names, shared helper
+  consumers and file names.
   Keep accented search fixtures unchanged. Other fixture text stays with A976, including catalogue
   display names, recipe ingredient names and seasonal venue and zone names, printer-screen display
   labels, counter-screen display text and station-screen display names, plus kitchen-ticket grouping,
