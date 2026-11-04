@@ -426,10 +426,15 @@ exact paths/signatures against the new Requested/pass design before writing code
 - the per-bill loops in `releaseGroup` (`apps/server/src/order-groups.ts`, its `byOrder` loop) and in
   `releasePassItems` (`apps/server/src/pass-release.ts`, its `byOrder` loop), and the same shape in
   `printHoldTickets`' `byBill` loop for HOLD paper;
+- the per-bill loops for slips: `correctHoldTickets`' `byBill` loop (`order-groups.ts`) for HOLD
+  corrections, `enqueueOrderKitchenNoteChange`'s `byOrder` loop (`kitchen-print.ts`) for correction
+  slips, and `readTicketItemsOn`'s `byOrder` map (`kitchen-print.ts`), which `enqueueMovedSlips` and
+  `enqueueMovedSlipsFor` read for MOVED slips;
 - `planKitchenTickets` and `enqueueKitchenTickets` (`apps/server/src/kitchen-print.ts`), which take
   one `orderId`, and `linkKitchenJob`, which links a job to one `working_order_id`;
 - `buildTicketItems` (`kitchen-print.ts`), where a bill name would join each dish beside its
-  `course` and `goesWithKitchenFood`.
+  `course`; `goesWithKitchenFood` is added after it, in `planKitchenTickets`, so slips never carry
+  it.
 
 What a cross-bill ticket reuses unchanged: the heading's course list is computed from the dishes
 under each heading (`headingCourses`, `apps/server/src/kitchen-ticket.ts`), and the cue's group fact

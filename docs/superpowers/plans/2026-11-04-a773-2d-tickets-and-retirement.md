@@ -435,9 +435,10 @@ tickets, station ticket modes and one cross-bill ticket per action (D124). The c
   cross-bill ticket will change: the per-bill loop in `releaseGroup` (`order-groups.ts`) and in
   `releasePassItems` (`pass-release.ts`), `planKitchenTickets`/`enqueueKitchenTickets`'s one-order
   signature and `linkKitchenJob`'s one `working_order_id`, `buildTicketItems` (where a bill name
-  would join the item, beside `course` and `goesWithKitchenFood`), and that D115's course list and
-  D117's group fact are already per group across bills, so a cross-bill ticket reuses them
-  unchanged. The PR body carries the same list.
+  would join the item, beside `course`; `goesWithKitchenFood` is added after it, in
+  `planKitchenTickets`), the per-bill loops for HOLD corrections, correction slips and MOVED slips,
+  and that D115's course list and D117's group fact are already per group across bills, so a
+  cross-bill ticket reuses them unchanged. The PR body carries the same list.
 
 - **D125 Prose.** Current developer prose that names a retired item is updated in the same task
   that retires it (Task 10 for the remainder); historical specs and plans get dated pointers, never
@@ -1024,7 +1025,7 @@ The per-task reviews are in `~/waitron-campaign-c/a773-2d-reviews/` (`task-1b.md
 | --- | --- |
 | 1b review M2: the control for `order-groups.test.ts:620` | Task 1b's mutation step says to fire `s.mains` "(group 3)"; in that fixture group 3 is `s.warm` and `s.mains` is group 4. Firing `s.warm` with the assertions in their committed order fails first at the positive check (`:619`, `GROUP 5 · DESSERTS`), so that control reaches the negative check only with the two assertions swapped, which is how the reviewer showed it can fail. The assertion stays as committed. |
 | 2 review M1: D118 clarified (lane's decision) | The cue follows the DISH, not the printing station. A released dish that did not wait for the pass, later moved to a station that waits, still carries the cue on that station's paper and card, because it still goes out with the kitchen's food. D118 already reads this way (it asks only about the dish's own ticket item); the printing station's `waits_for_pass` is not consulted. Paper (D118) and screen (D119) use the same rule. |
-| 2 review M3: the planner's `!entry.madeHere` check | Kept, and pinned. Established by running: with `planKitchenTickets` instrumented to log a made-here entry, 20 server suites that exercise made-here dishes (973 tests) reached it once, in `station-move.test.ts` › "does not reroute an anomalous held made-here record", where the test sets `made_here` on a held item by a direct update and then fires its group. `goes-with-kitchen-food.test.ts` › "no cue for an anomalous held made-here record" builds the same row; deleting the check turns it red. Whether any production writer can leave a held item made here was not established. |
+| 2 review M3: the planner's `!entry.madeHere` check | Kept, and pinned. Established by running: with `planKitchenTickets` instrumented to log a made-here entry, 20 server suites that exercise made-here dishes (973 tests) reached it once, in `station-move.test.ts` › "does not reroute an anomalous held made-here record", where the test sets `made_here` on a held item by a direct update and then fires its group. `goes-with-kitchen-food.test.ts` › "no cue for an anomalous held made-here record" builds the same row; deleting the check turns it red. No product path writes such a row (Task 4 review, run 3): with two temporary triggers refusing any `ticket_items` write that leaves a made-here item without `fired_at` or `requested_at`, the 42 server test files that mention made-here (1935 tests) tripped them only at tests' own direct writes, never in product code. Every insert stamps a made-here item fired and requested and stores it ready; recall, the one writer that clears stamps, touches only queued items. The check stays as a defensive check (precedent: `station-move.test.ts` › "does not reroute an anomalous held made-here record"), pinned by its anomaly case. |
 | 2 review M4: the held test | D117's second half now uses `heldItem()` (`kitchen-phase.ts`: `fired_at` and `requested_at` both null) instead of `requested_at` null alone, matching the pass board's phases. Current writers stamp `requested_at` whenever they stamp `fired_at`, so current rows answer the same; a row fired without a request time now reads as released (pinned: "a dish fired before request times were kept counts as released", red before the change). |
 
 ## Revision 3 (2026-11-04, Task 3 review)
@@ -1037,3 +1038,16 @@ The review is `~/waitron-campaign-c/a773-2d-reviews/task-3.md`.
 | 3 review M1: the till predicate's comment | `goesWithKitchenFood` in `apps/till/src/widgets/station-queue.ts`: "the pass does not hold" became "the pass does not control". |
 | 3 review M2: the `phase !== "requested"` condition | Deleted. Every server writer that leaves a dish Requested (`requested_at` set, `fired_at` null) also sets `pass_controlled` true: `requestStamps` and `requestHeldItems` (`kitchen-release.ts`) and `keptStamps` (`working-order.ts`), so `!item.passControlled` already covers it. |
 | 3 review M3: the test file Task 3 names | Task 3's Files list and RED command name `goes-with-kitchen-food.test.ts`, where the cases are, instead of `station-queue.goes-with.test.ts`. |
+
+## Revision 4 (2026-11-04, Task 4 review)
+
+The review is `~/waitron-campaign-c/a773-2d-reviews/task-4.md`.
+
+| Finding | Change |
+| --- | --- |
+| 4 review I1: what a heading's course list names | The guide's `#held-work` (EN and ES) says a group's heading names the courses of the dishes printed under it, not of the whole group (D115, `headingCourses`). |
+| 4 review M1: the `!entry.madeHere` receipt | Revision 2's row now carries the reviewer's trigger run instead of "was not established". The check stays as a defensive check, pinned by its anomaly case. |
+| 4 review M2: where the cue flag is set | D124 and the A803 handoff paragraph say `goesWithKitchenFood` is added in `planKitchenTickets`, not `buildTicketItems`. The handoff also names the per-bill loops for HOLD corrections (`correctHoldTickets`), correction slips (`enqueueOrderKitchenNoteChange`) and MOVED slips (`readTicketItemsOn`). |
+| 4 review M3: the card's cue condition | `#kitchen-screen` (EN and ES) says the card shows the cue when it has a dish sent to be cooked and its group has dishes for the pass, the same term `#station-waits` uses. |
+| 4 review M4: paper is frozen | `#station-waits` (EN and ES) adds that a ticket says it as things stand when it prints, and a reprint checks again. |
+| 4 review M5: the Spanish word for the station's ticket | «el ticket del plato» became «la comanda del plato», the ES guide's word; «ticket anticipado de espera» stays. |
