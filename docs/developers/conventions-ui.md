@@ -1201,9 +1201,7 @@ full-disk action begins "The box has deleted the temporary copies, old logs and 
 make again, and the disk is still full." («El equipo ha quitado las copias temporales, los registros
 y los avisos de fallo antiguos que puede volver a crear, y el disco sigue lleno.»). Since A1127 the
 action names nobody to ask: it says what fills the rest of the disk, that Waitron cannot free more by
-itself, and what reinstalling costs; while a discarded recovery's copy is still there, one more line
-names its size (`discardedCopyBytes`, `apps/server/src/discarded-copy.ts`); the ordinary recovery
-page shows the same line when the failure it recorded is `storage.disk_full`. That start writes no
+itself, and what reinstalling costs. That start writes no
 `server.boot_started`, so "Why the last start failed" shows the last counted start's failure, if it
 failed. The Spanish says «quitado»,
 not the design's «borrado», because the page's never-wipe check (`NEVER_WIPE_ES`,

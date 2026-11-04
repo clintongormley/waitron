@@ -1101,7 +1101,8 @@ its replacement; line numbers are on `03a1198150`.
     backup recovery's),".
   - `:1190-1193` delete "; while a discarded recovery's copy is still there, one more line names its
     size (`discardedCopyBytes`, `apps/server/src/discarded-copy.ts`); the ordinary recovery page shows
-    the same line when the failure it recorded is `storage.disk_full`".
+    the same line when the failure it recorded is `storage.disk_full`"
+    (done early, with the pointer guard fix).
   - `:1300-1301` delete "A backup recovery's check of the box's files skips `first-setup-set-aside`
     in each root (`originals`, `packages/provisioning/src/first-setup-backup-workspace.ts`)."
 - **`docs/developers/testing-guide.md:1463-1477`** — "runs the repair page's Start-again flow beside
