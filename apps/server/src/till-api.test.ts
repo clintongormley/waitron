@@ -175,8 +175,7 @@ const suite = useVenueDb({
       locationId: brandLocationId(venueId),
     });
     // A node the working-order routes need: `parkOrder`/`payWorkingOrder` write `working_orders.node_id`
-    // (its FK `(node_id) → nodes(id)` requires a real row), and
-    // `listHeldOrders` filters by it. `cfg.nodeId` names THIS row so every parked order is on-node.
+    // (its FK `(node_id) → nodes(id)` requires a real row).
     const nodeId = await seedNode(db);
     // Ana's PIN is "5555"; anything else must not verify. Stored hashed via `hashPin`, never plain.
     const [person] = await db

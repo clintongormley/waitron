@@ -141,9 +141,9 @@ export interface ManagementApiDeps {
   db: Database;
   cfg: { nodeId: string };
   /**
-   * The venue config the department receipt settings routes use — the same value
-   * `mountTillApi` receives. Optional so harnesses that never reach those routes can omit it; a
-   * request that does reach one without it fails closed (`requireVenueCfg`).
+   * The venue config the department receipt settings GET route reads — the same value
+   * `mountTillApi` receives. Optional so harnesses that never reach that route can omit it; a
+   * request that does reach it without it fails closed (`requireVenueCfg`).
    */
   venueCfg?: TradingContext;
   validateOperationDescription?: (description: string) => void;
@@ -345,10 +345,10 @@ function requireDeviceProfileId(id: string): string {
 
 function requireVenueCfg(deps: ManagementApiDeps): TradingContext {
   /* v8 ignore start -- boot always threads venueCfg; only a harness that omits it AND hits a department
-     receipt settings route reaches this, which no suite does — a config error, surfaced as an opaque 500 by `run`. */
+     receipt settings GET route reaches this, which no suite does — a config error, surfaced as an opaque 500 by `run`. */
   if (deps.venueCfg === undefined) {
     throw new Error(
-      "mountManagementApi: venueCfg is required for the department receipt settings routes",
+      "mountManagementApi: venueCfg is required for the department receipt settings GET route",
     );
   }
   /* v8 ignore stop */
