@@ -16,7 +16,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { hasCode, isAppError } from "@waitron/shared";
 import type { AdoptCredential } from "./adopt.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
-import { boxDownload, fetchMirrorBundle, fetchPrimaryCertificate } from "./mirror-bundle-fetch.js";
+import {
+  boxDownload,
+  boxExchange,
+  fetchMirrorBundle,
+  fetchPrimaryCertificate,
+} from "./mirror-bundle-fetch.js";
 import {
   mintBoxAuthority,
   startBoxServer,
@@ -735,6 +740,29 @@ describe("a main box that never answers is given up on, so setup is not held", (
   });
 });
 
+describe("boxExchange", () => {
+  it("on a signal already stopped sends nothing and refuses at once", async () => {
+    let asked = 0;
+    const server = createHttpServer((req, res) => {
+      asked++;
+      req.resume();
+      res.end("answered");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const url = new URL(`http://127.0.0.1:${(server.address() as AddressInfo).port}/`);
+      await expect(
+        boxExchange(url, { method: "POST", trust: {}, signal: AbortSignal.abort(), body: "{}" }),
+      ).rejects.toThrow("no answer in time");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(asked).toBe(0);
+    } finally {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+});
+
 describe("boxDownload streams one answer to a file", () => {
   const BYTES = Buffer.from(Array.from({ length: 70_000 }, (_, i) => i % 256));
   let folder: string;
@@ -951,6 +979,19 @@ describe("boxDownload streams one answer to a file", () => {
     await vi.waitFor(() => expect(existsSync(partial)).toBe(true));
     controller.abort();
     await expect(download).rejects.toThrow();
+    expect(await existingFiles()).toEqual([]);
+  });
+
+  it("a download on a signal already stopped asks nothing and leaves no file", async () => {
+    let asked = 0;
+    const url = await httpBox((res) => {
+      asked++;
+      res.writeHead(200, { "content-length": String(BYTES.length) });
+      res.end(BYTES);
+    });
+    await expect(boxDownload(url, options(AbortSignal.abort()), destination)).rejects.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(asked).toBe(0);
     expect(await existingFiles()).toEqual([]);
   });
 

@@ -1,4 +1,9 @@
-import { createServer as createHttpServer, type RequestListener, type Server } from "node:http";
+import {
+  createServer as createHttpServer,
+  type RequestListener,
+  type Server,
+  type ServerResponse,
+} from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import type { AddressInfo } from "node:net";
 import { existsSync } from "node:fs";
@@ -627,6 +632,19 @@ describe("M1's status decides whether the spare stays", () => {
     expect(JSON.stringify(logLines)).toContain("the folder is held");
   });
 
+  it("a folder that can never be removed does not hold the operation open", async () => {
+    const r = await rig();
+    await abandonHandover(r.m1Store, OP, { code: "handover.destination_unreachable", params: {} });
+    await r.listen(r.m1App({ restricted: false }));
+    vi.mocked(rm).mockRejectedValue(new Error("the folder is held"));
+    try {
+      await r.start();
+      await vi.waitFor(async () => expect((await r.m2Row()).state).toBe("abandoned"));
+    } finally {
+      vi.mocked(rm).mockReset();
+    }
+  });
+
   it("a restricted M1 that reports abandoned closes M2's too", async () => {
     const r = await rig();
     await abandonHandover(r.m1Store, OP, { code: "handover.superseded_during_start", params: {} });
@@ -785,6 +803,37 @@ describe("M1's status decides whether the spare stays", () => {
     await settle();
     expect((await r.m2Row()).state).toBe("prepared");
     expect(r.copyReads()).toBe(0);
+  });
+
+  it.each([
+    // Passes the shape check, since this state fits a source in an emergency.
+    ["another scenario", { scenario: "emergency", state: "source_superseded" }],
+    ["a state no box records", { state: "nonsense" }],
+    ["a state no source records", { state: "copy_accepted" }],
+  ])("a signed status with %s is not fetched past", async (_label, parts) => {
+    const r = await rig();
+    await r.stepDownM1();
+    const reported = {
+      operationId: OP,
+      role: "source",
+      scenario: "controlled",
+      sourceNodeId: r.m1,
+      destinationNodeId: r.m2,
+      ...parts,
+    };
+    const compare = vi.fn(async () => {});
+    await r.listen(r.m1App({ restricted: true }), (url, real) =>
+      url === "/api/node/peer-status"
+        ? statusFor(r, { requestedOperation: reported as unknown as CanonicalValue })
+        : real,
+    );
+    await r.start({ compare });
+    await vi.waitFor(async () =>
+      expect((await r.m2Row()).waitingReason).toBe("handover.source_unreachable"),
+    );
+    await settle();
+    expect(r.copyReads()).toBe(0);
+    expect(compare).not.toHaveBeenCalled();
   });
 
   it("a status signed by the wrong box does not close M2", async () => {
@@ -963,5 +1012,270 @@ describe("what the duty works on", () => {
     });
     const reads = r.statusReads();
     await vi.waitFor(() => expect(r.statusReads()).toBeGreaterThan(reads));
+  });
+});
+
+describe("a stop or a changed row while a request is out", () => {
+  it("a stop landing during the status read sends nothing more, and the stop returns", async () => {
+    const r = await rig();
+    await r.stepDownM1();
+    let releaseStatus = () => {};
+    const statusHeld = new Promise<void>((resolve) => (releaseStatus = resolve));
+    const neverAnswered: ServerResponse[] = [];
+    await r.listen(r.m1App({ restricted: true }), (url, real) => {
+      if (url === "/api/node/peer-status") {
+        return (req, res) => void statusHeld.then(() => real(req, res));
+      }
+      if (url.endsWith("/indicator")) return (_req, res) => void neverAnswered.push(res);
+      return real;
+    });
+    const duty = (await r.start())!;
+    await vi.waitFor(() => expect(r.statusReads()).toBe(1));
+
+    const stopped = duty.stop().then(() => "stopped");
+    releaseStatus();
+    const outcome = await Promise.race([
+      stopped,
+      new Promise((resolve) => setTimeout(() => resolve("still running"), 3_000)),
+    ]);
+    for (const res of neverAnswered) res.destroy();
+
+    expect(outcome).toBe("stopped");
+    expect(r.requests).toEqual(["/api/node/peer-status"]);
+    expect((await r.m2Row()).waitingReason).toBeNull();
+  });
+
+  it("a compare is handed the row as it stands, not as the pass first read it", async () => {
+    const r = await rig();
+    const compare = vi.fn(async () => {});
+    await r.start({ compare });
+    await vi.waitFor(async () =>
+      expect((await r.m2Row()).waitingReason).toBe("handover.source_unreachable"),
+    );
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    const [operation] = compare.mock.calls[0] as unknown as [{ waitingReason: string | null }];
+    expect(operation.waitingReason).toBeNull();
+  });
+
+  it("an operation replaced during the status read is not fetched", async () => {
+    const r = await rig();
+    await r.stepDownM1();
+    let releaseStatus = () => {};
+    const statusHeld = new Promise<void>((resolve) => (releaseStatus = resolve));
+    await r.listen(r.m1App({ restricted: true }), (url, real) =>
+      url === "/api/node/peer-status"
+        ? (req, res) => void statusHeld.then(() => real(req, res))
+        : real,
+    );
+    await r.start();
+    await vi.waitFor(() => expect(r.statusReads()).toBe(1));
+    await advanceHandover(r.m2Store, OP, "replaced", {});
+    releaseStatus();
+    await settle();
+    expect(r.requests).toEqual(["/api/node/peer-status"]);
+    expect((await r.m2Row()).waitingReason).toBeNull();
+  });
+
+  /** A real download that runs `after` once the whole file sits at its final name. */
+  const downloadThen = (after: () => Promise<unknown>) =>
+    vi.fn(async (...args: Parameters<typeof boxDownload>) => {
+      const answer = await boxDownload(...args);
+      await after();
+      return answer;
+    });
+
+  it("an operation replaced during the download is not compared, and its folder goes", async () => {
+    const r = await rig();
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    const compare = vi.fn(async () => {});
+    const download = downloadThen(() => advanceHandover(r.m2Store, OP, "replaced", {}));
+    await r.start({ compare, download });
+    await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    await vi.waitFor(() => expect(existsSync(join(r.stateDir, "handover", OP))).toBe(false), {
+      timeout: 10_000,
+    });
+    await settle();
+    expect(compare).not.toHaveBeenCalled();
+    expect(await r.m2Row()).toMatchObject({ state: "replaced", waitingReason: null });
+  });
+
+  it("a box promoted during the download compares nothing and keeps no copy", async () => {
+    const r = await rig();
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    const compare = vi.fn(async () => {});
+    const download = downloadThen(() =>
+      setNodeMode({ venue: r.db, node: suite.node }, r.m2, "primary"),
+    );
+    await r.start({ compare, download });
+    await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    await settle();
+    expect(compare).not.toHaveBeenCalled();
+    expect(existsSync(r.received())).toBe(false);
+  });
+
+  it("a stop landing after the file is whole compares nothing and keeps no copy", async () => {
+    const r = await rig();
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    const compare = vi.fn(async () => {});
+    let stopping: Promise<void> | undefined;
+    const duty = (await r.start({
+      compare,
+      download: downloadThen(async () => {
+        stopping = duty.stop();
+      }),
+    }))!;
+    await vi.waitFor(() => expect(stopping).toBeDefined(), { timeout: 10_000 });
+    await stopping;
+    expect(compare).not.toHaveBeenCalled();
+    expect(existsSync(r.received())).toBe(false);
+  });
+
+  it.each([
+    [
+      "throws",
+      async () => {
+        throw new Error("the connection was lost");
+      },
+    ],
+    ["is refused", async () => ({ status: 409, text: "{}" })],
+  ])(
+    "an operation replaced during a download that %s gets no waiting reason",
+    async (_label, outcome) => {
+      const r = await rig();
+      await r.stepDownM1();
+      await r.listen(r.m1App({ restricted: true }));
+      const download = vi.fn(async () => {
+        await advanceHandover(r.m2Store, OP, "replaced", {});
+        return outcome();
+      });
+      await r.start({ download: download as typeof boxDownload });
+      await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+      await settle();
+      expect(await r.m2Row()).toMatchObject({ state: "replaced", waitingReason: null });
+    },
+  );
+});
+
+describe("the folder of an operation that closed", () => {
+  it("an operation replaced after its file was fetched loses its folder", async () => {
+    const r = await rig();
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    const compare = vi.fn(async () => {});
+    await r.start({ compare });
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    await settle();
+    // Control: an open operation's file stays through several passes.
+    expect(existsSync(r.received())).toBe(true);
+    await advanceHandover(r.m2Store, OP, "replaced", {});
+    await vi.waitFor(() => expect(existsSync(join(r.stateDir, "handover", OP))).toBe(false));
+  });
+
+  it("a start removes what a closed destination operation left, and nothing else", async () => {
+    const r = await rig();
+    const folderOf = (name: string) => join(r.stateDir, "handover", name);
+    const fill = async (name: string) => {
+      await mkdir(folderOf(name), { recursive: true });
+      await writeFile(join(folderOf(name), "received.db"), "a whole venue");
+    };
+    const THIRD_OP = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const NO_ROW = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    await advanceHandover(r.m2Store, OP, "replaced", {});
+    await beginHandover(r.m2Store, r.binding(OTHER_OP), "destination");
+    await advanceHandover(r.m2Store, OTHER_OP, "abandoned", {});
+    await beginHandover(r.m2Store, r.binding(THIRD_OP), "source");
+    await advanceHandover(r.m2Store, THIRD_OP, "abandoned", {});
+    await Promise.all([OP, OTHER_OP, THIRD_OP, NO_ROW].map(fill));
+    await r.start();
+    await vi.waitFor(() => expect(existsSync(folderOf(OTHER_OP))).toBe(false));
+    expect(existsSync(folderOf(OP))).toBe(false);
+    // A source's folder is its capture, and a folder with no row is nothing this duty knows.
+    expect(existsSync(folderOf(THIRD_OP))).toBe(true);
+    expect(existsSync(folderOf(NO_ROW))).toBe(true);
+  });
+
+  it("a closed operation's folder that cannot be removed is logged, and the next wake tries again", async () => {
+    const r = await rig();
+    await advanceHandover(r.m2Store, OP, "replaced", {});
+    const folder = join(r.stateDir, "handover", OP);
+    await mkdir(folder, { recursive: true });
+    vi.mocked(rm).mockRejectedValueOnce(new Error("the folder is held"));
+    const duty = (await r.start())!;
+    await vi.waitFor(() => expect(JSON.stringify(logLines)).toContain("the folder is held"));
+    expect(existsSync(folder)).toBe(true);
+    duty.wake();
+    await vi.waitFor(() => expect(existsSync(folder)).toBe(false));
+  });
+});
+
+describe("a compare that throws", () => {
+  it("is tried again on the same file, which is not fetched again, until it succeeds", async () => {
+    const r = await rig();
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    let failures = 2;
+    const compare = vi.fn(async () => {
+      if (failures-- > 0) throw new Error("a stand-in failure");
+    });
+    await r.start({ compare, compareRetryMs: TICK_MS });
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(3), { timeout: 10_000 });
+    const reads = r.statusReads();
+    await vi.waitFor(() => expect(r.statusReads()).toBeGreaterThan(reads + 2));
+    expect(compare).toHaveBeenCalledTimes(3);
+    expect(r.copyReads()).toBe(1);
+    expect(existsSync(r.received())).toBe(true);
+    const [first, , last] = compare.mock.calls as unknown as unknown[][];
+    expect(last![1]).toEqual(first![1]);
+    expect(last![2]).toBe(r.received());
+  });
+
+  it("is not tried again before its limit, however often the duty ticks or is woken", async () => {
+    const r = await rig();
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    const compare = vi.fn(async () => {
+      throw new Error("a stand-in failure");
+    });
+    const duty = (await r.start({ compare }))!;
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    duty.wake();
+    await settle();
+    duty.wake();
+    await settle();
+    expect(compare).toHaveBeenCalledTimes(1);
+    expect(r.copyReads()).toBe(1);
+  });
+
+  it("M1's abandoned still closes the operation while a compare keeps failing", async () => {
+    const r = await rig();
+    await r.stepDownM1();
+    let reportAbandoned = false;
+    await r.listen(r.m1App({ restricted: true }), (url, real) =>
+      url === "/api/node/peer-status" && reportAbandoned
+        ? statusFor(r, {
+            requestedOperation: {
+              operationId: OP,
+              role: "source",
+              scenario: "controlled",
+              state: "abandoned",
+              sourceNodeId: r.m1,
+              destinationNodeId: r.m2,
+            },
+          })
+        : real,
+    );
+    const compare = vi.fn(async () => {
+      throw new Error("a stand-in failure");
+    });
+    await r.start({ compare });
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    reportAbandoned = true;
+    await vi.waitFor(async () => expect((await r.m2Row()).state).toBe("abandoned"));
+    expect(existsSync(join(r.stateDir, "handover", OP))).toBe(false);
   });
 });

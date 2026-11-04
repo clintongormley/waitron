@@ -1,10 +1,12 @@
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
+import { performance } from "node:perf_hooks";
 import type { KeyRing } from "@waitron/credentials";
 import { readNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
 import type { CanonicalValue, RoutableServer } from "@waitron/membership";
 import {
+  readHandoverOperation,
   readMirrorLink,
   readNodeMode,
   readOpenHandoverOperation,
@@ -21,6 +23,9 @@ import { isLoopbackHost } from "./primary-url.js";
 import "./errors.js";
 
 const TICK_MS = 5000;
+
+// A compare that fails may need a person to fix a setting, and it reads a whole venue's copy.
+const COMPARE_RETRY_MS = 60_000;
 
 // Room for what else a signed indicator holds beside the old box's retained selections, which come
 // from a file limited to 1 MiB (`module-preparation-state.ts`).
@@ -52,8 +57,9 @@ export interface DestinationDutyDeps {
   tickMs?: number;
   /** How long a download may go without a byte before it is given up on. */
   silenceLimitMs?: number;
-  /** Told of each file fetched whole, once per file. */
+  /** Told of a file fetched whole. A throw has it told again of the same file, after `compareRetryMs`. */
   compare?: (operation: HandoverOperation, indicator: unknown, copyPath: string) => Promise<void>;
+  compareRetryMs?: number;
   download?: typeof boxDownload;
 }
 
@@ -95,6 +101,15 @@ function describesOperation(
   );
 }
 
+/** A whole file this duty fetched for an operation, and how far comparing it has got. */
+interface HeldCopy {
+  operationId: string;
+  indicator: unknown;
+  path: string;
+  compared: boolean;
+  compareDueAt: number;
+}
+
 function refusalReason(text: string): ErrorCode {
   try {
     const code = (JSON.parse(text) as { error?: { code?: unknown } }).error?.code;
@@ -133,9 +148,10 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
   const { signal } = stopping;
   const tickMs = deps.tickMs ?? TICK_MS;
   const download = deps.download ?? boxDownload;
+  const compareRetryMs = deps.compareRetryMs ?? COMPARE_RETRY_MS;
   let woken = false;
   let rouse: () => void = () => {};
-  let held: string | undefined;
+  let held: HeldCopy | undefined;
 
   const wake = () => {
     woken = true;
@@ -155,12 +171,35 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     });
   }
 
+  /** The one operation this duty should be working on now, read fresh, or `null`. */
+  async function workToDo(): Promise<HandoverOperation | null> {
+    const { mode } = await readNodeMode(deps.node, deps.nodeId);
+    if (mode !== "mirror") {
+      await noteOperationOffMirror(deps);
+      return null;
+    }
+    const operation = await readOpenHandoverOperation(deps.node, deps.nodeId);
+    return operation?.role === "destination" &&
+      operation.scenario === "controlled" &&
+      operation.state === "prepared"
+      ? operation
+      : null;
+  }
+
+  /** `operation`'s row now, unless a stop or another writer ended this duty's work on it. */
+  async function stillWorkingOn(operation: HandoverOperation): Promise<HandoverOperation | null> {
+    if (signal.aborted) return null;
+    const current = await workToDo();
+    return current?.operationId === operation.operationId ? current : null;
+  }
+
   async function waitOn(
     operation: HandoverOperation,
     reason: ErrorCode,
     detail: Readonly<Record<string, unknown>> = {},
   ): Promise<void> {
-    if (operation.waitingReason === reason) return;
+    const current = await stillWorkingOn(operation);
+    if (current === null || current.waitingReason === reason) return;
     deps.log("info", "handover-destination.waiting", {
       operationId: operation.operationId,
       reason,
@@ -169,16 +208,35 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     await waitHandover(deps, operation.operationId, reason);
   }
 
-  async function close(operation: HandoverOperation): Promise<void> {
-    const folder = dirname(receivedCopyPath(deps.stateDir, operation.operationId));
-    // Before the record, so a crash between the two repeats both. A failure must not keep the
-    // operation open: an open operation holds up every promotion of this box.
+  /** `operationId` must come from a stored row. A failure is logged and never thrown. */
+  async function removeFolder(operationId: string): Promise<void> {
+    const folder = dirname(receivedCopyPath(deps.stateDir, operationId));
     await rm(folder, { recursive: true, force: true }).catch((error: unknown) => {
       deps.log("error", "handover-destination.remove_failed", {
-        operationId: operation.operationId,
+        operationId,
         error: String(error),
       });
     });
+  }
+
+  /**
+   * An operation that closes from `prepared` leaves a whole venue's copy nothing will read again.
+   * A source's folder is its own capture (`handover-capture.ts`).
+   */
+  async function removeClosedFolders(): Promise<void> {
+    const names = await readdir(join(deps.stateDir, "handover")).catch(() => []);
+    for (const name of names) {
+      const row = await readHandoverOperation(deps.node, deps.nodeId, name);
+      if (row?.role === "destination" && (row.state === "abandoned" || row.state === "replaced")) {
+        await removeFolder(row.operationId);
+      }
+    }
+  }
+
+  async function close(operation: HandoverOperation): Promise<void> {
+    // Before the record, so a crash between the two repeats both. A failure must not keep the
+    // operation open: an open operation holds up every promotion of this box.
+    await removeFolder(operation.operationId);
     await advanceHandover(deps, operation.operationId, "abandoned", {
       reportedBy: operation.sourceNodeId,
     } as CanonicalValue);
@@ -244,9 +302,19 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       });
       return waitOn(operation, "handover.source_unreachable");
     }
-    held = operationId;
-    if (operation.waitingReason !== null) await waitHandover(deps, operationId, null);
-    await deps.compare?.(operation, indicator, path);
+    // The download can outlast the operation, the box's being a mirror, or this duty.
+    const current = await stillWorkingOn(operation);
+    if (current === null) return discard();
+    held = { operationId, indicator, path, compared: false, compareDueAt: 0 };
+    if (current.waitingReason !== null) await waitHandover(deps, operationId, null);
+    await compareHeld(held, { ...current, waitingReason: null });
+  }
+
+  async function compareHeld(copy: HeldCopy, operation: HandoverOperation): Promise<void> {
+    if (copy.compared || performance.now() < copy.compareDueAt) return;
+    copy.compareDueAt = performance.now() + compareRetryMs;
+    await deps.compare?.(operation, copy.indicator, copy.path);
+    copy.compared = true;
   }
 
   /** Whether this operation still has work a later tick must do. */
@@ -270,13 +338,19 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       },
     })({ nodeId: source.nodeId, url: base, standing: source.standing } as RoutableServer);
 
+    const current = await stillWorkingOn(operation);
+    if (current === null) return true;
+
     const reported = status?.requestedOperation;
     const described = reported !== undefined && describesOperation(reported, operation);
     if (described && reported.state === "abandoned") {
       await close(operation);
       return false;
     }
-    if (held === operation.operationId) return true;
+    if (held?.operationId === operation.operationId) {
+      await compareHeld(held, current);
+      return true;
+    }
     // A refused read goes on to the copy route, whose refusal names its reason, and which opens
     // only for a box restricted as handed over in this operation (`steppedDownBinding`).
     if (status === null && silentBecause !== "refused") {
@@ -303,20 +377,9 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
   }
 
   async function pass(): Promise<boolean> {
-    const { mode } = await readNodeMode(deps.node, deps.nodeId);
-    if (mode !== "mirror") {
-      await noteOperationOffMirror(deps);
-      return false;
-    }
-    const operation = await readOpenHandoverOperation(deps.node, deps.nodeId);
-    if (
-      operation?.role !== "destination" ||
-      operation.scenario !== "controlled" ||
-      operation.state !== "prepared"
-    ) {
-      return false;
-    }
-    return workOn(operation);
+    await removeClosedFolders();
+    const operation = await workToDo();
+    return operation === null ? false : workOn(operation);
   }
 
   async function loop(): Promise<void> {

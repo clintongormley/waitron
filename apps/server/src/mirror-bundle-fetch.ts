@@ -127,6 +127,11 @@ export function boxExchange(
   maxBytes?: number,
 ): Promise<{ status: number; text: string }> {
   return new Promise((resolve, reject) => {
+    // An abort event never fires on a signal already aborted, so nothing below would end the request.
+    if (options.signal.aborted) {
+      reject(new Error("no answer in time"));
+      return;
+    }
     const req = (url.protocol === "http:" ? httpRequest : request)(
       url,
       {
