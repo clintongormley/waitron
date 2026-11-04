@@ -180,8 +180,9 @@ cosas también lo quitan:
 - Que los clientes se vayan.
 
 Hasta que se envía el primer pedido, no se muestra ningún paso mientras se toma nota en la mesa. Una
-cuenta que llega de otra mesa se trata como primer pedido si la mesa aún no tiene ninguno, pero no
-quita los pasos que empezaron al servir sus platos.
+cuenta que llega de otra mesa o del mostrador se trata como primer pedido si la mesa aún no tiene
+ninguno, pero no quita los pasos que empezaron al servir sus platos; el primer pedido propio de la
+mesa sí los quita.
 
 Un paso ya hecho vuelve cuando ocurre otra vez el momento en que empieza, como cuando se sirven más
 platos de un curso. Un paso que se repite cada pocos minutos desde el último pedido vuelve con cada

@@ -1074,7 +1074,8 @@ to three", because no capture is written when the party has no bill left (seen a
 Question 1 item 4's ES should read «bajo EN ESPERA», which the shipped passage now does.
 
 **D9's reader, 2026-11-04.** `readStepFacts` (`service-step-signals.ts`) now reads `detail`: it counts a
-`lines_moved` event as an order only when `arrived` is true, as a party's order times when it has no order of its own.
+`lines_moved` event as an order only when `arrived` is true, as a party's order times when it has no order of its own
+and still has a dish on a shown bill.
 
 **Control 9's claim.** The plan says the dish "takes the arrival path" with no copy made. Both cases passed
 their earlier assertions and only the source group's `removed` state went red (`task-10b.md`, Note A).

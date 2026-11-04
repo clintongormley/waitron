@@ -600,7 +600,7 @@ describe("readTableSteps", () => {
   });
 });
 
-describe("a party whose dishes arrived from another table", () => {
+describe("a party whose dishes arrived from another table or the counter", () => {
   const TAKE_ORDER = seated("Take order");
   const ANOTHER = {
     name: "Another order?",
@@ -1155,6 +1155,34 @@ describe("a party whose dishes arrived from another table", () => {
     expect(
       (await liveAt(v, partyId, tableId, arrived + 11 * MINUTE))!.map((step) => step.stepId),
     ).toEqual([another]);
+  });
+
+  it("the table's own first order clears a step that started when an arrived dish was served", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const mains = await inTx(v, (tx) => createCourse(tx, { name: "Mains", heldUntilFired: false }));
+    const [dessert] = await setSteps(v, await tablesDepartment(v), [
+      { name: "Dessert?", start: "course_served", courseId: mains.id, minutes: 10 },
+    ]);
+    const from = await partyWith(v, "Table 1", "fire");
+    await setCourse(v, mains.id, [await lineIdOf(v, from.billId, "Agua")]);
+    const servedAt = await serve(v, from.billId, "Agua");
+    const earlier = new Date(servedAt - 60 * MINUTE).toISOString();
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ servedAt: earlier })
+        .where(eq(workingOrderLines.workingOrderId, from.billId)),
+    );
+    const { partyId, tableId } = await carryToFreeTable(v, "move", from);
+    expect((await liveAt(v, partyId, tableId))!.map((step) => step.stepId)).toEqual([dessert]);
+
+    await orderForParty(v, partyId, ["Agua"]);
+
+    expect(await factsOf(v, partyId, tableId)).toMatchObject({
+      ordersArrived: false,
+      courseServedAt: new Map([[mains.id, servedAt - 60 * MINUTE]]),
+    });
+    expect(await liveAt(v, partyId, tableId)).toEqual([]);
   });
 
   for (const how of ["move", "split"] as const) {

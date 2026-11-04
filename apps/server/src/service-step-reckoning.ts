@@ -7,7 +7,10 @@ export interface StepFacts {
   openedAt: number;
   firstOrderAt: number | null;
   lastOrderAt: number | null;
-  /** The order times are dishes arriving from another table: the party has sent no order itself. */
+  /**
+   * The order times are dishes arriving from another table or the counter: the party has sent no
+   * order itself.
+   */
   ordersArrived?: boolean;
   drafting: boolean;
   courseServedAt: ReadonlyMap<string, number>;

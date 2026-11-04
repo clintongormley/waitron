@@ -172,8 +172,9 @@ and any earlier step it was hiding. Often you don't need to tap it, because thes
 - The party leaving.
 
 Until the first order is sent, no step shows while an order is being taken for the table. A bill
-moved in from another table is treated as the first order of a table that has none, but it does not
-clear steps that started when its dishes were served.
+moved in from another table or the counter is treated as the first order of a table that has none,
+but it does not clear steps that started when its dishes were served; the table's own first order
+still does.
 
 A cleared step comes back when the moment it starts from happens again, such as more of a course
 being served. A step that repeats every few minutes after the last order comes back with each
