@@ -255,7 +255,7 @@ export class MenuPublicationsPanel extends LitElement {
   @state() private repeated: RepeatedTime | null = null;
   @state() private attempted = false;
   @state() private scheduleRefusal: ScheduleRefusal | null = null;
-  /** A write answered with a refusal once its window had gone: nothing else would say so. */
+  /** A write that failed once its window had gone: nothing else would say so. */
   @state() private lateRefusal = false;
 
   /** The menu whose editions are followed. */

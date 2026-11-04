@@ -1,7 +1,7 @@
 import { html } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WtTabs } from "@waitron/ui";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { VENUE_SETTINGS_TABS, isVenueSettingsTab } from "./venue-settings-screen.js";
 import type { VenueSettingsPanel, VenueSettingsScreen } from "./venue-settings-screen.js";
@@ -74,6 +74,7 @@ it("moves an open dialog between its panel parents without closing it or losing 
     el.shadowRoot!.querySelector('[data-test="venue-settings-kitchen"]')!.contains(dialog),
   ).toBe(true);
   expect(dialog.shadowRoot!.querySelector("dialog")!.matches(":modal")).toBe(true);
+  await closeReportsDelivered();
   expect(closes).not.toHaveBeenCalled();
 });
 

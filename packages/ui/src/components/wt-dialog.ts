@@ -134,7 +134,8 @@ export class WtDialog extends LitElement {
     `,
   ];
 
-  /** Open dialogs on the page. A dialog that leaves is dropped, and holds its own place to return to. */
+  /** Dialogs shown on the page. A dialog that leaves is dropped, and holds its own place to return
+   * to; one the browser has shut stays until its `open` update runs. */
   private static readonly openDialogs = new Set<WtDialog>();
   private static openings = 0;
   /** This opening's place among all openings: later is higher. */
@@ -304,6 +305,7 @@ export class WtDialog extends LitElement {
       if (!this.open) {
         this.unwatchContent();
         WtDialog.openDialogs.delete(this);
+        this.lastFocused = null;
       }
       if (!this.open && this.dialog.open) {
         this.dialog.close();
@@ -342,19 +344,23 @@ export class WtDialog extends LitElement {
     WtDialog.openDialogs.add(this);
     if (this.dialog.matches(":modal")) return;
     const above = [...WtDialog.openDialogs]
-      .filter((other) => other.openedAt > this.openedAt && other.dialog.matches(":modal"))
+      .filter((other) => other.openedAt > this.openedAt)
       .sort((a, b) => a.openedAt - b.openedAt);
     this.showAgain();
-    for (const each of above) each.showAgain();
+    // Asked here, not above: moving focus can run a page's handlers, and one may remove or close
+    // any of these. A dialog off the page is not modal either.
+    for (const each of above) if (each.dialog.matches(":modal")) each.showAgain();
   }
 
   /** `close()`, because a modal whose `open` attribute is removed keeps its place in the top layer.
    * Its native report arrives with the dialog open again, and `onClose` ignores that. */
   private showAgain(): void {
     const focused = this.lastFocused;
+    const scrolled = this.bodyEl.scrollTop;
     this.dialog.close();
     this.showModalWithOpeningFocus();
     focused?.focus();
+    this.bodyEl.scrollTop = scrolled;
   }
 
   private onClose(): void {
@@ -374,8 +380,9 @@ export class WtDialog extends LitElement {
     this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
   }
 
-  /** The browser hands focus back to what had it at opening; when it could not, or this dialog has
-   * since been put back on the page, focus is left on the page body or inside this closed dialog. */
+  /** The browser hands focus back to what had it at opening, or, once this dialog has been put back
+   * on the page, to what had it then. When it could not, or that was the page body, focus is left
+   * on the page body or inside this closed dialog. */
   private refocus(): void {
     const focused = deepActiveElement();
     if (focused !== document.body && !composedContains(this, focused)) return;

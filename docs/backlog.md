@@ -4693,12 +4693,22 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **The till's modifier picker still recreates its modal when put back.** A738 added that because
   `wt-dialog` lost modality there; `wt-dialog` now restores it. With the recreation disabled, the
   `combined line edits` cases of `apps/till/src/widgets/modifier-picker.unsaved.test.ts` still passed
-  (3 passed). The department and zone edit dialogs also close on removal and reopen on return;
-  whether they still need to was not tried. Left open by A397.
+  (3 passed). Left open by A397.
+
+- **The department and zone edit dialogs still close on removal and reopen on return**, so they come
+  back on top with focus as at opening, not in their place in opening order. Whether they still need
+  to was not tried. (`packages/venue-service/src/dashboard/department-edit-dialog.ts`,
+  `zone-edit-dialog.ts`.) Left open by A397.
+
+- **An open choice list or native popover inside a dialog closes when a dialog under it is put
+  back**, because the dialog above is shown again; the person opens it again. Measured in the dialog
+  above on Chromium: its field's value, selection and focus, an open `details`, and the scroll of its
+  body, an inner box and a textarea are kept. At e3ec7efd36 the list and popover stayed open. Left
+  open by A397.
 
 - **A Schedule or Change time write refused after the person has left that menu still says
   nothing.** The panel says so only for the menu it is on; on another menu, or with the panel gone,
-  the person believes it went through. The Prices tab's `menus.change_not_saved` shows its message at
+  nothing tells the person. The Prices tab's `menus.change_not_saved` shows its message at
   screen level. Left open by A397.
 
 - **Change legal name says nothing when its rename is refused after Back and Discard closed the
