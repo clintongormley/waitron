@@ -52,6 +52,7 @@ beforeAll(() => {
 type Venue = Awaited<ReturnType<typeof setupSplitExtrasVenue>>;
 
 const ALL_PASS: CapabilityFlag[] = ["act-as-kds", "prepare-orders", "run-the-pass"];
+const TILL_PASS: CapabilityFlag[] = [...ALL_PASS, "show-expo"];
 const STATION_NAMES = { grill: "Grill", fryer: "Fryer", kitchen: "Kitchen", bar: "Bar" } as const;
 
 /** A device on a profile of its own, a kitchen display's unless `formFactor` says otherwise, with
@@ -264,6 +265,27 @@ describe("A773 station policy: pass coverage", () => {
     await waiting(venue, "grill");
     await tablesTillPass(venue);
     expect(await coverage(venue)).toEqual(await gaps(venue, [["grill", venue.counter.zoneId]]));
+  });
+
+  it("case 14: a till or handheld whose profile has the Pass button off covers nothing, though its Fire still releases", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await waiting(venue, "grill");
+    const both = await gaps(venue, [
+      ["grill", venue.party.zoneId],
+      ["grill", venue.counter.zoneId],
+    ]);
+    const every: DeviceKitchenScreen = { kind: "pass", stationIds: null, zoneIds: null };
+    await kitchenDisplay(venue, "Handheld pass", every, ALL_PASS, "phone-portrait");
+    await burgerAtTable(venue, "fire");
+    const pass = await tablesTillPass(venue, ALL_PASS);
+    expect(await coverage(venue)).toEqual(both);
+    const [card] = await toFire(venue, pass.by);
+    expect(card!.releaseTicketItemIds).toHaveLength(1);
+    expect(await release(venue, pass.by, card!)).toEqual({
+      releasedTicketItemIds: card!.releaseTicketItemIds,
+    });
+    await kitchenDisplay(venue, "Handheld pass on", every, TILL_PASS, "phone-portrait");
+    expect(await coverage(venue)).toEqual([]);
   });
 
   it("case 13: the till pass's Fire refuses the counter dish and releases the table's", async () => {
@@ -584,7 +606,7 @@ const stopWaiting = (venue: Venue) =>
 /** A till pass on every station and zone, signed in as a new person, whose profile serves the
  *  tables zone's department and, of its zones, only the tables zone. The fixture's counter zone is
  *  in the same department, so the zone list alone keeps it out. */
-async function tablesTillPass(venue: Venue) {
+async function tablesTillPass(venue: Venue, capabilities: CapabilityFlag[] = TILL_PASS) {
   const T = venue.party.zoneId;
   const departmentOf = async (zoneId: string) =>
     (
@@ -599,7 +621,7 @@ async function tablesTillPass(venue: Venue) {
     venue,
     "Till pass",
     { kind: "pass", stationIds: null, zoneIds: null },
-    ALL_PASS,
+    capabilities,
     "till",
   );
   await withTransaction(db, (tx) =>

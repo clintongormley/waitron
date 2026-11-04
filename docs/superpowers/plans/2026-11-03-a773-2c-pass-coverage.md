@@ -384,6 +384,12 @@ retirement.
   stays "Devices", as the owner approved; the guide carries the profile step. `#pass-screen` and `#request-cooking` link to it where they first say "a dish
   whose station waits for the pass"; `#service-lifetime`'s list of station settings gains it.
 
+- **D111 A till or handheld covers only with the Pass button on.** Beyond D100, `readPassCoverage`
+  counts a till or handheld (not a kitchen display) as a pass device only when its profile carries
+  `show-expo` (**Pass button**), because the till offers the pass only then
+  (`apps/till/src/till-app.ts` `#affordances`, `#allowsDestination`). The Fire does not check it
+  and stays unchanged: with the button off, nobody can open the pass on that device to press Fire.
+
 ## Departures from the master plan
 
 | Master (Task 10) | This plan | Why |
@@ -1018,3 +1024,16 @@ rejected.
   places) no longer read it (`setDefaultStation` writes only `is_default`, which the coverage read
   never selects); cases count the reads for each, and for station add and delete.
 - **m3:** `routing-grid.unsaved.test.ts`'s stub answers `readPassCoverage` with `[]`.
+
+## Revision 6 (Pass button) (2026-11-04, Task 8 review)
+
+- **Experiment** (a throwaway `useVenueDb` probe through the real routes, deleted after): a till
+  profile saved with **Pass button** on, a device given an every-zone pass screen by
+  `PATCH /management-api/devices/:id` (204), then the profile saved without `show-expo` by
+  `PUT /management-api/device-profiles/:id` (200, `narrowed=[]`): the pass screen stayed
+  `available: true`, `readPassCoverage` answered `[]`, and the signed-in Fire answered 200. The other
+  order (profile off first, then the device's choice) and a handheld gave the same. A kitchen display
+  saved without **Runs the pass** kept its screen, its Fire answered 403
+  `device.forbidden_action` `run-the-pass`, and coverage named both gaps. So a till that cannot open
+  its pass counted as covering: D111, held by `pass-coverage.test.ts` case 14. The till pass helper
+  in that file now carries `show-expo`, as a working till pass does.

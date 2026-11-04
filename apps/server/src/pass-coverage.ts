@@ -10,6 +10,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { isSharedDisplay } from "@waitron/layouts";
 import { deviceBindingColumns, deviceProfileJoin, toDeviceBinding } from "./device-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { passScopeOf, passSees, rowsWatchZones, type PassScope } from "./pass-board.js";
@@ -30,9 +31,11 @@ export interface PassCoverageGap {
 /** Each active waiting station in each active zone (or in no zone, when the venue has no active
  *  zone), and each station and zone where a live dish waits for the pass, that no pass device
  *  covers, by zone order (no zone last), then station name and id. A pass device is active, passes
- *  the Fire's profile check (`passReleaseRefusal`) and has an available pass screen; it covers a
- *  station and zone its screen sees, where its profile's zone list allows that zone. A pair in no
- *  zone needs no allowance from the list, as at the Fire (`assertSubjectZones`). */
+ *  the Fire's profile check (`passReleaseRefusal`) and has an available pass screen, and a till or
+ *  handheld's profile also has the Pass button on (`show-expo`), without which the till never opens
+ *  the pass though its Fire would answer; it covers a station and zone its screen sees, where its
+ *  profile's zone list allows that zone. A pair in no zone needs no allowance from the list, as at
+ *  the Fire (`assertSubjectZones`). */
 export async function readPassCoverage(
   tx: Transaction,
   cfg: TradingContext,
@@ -67,7 +70,13 @@ export async function readPassCoverage(
       .from(devices)
       .innerJoin(deviceProfiles, deviceProfileJoin)
       .where(eq(devices.active, true))
-  ).filter((row) => passReleaseRefusal(toDeviceBinding(row.id, row)) === null);
+  ).filter((row) => {
+    const device = toDeviceBinding(row.id, row);
+    return (
+      passReleaseRefusal(device) === null &&
+      (isSharedDisplay(device.formFactor) || device.capabilities.includes("show-expo"))
+    );
+  });
   const screens = await VENUE_SERVICE.readDevicesKitchenScreens(
     tx,
     cfg,
