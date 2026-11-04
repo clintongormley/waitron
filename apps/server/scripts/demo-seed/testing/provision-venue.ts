@@ -12,7 +12,7 @@ type NifFormat = "fixed_k" | "calculated";
 const COUNTRIES = {
   ES: {
     legalName: "Casa Delgado SL",
-    locationName: "Main room",
+    venueName: "Main room",
     fiscalTerritory: "ES-common",
     operationDescription: "Sale on premises",
     addressLine1: "1 Market Street",
@@ -28,7 +28,7 @@ const COUNTRIES = {
   },
   GB: {
     legalName: "Deli London Ltd",
-    locationName: "Main counter",
+    venueName: "Main counter",
     fiscalTerritory: "GB-vat",
     operationDescription: "Sale on premises",
     addressLine1: "1 High Street",
@@ -71,7 +71,7 @@ export function createDemoVenueProvisioner(
           country,
           taxId: fixture.taxId(number, options.nifFormat),
           legalName: fixture.legalName,
-          name: fixture.locationName,
+          name: fixture.venueName,
           fiscalTerritory: fixture.fiscalTerritory,
           invoiceLocales: [options.invoiceLocale],
           operationDescription: fixture.operationDescription,

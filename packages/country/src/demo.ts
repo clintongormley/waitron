@@ -197,7 +197,7 @@ export interface CountryDemoReason<L extends string = string> {
 export interface CountryDemoDeveloperPreset {
   readonly country: string;
   readonly dataSet: string;
-  readonly locationName: string;
+  readonly venueName: string;
   readonly postalCode: string;
   readonly city: string;
   readonly province: string;

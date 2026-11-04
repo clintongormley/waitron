@@ -18,7 +18,7 @@ vi.mock("@waitron/country-packs", async (importOriginal) => {
     demo: {
       legalName: "Nowhere Foods Ltd",
       taxId: "XX123456789",
-      locationName: "Nowhere Street",
+      venueName: "Nowhere Street",
       departmentTradingNames: { restaurant: "Nowhere Bar", deli: "Nowhere Deli" },
     },
   };

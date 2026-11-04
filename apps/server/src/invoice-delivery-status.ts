@@ -176,10 +176,10 @@ async function readStates(
       continue;
     }
     const receipt = receipts.get(sale.id)!;
-    const located = { id: sale.id };
-    const printers = await offer(located);
+    const offeredSale = { id: sale.id };
+    const printers = await offer(offeredSale);
     const emailable =
-      typeof emailAvailable === "boolean" ? emailAvailable : await emailAvailable(located);
+      typeof emailAvailable === "boolean" ? emailAvailable : await emailAvailable(offeredSale);
     const saleRows = rowsOf.get(sale.id) ?? [];
     const saleJobs = jobsOf.get(sale.id) ?? [];
     const withdrawn = receiptPrinterWithdrawn(saleRows, saleJobs, receipt, printers);

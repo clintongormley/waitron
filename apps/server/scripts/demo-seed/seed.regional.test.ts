@@ -63,7 +63,7 @@ for (const [province, postalCode, invoiceLocale] of [
       const selection = await selections.readDemoSeedSelection(suite.db);
       expect(selection.identity).toMatchObject({
         dataSet: "casa-delgado-ca",
-        locationName: "Can Delgado",
+        venueName: "Can Delgado",
       });
       await seedDemoRestaurant(suite.db, {
         venue,
@@ -229,7 +229,7 @@ for (const locale of ["en", "es"] as const)
     const selection = await selections.readDemoSeedSelection(suite.db);
     expect(selection.identity).toMatchObject({
       dataSet: "casa-delgado-valencia",
-      locationName: VALENCIA_DEMO_TEXT.locationName,
+      venueName: VALENCIA_DEMO_TEXT.venueName,
     });
     await seedDemoRestaurant(suite.db, {
       venue,
@@ -461,7 +461,7 @@ for (const locale of ["en", "es"] as const)
     const selection = await selections.readDemoSeedSelection(suite.db);
     expect(selection.identity).toMatchObject({
       dataSet: "casa-delgado-gl",
-      locationName: GALICIA_DEMO_TEXT.locationName,
+      venueName: GALICIA_DEMO_TEXT.venueName,
     });
     await seedDemoRestaurant(suite.db, {
       venue,

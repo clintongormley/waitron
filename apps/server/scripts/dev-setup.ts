@@ -216,7 +216,7 @@ async function provisionVenue(
         country: preset.country,
         taxId: identity.taxId,
         legalName: identity.legalName,
-        name: preset.locationName,
+        name: preset.venueName,
         fiscalTerritory: DEV_VENUE_TERRITORY,
         invoiceLocales: [receiptLocale],
         operationDescription: "In-store sales",

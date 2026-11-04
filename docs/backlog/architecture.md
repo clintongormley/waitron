@@ -1062,19 +1062,19 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
     handed to `readPrintedDepartmentReceipt` (both S18, with the module contract's scope; S10,
     #2396). The attendance recorder keeps an unread optional `locationId` for S18 (S13, #2397).
     Venue-service's exported functions keep their scope parameter as an unread `_cfg` until S18
-    removes it (S6, #2394). The calendar's exported readers keep an unread `_cfg` until S18;
-    `saveHolidayArea` reads the venue row twice (for the address, then for its id) because
-    `readVenue`'s `Venue` carries no id; S18 can drop the second read when `venueLocationId` goes
+    removes it (S6, #2394). The calendar's exported readers keep an unread `_cfg` until S18
     (S8, #2405). Left for S18 by S11 (#2411): the unread `_cfg` in `kitchen.ts`, `dead-ends.ts`
     and `kitchen-allergy.ts`, the `VENUE_SERVICE.stationStates` scopes in `kitchen.ts` and
-    `station-move.ts`, the floor annotator's `cfg`, and `receipt-guests.ts`'s `cfg`. The node and
-    storage ids remain for S18 and the schema slices (S16, #2402).
+    `station-move.ts`, the floor annotator's `cfg`, and `receipt-guests.ts`'s `cfg`. The node's id
+    remains for S18f (S16, #2402).
   - **The schema slices S20–S28:** the schema changes remain for S20–S28 (S3, #2387). Until the
     schema slices drop `print_jobs.location_id`, `enqueuePrintJob` takes the venue id as an
     optional `venueId`, so a sale, a kitchen send or a payment's slips read it once, and the demo
     printer's boot lookup keeps its venue condition for `printers_local_key_key` (S10, #2396).
     S25 still needs to drop the node's venue foreign key (S4, #2388). Calendar rows still written
-    with a `location_id` take `venueLocationId` (S8, #2405). Until the schema slices drop the
+    with a `location_id` take `venueLocationId` (S8, #2405). `saveHolidayArea` reads the venue row
+    twice (for the address, then for its id) because `readVenue`'s `Venue` carries no id; the
+    second read goes with `holiday_geographies.location_id` (S8, #2405). Until the schema slices drop the
     columns, the configuration import sets every column whose foreign key points at `locations`
     to the importing venue's row (`venueLocationId`); the export no longer carries
     `fire_control`, whose column A773-2 removes (S17, #2415). Two raw

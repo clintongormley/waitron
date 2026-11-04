@@ -117,12 +117,12 @@ for (const locale of ["en-GB", "es-ES"] as const)
     setLocale(locale);
     const el = await mount();
     await fill(el, "postalCode", "46001");
-    expect((await native(el, "name")).value).toBe(VALENCIA_DEMO_TEXT.locationName);
+    expect((await native(el, "name")).value).toBe(VALENCIA_DEMO_TEXT.venueName);
     const automatic = (await submit(el))[0]!;
     expect(automatic).toMatchObject({
       demoVenueNameSource: "automatic",
       venue: {
-        name: VALENCIA_DEMO_TEXT.locationName,
+        name: VALENCIA_DEMO_TEXT.venueName,
         province: VALENCIA_DEMO_TEXT.province,
         invoiceLocales: ["es-ES"],
       },
@@ -130,16 +130,16 @@ for (const locale of ["en-GB", "es-ES"] as const)
     cleanupWidgets();
     const restored = await mount({ mode: "demo", ...automatic });
     await fill(restored, "postalCode", "08001");
-    expect((await native(restored, "name")).value).toBe(VALENCIA_DEMO_TEXT.catalanLocation);
-    await fill(restored, "name", VALENCIA_DEMO_TEXT.locationName);
+    expect((await native(restored, "name")).value).toBe(VALENCIA_DEMO_TEXT.catalanVenueName);
+    await fill(restored, "name", VALENCIA_DEMO_TEXT.venueName);
     await fill(restored, "postalCode", "28013");
-    expect((await native(restored, "name")).value).toBe(VALENCIA_DEMO_TEXT.locationName);
+    expect((await native(restored, "name")).value).toBe(VALENCIA_DEMO_TEXT.venueName);
     const custom = (await submit(restored))[0]!;
     expect(custom.demoVenueNameSource).toBe("custom");
     cleanupWidgets();
     const customRestored = await mount({ mode: "demo", ...custom });
     await fill(customRestored, "postalCode", "46001");
-    expect((await native(customRestored, "name")).value).toBe(VALENCIA_DEMO_TEXT.locationName);
+    expect((await native(customRestored, "name")).value).toBe(VALENCIA_DEMO_TEXT.venueName);
     expect((await submit(customRestored))[0]!.demoVenueNameSource).toBe("custom");
   });
 
@@ -148,12 +148,12 @@ for (const locale of ["en-GB", "es-ES"] as const)
     setLocale(locale);
     const el = await mount();
     await fill(el, "postalCode", "15001");
-    expect((await native(el, "name")).value).toBe(GALICIA_DEMO_TEXT.locationName);
+    expect((await native(el, "name")).value).toBe(GALICIA_DEMO_TEXT.venueName);
     const automatic = (await submit(el))[0]!;
     expect(automatic).toMatchObject({
       demoVenueNameSource: "automatic",
       venue: {
-        name: GALICIA_DEMO_TEXT.locationName,
+        name: GALICIA_DEMO_TEXT.venueName,
         province: GALICIA_DEMO_TEXT.province,
         invoiceLocales: ["es-ES"],
       },
@@ -161,15 +161,15 @@ for (const locale of ["en-GB", "es-ES"] as const)
     cleanupWidgets();
     const restored = await mount({ mode: "demo", ...automatic });
     await fill(restored, "postalCode", "08001");
-    expect((await native(restored, "name")).value).toBe(GALICIA_DEMO_TEXT.catalanLocation);
-    await fill(restored, "name", GALICIA_DEMO_TEXT.locationName);
+    expect((await native(restored, "name")).value).toBe(GALICIA_DEMO_TEXT.catalanVenueName);
+    await fill(restored, "name", GALICIA_DEMO_TEXT.venueName);
     await fill(restored, "postalCode", "28013");
-    expect((await native(restored, "name")).value).toBe(GALICIA_DEMO_TEXT.locationName);
+    expect((await native(restored, "name")).value).toBe(GALICIA_DEMO_TEXT.venueName);
     const custom = (await submit(restored))[0]!;
     expect(custom.demoVenueNameSource).toBe("custom");
     cleanupWidgets();
     const customRestored = await mount({ mode: "demo", ...custom });
     await fill(customRestored, "postalCode", "15001");
-    expect((await native(customRestored, "name")).value).toBe(GALICIA_DEMO_TEXT.locationName);
+    expect((await native(customRestored, "name")).value).toBe(GALICIA_DEMO_TEXT.venueName);
     expect((await submit(customRestored))[0]!.demoVenueNameSource).toBe("custom");
   });

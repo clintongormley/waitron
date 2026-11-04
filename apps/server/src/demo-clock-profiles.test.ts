@@ -19,7 +19,7 @@ describe("installed starter clock profiles", () => {
       country: "ES",
       taxId: identity.taxId,
       legalName: identity.legalName,
-      name: identity.locationName,
+      name: identity.venueName,
       fiscalTerritory: "ES-common",
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
