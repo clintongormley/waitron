@@ -313,6 +313,8 @@ Proposed POST `/api/bills/:id/move-dishes` mirrors it. Replace split-table body 
 `{partyId:string;billIds:string[];zoneRevisions?:Record<string,number>}`. Preserve the current optional `movingRooms` map, present when rooms moved; client/app/floor must share one
 declared type.
 
+_(2026-11-04: slice 4b built this as `copyHeldGroups`, with a different signature; see `2026-11-04-a803-4b-waiting-course-copies.md`.)_
+
 **Course contract:** `copyWaitingCourses(tx:Transaction,fromPartyId:string,toPartyId:string,portionIds:readonly string[]):Promise<Map<string,string>>` maps each source waiting
 instance to a new destination instance, retaining course identity/name, waiting state and ordering, never a fired timestamp. Rebind only moved portions and their draft
 reservations. Use it for whole-bill moves too. Do not implement A773-2 Requested/pass release states here.

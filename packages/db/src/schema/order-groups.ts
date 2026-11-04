@@ -44,11 +44,11 @@ export const orderGroups = table(
     firedByDeviceId: id("fired_by_device_id"),
     submittedBy: id("submitted_by").notNull(),
     remindAt: tsString("remind_at"),
-    // When this group's advance HOLD ticket was queued for a printer; null if none was.
+    // When this group's advance HOLD ticket was queued for a printer; null if none was. A held copy
+    // made for a moved bill carries its source group's time.
     holdPrintedAt: tsString("hold_printed_at"),
-    // Written by `startGroup`, and by `releaseGroup` when it fires the party's first food; typed by
-    // `OrderGroupRequestKind`; nothing refuses another value at run time, and a CHECK would rebuild
-    // this table.
+    // Typed by `OrderGroupRequestKind`; nothing refuses another value at run time, and a CHECK would
+    // rebuild this table.
     requestKind: label("request_kind")
       .$type<OrderGroupRequestKind>()
       .notNull()

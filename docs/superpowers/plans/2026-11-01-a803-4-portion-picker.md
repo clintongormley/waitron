@@ -1281,6 +1281,8 @@ and client tests in the "Changed test checks" rows marked 9b (`till-app.test.ts`
 
 ## Cut 4b (outline): waiting dishes leave with their own copy of the course
 
+_(2026-11-04: built from `2026-11-04-a803-4b-waiting-course-copies.md`, whose findings and Build record correct this outline, the copy's place after `groupArrivingDishes` and its reminder among them.)_
+
 **Branch** `feat/a803-4b-waiting-course-copies`, after 4a lands (or beside it: it touches
 `move-bill.ts`, `table-actions.ts`, `order-groups.ts`, `working-order.ts`'s `refuseHeldLeavingParty`
 and `kitchen-print.ts`, none of which 4a changes beyond `carveLines`). Its own task plan and plan

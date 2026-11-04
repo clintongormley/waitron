@@ -233,6 +233,7 @@ another bill of the same visit keeps them in their group, held or fired, so the 
 not change. Moving items to a DIFFERENT visit (another table's tab): an item in a held group cannot
 move until it is fired or taken out of the group; an item already fired moves, leaves its group,
 and the kitchen gets the "moved to table X" slip the menus work builds.
+_(2026-11-04, A803 slice 4b: a held item on a bill that moves whole to another table now goes, with its own held copy of the group; only a move to the counter is still refused.)_
 
 ## 4. Show what is known, including in a paper kitchen
 
@@ -701,7 +702,7 @@ settled", §3 and §4's correction wording, and §10's held-work availability no
 - a draft is priced like an unsaved basket and locks at submission (§2);
 - a draft belongs to the signed-in operator and the visit, and is saved on the server (§2);
 - a group belongs to the visit, so bill splits keep it; moving held items to another visit is
-  refused (§3);
+  refused (§3); _(2026-11-04, A803 slice 4b: changed for a whole bill moving to another table, see §3's note.)_
 - serving can be recorded on a paid bill (§4);
 - the release-reminder rules, default 10 minutes (§4);
 - kitchen tickets as ×N or N entries, a venue setting (§4);

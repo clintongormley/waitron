@@ -2170,8 +2170,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A1299. Moving, splitting or transferring a very large bill binds one value per line further
   along (left open by A803 slice 4a).** Slice 4a passes Move dishes…' line ids as one bound value,
-  but `moveOrderLines` and `stampSentOrderNumber` in `apps/server/src/working-order.ts` still bind
-  one per line, so a bill past the store's bound-value limit would fail there. By reading, not run.
+  but `moveOrderLines` and `stampSentOrderNumber` in `apps/server/src/working-order.ts` and
+  `copyHeldGroups` in `apps/server/src/order-groups.ts` still bind one or more per line, so a bill past the store's bound-value limit would fail there. By reading, not run.
 
 - **A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped
   row (left open by A803 slice 1, D14 and D31).** Actions on a row take a count, never chosen
