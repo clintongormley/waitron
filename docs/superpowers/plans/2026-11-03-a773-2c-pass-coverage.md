@@ -429,6 +429,14 @@ callers of `listStations`/`listStationsToday` that gain the key in their answers
 `apps/server/scripts/dev-setup.ts:294`. P1 ran each route's suites; only the two `kitchen.test.ts`
 pins and the migration case changed.
 
+**Re-run at the branch tip (Task 10, `f50474c214`).** Every hit of the same `rg` is in a row above
+or is one of the new readers: `packages/db/src/configuration-transfer.ts:30-31` (the 0/1 check that
+replaced the `omit`, Task 2); `apps/server/src/kitchen.ts` (Task 1); `apps/server/src/pass-coverage.ts:46`
+(Tasks 3a–3b); and the dashboard's `routing-client.ts`, `station-editor.ts`, `station-table.ts`,
+`prep-stations-screen.ts` and `strings.ts` (Tasks 4–7). One reader the list above did not name:
+the POST and PATCH station routes in `apps/server/src/management-api.ts` (`:1577-1610`, `:1667-1715`),
+which read the field as D98 says (Task 1). Every other hit is a new or grown test case or fixture.
+
 ## Changed test checks (expected; the implementer confirms each)
 
 | File:line | Before | After | Decision |
@@ -440,6 +448,7 @@ pins and the migration case changed.
 | `packages/venue-service/src/dashboard/prep-stations-screen.test.ts:516`, `:3097-3100` | same lists | same insertion | D106 |
 | `packages/venue-service/src/dashboard/station-table.test.ts` "keeps the table with its read-outs inside %s %ipx" | `headings(el)` length `4` | `5`: the new column; width check unchanged | D106 (Revision 3) |
 | `packages/venue-service/src/service.test.ts:22-…` "exposes every generic ordering capability" | the seat's sorted key list | gains `"readProfilesZones"` in sorted place | D100 |
+| `apps/server/src/guide-content.test.ts:50-67` "the kitchen guide in %s registers its allergy and service sections" | the whole list of section ids | gains `"station-waits"` between `"request-cooking"` and `"delete-prep-station"`; every existing id unchanged and in the same order (Task 8) | D110 |
 | `packages/venue-service/src/dashboard/station-editor.test.ts:993-995` ("at %ipx (printers managed: %s) the minutes, notes and read-out end where the fields end") | `.note` count `canManagePrinters ? 3 : 2` | `canManagePrinters ? 4 : 3`; the rest of the case (every block lines up with the name field at 390 and 1280 px) unchanged, and now also holds the new switch and its line | D105 (review probe E2) |
 
 Fixtures that grow (no assertion changes): every `PrepStation`/`StationEditorStation` literal in
@@ -452,6 +461,14 @@ Every stub of the Prep stations screen's API or of its requests gains the covera
 `apps/dashboard/src/dashboard-app.unsaved-changes.test.ts:996-1009` (its request stub throws
 `Unexpected request` for any other path); `apps/dashboard/src/dashboard-app.test.ts:4309`, `:4358`
 (their stubs already answer `[]`, so they need nothing, but Task 7 runs them).
+
+Checked at the branch tip (Task 10): every removed or changed `expect` line in
+`git diff 2ea0d1bd76 -- '*.test.ts'` is a row above. Two existing accessibility cases grew rather
+than changed: `station-editor.a11y.test.ts` gains a "waits for the pass" state (an axe check in each
+theme and the switch read as on), and `station-table.a11y.test.ts`'s Grill fixture now waits for the
+pass and its existing case also reads that row's cell as Yes. `routing-grid.unsaved.test.ts`'s stub
+answers the coverage read with `[]` (Revision 5 m3); `prep-stations-screen.unsaved.test.ts` and
+`station-editor.save-state.test.ts` take an extra `mount` argument with the old behaviour as its default.
 
 ## Guard suites (the final task runs each; earlier tasks run the ones they name)
 
