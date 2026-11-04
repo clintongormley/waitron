@@ -216,7 +216,7 @@ async function provisionVenue(
         country: preset.country,
         taxId: identity.taxId,
         legalName: identity.legalName,
-        name: preset.locationName,
+        name: preset.venueName,
         fiscalTerritory: DEV_VENUE_TERRITORY,
         invoiceLocales: [receiptLocale],
         operationDescription: "In-store sales",
@@ -247,7 +247,7 @@ async function provisionVenue(
     locationId: venue.locationId,
   };
 
-  const selection = await readDemoSeedSelection(db, ids.locationId);
+  const selection = await readDemoSeedSelection(db);
   const seeded = await seedDemoRestaurant(db, {
     venue: ids,
     locale: seedLocale,

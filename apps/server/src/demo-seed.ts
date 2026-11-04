@@ -17,7 +17,7 @@ export async function seedInstalledDemo(
   result: VenueResult,
   venue: VenueRequest,
 ): Promise<void> {
-  const { identity, dataSet } = await readDemoSeedSelection(db, result.locationId);
+  const { identity, dataSet } = await readDemoSeedSelection(db);
   await seedDemoRestaurant(db, {
     venue: {
       nodeId: result.nodeId,

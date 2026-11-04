@@ -191,7 +191,7 @@ type LanguageRules = Pick<
 // que en derivin" in Catalan, and by the agency's reading that invoices are at least in Catalan and
 // till receipts ("tiquets de caixa") are owed in Catalan. Art. 32.3 is not the receipt's source:
 // putting invoices under it is the agency's reading, not the statute's.
-// Catalan is the location's receipt language; staff can print in another offered language at the
+// Catalan is the venue's receipt language; staff can print in another offered language at the
 // till (`readOfferedReceiptLanguages`, apps/server/src/venue-locale.ts).
 // Sources: docs/compliance/regional-language-rules.md, Catalonia table, "Receipts / invoices" rows.
 const CATALONIA: LanguageRules = {
@@ -271,11 +271,11 @@ const administrativeAreas: readonly AdministrativeArea[] = PROVINCES.map(
     timeZone: code === "35" || code === "38" ? "Atlantic/Canary" : "Europe/Madrid",
     ...languageRulesFor(code),
     ...(CATALONIA_PROVINCES.has(code) || BALEARIC_PROVINCES.has(code)
-      ? { demo: { dataSet: "casa-delgado-ca", locationName: "Can Delgado" } }
+      ? { demo: { dataSet: "casa-delgado-ca", venueName: "Can Delgado" } }
       : VALENCIAN_PROVINCES.has(code)
-        ? { demo: { dataSet: "casa-delgado-valencia", locationName: "Casa Delgado de l'Horta" } }
+        ? { demo: { dataSet: "casa-delgado-valencia", venueName: "Casa Delgado de l'Horta" } }
         : GALICIAN.has(code)
-          ? { demo: { dataSet: "casa-delgado-gl", locationName: "A Casa Delgado" } }
+          ? { demo: { dataSet: "casa-delgado-gl", venueName: "A Casa Delgado" } }
           : {}),
   }),
 );
@@ -339,7 +339,7 @@ export const SPAIN: CountryPack = {
   demo: {
     legalName: "Waitron Demo S.L.",
     taxId: "B00000000",
-    locationName: "Casa Delgado",
+    venueName: "Casa Delgado",
     departmentTradingNames: { restaurant: "Bar Casa Delgado", deli: "Deli Delgado" },
     dataSet: "casa-delgado-es",
   },

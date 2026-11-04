@@ -1,7 +1,7 @@
 export const DEMO_BASELINE_FIXTURE_ROOT = new URL("../test-fixtures/demo/", import.meta.url);
 
 export const VALENCIA_DEMO_TEXT = {
-  locationName: "Casa Delgado de l'Horta",
+  venueName: "Casa Delgado de l'Horta",
   city: "València",
   province: "Valencia/València",
   alicanteProvince: "Alicante/Alacant",
@@ -33,7 +33,7 @@ export const VALENCIA_DEMO_TEXT = {
   neus: "Neus Martí",
   pau: "Pau Sanchis",
   clara: "Clara Peris",
-  catalanLocation: "Can Delgado",
+  catalanVenueName: "Can Delgado",
 } as const;
 
 export const GALICIA_DEMO_TEXT = {
@@ -51,7 +51,7 @@ export const GALICIA_DEMO_TEXT = {
   deliDepartment: "Charcutaría",
   upstairsBar: "Bar de arriba",
   counter: "Mostrador de charcutaría",
-  locationName: "A Casa Delgado",
+  venueName: "A Casa Delgado",
   city: "A Coruña",
   province: "Coruña, A",
   dish: "Empanada galega",
@@ -80,5 +80,5 @@ export const GALICIA_DEMO_TEXT = {
   brais: "Brais López",
   iria: "Iria Fernández",
   anton: "Antón Souto",
-  catalanLocation: "Can Delgado",
+  catalanVenueName: "Can Delgado",
 } as const;

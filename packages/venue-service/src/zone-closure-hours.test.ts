@@ -11,10 +11,10 @@ import {
   withTransaction,
   type Database,
   venueLocationId,
+  readVenueClock,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { readLocationClock } from "@waitron/reporting";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
@@ -329,7 +329,7 @@ describe("assertDatedClosuresInHours", () => {
             ],
             new Set(),
             {
-              clock: await readLocationClock(tx, v.cfg.locationId),
+              clock: await readVenueClock(tx),
               departmentOf: new Map([[v.barZone, v.deli]]),
             },
           ),

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { loadKeyRing } from "@waitron/credentials";
-import { venueLocationId } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
@@ -20,12 +19,11 @@ describe("readBoxEmailContext", () => {
       invoiceLocales: ["en-GB"],
       operationDescription: "Sale",
     });
-    const venueId = await venueLocationId(suite.db);
     const [admin] = await suite.db
       .insert(persons)
       .values({ displayName: "Admin", role: "admin", email: "admin@example.test" })
       .returning({ id: persons.id });
-    const deps = { ring, locationId: venueId, venueLanguage: "en" as const };
+    const deps = { ring, venueLanguage: "en" as const };
 
     await expect(readBoxEmailContext(suite.db, { ...deps, practiceMode: false })).resolves.toEqual({
       venue: "Corner Bistro",

@@ -587,7 +587,7 @@ function parseProvisionPayload(
       ? parsedVenue
       : {
           ...parsedVenue,
-          name: identity.locationName,
+          name: identity.venueName,
         };
   if (mode !== "demo" && !venue.taxpayerDomicile?.trim()) {
     invalidRequest("taxpayerDomicile");

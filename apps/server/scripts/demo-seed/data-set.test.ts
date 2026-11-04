@@ -310,7 +310,7 @@ describe("a country with no demo data", () => {
     const identity: CountryDemoIdentity = {
       legalName: spain.legalName,
       taxId: spain.taxId,
-      locationName: spain.locationName,
+      venueName: spain.venueName,
       departmentTradingNames: spain.departmentTradingNames,
     };
     expect(demoDataSetFor(spain)).toBe(DEMO_DATA_SETS["casa-delgado-es"]);

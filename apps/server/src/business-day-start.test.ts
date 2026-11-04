@@ -10,11 +10,11 @@ import {
   locationBusinessDaySettings,
   locations,
   withTransaction,
+  readVenueClock,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { venueFiscalSelection } from "@waitron/provisioning";
-import { readLocationClock } from "@waitron/reporting";
 import { businessDayBounds } from "@waitron/shared";
 import {
   createDepartment,
@@ -953,7 +953,7 @@ describe("a Save takes the next changeover", () => {
     }));
   }
   async function bounds(businessDay: string) {
-    const clock = await inTx((tx) => readLocationClock(tx, venue.cfg.locationId));
+    const clock = await inTx((tx) => readVenueClock(tx));
     return businessDayBounds(clock, businessDay);
   }
   const tuesday = "2026-10-20T20:00:00Z";

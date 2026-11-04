@@ -615,10 +615,10 @@ describe("developer demo regions", () => {
       const preset = module.resolveDeveloperDemo(value);
       expect(preset).toMatchObject(
         value?.trim() === "catalonia"
-          ? { dataSet: "casa-delgado-ca", postalCode: "08001", locationName: "Can Delgado" }
+          ? { dataSet: "casa-delgado-ca", postalCode: "08001", venueName: "Can Delgado" }
           : value === "balearic"
-            ? { dataSet: "casa-delgado-ca", postalCode: "07001", locationName: "Can Delgado" }
-            : { dataSet: "casa-delgado-es", postalCode: "28013", locationName: "Casa Delgado" },
+            ? { dataSet: "casa-delgado-ca", postalCode: "07001", venueName: "Can Delgado" }
+            : { dataSet: "casa-delgado-es", postalCode: "28013", venueName: "Casa Delgado" },
       );
     },
   );
@@ -716,7 +716,7 @@ describe("Valencian developer demo", () => {
     const { resolveDeveloperDemo } = await import("./dev-setup.js");
     expect(resolveDeveloperDemo(" valencia ")).toMatchObject({
       dataSet: "casa-delgado-valencia",
-      locationName: VALENCIA_DEMO_TEXT.locationName,
+      venueName: VALENCIA_DEMO_TEXT.venueName,
       postalCode: "46001",
       city: VALENCIA_DEMO_TEXT.city,
       province: VALENCIA_DEMO_TEXT.province,
@@ -742,7 +742,7 @@ describe("Valencian developer demo", () => {
             store.venue.all(sql`select name,postal_code,province,invoice_locales from locations`),
           ).toEqual([
             {
-              name: VALENCIA_DEMO_TEXT.locationName,
+              name: VALENCIA_DEMO_TEXT.venueName,
               postal_code: "46001",
               province: VALENCIA_DEMO_TEXT.province,
               invoice_locales: '["es-ES"]',
@@ -776,7 +776,7 @@ describe("Galician developer demo", () => {
     const { resolveDeveloperDemo } = await import("./dev-setup.js");
     expect(resolveDeveloperDemo(" galicia ")).toMatchObject({
       dataSet: "casa-delgado-gl",
-      locationName: GALICIA_DEMO_TEXT.locationName,
+      venueName: GALICIA_DEMO_TEXT.venueName,
       postalCode: "15001",
       city: GALICIA_DEMO_TEXT.city,
       province: GALICIA_DEMO_TEXT.province,
@@ -802,7 +802,7 @@ describe("Galician developer demo", () => {
             store.venue.all(sql`select name,postal_code,province,invoice_locales from locations`),
           ).toEqual([
             {
-              name: GALICIA_DEMO_TEXT.locationName,
+              name: GALICIA_DEMO_TEXT.venueName,
               postal_code: "15001",
               province: GALICIA_DEMO_TEXT.province,
               invoice_locales: '["es-ES"]',

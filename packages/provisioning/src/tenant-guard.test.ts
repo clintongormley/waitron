@@ -39,14 +39,14 @@ describe("assertNoForeignTenant", () => {
 });
 
 describe("operational venue guards", () => {
-  it("accepts exactly the configured venue at trading boot", () => {
-    expect(() => assertSingleOperationalVenue(["venue-a"], "venue-a")).not.toThrow();
+  it("accepts one venue row", () => {
+    expect(() => assertSingleOperationalVenue(["venue-a"])).not.toThrow();
   });
 
-  it.each([[[]], [["venue-b"]], [["venue-a", "venue-b"]]] as const)(
+  it.each([[[]], [["venue-a", "venue-b"]]] as const)(
     "refuses a trading boot whose venue rows are %j",
     (present) => {
-      expect(() => assertSingleOperationalVenue(present, "venue-a")).toThrowError(
+      expect(() => assertSingleOperationalVenue(present)).toThrowError(
         expect.objectContaining({ code: "provisioning.second_venue" }),
       );
     },

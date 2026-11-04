@@ -554,13 +554,13 @@ describe("holiday calendar", () => {
 });
 
 describe("demo geography", () => {
-  it("overlays only a regional dataset and location while retaining the legal identity", async () => {
+  it("overlays only a regional dataset and venue name while retaining the legal identity", async () => {
     const country = await import("./index.js");
     expect(country).toHaveProperty("resolveCountryDemoIdentity", expect.any(Function));
     const demo = {
       legalName: "Example Foods Ltd",
       taxId: "XY123",
-      locationName: "Example House",
+      venueName: "Example House",
       dataSet: "example-base",
       departmentTradingNames: { restaurant: "Example Dining", deli: "Example Deli" },
     };
@@ -570,7 +570,7 @@ describe("demo geography", () => {
       administrativeAreas: [
         {
           ...pack.administrativeAreas[0]!,
-          demo: { dataSet: "example-north", locationName: "North House" },
+          demo: { dataSet: "example-north", venueName: "North House" },
         },
         pack.administrativeAreas[1]!,
       ],
@@ -579,7 +579,7 @@ describe("demo geography", () => {
       expect(country.resolveCountryDemoIdentity(regional, area)).toStrictEqual({
         ...demo,
         dataSet: "example-north",
-        locationName: "North House",
+        venueName: "North House",
       });
     }
     for (const area of [undefined, null, "02", "missing", "constructor", "__proto__"]) {

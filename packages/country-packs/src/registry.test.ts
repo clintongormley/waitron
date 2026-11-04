@@ -303,7 +303,7 @@ describe("installed demo geography", () => {
     expect(result).toStrictEqual({
       ...getCountryPack("ES")!.demo,
       dataSet: "casa-delgado-ca",
-      locationName: "Can Delgado",
+      venueName: "Can Delgado",
     });
   });
   it.each([undefined, null, "Madrid", "28", "unknown", "constructor", "__proto__"])(
@@ -344,7 +344,7 @@ it.each([
   expect(resolveInstalledDemoIdentity({ country: "ES", area })).toStrictEqual({
     ...getCountryPack("ES")!.demo,
     dataSet: "casa-delgado-valencia",
-    locationName: VALENCIA_DEMO_TEXT.locationName,
+    venueName: VALENCIA_DEMO_TEXT.venueName,
   });
 });
 
@@ -355,7 +355,7 @@ it.each(["15", "27", "32", "36", ...GALICIA_DEMO_TEXT.provinceAliases])(
     expect(resolveInstalledDemoIdentity({ country: "ES", area })).toStrictEqual({
       ...getCountryPack("ES")!.demo,
       dataSet: "casa-delgado-gl",
-      locationName: "A Casa Delgado",
+      venueName: "A Casa Delgado",
     });
   },
 );

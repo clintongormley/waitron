@@ -1,12 +1,6 @@
 import "./errors.js";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import {
-  invoiceDeliveries,
-  printJobs,
-  sales,
-  venueLocationId,
-  type Transaction,
-} from "@waitron/db";
+import { invoiceDeliveries, printJobs, sales, type Transaction } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
 import type { InvoiceDelivery } from "./invoice-delivery.js";
@@ -78,7 +72,7 @@ export interface InvoiceDeliveryStatus {
 export type InvoiceDeliveryReadOptions = { emailAvailable: boolean };
 
 /** A full invoice's sale, as the status reader found it. */
-export type InvoiceDeliverySale = { id: string; locationId: string };
+export type InvoiceDeliverySale = { id: string };
 
 /**
  * The printers a full invoice may be printed on, which depend on who asks; none when omitted, so
@@ -176,19 +170,16 @@ async function readStates(
   const rowsOf = bySale(rows);
   const jobsOf = bySale(jobs);
   const states = new Map<string, InvoiceDeliveryState | null>();
-  const venueId = found.some((sale) => sale.recipient !== null)
-    ? await venueLocationId(tx)
-    : undefined;
   for (const sale of found) {
     if (sale.recipient === null) {
       states.set(sale.id, null);
       continue;
     }
     const receipt = receipts.get(sale.id)!;
-    const located = { id: sale.id, locationId: venueId! };
-    const printers = await offer(located);
+    const offeredSale = { id: sale.id };
+    const printers = await offer(offeredSale);
     const emailable =
-      typeof emailAvailable === "boolean" ? emailAvailable : await emailAvailable(located);
+      typeof emailAvailable === "boolean" ? emailAvailable : await emailAvailable(offeredSale);
     const saleRows = rowsOf.get(sale.id) ?? [];
     const saleJobs = jobsOf.get(sale.id) ?? [];
     const withdrawn = receiptPrinterWithdrawn(saleRows, saleJobs, receipt, printers);

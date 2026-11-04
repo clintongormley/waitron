@@ -23,7 +23,7 @@ export interface AdministrativeArea {
   readonly name: string;
   readonly aliases?: readonly string[];
   readonly postalPrefixes: readonly string[];
-  readonly demo?: { readonly dataSet: string; readonly locationName: string };
+  readonly demo?: { readonly dataSet: string; readonly venueName: string };
   /** Not the content languages a venue here must keep: those are `requiredContentLocales`. */
   readonly defaultLocale?: string;
   readonly timeZone?: string;
@@ -121,7 +121,7 @@ export type ReceiptLabels = Readonly<Record<(typeof RECEIPT_LABEL_KEYS)[number],
 export interface CountryDemoIdentity {
   readonly legalName: string;
   readonly taxId: string;
-  readonly locationName: string;
+  readonly venueName: string;
   readonly departmentTradingNames: { readonly restaurant: string; readonly deli: string };
   /** The id of the server-side demo data set (menus, floor, staff) the seed writes; absent, the
    * demo seeds the fallback set with English as its default. */

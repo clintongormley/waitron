@@ -104,7 +104,7 @@ describe("pack-owned Spanish demo", () => {
     expect(DEMO_DEVELOPER_PRESETS.madrid).toEqual({
       country: "ES",
       dataSet: "casa-delgado-es",
-      locationName: "Casa Delgado",
+      venueName: "Casa Delgado",
       postalCode: "28013",
       city: "Madrid",
       province: "Madrid",

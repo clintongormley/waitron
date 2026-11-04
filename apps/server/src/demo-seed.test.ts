@@ -18,7 +18,7 @@ vi.mock("@waitron/country-packs", async (importOriginal) => {
     demo: {
       legalName: "Nowhere Foods Ltd",
       taxId: "XX123456789",
-      locationName: "Nowhere Street",
+      venueName: "Nowhere Street",
       departmentTradingNames: { restaurant: "Nowhere Bar", deli: "Nowhere Deli" },
     },
   };
@@ -182,13 +182,6 @@ it.each(["Barcelona", "Balears, Illes"])(
     expect(seedDemoRestaurant.mock.calls[0]![1].locale).toBe("es");
   },
 );
-
-it("refuses an absent stored location before seeding", async () => {
-  await expect(
-    seedInstalledDemo(suite.db, { ...RESULT, locationId: "missing" }, venueWithLocales(["es-ES"])),
-  ).rejects.toThrow("missing location");
-  expect(seedDemoRestaurant).not.toHaveBeenCalled();
-});
 
 it.each([
   VALENCIA_DEMO_TEXT.alicanteProvince,

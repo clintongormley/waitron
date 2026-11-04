@@ -453,7 +453,7 @@ export class SetupVenueScreen extends LitElement {
   #followDemoName(pack: CountryPack | undefined, area: AdministrativeArea | undefined): void {
     if (!this.#demo || this.#demoVenueNameSource !== "automatic" || pack === undefined) return;
     const identity = resolveCountryDemoIdentity(pack, area?.code);
-    if (identity !== undefined) this.values = { ...this.values, name: identity.locationName };
+    if (identity !== undefined) this.values = { ...this.values, name: identity.venueName };
   }
 
   #onField(key: TextField, event: CustomEvent<{ value: string }>): void {

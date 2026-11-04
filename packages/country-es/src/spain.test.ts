@@ -391,7 +391,7 @@ describe("demo company identity", () => {
     expect(SPAIN.demo).toEqual({
       legalName: "Waitron Demo S.L.",
       taxId: "B00000000",
-      locationName: "Casa Delgado",
+      venueName: "Casa Delgado",
       departmentTradingNames: { restaurant: "Bar Casa Delgado", deli: "Deli Delgado" },
       dataSet: "casa-delgado-es",
     });
@@ -412,7 +412,7 @@ describe("regional demo identities", () => {
     (code) => {
       expect(SPAIN.administrativeAreas.find((area) => area.code === code)?.demo).toStrictEqual({
         dataSet: "casa-delgado-ca",
-        locationName: "Can Delgado",
+        venueName: "Can Delgado",
       });
     },
   );
@@ -426,7 +426,7 @@ it.each(["03", "12", "46"])("selects the Valencian demo only in province %s", (c
   const area = SPAIN.administrativeAreas.find((area) => area.code === code)!;
   expect(area.demo).toStrictEqual({
     dataSet: "casa-delgado-valencia",
-    locationName: "Casa Delgado de l'Horta",
+    venueName: "Casa Delgado de l'Horta",
   });
   expect(area.defaultLocale).toBe("ca-ES");
   expect(area.defaultContentLocale).toBe("ca-ES-valencia");
@@ -435,7 +435,7 @@ it.each(["03", "12", "46"])("selects the Valencian demo only in province %s", (c
 
 it.each(["15", "27", "32", "36"])("selects the Galician demo only in province %s", (code) => {
   const area = SPAIN.administrativeAreas.find((area) => area.code === code)!;
-  expect(area.demo).toStrictEqual({ dataSet: "casa-delgado-gl", locationName: "A Casa Delgado" });
+  expect(area.demo).toStrictEqual({ dataSet: "casa-delgado-gl", venueName: "A Casa Delgado" });
   expect(area.defaultLocale).toBe("gl-ES");
   expect(area.defaultContentLocale).toBe("gl-ES");
   expect(area.fixedReceiptLocale).toBeUndefined();

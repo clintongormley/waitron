@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   invoiceDeliveries,
@@ -275,16 +275,16 @@ type Offer = (sale: InvoiceDeliverySale) => Promise<OfferedPrinter[]>;
 
 const a4 = (id: string, name = "Back office"): OfferedPrinter => ({ id, name, kind: "a4" });
 
-const locationOffices: Offer = async (sale) =>
+const activePagePrinters: Offer = async () =>
   (
     await suite.db
       .select({ id: pagePrinters.id, name: pagePrinters.name })
       .from(pagePrinters)
-      .where(and(eq(pagePrinters.locationId, sale.locationId), eq(pagePrinters.active, true)))
+      .where(eq(pagePrinters.active, true))
       .orderBy(pagePrinters.name)
   ).map((row) => a4(row.id, row.name));
 
-function read(saleId: string, emailAvailable = true, printers: Offer = locationOffices) {
+function read(saleId: string, emailAvailable = true, printers: Offer = activePagePrinters) {
   return withTransaction(suite.db, (tx) =>
     readInvoiceDeliveries(tx, saleId, { emailAvailable, printers }),
   );
@@ -1040,7 +1040,7 @@ describe("readInvoiceDeliveries", () => {
 
     for (const id of [saleId, simplified]) await read(id, true, offer);
 
-    expect(asked).toEqual([{ id: saleId, locationId: v.locationId }]);
+    expect(asked).toEqual([{ id: saleId }]);
   });
 
   it("reads several sales at once exactly as it reads each one", async () => {
@@ -1070,29 +1070,4 @@ describe("readInvoiceDeliveries", () => {
     expect(batch.get(simplified)).toBeNull();
     expect(batch.get(fresh)!.actions.print).toBeNull();
   });
-});
-
-it("reads the venue once when reading several full-invoice deliveries", async () => {
-  const v = await venue();
-  const ids = [await invoice(v.nodeId), await invoice(v.nodeId)];
-  const session = (
-    suite.db as unknown as { session: { prepareQuery: (...args: unknown[]) => unknown } }
-  ).session;
-  const original = session.prepareQuery.bind(session);
-  const statements: string[] = [];
-  const spy = vi.spyOn(session, "prepareQuery").mockImplementation((...args) => {
-    statements.push((args[0] as { sql: string }).sql);
-    return original(...args);
-  });
-  try {
-    const batch = await withTransaction(suite.db, (tx) =>
-      readInvoiceDeliveriesFor(tx, ids, { emailAvailable: false }),
-    );
-    expect([...batch.keys()].sort()).toEqual([...ids].sort());
-    expect(statements.filter((statement) => statement.includes('from "locations"'))).toHaveLength(
-      1,
-    );
-  } finally {
-    spy.mockRestore();
-  }
 });

@@ -26,8 +26,6 @@ export interface InvoiceCustomerDataDeps {
   db: Database;
   backend: FiscalBackend;
   tradingContext: TradingContext;
-  /** The node whose time zone dates the download. */
-  nodeId: string;
   venueLocale: string;
   now?: () => Date;
   render?: InvoiceCustomerFilesDeps["render"];

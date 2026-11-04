@@ -2,7 +2,7 @@ import type { CountryDemoDeveloperPreset } from "@waitron/country";
 const REGIONAL_ADDRESS = {
   country: "ES",
   dataSet: "casa-delgado-ca",
-  locationName: "Can Delgado",
+  venueName: "Can Delgado",
   timeZone: "Europe/Madrid",
   addressLine1: "1 Main Street",
   addressLine2: null,
@@ -12,7 +12,7 @@ export const DEMO_DEVELOPER_PRESETS = {
   galicia: {
     ...REGIONAL_ADDRESS,
     dataSet: "casa-delgado-gl",
-    locationName: "A Casa Delgado",
+    venueName: "A Casa Delgado",
     postalCode: "15001",
     city: "A Coruña",
     province: "Coruña, A",
@@ -21,7 +21,7 @@ export const DEMO_DEVELOPER_PRESETS = {
   valencia: {
     ...REGIONAL_ADDRESS,
     dataSet: "casa-delgado-valencia",
-    locationName: "Casa Delgado de l'Horta",
+    venueName: "Casa Delgado de l'Horta",
     postalCode: "46001",
     city: "València",
     province: "Valencia/València",
@@ -42,7 +42,7 @@ export const DEMO_DEVELOPER_PRESETS = {
   madrid: {
     country: "ES",
     dataSet: "casa-delgado-es",
-    locationName: "Casa Delgado",
+    venueName: "Casa Delgado",
     postalCode: "28013",
     city: "Madrid",
     province: "Madrid",
