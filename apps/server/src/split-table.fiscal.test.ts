@@ -116,6 +116,27 @@ function recordOf(billId: string) {
   return row!;
 }
 
+function operatorOfSale(billId: string): string | null {
+  const [row] = venue.db.all<{ operatorId: string | null }>(
+    sql`select operator_id as operatorId from sales where working_order_id = ${billId}`,
+  );
+  return row!.operatorId;
+}
+
+function frozenLabelOf(billId: string): string | null {
+  const [row] = venue.db.all<{ label: string | null }>(
+    sql`select label from working_orders where id = ${billId}`,
+  );
+  return row!.label;
+}
+
+function tableLabelOf(tableId: string): string {
+  const [row] = venue.db.all<{ label: string }>(
+    sql`select label from dining_tables where id = ${tableId}`,
+  );
+  return row!.label;
+}
+
 function partyOfBill(billId: string): string {
   const [row] = venue.db.all<{ partyId: string }>(
     sql`select party_id as partyId from working_orders where id = ${billId}`,
@@ -152,7 +173,7 @@ async function atTwoTables(...names: string[]) {
     }),
   );
   expect(joined.status, JSON.stringify(joined.json)).toBe(200);
-  return { partyId: party.partyId, tabId: party.tabId, leaving };
+  return { partyId: party.partyId, tabId: party.tabId, first: party.tableId, leaving };
 }
 
 /**
@@ -248,7 +269,7 @@ async function split(
 
 describe("A803 split: issuance", () => {
   it("a loose pick of the last unpaid dish of an item-paid bill issues its one invoice, on the staying party", async () => {
-    const { partyId, tabId, leaving } = await atTwoTables("Paella", "Caña");
+    const { partyId, tabId, first, leaving } = await atTwoTables("Paella", "Caña");
     await payFor(tabId, 1, "35.00");
     const [, caña] = lineIdsOf(tabId);
     expect(registroCount(venue, tabId)).toBe(0);
@@ -264,6 +285,24 @@ describe("A803 split: issuance", () => {
     expect(registroCount(venue, tabId)).toBe(1);
     expect(await statusOf(venue, tabId)).toBe("settled");
     expect(partyOfBill(tabId)).toBe(partyId);
+    expect(operatorOfSale(tabId)).toBe(venue.operatorId);
+    expect(frozenLabelOf(tabId)).toBe(tableLabelOf(first));
+  });
+
+  it("when the party's first table is the one taken away, the invoice names the table that stays", async () => {
+    const { partyId, tabId, first, leaving } = await atTwoTables("Paella", "Caña");
+    await payFor(tabId, 1, "35.00");
+    const [, caña] = lineIdsOf(tabId);
+
+    const answer = await split(partyId, first, {
+      wholeBillIds: [],
+      loose: [{ billId: tabId, lineIds: [caña!] }],
+    });
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(partyOfBill(tabId)).toBe(partyId);
+    expect(operatorOfSale(tabId)).toBe(venue.operatorId);
+    expect(frozenLabelOf(tabId)).toBe(tableLabelOf(leaving));
   });
 
   it("the new bill holds no sale", async () => {
