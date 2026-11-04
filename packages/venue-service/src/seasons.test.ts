@@ -18,11 +18,11 @@ import {
   type Database,
   type Transaction,
   venueLocationId,
+  readVenueClock,
 } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { starterName } from "@waitron/country-packs";
-import { readLocationClock } from "@waitron/reporting";
 import {
   locationId as brandLocationId,
   type CalendarColour,
@@ -304,7 +304,7 @@ const refusal = async (promise: Promise<unknown>) => {
 const seasonsOf = (v: AutumnVenue) => scoped((tx) => readSeasons(tx, v.cfg)).then(shape);
 const seasonOnDay = (v: AutumnVenue, day: string) =>
   scoped(async (tx) => {
-    const clock = await readLocationClock(tx, v.cfg.locationId);
+    const clock = await readVenueClock(tx);
     const days = await resolveDepartmentDays(tx, v.cfg, v.restaurant, [day], clock);
     return days.get(day)?.seasonId;
   });

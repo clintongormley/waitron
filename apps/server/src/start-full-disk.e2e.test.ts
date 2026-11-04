@@ -1375,7 +1375,6 @@ describe("a start on a real full disk", () => {
         invoiceLocales: ["en-GB"],
         operationDescription: "Sale",
       });
-      const venueId = await venueLocationId(db);
       const [admin] = await db
         .insert(persons)
         .values({ displayName: "Admin", role: "admin", email: "admin@example.test" })
@@ -1390,7 +1389,6 @@ describe("a start on a real full disk", () => {
         const context = await readBoxEmailContext(db, {
           ring,
           practiceMode: true,
-          locationId: venueId,
           venueLanguage: "en",
         });
         expect(context.venue).toBe("Corner Bistro");

@@ -10,11 +10,11 @@ import {
   stampDeployment,
   invoiceSeries,
   withTransaction,
+  readVenueClock,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { businessDayBounds, locationId } from "@waitron/shared";
-import { readLocationClock } from "@waitron/reporting";
 import { resolveDepartmentService } from "@waitron/venue-service";
 import { sql } from "drizzle-orm";
 import { ALL_MODULES } from "./modules.js";
@@ -133,9 +133,7 @@ describe("business-day timeline through cold restore and reset", () => {
       });
       const restored = await openVenueDatabase(venueDir);
       try {
-        const clock = await withTransaction(restored.venue, (tx) =>
-          readLocationClock(tx, venue.cfg.locationId),
-        );
+        const clock = await withTransaction(restored.venue, (tx) => readVenueClock(tx));
         expect(businessDayBounds(clock, "2026-11-09")).toEqual({
           startAt: "2026-11-09T02:00:00.000Z",
           endAt: "2026-11-10T06:00:00.000Z",

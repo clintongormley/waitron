@@ -1,6 +1,6 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, inArray, isNull } from "drizzle-orm";
 import type { KeyRing } from "@waitron/credentials";
-import { incidents, locations, type Database } from "@waitron/db";
+import { incidents, readVenue, type Database } from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
 import { formatBytes, formatDuration } from "@waitron/shared";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
@@ -216,17 +216,12 @@ export async function readBoxEmailContext(
   deps: {
     ring: KeyRing;
     practiceMode: boolean;
-    locationId: string;
     venueLanguage: "en" | "es";
   },
 ): Promise<BoxEmailContext> {
   return db.withWriteLock(async () => {
-    const [location] = await db
-      .select({ name: locations.name })
-      .from(locations)
-      .where(eq(locations.id, deps.locationId));
     return {
-      venue: location!.name,
+      venue: (await readVenue(db)).name,
       recipients: await readManagerEmailRecipients(db, deps.venueLanguage),
       delivery: await resolveEmailDeliveryIn(db, deps.ring, deps.practiceMode),
     };

@@ -247,7 +247,7 @@ async function provisionVenue(
     locationId: venue.locationId,
   };
 
-  const selection = await readDemoSeedSelection(db, ids.locationId);
+  const selection = await readDemoSeedSelection(db);
   const seeded = await seedDemoRestaurant(db, {
     venue: ids,
     locale: seedLocale,

@@ -1,12 +1,6 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import {
-  locations,
-  nodes,
-  locationDayCutoverChanges,
-  readVenueClock,
-  type Transaction,
-} from "@waitron/db";
+import { nodes, readVenueClock, type Transaction } from "@waitron/db";
 import { businessDayAt, businessDayBoundaryAt, businessDayBounds } from "@waitron/shared";
 import type { BusinessDayClock, NodeId } from "@waitron/shared";
 import type { DailyCloseInput, PeriodVatInput } from "./types.js";
@@ -154,62 +148,6 @@ export function venueMomentAt(instant: Date, clock: BusinessDayClock): VenueMome
   } catch {
     return null;
   }
-}
-
-function storedCutover(value: string): string {
-  return /^([01]\d|2[0-3]):[0-5]\d:00$/.test(value) ? value.slice(0, 5) : value;
-}
-
-export async function readLocationClock(
-  tx: Transaction,
-  locationId: string,
-): Promise<BusinessDayClock> {
-  return (await readLocationClockAndPlace(tx, locationId)).clock;
-}
-
-/** Where the location stands, as stored. */
-export interface LocationPlace {
-  province: string | null;
-  city: string | null;
-}
-
-/** {@link readLocationClock}, with the province and city read in the same statement. */
-export async function readLocationClockAndPlace(
-  tx: Transaction,
-  locationId: string,
-): Promise<{ clock: BusinessDayClock; place: LocationPlace }> {
-  const rows = await tx
-    .select({
-      timeZone: locations.timeZone,
-      dayCutover: locations.dayCutover,
-      province: locations.province,
-      city: locations.city,
-      effectiveBusinessDay: locationDayCutoverChanges.effectiveBusinessDay,
-      changedCutover: locationDayCutoverChanges.dayCutover,
-    })
-    .from(locations)
-    .leftJoin(locationDayCutoverChanges, eq(locationDayCutoverChanges.locationId, locations.id))
-    .where(eq(locations.id, locationId))
-    .orderBy(asc(locationDayCutoverChanges.effectiveBusinessDay));
-  const location = rows[0];
-  if (location === undefined) throw new Error(`reporting: no location ${locationId}`);
-  return {
-    clock: {
-      timeZone: location.timeZone,
-      dayCutover: storedCutover(location.dayCutover),
-      cutoverChanges: rows.flatMap((row) =>
-        row.effectiveBusinessDay === null
-          ? []
-          : [
-              {
-                effectiveBusinessDay: row.effectiveBusinessDay,
-                dayCutover: storedCutover(row.changedCutover!),
-              },
-            ],
-      ),
-    },
-    place: { province: location.province, city: location.city },
-  };
 }
 
 export async function resolveVenueClock(

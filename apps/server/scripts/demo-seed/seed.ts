@@ -4,10 +4,9 @@ import { readBusinessDayScheduleRevision } from "@waitron/venue-service";
 // and reads the committed products.
 
 import { and, eq } from "drizzle-orm";
-import { deviceProfiles, floorZones, withTransaction } from "@waitron/db";
+import { deviceProfiles, floorZones, readVenueClock, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { validateCapabilities } from "@waitron/layouts";
-import { readLocationClock } from "@waitron/reporting";
 import { replaceZoneClosedWeek, saveSpecialDay, venueLocalMoment } from "@waitron/venue-service";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { CountryDemoIdentity } from "@waitron/country";
@@ -142,7 +141,7 @@ export async function seedDemoRestaurant(
       );
     if (zone === undefined) throw new Error("seedDemoRestaurant: no Terrace zone");
     const cfg = { locationId: brandLocationId(locationId) };
-    const clock = await readLocationClock(tx, locationId);
+    const clock = await readVenueClock(tx);
     await replaceZoneClosedWeek(
       tx,
       cfg,

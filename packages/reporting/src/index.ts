@@ -2,8 +2,6 @@ export {
   businessDayStart,
   civilDateOf,
   currentBusinessDay,
-  readLocationClock,
-  readLocationClockAndPlace,
   resolveVenueClock,
   validateBusinessDay,
   validateCutover,
@@ -11,7 +9,7 @@ export {
   validatedRangeWindow,
   venueMomentAt,
 } from "./business-day.js";
-export type { LocationPlace, VenueMoment } from "./business-day.js";
+export type { VenueMoment } from "./business-day.js";
 export { computeDailyClose } from "./daily-close.js";
 export { computeVatSummaryForPeriod } from "./vat-summary.js";
 export { computeTopSellers } from "./top-sellers.js";

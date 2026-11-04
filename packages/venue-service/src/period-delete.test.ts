@@ -17,10 +17,10 @@ import {
   type Database,
   type Transaction,
   venueLocationId,
+  readVenueClock,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { readLocationClock } from "@waitron/reporting";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { resolveDepartmentDays } from "./day-resolver.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
@@ -611,13 +611,7 @@ describe("deleting a period", () => {
       await remove(v, v.lunch, null);
 
       const resolved = await scoped(async (tx) =>
-        resolveDepartmentDays(
-          tx,
-          v.cfg,
-          v.restaurant,
-          [date],
-          await readLocationClock(tx, v.locationId),
-        ),
+        resolveDepartmentDays(tx, v.cfg, v.restaurant, [date], await readVenueClock(tx)),
       );
       expect(resolved.get(date)).toEqual({
         businessDay: date,
@@ -657,7 +651,7 @@ describe("deleting a period", () => {
           v.cfg,
           v.restaurant,
           [date, plainWednesday],
-          await readLocationClock(tx, v.locationId),
+          await readVenueClock(tx),
         ),
       );
       expect(resolved.get(date)!.ranges).toEqual([slot(v.dinner, "20:00", "23:00")]);

@@ -1,5 +1,4 @@
-import { sql } from "drizzle-orm";
-import type { Database } from "@waitron/db";
+import { readTenant, readVenue, type Database } from "@waitron/db";
 import { resolveCountryDemoIdentity } from "@waitron/country";
 import type { DietaryLabel, PricingUnit, VatClass } from "@waitron/catalogue";
 import type { PersonRoleValue } from "@waitron/identity";
@@ -160,18 +159,14 @@ export function demoPlainText(
 
 export async function readDemoSeedSelection(
   db: Database,
-  locationId: string,
 ): Promise<{ identity: CountryDemoIdentity; dataSet: DemoDataSet }> {
-  const { rows } = await db.execute<{ country: string; province: string | null }>(
-    sql`select t.country, l.province from tenants t cross join locations l where l.id = ${locationId}`,
-  );
-  const geography = rows[0];
-  const pack = geography === undefined ? undefined : getCountryPack(geography.country);
-  const identity =
-    pack === undefined ? undefined : resolveCountryDemoIdentity(pack, geography?.province);
+  const tenant = await readTenant(db);
+  const { province } = await readVenue(db);
+  const pack = tenant === null ? undefined : getCountryPack(tenant.country);
+  const identity = pack === undefined ? undefined : resolveCountryDemoIdentity(pack, province);
   if (identity === undefined)
     throw new Error(
-      `readDemoSeedSelection: no demo identity for ${geography?.country ?? "missing location"}`,
+      `readDemoSeedSelection: no demo identity for ${tenant?.country ?? "missing tenant"}`,
     );
   return { identity, dataSet: demoDataSetFor(identity) };
 }

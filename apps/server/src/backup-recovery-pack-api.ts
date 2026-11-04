@@ -4,12 +4,13 @@ import type { Context, Hono } from "hono";
 import { credentialRevision, type KeyRing } from "@waitron/credentials";
 import {
   insertRecoveryPack,
-  locations,
   markRecoveryPackReceived,
   nextRecoveryPackNumber,
   readRecoveryPack,
   readRecoveryPacks,
   readTenant,
+  readVenue,
+  readVenueClock,
   withNodeTransaction,
   withTransaction,
   type Database,
@@ -280,12 +281,9 @@ async function makePack(
   const nodeId = deps.node.nodeId;
   await authorizeManager(tx, { managementSessionId: input.token, permission: "system.manage" });
   const tenant = await readTenant(tx);
-  const [venue] = await tx
-    .select({ name: locations.name, timeZone: locations.timeZone })
-    .from(locations)
-    .where(eq(locations.id, deps.node.locationId));
-  if (tenant === null || venue === undefined) {
-    throw new Error("the box has no taxpayer or venue to name on a recovery pack");
+  const venue = await readVenue(tx);
+  if (tenant === null) {
+    throw new Error("the box has no taxpayer to name on a recovery pack");
   }
   const [person] = await tx
     .select({ name: persons.displayName })
@@ -463,12 +461,7 @@ export function mountBackupRecoveryPackMakeApi(
                   .where(inArray(persons.id, makers))
               ).map((p) => [p.id, p.name] as const),
         );
-        const [venue] = await tx
-          .select({ timeZone: locations.timeZone })
-          .from(locations)
-          .where(eq(locations.id, deps.node.locationId));
-        if (venue === undefined)
-          throw new Error("the box has no venue to date its recovery packs in");
+        const venue = await readVenueClock(tx);
         const loaded = deps.backups();
         const status = packStatus({
           records: records.map((r) => ({

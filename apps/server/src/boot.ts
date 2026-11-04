@@ -2920,7 +2920,6 @@ async function bootServer(
       readBoxEmailContext(db, {
         ring,
         practiceMode: config.devMode || tradingContext.practiceMode === true,
-        locationId: tradingContext.locationId,
         venueLanguage: venueLocale === "es-ES" ? "es" : "en",
       }),
     send: createTextEmailSender(),

@@ -17,6 +17,7 @@ import {
   withTransaction,
   type Transaction,
   venueLocationId,
+  readVenueClock,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -30,7 +31,6 @@ import { closeStationForToday } from "./station-times.js";
 import { stationServiceTimes } from "./station-service-times.js";
 import { readSeasons } from "./seasons.js";
 import * as service from "./index.js";
-import { readLocationClock } from "@waitron/reporting";
 import { saveSpecialDay, type SpecialDayInput } from "./special-days.js";
 
 const suite = useVenueDb({
@@ -740,7 +740,7 @@ it("A724: batched dated forecasts retain distinct sending departments", async ()
   tx(async (db) => {
     const f = await fixture(db);
     const takeaway = await paintableTakeaway(db, f);
-    const clock = await readLocationClock(db, f.cfg.locationId);
+    const clock = await readVenueClock(db);
     const result = await service.readPlannedServiceGuides?.(db, f.cfg, [f.station, f.unused], {
       kind: "dates",
       dates: [day],

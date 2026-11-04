@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction, readVenueClock } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   businessDayStart,
   currentBusinessDay,
-  readLocationClock,
   validatedRangeWindow,
   venueMomentAt,
 } from "./business-day.js";
@@ -30,7 +29,7 @@ beforeEach(async () => {
 afterEach(() => vi.useRealTimers());
 describe("complete reporting clock", () => {
   it("reads explicit empty history alongside the initial setting", async () => {
-    expect(await readLocationClock(suite.db, locationId)).toEqual({
+    expect(await readVenueClock(suite.db)).toEqual({
       timeZone: "Europe/Madrid",
       dayCutover: "05:00",
       cutoverChanges: [],
@@ -42,7 +41,7 @@ describe("complete reporting clock", () => {
         sql`insert into location_day_cutover_changes (location_id, effective_business_day, day_cutover) values (${locationId}, '2026-12-01', '07:00:00'), (${locationId}, '2026-11-04', '03:00:00')`,
       );
     });
-    expect(await readLocationClock(suite.db, locationId)).toEqual({
+    expect(await readVenueClock(suite.db)).toEqual({
       ...clock,
       cutoverChanges: [
         ...clock.cutoverChanges,

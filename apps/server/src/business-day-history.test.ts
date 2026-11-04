@@ -2,7 +2,14 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { dailyCloseChain, dailyCloses, locations, sales, withTransaction } from "@waitron/db";
+import {
+  dailyCloseChain,
+  dailyCloses,
+  locations,
+  sales,
+  withTransaction,
+  readVenueClock,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { addDecimal, decimal, saleId as brandSaleId } from "@waitron/shared";
@@ -11,7 +18,6 @@ import {
   computeDailyClose,
   computeTopSellers,
   computeVatSummaryForPeriod,
-  readLocationClock,
   recordDailyClose,
   verifyDailyCloseChain,
 } from "@waitron/reporting";
@@ -143,7 +149,7 @@ async function frozen() {
 }
 async function derived(day: string) {
   return inTx(async (tx) => {
-    const clock = await readLocationClock(tx, venue.cfg.locationId);
+    const clock = await readVenueClock(tx);
     const range = { ...clock, nodeId: venue.cfg.nodeId, fromBusinessDay: day, toBusinessDay: day };
     const close = await computeDailyClose(tx, {
       ...clock,
@@ -311,7 +317,7 @@ describe("dated business-day reporting through real storage", () => {
         decimal("24.20"),
       );
       const page = await inTx(async (tx) => {
-        const clock = await readLocationClock(tx, venue.cfg.locationId);
+        const clock = await readVenueClock(tx);
         return listOrders(tx, {
           status: "all",
           credited: false,

@@ -60,7 +60,7 @@ for (const [province, postalCode, invoiceLocale] of [
         adminPin: "5555",
       })();
       expect(selections).toHaveProperty("readDemoSeedSelection", expect.any(Function));
-      const selection = await selections.readDemoSeedSelection(suite.db, venue.locationId);
+      const selection = await selections.readDemoSeedSelection(suite.db);
       expect(selection.identity).toMatchObject({
         dataSet: "casa-delgado-ca",
         locationName: "Can Delgado",
@@ -176,7 +176,7 @@ it("records a forced regional-only pool through the unchanged fiscal seat", asyn
     province: "Barcelona",
     postalCode: "08001",
   })();
-  const selection = await selections.readDemoSeedSelection(suite.db, venue.locationId);
+  const selection = await selections.readDemoSeedSelection(suite.db);
   await seedDemoRestaurant(suite.db, {
     venue,
     locale: "es",
@@ -226,7 +226,7 @@ for (const locale of ["en", "es"] as const)
       postalCode: "46001",
       adminPin: "5555",
     })();
-    const selection = await selections.readDemoSeedSelection(suite.db, venue.locationId);
+    const selection = await selections.readDemoSeedSelection(suite.db);
     expect(selection.identity).toMatchObject({
       dataSet: "casa-delgado-valencia",
       locationName: VALENCIA_DEMO_TEXT.locationName,
@@ -367,7 +367,7 @@ it("stores the Valencian plain-name entry when Catalan and Valencian differ", as
     province: VALENCIA_DEMO_TEXT.province,
     postalCode: "46001",
   })();
-  const { dataSet, identity } = await selections.readDemoSeedSelection(suite.db, venue.locationId);
+  const { dataSet, identity } = await selections.readDemoSeedSelection(suite.db);
   expect(dataSet.plainNameLanguage).toBe("ca-ES-valencia");
   const synthetic = {
     ...dataSet,
@@ -406,7 +406,7 @@ it.each([
     province: VALENCIA_DEMO_TEXT.province,
     postalCode: "46001",
   })();
-  const { dataSet, identity } = await selections.readDemoSeedSelection(suite.db, venue.locationId);
+  const { dataSet, identity } = await selections.readDemoSeedSelection(suite.db);
   expect(dataSet.id).toBe("casa-delgado-valencia");
   await seedDemoRestaurant(suite.db, {
     venue,
@@ -458,7 +458,7 @@ for (const locale of ["en", "es"] as const)
       postalCode: "15001",
       adminPin: "5555",
     })();
-    const selection = await selections.readDemoSeedSelection(suite.db, venue.locationId);
+    const selection = await selections.readDemoSeedSelection(suite.db);
     expect(selection.identity).toMatchObject({
       dataSet: "casa-delgado-gl",
       locationName: GALICIA_DEMO_TEXT.locationName,
@@ -607,7 +607,7 @@ it.each([
     province: GALICIA_DEMO_TEXT.province,
     postalCode: "15001",
   })();
-  const { dataSet, identity } = await selections.readDemoSeedSelection(suite.db, venue.locationId);
+  const { dataSet, identity } = await selections.readDemoSeedSelection(suite.db);
   expect(dataSet.id).toBe("casa-delgado-gl");
   await seedDemoRestaurant(suite.db, {
     venue,
