@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, StatementSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vitest";
 import {
   diningTables,
@@ -595,6 +595,7 @@ describe("readTableSteps", () => {
     const none = await statements([]);
 
     expect(three.steps.size).toBe(3);
+    expect(one.count).toBe(6);
     expect(three.count).toBe(one.count);
     expect(none).toEqual({ count: 0, steps: new Map() });
   });
@@ -1143,6 +1144,175 @@ describe("a party whose dishes arrived from another table or the counter", () =>
       });
     });
   }
+
+  const ARRIVED = { lineIds: ["line"], from: "group", arrived: true };
+
+  async function addEvents(
+    v: PartyVenue,
+    partyId: string,
+    kind: "submitted" | "joined" | "fired" | "lines_moved",
+    detail: Record<string, unknown>,
+    times: readonly string[],
+  ): Promise<void> {
+    await inTx(v, (tx) =>
+      tx
+        .insert(orderGroupEvents)
+        .values(
+          times.map((createdAt) => ({ partyId, kind, actorId: OPERATOR, detail, createdAt })),
+        ),
+    );
+  }
+
+  /** The read's facts at the table and how many rows its query of the events handed back. */
+  async function factsAndEventRows(v: PartyVenue, partyId: string, tableId: string) {
+    const given = await stepParty(v, partyId);
+    return inTx(v, async (tx) => {
+      const all = vi.spyOn(StatementSync.prototype, "all");
+      try {
+        const facts = (await readStepFacts(tx, [given])).get(tableId)!.facts;
+        const eventRows = (all.mock.contexts as StatementSync[]).flatMap((statement, call) =>
+          statement.sourceSQL.includes('from "order_group_events"')
+            ? [all.mock.results[call]!.value as unknown[]]
+            : [],
+        );
+        expect(eventRows).toHaveLength(1);
+        return { facts, rows: eventRows[0]!.length };
+      } finally {
+        all.mockRestore();
+      }
+    });
+  }
+
+  it("the read of the events hands back one row per class, however many events the party has", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const { partyId, tableId, arrived } = await arrivedDish(v, "hold");
+
+    const before = await factsAndEventRows(v, partyId, tableId);
+    expect(before.rows).toBe(1);
+    expect(before.facts).toMatchObject({ firstOrderAt: arrived, lastOrderAt: arrived });
+
+    const filler = (year: number) =>
+      Array.from({ length: 20 }, (_, ms) =>
+        new Date(Date.UTC(year, 0, 1, 0, 0, 0, ms)).toISOString(),
+      );
+    // Neither extreme is the first or last written, and each is a millisecond from its neighbour.
+    await addEvents(v, partyId, "lines_moved", ARRIVED, [
+      ...filler(2050),
+      "2090-06-01T12:00:00.998Z",
+      "2020-06-01T12:00:00.002Z",
+      "2090-06-01T12:00:00.999Z",
+      "2020-06-01T12:00:00.001Z",
+      ...filler(2051),
+    ]);
+    const manyArrivals = await factsAndEventRows(v, partyId, tableId);
+    expect(manyArrivals.rows).toBe(1);
+    expect(manyArrivals.facts).toMatchObject({
+      firstOrderAt: Date.parse("2020-06-01T12:00:00.001Z"),
+      lastOrderAt: Date.parse("2090-06-01T12:00:00.999Z"),
+      ordersArrived: true,
+    });
+
+    await addEvents(v, partyId, "submitted", { release: "fire" }, [
+      ...filler(2060),
+      "2070-06-01T12:00:00.998Z",
+      "2030-06-01T12:00:00.002Z",
+    ]);
+    await addEvents(v, partyId, "joined", { release: "fire" }, [
+      "2070-06-01T12:00:00.999Z",
+      "2030-06-01T12:00:00.001Z",
+      ...filler(2061),
+    ]);
+    const ownToo = await factsAndEventRows(v, partyId, tableId);
+    expect(ownToo.rows).toBe(2);
+    expect(ownToo.facts).toMatchObject({
+      firstOrderAt: Date.parse("2030-06-01T12:00:00.001Z"),
+      lastOrderAt: Date.parse("2070-06-01T12:00:00.999Z"),
+      ordersArrived: false,
+    });
+  });
+
+  it("a joined family's first and last of each class come from whichever member has them", async () => {
+    const v = await setupPartyVenue(suite.db);
+    await setSteps(v, await tablesDepartment(v), [TAKE_ORDER]);
+    const joinInto = async (partyId: string, other: { partyId: string; tableId: string }) => {
+      const into = await commandFor(v, partyId);
+      const from = await commandFor(v, other.partyId);
+      await inTx(v, (tx) =>
+        joinTables(tx, v.cfg, partyId, other.tableId, {
+          ...into,
+          otherPartyId: other.partyId,
+          expectedOtherPartyRevision: from.expectedPartyRevision,
+        }),
+      );
+    };
+
+    // Arrivals alone: the earliest on the party joined in, the latest on the one it joined.
+    const arrivalsTable = await v.table("Table 2");
+    const arrivals = await seat(v, arrivalsTable);
+    const joinedIn = await carryToFreeTable(
+      v,
+      "move",
+      await partyWith(v, "Table 1", "hold"),
+      "Table 3",
+    );
+    await joinInto(arrivals.partyId, joinedIn);
+    await addEvents(v, arrivals.partyId, "lines_moved", ARRIVED, [
+      "2030-06-01T12:00:00.000Z",
+      "2090-06-01T12:00:00.999Z",
+    ]);
+    await addEvents(v, joinedIn.partyId, "lines_moved", ARRIVED, [
+      "2050-06-01T12:00:00.000Z",
+      "2020-06-01T12:00:00.001Z",
+    ]);
+    expect(await factsOf(v, arrivals.partyId, arrivalsTable)).toMatchObject({
+      firstOrderAt: Date.parse("2020-06-01T12:00:00.001Z"),
+      lastOrderAt: Date.parse("2090-06-01T12:00:00.999Z"),
+      ordersArrived: true,
+    });
+
+    // Own orders win, and arrivals and other kinds outside their span do not widen it.
+    const ownTable = await v.table("Table 4");
+    const own = await seat(v, ownTable);
+    const ownJoinedTable = await v.table("Table 5");
+    const ownJoined = await seat(v, ownJoinedTable);
+    await joinInto(own.partyId, { partyId: ownJoined.partyId, tableId: ownJoinedTable });
+    await addEvents(v, own.partyId, "submitted", { release: "fire" }, ["2070-06-01T12:00:00.998Z"]);
+    await addEvents(v, own.partyId, "joined", { release: "fire" }, [
+      "2030-06-01T12:00:00.000Z",
+      "2080-06-01T12:00:00.999Z",
+    ]);
+    await addEvents(v, ownJoined.partyId, "submitted", { release: "fire" }, [
+      "2040-06-01T12:00:00.000Z",
+    ]);
+    await addEvents(v, ownJoined.partyId, "joined", { release: "fire" }, [
+      "2025-06-01T12:00:00.001Z",
+      "2060-06-01T12:00:00.000Z",
+    ]);
+    await addEvents(v, own.partyId, "lines_moved", ARRIVED, ["2010-06-01T12:00:00.000Z"]);
+    await addEvents(v, ownJoined.partyId, "lines_moved", ARRIVED, ["2095-06-01T12:00:00.000Z"]);
+    await addEvents(v, own.partyId, "fired", { lineId: "line" }, ["2005-06-01T12:00:00.000Z"]);
+    await addEvents(v, ownJoined.partyId, "lines_moved", { lineIds: ["line"], to: "group" }, [
+      "2098-06-01T12:00:00.000Z",
+    ]);
+
+    // Asked about both at once, a member's times reach its own answer and its family's.
+    const otherTable = await v.table("Table 6");
+    const given = [
+      await stepParty(v, own.partyId),
+      { ...(await stepParty(v, ownJoined.partyId)), tableIds: [otherTable] },
+    ];
+    const facts = await inTx(v, (tx) => readStepFacts(tx, given));
+    expect(facts.get(ownTable)!.facts).toMatchObject({
+      firstOrderAt: Date.parse("2025-06-01T12:00:00.001Z"),
+      lastOrderAt: Date.parse("2080-06-01T12:00:00.999Z"),
+      ordersArrived: false,
+    });
+    expect(facts.get(otherTable)!.facts).toMatchObject({
+      firstOrderAt: Date.parse("2025-06-01T12:00:00.001Z"),
+      lastOrderAt: Date.parse("2060-06-01T12:00:00.000Z"),
+      ordersArrived: false,
+    });
+  });
 
   it("an open draft no longer hides the steps of a table whose dishes arrived", async () => {
     const v = await setupPartyVenue(suite.db);

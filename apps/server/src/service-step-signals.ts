@@ -124,11 +124,14 @@ export async function readStepFacts(
   // A party with orders of its own keeps their times: a bill arriving is not this table ordering.
   const orders = new Map<string, OrderTimes>();
   const arrivals = new Map<string, OrderTimes>();
+  const isArrival = sql<number>`${orderGroupEvents.kind} = 'lines_moved'`;
   const orderRows = await tx
     .select({
       partyId: orderGroupEvents.partyId,
-      kind: orderGroupEvents.kind,
-      createdAt: orderGroupEvents.createdAt,
+      isArrival,
+      // Every event is stamped by the column's `nowIso`, so text order is time order.
+      first: sql<string>`min(${orderGroupEvents.createdAt})`,
+      last: sql<string>`max(${orderGroupEvents.createdAt})`,
     })
     .from(orderGroupEvents)
     .where(
@@ -142,17 +145,19 @@ export async function readStepFacts(
           ),
         ),
       ),
-    );
+    )
+    .groupBy(orderGroupEvents.partyId, isArrival);
   for (const row of orderRows) {
-    const at = Date.parse(row.createdAt);
-    const times = row.kind === "lines_moved" ? arrivals : orders;
+    const first = Date.parse(row.first);
+    const last = Date.parse(row.last);
+    const times = row.isArrival === 1 ? arrivals : orders;
     for (const root of rootsOf.get(row.partyId)!) {
       const seen = times.get(root);
       times.set(
         root,
         seen === undefined
-          ? { first: at, last: at }
-          : { first: Math.min(seen.first, at), last: Math.max(seen.last, at) },
+          ? { first, last }
+          : { first: Math.min(seen.first, first), last: Math.max(seen.last, last) },
       );
     }
   }
