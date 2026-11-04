@@ -1397,3 +1397,39 @@ after 2026-11-02 is the proof: read each `mutation-db (N)` job's duration. A sha
 20 minutes means the table needs refreshing with `scripts/mutation-costs.mjs` from that run's
 reports (receipt in `docs/developers/ci-and-gates.md`, "db's mutation shards are packed by
 estimated cost").
+
+## Store bound-value test timeout
+
+[CI run 41879243123, light-a job 126747319929](https://github.com/clintongormley/waitron/actions/runs/41879243123/job/126747319929)
+timed out after 5,000 ms in `packages/store/src/index.test.ts`'s reader/writer bound-value case
+on 4 November. The other 319 store cases passed. The log does not identify the slow phase.
+A790's corrected head and the later A1009 PR passed this package; that does not repair the
+unexplained timeout. A1332's unchanged local file passed 54 cases; a separate traced copy kept
+all assertions and reported store opening and all twelve query-construction/execution timings.
+The first Linux attempts were refused while other lanes held the shared test box. Once acquired,
+the x86_64 Linux 7.0.0 / Node 26.11.1 trace passed: opening took 7.8 ms, query construction
+35–67 ms per call and execution 95–142 ms per call. The unchanged full package then passed
+320 cases with coverage above its thresholds. Neither run reproduced the timeout; neither
+establishes what delayed the original CI case.
+
+If it recurs, retain phase timings and a stack sample before changing the fixture or deadline.
+The original investigation read 94 earlier failed-run logs without a matching failure; five
+historical logs were unavailable. There is no established root cause or store fix.
+
+## Shared logo retry checks use the retained timing list
+
+`packages/ui/src/components/wt-venue-logo.retry.test.ts`'s `requests` helper reads
+`performance.getEntriesByName`. By reading, it has the same bounded-observation shape that
+A1332 reproduced in the till's logo check. Reproduce the primitive suite with a full timing
+buffer, then retain its exact retry assertions while changing the observation. A1332 changed
+only the till check; it did not qualify or change these sibling cases.
+
+## The logo retry check can outwait its test deadline
+
+`apps/till/src/widgets/till-shell.venue-logo.test.ts`'s `requestsReach` waits up to 300 animation
+frames. A1332's run-it review measured 66–70 ms frames: the request wait then exceeds the
+15-second test deadline, so a missing request can produce only a timeout before its count
+assertion runs. The retry-disabled controls still detect the missing retry; they do not establish
+that its count assertion always reports first. Reproduce the throttled-frame case before choosing
+a wall-clock-bounded observation; keep the retry schedule, request assertions and existing case
+deadline. The related `await failed` can also await a missing event until the case times out.

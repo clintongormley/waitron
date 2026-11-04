@@ -6092,6 +6092,18 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **The logo retry check can outwait its test deadline** (left open by A1332). Its 300-frame
+  request wait can exceed the unchanged 15-second case deadline when Chromium throttles frames.
+  [Detail](backlog/ci.md#the-logo-retry-check-can-outwait-its-test-deadline).
+
+- **Store bound-value test timeout** (left open by A1332). One CI run timed out while checking
+  the reader and writer limits; the slow phase remains unknown. Keep the assertions and deadline.
+  [Detail](backlog/ci.md#store-bound-value-test-timeout).
+
+- **The shared logo primitive's retry checks still count a bounded timing list** (left open by
+  A1332). Apply the till check's scoped observation after reproducing the same failure there.
+  [Detail](backlog/ci.md#shared-logo-retry-checks-use-the-retained-timing-list).
+
 - **The resume-authority test's ciphertext damage can leave the value unchanged** (left open by
   A1314). In `apps/server/src/first-setup-backup-resume-authority.test.ts`, `slice(0, -4) + "AAAA"`
   changes nothing when the ciphertext decodes to a multiple of three bytes ending in three zero

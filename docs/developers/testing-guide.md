@@ -1,5 +1,22 @@
 # Testing guide
 
+## Count image requests as they are delivered
+
+When a retry test counts resource requests, observe the resource entries as they arrive with a
+scoped `PerformanceObserver`, then disconnect it in `finally` and register the same restoration
+with `onTestFinished`: a timed-out test may still be awaiting an event when Vitest ends it. The
+retained timing list is a bounded observation, so it cannot establish that no new request happened once it is full.
+
+On 4 November 2026, A1332 reproduced the till logo check's `expected 2, received 1` failure by
+setting the resource-timing capacity to one. The observer recorded two requests and the shell
+sent two image-error events, while `performance.getEntriesByName` retained only the first request.
+Counting observer deliveries passed the original early-retry, repeated-request, hidden-logo and
+no-wrap assertions with both 250 slots and one slot. The one-slot case also checks that the
+retained list still contains only one request. Run
+`pnpm --filter @waitron/till exec vitest run src/widgets/till-shell.venue-logo.test.ts`.
+This reproduces a mechanism for the CI symptom; the failed CI runs did not retain their buffer
+state, so that part of their diagnosis remains inferred.
+
 ## Retiring test cases also updates their fresh-process wrappers
 
 Before you move or retire cases, search for their test file name, family key and expected child
