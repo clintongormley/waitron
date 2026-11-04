@@ -9,6 +9,7 @@ import {
 import {
   snapshot,
   noConfirmations,
+  expectStartAgainDeleted,
   expectStartAgainRefused,
   LEFT_STATE,
 } from "../test/start-again-deleted.js";
@@ -215,6 +216,8 @@ it("in the held state, the Start again route starts again over HTTPS with only t
   } finally {
     socket.destroy();
   }
+  await expectStartAgainDeleted(f.roots);
+  await noConfirmations(f);
 });
 
 it("in the held state, the Start again route answers a refusal HTTP 409 with its cause, and nothing changes", async () => {
