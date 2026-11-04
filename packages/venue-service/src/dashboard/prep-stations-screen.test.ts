@@ -5722,6 +5722,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     ]);
     for (const line of warning(el)!.querySelectorAll("p")) {
       expect(line.querySelectorAll("a")).toHaveLength(1);
+      expect(line.querySelector("a")!.textContent).toBe("Devices");
       expect(line.querySelector("a")!.getAttribute("href")).toBe("/manage/devices");
     }
   });

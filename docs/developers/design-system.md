@@ -4799,12 +4799,13 @@ this is the default station" in place of the dates. The station choices require
 Prep stations itself has only Stations and Routes. Above its tabs, a warning names, zone by zone,
 each station no pass screen can fire there — one set to wait for the pass, or one with a dish
 already waiting at the pass — with a line for orders with no service zone last and a link to
-Devices on each line; a failed read shows one line in its place. The former Times tab and each station's
-"When it gets orders" link are retired. Station lists use name order, with the Default badge at
-its alphabetical place and a colour square on every Stations row. Add and Edit use
-`wt-colour-chooser`; a missing creation colour takes the first colour no active station uses,
-or red when all choices are occupied. The Edit window sets its four minutes fields two to a row.
-There is no station order field or drag handle.
+Devices on each line; a failed read shows one line in its place. With two or more active zones, the
+stations it would name in every active zone share a single line instead, drawn first. The former
+Times tab and each station's "When it gets orders" link are retired. Station lists use name order,
+with the Default badge at its alphabetical place and a colour square on every Stations row. Add and
+Edit use `wt-colour-chooser`; a missing creation colour takes the first colour no active station
+uses, or red when all choices are occupied. The Edit window sets its four minutes fields two to a
+row. There is no station order field or drag handle.
 
 ### Tabbed management pages
 
