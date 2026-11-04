@@ -113,7 +113,7 @@ hangs over a far ancestor's corner unnoticed.
 Ask of every sentence, in a guide or a help text: does this change what the person does? If the
 code handles an exception or a corner case by itself and staff do nothing different, write nothing
 about it, and cut the sentence rather than rewording it. No wording options go to the owner for
-such a sentence. A sentence staff need to act on stays. This narrows "the guide carries the detail"
+such a sentence. A sentence staff need to act on stays. This narrows "the guide section that documents everything else"
 in the section below. Nothing guards it.
 
 The owner (2026-11-04, on A803 4b's sentence about a moved bill and service steps): "the important

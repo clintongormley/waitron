@@ -2190,7 +2190,7 @@ describe("A803 waiting copy: how long a group has been held", () => {
     return inTx(v, (tx) => splitTable(tx, v.cfg, partyId, tableId, billId, splitting));
   }
 
-  it("Move this bill: the copy shows the time its source was held, and so does a copy of the copy", async () => {
+  it("A803 waiting copy: Move this bill: the copy shows the time its source was held, and so does a copy of the copy", async () => {
     const a = await seatWith([{ names: ["Tarta"], release: "hold" }]);
     const source = (await lineOf(a.billId, "Tarta")).groupId!;
     const held = minutesAgo(20);
@@ -2217,7 +2217,7 @@ describe("A803 waiting copy: how long a group has been held", () => {
     expect((await shownGroup(second.partyId!, again)).sentAt).toBe(held);
   });
 
-  it("Split a table: the copy shows the time its source was held", async () => {
+  it("A803 waiting copy: Split a table: the copy shows the time its source was held", async () => {
     const a = await seatWith([{ names: ["Tarta"], release: "hold" }]);
     const source = (await lineOf(a.billId, "Tarta")).groupId!;
     const held = minutesAgo(20);
@@ -2234,7 +2234,7 @@ describe("A803 waiting copy: how long a group has been held", () => {
     expect(shown.sentBy).toBe(before.sentBy);
   });
 
-  it("the copy's number and position at the other table still come after the groups there", async () => {
+  it("A803 waiting copy: the copy's number and position at the other table still come after the groups there", async () => {
     const a = await seatWith([{ names: ["Tarta"], release: "hold" }]);
     await backdateGroup((await lineOf(a.billId, "Tarta")).groupId!, minutesAgo(20));
     const tableId = await v.table(`Copy ${++tableNumber}`);
@@ -2251,7 +2251,7 @@ describe("A803 waiting copy: how long a group has been held", () => {
     expect(shown.at(-1)!.id).toBe(copy);
   });
 
-  it("the pass's held column ranks a party by its oldest group, so a copy brings its source's age with it", async () => {
+  it("A803 waiting copy: the pass's held column ranks a party by its oldest group, so a copy brings its source's age with it", async () => {
     const t = await paperTable(false);
     await backdateGroup(t.g, minutesAgo(20));
     const older = await seatWith([{ names: ["Flan"], release: "hold" }]);

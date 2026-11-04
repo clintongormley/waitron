@@ -1082,25 +1082,25 @@ their earlier assertions and only the source group's `removed` state went red (`
 
 ### After the whole-branch review, 2026-11-04
 
-The sections above were written at `f86819f209`, before the rebase onto `721f30a311`; that commit is
-`36a9172911` here (same patch id), and other commits they name from before the rebase are not on this
+The sections above were written at `f86819f209`, before the rebases onto `721f30a311` and `c11d7ff0c3`; that commit is
+`9648aae170` here (same patch id), and other commits they name from before the rebase are not on this
 branch either. The review that followed changed behaviour in two
 places and added tests:
 
-- **A table that received a bill counts as having ordered** (`8e6727a617`, `f2a197ce89`, with their
-  wording in `9bda7c1462`). A review run showed "Take order" still live after a move to a free table;
+- **A table that received a bill counts as having ordered** (`0ebff0cfd5`, `5569be5a72`, with their
+  wording in `805715db33`). A review run showed "Take order" still live after a move to a free table;
   a fired bill did the same at `721f30a311`, so that path predates this slice and held dishes were a
   new way to reach it. See "D9's reader" above.
-- **A copy keeps its source group's `createdAt`** (`cd5af616ec`, adding to D4), so the "Held" time
+- **A copy keeps its source group's `createdAt`** (`83e9ed3cbc`, adding to D4), so the "Held" time
   survives the move. A party's place in the pass's Held column therefore also moves up when a bill with
   an older held group arrives (`partyFirstCreatedAt` in `pass-card.ts`, read as `partyFirstGroupAt` in `working-order.ts`), not only at a merge.
-- **Four race cases more** (`768e1dbb27`): recall against Move this bill and against Split a table, each
+- **Four race cases more** (`eddb5726d0`): recall against Move this bill and against Split a table, each
   asked first in turn. The "5 tests" and "65 race runs" rows above stand for Task 6 as it was.
 
 Two statements above need narrowing. "Printed nothing: no schema change" was true of Task 10a's run;
-`9fb3a616ec` and `dbae81fb65` later changed comments in `packages/db/src/schema/order-groups.ts`, and only
+`f310d21af5` and `9deba32595` later changed comments in `packages/db/src/schema/order-groups.ts`, and only
 comments. "No later code changed what it read" was true at `f86819f209`; the rebase brought in `main`'s attendance
-and payment changes, none in those two files, and `cd5af616ec` later changed `copyHeldGroups`, and a grep of `kitchen-print.ts` and `moved-slips.ts` finds no read of a group's
+and payment changes, none in those two files, and `83e9ed3cbc` later changed `copyHeldGroups`, and a grep of `kitchen-print.ts` and `moved-slips.ts` finds no read of a group's
 `createdAt`. The paper LOOK was not run again.
 
 ### Line numbers that moved
@@ -1211,4 +1211,4 @@ what was true then. The rule went into root `CLAUDE.md` §3 and `docs/developers
 
 A third Codex run (`~/waitron-campaign-c/a803-4b-reviews/finish-codex-c.md`) ran the three behaviour
 fixes the first two runs never saw: no Critical or Important finding. Its performance finding was
-fixed in `d9fc4d238d`; its guide finding went away with the sentence.
+fixed in `bed2df5395`; its guide finding went away with the sentence.

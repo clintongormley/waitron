@@ -314,9 +314,9 @@ not seen on a decoded ticket. The guide `apps/server/src/guide/es/kitchen-servic
 - `:71` «una comanda HOLD CHANGED cuando se añade al grupo un plato en espera»;
 - `:73` «la comanda marcada FIRE»;
 - `:75` «la comanda marcada FIRE de esa impresora lleva las dos»;
-- `:328` «las comandas de corrección como **HOLD CHANGED**».
+- `:324` «las comandas de corrección como **HOLD CHANGED**».
 
-By `git blame`, `:71`, `:73` and `:75` come from `c072fd5db6` (2026-10-24) and `:328` from
+By `git blame`, `:71`, `:73` and `:75` come from `c072fd5db6` (2026-10-24) and `:324` from
 `78339a68ca` (2026-10-30). The question was put to the owner in lane C's ~15:50 entry of 2026-11-04 in
 `~/waitron-campaign-c/questions.md`: use the paper's words (recommended), or keep these because a
 guide's language and a kitchen's can differ. 4b's own new text names no marker, so the question stayed
