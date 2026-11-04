@@ -164,6 +164,8 @@ for (const locale of ["en", "es"] as const) {
       const parties = expected[phase].tables.parties!;
       parties.columns = parties.columns.filter((column) => column.name !== "main_bill_id");
       parties.foreignKeys = parties.foreignKeys.filter((key) => key.from !== "main_bill_id");
+      const ticketItems = expected[phase].tables.ticket_items!;
+      ticketItems.columns = ticketItems.columns.filter((column) => column.name !== "away_at");
       for (const name of ["workforce_chains", "time_entries", "pay_period_closures"]) {
         const table = expected[phase].tables[name]!;
         table.columns = table.columns.filter((column) => column.name !== "location_id");

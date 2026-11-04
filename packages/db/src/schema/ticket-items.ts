@@ -64,7 +64,6 @@ export const ticketItems = table(
     firedAt: tsString("fired_at"),
     requestedAt: tsString("requested_at"),
     passControlled: flag("pass_controlled").notNull().default(false),
-    awayAt: tsString("away_at"),
     stationChosenAt: tsString("station_chosen_at"),
     // Explicit "leave to finish" survives disabling; an earlier manual station choice does not.
     stationRetainedAtRelease: flag("station_retained_at_release").notNull().default(false),

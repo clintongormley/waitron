@@ -1443,6 +1443,13 @@
       "when": 1793776288812,
       "tag": "0205_retire_pass_item_marks",
       "breakpoints": true
+    },
+    {
+      "idx": 206,
+      "version": "6",
+      "when": 1793777437217,
+      "tag": "0206_retire_away_at",
+      "breakpoints": true
     }
   ]
 }

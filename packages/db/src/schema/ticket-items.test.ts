@@ -140,21 +140,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     expect(row!.nodeId).toBe(nodeA);
     expect(row!.queuedAt).not.toBeNull();
     expect(row!.readyAt).not.toBeNull();
-    // NULL until the pass dispatches the item.
-    expect(row!.awayAt).toBeNull();
-  });
-
-  it("stamps away_at (the pass dispatch) and reads it back through the Drizzle export", async () => {
-    const { orderId, lineId } = await seedOrderLine(nodeA, productA);
-    const id = await seedTicket(nodeA, orderId, lineId, stationA);
-    await inTx((tx) =>
-      tx
-        .update(ticketItems)
-        .set({ awayAt: new Date().toISOString() })
-        .where(eq(ticketItems.id, id)),
-    );
-    const [row] = await inTx((tx) => tx.select().from(ticketItems).where(eq(ticketItems.id, id)));
-    expect(row!.awayAt).not.toBeNull();
   });
 
   it("A773 phases: a new ticket item has no request time and is not pass-controlled", async () => {
@@ -205,6 +190,13 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       sql`select name from sqlite_master where name = 'pass_item_marks'`,
     );
     expect(tables).toEqual([]);
+  });
+
+  it("A773 retired storage: ticket items have no Away column", () => {
+    const columns = suite.db.all<{ name: string }>(
+      sql`select name from pragma_table_info('ticket_items') where name = 'away_at'`,
+    );
+    expect(columns).toEqual([]);
   });
 
   it("carries a nullable note column (spec §2/§3, NON-FISCAL)", async () => {
