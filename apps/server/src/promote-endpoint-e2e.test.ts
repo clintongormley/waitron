@@ -47,7 +47,7 @@ import {
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer, type StartedServer } from "./boot.js";
-import { readOfferSettings } from "./handover-manifest.js";
+import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
 import { ALL_MODULES } from "./modules.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
@@ -637,6 +637,7 @@ describe("a real offer beside a real promotion on a real start", () => {
           },
           authorisedBy: ADMIN_ID,
           settings: await readOfferSettings(STATE_ROOT, RING, "handover.settings_unreadable"),
+          imageMigrations: imageMigrationsDigest(null),
         } as unknown as CanonicalValue,
         { nodeId: MIRROR_ORIGIN_NODE_ID, privateKey: seed.origin.privateKey },
       ),

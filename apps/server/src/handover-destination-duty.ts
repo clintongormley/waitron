@@ -14,7 +14,7 @@ import {
 } from "@waitron/node-db";
 import type { ErrorCode } from "@waitron/shared";
 import { askPeerStatus, isOperationStatus } from "./boot-peer-check.js";
-import type { CompareOutcome } from "./handover-compare.js";
+import type { CompareOptions, CompareOutcome, CopyFileChecks } from "./handover-compare.js";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { advanceHandover, waitHandover } from "./handover-store.js";
 import type { Logger } from "./logger.js";
@@ -25,7 +25,8 @@ import "./errors.js";
 
 const TICK_MS = 5000;
 
-// A compare that fails may need a person to fix a setting, and it reads a whole venue's copy.
+// A compare that fails may need a person to fix a setting, the one thing that can change a kept
+// file's answer.
 const COMPARE_RETRY_MS = 60_000;
 
 /** The refusals another copy of the same file could cure: every other waits on the same file. */
@@ -66,12 +67,14 @@ export interface DestinationDutyDeps {
   silenceLimitMs?: number;
   /**
    * Told of a file fetched whole. A throw or a refusal has it told again of the same file, after
-   * `compareRetryMs`, except a refusal in `REFUSALS_FETCHED_AGAIN`.
+   * `compareRetryMs`, except a refusal in `REFUSALS_FETCHED_AGAIN`. `options.found` belongs to that
+   * one file.
    */
   compare?: (
     operation: HandoverOperation,
     indicator: unknown,
     copyPath: string,
+    options: CompareOptions,
   ) => Promise<CompareOutcome>;
   compareRetryMs?: number;
   /** A clock that only runs forward, for the limit on comparing again. */
@@ -124,6 +127,7 @@ interface HeldCopy {
   path: string;
   compared: boolean;
   compareDueAt: number;
+  found: CopyFileChecks;
 }
 
 async function discardCopy(path: string): Promise<void> {
@@ -324,7 +328,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     // The download can outlast the operation, the box's being a mirror, or this duty.
     const current = await stillWorkingOn(operation);
     if (current === null) return discard();
-    held = { operationId, indicator, path, compared: false, compareDueAt: 0 };
+    held = { operationId, indicator, path, compared: false, compareDueAt: 0, found: {} };
     if (current.waitingReason !== null) await waitHandover(deps, operationId, null);
     // Another writer may have closed the operation while the reason was being cleared.
     const cleared = await stillWorkingOn(operation);
@@ -335,7 +339,10 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
   async function compareHeld(copy: HeldCopy, operation: HandoverOperation): Promise<void> {
     if (copy.compared || monotonicNow() < copy.compareDueAt) return;
     copy.compareDueAt = monotonicNow() + compareRetryMs;
-    const outcome = await deps.compare?.(operation, copy.indicator, copy.path);
+    const outcome = await deps.compare?.(operation, copy.indicator, copy.path, {
+      found: copy.found,
+      signal,
+    });
     if (outcome !== undefined && !outcome.ok) {
       if (REFUSALS_FETCHED_AGAIN.has(outcome.reason)) {
         held = undefined;
@@ -422,7 +429,10 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       try {
         more = await pass();
       } catch (error) {
-        deps.log("error", "handover-destination.pass_failed", { error: String(error) });
+        // A stop ends a comparison under way by rejecting it.
+        if (!signal.aborted) {
+          deps.log("error", "handover-destination.pass_failed", { error: String(error) });
+        }
       }
       await sleep(more ? tickMs : undefined);
     }

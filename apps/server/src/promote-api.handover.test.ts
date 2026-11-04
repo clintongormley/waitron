@@ -39,6 +39,7 @@ import {
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { AppError, locationId, nodeId } from "@waitron/shared";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
+import { imageMigrationsDigest } from "./handover-manifest.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
@@ -196,7 +197,14 @@ beforeEach(async () => {
   app = new Hono();
   mountHandoverDestinationApi(
     app,
-    { db: suite.db, node: suite.node, ring: RING, nodeId: self, stateDir: stateRoot },
+    {
+      db: suite.db,
+      node: suite.node,
+      ring: RING,
+      nodeId: self,
+      stateDir: stateRoot,
+      migrationsRoot: null,
+    },
     () => undefined,
   );
   mountPromoteApi(app, {
@@ -267,6 +275,7 @@ function offer(
       binding: { ...binding, ...overrides },
       authorisedBy: AUTHORISER,
       settings: { backupSettings: null, moduleSettings: null, ringVersions: [1] },
+      imageMigrations: imageMigrationsDigest(null),
     } as unknown as CanonicalValue,
     SOURCE,
   );

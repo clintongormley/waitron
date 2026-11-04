@@ -1385,6 +1385,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The box you chose is not a spare waiting to take over this venue, so the handover did not start. This box keeps selling.",
     es: "El equipo elegido no es un equipo de reserva a la espera de llevar este local, así que el traspaso no ha empezado. Este equipo sigue vendiendo.",
   },
+  "handover.destination_not_joined": {
+    en: "This box holds no record of the box you chose having finished joining the venue, so the handover did not start and this box keeps selling.",
+    es: "Este equipo no tiene constancia de que el equipo elegido haya terminado de unirse al local, así que el traspaso no ha empezado y este equipo sigue vendiendo.",
+  },
   "handover.destination_unaddressable": {
     en: "The venue's list of boxes holds no address of its own for the box you chose, so this box cannot reach it. The handover did not start and this box keeps selling.",
     es: "La lista de equipos del local no tiene una dirección propia para el equipo elegido, así que este equipo no puede llegar a él. El traspaso no ha empezado y este equipo sigue vendiendo.",
@@ -1410,8 +1414,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Los dos equipos tienen ajustes de copia de seguridad distintos, así que el equipo de reserva no ha aceptado este traspaso.",
   },
   "handover.modules_differ": {
-    en: "The two boxes have different modules switched on, so the spare did not accept this handover.",
-    es: "Los dos equipos tienen activados módulos distintos, así que el equipo de reserva no ha aceptado este traspaso.",
+    en: "The two boxes run different versions of the software or have different modules switched on, so the spare did not accept this handover.",
+    es: "Los dos equipos usan versiones distintas del programa o tienen activados módulos distintos, así que el equipo de reserva no ha aceptado este traspaso.",
   },
   "handover.key_ring_mismatch": {
     en: "The spare does not hold every encryption key this box uses, so it did not accept this handover.",

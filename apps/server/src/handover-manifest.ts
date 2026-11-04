@@ -9,6 +9,7 @@ import {
   type RetainedRevision,
 } from "@waitron/handover";
 import { canonicalize } from "@waitron/membership";
+import { imageMigrationHashes, manifestSets } from "@waitron/migrations";
 import { readModulePreparationRevisions } from "@waitron/provisioning";
 import { AppError, isAppError, type ErrorCode } from "@waitron/shared";
 import { parseEnvFile } from "./env-file.js";
@@ -114,13 +115,28 @@ export function isManifestStateFile(file: unknown): boolean {
 
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 
+/**
+ * The migrations this image ships, every set whether switched on or not, for two boxes to find they
+ * run different releases. Module versions cannot say so: every module's is `0.0.0`.
+ */
+export function imageMigrationsDigest(root: string | null): string {
+  const hashes = Object.fromEntries(
+    manifestSets().map((set) => [set.name, imageMigrationHashes(set, root)]),
+  );
+  return sha256Hex(canonicalize(hashes));
+}
+
+export function isDigest(value: unknown): value is string {
+  return typeof value === "string" && SHA256_HEX.test(value);
+}
+
 function refuse(field: string): never {
   throw new AppError("handover.request_invalid", { field });
 }
 
 function digestAt(value: unknown, field: string): string | null {
   if (value === null) return null;
-  if (typeof value !== "string" || !SHA256_HEX.test(value)) refuse(field);
+  if (!isDigest(value)) refuse(field);
   return value;
 }
 

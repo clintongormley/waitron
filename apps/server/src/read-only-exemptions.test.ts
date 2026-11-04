@@ -37,7 +37,7 @@ import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { freePort } from "./testing/free-ports.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
-import { readOfferSettings } from "./handover-manifest.js";
+import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { READ_ONLY_EXEMPTIONS, isReadOnlyExempt } from "./read-only-exemptions.js";
@@ -323,6 +323,7 @@ beforeAll(async () => {
           RING,
           "handover.settings_unreadable",
         )) as unknown as CanonicalValue,
+        imageMigrations: imageMigrationsDigest(null),
       },
       MAIN_BOX,
     ),

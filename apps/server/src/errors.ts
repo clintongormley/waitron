@@ -210,6 +210,11 @@ declare module "@waitron/shared" {
      * operation is no longer waiting for the offer.
      */
     "handover.destination_not_spare": { destinationNodeId: string };
+    /**
+     * This box's own `nodes` lacks a row for the chosen spare holding the key the chart vouches
+     * for, so the copy it would send could not start that spare.
+     */
+    "handover.destination_not_joined": { destinationNodeId: string };
     /** A handover named a spare whose chart address is empty or is this box's own. */
     "handover.destination_unaddressable": { destinationNodeId: string };
     /** A handover's spare did not answer in time, or gave an answer this box could not verify. */
@@ -228,7 +233,10 @@ declare module "@waitron/shared" {
     "handover.membership_changed": Record<string, never>;
     /** A handover's two boxes hold different values in `backup.env`. */
     "handover.backup_settings_differ": Record<string, never>;
-    /** A handover's two boxes switch off different modules in `modules.json`. */
+    /**
+     * A handover's two boxes switch off different modules in `modules.json`, or run images shipping
+     * different migrations, or the copy's journal stands behind the receiving box's image.
+     */
     "handover.modules_differ": Record<string, never>;
     /** The box handing over lists a credentials key version the receiving box does not hold. */
     "handover.key_ring_mismatch": Record<string, never>;

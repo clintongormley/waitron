@@ -37,9 +37,11 @@ import {
 } from "@waitron/membership";
 import { NODE_MIGRATIONS, readHandoverOperation, setNodeMode } from "@waitron/node-db";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
+import { imageMigrationsDigest } from "./handover-manifest.js";
 import type { HandoverStatusBody } from "./handover-status-api.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import { copyImageMigrations } from "./testing/image-migrations.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 
 const RING: KeyRing = loadKeyRing({
@@ -54,6 +56,7 @@ const SOURCE = { nodeId: "11111111-1111-4111-8111-111111111111", ...generateNode
 const BYSTANDER = { nodeId: "22222222-2222-4222-8222-222222222222", ...generateNodeKeyPair() };
 const STRANGER = { nodeId: "33333333-3333-4333-8333-333333333333", ...generateNodeKeyPair() };
 const SETTINGS = { backupSettings: null, moduleSettings: null, ringVersions: [1] };
+const IMAGE = imageMigrationsDigest(null);
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
@@ -108,7 +111,7 @@ beforeEach(async () => {
   app = new Hono();
   mountHandoverDestinationApi(
     app,
-    { db: suite.db, node: suite.node, ring: RING, nodeId: self, stateDir },
+    { db: suite.db, node: suite.node, ring: RING, nodeId: self, stateDir, migrationsRoot: null },
     () => undefined,
   );
 });
@@ -122,7 +125,12 @@ function envelopeOf(
   signer: { nodeId: string; privateKey: string } = SOURCE,
   kind: HandoverKind = "stepdown",
 ) {
-  const body = { binding: { ...binding, ...overrides }, authorisedBy: PERSON, settings: SETTINGS };
+  const body = {
+    binding: { ...binding, ...overrides },
+    authorisedBy: PERSON,
+    settings: SETTINGS,
+    imageMigrations: IMAGE,
+  };
   return signEnvelope(kind, body as unknown as CanonicalValue, signer);
 }
 
@@ -255,7 +263,14 @@ describe("POST /api/node/handover/offer", () => {
       const told = new Hono();
       mountHandoverDestinationApi(
         told,
-        { db: suite.db, node: suite.node, ring: RING, nodeId: self, stateDir },
+        {
+          db: suite.db,
+          node: suite.node,
+          ring: RING,
+          nodeId: self,
+          stateDir,
+          migrationsRoot: null,
+        },
         () => undefined,
         onOfferRecorded,
       );
@@ -367,12 +382,12 @@ describe("POST /api/node/handover/offer", () => {
       ["an extra key", { binding: "later", authorisedBy: PERSON, extra: 1 }, "body"],
       [
         "a person that is not an id",
-        { binding: "later", authorisedBy: "someone", settings: SETTINGS },
+        { binding: "later", authorisedBy: "someone", settings: SETTINGS, imageMigrations: IMAGE },
         "authorisedBy",
       ],
       [
         "a person that is not text",
-        { binding: "later", authorisedBy: 7, settings: SETTINGS },
+        { binding: "later", authorisedBy: 7, settings: SETTINGS, imageMigrations: IMAGE },
         "authorisedBy",
       ],
     ])("refuses a body holding %s", async (_name, shape, field) => {
@@ -392,6 +407,7 @@ describe("POST /api/node/handover/offer", () => {
           binding: { ...binding, scenario: "other" },
           authorisedBy: PERSON,
           settings: SETTINGS,
+          imageMigrations: IMAGE,
         } as CanonicalValue,
         SOURCE,
       );
@@ -501,6 +517,95 @@ describe("POST /api/node/handover/offer", () => {
     });
   });
 
+  describe("the image the offer names", () => {
+    const offerNaming = (imageMigrations: unknown) =>
+      signEnvelope(
+        "stepdown",
+        {
+          binding,
+          authorisedBy: PERSON,
+          settings: SETTINGS,
+          imageMigrations,
+        } as unknown as CanonicalValue,
+        SOURCE,
+      );
+    const onImage = async (root: string): Promise<Hono> => {
+      const built = new Hono();
+      mountHandoverDestinationApi(
+        built,
+        {
+          db: suite.db,
+          node: suite.node,
+          ring: RING,
+          nodeId: self,
+          stateDir,
+          migrationsRoot: root,
+        },
+        () => undefined,
+      );
+      return built;
+    };
+    const offerTo = async (to: Hono, raw: unknown) => {
+      const response = await to.request("/api/node/handover/offer", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(raw),
+      });
+      return { status: response.status, body: await response.json() };
+    };
+
+    it("a spare on an image one migration behind refuses, recording nothing", async () => {
+      const root = join(stateDir, "older-image");
+      await copyImageMigrations(root, "fiscal-verifactu");
+      // Failing case: 200, and a `prepared` row with the old box about to stop.
+      expect(await offerTo(await onImage(root), envelopeOf())).toEqual(
+        refusal(409, "handover.modules_differ"),
+      );
+      await expectNothingRecorded();
+    });
+
+    it("control: a spare on an equal image at another path accepts", async () => {
+      const root = join(stateDir, "same-image");
+      await copyImageMigrations(root);
+      expect(imageMigrationsDigest(root)).toBe(IMAGE);
+      const answer = await offerTo(await onImage(root), envelopeOf());
+      expect(answer.status).toBe(200);
+      expect(await readHandoverOperation(suite.node, self, OP)).toMatchObject({
+        state: "prepared",
+      });
+    });
+
+    it("an offer naming another digest is refused", async () => {
+      expect(await post(offerNaming("a".repeat(64)))).toEqual(
+        refusal(409, "handover.modules_differ"),
+      );
+      await expectNothingRecorded();
+    });
+
+    it.each([
+      ["not a digest", "abc"],
+      ["in capitals", "A".repeat(64)],
+      ["a number", 7],
+      ["nothing", null],
+    ])("an image digest that is %s is a malformed request", async (_label, value) => {
+      expect(await post(offerNaming(value))).toEqual(
+        refusal(400, "handover.request_invalid", { field: "imageMigrations" }),
+      );
+      await expectNothingRecorded();
+    });
+
+    it("an offer that names no image is a malformed request", async () => {
+      const envelope = signEnvelope(
+        "stepdown",
+        { binding, authorisedBy: PERSON, settings: SETTINGS } as unknown as CanonicalValue,
+        SOURCE,
+      );
+      expect(await post(envelope)).toEqual(
+        refusal(400, "handover.request_invalid", { field: "body" }),
+      );
+    });
+  });
+
   describe("the settings the offer carries", () => {
     const DIGEST = "a".repeat(64);
     const offerWith = (settings: unknown, overrides: Partial<HandoverBinding> = {}) =>
@@ -510,6 +615,7 @@ describe("POST /api/node/handover/offer", () => {
           binding: { ...binding, ...overrides },
           authorisedBy: PERSON,
           settings,
+          imageMigrations: IMAGE,
         } as unknown as CanonicalValue,
         SOURCE,
       );
@@ -583,7 +689,7 @@ describe("POST /api/node/handover/offer", () => {
       const rotated = new Hono();
       mountHandoverDestinationApi(
         rotated,
-        { db: suite.db, node: suite.node, ring, nodeId: self, stateDir },
+        { db: suite.db, node: suite.node, ring, nodeId: self, stateDir, migrationsRoot: null },
         () => undefined,
       );
       const response = await rotated.request("/api/node/handover/offer", {

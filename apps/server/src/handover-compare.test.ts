@@ -43,7 +43,7 @@ import {
   type CanonicalValue,
   type MembershipDocumentBody,
 } from "@waitron/membership";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { imageMigrationHashes, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
 import {
   readHandoverOperation,
@@ -54,7 +54,12 @@ import {
   type HandoverOperation,
 } from "@waitron/node-db";
 import { captureFinalCopy, finalCopyPath, type CaptureDeps } from "./handover-capture.js";
-import { compareFinalCopy, type CompareDeps } from "./handover-compare.js";
+import {
+  compareFinalCopy,
+  type CompareDeps,
+  type CompareOptions,
+  type CopyFileChecks,
+} from "./handover-compare.js";
 import {
   receivedCopyPath,
   startHandoverDestinationDuty,
@@ -68,6 +73,19 @@ import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
+
+const integrityThreads = vi.hoisted(() => ({ paths: [] as string[] }));
+vi.mock("node:worker_threads", async (importOriginal) => {
+  const real = await importOriginal<typeof import("node:worker_threads")>();
+  class CountedWorker extends real.Worker {
+    constructor(source: string | URL, options?: import("node:worker_threads").WorkerOptions) {
+      const path = (options?.workerData as { path?: string } | undefined)?.path;
+      if (path !== undefined) integrityThreads.paths.push(path);
+      super(source, options);
+    }
+  }
+  return { ...real, Worker: CountedWorker };
+});
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x7).toString("base64"),
@@ -231,8 +249,11 @@ async function rig() {
     });
   };
 
-  const compareRow = async (envelope: unknown = indicator, overrides: Partial<CompareDeps> = {}) =>
-    compareFinalCopy({ ...deps, ...overrides }, await row(), envelope, path);
+  const compareRow = async (
+    envelope: unknown = indicator,
+    overrides: Partial<CompareDeps> = {},
+    found: CopyFileChecks = {},
+  ) => compareFinalCopy({ ...deps, ...overrides }, await row(), envelope, path, { found });
 
   return {
     db,
@@ -534,6 +555,164 @@ describe("compareFinalCopy", () => {
     });
   });
 
+  describe("a copy behind this box's image", () => {
+    const setNamed = (name: string) => manifestSets().find((set) => set.name === name)!;
+    const lastMigration = (name: string) => imageMigrationHashes(setNamed(name), null).at(-1)!;
+
+    it("one migration behind, with a column a module reads gone, is refused before it reads", async () => {
+      const r = await rig();
+      alter(
+        r.path,
+        `delete from ${setNamed(FISCAL).table} where hash = '${lastMigration(FISCAL)}';
+         alter table acks drop column csv`,
+      );
+      // Failing case: `handover.summary_unreadable`, which waits for ever with M1 stopped.
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("handover.modules_differ", { set: FISCAL }),
+      );
+    });
+
+    it("one migration behind and otherwise sound is refused too", async () => {
+      const r = await rig();
+      alter(
+        r.path,
+        `delete from ${setNamed("core").table} where hash = '${lastMigration("core")}'`,
+      );
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("handover.modules_differ", { set: "core" }),
+      );
+    });
+
+    it("a set this box does not switch on may be behind: no start migrates it", async () => {
+      const r = await rig();
+      const off = "staffing";
+      alter(r.path, `delete from ${setNamed(off).table} where hash = '${lastMigration(off)}'`);
+      const envelope = await r.resignedForFile((body) => {
+        body.snapshot.modules = body.snapshot.modules.filter((one) => one.name !== off);
+      });
+      const modules = ALL_MODULES.filter((module) => module.name !== off);
+      expect(await r.compareRow(envelope, { modules })).toEqual({ ok: true });
+    });
+
+    it("a node.db set is not looked for in the copy", async () => {
+      const r = await rig();
+      const set = manifestSets().find((one) => one.database === "node")!;
+      alter(r.path, `create table ${set.table} (hash text, created_at integer)`);
+      expect(await r.compareRow(await r.resignedForFile())).toEqual({ ok: true });
+    });
+  });
+
+  describe("a file kept between tries", () => {
+    const LATE = (r: Awaited<ReturnType<typeof rig>>) =>
+      `update persons set display_name = 'Late' where id = '${r.authorisedBy}'`;
+
+    it("its bytes are not read again, and a new file's are", async () => {
+      const r = await rig();
+      const found: CopyFileChecks = {};
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual({ ok: true });
+      alter(r.path, LATE(r));
+      // The cost the ruling states: a change after the file passed is not found in this run.
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual({ ok: true });
+      // Control: the same file with nothing remembered is read, and refused.
+      expect(await r.compareRow(r.indicator, {}, {})).toEqual(refused("handover.copy_mismatch"));
+    });
+
+    it("its integrity check runs once, on a thread of its own", async () => {
+      const r = await rig();
+      integrityThreads.paths.length = 0;
+      const found: CopyFileChecks = {};
+      await r.compareRow(r.indicator, {}, found);
+      await r.compareRow(r.indicator, {}, found);
+      expect(integrityThreads.paths).toEqual([r.path]);
+      // Control: a new file is checked.
+      await r.compareRow(r.indicator, {}, {});
+      expect(integrityThreads.paths).toEqual([r.path, r.path]);
+    });
+
+    it("a refused file's integrity check is not remembered as passed", async () => {
+      const r = await rig();
+      await writeFile(r.path, "x".repeat(8192));
+      const found: CopyFileChecks = {};
+      const envelope = await r.resignedForFile();
+      expect(await r.compareRow(envelope, {}, found)).toEqual(refused("handover.copy_damaged"));
+      expect(await r.compareRow(envelope, {}, found)).toEqual(refused("handover.copy_damaged"));
+    });
+
+    it("its modules' checks run once, and a passing or refusing answer is kept", async () => {
+      const r = await rig();
+      const checkCopy = vi.fn(async (): Promise<"ok" | "broken"> => "ok");
+      const counted: WaitronModule = {
+        ...ALL_MODULES[0]!,
+        name: "counted",
+        handover: { summarise: async () => ({}), checkCopy },
+      };
+      const modules = [...ALL_MODULES, counted];
+      const listed = (body: Mutable) => {
+        body.snapshot.modules.push({ name: "counted", version: counted.version });
+        body.modulesSummary.counted = {};
+      };
+      const envelope = r.resigned(listed);
+      const found: CopyFileChecks = {};
+      expect(await r.compareRow(envelope, { modules }, found)).toEqual({ ok: true });
+      expect(await r.compareRow(envelope, { modules }, found)).toEqual({ ok: true });
+      expect(checkCopy).toHaveBeenCalledTimes(1);
+
+      checkCopy.mockResolvedValue("broken");
+      const refusing: CopyFileChecks = {};
+      const answer = refused("handover.chain_broken", { module: "counted" });
+      expect(await r.compareRow(envelope, { modules }, refusing)).toEqual(answer);
+      expect(await r.compareRow(envelope, { modules }, refusing)).toEqual(answer);
+      expect(checkCopy).toHaveBeenCalledTimes(2);
+    });
+
+    it("what only the spare's own files say is read every time", async () => {
+      const r = await rig();
+      const found: CopyFileChecks = {};
+      await writeFile(join(r.m2State, "backup.env"), SETTINGS);
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual(
+        refused("handover.backup_settings_differ"),
+      );
+      await rm(join(r.m2State, "backup.env"));
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual({ ok: true });
+    });
+
+    it("a kept file that is gone, or another size, is refused so it is fetched again", async () => {
+      const r = await rig();
+      const found: CopyFileChecks = {};
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual({ ok: true });
+      const bytes = await readFile(r.path);
+      await writeFile(r.path, bytes.subarray(0, bytes.length - 4096));
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual(refused("handover.copy_mismatch"));
+      await rm(r.path);
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual(refused("handover.copy_mismatch"));
+    });
+
+    it("a kept path that cannot be read for another reason stays a fault", async () => {
+      const r = await rig();
+      const found: CopyFileChecks = {};
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual({ ok: true });
+      await rm(dirname(r.path), { recursive: true });
+      await writeFile(dirname(r.path), "a file where the folder was");
+      await expect(r.compareRow(r.indicator, {}, found)).rejects.toMatchObject({
+        code: "ENOTDIR",
+      });
+    });
+
+    it("a stop during the check rejects, and leaves nothing remembered", async () => {
+      const r = await rig();
+      const stopping = new AbortController();
+      stopping.abort(new Error("stopping"));
+      const found: CopyFileChecks = {};
+      await expect(
+        compareFinalCopy(r.deps, await r.row(), r.indicator, r.path, {
+          found,
+          signal: stopping.signal,
+        }),
+      ).rejects.toThrow("stopping");
+      expect(found).toEqual({});
+    });
+  });
+
   describe("each module's own check of the copy", () => {
     it("one record's amount changed, with a re-signed indicator, is refused naming the module", async () => {
       const r = await rig();
@@ -605,9 +784,9 @@ describe("compareFinalCopy", () => {
       const path = join(scratch, "elsewhere.db");
       await copyFile(r.path, path);
       await rm(r.m2State, { recursive: true });
-      expect(await compareFinalCopy(r.deps, await r.row(), r.indicator, path)).toEqual(
-        refused("handover.destination_settings_unreadable", { file: "backup.env" }),
-      );
+      expect(
+        await compareFinalCopy(r.deps, await r.row(), r.indicator, path, { found: {} }),
+      ).toEqual(refused("handover.destination_settings_unreadable", { file: "backup.env" }));
     });
 
     it("a spare's own file that cannot be read is refused naming it", async () => {
@@ -718,12 +897,10 @@ describe("compareFinalCopy", () => {
       );
     });
 
-    it("a copy whose row for this box names no existing location is refused", async () => {
+    it("a row for this box with this box's key is enough, whatever else the row holds", async () => {
       const r = await rig();
       alter(r.path, `update nodes set location_id = 'gone' where id = '${r.m2.nodeId}'`);
-      expect(await r.compareRow(await r.resignedForFile())).toEqual(
-        refused("handover.copy_lacks_destination"),
-      );
+      expect(await r.compareRow(await r.resignedForFile())).toEqual({ ok: true });
     });
 
     it("control: the live venue's row has this box's own key", async () => {
@@ -778,9 +955,9 @@ describe("compareFinalCopy", () => {
     it("an operation stored with no offer is a fault in Waitron, not a refusal", async () => {
       const r = await rig();
       const without = { ...(await r.row()), operationId: OTHER_OP };
-      await expect(compareFinalCopy(r.deps, without, r.indicator, r.path)).rejects.toThrow(
-        OTHER_OP,
-      );
+      await expect(
+        compareFinalCopy(r.deps, without, r.indicator, r.path, { found: {} }),
+      ).rejects.toThrow(OTHER_OP);
     });
   });
 
@@ -889,8 +1066,8 @@ describe("the spare's duty runs the real comparison", () => {
         stateDir: r.m2State,
         log,
         tickMs: 20,
-        compare: (operation, indicator, path) =>
-          compareFinalCopy(r.deps, operation, indicator, path),
+        compare: (operation, indicator, path, options) =>
+          compareFinalCopy(r.deps, operation, indicator, path, options),
         ...overrides,
       });
       closers.push(() => duty!.stop());
@@ -904,8 +1081,9 @@ describe("the spare's duty runs the real comparison", () => {
   it("a copy differing by one late row is refused, M1 stays stepped down, and it is fetched again", async () => {
     const r = await dutyRig();
     let late = true;
-    const compare = vi.fn((operation: HandoverOperation, indicator: unknown, path: string) =>
-      compareFinalCopy(r.deps, operation, indicator, path),
+    const compare = vi.fn(
+      (operation: HandoverOperation, indicator: unknown, path: string, options: CompareOptions) =>
+        compareFinalCopy(r.deps, operation, indicator, path, options),
     );
     const download = vi.fn(async (...args: Parameters<typeof boxDownload>) => {
       const answer = await boxDownload(...args);
@@ -952,5 +1130,48 @@ describe("the spare's duty runs the real comparison", () => {
       timeout: 15_000,
     });
     expect(r.copyReads()).toBe(1);
+  }, 60_000);
+
+  it("waiting on a setting checks the file once however often it compares", async () => {
+    const r = await dutyRig();
+    await writeFile(join(r.m2State, "backup.env"), SETTINGS);
+    const compare = vi.fn(
+      (operation: HandoverOperation, indicator: unknown, path: string, options: CompareOptions) =>
+        compareFinalCopy(r.deps, operation, indicator, path, options),
+    );
+    integrityThreads.paths.length = 0;
+    await r.start({ compare, compareRetryMs: 30 });
+    await vi.waitFor(() => expect(compare.mock.calls.length).toBeGreaterThanOrEqual(3), {
+      timeout: 15_000,
+    });
+    // Failing case: one thread per compare, each reading the whole file.
+    expect(integrityThreads.paths).toEqual([r.path]);
+    expect(r.copyReads()).toBe(1);
+  }, 60_000);
+
+  it("a file fetched again is checked again from nothing", async () => {
+    const r = await dutyRig();
+    let late = true;
+    const seen: CopyFileChecks[] = [];
+    const compare = vi.fn(
+      (operation: HandoverOperation, indicator: unknown, path: string, options: CompareOptions) => {
+        seen.push(options.found);
+        return compareFinalCopy(r.deps, operation, indicator, path, options);
+      },
+    );
+    const download = vi.fn(async (...args: Parameters<typeof boxDownload>) => {
+      const answer = await boxDownload(...args);
+      if (late) {
+        late = false;
+        alter(args[2], `update persons set display_name = 'Late' where id = '${r.authorisedBy}'`);
+      }
+      return answer;
+    });
+    await r.start({ compare, download });
+    await vi.waitFor(() => expect(seen.at(-1)?.bytesAndIntegrity).toBe(true), { timeout: 15_000 });
+    // Failing case: the second file carries the first's record, or no second file was compared.
+    expect(seen.length).toBe(2);
+    expect(seen[0]).not.toBe(seen[1]);
+    expect(seen[0]).toEqual({});
   }, 60_000);
 });

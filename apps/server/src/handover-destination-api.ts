@@ -12,6 +12,8 @@ import { readHandoverOperation, readNodeMode } from "@waitron/node-db";
 import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { AppError, isUuid } from "@waitron/shared";
 import {
+  imageMigrationsDigest,
+  isDigest,
   offerSettingsDifference,
   parseOfferSettings,
   readOfferSettings,
@@ -41,11 +43,13 @@ const STATUS = {
 
 export interface HandoverDestinationDeps extends PeerStatusApiDeps {
   stateDir: string;
+  migrationsRoot: string | null;
 }
 
 interface OfferBody {
   binding: HandoverBinding;
   settings: OfferSettings;
+  imageMigrations: string;
 }
 
 interface VerifiedOffer extends OfferBody {
@@ -59,11 +63,18 @@ function invalid(field: string): never {
 function offerBodyOf(body: unknown): OfferBody {
   if (body === null || typeof body !== "object" || Array.isArray(body)) invalid("body");
   const fields = body as Record<string, unknown>;
-  if (Object.keys(fields).sort().join() !== "authorisedBy,binding,settings") invalid("body");
+  if (Object.keys(fields).sort().join() !== "authorisedBy,binding,imageMigrations,settings") {
+    invalid("body");
+  }
   if (typeof fields.authorisedBy !== "string" || !isUuid(fields.authorisedBy)) {
     invalid("authorisedBy");
   }
-  return { binding: parseBinding(fields.binding), settings: parseOfferSettings(fields.settings) };
+  if (!isDigest(fields.imageMigrations)) invalid("imageMigrations");
+  return {
+    binding: parseBinding(fields.binding),
+    settings: parseOfferSettings(fields.settings),
+    imageMigrations: fields.imageMigrations,
+  };
 }
 
 async function verifiedOffer(c: Context, deps: PeerStatusApiDeps): Promise<VerifiedOffer> {
@@ -73,11 +84,11 @@ async function verifiedOffer(c: Context, deps: PeerStatusApiDeps): Promise<Verif
     if (verdict.reason === "malformed" || verdict.reason === "wrong_purpose") invalid("envelope");
     throw new AppError("handover.peer_unknown", {});
   }
-  const { binding, settings } = offerBodyOf(verdict.body);
+  const { binding, settings, imageMigrations } = offerBodyOf(verdict.body);
   if (verdict.signerNodeId !== binding.sourceNodeId) invalid("sourceNodeId");
   if (binding.destinationNodeId !== deps.nodeId) invalid("destinationNodeId");
   if (binding.scenario !== "controlled") invalid("scenario");
-  return { envelope: raw as SignedHandoverEnvelope<unknown>, binding, settings };
+  return { envelope: raw as SignedHandoverEnvelope<unknown>, binding, settings, imageMigrations };
 }
 
 async function matchesThisBox(deps: PeerStatusApiDeps, binding: HandoverBinding): Promise<boolean> {
@@ -106,7 +117,7 @@ export function mountHandoverDestinationApi(
 
   app.post("/api/node/handover/offer", (c) =>
     run(c, log, async () => {
-      const { envelope, binding, settings } = await verifiedOffer(c, deps);
+      const { envelope, binding, settings, imageMigrations } = await verifiedOffer(c, deps);
       const { operationId } = binding;
       const stored = await readHandoverOperation(deps.node, deps.nodeId, operationId);
       // Before the mode and the chart: a retry must still answer once this box has moved on.
@@ -118,6 +129,9 @@ export function mountHandoverDestinationApi(
         if (mode !== "mirror") throw new AppError("handover.not_a_spare", {});
         if (!(await matchesThisBox(deps, binding))) {
           throw new AppError("handover.membership_mismatch", { operationId });
+        }
+        if (imageMigrations !== imageMigrationsDigest(deps.migrationsRoot)) {
+          throw new AppError("handover.modules_differ", {});
         }
         const own = await readOfferSettings(
           deps.stateDir,

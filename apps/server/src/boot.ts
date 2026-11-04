@@ -2301,7 +2301,7 @@ async function bootServer(
     nodeId: tradingContext.nodeId,
     stateDir: config.stateDir,
     log,
-    compare: (operation, indicator, copyPath) =>
+    compare: (operation, indicator, copyPath, options) =>
       compareFinalCopy(
         {
           db,
@@ -2315,6 +2315,7 @@ async function bootServer(
         operation,
         indicator,
         copyPath,
+        options,
       ),
   });
   if (handoverDestinationDuty !== undefined) {
@@ -2322,7 +2323,14 @@ async function bootServer(
   }
   mountHandoverDestinationApi(
     app,
-    { db, node: store.node, ring, nodeId: tradingContext.nodeId, stateDir: config.stateDir },
+    {
+      db,
+      node: store.node,
+      ring,
+      nodeId: tradingContext.nodeId,
+      stateDir: config.stateDir,
+      migrationsRoot: config.migrationsRoot,
+    },
     log,
     () => handoverDestinationDuty?.wake(),
   );
@@ -3426,6 +3434,7 @@ async function bootServer(
       ring,
       nodeId: tradingContext.nodeId,
       stateDir: config.stateDir,
+      migrationsRoot: config.migrationsRoot,
       advertisedOrigin: config.advertisedOrigin,
       credentialKeyRing: totpKeyRing,
       rpId: config.managementRpId,

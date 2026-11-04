@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
+import { eq } from "drizzle-orm";
 import type { Context, Hono } from "hono";
-import { readNodeMembership } from "@waitron/db";
+import { nodes, readNodeMembership } from "@waitron/db";
 import {
   bindingFingerprint,
   isOperationId,
@@ -30,7 +31,12 @@ import {
 import { AppError, isAppError, isUuid } from "@waitron/shared";
 import { askPeerStatus, originOf, postToBox } from "./boot-peer-check.js";
 import { confirmFreshSignIn } from "./fresh-sign-in.js";
-import { isManifestStateFile, readOfferSettings, type OfferSettings } from "./handover-manifest.js";
+import {
+  imageMigrationsDigest,
+  isManifestStateFile,
+  readOfferSettings,
+  type OfferSettings,
+} from "./handover-manifest.js";
 import { currentBinding, peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import type { HandoverGate } from "./handover-gate.js";
 import { handoverPageAt, handoverPageOf } from "./handover-status-api.js";
@@ -48,6 +54,7 @@ import "./errors.js";
 
 export interface HandoverSourceStartDeps extends PeerStatusApiDeps {
   stateDir: string;
+  migrationsRoot: string | null;
   advertisedOrigin: string;
   credentialKeyRing: TotpKeyRing;
   rpId: string;
@@ -90,6 +97,7 @@ const STATUS = {
   "handover.destination_not_spare": 409,
   "handover.destination_unaddressable": 409,
   "handover.destination_unreachable": 409,
+  "handover.destination_not_joined": 409,
   "handover.restarted_before_stepdown": 409,
   "handover.membership_changed": 409,
   "handover.backup_settings_differ": 409,
@@ -184,6 +192,19 @@ function refusalOf(error: unknown): HandoverRefusal {
 function spareIn(held: SignedMembershipDocument, id: string) {
   const entry = held.body.nodes.find((node) => node.nodeId === id);
   return entry?.standing === "serving-secondary" ? entry : null;
+}
+
+/**
+ * Whether this box's own `nodes` holds `id` under the key the chart vouches for. The final copy is
+ * this file's bytes, and the spare refuses a copy without that row, by when this box has stopped.
+ */
+async function holdsJoinedSpare(deps: HandoverSourceStartDeps, id: string): Promise<boolean> {
+  const chartKey = (await peerKeyOf(deps))(id);
+  const [row] = await deps.db
+    .select({ publicKey: nodes.publicKey })
+    .from(nodes)
+    .where(eq(nodes.id, id));
+  return chartKey !== undefined && row?.publicKey === chartKey;
 }
 
 /** `POST /management-api/handover` — a person holding `node.promote` starts a controlled handover. */
@@ -338,6 +359,15 @@ export function mountHandoverSourceStartApi(
     if (bindingFingerprint(binding) !== stored.fingerprint) {
       return abandon(operationId, { code: "handover.membership_changed", params: {} });
     }
+    // Before the offer goes, as `answerToOffer` reads the same key: a read that fails sends nothing.
+    const joined = await holdsJoinedSpare(deps, destinationNodeId).catch(() => null);
+    if (joined === null) return abandon(operationId, unreachable(destinationNodeId));
+    if (!joined) {
+      return abandon(operationId, {
+        code: "handover.destination_not_joined",
+        params: { destinationNodeId },
+      });
+    }
     const offer = await readHandoverEvent(deps.node, deps.nodeId, operationId, "offer");
     // A fault in Waitron: this route records the offer in the transaction that begins the operation.
     if (offer?.envelope == null) throw new Error(`no offer event for handover ${operationId}`);
@@ -383,6 +413,9 @@ export function mountHandoverSourceStartApi(
     if (status === null) {
       throw new AppError("handover.destination_unreachable", { destinationNodeId });
     }
+    if (!(await holdsJoinedSpare(deps, destinationNodeId))) {
+      throw new AppError("handover.destination_not_joined", { destinationNodeId });
+    }
     const binding = await currentBinding(
       deps,
       "controlled",
@@ -399,6 +432,7 @@ export function mountHandoverSourceStartApi(
       binding: binding as unknown as CanonicalValue,
       authorisedBy: personId,
       settings: settings as unknown as CanonicalValue,
+      imageMigrations: imageMigrationsDigest(deps.migrationsRoot),
     });
     if (deps.gate.isClosed()) {
       // A stepped-down box records nothing and offers nothing. With no operation of its own open,

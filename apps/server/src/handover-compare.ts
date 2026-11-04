@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
+import { stat } from "node:fs/promises";
 import { nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import type { Database, NodeDatabase } from "@waitron/db";
 import {
@@ -18,6 +18,7 @@ import { modulePreparationMergeFits, quoteIdent, unknownHashes } from "@waitron/
 import { isAppError, type ErrorCode } from "@waitron/shared";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { digestBytes } from "./handover-capture.js";
+import { isCopyIntact } from "./handover-integrity.js";
 import {
   offerSettingsDifference,
   readOfferSettings,
@@ -43,6 +44,21 @@ export type CompareOutcome =
 
 type Refusal = Extract<CompareOutcome, { ok: false }>;
 
+/**
+ * What one received file, with its one indicator, has already answered. Whoever holds the file
+ * holds this beside it for as long as it keeps the file: nothing writes the file, so only what the
+ * spare's own files say can change between tries.
+ */
+export interface CopyFileChecks {
+  bytesAndIntegrity?: true;
+  moduleChecks?: Refusal | null;
+}
+
+export interface CompareOptions {
+  found: CopyFileChecks;
+  signal?: AbortSignal;
+}
+
 const refuse = (reason: ErrorCode, detail: CanonicalValue = {}): Refusal => ({
   ok: false,
   reason,
@@ -67,6 +83,7 @@ export async function compareFinalCopy(
   operation: HandoverOperation,
   indicator: unknown,
   copyPath: string,
+  { found, signal }: CompareOptions,
 ): Promise<CompareOutcome> {
   let body: FinalStateIndicator;
   try {
@@ -82,15 +99,23 @@ export async function compareFinalCopy(
   if (bindingFingerprint(body.binding) !== operation.fingerprint) {
     return refuse("handover.indicator_mismatch", { field: "binding" });
   }
-  if (!(await holdsDescribedBytes(copyPath, body))) return refuse("handover.copy_mismatch");
-  if (!isIntact(copyPath)) return refuse("handover.copy_damaged");
+  if (found.bytesAndIntegrity === true) {
+    if (!(await stillSameSize(copyPath, body))) return refuse("handover.copy_mismatch");
+  } else {
+    if (!(await holdsDescribedBytes(copyPath, body))) return refuse("handover.copy_mismatch");
+    if (!(await isCopyIntact(copyPath, signal === undefined ? {} : { signal }))) {
+      return refuse("handover.copy_damaged");
+    }
+    found.bytesAndIntegrity = true;
+  }
 
   const copy = await openBackupQuery(copyPath);
   try {
     return (
       (await aheadOfThisImage(copy.query, deps.migrationsRoot)) ??
       modulesDiffer(body, deps.modules) ??
-      (await moduleCheckRefused(deps.modules, copy.query)) ??
+      (await behindThisImage(copy.query, deps.modules, deps.migrationsRoot)) ??
+      (await rememberedModuleChecks(found, deps.modules, copy.query)) ??
       (await settingsRefused(deps, body)) ??
       (await summaryRefused(deps.modules, copy.query, body)) ??
       (await destinationRefused(deps, copy.query)) ??
@@ -111,19 +136,13 @@ async function holdsDescribedBytes(path: string, body: FinalStateIndicator): Pro
   }
 }
 
-/** On its own open: the copy query's authoriser refuses a pragma, and a refusal closes it. */
-function isIntact(path: string): boolean {
+/** What a kept file's checks cannot see of a file gone or cut short, without reading it again. */
+async function stillSameSize(path: string, body: FinalStateIndicator): Promise<boolean> {
   try {
-    const db = new DatabaseSync(path, { readOnly: true, allowExtension: false });
-    try {
-      db.exec("pragma query_only=on");
-      const checks = db.prepare("pragma integrity_check").all();
-      return checks.length === 1 && checks[0]!.integrity_check === "ok";
-    } finally {
-      db.close();
-    }
-  } catch {
-    return false;
+    return (await stat(path)).size === body.snapshot.bytes;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
   }
 }
 
@@ -145,13 +164,39 @@ async function hasTable(query: BackupQuery, name: string): Promise<boolean> {
 async function aheadOfThisImage(query: BackupQuery, root: string | null): Promise<Refusal | null> {
   for (const set of manifestSets()) {
     if (set.database === "node" || !(await hasTable(query, set.table))) continue;
-    const hashes: string[] = [];
-    for await (const row of query.rows(`select hash from ${quoteIdent(set.table)}`)) {
-      hashes.push(String(row.hash));
-    }
+    const hashes = await journalOf(query, set.table);
     const unknownMigrations = unknownHashes(hashes, imageMigrationHashes(set, root));
     if (unknownMigrations.length > 0) {
       return refuse("provisioning.database_ahead", { set: set.name, unknownMigrations });
+    }
+  }
+  return null;
+}
+
+async function journalOf(query: BackupQuery, table: string): Promise<string[]> {
+  const hashes: string[] = [];
+  for await (const row of query.rows(`select hash from ${quoteIdent(table)}`)) {
+    hashes.push(String(row.hash));
+  }
+  return hashes;
+}
+
+/**
+ * Only the sets this box switches on: the old box's start migrates those, so its copy is level with
+ * its image there, and a set switched off long ago may rightly stand behind. Module versions cannot
+ * find this: every module's is `0.0.0`. A module's check or summary must not read a schema older
+ * than its code.
+ */
+async function behindThisImage(
+  query: BackupQuery,
+  modules: readonly WaitronModule[],
+  root: string | null,
+): Promise<Refusal | null> {
+  for (const { migrations: set } of modules) {
+    if (set.database === "node" || !(await hasTable(query, set.table))) continue;
+    const held = await journalOf(query, set.table);
+    if (unknownHashes(imageMigrationHashes(set, root), held).length > 0) {
+      return refuse("handover.modules_differ", { set: set.name });
     }
   }
   return null;
@@ -177,6 +222,17 @@ async function moduleCheckRefused(
     return refusalOr(error, "handover.copy_check_failed");
   }
   return answer.ok ? null : refuse("handover.chain_broken", { module: answer.module });
+}
+
+async function rememberedModuleChecks(
+  found: CopyFileChecks,
+  modules: readonly WaitronModule[],
+  query: BackupQuery,
+): Promise<Refusal | null> {
+  if (found.moduleChecks === undefined) {
+    found.moduleChecks = await moduleCheckRefused(modules, query);
+  }
+  return found.moduleChecks;
 }
 
 function rowOf(body: FinalStateIndicator, item: string) {
@@ -241,13 +297,9 @@ async function summaryRefused(
   return null;
 }
 
-/** A start on this copy needs this box's row and its location (`boot.ts`'s `readNodeLocation`). */
 async function destinationRefused(deps: CompareDeps, query: BackupQuery): Promise<Refusal | null> {
   const ownKey = nodeSigningPublicKey(await readNodeIdentityKey(deps.node, deps.ring, deps.nodeId));
-  for await (const row of query.rows(
-    `select n.public_key from nodes n join locations l on l.id = n.location_id where n.id = ?`,
-    [deps.nodeId],
-  )) {
+  for await (const row of query.rows("select public_key from nodes where id = ?", [deps.nodeId])) {
     if (row.public_key === ownKey) return null;
   }
   return refuse("handover.copy_lacks_destination");

@@ -5,14 +5,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import { serve } from "@hono/node-server";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Hono, type Context } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
+  insertReservedNodeTx,
+  nodes,
   readTenant,
   stampDeployment,
+  venueLocationId,
   withNodeTransaction,
+  withTransaction,
   writeNodeMembership,
   type Database,
   type NodeDatabase,
@@ -53,6 +57,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { BackgroundDuties } from "./background-duties.js";
 import { createHandoverGate, type HandoverGate } from "./handover-gate.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
+import { imageMigrationsDigest } from "./handover-manifest.js";
 import { promotionTurn } from "./handover-promotion-turn.js";
 import {
   mountHandoverSourceStartApi,
@@ -65,6 +70,7 @@ import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 import { closeSupersededOperation, repairAtStart } from "./start-peer-check.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { copyImageMigrations } from "./testing/image-migrations.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 
 const RING: KeyRing = loadKeyRing({
@@ -141,6 +147,22 @@ async function holdChart(
   for (const db of boxes) await writeNodeMembership(db, held);
 }
 
+/** The spare's row in the main box's own file, as A947 3b's Task 6.2 plans to write it. */
+async function writeSpareRow(publicKey: string): Promise<void> {
+  const locationId = await venueLocationId(mainBox.db);
+  await withTransaction(mainBox.db, (tx) =>
+    insertReservedNodeTx(tx, {
+      id: spare,
+      locationId,
+      name: "Test node (standby)",
+      filingModule: null,
+      taxModule: null,
+      publicKey,
+      endorsement: endorseKey(spare, publicKey, self, selfKey),
+    }),
+  );
+}
+
 function mount(
   overrides: Partial<HandoverSourceStartDeps> = {},
   behindTheGate: (built: Hono) => void = () => {},
@@ -156,6 +178,7 @@ function mount(
       ring: RING,
       nodeId: self,
       stateDir: mainState,
+      migrationsRoot: null,
       advertisedOrigin: MAIN_URL,
       credentialKeyRing: TOTP_KEY_RING,
       rpId: "localhost",
@@ -200,6 +223,7 @@ beforeEach(async () => {
     publicKey: nodeSigningPublicKey(selfKey),
   });
   await holdChart(chartNodes());
+  await writeSpareRow(nodeSigningPublicKey(spareKey));
   const session = await openManagementSession(mainBox.db, "admin");
   personId = session.personId;
   cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
@@ -212,7 +236,11 @@ beforeEach(async () => {
   const spareDeps = { db: spareBox.db, node: spareBox.node, ring: RING, nodeId: spare };
   mountPeerStatusApi(spareApp, spareDeps, () => undefined);
   mountHandoverStatusApi(spareApp, spareDeps, () => undefined);
-  mountHandoverDestinationApi(spareApp, { ...spareDeps, stateDir: spareState }, () => undefined);
+  mountHandoverDestinationApi(
+    spareApp,
+    { ...spareDeps, stateDir: spareState, migrationsRoot: null },
+    () => undefined,
+  );
   app = mount();
 });
 
@@ -354,6 +382,9 @@ describe("a valid start", () => {
     expect(verdict.body.authorisedBy).toBe(personId);
     expect(verdict.body.binding).toEqual(operations()[0]!.binding);
     expect(events(spareBox)[0]!.envelope).toBe(offer!.envelope);
+    expect((verdict.body as unknown as { imageMigrations: string }).imageMigrations).toBe(
+      imageMigrationsDigest(null),
+    );
   });
 
   it("reaches the stepdown seam once, after the offer, with this request and the binding", async () => {
@@ -658,6 +689,34 @@ describe("the checks before anything is recorded", () => {
     });
     expect(await start()).toEqual(unreachable());
     await expectNothingRecorded();
+  });
+
+  describe("the spare's row in this box's own file", () => {
+    const dropSpareRow = () => mainBox.db.delete(nodes).where(eq(nodes.id, spare));
+
+    it("no row: refused before anything stops, sending no offer", async () => {
+      await dropSpareRow();
+      // Failing case: 200, a `prepared` row on both boxes and the stepdown seam reached.
+      expect(await start()).toEqual(
+        refusal(409, "handover.destination_not_joined", { destinationNodeId: spare }),
+      );
+      await expectNothingRecorded();
+      expect(exchanged).toEqual([QUERY_PATH]);
+    });
+
+    it("a row holding another key is refused the same way", async () => {
+      await dropSpareRow();
+      await writeSpareRow(generateNodeKeyPair().publicKey);
+      expect(await start()).toEqual(
+        refusal(409, "handover.destination_not_joined", { destinationNodeId: spare }),
+      );
+      await expectNothingRecorded();
+    });
+
+    it("control: the row the chart's key names lets the start go on", async () => {
+      expect((await start()).status).toBe(200);
+      expect(stepDownAfterOffer).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("refuses while another handover is open on this box, sending no offer", async () => {
@@ -1045,6 +1104,15 @@ describe("a `prepared` one whose chart has changed since", () => {
     await expectRefusedUnsent(await start(), "handover.not_main_box");
   });
 
+  it("the spare's row gone from this box's own file: abandoned, sending nothing", async () => {
+    await startedThenForgotten();
+    await mainBox.db.delete(nodes).where(eq(nodes.id, spare));
+
+    await expectRefusedUnsent(await start(), "handover.destination_not_joined", {
+      destinationNodeId: spare,
+    });
+  });
+
   it("no chart held any more: abandoned, sending nothing", async () => {
     await startedThenForgotten();
     await mainBox.db.run(sql`delete from node_membership`);
@@ -1188,6 +1256,30 @@ describe("the settings the offer carries", () => {
     it("the same when only the spare holds backup settings", async () => {
       await write(spareState, "backup.env", BACKUP);
       await expectRefusedByTheSpare("handover.backup_settings_differ");
+    });
+
+    it("A spare on an image one migration behind is refused the same way", async () => {
+      const root = join(spareState, "older-image");
+      await copyImageMigrations(root, "fiscal-verifactu");
+      spareApp = new Hono();
+      mountHandoverDestinationApi(
+        spareApp,
+        {
+          db: spareBox.db,
+          node: spareBox.node,
+          ring: RING,
+          nodeId: spare,
+          stateDir: spareState,
+          migrationsRoot: root,
+        },
+        () => undefined,
+      );
+      mountPeerStatusApi(
+        spareApp,
+        { db: spareBox.db, node: spareBox.node, ring: RING, nodeId: spare },
+        () => undefined,
+      );
+      await expectRefusedByTheSpare("handover.modules_differ");
     });
 
     it("An offer whose module settings differ is refused the same way", async () => {

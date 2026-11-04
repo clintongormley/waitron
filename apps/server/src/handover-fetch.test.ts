@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { getRequestListener } from "@hono/node-server";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   stampDeployment,
@@ -1120,6 +1120,33 @@ describe("a stop or a changed row while a request is out", () => {
     expect(existsSync(r.received())).toBe(false);
   });
 
+  it("a stop during a comparison ends it by its signal, and that is not logged as a fault", async () => {
+    const r = await rig();
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    let release = () => {};
+    const compare = vi.fn<NonNullable<DestinationDutyDeps["compare"]>>(
+      (_operation, _indicator, _path, { signal }) =>
+        new Promise((_resolve, reject) => {
+          release = () => reject(new Error("released"));
+          signal?.addEventListener("abort", () => reject(new Error("stopping")));
+        }),
+    );
+    const duty = (await r.start({ compare }))!;
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    logLines.length = 0;
+    const stopped = duty.stop().then(() => "stopped");
+    const answer = await Promise.race([
+      stopped,
+      new Promise((resolve) => setTimeout(() => resolve("still comparing"), 1000)),
+    ]);
+    release();
+    await stopped;
+    // Failing case, a comparison told no signal: "still comparing".
+    expect(answer).toBe("stopped");
+    expect(logLines.filter((line) => line[1] === "handover-destination.pass_failed")).toEqual([]);
+  });
+
   it("a stop landing after the file is whole compares nothing and keeps no copy", async () => {
     const r = await rig();
     await r.stepDownM1();
@@ -1305,11 +1332,14 @@ describe("a compare that throws", () => {
         held.push(existsSync(path));
         return refuseAgain ? refusing(reason) : { ok: true as const };
       });
-      await r.start({ compare, monotonicNow: () => 1000 });
+      // No tick of its own, so nothing can fetch again before the file's absence is read.
+      const duty = (await r.start({ compare, monotonicNow: () => 1000, tickMs: 3_600_000 }))!;
       await vi.waitFor(async () => expect((await r.m2Row()).waitingReason).toBe(reason), {
         timeout: 10_000,
       });
       expect(existsSync(r.received())).toBe(false);
+      const ticking = setInterval(() => duty.wake(), TICK_MS);
+      onTestFinished(() => clearInterval(ticking));
       await vi.waitFor(() => expect(r.copyReads()).toBeGreaterThan(1), { timeout: 10_000 });
       await vi.waitFor(() => expect(compare.mock.calls.length).toBeGreaterThan(1));
       refuseAgain = false;

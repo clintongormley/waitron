@@ -371,6 +371,7 @@ describe("a full start's stepdown, through its test seam", () => {
             },
             authorisedBy: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
             settings: { backupSettings: null, moduleSettings: null, ringVersions: [1] },
+            imageMigrations: "a".repeat(64),
           },
           MAIN_BOX,
         ),
@@ -595,11 +596,7 @@ describe("a full start's stepdown, through its test seam", () => {
       });
     };
 
-    const startOnce = async (
-      restart: () => void,
-      beforeStart?: () => void,
-      options: { joined?: boolean } = {},
-    ) => {
+    const startOnce = async (restart: () => void, beforeStart?: () => void) => {
       let cookie = "";
       const started = await boot(suite, {
         restricted: false,
@@ -612,7 +609,7 @@ describe("a full start's stepdown, through its test seam", () => {
         },
         beforeListening: async (nodeId, privateKey) => {
           await holdChartNamingSpare(nodeId, privateKey);
-          if (options.joined === true) await addSpareRow(nodeId);
+          await addSpareRow(nodeId);
         },
       });
       return { ...started, cookie };
@@ -659,7 +656,7 @@ describe("a full start's stepdown, through its test seam", () => {
       let port = 0;
       let nodeId = "";
       await listenAsSpare(() => handChart(port, chartNodes(nodeId)));
-      const started = await startOnce(restart, undefined, { joined: true });
+      const started = await startOnce(restart);
       port = started.port;
       nodeId = started.venue.cfg.nodeId;
       return { ...started, nodeId };
@@ -810,7 +807,6 @@ describe("a full start's stepdown, through its test seam", () => {
 
       const nextPort = await startAgain(env, async () => {
         suite.node.run(sql`drop trigger refuse_restriction`);
-        await addSpareRow(nodeId);
       });
 
       expect((await readHandoverOperation(suite.node, nodeId, OP))?.state).toBe("abandoned");
