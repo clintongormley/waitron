@@ -71,12 +71,9 @@ Firing held work at the same station does not duplicate an existing allergy corr
 a dish into a draft ends its old kitchen work. Sending that draft again creates a new kitchen copy
 from the instructions you confirm for that send.
 
-When a bill with dishes on hold moves to another table, each station with a moved dish on its
-paper whose **Print a slip when sent dishes move table** setting is **Print** gets a **MOVED** slip
-listing the dishes that moved, the held ones under HOLD with their group's number at the new table.
-A held dish whose group's HOLD paper never reached that station is not listed there. The new
-table's ticket marked FIRE lists only those dishes, and the old table's lists only the dishes that
-stayed. Nothing already printed is printed again.
+When dishes on hold move to another table, the **MOVED** slip lists them under HOLD with their
+group's new number, if their HOLD ticket was printed. Each table's fire ticket then lists only its
+own dishes.
 
 ## Read a group's heading on kitchen paper {#group-headings}
 

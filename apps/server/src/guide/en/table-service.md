@@ -327,16 +327,9 @@ again to choose afresh.
 
 ## Move a bill or split a table with dishes on hold {#held-dishes-move}
 
-A bill with dishes on hold can go to another table with **Move this bill**, and **Split a table**
-can take it with the table that leaves. At the other table the dishes stay on hold, in a group of
-their own with that table's next number. Each table fires its own group: firing one sends none of
-the other table's dishes. If nobody has answered the allergy question at the other table yet,
-firing there says **Record an allergy answer before sending dishes.**: answer it under
-**Allergies** in the **⋮** menu, then fire again.
-
-A bill with dishes on hold cannot move to the counter. The till says **Items still on hold cannot
-move to the counter until their group is fired. They can move to another table.** Fire their group
-first, or move the bill to a table.
+A bill with dishes on hold can go to another table with **Move this bill** or **Split a table**.
+The dishes stay on hold there, in a group with that table's next number. Each table then fires its
+own group: firing one sends none of the other table's dishes.
 
 ## Name a bill {#bill-names}
 

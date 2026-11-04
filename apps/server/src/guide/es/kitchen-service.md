@@ -79,13 +79,9 @@ Enviar a preparar el trabajo en espera en la misma estación no duplica una corr
 existente. Recuperar un plato a un borrador termina su trabajo anterior en cocina. Volver a enviar
 ese borrador crea una copia nueva con las instrucciones que confirmas para ese envío.
 
-Cuando una cuenta con platos en espera pasa a otra mesa, cada estación que tiene en papel un plato
-movido y tiene **Imprimir un aviso al cambiar de mesa los platos enviados** en **Imprimir** recibe
-un ticket **MOVIDO** con los platos que se han movido; los que están en espera aparecen bajo EN
-ESPERA, con el número de su grupo en la mesa nueva. Un plato en espera cuyo grupo no tiene lo
-impreso en espera en esa estación no aparece en ella. La comanda marcada FIRE de la mesa nueva
-lleva solo esos platos, y la de la mesa anterior solo los que se quedaron. No se vuelve a imprimir
-nada de lo ya impreso.
+Cuando unos platos en espera pasan a otra mesa, el ticket **MOVIDO** los lista bajo EN ESPERA con
+el nuevo número de su grupo, si se imprimió su ticket en espera. Después, la comanda de cada mesa al
+marchar lleva solo sus propios platos.
 
 ## Lee el encabezado de un grupo en el papel de cocina {#group-headings}
 

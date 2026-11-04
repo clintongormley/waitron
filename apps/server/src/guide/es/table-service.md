@@ -343,16 +343,9 @@ pedido. Abre otra vez **Mover platos…** para elegir de nuevo.
 
 ## Mover una cuenta o separar una mesa con platos en espera {#held-dishes-move}
 
-Una cuenta con platos en espera puede pasar a otra mesa con **Mover esta cuenta**, y **Separar una
-mesa** puede llevársela con la mesa que se separa. En la otra mesa los platos siguen en espera, en
-un grupo propio con el siguiente número de esa mesa. Cada mesa marcha su propio grupo: marchar uno
-no envía ningún plato de la otra mesa. Si en la otra mesa todavía nadie ha indicado si hay
-alergias, al marchar allí la caja dice **Indica si hay alergias antes de enviar los platos.**:
-indícalo en **Alergias**, en el menú **⋮**, y vuelve a marchar.
-
-Una cuenta con platos en espera no puede pasar al mostrador. La caja dice **Los artículos en espera
-no se pueden pasar al mostrador hasta que se marche su grupo. Sí se pueden pasar a otra mesa.**
-Marcha antes su grupo, o pasa la cuenta a una mesa.
+Una cuenta con platos en espera puede pasar a otra mesa con **Mover esta cuenta** o **Separar una
+mesa**. Allí los platos siguen en espera, en un grupo con el siguiente número de esa mesa. Después
+cada mesa marcha su propio grupo: marchar uno no envía ningún plato de la otra mesa.
 
 ## Poner nombre a una cuenta {#bill-names}
 
