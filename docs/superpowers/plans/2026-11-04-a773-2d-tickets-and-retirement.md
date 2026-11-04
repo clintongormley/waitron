@@ -1051,3 +1051,97 @@ The review is `~/waitron-campaign-c/a773-2d-reviews/task-4.md`.
 | 4 review M3: the card's cue condition | `#kitchen-screen` (EN and ES) says the card shows the cue when it has a dish sent to be cooked and its group has dishes for the pass, the same term `#station-waits` uses. |
 | 4 review M4: paper is frozen | `#station-waits` (EN and ES) adds that a ticket says it as things stand when it prints, and a reprint checks again. |
 | 4 review M5: the Spanish word for the station's ticket | «el ticket del plato» became «la comanda del plato», the ES guide's word; «ticket anticipado de espera» stays. |
+
+## Revision 5 (2026-11-04, the owner withdraws "Goes with kitchen food")
+
+The owner (questions.md, watcher relay ~06:10): "Waitron doesn't know that the other prep station
+is a kitchen and that the product is food. The wording needs to be more generic." Both the English
+"Goes with kitchen food" (spec §5) and «Sale con la comida de cocina» are withdrawn. The lane
+proposed three generic forms (~07:00) and recommended (a), which this revision builds; PR D lands
+only after the owner's pick, and a different pick changes only the words and, for (b) or (c), drops
+the names from the cue.
+
+**D127 The cue names the stations it goes with.** The cue reads **"Goes with {stations}"** /
+**«Sale con {stations}»**, where `{stations}` is the venue's own names of the stations holding the
+group's dishes for the pass, joined as a list in the paper's or screen's language
+(`conjunctionList`, `packages/shared/src/list.ts`: "Grill and Pastry", «Grill y Pastry»). "Holding
+the group's dishes for the pass" is D117's condition, unchanged, applied per dish: a live dish of
+the group whose ticket item is pass-controlled, or held at a station that waits for the pass now;
+its station is its ticket item's `station_id`. Names are distinct by station id and ordered by
+station name, then id, as the stations list is (`kitchen.ts`, `orderBy(kitchenStations.name,
+kitchenStations.id)`); two stations sharing a name both appear. The printing station is not left
+out: a dish moved after release to a station that waits (Revision 2 M1) reads "Goes with Grill"
+on Grill's own paper, which still says whose pass dishes it goes out with. Which dishes carry the
+cue, and where it prints or draws, is D118 and D119 unchanged.
+
+**D128 Where the names travel.**
+- `groupsWithPassFood` becomes `passStationsByGroup(tx, groupIds): Promise<ReadonlyMap<string,
+  readonly string[]>>` in the same place: one query, a group present only when it has at least one
+  such station, its value the ordered names.
+- `KitchenTicketItem.goesWithKitchenFood?: true` becomes `goesWith?: readonly string[]` (non-empty
+  when present), set in `planKitchenTickets` from the map under D118's conditions. `entryKey` keys
+  on the joined names instead of the flag. The formatter's cue under a heading lists the distinct
+  names across the dishes under it, in the order D127 gives (every dish under one heading shares a
+  group, so in practice the group's list); `prepareText` applies to the whole line as today.
+- The word `KITCHEN_TICKET_WORDS.{en,es}.goesWith`: "Goes with {stations}" / "Sale con {stations}",
+  substituted with a replacer function (`replace("{stations}", () => list)`, as `emitLateMark` does).
+- The server's `QueueGroup.goesWithKitchenFood?: true` becomes `goesWith?: readonly string[]`,
+  present only for a group in the map, on `listStationQueues`' groups only (D119, D126). The till's
+  twin type follows. The card's predicate is unchanged apart from reading the list; it draws
+  `t("station.goes_with", { stations: conjunctionList(names, currentLocale()) })`, strings "Goes
+  with {stations}" / "Sale con {stations}".
+- Renames, so no identifier or file still says "kitchen food": `goes-with-kitchen-food.test.ts` →
+  `goes-with.test.ts` (`git mv`), the till predicate `goesWithKitchenFood` → `goesWith`, the till
+  string `station.goes_with_kitchen_food` → `station.goes_with`, `passFood`/`withPassFood` locals →
+  `passStations`. Case titles keep their `A773 fire paper` prefix.
+
+**Changed checks.** Only this branch's own new cases (Tasks 2 and 3) change: each expected line
+"Goes with kitchen food" / «Sale con la comida de cocina» becomes the named form, each
+`goesWithKitchenFood: true` expectation becomes the expected name list, and each case that had only
+one waiting station gains, where its fixture already has two (or by adding a second waiting
+station's dish, a fixture that grows), a two-station expectation so the list join is pinned. No
+assertion that is on `main` changes.
+
+**Prose.** The guide's `#station-waits`, `#kitchen-screen` and `#held-work` (EN and ES), D116–D119
+and the Owner-answers section above (historical, left as written; this revision supersedes it), the
+A803 handoff paragraph, the backlog lines that say "Goes with kitchen food", and the spec's §5
+sentence (a dated pointer to this revision, not a rewrite, D125) stop calling the other station a
+kitchen or its dishes food. The guide says what the line names: the stations whose dishes the pass
+is holding for that group.
+
+### Task R1: the cue names its stations, on paper and in the queue read (about 60 calls)
+
+Server only. D127, D128 (the server bullets and renames). Files: `working-order.ts`
+(`passStationsByGroup`, `QueueGroup`, `stationQueueGroup`, `listStationQueues`), `kitchen-print.ts`
+(`planKitchenTickets`), `kitchen-ticket.ts` (`KitchenTicketItem`, `entryKey`, `emitCue`),
+`i18n/kitchen-ticket.ts`, `goes-with.test.ts` (renamed), `kitchen-ticket.test.ts`.
+- [ ] RED first: change the new cases' expectations to the named form (and add the two-station
+  expectations: one in the predicate case — the map's value for a group with a Grill dish
+  pass-controlled and a Pastry dish held while Pastry waits is `["Grill", "Pastry"]`; one paper case
+  printing `Goes with Grill and Pastry`; one Spanish paper line `Sale con Grill y Pastry`; one queue
+  case whose `group.goesWith` is `["Grill", "Pastry"]`); run and see them fail on their assertions.
+- [ ] Implement; GREEN: `pnpm --filter @waitron/server exec vitest run src/goes-with.test.ts src/kitchen-ticket.test.ts`,
+  plus Task 2's and Task 3's GREEN server files; `pnpm exec vitest run scripts/english-only.test.ts`
+  from the root; `pnpm --filter @waitron/server typecheck`.
+- [ ] Mutation controls: order names by id instead of name → the two-station case red (name the
+  fixture so name order and id order differ); drop the distinct → a group with two dishes at one
+  station red; keep D118's HOLD guard and pass-controlled controls from Task 2 and re-run them.
+- [ ] Commit: `git commit -s -m "The ticket and station queue name the stations a dish goes out with, not 'kitchen food'"`.
+
+### Task R2: the till card, the guide and the prose (about 50 calls)
+
+D128's till bullets and renames; the Prose paragraph. Files: `apps/till/src/api/client.ts`,
+`widgets/station-queue.ts`, `i18n/strings.ts`, `widgets/station-queue.test.ts`,
+`widgets/station-queue.a11y.test.ts`; `apps/server/src/guide/{en,es}/kitchen-service.md`;
+`docs/superpowers/plans/2026-10-19-a803-bills-and-tables.md` (handoff paragraph);
+`docs/superpowers/specs/2026-10-16-a773-courses-and-groups-design.md` (dated pointer at §5);
+`docs/backlog.md`, `docs/backlog/till.md` (the lines that quote the old words).
+- [ ] RED: the till cases expect "Goes with Grill" and, with two names, "Goes with Grill and
+  Pastry" / «Sale con Grill y Pastry»; see them fail.
+- [ ] Implement; GREEN (memory first): `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue.test.ts src/widgets/station-queue.a11y.test.ts src/screens/till-station-screen.test.ts`;
+  `pnpm --filter @waitron/till typecheck`; root `scripts/english-only.test.ts scripts/guide-links.test.ts`;
+  `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts`.
+- [ ] Guide sentences written from the code, each with its `file:line` in the report.
+- [ ] Final grep, empty outside historical plans/specs and the Owner-answers section above:
+  `grep -rn "kitchen food\|comida de cocina\|goesWithKitchenFood\|goes_with_kitchen_food\|groupsWithPassFood" apps packages docs/backlog.md docs/backlog`.
+- [ ] Commit: `git commit -s -m "The station card and guide name the stations a dish goes out with"`.
