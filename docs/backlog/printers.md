@@ -107,9 +107,11 @@ the cause was not found.
 
 ## A790: document and printer routing plan
 
-Build the unconnected Cut A foundation from the
-[venue-only plan](../superpowers/plans/2026-11-04-a790-venue-document-printer-routing.md),
-then its complete live Cut B before A739's payment-window integration. The owner approved the
+Build the complete live Cut B from the
+[venue-only plan](../superpowers/plans/2026-11-04-a790-venue-document-printer-routing.md)
+before A739's payment-window integration. Cut A supplies unmounted authorized offers, routing
+tables and shared browser recovery/form models; it mounts no route or screen and changes no
+Equipment writer. The owner approved the
 routing plan and build on 23 October; the 4 November revision applies the later removal of
 locations. It introduces no location field, partition or cross-location fixture. Overlapping
 files and migration numbers require inventory and rebase/regeneration, not a release wait.
@@ -129,8 +131,9 @@ routing services. F2 replacement remains A556's separate fiscal work; preserve A
 F1 capability rather than restoring a historical blanket refusal.
 
 The [design's dated precedence](../superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
-and the original plan preserve earlier proposals as history. No product implementation is
-completed by this plan revision.
+and the original plan preserve earlier proposals as history. Cut A uses an injected origin and
+typed protocol seats: live activation/restore, HTTP admission, printing and physical handover
+remain unqualified by that foundation.
 
 ## Show a failed automatic invoice copy to staff
 
