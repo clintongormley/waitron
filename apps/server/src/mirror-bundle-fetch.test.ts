@@ -2,7 +2,8 @@ import { createServer as createHttpServer, type ServerResponse } from "node:http
 import { createServer as createHttpsServer } from "node:https";
 import { Readable } from "node:stream";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import * as fs from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer as createTcpServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,6 +25,8 @@ import {
   type BoxServer,
   type SilentServer,
 } from "./testing/box-authority.js";
+
+vi.mock("node:fs/promises", { spy: true });
 
 // The fetcher only JSON-round-trips it, so the content is immaterial.
 const SAMPLE_BUNDLE: MirrorBundle = {
@@ -974,6 +977,132 @@ describe("boxDownload streams one answer to a file", () => {
     });
     await expect(boxDownload(url, options(), destination)).rejects.toThrow();
     expect(existsSync(partial)).toBe(false);
+  });
+
+  function wholeAnswer(): Promise<URL> {
+    return httpBox((res) => {
+      res.writeHead(200, { "content-length": String(BYTES.length) });
+      res.end(BYTES);
+    });
+  }
+
+  /** While `run` runs: each flush of an opened file (with its size then) or folder and each rename, in order. */
+  async function flushesAndRenames(run: () => Promise<unknown>): Promise<string[]> {
+    const events: string[] = [];
+    const real = await vi.importActual<typeof fs>("node:fs/promises");
+    vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+      const handle = await real.open(...args);
+      const flush = handle.sync.bind(handle);
+      handle.sync = async () => {
+        const now = await handle.stat();
+        events.push(`flush ${String(args[0])}${now.isFile() ? ` at ${now.size} bytes` : ""}`);
+        return flush();
+      };
+      return handle;
+    });
+    vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+      events.push(`rename ${String(from)} to ${String(to)}`);
+      return real.rename(from, to);
+    });
+    try {
+      await run();
+    } finally {
+      vi.mocked(fs.open).mockReset();
+      vi.mocked(fs.rename).mockReset();
+    }
+    return events;
+  }
+
+  /** While `run` runs, a flush of the file or folder at `failing` fails with EIO. */
+  async function withFailingFlush(failing: string, run: () => Promise<unknown>): Promise<void> {
+    const real = await vi.importActual<typeof fs>("node:fs/promises");
+    vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+      const handle = await real.open(...args);
+      if (String(args[0]) === failing) {
+        handle.sync = () => Promise.reject(Object.assign(new Error("no"), { code: "EIO" }));
+      }
+      return handle;
+    });
+    try {
+      await run();
+    } finally {
+      vi.mocked(fs.open).mockReset();
+    }
+  }
+
+  it("the whole file is flushed before the rename, and the folder after it", async () => {
+    const url = await wholeAnswer();
+    const events = await flushesAndRenames(() => boxDownload(url, options(), destination));
+    expect(events).toEqual([
+      `flush ${partial} at ${BYTES.length} bytes`,
+      `rename ${partial} to ${destination}`,
+      `flush ${folder}`,
+    ]);
+    expect((await readFile(destination)).equals(BYTES)).toBe(true);
+  });
+
+  it("a file that cannot be flushed is a failure, with neither file left", async () => {
+    const url = await wholeAnswer();
+    await withFailingFlush(partial, async () => {
+      await expect(boxDownload(url, options(), destination)).rejects.toMatchObject({
+        code: "EIO",
+      });
+    });
+    expect(await existingFiles()).toEqual([]);
+  });
+
+  it("a folder that cannot be flushed is a failure, with the whole file at its final name", async () => {
+    const url = await wholeAnswer();
+    await withFailingFlush(folder, async () => {
+      await expect(boxDownload(url, options(), destination)).rejects.toMatchObject({
+        code: "EIO",
+      });
+    });
+    expect(await existingFiles()).toEqual([destination]);
+    expect((await readFile(destination)).equals(BYTES)).toBe(true);
+  });
+
+  it("only the owner can read the partial file and the final file", async () => {
+    let answer: ServerResponse | undefined;
+    const url = await httpBox((res) => {
+      res.writeHead(200, { "content-length": String(BYTES.length) });
+      res.write(BYTES.subarray(0, 1_000));
+      answer = res;
+    });
+    // Under this mask a file created with no stated mode comes out 644.
+    const mask = process.umask(0o022);
+    let partialMode: number;
+    try {
+      const download = boxDownload(url, options(), destination);
+      await vi.waitFor(async () => {
+        expect((await readFile(partial)).length).toBe(1_000);
+      });
+      partialMode = (await stat(partial)).mode & 0o777;
+      answer!.end(BYTES.subarray(1_000));
+      await download;
+    } finally {
+      process.umask(mask);
+    }
+    expect(partialMode).toBe(0o600);
+    expect((await stat(destination)).mode & 0o777).toBe(0o600);
+  });
+
+  it("a partial file an earlier attempt left readable by others does not pass that on", async () => {
+    await writeFile(partial, "left behind");
+    await chmod(partial, 0o644);
+    await boxDownload(await wholeAnswer(), options(), destination);
+    expect((await stat(destination)).mode & 0o777).toBe(0o600);
+    expect((await readFile(destination)).equals(BYTES)).toBe(true);
+  });
+
+  it("a connection lost straight after the headers is a failure, with neither file left", async () => {
+    const url = await httpBox((res) => {
+      res.writeHead(200, { "content-length": String(BYTES.length) });
+      res.flushHeaders();
+      res.destroy();
+    });
+    await expect(boxDownload(url, options(), destination)).rejects.toThrow();
+    expect(await existingFiles()).toEqual([]);
   });
 
   it("a folder that is not there is a failure: the caller makes it", async () => {

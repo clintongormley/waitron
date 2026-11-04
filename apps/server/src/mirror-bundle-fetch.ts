@@ -1,11 +1,10 @@
 // `credential` is the primary's by-id login object (`AdoptCredential`), not the dashboard's
 // by-email body: the primary's mirror-bundle route authenticates it with `loginManagerById`.
 import { X509Certificate } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { rename, rm } from "node:fs/promises";
+import { open, rename, rm } from "node:fs/promises";
 import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request, type RequestOptions } from "node:https";
-import { pipeline } from "node:stream/promises";
+import { dirname } from "node:path";
 import { AppError } from "@waitron/shared";
 import type { AdoptCredential } from "./adopt.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
@@ -187,9 +186,12 @@ async function refusalText(res: IncomingMessage): Promise<string> {
  * arrives, and moved to `destinationPath` only once all of it came. Any other status comes back
  * with its text and touches no file. The destination's folder must exist.
  *
+ * The file is flushed to disk before the move and the folder after it. A failed folder flush is
+ * thrown with the file already at its final name.
+ *
  * A declared length is required because Node reports a body with no length and no chunking as
- * ended whenever the connection closes; with a length it fails a shorter body, so what the
- * pipeline finishes is the whole file (the "connection lost" and "no length" cases in
+ * ended whenever the connection closes; with a length it fails a shorter body, so a read that
+ * finishes has the whole file (the "connection lost" and "no length" cases in
  * `mirror-bundle-fetch.test.ts`).
  */
 export async function boxDownload(
@@ -227,11 +229,26 @@ export async function boxDownload(
   }
   const partialPath = `${destinationPath}.partial`;
   try {
-    await pipeline(res, createWriteStream(partialPath));
+    // A leftover's permissions would survive: `open` applies the mode only when it creates the file.
+    await rm(partialPath, { force: true });
+    // 0600 because this is the whole venue database.
+    const partial = await open(partialPath, "w", 0o600);
+    try {
+      await partial.writeFile(res);
+      await partial.sync();
+    } finally {
+      await partial.close();
+    }
     await rename(partialPath, destinationPath);
   } catch (error) {
     await rm(partialPath, { force: true });
     throw error;
+  }
+  const folder = await open(dirname(destinationPath), "r");
+  try {
+    await folder.sync();
+  } finally {
+    await folder.close();
   }
   return { status, text: "" };
 }
