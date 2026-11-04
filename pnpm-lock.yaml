@@ -470,6 +470,9 @@ importers:
       '@waitron/diagnostics':
         specifier: workspace:*
         version: link:../../packages/diagnostics
+      '@waitron/fiscal':
+        specifier: workspace:*
+        version: link:../../packages/fiscal
       '@waitron/module':
         specifier: workspace:*
         version: link:../../packages/module

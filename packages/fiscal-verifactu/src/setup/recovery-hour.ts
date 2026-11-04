@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, draftScopeFor, focusFirstInvalid, type DraftScope } from "@waitron/ui";
+import { readInvoiceEvidenceReport } from "@waitron/fiscal/src/invoice-evidence.js";
 import { classifySavedTimeZone } from "@waitron/shared";
 import type {
   ModuleRecoveryCredentials,
@@ -37,6 +38,9 @@ const strings = {
   en: {
     ...clockWaitStrings.en,
     heading: "Recover this box",
+    deviceInvoices: "Invoices seen on this device",
+    deviceInvoicesHint:
+      "These are the last invoices this browser kept for this taxpayer and environment. The list may be incomplete. Recovery still uses new series.",
     stopped: "The old box is stopped and will stay offline.",
     sole: "I am the only person recovering this taxpayer, across all venues.",
     compare: "Compare clocks",
@@ -64,6 +68,9 @@ const strings = {
   es: {
     ...clockWaitStrings.es,
     heading: "Recuperar esta caja",
+    deviceInvoices: "Facturas vistas en este dispositivo",
+    deviceInvoicesHint:
+      "Son las últimas facturas que este navegador guardó para este contribuyente y entorno. La lista puede estar incompleta. La recuperación sigue usando series nuevas.",
     stopped: "La caja anterior está apagada y seguirá desconectada.",
     sole: "Soy la única persona recuperando este contribuyente, en todos sus locales.",
     compare: "Comparar relojes",
@@ -341,6 +348,10 @@ export class RecoveryHourEntry extends LitElement {
   override render() {
     const en = this.locale === "en";
     const words = en ? strings.en : strings.es;
+    const observations = readInvoiceEvidenceReport({
+      taxpayerId: this.context.selection.taxId,
+      environment: this.context.selection.environment,
+    });
     const zone = classifySavedTimeZone(this.context.selection.timeZone);
     const displayZone = zone.kind === "valid" ? zone.timeZone : "UTC";
     const format = (ms: number) =>
@@ -354,6 +365,21 @@ export class RecoveryHourEntry extends LitElement {
     const canSelect =
       this.#canSelect && !this.busy && !this.#wait.waiting && result?.status !== "selected";
     return html`<h3>${words.heading}</h3>
+      ${
+        observations.length === 0
+          ? nothing
+          : html`<section data-test="device-invoices" aria-label=${words.deviceInvoices}>
+              <h4>${words.deviceInvoices}</h4>
+              <p>${words.deviceInvoicesHint}</p>
+              <dl>
+                ${observations.map(
+                  (observation) =>
+                    html`<dt>${observation.invoiceNumber}</dt>
+                      <dd>${observation.issuedDate}<br />${observation.recordEvidence}</dd>`,
+                )}
+              </dl>
+            </section>`
+      }
       <vf-recovery-key
         .selection=${this.context.selection}
         .locale=${this.locale}

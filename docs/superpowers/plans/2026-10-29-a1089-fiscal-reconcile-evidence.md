@@ -1,5 +1,13 @@
 # A1089 Fiscal Reconciliation Evidence Implementation Plan
 
+**4 November 2026, W41s-10a candidate update:** the earlier statements below about a missing
+production fiscal reconciliation caller are historical. The candidate adds a scoped startup/daily
+module duty, qualified by `apps/server/src/fiscal-reconciliation.test.ts` and
+`boot.fiscal-reconciliation.test.ts`. See the [current backlog checkpoint](../../backlog/fiscal.md#w41s-10a-runtime-candidate-checkpoint-2-november-2026).
+It still needs the fiscal review/CI gate. The separate evidence-inspection and persistent-repair
+work is unchanged.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use `superpowers:executing-plans` to implement task-by-task, inline. Steps use checkbox (`- [ ]`) syntax. No routine subagents.
 
 **Goal:** Inspect the first retained reconciliation finding beside verified current local observations, with sign-in, Read again and Stop; persistent repair and production fiscal reconciliation activation remain **OPEN**.

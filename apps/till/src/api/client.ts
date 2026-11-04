@@ -1,3 +1,5 @@
+import { rememberInvoiceEvidence } from "./invoice-evidence.js";
+import type { InvoiceEvidence } from "./invoice-evidence.js";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import type {
   AllergyCommand,
@@ -1067,6 +1069,7 @@ export type TenderBlock =
 
 /** `POST /api/sales` success — the ticket payload the receipt view renders. */
 export interface TillSaleResult extends ReceiptPresentation {
+  invoiceEvidence?: InvoiceEvidence;
   issuedOffsetMinutes?: number;
   operationDate?: string;
   invoiceType?: "F1" | "F2";
@@ -4902,6 +4905,7 @@ export class TillApi {
     const answer: unknown = text === "" ? undefined : JSON.parse(text);
     if (isRecord(answer) && Array.isArray(answer.madeHere) && answer.madeHere.length > 0)
       this.#madeHereListener?.(answer.madeHere as MadeHereItem[]);
+    rememberInvoiceEvidence(answer);
     return answer as T;
   }
 }

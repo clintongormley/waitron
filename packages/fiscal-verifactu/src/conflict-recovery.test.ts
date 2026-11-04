@@ -29,6 +29,9 @@ import { VerifactuBackend } from "./backend.js";
 import { openFilingCase } from "./filing-cases.js";
 import { readActiveConflicts, type ConflictRef } from "./conflict-evidence.js";
 import * as recovery from "./conflict-recovery.js";
+import { retainLookupConflict } from "./reconcile-conflicts.js";
+import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
+import type { RecoveryConflictRef } from "./conflict-types.js";
 import { readHourRecoveryState } from "./hour-recovery-state.js";
 import { FISCAL_OPERATIONS } from "./hour-configuration.js";
 
@@ -77,12 +80,15 @@ function store() {
     });
   return { withState, history };
 }
-function bindingFor(ref = conflict, eventId = "conflict-switch-1") {
+function bindingFor(ref: RecoveryConflictRef = conflict, eventId = "conflict-switch-1") {
   return {
     module: "fiscal-verifactu",
     action: "conflict-switch",
     eventId,
-    sourceId: JSON.stringify(["conflict", ref.sifId, ref.registroId, ref.caseId]),
+    sourceId:
+      "lookupId" in ref
+        ? JSON.stringify(["lookup-conflict", ref.sifId, ref.lookupId])
+        : JSON.stringify(["conflict", ref.sifId, ref.registroId, ref.caseId]),
     targetNodeId: node.nodeId,
   };
 }
@@ -190,8 +196,8 @@ it("reads live fiscal bases without a restore archive", async () => {
   });
 });
 
-async function attempt(event = "conflict-switch-1") {
-  const binding = bindingFor(conflict, event);
+async function attempt(event = "conflict-switch-1", ref: RecoveryConflictRef = conflict) {
+  const binding = bindingFor(ref, event);
   const operator = { kind: "recovery-key" as const, nodeId: node.nodeId, eventId: event };
   const history = [await withTransaction(suite.db, (tx) => readHourHistory(tx, "preproduction"))];
   const state = store();
@@ -457,4 +463,113 @@ it("rolls back a failed activation and refuses to reuse its consumed process adm
       }),
     ).rejects.toMatchObject(refusal("uncertain_prior_activation"));
   });
+});
+
+it.each(["pendiente", "aceptado", "aceptado_con_errores"] as const)(
+  "recovers a retained lookup conflict without replacing its %s submission result",
+  async (estado) => {
+    await withTransaction(suite.db, async (tx) => {
+      await tx.update(envios).set({ estado }).where(eq(envios.registroId, conflict.registroId));
+      await retainLookupConflict(
+        tx,
+        conflict.registroId,
+        {
+          source: "consulta",
+          invoice: {
+            IDEmisorFactura: scope.taxpayerNif,
+            NumSerieFactura: "A/999",
+            FechaExpedicionFactura: "16-10-2026",
+          },
+          reference: "foreign-record",
+          state: "Correcto",
+          fingerprint: "D".repeat(64),
+          system: { taxId: "89890001K", softwareId: "WT", installation: "another" },
+        },
+        new Date(),
+      );
+    });
+    const a = await attempt();
+    const before = await snapshot();
+    const outcome = withOperationAuthority(a.binding, a.operator, (authority) =>
+      recovery.recoverActiveConflict(liveScope(authority, a.preparation, a.binding), {
+        binding: a.binding,
+        conflict,
+        input: a.input,
+      }),
+    );
+    await expect(outcome).resolves.toMatchObject({ activationEventId: a.binding.eventId });
+    const result = await outcome;
+    expect(result.activationEventId).toBe(a.binding.eventId);
+    const after = await snapshot();
+    expect(after.records).toEqual(before.records);
+    expect(after.cases).toEqual(before.cases);
+    expect(after.replies).toEqual(before.replies);
+    expect(after.allocations).toHaveLength(before.allocations.length + 1);
+    expect(await withTransaction(suite.db, (tx) => readActiveConflicts(tx, node.nodeId))).toEqual(
+      [],
+    );
+    expect(
+      await withOperationAuthority(a.binding, a.operator, (authority) =>
+        withTransaction(suite.db, (tx) =>
+          recovery.readCommittedConflictSwitch(tx, node, a.binding, conflict, authority, a.input),
+        ),
+      ),
+    ).toEqual(result);
+    expect(await snapshot()).toEqual(after);
+  },
+);
+
+it("recovers and replays an unheld invoice observation without fabricating a filing record", async () => {
+  const [series] = await suite.db
+    .select()
+    .from(invoiceSeries)
+    .where(isNull(invoiceSeries.retiredAt));
+  const [lookup] = await suite.db
+    .insert(fiscalSeriesConflicts)
+    .values({
+      sifId: conflict.sifId,
+      seriesId: series!.id,
+      invoiceIdentity: `${series!.code}/99`,
+      recordedAt: new Date(),
+      evidence: {
+        source: "consulta",
+        invoice: {
+          IDEmisorFactura: scope.taxpayerNif,
+          NumSerieFactura: `${series!.code}/99`,
+          FechaExpedicionFactura: "16-10-2026",
+        },
+        reference: "outside-record",
+        state: "Correcto",
+        fingerprint: "D".repeat(64),
+        system: null,
+      },
+    })
+    .returning();
+  const ref = { lookupId: lookup!.id, sifId: conflict.sifId };
+  const a = await attempt("lookup-switch", ref);
+  const before = await snapshot();
+  const outcome = withOperationAuthority(a.binding, a.operator, (authority) =>
+    recovery.recoverActiveConflict(liveScope(authority, a.preparation, a.binding), {
+      binding: a.binding,
+      conflict: ref,
+      input: a.input,
+    }),
+  );
+  await expect(outcome).resolves.toMatchObject({ activationEventId: "lookup-switch" });
+  const result = await outcome;
+  expect(result.activationEventId).toBe("lookup-switch");
+  const after = await snapshot();
+  expect(after.records).toEqual(before.records);
+  expect(after.cases).toEqual(before.cases);
+  expect(after.replies).toEqual(before.replies);
+  expect(await suite.db.select().from(fiscalSeriesConflicts)).toEqual([lookup]);
+  expect(await withTransaction(suite.db, (tx) => readActiveConflicts(tx, node.nodeId))).toEqual([]);
+  expect(
+    await withOperationAuthority(a.binding, a.operator, (authority) =>
+      withTransaction(suite.db, (tx) =>
+        recovery.readCommittedConflictSwitch(tx, node, a.binding, ref, authority, a.input),
+      ),
+    ),
+  ).toEqual(result);
+  expect(await snapshot()).toEqual(after);
 });

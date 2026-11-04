@@ -28,6 +28,8 @@ import { previewRecoveryArchive } from "../recovery-backup-preview.js";
 import { recoveryStreamSourceId } from "../recovery-source.js";
 import { createSelectedRecoveryPreparation } from "../recovery-preparation.js";
 import { runStagedRestore, stageRestoreRequest } from "../restore-request.js";
+import { restoreFromArtifact } from "../restore.js";
+import { writeStreamRestore } from "../restore-stream.js";
 import { nodeDumpEntry } from "./node-copy.js";
 import {
   createFakeTimersHourClock,
@@ -64,6 +66,7 @@ export async function stagedHourRestore(
     clock?: HourTestClock;
     /** Defaults to a browser on another device. */
     requestFromBox?: () => boolean;
+    interactive?: boolean;
   } = {},
 ) {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
@@ -231,12 +234,13 @@ export async function stagedHourRestore(
         soleRecovery: true,
       },
     };
-    await stageRestoreRequest(
-      roots.stateDir,
-      kind === "archive"
-        ? { ...common, artifact, recoveryKey: encryptionKey }
-        : { ...common, kind: "stream", databasePath, entries },
-    );
+    if (seams.interactive !== true)
+      await stageRestoreRequest(
+        roots.stateDir,
+        kind === "archive"
+          ? { ...common, artifact, recoveryKey: encryptionKey }
+          : { ...common, kind: "stream", databasePath, entries },
+      );
     const nextEvent = async () => {
       const next = createSelectedRecoveryPreparation({
         ...options,
@@ -294,6 +298,16 @@ export async function stagedHourRestore(
       advanceCounters,
       nextEvent,
       cleanup,
+      runInteractive: () => {
+        const prepared = {
+          ...restore,
+          modules: service.modules,
+          withModuleOperations: service.runner(outcome.input),
+        };
+        return kind === "archive"
+          ? restoreFromArtifact(prepared)
+          : writeStreamRestore({ ...prepared, databasePath, entries });
+      },
       run: (log: Parameters<typeof runStagedRestore>[0]["log"] = () => {}) =>
         runStagedRestore({ ...restore, log }),
     };

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
-import type { Database, Transaction } from "@waitron/db";
+import type { Database, DeploymentEnvironment, Transaction } from "@waitron/db";
 import { recordIncident, recordIncidentOnce } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
 import { AppError, jobOrigin } from "@waitron/shared";
@@ -10,21 +10,34 @@ import type {
   Cabecera,
   ConsultaFiltro,
   EstadoRegistroConsulta,
+  RegistroConsultado,
   VerifactuClient,
 } from "@waitron/verifactu";
 import { deleteAck, writeAck } from "./acks.js";
 import { openAcceptedWithErrorsCase } from "./filing-cases.js";
 import { toAeatDate } from "./registro-row.js";
+import { retainLookupConflict } from "./reconcile-conflicts.js";
+import {
+  liveLookupHeader,
+  lookupSystem,
+  readLiveReconciliationSeries,
+  retainUnheldSeriesConflicts,
+} from "./reconcile-series.js";
+import type { LookupConflictEvidence } from "./conflict-types.js";
 
 export interface ReconcileDeps {
   db: Database;
-  /**
-   * A function, not a resolved client: the real resolver decrypts a certificate, and `reconcile`
-   * calls it only once it knows the period holds at least one row, so a period with nothing to
-   * reconcile never has a certificate decrypted.
-   */
+  /** Runtime sweeps name the identity they may observe and correct. */
+  scope?: ReconcileScope;
   resolveClient: () => Promise<VerifactuClient>;
   clock: TrustedClock;
+  signal?: AbortSignal;
+}
+
+export interface ReconcileScope {
+  readonly nodeId: string;
+  readonly taxpayerId: string;
+  readonly environment: DeploymentEnvironment;
 }
 
 /**
@@ -40,7 +53,12 @@ type PeriodRow = {
   sale_id: string;
   /** For an alta, the id of its sale's anulación, if one exists; otherwise null. */
   anulacion_id: string | null;
+  known_huellas: string;
+  huella: string;
+  tipo_registro: string;
+  sistema_informatico: string;
   estado: string;
+  intentos: number;
   csv: string | null;
   reconciled_resubmit_at: string | null;
   id_emisor_factura: string;
@@ -56,8 +74,6 @@ type Reported = {
   mensaje: string | null;
 };
 
-/** `envios.estado` values we read as "still awaiting acknowledgement". */
-const PENDIENTE = new Set(["pendiente", "enviando"]);
 /** `envios.estado` values we read as "we believe AEAT accepted this". A `rechazado`/`detenido`
  * record is in neither set: a sweep does not re-classify what we already know was refused or halted. */
 const ACEPTADO = new Set(["aceptado", "aceptado_con_errores"]);
@@ -93,28 +109,8 @@ const CORRECTION: Partial<Record<EstadoRegistroConsulta, "aceptado" | "aceptado_
   AceptadoConErrores: "aceptado_con_errores",
 };
 
-/**
- * Audits one calendar period against what AEAT reports for it, classifying every disagreement into
- * `lostAck`/`noTrace`/`drift`. The returned lists are the audit finding and always include a
- * mismatch this sweep also corrects. Where AEAT's state maps to a local estado (`CORRECTION`), the
- * sweep also corrects ours and writes the ack the lost response would have, in the same
- * transaction as the classification.
- *
- * The consulta runs OUTSIDE any transaction, between a short read (T1) and a short write (T2), so
- * no transaction is held across the network round trip.
- *
- * Diff on `EstadoRegistro`, not presence (design §4.3), because the response is paged and a
- * record may not be on a page yet:
- *
- *   - a `pendiente`/`enviando` record ABSENT from AEAT is in flight, so it is NEVER `noTrace`;
- *   - a `pendiente`/`enviando` record PRESENT at AEAT is `lostAck`;
- *   - an accepted record ABSENT from AEAT is `noTrace`;
- *   - an accepted record whose AEAT state disagrees with ours is `drift` (see `isDrift`).
- *
- * Deliberately does NOT reuse the drainer's `resolveEstadoEfectivo` (design §5): a consulta can
- * report `Anulado` and never reports a rejected record, and a submission response is the mirror
- * image.
- */
+/** The lookup stays outside the write transaction. Its snapshot is checked again before any
+ * correction so another caller's filing result or retry is not overwritten. */
 export async function reconcile(
   deps: ReconcileDeps,
   period: { year: string; month: string },
@@ -136,29 +132,73 @@ export async function reconcile(
     incidentsRaised: 0,
   };
 
-  // T1
-  const rows = await withTransaction(deps.db, (tx) => rowsForPeriod(tx, normalizedPeriod));
+  const rows = await withTransaction(deps.db, (tx) =>
+    rowsForPeriod(tx, normalizedPeriod, deps.scope),
+  );
   result.checked = rows.length;
-  // Nothing to reconcile: no consulta, and no certificate resolved.
-  if (rows.length === 0) return result;
-
+  const liveSeries =
+    deps.scope === undefined
+      ? []
+      : await withTransaction(deps.db, (tx) => readLiveReconciliationSeries(tx, deps.scope!));
+  if (rows.length === 0 && liveSeries.length === 0) return result;
+  const cabecera =
+    rows.length > 0
+      ? cabeceraFor(rows[0]!)
+      : await withTransaction(deps.db, (tx) => liveLookupHeader(tx, deps.scope!));
+  deps.signal?.throwIfAborted();
   const client = await deps.resolveClient();
+  const { authority, conflicts, unknown, observed } = await fetchAuthority(
+    client,
+    cabecera,
+    normalizedPeriod,
+    rows,
+    deps.scope !== undefined,
+    deps.signal,
+  );
 
-  // One database holds one taxpayer, but a rename leaves rows carrying different names; the
-  // cabecera takes the first row's, in no stated order.
-  const authority = await fetchAuthority(client, cabeceraFor(rows[0]!), normalizedPeriod);
-
-  // T2
   const detectedAt = deps.clock.now().instant;
   await withTransaction(deps.db, async (tx) => {
-    // A correction can commit while consulta is in flight; its predecessor must stay untouched.
-    const currentIds = new Set((await rowsForPeriod(tx, normalizedPeriod)).map((row) => row.id));
+    deps.signal?.throwIfAborted();
+    if (deps.scope !== undefined)
+      await retainUnheldSeriesConflicts(
+        tx,
+        deps.scope,
+        observed,
+        new Set(rows.filter((row) => conflicts.has(row.id)).map((row) => row.num_serie_factura)),
+        detectedAt,
+        normalizedPeriod,
+      );
+    const current = new Map(
+      (await rowsForPeriod(tx, normalizedPeriod, deps.scope)).map((row) => [row.id, row]),
+    );
     for (const row of rows) {
-      if (!currentIds.has(row.id)) continue;
+      deps.signal?.throwIfAborted();
+      const latest = current.get(row.id);
+      // A lookup cannot replace a filing result or retry committed while the network was pending.
+      if (
+        row.estado === "enviando" ||
+        latest === undefined ||
+        (Object.keys(row) as (keyof PeriodRow)[]).some((key) => latest[key] !== row[key])
+      ) {
+        (result.deferred ??= []).push(row.id);
+        continue;
+      }
+      const conflict = conflicts.get(row.id);
+      if (conflict !== undefined) {
+        await retainLookupConflict(tx, row.id, conflict, detectedAt);
+        if (await raiseOnce(tx, row, "error", "fiscal.huella_divergente", detectedAt))
+          result.incidentsRaised += 1;
+        (result.conflicts ??= []).push(mismatchOf(row, conflict.state));
+        continue;
+      }
+      if (unknown.has(row.id)) {
+        (result.deferred ??= []).push(row.id);
+        continue;
+      }
       const found = authority.get(row.id) ?? reportedThroughAnulacion(row, authority);
       const reported = found?.estado ?? null;
 
-      if (PENDIENTE.has(row.estado)) {
+      if (row.estado === "pendiente") {
         if (found !== null) {
           result.lostAck.push(mismatchOf(row, found.estado));
           await correct(tx, row, found, detectedAt, { lostAck: true, result });
@@ -216,6 +256,7 @@ export async function reconcile(
       // was not a mismatch): `reported === "Correcto"` on a local `aceptado` row, OR
       // `reported === "AceptadoConErrores"` on a local `aceptado_con_errores` row (see `isDrift`).
     }
+    deps.signal?.throwIfAborted();
   });
 
   return result;
@@ -234,7 +275,16 @@ export async function reconcile(
 async function rowsForPeriod(
   tx: Transaction,
   period: { year: string; month: string },
+  scope?: ReconcileScope,
 ): Promise<PeriodRow[]> {
+  const scoped =
+    scope === undefined
+      ? sql``
+      : sql`
+    and r.node_id = ${scope.nodeId}
+    and r.id_emisor_factura = ${scope.taxpayerId}
+    and r.entorno = ${scope.environment}
+  `;
   const { rows } = await tx.execute<PeriodRow>(sql`
     select
       r.id, r.sale_id,
@@ -243,7 +293,17 @@ async function rowsForPeriod(
         where a.sale_id = r.sale_id and a.tipo_registro = 'anulacion'
         limit 1
       ) end as anulacion_id,
-      e.estado, e.csv, e.reconciled_resubmit_at,
+      (
+        select json_group_array(known.huella order by known.secuencia)
+        from registros_facturacion known
+        where known.sale_id = r.sale_id and known.node_id = r.node_id
+          and known.id_emisor_factura = r.id_emisor_factura
+          and known.entorno is r.entorno
+          and known.num_serie_factura = r.num_serie_factura
+          and known.fecha_expedicion_factura = r.fecha_expedicion_factura
+      ) as known_huellas,
+      r.huella, r.tipo_registro, r.sistema_informatico,
+      e.estado, e.intentos, e.csv, e.reconciled_resubmit_at,
       r.id_emisor_factura, r.nombre_razon_emisor, r.num_serie_factura,
       r.fecha_expedicion_factura
     from envios e
@@ -253,6 +313,7 @@ async function rowsForPeriod(
         select 1 from registros_facturacion replacement
         where replacement.corrects_registro_id = r.id
       )
+    ${scoped}
   `);
   return rows.map((row) => ({
     ...row,
@@ -260,12 +321,6 @@ async function rowsForPeriod(
   }));
 }
 
-/**
- * Once AEAT accepts a cancellation, its consulta reports the invoice `Anulado` with the anulación's
- * fingerprint (`@waitron/verifactu`'s live preproduction check), and the library's fake also moves
- * the reference to the anulación's. So an alta absent under its own reference whose anulación AEAT
- * reports `Anulado` is reported `Anulado` itself, not missing.
- */
 function reportedThroughAnulacion(
   row: PeriodRow,
   authority: Map<string, Reported>,
@@ -280,30 +335,63 @@ function cabeceraFor(row: PeriodRow): Cabecera {
   return { ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura } };
 }
 
-/**
- * Pages the whole period consulta into `RefExterna → Reported`. A record with no `RefExterna`
- * is one we cannot attribute to any of our registros (e.g. filed for this obligado by another
- * software system), so it is skipped.
- *
- * Throws on "more pages" without a `ClavePaginacion` rather than stopping: an under-paged map would
- * make records on the unreached pages read as absent and raise false `noTrace` incidents.
- */
+/** An incomplete period lookup cannot establish that an accepted record is missing. */
 async function fetchAuthority(
   client: VerifactuClient,
   cabecera: Cabecera,
   period: { year: string; month: string },
-): Promise<Map<string, Reported>> {
+  rows: readonly PeriodRow[],
+  compareContents: boolean,
+  signal?: AbortSignal,
+): Promise<{
+  authority: Map<string, Reported>;
+  conflicts: Map<string, LookupConflictEvidence>;
+  unknown: Set<string>;
+  observed: RegistroConsultado[];
+}> {
+  const expected = new Map(rows.map((row) => [row.id, row]));
   const authority = new Map<string, Reported>();
+  const visited = new Set<string>();
+  const observed: RegistroConsultado[] = [];
+  const records = new Map<string, RegistroConsultado[]>();
   let clave: ConsultaFiltro["ClavePaginacion"];
   do {
+    signal?.throwIfAborted();
     const resp = await client.consultar(cabecera, {
       Ejercicio: period.year,
       Periodo: period.month,
       ClavePaginacion: clave,
+      ...(compareContents
+        ? { DatosAdicionalesRespuesta: { MostrarSistemaInformatico: "S" as const } }
+        : {}),
     });
+    signal?.throwIfAborted();
     for (const r of resp.registros) {
+      if (compareContents) {
+        const date = r.IDFactura.FechaExpedicionFactura;
+        if (
+          !/^\d{2}-\d{2}-\d{4}$/.test(date) ||
+          date.slice(6) !== period.year ||
+          date.slice(3, 5) !== period.month
+        )
+          throw new Error("consulta returned an invoice outside the requested period");
+        observed.push(r);
+        const key = JSON.stringify([r.IDFactura.IDEmisorFactura, r.IDFactura.NumSerieFactura]);
+        const group = records.get(key) ?? [];
+        group.push(r);
+        records.set(key, group);
+      }
       const ref = (r.DatosRegistroFacturacion as { RefExterna?: string }).RefExterna;
       if (ref !== undefined) {
+        const row = expected.get(ref);
+        if (
+          row !== undefined &&
+          (r.IDFactura.IDEmisorFactura !== row.id_emisor_factura ||
+            r.IDFactura.NumSerieFactura !== row.num_serie_factura ||
+            r.IDFactura.FechaExpedicionFactura !== row.fecha_expedicion_factura)
+        ) {
+          throw new Error("consulta identity does not match stored record");
+        }
         authority.set(ref, {
           estado: r.EstadoRegistro,
           codigo: r.CodigoErrorRegistro ?? null,
@@ -315,12 +403,76 @@ async function fetchAuthority(
       if (resp.ClavePaginacion === undefined) {
         throw new Error("consulta returned IndicadorPaginacion=S without a ClavePaginacion");
       }
+      const key = JSON.stringify([
+        resp.ClavePaginacion.IDEmisorFactura,
+        resp.ClavePaginacion.NumSerieFactura,
+        resp.ClavePaginacion.FechaExpedicionFactura,
+      ]);
+      if (visited.has(key)) {
+        throw new Error("consulta repeated a ClavePaginacion");
+      }
+      visited.add(key);
       clave = resp.ClavePaginacion;
     } else {
       clave = undefined;
     }
   } while (clave !== undefined);
-  return authority;
+  const conflicts = new Map<string, LookupConflictEvidence>();
+  const unknown = new Set<string>();
+  if (compareContents) {
+    for (const row of rows) {
+      const key = JSON.stringify([row.id_emisor_factura, row.num_serie_factura]);
+      for (const record of records.get(key) ?? []) {
+        // A still-live invoice reports its alta, not an unfiled cancellation of that invoice.
+        if (row.tipo_registro === "anulacion" && record.EstadoRegistro !== "Anulado") continue;
+        const data = record.DatosRegistroFacturacion;
+        const system = lookupSystem(data.SistemaInformatico);
+        const local = JSON.parse(row.sistema_informatico) as Record<string, unknown>;
+        const fingerprints = JSON.parse(row.known_huellas) as string[];
+        const externalCancellation =
+          record.EstadoRegistro === "Anulado" &&
+          row.tipo_registro === "alta" &&
+          row.anulacion_id === null;
+        const different =
+          record.IDFactura.FechaExpedicionFactura !== row.fecha_expedicion_factura ||
+          (!externalCancellation &&
+            ((typeof data.Huella === "string" &&
+              data.Huella.length > 0 &&
+              !fingerprints.includes(data.Huella)) ||
+              (system !== null &&
+                ((system.taxId !== null && system.taxId !== local.NIF) ||
+                  (system.softwareId !== null &&
+                    system.softwareId !== local.IdSistemaInformatico) ||
+                  (system.installation !== null &&
+                    system.installation !== local.NumeroInstalacion)))));
+        if (different) {
+          conflicts.set(row.id, {
+            source: "consulta",
+            invoice: record.IDFactura,
+            reference: typeof data.RefExterna === "string" ? data.RefExterna : null,
+            state: record.EstadoRegistro,
+            fingerprint: typeof data.Huella === "string" ? data.Huella : null,
+            system,
+          });
+        } else if (
+          typeof data.Huella !== "string" ||
+          data.Huella.length === 0 ||
+          (record.EstadoRegistro !== "Anulado" && data.Huella !== row.huella) ||
+          system === null ||
+          Object.values(system).some((value) => value === null)
+        ) {
+          unknown.add(row.id);
+        } else {
+          authority.set(row.id, {
+            estado: record.EstadoRegistro,
+            codigo: record.CodigoErrorRegistro ?? null,
+            mensaje: record.DescripcionErrorRegistro ?? null,
+          });
+        }
+      }
+    }
+  }
+  return { authority, conflicts, unknown, observed };
 }
 
 function mismatchOf(row: PeriodRow, reported: EstadoRegistroConsulta | null): ReconcileMismatch {
@@ -411,7 +563,8 @@ async function raise(
   code:
     | "fiscal.reconcile_no_trace"
     | "fiscal.reconcile_drift_errores"
-    | "fiscal.reconcile_drift_anulada",
+    | "fiscal.reconcile_drift_anulada"
+    | "fiscal.huella_divergente",
   detectedAt: Date,
 ): Promise<void> {
   await recordIncident(tx, {
@@ -444,7 +597,7 @@ async function raiseOnce(
   tx: Transaction,
   row: PeriodRow,
   severity: IncidentSeverity,
-  code: "fiscal.reconcile_no_trace" | "fiscal.reconcile_drift_anulada",
+  code: "fiscal.reconcile_no_trace" | "fiscal.reconcile_drift_anulada" | "fiscal.huella_divergente",
   detectedAt: Date,
 ): Promise<boolean> {
   return recordIncidentOnce(tx, {

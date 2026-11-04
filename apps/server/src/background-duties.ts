@@ -40,6 +40,7 @@ export interface BackgroundDutyHandles {
   attendanceEmailLoop: unknown;
   certificateReminderLoop: unknown;
   certificateDiagnosis: Stopper | undefined;
+  fiscalReconciliation?: Stopper;
   invoiceEmailLoop: unknown;
   cloudWorker: unknown;
   cloudSnapshots: unknown;
@@ -148,6 +149,15 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       // Called early, its result would be kept and a later refresh never awaited.
       reason: "waits for a local refresh, which must be awaited at close, not before",
     },
+    ...(h.fiscalReconciliation === undefined
+      ? []
+      : [
+          {
+            name: "fiscalReconciliation",
+            close: () => h.fiscalReconciliation!.stop(),
+            atStepdown: true as const,
+          },
+        ]),
     { name: "menuActivation", close: () => h.menuActivation.stop(), atStepdown: true },
     {
       name: "appendOnlyWatch",

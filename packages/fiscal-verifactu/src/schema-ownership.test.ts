@@ -21,6 +21,8 @@ const OWNED = [
   "fiscal_certificate_installs",
   "fiscal_certificate_reminders",
   "fiscal_conflict_evidence",
+  "fiscal_lookup_conflicts",
+  "fiscal_series_conflicts",
   "fiscal_reservations",
   "registro_sif",
   "registros_facturacion",

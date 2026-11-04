@@ -14,7 +14,12 @@ export async function readReceiptIssuer(
   Partial<
     Pick<
       TillSaleResult,
-      "issuer" | "recipient" | "invoiceType" | "operationDate" | "issuedOffsetMinutes"
+      | "issuer"
+      | "recipient"
+      | "invoiceType"
+      | "operationDate"
+      | "issuedOffsetMinutes"
+      | "invoiceEvidence"
     >
   >
 > {
@@ -36,6 +41,7 @@ export async function readReceiptIssuer(
     .where(eq(sales.id, saleId));
   const issueOffset = sale === undefined ? {} : { issuedOffsetMinutes: sale.issuedOffsetMinutes };
   if (!filed?.issuer) return issueOffset;
+  const invoiceEvidence = await backend.invoiceEvidenceFor?.(tx, saleId);
   const issueDay =
     sale === undefined
       ? undefined
@@ -44,6 +50,7 @@ export async function readReceiptIssuer(
           .slice(0, 10);
   return {
     ...issueOffset,
+    ...(invoiceEvidence === undefined ? {} : { invoiceEvidence }),
     ...(sale?.recipientTaxId != null &&
     sale.operationDate !== null &&
     sale.operationDate !== issueDay

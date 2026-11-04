@@ -257,3 +257,38 @@ describe("background duties", () => {
     expect(stops).toBe(1);
   });
 });
+
+describe("fiscal reconciliation shutdown", () => {
+  it("stops reconciliation during stepdown and shares the same pending close with shutdown", async () => {
+    let finish!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let calls = 0;
+    const handles = Object.assign(recordingHandles([]), {
+      fiscalReconciliation: {
+        stop: () => {
+          calls += 1;
+          return pending;
+        },
+      },
+    });
+    const duties = backgroundDuties(handles);
+    const closer = duties.closers.find((item) => item.name === "fiscalReconciliation");
+    expect(closer?.atStepdown).toBe(true);
+    expect(closer?.close()).toBe(pending);
+    let closed = false;
+    const closing = stopBackgroundDuties(duties).then(() => {
+      closed = true;
+    });
+    try {
+      await Promise.resolve();
+      expect(closed).toBe(false);
+      expect(calls).toBe(1);
+    } finally {
+      finish();
+      await closing;
+    }
+    expect(closed).toBe(true);
+  });
+});

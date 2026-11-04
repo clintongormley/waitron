@@ -1,7 +1,7 @@
 import "./errors.js";
 import { isDeepStrictEqual as equal } from "node:util";
-import { eq } from "drizzle-orm";
-import { type Transaction } from "@waitron/db";
+import { and, eq } from "drizzle-orm";
+import { invoiceSeries, type Transaction } from "@waitron/db";
 import {
   type LiveModuleOperationScope,
   type OperationAuthority,
@@ -10,7 +10,12 @@ import {
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { recoveryHourOperator } from "./hour-recovery-preparation.js";
-import { readActiveConflicts, type ConflictRef } from "./conflict-evidence.js";
+import { readActiveConflicts } from "./conflict-evidence.js";
+import type { RecoveryConflictRef as ConflictRef } from "./conflict-types.js";
+import { conflictSourceId } from "./conflict-reference.js";
+export { conflictSourceId } from "./conflict-reference.js";
+import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
+import { registroSif } from "./schema/sif.js";
 import {
   parseConflictActivation,
   type ConflictAllocationInput,
@@ -19,16 +24,13 @@ import { fiscalAllocations, type ActivationResult } from "./schema/allocations.j
 import { registrosFacturacion } from "./schema/registros.js";
 import { filingCases } from "./schema/filing-cases.js";
 import { envios } from "./schema/envios.js";
+import { fiscalLookupConflicts } from "./schema/lookup-conflicts.js";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { activateModuleAllocation, readModuleAllocationSeries } from "./allocation-operation.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 
 function refuse(reason: string): never {
   throw new AppError("sif.allocation_invalid", { reason });
-}
-
-export function conflictSourceId(conflict: ConflictRef): string {
-  return JSON.stringify(["conflict", conflict.sifId, conflict.registroId, conflict.caseId]);
 }
 
 function checkBinding(
@@ -51,6 +53,25 @@ async function checkOriginal(
   node: ProvisionedNode,
   conflict: ConflictRef,
 ): Promise<void> {
+  if ("lookupId" in conflict) {
+    const [lookup] = await tx
+      .select({
+        sifId: fiscalSeriesConflicts.sifId,
+        nodeId: registroSif.nodeId,
+        seriesNode: invoiceSeries.nodeId,
+      })
+      .from(fiscalSeriesConflicts)
+      .innerJoin(registroSif, eq(registroSif.id, fiscalSeriesConflicts.sifId))
+      .innerJoin(invoiceSeries, eq(invoiceSeries.id, fiscalSeriesConflicts.seriesId))
+      .where(eq(fiscalSeriesConflicts.id, conflict.lookupId));
+    if (
+      lookup?.sifId !== conflict.sifId ||
+      lookup.nodeId !== node.nodeId ||
+      lookup.seriesNode !== node.nodeId
+    )
+      return refuse("event_mismatch");
+    return;
+  }
   const [original] = await tx
     .select()
     .from(registrosFacturacion)
@@ -63,17 +84,23 @@ async function checkOriginal(
   )
     return refuse("event_mismatch");
   const [reply] = await tx.select().from(envios).where(eq(envios.registroId, conflict.registroId));
-  if (reply?.estado !== "rechazado") return refuse("conflict_not_active");
+  const [lookup] = await tx
+    .select()
+    .from(fiscalLookupConflicts)
+    .where(
+      and(
+        eq(fiscalLookupConflicts.registroId, conflict.registroId),
+        eq(fiscalLookupConflicts.caseId, conflict.caseId),
+      ),
+    );
+  if (reply?.estado !== "rechazado" && lookup === undefined) return refuse("conflict_not_active");
 }
 
 async function checkActive(tx: Transaction, node: ProvisionedNode, conflict: ConflictRef) {
   await checkOriginal(tx, node, conflict);
   if (
     !(await readActiveConflicts(tx, node.nodeId)).some(
-      (row) =>
-        row.registroId === conflict.registroId &&
-        row.caseId === conflict.caseId &&
-        row.sifId === conflict.sifId,
+      (row) => conflictSourceId(row) === conflictSourceId(conflict),
     )
   )
     return refuse("conflict_not_active");

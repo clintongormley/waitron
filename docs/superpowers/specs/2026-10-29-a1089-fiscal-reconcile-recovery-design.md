@@ -1,5 +1,13 @@
 # A1089: inspect reconciliation evidence before choosing recovery
 
+**4 November 2026, W41s-10a candidate update:** the earlier statements below about a missing
+production fiscal reconciliation caller are historical. The candidate adds a scoped startup/daily
+module duty, qualified by `apps/server/src/fiscal-reconciliation.test.ts` and
+`boot.fiscal-reconciliation.test.ts`. See the [current backlog checkpoint](../../backlog/fiscal.md#w41s-10a-runtime-candidate-checkpoint-2-november-2026).
+It still needs the fiscal review/CI gate. The separate evidence-inspection and persistent-repair
+work is unchanged.
+
+
 **PROPOSAL, 2026-10-29. Awaiting owner scope choice. No implementation authority.**
 You need to distinguish a recorded discrepancy from today's local facts before choosing recovery.
 Recommend planning read-only inspection of already-recorded incidents first; fiscal reconciliation

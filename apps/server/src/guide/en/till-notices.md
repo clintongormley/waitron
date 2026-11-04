@@ -111,5 +111,5 @@ a newer version of the box. Tell a manager so they can check the box.
 Choose **Open recovery** beside the refusal to open this box's recovery page in a separate tab.
 Keep the payment window available. If it says the card was charged, do not charge again. Use this
 box's current recovery key and follow [Recover an invoice identity](box-status.md#invoice-conflict).
-You can close the payment window without starting a recovery. A completed switch does not undo
-the original rejection; its filing case stays open.
+You can close the payment window without starting a recovery. A completed switch leaves existing
+filing results and cases unchanged.

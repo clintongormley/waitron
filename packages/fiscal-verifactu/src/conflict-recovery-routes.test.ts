@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   withOperationAuthority,
@@ -16,6 +16,7 @@ import { seedLiveConflict, liveConflictNode } from "../test/live-conflict-fixtur
 import { FISCAL_ROUTES } from "./routes.js";
 import type { ConflictRef } from "./conflict-evidence.js";
 import { FISCAL_OPERATIONS } from "./hour-configuration.js";
+import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
 import { readHourRecoveryState } from "./hour-recovery-state.js";
 import { parseConflictResult, type ConflictAllocationInput } from "./conflict-recovery-contract.js";
 
@@ -428,4 +429,44 @@ it("refuses an absent preparation engine and malformed retained-event status", a
   expect(await (await invalid.request(status({ conflict }))).json()).toMatchObject({
     error: { code: "sif.allocation_invalid", params: { reason: "event_mismatch" } },
   });
+});
+
+it("binds a lookup-only reference to its exact observation at the authenticated recovery route", async () => {
+  const [series] = await suite.db.select().from(invoiceSeries);
+  const [observed] = await suite.db
+    .insert(fiscalSeriesConflicts)
+    .values({
+      sifId: conflict.sifId,
+      seriesId: series!.id,
+      invoiceIdentity: `${series!.code}/99`,
+      recordedAt: new Date(),
+      evidence: {
+        source: "consulta",
+        invoice: {
+          IDEmisorFactura: "89890001K",
+          NumSerieFactura: `${series!.code}/99`,
+          FechaExpedicionFactura: "16-10-2026",
+        },
+        reference: null,
+        state: "Correcto",
+        fingerprint: null,
+        system: null,
+      },
+    })
+    .returning();
+  const ref = { lookupId: observed!.id, sifId: conflict.sifId };
+  const { request } = mount();
+  const current = await request(status({ conflict: ref }));
+  expect(current.status).toBe(200);
+  expect(parseConflictResult(await current.json())).toMatchObject({
+    kind: "status",
+    active: expect.arrayContaining([expect.objectContaining(ref)]),
+  });
+  const wrong = await request(status({ conflict: { ...ref, lookupId: "another-lookup" } }));
+  expect(wrong.status).toBe(409);
+  expect(await wrong.json()).toMatchObject({
+    error: { code: "sif.allocation_invalid", params: { reason: "conflict_not_active" } },
+  });
+  const unauthenticated = await request(status({ recoveryKey: "wrong-key", conflict: ref }));
+  expect(unauthenticated.status).toBe(401);
 });

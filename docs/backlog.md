@@ -188,17 +188,18 @@ under `docs/backlog/`.
   Keep the installed certificate until a replacement passes its checks.
   [Remaining workflow](backlog/self-service-refusals.md#certificate).
 
-- **A1089: reconciliation alerts need a production caller and an evidence/decision route.** The
-  scoped caller search found only library tests; the server loop schedules payment reconciliation.
-  Specify the fiscal caller, authority and cadence before adding recovery choices or promising a
-  periodic check. [Audit and remaining work](backlog/self-service-refusals.md#fiscal-reconcile).
+- **A1089: reconciliation alerts need an evidence/decision route.** W41s-10a's candidate adds a
+  module-owned startup/daily caller, scoped to node, taxpayer and environment, separately from
+  payment reconciliation. The older caller audits are historical. Inspect retained findings before
+  offering decisions for persistent mismatches; a local queue-reset marker does not prove another
+  submission occurred. [Audit and remaining work](backlog/self-service-refusals.md#fiscal-reconcile).
 
   The [inspection and caller-scope proposal](superpowers/specs/2026-10-29-a1089-fiscal-reconcile-recovery-design.md)
   and [implementation plan](superpowers/plans/2026-10-29-a1089-fiscal-reconcile-evidence.md)
   follow the owner's 29 October evidence-first decision. The 08:07 instruction approves the
   read-only build after fresh plan review and coordination of shared files. The screen and its
   qualification remain open. A local queue-reset marker does not prove a repeat submission;
-  production activation and persistent recovery remain open.
+  persistent recovery remains open. W41s-10a's caller still needs its fiscal review and CI gates.
 
 - **A1089: fiscal environment refusals need safe configuration or recovery guidance.** Separate a wrong host environment from missing immutable metadata. Never relabel records, promote test data or reset invoice numbering.
   [Audit](backlog/self-service-refusals.md#fiscal-environment).
@@ -379,11 +380,29 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   behavioral assertions and protected-file scope intact.
   [Detail](backlog/fiscal.md#protected-write-path-test-policy-quotation).
 
-- **W41s. Fiscal prevention and offline recovery** — filing investigation, outside evidence and
-  fencing, and the complete old-backup/new-hardware exercise remain queued. Task 8's synthetic
-  correction and held-record actions keep disputed production remedies disabled pending
-  Q35/Q37/Q38/Q40 or a case-specific owner decision. A held cancellation from another issuing
-  chain has no qualified release here.
+- **W41s. Fiscal prevention and offline recovery** — filing investigation, startup/daily
+  reconciliation, optional device-held invoice evidence, signed witnesses and fencing, and the
+  complete old-backup/new-hardware exercise remain queued. Task 8's synthetic correction and
+  held-record actions keep disputed production remedies disabled pending Q35/Q37/Q38/Q40 or a
+  case-specific owner decision. A held cancellation from another issuing chain has no qualified
+  release here.
+  The candidate now wires a module-owned startup/daily sweep beside submission, scoped to the
+  node, venue taxpayer and environment. Lookups include empty intervening months from the oldest
+  locally known period through the current month, retaining periods already observed during this
+  start. Their daily/retry deadlines begin after the pass finishes; incomplete responses and live
+  or changed filing claims remain unknown. A complete lookup
+  can retain a fingerprint, software-identity or different-date conflict for a locally held invoice
+  number and use the existing administrator stop without changing its filing result. It also queries
+  the current venue month without local invoices and retains an externally held number in an active
+  series without inventing a local record or filing case. Lookup-only recovery preserves the existing
+  filing results. The next candidate retains receipt observations on the till by taxpayer, environment
+  and series, through a separate optional reader. Cash sales and their retries have now been exercised
+  while a lookup is pending, failed or incomplete. Archive and stream restore tests now complete
+  without enrolled devices or internet time, then pair a fresh device through the approval routes
+  and issue under the recovered series. The recovery form now displays this browser's retained
+  observations for the selected taxpayer and environment without sending them as recovery authority.
+  Archive/stream fresh-device pairing also runs over a real loopback HTTP listener. Whole-item
+  review, the normal hook and current-head CI remain before owner review.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment

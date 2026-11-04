@@ -1,3 +1,4 @@
+import { readDeviceReceiptEvidence } from "./device-receipt-evidence.js";
 // Registers this package's own error codes on the shared registry.
 import "./errors.js";
 import { sql } from "drizzle-orm";
@@ -22,6 +23,7 @@ import type {
   Counterparty,
   FiscalBackend,
   FiledReceipt,
+  FiledInvoiceEvidence,
   FiscalRecordRef,
   IntegrityReport,
   MisdatedDetail,
@@ -400,6 +402,13 @@ export class VerifactuBackend implements FiscalBackend {
       vatBreakdown,
       issuer: { legalName: row.nombre_razon_emisor, taxId: row.id_emisor_factura },
     };
+  }
+
+  async invoiceEvidenceFor(
+    tx: Transaction,
+    saleId: SaleId,
+  ): Promise<FiledInvoiceEvidence | undefined> {
+    return readDeviceReceiptEvidence(tx, saleId);
   }
 
   /** Voids a previously recorded sale by appending an anulación referencing its identity. */
