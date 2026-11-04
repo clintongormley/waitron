@@ -22,7 +22,12 @@ import {
   recordStepCompletions,
   serviceSteps,
 } from "@waitron/venue-service";
+import { readBillEditState } from "./bill-editing.js";
+import { recallToDraft } from "./draft-recall.js";
 import { createCourse } from "./kitchen.js";
+import { cancelItem } from "./line-cancel.js";
+import { readCancellationContext } from "./line-cancel-context.js";
+import { discardDraft } from "./order-drafts.js";
 import { fireGroup } from "./order-groups.js";
 import {
   readStepFacts,
@@ -30,6 +35,7 @@ import {
   stepSignal,
   type StepParty,
 } from "./service-step-signals.js";
+import { cancelLine, cancelReasonId, ensureOperator } from "./testing/cancel-line.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
@@ -49,6 +55,7 @@ import {
 } from "./testing/party-venue.js";
 import { serveLine } from "./testing/serve-line.js";
 import { departmentOf, setOpenedAt, setSteps } from "./testing/service-steps.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -620,8 +627,9 @@ describe("a party whose dishes arrived from another table", () => {
     v: PartyVenue,
     how: "move" | "split",
     from: { partyId: string; billId: string },
+    label = `Table ${how}`,
   ): Promise<{ partyId: string; tableId: string }> {
-    const tableId = await v.table(`Table ${how}`);
+    const tableId = await v.table(label);
     if (how === "move") {
       const options = {
         operatorId: OPERATOR,
@@ -680,6 +688,26 @@ describe("a party whose dishes arrived from another table", () => {
         ),
     );
     return rows.filter((row) => row.detail.arrived === true).map((row) => Date.parse(row.at));
+  }
+
+  /** A free table holding only a moved-in bill of one dish, its opening older than the arrival. */
+  async function arrivedDish(v: PartyVenue, release: "hold" | "fire") {
+    const [takeOrder, another] = await setSteps(v, await tablesDepartment(v), [
+      TAKE_ORDER,
+      ANOTHER,
+    ]);
+    const from = await partyWith(v, "Table 1", release);
+    const { partyId, tableId } = await carryToFreeTable(v, "move", from);
+    await setOpenedAt(v, partyId, OPENED);
+    return {
+      takeOrder: takeOrder!,
+      another: another!,
+      partyId,
+      tableId,
+      billId: from.billId,
+      arrived: (await arrivalsOf(v, partyId))[0]!,
+      lineId: await lineIdOf(v, from.billId, "Agua"),
+    };
   }
 
   for (const how of ["move", "split"] as const) {
@@ -804,12 +832,261 @@ describe("a party whose dishes arrived from another table", () => {
     });
   }
 
+  for (const release of ["hold", "fire"] as const) {
+    it(`${release}: a seated table a bill only passed through shows its first step again`, async () => {
+      const v = await setupPartyVenue(suite.db);
+      const [takeOrder, another] = await setSteps(v, await tablesDepartment(v), [
+        TAKE_ORDER,
+        ANOTHER,
+      ]);
+      const tableId = await v.table("Table 2");
+      const { partyId } = await seat(v, tableId);
+      await setOpenedAt(v, partyId, OPENED);
+      const liveIds = async () => (await liveAt(v, partyId, tableId))!.map((step) => step.stepId);
+      expect(await liveIds()).toEqual([takeOrder]);
+      const from = await partyWith(v, "Table 1", release);
+
+      await moveToParty(v, from, partyId, tableId);
+      expect(await liveIds()).toEqual([another]);
+
+      await carryToFreeTable(v, "move", { partyId, billId: from.billId }, "Table 3");
+
+      expect(await factsOf(v, partyId, tableId)).toMatchObject({
+        firstOrderAt: null,
+        lastOrderAt: null,
+        ordersArrived: false,
+      });
+      expect(await liveIds()).toEqual([takeOrder]);
+    });
+
+    it(`${release}: a free table a bill only passed through shows its first step`, async () => {
+      const v = await setupPartyVenue(suite.db);
+      const [takeOrder, another] = await setSteps(v, await tablesDepartment(v), [
+        TAKE_ORDER,
+        ANOTHER,
+      ]);
+      const from = await partyWith(v, "Table 1", release);
+      const { partyId, tableId } = await carryToFreeTable(v, "move", from);
+      await setOpenedAt(v, partyId, OPENED);
+      const liveIds = async () => (await liveAt(v, partyId, tableId))!.map((step) => step.stepId);
+      expect(await liveIds()).toEqual([another]);
+
+      await carryToFreeTable(v, "move", { partyId, billId: from.billId }, "Table 3");
+
+      expect(await factsOf(v, partyId, tableId)).toMatchObject({
+        firstOrderAt: null,
+        lastOrderAt: null,
+        ordersArrived: false,
+      });
+      expect(await liveIds()).toEqual([takeOrder]);
+    });
+  }
+
+  for (const release of ["hold", "fire"] as const) {
+    it(`${release}: the only arrived dish recalled into a draft stops counting, and discarding the draft removes it`, async () => {
+      const v = await setupPartyVenue(suite.db);
+      const { takeOrder, partyId, tableId, billId, lineId } = await arrivedDish(v, release);
+
+      const expectedPartyRevision = await revisionOf(v, partyId);
+      const { draft } = await inTx(v, async (tx) =>
+        recallToDraft(tx, v.cfg, partyId, lineId, {
+          submissionId: randomUUID(),
+          expectedPartyRevision,
+          operatorId: OPERATOR,
+          expectedEdit: await readBillEditState(tx, billId),
+        }),
+      );
+
+      expect(await factsOf(v, partyId, tableId)).toMatchObject({
+        firstOrderAt: null,
+        lastOrderAt: null,
+        ordersArrived: false,
+        drafting: true,
+      });
+      expect(await liveAt(v, partyId, tableId)).toEqual([]);
+
+      await inTx(v, async (tx) => {
+        await ensureOperator(tx, OPERATOR);
+        const [bill] = await tx
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, billId));
+        await discardDraft(
+          tx,
+          v.cfg,
+          partyId,
+          draft.id,
+          OPERATOR,
+          {
+            submissionId: randomUUID(),
+            revision: draft.revision,
+            expectedRevision: bill!.revision,
+            expectedEdit: await readBillEditState(tx, billId),
+            reasonId: await cancelReasonId(tx),
+            note: null,
+            admission: testTradingAdmission(),
+          },
+          v.cfg.locale,
+        );
+      });
+
+      expect(await factsOf(v, partyId, tableId)).toMatchObject({
+        firstOrderAt: null,
+        lastOrderAt: null,
+        ordersArrived: false,
+        drafting: false,
+      });
+      expect((await liveAt(v, partyId, tableId))!.map((step) => step.stepId)).toEqual([takeOrder]);
+    });
+
+    it(`${release}: the only arrived dish cancelled off the bill stops counting`, async () => {
+      const v = await setupPartyVenue(suite.db);
+      const { takeOrder, partyId, tableId, billId } = await arrivedDish(v, release);
+      const lineNo = await lineNoOf(v, billId, "Agua");
+
+      await inTx(v, (tx) => cancelLine(tx, v.cfg, billId, lineNo));
+
+      expect(await factsOf(v, partyId, tableId)).toMatchObject({
+        firstOrderAt: null,
+        lastOrderAt: null,
+        ordersArrived: false,
+      });
+      expect((await liveAt(v, partyId, tableId))!.map((step) => step.stepId)).toEqual([takeOrder]);
+    });
+  }
+
+  /** The kitchen's cancel of a whole fired dish whose preparation has started. */
+  async function cancelStarted(
+    v: PartyVenue,
+    dish: { partyId: string; billId: string; lineId: string },
+    outcome: "remove_charge" | "keep_charge",
+  ): Promise<void> {
+    const { partyId, billId, lineId } = dish;
+    const expectedPartyRevision = await revisionOf(v, partyId);
+    await inTx(v, async (tx) => {
+      await ensureOperator(tx, OPERATOR);
+      const [bill] = await tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId));
+      await cancelItem(
+        tx,
+        v.cfg,
+        partyId,
+        lineId,
+        {
+          quantity: "1",
+          expectedEdit: await readBillEditState(tx, billId),
+          outcome,
+          preparationStarted: true,
+          reasonId: await cancelReasonId(tx),
+          expectedPartyRevision,
+          expectedBillRevision: bill!.revision,
+          expectedContext: await readCancellationContext(tx, partyId, lineId),
+          submissionId: randomUUID(),
+          admission: testTradingAdmission(),
+        },
+        OPERATOR,
+      );
+    });
+  }
+
+  it("the only arrived dish cancelled while being made, charge removed, stops counting", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const dish = await arrivedDish(v, "fire");
+
+    await cancelStarted(v, dish, "remove_charge");
+
+    expect(await factsOf(v, dish.partyId, dish.tableId)).toMatchObject({
+      firstOrderAt: null,
+      lastOrderAt: null,
+      ordersArrived: false,
+    });
+    expect((await liveAt(v, dish.partyId, dish.tableId))!.map((step) => step.stepId)).toEqual([
+      dish.takeOrder,
+    ]);
+  });
+
+  it("the only arrived dish cancelled while being made, charge kept, stays on the bill and counts", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const dish = await arrivedDish(v, "fire");
+
+    await cancelStarted(v, dish, "keep_charge");
+
+    expect(await factsOf(v, dish.partyId, dish.tableId)).toMatchObject({
+      firstOrderAt: dish.arrived,
+      lastOrderAt: dish.arrived,
+      ordersArrived: true,
+    });
+    expect((await liveAt(v, dish.partyId, dish.tableId))!.map((step) => step.stepId)).toEqual([
+      dish.another,
+    ]);
+  });
+
+  it("a bill moved in from the counter counts as the first order of a free table", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const [, another] = await setSteps(v, await tablesDepartment(v), [TAKE_ORDER, ANOTHER]);
+    const from = await partyWith(v, "Table 1", "fire");
+    const toCounter = {
+      operatorId: OPERATOR,
+      partyId: from.partyId,
+      expectedPartyRevision: await revisionOf(v, from.partyId),
+      otherPartyId: null,
+    };
+    await inTx(v, (tx) =>
+      moveBill(tx, v.cfg, from.billId, { counter: { zoneId: null } }, toCounter),
+    );
+    const tableId = await v.table("Table 2");
+    const toTable = { operatorId: OPERATOR, partyId: null, otherPartyId: null };
+
+    const moved = await inTx(v, (tx) => moveBill(tx, v.cfg, from.billId, { tableId }, toTable));
+
+    const partyId = moved.partyId!;
+    await setOpenedAt(v, partyId, OPENED);
+    const arrived = (await arrivalsOf(v, partyId))[0]!;
+    expect(await factsOf(v, partyId, tableId)).toMatchObject({
+      firstOrderAt: arrived,
+      lastOrderAt: arrived,
+      ordersArrived: true,
+    });
+    expect((await liveAt(v, partyId, tableId))!.map((step) => step.stepId)).toEqual([another]);
+  });
+
+  it("an arrival with no dish on a bill of the party is not an order", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const [takeOrder] = await setSteps(v, await tablesDepartment(v), [TAKE_ORDER]);
+    const tableId = await v.table("Table 1");
+    const { partyId } = await seat(v, tableId);
+    await setOpenedAt(v, partyId, OPENED);
+
+    await inTx(v, (tx) =>
+      tx.insert(orderGroupEvents).values({
+        partyId,
+        kind: "lines_moved",
+        actorId: OPERATOR,
+        detail: { lineIds: ["line"], from: "group", arrived: true },
+      }),
+    );
+
+    expect(await factsOf(v, partyId, tableId)).toMatchObject({
+      firstOrderAt: null,
+      lastOrderAt: null,
+      ordersArrived: false,
+    });
+    expect((await liveAt(v, partyId, tableId))!.map((step) => step.stepId)).toEqual([takeOrder]);
+  });
+
   it("a moved-lines event that does not say the dishes arrived is not an order", async () => {
     const v = await setupPartyVenue(suite.db);
     const [takeOrder] = await setSteps(v, await tablesDepartment(v), [TAKE_ORDER]);
     const tableId = await v.table("Table 1");
     const { partyId } = await seat(v, tableId);
     await setOpenedAt(v, partyId, OPENED);
+    // A dish on the party's bill, with no event of this party saying how it got there.
+    const other = await partyWith(v, "Table 9", "fire");
+    await inTx(v, (tx) =>
+      tx.update(workingOrders).set({ partyId }).where(eq(workingOrders.id, other.billId)),
+    );
     const movedLines = (detail: Record<string, unknown>) =>
       inTx(v, (tx) =>
         tx

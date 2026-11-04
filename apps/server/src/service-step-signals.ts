@@ -167,12 +167,16 @@ export async function readStepFacts(
 
   for (const party of parties) {
     const served = servedTimes(dishes.get(party.partyId) ?? []);
-    const ordered = orders.get(party.partyId) ?? arrivals.get(party.partyId);
+    const own = orders.get(party.partyId);
+    // An arrival counts only while a dish is still here: the event outlives the bill moving on.
+    const arrived =
+      own === undefined && dishes.has(party.partyId) ? arrivals.get(party.partyId) : undefined;
+    const ordered = own ?? arrived;
     const facts = {
       openedAt: Date.parse(party.openedAt),
       firstOrderAt: ordered?.first ?? null,
       lastOrderAt: ordered?.last ?? null,
-      ordersArrived: !orders.has(party.partyId) && arrivals.has(party.partyId),
+      ordersArrived: arrived !== undefined,
       drafting: drafting.has(party.partyId),
       courseServedAt: served.courseServedAt,
       allServedAt: served.allServedAt,
