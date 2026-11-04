@@ -612,6 +612,8 @@ To decide before building:
 **2026-10-20, A773-2:** the pass's Done/Undo HTTP route is retired. The sign-in work must use
 the remaining preparation actions and planned pass release rather than extend those former marks.
 
+**2026-11-04, A773-2 PR D:** the marks' table was dropped (core 0205).
+
 ## Task 7 (#789, each person's draft kept on the server)
 
 **2026-10-19, A773-1:** the [per-bill ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
@@ -1062,8 +1064,8 @@ may predate that branch:
   the held after a +; below the width its columns need, a kitchen board shows them as tabs; a late
   card's tab, and its collapsed column, carry a red bar) landed in #2144, from the plan's slice 9c; it
   builds `overviewRows` (`apps/till/src/state/kitchen-overview.ts`), the one counting function
-  A773-2's pass reuses. What is left of A797: slices 10–11, and 12b after
-  A773-2 (slice 12 is A773-2's own). Build slices (design §8), in the owner's
+  A773-2's pass reuses. What is left of A797: slices 10–11 and 12b
+  (slice 12 is A773-2's own). Build slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
   A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits
@@ -2505,7 +2507,7 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
 
 ## A773. Courses, groups and the pass
 
-**A773-2**, firing and the pass, is complete. Its [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
+**A773-2**, firing and the pass: its [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
 was cut into PR B (B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
 B4 into B4a and B4b by its [task plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)),
 PR C ([task plan](../superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) and PR D
@@ -2548,12 +2550,6 @@ The [A773-1 plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and
 [ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md) govern the landed
 Sent/New order and bill ownership behavior. Physical dragging and partial-serving trials remain
 separate backlog entries. A803 owns its pass/station presentation tail.
-
-Each kitchen ticket's group heading names the courses of the dishes under it, and a dish that
-does not wait for the pass, whose group has dishes for the pass, prints "Goes with {stations}"
-naming those dishes' stations; the station card shows the same line. Core migrations `0205_retire_pass_item_marks` and `0206_retire_away_at` dropped
-`pass_item_marks` and `ticket_items.away_at`; `fire_control` goes with `locations` in A1301 S28
-(PR D plan D113).
 
 What A797 leaves for the pass (slices 9 and 9b): `apps/till/src/state/kitchen-columns.ts` is the
 Columns store to reuse, and a key missing from a stored layout returns to its default place, not
@@ -3184,3 +3180,13 @@ reaches them, also moves Waitron's own from the browser's 700 to Bold's 600, on 
 tills and the setup screens; the design did not discuss it. The way not taken: a
 heading weight held at 700, which no hand-set Bold would reach. The rule stands unless the owner
 says otherwise.
+
+## Delete the tests and fixtures that still set `fireControl` with A1301 S28
+
+Left open by A773-2 PR D, its plan's D113. Nothing reads the setting; tests still pass it to the
+till's setup answer or write the `fire_control` column, and they pass. List them with
+`grep -rlE 'fireControl|fire_control' apps/till apps/server packages --include='*.ts' --include='*.json' | grep -v /drizzle/`:
+the till's test files and its `apps/till/test/` fixtures, the server and package tests named in
+[kitchen.md](kitchen.md), and
+`apps/server/src/testing/fixtures/configuration-v1-before-printing-retirement.json`. The
+hash-pinned `madrid-before-move.*.json` captures change only when they are recaptured.

@@ -406,7 +406,7 @@ These 187 source rows were obtained by importing today’s descriptors, not infe
 
 **2026-10-26 (A797 slice 6):** core 0193 adds `kitchen_stations.ready_warning_after_minutes`. A squash writes the end state.
 
-**2026-11-04 (A773-2 PR D):** core 0205 drops `pass_item_marks`. A squash leaves it out.
+**2026-11-04 (A773-2 PR D):** core 0205 drops `pass_item_marks` and core 0206 drops `ticket_items.away_at`. `locations.fire_control` is read and written by nothing and is left in place, because dropping it rebuilds `locations`; a squash leaves all three out.
 
 ## Removed and superseded material
 

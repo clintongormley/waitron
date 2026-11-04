@@ -2464,22 +2464,23 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Delete the tests and fixtures that still set `fireControl` with A1301 S28 (left open by A773-2
   PR D, its plan's D113).** Nothing reads the setting; tests still pass it to the till's setup
-  answer or write the `fire_control` column, and they pass. List them with
-  `grep -rlE 'fireControl|fire_control' apps/till apps/server packages --include='*.ts' --include='*.json' | grep -v /drizzle/`:
-  the till's test files and its `apps/till/test/` fixtures, the server and package tests named in
-  [kitchen.md](backlog/kitchen.md), and
-  `apps/server/src/testing/fixtures/configuration-v1-before-printing-retirement.json`. The
-  hash-pinned `madrid-before-move.*.json` captures change only when they are recaptured.
-  Two till fixtures still pass the dropped `awayAt` field, which nothing reads:
-  `apps/till/src/screens/till-table-order-screen.test.ts:2406` and
+  answer or write the `fire_control` column, and they pass.
+  [Detail](backlog/till.md#delete-the-tests-and-fixtures-that-still-set-firecontrol-with-a1301-s28)
+
+- **Two till fixtures still pass the dropped `awayAt` field (left open by A773-2 PR D).** Nothing
+  reads it: `apps/till/src/screens/till-table-order-screen.test.ts:2406` and
   `apps/till/src/screens/till-table-order-screen.current-orders.test-helpers.ts:69`.
 
-- **Three things seen on the "Goes with {stations}" line and not changed (left open by A773-2 PR
-  D's look).** On 80 mm paper a wrapped cue can leave one station name alone on the next line,
-  which on a shared printer's reprint can look like an empty station section. On a printer shared
-  by two stations the cue prints once under the group heading, above the waiting station's own
-  section too (Grill's dishes then sit under "Goes with Grill"). An English list of three stations
-  gets a serial comma ("Grill, Fryer, and Pastry"); Spanish has none («Grill, Fryer y Pastry»).
+- **On 80 mm paper a wrapped "Goes with {stations}" line can leave one station name alone on the
+  next line (left open by A773-2 PR D's look).** On a shared printer's reprint that line can look
+  like an empty station section.
+
+- **On a printer shared by two stations the "Goes with {stations}" line prints once under the
+  group heading, above the waiting station's own section too (left open by A773-2 PR D's look).**
+  Grill's dishes then sit under "Goes with Grill".
+
+- **An English "Goes with" list of three stations gets a serial comma (left open by A773-2 PR D's
+  look).** "Grill, Fryer, and Pastry"; Spanish has none («Grill, Fryer y Pastry»).
 
 - **The pass board and the station board still carry copies of each other's code (left open by
   A773-2 B4a's finish review).** Two copies remain: the width watcher that switches between columns
@@ -3153,7 +3154,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).** Counter
   custom items (A738 residual) and the payment window (A739) remain. What is left of A797: slices
-  10–11, and 12b after A773-2: [build
+  10–11 and 12b: [build
   plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md).
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)

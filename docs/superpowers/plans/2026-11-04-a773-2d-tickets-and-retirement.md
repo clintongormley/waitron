@@ -1,5 +1,8 @@
 # A773-2 PR D: course headings on kitchen tickets, "Goes with kitchen food", and the retired pass storage — task plan
 
+2026-11-04: the cue reads "Goes with {stations}" (Revision 5); the course heading has its own guide
+section `#group-headings` (EN and ES), and `headingCourses` is not exported.
+
 **Goal.** PRs A to C (#2381 … #2445) finished the waiter's request, the pass's **Fire**, the pass and
 station boards and the station setting "Waits for the pass". Two things remain. First, kitchen paper
 names a group only by its number (`GROUP 3`), and nothing tells a station that does not wait for the
@@ -459,6 +462,7 @@ tickets, station ticket modes and one cross-bill ticket per action (D124). The c
 | Bump configuration format "4 → 5" | none | already 10; nothing carried changes (D114) |
 | "Remove retired child marks first; generate drops" in one task | test edits first (Tasks 6, 7a, 7b), then one generation per storage item (Tasks 8, 9) | each commit green; tasks small |
 | "Schema releases require a pre-live reset, stated first in the PR" | no reset expected, stated first in the PR; the upgrade guard decides | plain `DROP TABLE` / `DROP COLUMN` (P1), guard green with rows present (E4, control E4c); this lane's reading since B1 (#2381, #2440); stop if the guard refuses |
+| "Goes with kitchen food" / «Sale con la comida de cocina» | "Goes with {stations}" / «Sale con {stations}» | the owner withdrew the words (Revision 5, D127) |
 | Requested Grill prints no paper at request, one at release; HOLD obeys A756 | pinned already by B3 (`kitchen-request.hold-paper.test.ts`, `pass-release.test.ts`); Task 2 adds the heading and no-cue facts to one release case | not rebuilt |
 
 ## Consumer audit
@@ -1100,7 +1104,7 @@ is a kitchen and that the product is food. The wording needs to be more generic.
 "Goes with kitchen food" (spec §5) and «Sale con la comida de cocina» are withdrawn. The lane
 proposed three generic forms (~07:00) and recommended (a), which this revision builds; PR D lands
 only after the owner's pick, and a different pick changes only the words and, for (b) or (c), drops
-the names from the cue.
+the names from the cue. 2026-11-04 ~07:00: the owner picked (a).
 
 **D127 The cue names the stations it goes with.** The cue reads **"Goes with {stations}"** /
 **«Sale con {stations}»**, where `{stations}` is the venue's own names of the stations holding the
