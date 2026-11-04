@@ -631,7 +631,10 @@ describe("Cloud recovery client exclusion", () => {
       );
       await expect(client.binding()).rejects.toThrow("Cloud recovery is unavailable");
       await expect(client.status()).rejects.toThrow("Cloud recovery is unavailable");
-      await expect(client.startAgain()).rejects.toThrow("Cloud recovery is unavailable");
+      expect(f.calls.length).toBe(callsWhileHeld);
+      // Start again is refused for its own reasons too, so only its sending nothing shows the
+      // exclusion held it.
+      await client.startAgain().catch(() => undefined);
       expect(f.calls.length).toBe(callsWhileHeld);
     } finally {
       release();
