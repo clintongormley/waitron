@@ -1057,7 +1057,8 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
   - **S18:** the contract's node location ids remain for S18 (S3, #2387). The attendance
     recorder keeps an unread optional `locationId` for S18 (S13, #2397). The node's id remains
-    for S18f (S16, #2402). Four department-receipt scopes are still built by
+    for S18f (S16, #2402). `CatalogueApiDeps.venueCfg` (`apps/server/src/catalogue-api.ts`) is
+    unread and goes when S18f removes the node's location id, or sooner (S18b). Four department-receipt scopes are still built by
     spreading a `cfg` whose type holds `locationId`, which the scope's type no longer declares:
     `receipt-print.ts` and `receipt-presentation.ts` (their `Pick<TradingContext, "locationId" …>`,
     which S18f-2 retypes), and `invoice-document.ts` and `department-receipt-api.ts` (a whole
