@@ -345,26 +345,23 @@ it.each(locales)(
   },
 );
 
-it.each([{ route: "/start-again/summary", answer: { reached: "unknown" } }])(
-  "opens no confirmation when $route answers an unreadable record",
-  async ({ route, answer }) => {
-    const { app, requests } = await missingDatabaseFixture({
-      intercept(path) {
-        if (path.endsWith(route)) return Response.json(answer);
-      },
-    });
-    await openMissing(app);
-    expect(q(app, "missing-reached")).toBeNull();
-    expect(q(app, "retire-confirmed")).toBeNull();
-    expect(q(app, "confirm-start-again")).toBeNull();
-    expect(
-      [
-        ...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions"),
-      ].some((f) => f.error),
-    ).toBe(true);
-    expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
-  },
-);
+it("opens no confirmation when the summary answers an unreadable record", async () => {
+  const { app, requests } = await missingDatabaseFixture({
+    intercept(path) {
+      if (path.endsWith("/start-again/summary")) return Response.json({ reached: "unknown" });
+    },
+  });
+  await openMissing(app);
+  expect(q(app, "missing-reached")).toBeNull();
+  expect(q(app, "retire-confirmed")).toBeNull();
+  expect(q(app, "confirm-start-again")).toBeNull();
+  expect(
+    [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].some(
+      (f) => f.error,
+    ),
+  ).toBe(true);
+  expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
+});
 
 const shells = { en: shellEn, es: shellEs };
 const startAgainRequests = <R extends { path: string }>(requests: R[]) =>

@@ -108,6 +108,8 @@ export const summaryReads = (requests: Sent[]) =>
   requests.filter((r) => r.path.endsWith("/start-again/summary"));
 export const sends = (requests: Sent[]) =>
   requests.filter((r) => r.path.endsWith("/resolution/start-again"));
+export const oldRecoveryRequests = (requests: { path: string }[]) =>
+  requests.filter((r) => OLD_RECOVERY_ROUTE.test(r.path)).map((r) => r.path);
 
 export const cases: {
   name: string;

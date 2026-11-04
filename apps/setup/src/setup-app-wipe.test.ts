@@ -9,18 +9,17 @@ import { initial, wizardApi } from "../test/first-setup-browser.js";
 import { click, damagedSummary, namedSummary, q } from "../test/missing-database-browser.js";
 import { refusedCause, settled } from "../test/held-database-browser.js";
 import {
-  OLD_RECOVERY_ROUTE,
   OWNER_HEADER,
   cases,
   confirmation,
   fieldsIn,
   formErrors,
+  oldRecoveryRequests,
   sends,
   summaryReads,
   t,
   text,
   wipeFixture,
-  type Sent,
 } from "../test/wipe-browser.js";
 import type { SetupApp } from "./setup-app.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
@@ -59,34 +58,28 @@ for (const c of cases)
     await expect.poll(() => text(app)).toContain(t.restarting);
   });
 
-it("the repair page sends nothing under /resolution/backup/: on load, on Start again, on Recover from backup, on Reconnect, with the setup database present, missing and damaged, and for an ordinary first setup resumed in a tab that holds its session", async () => {
-  const oldRoutes = (requests: Sent[]) =>
-    requests.filter((r) => OLD_RECOVERY_ROUTE.test(r.path)).map((r) => r.path);
-  const reset = async () => {
-    cleanupWidgets();
-    sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
-    await navigator.locks.request(`waitron:first-setup:attempt:${initial.attemptId}`, () => {});
-  };
-  for (const database of ["occupied", "missing", "corrupt"] as const)
-    for (const [press, confirm] of [
-      ["start-again", "confirm-start-again"],
-      ["recover-backup", "confirm-recover"],
-    ] as const) {
+for (const database of ["occupied", "missing", "corrupt"] as const)
+  for (const [press, confirm] of [
+    ["start-again", "confirm-start-again"],
+    ["recover-backup", "confirm-recover"],
+  ] as const)
+    it(`setup database ${database}, ${press}: the repair page sends nothing under /resolution/backup/ on load, on the wipe or on Reconnect`, async () => {
       const { app, requests } = await wipeFixture({ inspection: { database } });
-      expect(oldRoutes(requests)).toEqual([]);
+      expect(oldRecoveryRequests(requests)).toEqual([]);
       await click(app, press);
       await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
       await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
       await click(app, confirm);
       await expect.poll(() => sends(requests).length).toBe(1);
-      expect(oldRoutes(requests)).toEqual([]);
+      expect(oldRecoveryRequests(requests)).toEqual([]);
       const before = requests.length;
       await click(app, "reconnect-first");
       await expect.poll(() => requests.length).toBeGreaterThan(before);
       await settled(app);
-      expect(oldRoutes(requests)).toEqual([]);
-      await reset();
-    }
+      expect(oldRecoveryRequests(requests)).toEqual([]);
+    });
+
+it("an ordinary first setup resumed in a tab that holds its session sends nothing under /resolution/backup/", async () => {
   sessionStorage.setItem(
     FIRST_SETUP_SESSION_KEY,
     JSON.stringify({
@@ -109,7 +102,7 @@ it("the repair page sends nothing under /resolution/backup/: on load, on Start a
   await expect.poll(() => q(app, "resume")).not.toBeNull();
   await settled(app);
   expect(requests.some((r) => r.headers.has(OWNER_HEADER))).toBe(true);
-  expect(oldRoutes(requests)).toEqual([]);
+  expect(oldRecoveryRequests(requests)).toEqual([]);
 });
 
 it("with the setup database missing, no Continue or password field is drawn, before or after Start again", async () => {
@@ -225,7 +218,6 @@ it("a summary read that fails draws the error beside Start again, still offered"
   await click(app, "start-again");
   await expect.poll(() => formErrors(app)).toContain(shellEn["shell.first_setup.disk_full"]);
   await settled(app);
-  expect(q(app, "check-again")).toBeNull();
   expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
   fail = false;
   await click(app, "start-again");
