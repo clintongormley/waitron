@@ -86,7 +86,7 @@ async function form(document: "receipt" | "invoice" = "receipt") {
 }
 afterEach(async () => {
   vi.restoreAllMocks();
-  for (const store of stores.splice(0)) store.close();
+  for (const store of stores.splice(0)) store?.close();
   await new Promise<void>((resolve, reject) => {
     const q = indexedDB.deleteDatabase("waitron-document-routing-v1");
     q.onsuccess = () => resolve();
