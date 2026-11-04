@@ -1469,6 +1469,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "According to the copy the spare received, the person who authorised this handover may not move the venue to another box, so the spare did not accept it. The old box stays stopped.",
     es: "Según la copia que ha recibido el equipo de reserva, la persona que autorizó este traspaso no puede pasar el local a otro equipo, así que no la ha aceptado. El equipo antiguo sigue detenido.",
   },
+  "handover.accepted_copy_missing": {
+    en: "The copy of the venue this box accepted is no longer on its disk, so this box cannot take over the venue.",
+    es: "La copia del local que este equipo aceptó ya no está en su disco, así que este equipo no puede pasar a llevar el local.",
+  },
   "handover.relinquishment_invalid": {
     en: "The old box's answer did not hand filing to this box for the copy it accepted, so this box has not taken over. It keeps asking the old box.",
     es: "La respuesta del equipo antiguo no le cede a este equipo el envío de registros de la copia que aceptó, así que este equipo no ha asumido el envío. Sigue preguntando al equipo antiguo.",

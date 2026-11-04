@@ -1,4 +1,4 @@
-import { mkdir, readdir, rm } from "node:fs/promises";
+import { access, mkdir, readdir, rm } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -15,6 +15,7 @@ import {
 import type { ErrorCode } from "@waitron/shared";
 import { askPeerStatus, isOperationStatus } from "./boot-peer-check.js";
 import {
+  acceptedCopyPath,
   acceptFinalCopy,
   readStoredAcceptance,
   verifiedRelinquishment,
@@ -322,6 +323,9 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     try {
       await mkdir(dirname(path), { recursive: true, mode: 0o700 });
       await discard();
+      // Before the record nothing is promised, so this is only what a crash after the move left, and
+      // beside it a second whole copy might not fit.
+      await rm(acceptedCopyPath(deps.stateDir, operationId), { force: true });
       const answer = await boxExchange(
         new URL(`${routes}/indicator`),
         {
@@ -405,6 +409,12 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
 
   async function postAcceptance(operation: HandoverOperation): Promise<void> {
     const { operationId } = operation;
+    // Told to give up filing, the old box would stop for good with this box unable to take over.
+    const fileThere = await access(acceptedCopyPath(deps.stateDir, operationId)).then(
+      () => true,
+      () => false,
+    );
+    if (!fileThere) return waitOn(operation, "handover.accepted_copy_missing");
     const address = await sourceAddress(operation);
     if (address === undefined) {
       return waitOn(operation, "handover.source_unreachable");

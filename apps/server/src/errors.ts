@@ -273,6 +273,11 @@ declare module "@waitron/shared" {
      */
     "handover.relinquishment_invalid": Record<string, never>;
     /**
+     * The file this box accepted is missing, so it does not ask the old box to give up filing: that
+     * would leave neither box able to go forward.
+     */
+    "handover.accepted_copy_missing": Record<string, never>;
+    /**
      * A node booting as primary found, by reconciling with its cloud peer, a higher-term membership
      * document that fences it, so it boots read-only rather than sell beside the promoted primary
      * (two nodes filing under one NIF — CLAUDE.md §5). Logged, never thrown: a fenced boot is a

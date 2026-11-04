@@ -1,4 +1,4 @@
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
@@ -33,6 +33,7 @@ import {
   writeMirrorLink,
 } from "@waitron/node-db";
 import type { StartedServer } from "./boot.js";
+import { acceptedCopyPath } from "./handover-acceptance.js";
 import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
@@ -152,6 +153,7 @@ async function boot(
   mode: "mirror" | "primary",
   mainBoxState = "abandoned",
   beforeStart: (nodeId: string, ownKey: string) => Promise<void> = async () => {},
+  inStateFolder: (stateDir: string) => Promise<void> = async () => {},
 ) {
   beforeServerStarts();
   const venue = await setupVenue(suite.db);
@@ -215,6 +217,7 @@ async function boot(
     join(scratch, "modules.json"),
     JSON.stringify({ modules: { "fiscal-none": false } }),
   );
+  await inStateFolder(scratch);
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const env: Record<string, string> = {
     ...KEY_ENV,
@@ -286,29 +289,38 @@ describe("the spare's handover duty in a full start", () => {
   }, 120_000);
 
   it("a real start at copy_accepted posts the stored acceptance and records filing_assumed", async () => {
-    const { nodeId, posts } = await boot("mirror", "source_stepped_down", async (id, ownKey) => {
-      const store = { node: suite.node, nodeId: id };
-      const row = (await readHandoverOperation(suite.node, id, OP))!;
-      await withNodeTransaction(suite.node, (tx) =>
-        appendHandoverEventTx(tx, {
-          nodeId: id,
-          operationId: OP,
-          kind: "offer",
-          detail: {},
-          envelope: canonicalize({ body: { authorisedBy: AUTHORISER } }),
-        }),
-      );
-      const acceptance = signEnvelope(
-        "acceptance",
-        {
-          binding: row.binding as CanonicalValue,
-          indicatorDigest: "d".repeat(64),
-          acceptedAtMs: 1,
-        },
-        { nodeId: id, privateKey: ownKey },
-      );
-      await advanceHandover(store, OP, "copy_accepted", {}, acceptance);
-    });
+    const { nodeId, posts } = await boot(
+      "mirror",
+      "source_stepped_down",
+      async (id, ownKey) => {
+        const store = { node: suite.node, nodeId: id };
+        const row = (await readHandoverOperation(suite.node, id, OP))!;
+        await withNodeTransaction(suite.node, (tx) =>
+          appendHandoverEventTx(tx, {
+            nodeId: id,
+            operationId: OP,
+            kind: "offer",
+            detail: {},
+            envelope: canonicalize({ body: { authorisedBy: AUTHORISER } }),
+          }),
+        );
+        const acceptance = signEnvelope(
+          "acceptance",
+          {
+            binding: row.binding as CanonicalValue,
+            indicatorDigest: "d".repeat(64),
+            acceptedAtMs: 1,
+          },
+          { nodeId: id, privateKey: ownKey },
+        );
+        await advanceHandover(store, OP, "copy_accepted", {}, acceptance);
+      },
+      async (stateDir) => {
+        const accepted = acceptedCopyPath(stateDir, OP);
+        await mkdir(dirname(accepted), { recursive: true });
+        await writeFile(accepted, "the accepted copy");
+      },
+    );
     // Failing case, with the duty reading only `prepared`: nothing is posted and the row stays.
     await vi.waitFor(
       async () => expect((await operation(nodeId, OP))?.state).toBe("filing_assumed"),

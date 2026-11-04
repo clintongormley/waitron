@@ -1535,6 +1535,14 @@ estimate is refused before the folder copy. It fills its disk, so it has one of 
 and 2 GiB aim can never be met, so the file passes `spaceFloorBytes` 1 MiB and `spaceAimBytes`
 4 MiB with a 6 MiB estimate. Its measured figures are HFS+; CI's tmpfs is its first Linux run.
 
+**A fifth real-disk file checks that a spare's leftover copy does not keep out the next one.**
+`apps/server/src/handover-refetch-full-disk.e2e.test.ts` runs the spare's handover duty with its
+state folder on a small disk that has room for one 4 MiB copy and holds a leftover `accepted.db`:
+the file goes, the copy fits and the operation reaches `copy_accepted`. Its control leaves room for
+half a copy, and the disk refuses with `ENOSPC`. The comparison is a stand-in and the old box's copy
+route a stub; the disk is what it is about. It calls `openSmallDisk("WAITRON_FULL_DISK_DIR_HANDOVER", 32)`,
+and CI mounts a fifth 32 MiB tmpfs at `$RUNNER_TEMP/full-disk-handover` in the same step.
+
 **A test that runs a backup through the supervisor or boot depends on the machine's free disk.**
 The supervisor passes the run no floor or aim, so the product's defaults apply: below the need plus
 2 GiB free, a run deletes old archives in local folders on that disk (only where an installation
@@ -3519,8 +3527,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 - **Full-disk tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
   needs `WAITRON_FULL_DISK_DIR` (and `WAITRON_FULL_DISK_DIR_START_AGAIN`,
-  `WAITRON_FULL_DISK_DIR_FROM_SPARE` and `WAITRON_FULL_DISK_DIR_BACKUP_ROOM` for the second to fourth
-  files: two files filling one filesystem could fail each other, as the server's `maxWorkers: 4` can
+  `WAITRON_FULL_DISK_DIR_FROM_SPARE`, `WAITRON_FULL_DISK_DIR_BACKUP_ROOM` and
+  `WAITRON_FULL_DISK_DIR_HANDOVER` for the second to fifth files: two files filling one filesystem could fail each other, as the server's `maxWorkers: 4` can
   run them at once), otherwise skips locally and fails CI. Interrupted
   macOS images can remain attached; `pnpm reap` does not detach them. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text.

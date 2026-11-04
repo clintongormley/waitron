@@ -42,8 +42,9 @@ export function acceptedCopyPath(stateDir: string, operationId: string): string 
 
 /**
  * Keeps a compared file as the accepted copy, then records `copy_accepted` with the signed
- * acceptance. The move comes first and reaches the disk first, so a recorded acceptance always has
- * its file; a crash between the two leaves `prepared`, and the old box still serves the copy.
+ * acceptance. The move comes first and reaches the disk first, so the file is there when the
+ * acceptance is recorded; a crash between the two leaves `prepared`, and the old box still serves
+ * the copy.
  */
 export async function acceptFinalCopy(
   deps: AcceptanceDeps,

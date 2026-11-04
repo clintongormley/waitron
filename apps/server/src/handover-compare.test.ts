@@ -5,6 +5,7 @@ import {
   open,
   readFile,
   readdir,
+  rename,
   rm,
   stat,
   writeFile,
@@ -1492,6 +1493,67 @@ describe("the spare's duty runs the real comparison", () => {
       expect(r.posted.at(-1)!.text).toBe(before);
       expect(r.copyReads()).toBe(reads);
       expect(existsSync(acceptedCopyPath(r.m2State, OP))).toBe(true);
+    }, 60_000);
+
+    it("a file left by a crash between the move and the record is gone before the download starts", async () => {
+      const r = await dutyRig();
+      const original = await readFile(finalCopyPath(r.m1State, OP));
+      const accepted = acceptedCopyPath(r.m2State, OP);
+      await mkdir(dirname(accepted), { recursive: true });
+      await writeFile(accepted, "left by a crash");
+      const thereAtDownload: boolean[] = [];
+      r.seam.answer = (text) => r.answerWith(r.relinquishment(text));
+      await r.startAccepting({
+        download: (...args) => {
+          thereAtDownload.push(existsSync(accepted));
+          return boxDownload(...args);
+        },
+      });
+      await vi.waitFor(async () => expect((await r.row()).state).toBe("filing_assumed"), {
+        timeout: 15_000,
+      });
+      // Failing case, keeping it: `[true]`, so a second whole copy has to fit beside the first.
+      expect(thereAtDownload).toEqual([false]);
+      expect(Buffer.compare(await readFile(accepted), original)).toBe(0);
+    }, 60_000);
+
+    it("with the accepted file missing nothing is posted, and it waits until the file is back", async () => {
+      const r = await dutyRig();
+      const first = (await r.startAccepting())!;
+      await vi.waitFor(() => expect(r.posted.length).toBeGreaterThan(0), { timeout: 15_000 });
+      await first.stop();
+      const accepted = acceptedCopyPath(r.m2State, OP);
+      const aside = `${accepted}.aside`;
+      await rename(accepted, aside);
+      r.posted.length = 0;
+      r.seam.answer = (text) => r.answerWith(r.relinquishment(text));
+
+      await r.startAccepting();
+      await vi.waitFor(
+        async () =>
+          expect(
+            r.posted.length > 0 ||
+              (await r.row()).waitingReason === "handover.accepted_copy_missing",
+          ).toBe(true),
+        { timeout: 15_000 },
+      );
+      // Failing case, posting anyway: a post with `fileThere: false`, and M1 would give up filing.
+      expect(r.posted).toEqual([]);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(r.posted).toEqual([]);
+      expect(await r.row()).toMatchObject({
+        state: "copy_accepted",
+        waitingReason: "handover.accepted_copy_missing",
+      });
+
+      // Control: with the file there, the same duty posts and takes over.
+      await rename(aside, accepted);
+      await vi.waitFor(async () => expect((await r.row()).state).toBe("filing_assumed"), {
+        timeout: 15_000,
+      });
+      expect(r.posted.length).toBeGreaterThan(0);
+      expect(r.posted.every((post) => post.fileThere)).toBe(true);
+      expect((await r.row()).waitingReason).toBeNull();
     }, 60_000);
 
     it("at filing_assumed it posts nothing more, however often it is started", async () => {
