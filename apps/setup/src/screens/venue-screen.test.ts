@@ -962,7 +962,7 @@ it.each(["prepare", "live"] as const)(
     }
   },
 );
-it("starts the Demo venue name as the demo location, which the operator may keep or change", async () => {
+it("starts the Demo venue name as the demo identity's venue name, which the operator may keep or change", async () => {
   const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
     draft: { mode: "demo" },
   });
@@ -979,7 +979,7 @@ it("starts the Demo venue name as the demo location, which the operator may keep
   expect(venue.name).toBe("Casa Delgado");
   expect(venue.legalName).toBe("Waitron Demo S.L.");
 });
-it("keeps a venue name the Demo draft already holds rather than the demo location", async () => {
+it("keeps a venue name the Demo draft already holds rather than the demo identity's", async () => {
   const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
     draft: { mode: "demo", venue: { name: "Bar Pepe" } },
   });

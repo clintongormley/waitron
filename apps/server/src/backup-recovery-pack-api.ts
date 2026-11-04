@@ -10,7 +10,6 @@ import {
   readRecoveryPacks,
   readTenant,
   readVenue,
-  readVenueClock,
   withNodeTransaction,
   withTransaction,
   type Database,
@@ -461,7 +460,6 @@ export function mountBackupRecoveryPackMakeApi(
                   .where(inArray(persons.id, makers))
               ).map((p) => [p.id, p.name] as const),
         );
-        const clock = await readVenueClock(tx);
         const loaded = deps.backups();
         const status = packStatus({
           records: records.map((r) => ({
@@ -477,7 +475,7 @@ export function mountBackupRecoveryPackMakeApi(
             loaded.recoveryKey !== fileKey,
           now: deps.now(),
         });
-        return { ...status, timeZone: knownZone(clock.timeZone) };
+        return { ...status, timeZone: knownZone((await readVenue(tx)).timeZone) };
       });
       return c.json(status);
     });

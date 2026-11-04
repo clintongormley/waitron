@@ -208,7 +208,7 @@ describe("the venue screen's address search", () => {
     expect(ticked).toEqual(["es-ES"]);
   });
 
-  it("moves an automatic Demo location name with the chosen province", async () => {
+  it("moves an automatic Demo venue name with the chosen province", async () => {
     const el = await mount({ addressProvider: providerFor(BARCELONA) }, { mode: "demo" });
     expect(value(el, "name")).toBe("Casa Delgado");
     await choose(el, BARCELONA);

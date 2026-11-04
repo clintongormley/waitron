@@ -155,7 +155,7 @@ describe("businessDayRangeWindow", () => {
 describe("resolveVenueClock", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
-  it("resolveVenueClock reads the venue's clock for a node the database holds", async () => {
+  it("reads the venue's clock for a node the database holds", async () => {
     await seedVenue(suite.db, {
       name: "Sala",
       invoiceLocales: ["es"],
@@ -176,7 +176,7 @@ describe("resolveVenueClock", () => {
     });
   });
 
-  it("resolveVenueClock refuses a node the database does not hold", async () => {
+  it("refuses a node the database does not hold", async () => {
     const missing = randomUUID();
     await expect(withTransaction(suite.db, (tx) => resolveVenueClock(tx, missing))).rejects.toThrow(
       `reporting: no node ${missing}`,
