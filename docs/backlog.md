@@ -1608,10 +1608,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **At 390 px a block too short for both lines shows its period's name but not its times**; only
   its spoken label names them (`paint-grid.ts`) — left open by A506-8, #1634.
 
-- **Public holidays' names show in Spanish in the English interface**: the official lists carry
-  one name per holiday. Believed to predate A506-7; not checked against the year view's history —
-  left open by A506-7, #1623.
-
 - **On a phone, a holiday name cut with "…" on a date that also has a special day cannot be read
   whole**: the tooltip needs a pointer, and the day box shows only the special day's name
   (`openingHoursDay`, `opening-hours-day.ts`) — left open by A784.
