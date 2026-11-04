@@ -94,8 +94,8 @@ function firstOrderClears(rule: StepRule, firstOrderAt: number, triggeredAt: num
  * trigger plus its minutes, or at the repeat itself. A triggered step stays live until its own Done
  * is later than its trigger, an order is sent later than its due time, the party's first order is
  * later than its trigger, or — before the first order — the party has an open draft. A seated step
- * also clears at a first order at the same instant. Live steps come soonest due first, ties in list
- * order.
+ * also clears at a first order at the same instant. Arrival times do not clear steps that start
+ * from a serving. Live steps come soonest due first, ties in list order.
  */
 export function liveSteps(rules: readonly StepRule[], facts: StepFacts, nowMs: number): LiveStep[] {
   const live: LiveStep[] = [];
@@ -120,8 +120,9 @@ export function liveSteps(rules: readonly StepRule[], facts: StepFacts, nowMs: n
 
 /**
  * Whether the occurrence of `rule` due at `dueAt` has already been cleared: by an order sent once
- * it was due, or by the step's own Done. A repeat of a step every N minutes comes after the
- * order it counts from, and a Done clears the repeat showing when it was tapped, or the first.
+ * it was due (arrival times do not clear steps that start from a serving), or by the step's own
+ * Done. A repeat of a step every N minutes comes after the order it counts from, and a Done clears
+ * the repeat showing when it was tapped, or the first.
  */
 function occurrenceCleared(rule: StepRule, facts: StepFacts, dueAt: number): boolean {
   const done = facts.doneAt.get(rule.id);

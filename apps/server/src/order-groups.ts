@@ -2386,7 +2386,7 @@ export async function heldPaperStations(
   return byGroup;
 }
 
-/** Paper numbers of held groups whose HOLD ticket was queued, or for a held copy its source's. */
+/** Paper numbers of held groups with `holdPrintedAt` set, which a held copy takes from its source. */
 export async function printedHeldGroups(
   tx: Transaction,
   groupIds: readonly string[],

@@ -209,7 +209,6 @@ function itemOrder(a: PassRow, b: PassRow): number {
 interface Placed {
   card: PassCard;
   column: Column;
-  /** Held order: the party's first group's creation (a bill's opening), that party (bill), position. */
   heldOrder: [string, string, number];
 }
 

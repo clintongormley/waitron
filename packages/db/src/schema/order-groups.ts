@@ -53,6 +53,7 @@ export const orderGroups = table(
       .$type<OrderGroupRequestKind>()
       .notNull()
       .default("new_order"),
+    // A held copy made for a moved bill carries its source group's time.
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
