@@ -2470,6 +2470,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [kitchen.md](backlog/kitchen.md), and
   `apps/server/src/testing/fixtures/configuration-v1-before-printing-retirement.json`. The
   hash-pinned `madrid-before-move.*.json` captures change only when they are recaptured.
+  Two till fixtures still pass the dropped `awayAt` field, which nothing reads:
+  `apps/till/src/screens/till-table-order-screen.test.ts:2406` and
+  `apps/till/src/screens/till-table-order-screen.current-orders.test-helpers.ts:69`.
 
 - **Three things seen on the "Goes with {stations}" line and not changed (left open by A773-2 PR
   D's look).** On 80 mm paper a wrapped cue can leave one station name alone on the next line,

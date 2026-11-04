@@ -555,6 +555,8 @@ These are requirements; the plan picks the shapes.
   cleared (section 5).
 - **Courses gain `held_until_fired`; stations gain `waits_for_pass`; `locations.fire_control` goes.**
   We are before go-live, so nothing is carried forward (CLAUDE.md §3).
+  2026-11-04: A773-2 PR D left `locations.fire_control` to A1301 S28, which drops the whole
+  `locations` table (PR D plan, D113).
 
 ## 10. Edge cases
 
