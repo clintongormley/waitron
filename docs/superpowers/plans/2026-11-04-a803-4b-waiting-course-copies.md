@@ -40,42 +40,136 @@ done, left, files, each check's state.
 **A1301 (location removal) binds here.** Nothing new is keyed on locations: no `locationId`
 parameter, column, fixture value or rule. Existing fixtures that already pass `v.cfg.locationId`
 (for example `party-move-bill.test.ts:85`) are left as they are; A1301's slices remove them.
+New test code, including helpers copied from an existing file, names no location (I4).
+
+## Revision 1 (2026-11-04): answers to plan review 1
+
+The review is `~/waitron-campaign-c/a803-4b-plan-review/review-1.md` (0 Critical, 6 Important, 8
+Minor). Each finding was checked against the code at `7d3900e7a4` before it was applied; what was
+read or run is named per row. Nothing was run for this revision beyond the reads and searches named.
+
+| Finding | Answer | Evidence checked for this revision |
+| --- | --- | --- |
+| I1 recalled rows' `join_group_id` | **Applied** (D8 four columns, finding 5, Task 1b, Changed check 2) | Read: `order_draft_recalled_lines` has `join_group_id` and `after_group_id` (`packages/db/src/schema/order-draft-recalled-lines.ts:16-17`); `recallToDraft` passes a held group as the join (`apps/server/src/draft-recall.ts:387-395`); `appendRecalledLine` stores `{ joinGroupId, slot: 0, afterGroupId: null }` (`order-drafts.ts:396-403`); `saveDraft` validates every line's references, recalled ones included, against the bill's party (`order-drafts.ts:538`, `:1313-1339`) |
+| I2 `holdPrintedAt` control aimed at cases that never read it | **Applied** (new Task 5 case 7 carries the control; Task 5 cases 1 and 3 keep the station control) | Read: the first move's "before" is read from the source group before the copy exists (`move-bill.ts:197-198`); after it, `onHeldPaper` reads only stations (`kitchen-print.ts:1518-1543`); `releaseGroup` marks FIRE from stations only (`order-groups.ts:871-873`); a **later** move's "before" needs `holdPrintedAt` (`readOnHoldTickets`, `kitchen-print.ts:1566`). The reviewer's E2 ran it |
+| I3 nested `withTransaction` control | **Applied** (Task 4's control replaced) | Read: the write queue throws "write lock: a body asked for the lock it is already holding" on re-entry (`packages/store/src/write-queue.ts:41-43`); both paths call `printHoldTickets` unconditionally after the copy (`move-bill.ts:282`, `table-actions.ts:355`), through an import a namespace spy replaces (`move-bill.ts:27`, as `order-drafts.db.test.ts:4810-4816` spies `groupArrivingDishes`) |
+| I4 location-keyed helpers | **Applied** ("Test file", Task 1a, Task 10a) | Read: `party-arriving-dishes.test.ts:85`, `:869`; `move-merge.test.ts:366`, `:572`, `:1566`. Siblings already pick the default station by `isDefault` alone (`dead-ends.test.ts:37`, `kitchen-timing-consumers.test.ts:50`); the counter zone the cases need is `v.counter.zoneId` (`party-move-bill.test.ts:744`); `createStation(tx, v.cfg, …)` takes the context, so the new file names no location |
+| I5 Spanish guide text not in Question 1 | **Applied** (Question 1 lists all eight new texts; Task 8 writes them; Task 11) | Read: 4a's Question 1 named its guide heading (`2026-11-01-a803-4-portion-picker.md:586-587`). The ES guide calls Split a table «Separar una mesa» (`guide/es/table-service.md:267`), so the planned heading's «dividir una mesa» is replaced |
+| I6 Question 2's example | **Applied** (Question 2 rewritten) | Read: `nextGroupNumber` counts groups the party holds or numbered (`order-groups.ts:2463-2475`); `moveGroupsToParty` keeps numbers (`:729-746`); `readGroupNumberLabels` labels only duplicate numbers, by the table that numbered them (`:2477-2517`), and the label prints in the group line (`kitchen-ticket.ts:294`) |
+| M1 Task 10 (and Task 2) too large | **Applied** | Task 2 → 2a (Move this bill) and 2b (Split a table); Task 10 → 10a (guards and audits), 10b (controls of Tasks 1a–2b), 10c (controls of Tasks 3–6) |
+| M2 kitchen views of the copy not asserted | **Applied** (Task 3 case 8, through `readCurrentOrders` and `readHeldCounts`) | Read: both exported (`order-groups.ts:1723`, `:1863`); `readCurrentOrders` shows a row under the party whose sequence holds its group (doc comment `:1855-1862`). The pass board's own read was not traced, so it is not named |
+| M3 a staying draft naming a removed source group | **Applied, as a pin of today's rule** (D8, Task 1b case 4), **with the refusal code corrected** | The review said `group.not_found`. Read: `removeEmptiedHeldGroups` changes only `state` and `remindAt` (`order-groups.ts:1457`), so the removed group keeps its `party_id`, and `validateDraftPlaces` then throws `group.not_held`, not `group.not_found` (`order-drafts.ts:1336-1339`). Expected `group.not_held`; the case records what the run shows |
+| M4 Task 6 framed as the master plan's race replay | **Applied** (outline row, Departures row, Task 6) | Read: `2026-11-01-a803-4-portion-picker.md:1361` assigns `A803 race replay` to 4a Task 3 and 4c |
+| M5 D9's reader check already answered | **Applied** (D9, Task 1a) | Read: the one reader outside `order-groups.ts` is `service-step-signals.ts:119-124`, kinds `submitted`/`joined`, no `detail`; `recordGroupEvent` writes one attendance capture per event with an actor (`order-groups.ts:2542-2569`) |
+| M6 Changed check 1 less strict than before | **Applied** (Changed check 1) | The old case pinned "nothing changed"; the new one adds the source group's `removed` event and the Flan's `ticket_items` row `toEqual` before and after |
+| M7 `working-order.ts:6250` | **Applied** (D4) | Read: `startGroup(…, as.kitchen === "fire" ? fireKind! : "next_course")` at `working-order.ts:6250-6256` |
+| M8 the till's `:2542` row title | **Rejected** | The title is generated from the row's data (`till-app-parties.test.ts:2542`, `"shows %s in its own words after %s"` at `:2545`), so renaming it means changing what the row emits, an edit to a passing check the slice does not force (owner rule, "Changed checks"). The row pins the till's wording of a code it still words; `:4163` pins the counter path the code is now sent on. Left as is, and named in the stay list |
 
 ## Owner questions
 
 Building goes ahead on each default. A question about new Spanish blocks landing only.
 
-**Question 1 of 2 (new Spanish; blocks landing).** After 4b, `group.held_leaves_party` is sent only
-when a bill with held dishes is moved to the counter. Its words today
-(`apps/till/src/i18n/codes.ts:338-341`) say "Items still on hold cannot move to another table until
-their group is fired" / «Los artículos en espera no se pueden pasar a otra mesa hasta que se marche
-su grupo», which would then be false: they can move to another table. Worked example: Table 5's
-bill has a flan held for desserts; the waiter chooses **Move this bill → Counter**. Proposed:
+**Question 1 of 2 (new words, English and Spanish; blocks landing).** 4b adds four texts, each in
+English and Spanish: the counter refusal, and three in the guides. All four are listed here as
+proposals. Task 8 writes the guide passages from the code built in Tasks 1–5; where that code makes
+a proposal below untrue, Task 8 changes it and the question posted to the owner is updated before
+landing, so the owner always approves the text that ships. The PR shows all four.
 
-- EN: "Items still on hold cannot move to the counter until their group is fired. They can move to
-  another table."
-- ES: «Los artículos en espera no se pueden pasar al mostrador hasta que se marche su grupo. Sí se
-  pueden pasar a otra mesa.»
+Worked example: Table 5's Bill 2 has a fired burger and a tarta held for desserts. The waiter
+chooses **Move this bill → Table 8**: it goes, and Table 8 holds the tarta in its own group. At Table
+5 the waiter chooses **Move this bill → Counter** for Bill 3, which also has a held dish: refused.
 
-«mostrador» is the till's word for the counter (`apps/till/src/i18n/strings.ts:2242`, `:3382`).
+1. **The counter refusal** (`group.held_leaves_party`, `apps/till/src/i18n/codes.ts:338-341`). After
+   4b it is sent only when a bill with held dishes is moved to the counter. Its words today, "Items
+   still on hold cannot move to another table until their group is fired" / «Los artículos en
+   espera no se pueden pasar a otra mesa hasta que se marche su grupo», would then be false.
+   Proposed:
+   - EN: "Items still on hold cannot move to the counter until their group is fired. They can move
+     to another table."
+   - ES: «Los artículos en espera no se pueden pasar al mostrador hasta que se marche su grupo. Sí
+     se pueden pasar a otra mesa.»
+
+   «mostrador» is the till's word for the counter (`apps/till/src/i18n/strings.ts:2242`, `:3382`).
+2. **The new guide heading** in `guide/*/table-service.md`:
+   - EN: "Move a bill or split a table with dishes on hold" `{#held-dishes-move}`
+   - ES: «Mover una cuenta o separar una mesa con platos en espera» `{#held-dishes-move}`
+     («Separar una mesa» is the ES guide's name for Split a table, `guide/es/table-service.md:267`).
+3. **The new section's text** under that heading:
+   - EN: "A bill with dishes on hold can go to another table with **Move this bill**, and **Split a
+     table** can take it with the table that leaves. At the other table the dishes stay on hold, in
+     a group of their own with that table's next number. Each table fires its own group: firing one
+     sends none of the other table's dishes. If nobody has answered the allergy question at the
+     other table yet, firing there says **Record an allergy answer before sending dishes.**: answer
+     it under **Allergies** in the **⋮** menu, then fire again.
+
+     A bill with dishes on hold cannot move to the counter. The till says **Items still on hold
+     cannot move to the counter until their group is fired. They can move to another table.** Fire
+     their group first, or move the bill to a table."
+   - ES: «Una cuenta con platos en espera puede pasar a otra mesa con **Mover esta cuenta**, y
+     **Separar una mesa** puede llevársela con la mesa que se separa. En la otra mesa los platos
+     siguen en espera, en un grupo propio con el siguiente número de esa mesa. Cada mesa marcha su
+     propio grupo: marchar uno no envía ningún plato de la otra mesa. Si en la otra mesa todavía
+     nadie ha indicado si hay alergias, al marchar allí la caja dice **Indica si hay alergias antes
+     de enviar los platos.**: indícalo en **Alergias**, en el menú **⋮**, y vuelve a marchar.
+
+     Una cuenta con platos en espera no puede pasar al mostrador. La caja dice **Los artículos en
+     espera no se pueden pasar al mostrador hasta que se marche su grupo. Sí se pueden pasar a otra
+     mesa.** Marcha antes su grupo, o pasa la cuenta a una mesa.»
+
+   The quoted allergy refusal is the till's existing text (`apps/till/src/i18n/strings.ts:56`,
+   `:1948`). "with that table's next number" holds only under Question 2's default (A); under (B)
+   the sentence becomes "keeping its number".
+4. **The new paragraph** at the end of `guide/*/kitchen-service.md#held-work`:
+   - EN: "When a bill with dishes on hold moves to another table, each station with a moved dish on
+     its paper whose **Print a slip when sent dishes move table** setting is **Print** gets a
+     **MOVED** slip listing the dishes that moved, the held ones under HOLD with their group's
+     number at the new table. A held dish whose group's HOLD paper never reached that station is
+     not listed there. The new table's ticket marked FIRE lists only those dishes, and the old
+     table's lists only the dishes that stayed. Nothing already printed is printed again."
+   - ES: «Cuando una cuenta con platos en espera pasa a otra mesa, cada estación que tiene en papel
+     un plato movido y tiene **Imprimir un aviso al cambiar de mesa los platos enviados** en
+     **Imprimir** recibe un ticket **MOVIDO** con los platos que se han movido; los que están en
+     espera aparecen aparte, con el número de su grupo en la mesa nueva. Un plato en espera cuyo
+     grupo no tiene lo impreso en espera en esa estación no aparece en ella. La comanda marcada
+     FIRE de la mesa nueva lleva solo esos platos, y la de la mesa anterior solo los que se
+     quedaron. No se vuelve a imprimir nada de lo ya impreso.»
+
+   The setting's names are the guides' own (`guide/en/kitchen-service.md:109`,
+   `guide/es/kitchen-service.md:126-127`), and the station setting gates the slip
+   (`readMovedSlipPrinting`, `kitchen-print.ts:1774`). «lo impreso en espera» and «la comanda
+   marcada FIRE» follow the paragraph above it (`guide/es/kitchen-service.md:68-76`).
+
 Default: as proposed.
 
 **Question 2 of 2 (no new words; does not block landing).** Which group number the copy prints.
-Worked example: Table 5 holds GROUP 2 · POSTRES (a flan on Bill 1, a tarta on Bill 2), and its HOLD
-ticket printed. Bill 2 moves to Table 8, which has nothing yet. The kitchen gets a MOVED slip
-"Mesa 5 → Mesa 8", with the tarta under HOLD and a group line. Later each table fires its own copy.
+Slips below are simplified to their group and dish lines.
 
-- **(A, recommended and built)** The copy takes Table 8's next number, as any new group there would:
-  the MOVED slip says `HOLD / GROUP 2 · POSTRES / 1 x TARTA` if Table 8's arriving dishes took GROUP
-  1, and Table 8's later FIRE says the same number. Every group a party holds has a number no other
-  group of that party shares, whatever moves later.
-- (B) The copy keeps Table 5's number and table (the way a join keeps a group's number,
-  `moveGroupsToParty`, `order-groups.ts:730-746`). The MOVED slip and FIRE then say `GROUP 2 · Mesa
-  5`. But moving the bill back, or joining the two tables later, puts two different groups in one
-  party with the same number and the same table name on paper (`readGroupNumberLabels`,
-  `order-groups.ts:2477-2517`, tells duplicates apart only by the table that numbered them).
+Worked example. Table 5 has GROUP 1 (starters, fired), GROUP 2 (mains, fired) and GROUP 3 · POSTRES,
+held: a flan on Bill 1 and a tarta on Bill 2. The Grill printed the tarta's HOLD ticket. Bill 2 (a fired burger and the tarta) moves to Table 8, which
+had nothing; the burger arrives in Table 8's GROUP 1.
 
-Default (A). Changing to (B) later changes one insert in `copyHeldGroups` and the paper cases.
+- **(A, recommended and built)** The copy takes Table 8's next number, GROUP 2, as any new group
+  there would. The Grill's three slips for the tarta read:
+  1. HOLD ticket (earlier): Mesa 5 · HOLD · GROUP 3 · POSTRES · 1 x TARTA
+  2. MOVED slip: From Mesa 5 · To Mesa 8 · 1 x BURG · HOLD · GROUP 2 · POSTRES · 1 x TARTA
+  3. FIRE ticket (later): Mesa 8 · FIRE · GROUP 2 · POSTRES · 1 x TARTA
+
+  The cost: the cook holding slip 1 sees the tarta's group change from 3 to 2, tied together only by
+  the MOVED slip's From and To lines and the dish's name.
+- (B) The copy keeps GROUP 3, still counted as numbered by Table 5 (the way a join keeps a group's
+  number, `moveGroupsToParty`, `order-groups.ts:729-746`). The slips read "GROUP 3" all three times,
+  with no table beside it while Table 8 holds no other GROUP 3 (`readGroupNumberLabels`,
+  `order-groups.ts:2477-2517`, adds a table only to duplicate numbers). The cost: if Bill 2 later
+  moves back to Table 5, or Tables 5 and 8 are joined, while the flan is still held, Table 5 holds
+    two different groups numbered 3 by Table 5's party, and the paper heads both with the same
+  tables, "GROUP 3 · Mesa 5 · POSTRES" after a move back. The two FIRE tickets cannot then be told
+  apart by their heading.
+
+Under (A) a join can still give a party two groups with one number, since a join keeps numbers, but
+they were numbered by different parties, so the paper heads each with the tables of the party that
+numbered it, as for any join today. Default (A): a number that changes at the move, explained only
+by the MOVED slip, rather than two groups the paper cannot tell apart. Changing to (B) later changes the copy's `displayNumber` and
+`numberPartyId` in `copyHeldGroups` and the paper cases.
 
 ## Read this first: what the planning pass found
 
@@ -117,7 +211,7 @@ Default (A). Changing to (B) later changes one insert in `copyHeldGroups` and th
    (not clear them, as it clears fired ones, `:525-528`), and the copy must carry the HOLD paper facts
    for the moved dishes, or the MOVED slip silently drops them. Split a table reads its "before"
    inside `withMovedSlips` (`table-actions.ts:320`), after `leaveParty` (`:317`): the same holds.
-   By reading; Task 2's first deletion control (held dishes cleared like fired ones) and Task 5's
+   By reading; Task 2a's first deletion control (held dishes cleared like fired ones) and Task 5's
    (no HOLD paper facts on the copy) establish it.
 
 4. **The copy must come after the arriving dishes are grouped.** `groupArrivingDishes` groups only
@@ -129,9 +223,12 @@ Default (A). Changing to (B) later changes one insert in `copyHeldGroups` and th
    `groupArrivingDishes`"; that is replaced (D3).
 
 5. **Drafts name groups.** A draft line can name a group to join (`order_draft_lines.join_group_id`)
-   or to follow (`after_group_id`), and a recalled dish's draft row names the group it follows
-   (`order_draft_recalled_lines.after_group_id`) (`packages/db/src/schema/order-drafts.ts:76-77`,
-   `:98-112`). Today a bill moved with such a draft keeps the stale reference and the next save is
+   or to follow (`after_group_id`) (`packages/db/src/schema/order-drafts.ts:76-77`), and so can a
+   recalled dish's draft row (`order_draft_recalled_lines.join_group_id`, `after_group_id`,
+   `packages/db/src/schema/order-draft-recalled-lines.ts:16-17`). A dish recalled from a **held**
+   group gets a row that joins that group (`recallToDraft`, `draft-recall.ts:387-395`, stored by
+   `appendRecalledLine` as `{ joinGroupId, slot: 0, afterGroupId: null }`, `order-drafts.ts:396-403`);
+   that is the usual recalled row for a held dish (revision 1, I1). Today a bill moved with such a draft keeps the stale reference and the next save is
    refused `group.not_found` (`order-drafts.db.test.ts:4521`, "A stale target must travel unchanged",
    pinned at `:4672-4690`). That case moves a bill whose only held dish is recalled, so no copy is
    made and it stays as it is. Where a copy **is** made, the master plan says "Rebind only moved
@@ -199,7 +296,7 @@ Default (A). Changing to (B) later changes one insert in `copyHeldGroups` and th
 | Changed checks include `party-move-bill.test.ts:740-756` and the till's `:2542`, `:4163` | those three stay; `codes.test.ts:271-274` changes | finding 6 |
 | `order-drafts.db.test.ts:4753-4802` "split table" | `:4735-4787`, one `it.each` over three destinations, all three change | finding 6 |
 | "Gate: … the refusal wording stays for the counter" | the words must change (Question 1) | `codes.ts:338-341` says "another table" |
-| (master plan) race replay "as `bill-editing.table-actions.test.ts` does" with promise barriers | that file has none; the pattern is `order-drafts.db.test.ts:5988-6006` | finding 8 |
+| (master plan) race replay "as `bill-editing.table-actions.test.ts` does" with promise barriers | that file has none; the pattern is `order-drafts.db.test.ts:5988-6006`. `A803 race replay` itself belongs to 4a Task 3 and 4c (`2026-11-01-a803-4-portion-picker.md:1361`); 4b's Task 6 is its own race check for the copy, not that item | finding 8; revision 1, M4 |
 | (master plan) `copyWaitingCourses(tx, fromPartyId, toPartyId, portionIds)` | `copyHeldGroups(tx, fromPartyId, toPartyId, lineIds, operatorId, attendance?)` | 4a's D2: line ids are one-to-one with bound portions; an event needs an operator (`recordGroupEvent`, `:2542`) |
 | (master plan) "Do not implement A773-2 Requested/pass release states here" | unchanged: a Requested dish is never in a held group (finding 2) | |
 
@@ -221,7 +318,8 @@ Default (A). Changing to (B) later changes one insert in `copyHeldGroups` and th
   right after `groupArrivingDishes` and before the MOVED slips are queued (finding 3, finding 4).
 - **D4 The copy's fields.** `state: "held"`, `firedAt`/`firedBy`/`firedByDeviceId` null (never a
   fired time), `submittedBy` the source's (who asked for the course), `requestKind: "next_course"`
-  (every held group is created so: `order-groups.ts:379`, `:1124`, `:1404`, `:2695`; `releaseGroup`
+  (every held group is created so: `order-groups.ts:379`, `:1124`, `:1404`, `:2695`,
+  `working-order.ts:6250`; `releaseGroup`
   decides `new_order` when it fires, `:884`), `displayNumber` the destination's next
   (`nextGroupNumber`, `:2463`) with `numberPartyId` the destination (Question 2, default A),
   `holdPrintedAt` the source's (D5), `remindAt` null (D6).
@@ -239,14 +337,26 @@ Default (A). Changing to (B) later changes one insert in `copyHeldGroups` and th
   `removed` event naming the mover (`removeEmptiedHeldGroups`, `:1426`). A source still holding a
   staying dish, or a recalled one, stays held.
 - **D8 Drafts follow the copy.** In the same call, the open drafts of the bills whose lines moved
-  have `join_group_id`/`after_group_id` (draft lines) and `after_group_id` (recalled rows) rewritten
-  from each copied source group to its copy. A reference to a group that got no copy is left as it
-  is (finding 5's pinned case).
+  have four columns rewritten from each copied source group to its copy: `join_group_id` and
+  `after_group_id` on `order_draft_lines`, and `join_group_id` and `after_group_id` on
+  `order_draft_recalled_lines`. A reference to a group that got no copy is left as it is (finding
+  5's pinned case). A **staying** bill's draft is never rewritten: a copy belongs to another party,
+  and `saveDraft` checks every reference against the draft's own party (`validateDraftPlaces`,
+  `order-drafts.ts:1313-1339`). So when the copy empties and removes the source group, a staying
+  draft line still naming it is refused at its next save, as for any emptied held group today: by
+  reading, `group.not_held`, because a removed group keeps its `party_id`
+  (`removeEmptiedHeldGroups` sets only `state` and `remindAt`, `order-groups.ts:1457`) and
+  `validateDraftPlaces` refuses a group of the party that is not held (`order-drafts.ts:1339`).
+  Task 1b case 4 pins it and records what the run shows.
 - **D9 Events.** One `lines_moved` event on the source (`detail: { lineIds, to: copyId }`) and one on
   the copy (`detail: { lineIds, from: sourceId, arrived: true }`), actor the operator, with attendance
-  when given (as `groupArrived`, `:2701-2711`). Task 1a first lists every reader of
-  `orderGroupEvents.detail` (`rg -n 'orderGroupEvents' apps/server/src -g '!*.test.ts'`) and stops if
-  one reads `lines_moved` details in a way these shapes would break.
+  when given (as `groupArrived`, `:2701-2711`). At planning (revision 1) the only reader outside
+  `order-groups.ts` is `service-step-signals.ts:119-124`, which reads kinds `submitted` and `joined`
+  and never `detail`. `recordGroupEvent` writes one attendance capture per event that has an actor
+  and is given attendance (`order-groups.ts:2542-2569`), so a copy that empties its source writes
+  three (two `lines_moved`, one `removed`). Task 1a
+  re-runs `rg -n 'orderGroupEvents' apps/server/src -g '!*.test.ts'` and stops if a new reader reads
+  `lines_moved` details in a way these shapes would break.
 - **D10 Counter keeps the refusal.** Move this bill to the counter and the paid bill sent to the
   counter by Finish table (`moveSettledBillToCounter`, `move-bill.ts:292-318`; held work is fired
   before it by `releaseHeldWorkOf`, `finish-party-service.ts:262`) keep `group.held_leaves_party`:
@@ -266,7 +376,7 @@ Default (A). Changing to (B) later changes one insert in `copyHeldGroups` and th
 | --- | --- | --- |
 | New `waiting-course-copy.ts` | `copyHeldGroups` in `order-groups.ts`, beside `moveGroupsToParty` and `removeEmptiedHeldGroups` | it needs `nextGroupNumber`, `lastPosition`, `recordGroupEvent`, which are module-private there |
 | "retaining course identity/name, waiting state and ordering" | a group has no course; its dishes do, and the paper heading reads them (`headingCourses`) | the copy keeps the dishes, so it keeps their courses; D2 keeps the order |
-| `A803 race replay` in `bill-editing.table-actions.test.ts` | in `waiting-course-copy.test.ts`, barrier pattern of `order-drafts.db.test.ts:5988-6006` | finding 8 |
+| (none: `A803 race replay` is 4a's and 4c's) | Task 6 adds 4b's own races in `waiting-course-copy.test.ts`, barrier pattern of `order-drafts.db.test.ts:5988-6006` | 4b adds a concurrency risk of its own (two tills on one held group); finding 8; revision 1, M4 |
 | One RED command over `portion-moves`, `waiting-course-copy`, `party-table-actions` | per-task RED commands | 4a built `move-dishes.test.ts` instead of `portion-moves` |
 
 ## Current code map (main `7d3900e7a4`)
@@ -289,11 +399,11 @@ Run each again at the task that touches it; list any new consumer in the ledger.
 
 | Consumer | What 4b does to it | Task |
 | --- | --- | --- |
-| `leaveParty` callers: `moveBillOnce` `:197`, `moveSettledBillToCounter` `:311`, `splitTable` `table-actions.ts:317` | gains a mode; counter callers keep "refuse" | 2 |
-| `refuseHeldLeavingParty` (only `leaveParty`, `rg -n refuseHeldLeavingParty apps/server/src`) | unchanged code; its doc comment narrowed to the counter | 2, 8 |
-| `groupArrivingDishes` (`move-bill.ts:250`, `:266`; `table-actions.ts:341`) | unchanged; held dishes still grouped are skipped | 2 |
+| `leaveParty` callers: `moveBillOnce` `:197`, `moveSettledBillToCounter` `:311`, `splitTable` `table-actions.ts:317` | gains a mode; counter callers keep "refuse" | 2a, 2b |
+| `refuseHeldLeavingParty` (only `leaveParty`, `rg -n refuseHeldLeavingParty apps/server/src`) | unchanged code; its doc comment narrowed to the counter | 2b, 8 |
+| `groupArrivingDishes` (`move-bill.ts:250`, `:266`; `table-actions.ts:341`) | unchanged; held dishes still grouped are skipped | 2a, 2b |
 | `readOnHoldTickets`, `onHeldPaper`, `buildTicketItems`, `releaseGroup`'s `heldPaper`, `holdPaperFor`, `readReprintParts` (`kitchen-print.ts:1973`) | read the copy's `holdPrintedAt` and stations; no code change planned | 5 |
-| `releaseReminder`, `readHeldCounts` (`:1723`), `readCurrentOrders` (`:1863`), the pass board's Held column, the station queue's `QueueGroup` (`working-order.ts:7821-7831`) | read the copy as a held group of the destination party; no code change planned | 3 (reminder case) |
+| `releaseReminder`, `readHeldCounts` (`:1723`), `readCurrentOrders` (`:1863`), the pass board's Held column, the station queue's `QueueGroup` (`working-order.ts:7821-7831`) | read the copy as a held group of the destination party; no code change planned | 3 (reminder case; Current orders and held counts, case 8) |
 | `order_draft_lines`/`order_draft_recalled_lines` group references | rewritten to the copy (D8) | 1b |
 | `order_group_events` readers | D9's check | 1a |
 | Till `codes.ts`, `codes.test.ts`, `client.ts:4699` | words, comment | 7 |
@@ -308,8 +418,8 @@ assertion stays; growth of fixtures is not a change.
 
 | # | Check | Pins today | Pins after | Why the spec forces it | Task |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `apps/server/src/party-table-actions.test.ts:1432-1446` "refuses a bill holding a dish held for the kitchen (Review Focus 4)" | Split a table refused `group.held_leaves_party` `{ tabId: b2, lineNo: 2 }`, parties/bills/tables unchanged | renamed "A803 waiting copy: Split a table takes a bill holding a dish held for the kitchen, and the new party holds its own copy of the group": the bill is the new party's; the flan's line is in a `held` group of the new party with `firedAt` null; the source's group is `removed`; the flan's kitchen item is unfired | §3.7 "A dish waiting for its course can go" | 2 |
-| 2 | `apps/server/src/order-drafts.db.test.ts:4735-4787` `it.each(["free table", "occupied table", "split table"])` "a recalled companion does not let active held work leave for a %s, and refusal changes nothing" | all three refused `group.held_leaves_party` `{ lineNo: 3 }`, writing nothing | renamed "a recalled companion travels as a draft row while active held work leaves for a %s with its own copy of the group": the active line (and its extras) in a new `held` group of the destination party; the recalled source line has no group and its draft row is unchanged except `after_group_id` → the copy; the fresh draft lines' `join_group_id`/`after_group_id` → the copy; the source group `removed` | §3.7 (split), §6 (whole bill); D8 | 2 (body), 1b supplies the rebinding |
+| 1 | `apps/server/src/party-table-actions.test.ts:1432-1446` "refuses a bill holding a dish held for the kitchen (Review Focus 4)" | Split a table refused `group.held_leaves_party` `{ tabId: b2, lineNo: 2 }`, parties/bills/tables unchanged | renamed "A803 waiting copy: Split a table takes a bill holding a dish held for the kitchen, and the new party holds its own copy of the group": the bill is the new party's; the flan's line is in a `held` group of the new party with `firedAt` null; the source's group is `removed`, with one `removed` event naming the operator; the flan's `ticket_items` row is `toEqual` before and after (unfired, nothing rewritten) | §3.7 "A dish waiting for its course can go" | 2b |
+| 2 | `apps/server/src/order-drafts.db.test.ts:4735-4787` `it.each(["free table", "occupied table", "split table"])` "a recalled companion does not let active held work leave for a %s, and refusal changes nothing" | all three refused `group.held_leaves_party` `{ lineNo: 3 }`, writing nothing | renamed "a recalled companion travels as a draft row while active held work leaves for a %s with its own copy of the group": the active line (and its extras) in a new `held` group of the destination party; the recalled source line has no group and its draft row is unchanged except that whichever of `join_group_id`/`after_group_id` named the source now names the copy; the fresh draft lines' `join_group_id`/`after_group_id` → the copy; the source group `removed`; and a `saveDraft` of that draft as read after the move is accepted (today's case pins only the refusal of a stale id) | §3.7 (split), §6 (whole bill); D8 | 2a rewrites the "free table" and "occupied table" rows and leaves "split table" as its own unchanged case, still refused; 2b moves that row into the rewritten `it.each`; 1b supplies the rebinding |
 | 3 | `apps/till/src/i18n/codes.test.ts:271-274` | EN/ES "…cannot move to another table…" | Question 1's words | the old words become false once a held dish can move to a table | 7 |
 
 Stay unchanged (outline listed some of them): `party-move-bill.test.ts:740-756` (counter);
@@ -336,7 +446,7 @@ output must be seen.
   `MOVES=( $(rg -l 'moveBill\(|splitTable\(|/move"|split-table' apps/server/src --glob '*.test.ts' | sed 's#^apps/server/##' | sort) )`
   (zsh: an array), run as `pnpm --filter @waitron/server exec vitest run "${MOVES[@]}"`. At
   `7d3900e7a4`: 46 files, 2,862 tests, all passing (R6). New files join it when they match.
-- **The paper probe** (Task 5, Task 10): A773-2 D's wide paper probe,
+- **The paper probe** (Task 5, Task 10a): A773-2 D's wide paper probe,
   `PAPER=( $(/usr/bin/grep -rlE 'GROUP|GRUPO|decodeTicket|ticketText|paperText|printJobs|TextDecoder|\.bytes|jobText|paper|decode-ticket|printedLines|kitchenPrintJobs|kitchenTicketWords' apps/server/src apps/server/scripts --include='*.test.ts' | sed 's#^apps/server/##') )`,
   run as `pnpm --filter @waitron/server exec vitest run "${PAPER[@]}"`. Measure free memory first
   (`memory_pressure | grep free`); it is about 266 files.
@@ -360,7 +470,16 @@ New `apps/server/src/waiting-course-copy.test.ts`, every case titled `A803 waiti
 as `party-arriving-dishes.test.ts:73-97` does (`useVenueDb({ resetPerTest: false, … })`,
 `setupPartyVenue`, three courses created once; each case seats its own tables), with helpers copied
 from there and from `move-merge.test.ts` (a station with a printer, `printedLines` of the jobs since
-a mark, `setStationPrinting`). One helper, `rowsOf(partyIds, billIds)`, returns full rows, ordered,
+a mark, `setStationPrinting`). **Copied without any location** (A1301; revision 1, I4): those files
+filter stations and insert a zone by `v.cfg.locationId` (`party-arriving-dishes.test.ts:85`, `:869`;
+`move-merge.test.ts:366`, `:572`, `:1566`). The new file picks the default station by
+`eq(kitchenStations.isDefault, true)` alone, as `dead-ends.test.ts:37` and
+`kitchen-timing-consumers.test.ts:50` do; finds a station by name with `eq(kitchenStations.name,
+name)` and `active` alone; makes stations through `createStation(tx, v.cfg, …)`; uses
+`v.counter.zoneId` for the counter (`party-move-bill.test.ts:744`); and makes no zone of its own
+(`party-arriving-dishes.test.ts`'s "Barra factura" zone is not needed by any 4b case). Every task
+that edits this file ends with `rg -n 'locationId|location_id' apps/server/src/waiting-course-copy.test.ts`
+printing nothing (exit 1). One helper, `rowsOf(partyIds, billIds)`, returns full rows, ordered,
 of `order_groups`, `order_group_hold_stations`, `order_group_events`, `working_order_lines`,
 `ticket_items`, `kitchen_notices`, `print_jobs`, `order_drafts`, `order_draft_lines`,
 `order_draft_recalled_lines`, `parties`, `party_tables` and `working_orders` for those parties and
@@ -378,7 +497,7 @@ Focused RED/GREEN command for this file:
 - [ ] Re-run finding 10's overlap check across `git worktree list` and the lanes' queues
   (`~/waitron-campaign*/queue.md`); record overlaps in the ledger.
 - [ ] Re-run `rg -n 'held_leaves_party' apps packages`; any hit not in finding 6 joins "Changed
-  checks" or the stay list, with a reason, before Task 2.
+  checks" or the stay list, with a reason, before Task 2a.
 - [ ] Post Question 1 to `~/waitron-campaign-c/questions.md` (one-at-a-time format, worked example
   as above) and Question 2 beside it, marked "default built, does not block landing".
 - [ ] Write the ledger `docs/handoffs/2026-11-04-a803-4b-waiting-course-copies.md`
@@ -409,10 +528,11 @@ export async function copyHeldGroups(
 A named line that is an extras line, recalled into a draft, in no group, in a group that is not
 held, or in a group of another party is ignored. The tests call it directly inside `inTx`, after
 moving the bill's row to the destination party by hand (`update working_orders set party_id`), so
-they do not depend on Task 2.
+they do not depend on Tasks 2a and 2b.
 
-- [ ] D9's reader check: `rg -n 'orderGroupEvents' apps/server/src -g '!*.test.ts'`; record each
-  reader of `detail` in the ledger; stop if one would misread D9's shapes.
+- [ ] D9's reader check: `rg -n 'orderGroupEvents' apps/server/src -g '!*.test.ts'`; at planning the
+  only reader outside `order-groups.ts` was `service-step-signals.ts:119-124` (kinds only, no
+  `detail`). Record any new reader of `detail` in the ledger; stop if one would misread D9's shapes.
 - [ ] **Failing tests** (all `A803 waiting copy: copyHeldGroups …`):
   1. "… copies a held group shared by a leaving and a staying bill, moving only the leaving dish and
      its extras": party A, Bill 1 (Flan, held, group G) and Bill 2 (Tarta, held, same G: place both
@@ -445,43 +565,58 @@ they do not depend on Task 2.
   (D5), update `working_order_lines.group_id` for the lines and `parent_line_id` in them, the two
   events (D9); then `removeEmptiedHeldGroups(tx, fromPartyId, sources, operatorId, attendance)`.
 - [ ] **GREEN.** The file unfiltered; `src/order-groups.test.ts`, `src/party-arriving-dishes.test.ts`
-  (baselines 254 and 29, R4); `pnpm --filter @waitron/server typecheck`.
+  (baselines 254 and 29, R4); `pnpm --filter @waitron/server typecheck`;
+  `rg -n 'locationId|location_id' apps/server/src/waiting-course-copy.test.ts` prints nothing (I4).
 - [ ] **Deletion controls** (each removed alone, the named case must go red, then restored):
   the hold-station intersection (copy all of G's stations) → case 4; `removeEmptiedHeldGroups` →
   case 3; the source-order `orderBy` reversed → case 2; `remindAt: null` replaced by G's → case 7;
   the recalled filter → case 6.
 - [ ] **Commit.** `git commit -s -m "A803 4b: copy a party's held groups for dishes leaving it"`.
 
-## Task 1b: drafts follow the copy (about 40 calls)
+## Task 1b: drafts follow the copy (about 45 calls)
 
 **Files.** `apps/server/src/order-groups.ts` (`copyHeldGroups`), `waiting-course-copy.test.ts`.
 
 - [ ] **Failing tests.**
-  1. "A803 waiting copy: copyHeldGroups points the moving bill's draft at the copy": Bill 2 has an
-     open draft with one line `join_group_id = G` (slot 0) and one `after_group_id = G` (slot 2),
-     and a recalled row with `after_group_id = G` for a recalled Tarta of G. Copy Bill 2's other G
-     dish. All three references read the copy; every other column of those rows is unchanged
+  1. "A803 waiting copy: copyHeldGroups points the moving bill's draft at the copy": G holds Bill
+     2's Tarta and Flan2 (both held). Recall Flan2 with the real `recallToDraft`
+     (`draft-recall.ts:290`), so its recalled row carries the join the product writes,
+     `join_group_id = G`, slot 0 (`draft-recall.ts:387-395`, `order-drafts.ts:396-403`); assert that
+     before copying. Add to the same open draft one fresh line `join_group_id = G` (slot 0) and one
+     `after_group_id = G` (slot 2), and, by hand, a second recalled row with `after_group_id = G`,
+     slot 2, for another of Bill 2's dishes, since `source_line_id` is unique. That is the shape
+     `recalledPlace` writes when a recalled dish takes the slot of a draft line that follows a
+     group (`order-drafts.ts:431-443`), kept so the `after_group_id` update is tested too. Copy Bill
+     2's Tarta. All four references read the copy; every other column of those rows is unchanged
      (`toEqual` on the whole rows with the one field replaced).
   2. "… leaves a staying bill's draft on the source group": Bill 1's draft line naming G is
      unchanged.
   3. "… leaves a reference to a group that got no copy as it was": Bill 2's draft names G3, which
      has no leaving dish; unchanged.
+  4. "… a staying bill's draft naming a source group the copy removed is refused at its next save,
+     as for any emptied held group" (D8; revision 1, M3): G holds only Bill 2's Tarta; Bill 1's open
+     draft has a fresh line `join_group_id = G`. Copy the Tarta (G is `removed`), then `saveDraft`
+     Bill 1's draft unchanged. Expected refusal `group.not_held` `{ groupId: G }` by reading
+     (`order-drafts.ts:1339`; D8); write the code the run shows, and if it is not a domain refusal
+     naming G, stop and ask in the ledger.
 - [ ] **RED.** `… -t 'draft'` in the file: case 1 fails on the first reference still reading G;
-  cases 2 and 3 pass already (they are pins; say so in the report).
+  cases 2, 3 and 4 pass already (they are pins; say so in the report).
 - [ ] **Implement.** After the copies: for the open drafts (`order_drafts.state = "open"`) whose
-  `bill_id` is a bill holding a moved line, three updates per copied source group (`join_group_id`,
-  `after_group_id` on `order_draft_lines`; `after_group_id` on `order_draft_recalled_lines`).
+  `bill_id` is a bill holding a moved line, four updates per copied source group (`join_group_id`
+  and `after_group_id` on `order_draft_lines`; `join_group_id` and `after_group_id` on
+  `order_draft_recalled_lines`).
 - [ ] **GREEN.** The file unfiltered; `src/order-drafts.db.test.ts` (299 as at R4: no path calls
-  the copy yet, so its `:4735-4787` refusal case still passes unchanged).
-- [ ] **Deletion controls.** Drop the `bill_id` filter → case 2 red; drop the recalled-row update →
-  case 1 red.
+  the copy yet, so its `:4735-4787` refusal case still passes unchanged); the location grep (I4)
+  prints nothing.
+- [ ] **Deletion controls.** Drop the `bill_id` filter → case 2 red; drop the recalled-row
+  `join_group_id` update → case 1 red (the `recallToDraft` row still names G); drop the
+  recalled-row `after_group_id` update → case 1 red (the hand-made row still names G).
 - [ ] **Commit.** `git commit -s -m "A803 4b: a moving bill's draft follows its held group's copy"`.
 
-## Task 2: Move this bill and Split a table carry held dishes (about 60 calls)
+## Task 2a: Move this bill carries held dishes (about 50 calls)
 
-**Files.** `apps/server/src/move-bill.ts`, `apps/server/src/table-actions.ts`,
-`waiting-course-copy.test.ts`, `party-table-actions.test.ts` (Changed check 1),
-`order-drafts.db.test.ts` (Changed check 2).
+**Files.** `apps/server/src/move-bill.ts`, `waiting-course-copy.test.ts`, `order-drafts.db.test.ts`
+(Changed check 2, its "free table" and "occupied table" rows).
 
 - [ ] **Failing tests** (new file):
   1. "A803 waiting copy: Move this bill to a free table takes a held dish, held, in its own copy of
@@ -490,41 +625,67 @@ they do not depend on Task 2.
      `firedAt` and `requestedAt` null, the source's group `removed`).
   2. "… to a seated table" (same, onto a party with its own fired and held groups; the copy after
      all of them, and after the arrival's fired group holding the Burger).
-  3. "… Split a table takes a bill holding a held dish" (the new party; the copy is after the
-     arrival's fired group).
   4. "… Move this bill to the counter still refuses a held dish, writing nothing" (`rowsOf` equal;
-     `group.held_leaves_party` `{ tabId, lineNo }`).
-  And the two Changed checks (1, 2) rewritten as the table says.
-- [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/waiting-course-copy.test.ts -t 'Move this bill|Split a table'`
-  → cases 1–3 refused `group.held_leaves_party`, case 4 passes (a pin).
-  `pnpm --filter @waitron/server exec vitest run src/party-table-actions.test.ts src/order-drafts.db.test.ts -t 'held'`
-  → the rewritten checks fail on the same refusal.
+     `group.held_leaves_party` `{ tabId, lineNo }`; the counter is `v.counter.zoneId`).
+  And Changed check 2's "free table" and "occupied table" rows rewritten as the table says. Its
+  "split table" row moves, unchanged, into a case of its own beside them (same title with "split
+  table", same body), because Split a table still refuses until Task 2b.
+- [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/waiting-course-copy.test.ts -t 'Move this bill'`
+  → cases 1 and 2 refused `group.held_leaves_party`, case 4 passes (a pin).
+  `pnpm --filter @waitron/server exec vitest run src/order-drafts.db.test.ts -t 'recalled companion'`
+  → the two rewritten rows fail on the same refusal; the split-table case passes.
 - [ ] **Implement.** `leaveParty(tx, billId, held: "refuse" | "keep")` returning
   `{ firers, heldLineIds }`: "keep" skips `refuseHeldLeavingParty` and clears only lines that are
   not held-and-unrecalled; "refuse" is today's body. `moveBillOnce` passes "refuse" for the counter
   and "keep" otherwise, and calls `copyHeldGroups(tx, path.partyId, partyId, heldLineIds,
   options.operatorId, activity)` right after each `groupArrivingDishes` (free `:250`, seated
-  `:266`); `moveSettledBillToCounter` passes "refuse"; `splitTable` passes "keep" and copies right
-  after `:341`, inside `withMovedSlips`. Update the doc comments of `leaveParty` (`:493-497`),
-  `splitTable` (`:278-283`, "holding no dish held for the kitchen") and `refuseHeldLeavingParty`
-  (`working-order.ts:5005-5008`) to say the counter.
-- [ ] **GREEN.** The new file unfiltered; `src/party-table-actions.test.ts` (89), `src/party-move-bill.test.ts`
-  (68), `src/order-drafts.db.test.ts` (299), `src/collect-at-counter.test.ts` (17),
-  `src/kitchen-request.bill-move.test.ts` (7), `src/party-arriving-dishes.test.ts` (29) — each
-  count equal to the baseline (R4) plus the cases added; then the move sweep. Types.
-- [ ] **Deletion controls.** "keep" clearing held lines like "refuse" does → cases 1–3 red (no
+  `:266`); `moveSettledBillToCounter` and `splitTable` pass "refuse" (Split changes in 2b). Update
+  the doc comment of `leaveParty` (`:493-497`).
+- [ ] **GREEN.** The new file unfiltered; `src/party-move-bill.test.ts` (68),
+  `src/order-drafts.db.test.ts` (299 + the split-out case), `src/collect-at-counter.test.ts` (17),
+  `src/kitchen-request.bill-move.test.ts` (7), `src/party-arriving-dishes.test.ts` (29),
+  `src/party-table-actions.test.ts` (89, unchanged: Split still refuses) — each count equal to the
+  baseline (R4) plus the cases added; types; the location grep (I4) prints nothing.
+- [ ] **Deletion controls.** "keep" clearing held lines like "refuse" does → cases 1 and 2 red (no
   copy is made and the dish takes the arrival path, R1); the copy call removed from the free-table
-  branch → case 1 red, from the seated branch → case 2, from `splitTable` → case 3 and Changed
-  check 1; the copy call moved to before `groupArrivingDishes` → cases 2 and 3 red (the arrival's
-  fired group after the copy, finding 4); the counter given "keep" → case 4 red.
-- [ ] **Commit.** `git commit -s -m "A803 4b: a bill with held dishes moves to a table or splits off with its own copy of each held group"`.
+  branch → case 1 red, from the seated branch → case 2 red; the copy call moved to before
+  `groupArrivingDishes` in the seated branch → case 2 red (the arrival's fired group after the copy,
+  finding 4); the counter given "keep" → case 4 red.
+- [ ] **Commit.** `git commit -s -m "A803 4b: a bill with held dishes moves to another table with its own copy of each held group"`.
 
-## Task 3: what the copy does afterwards (about 55 calls)
+## Task 2b: Split a table carries held dishes (about 45 calls)
+
+**Files.** `apps/server/src/table-actions.ts`, `apps/server/src/working-order.ts` (a doc comment),
+`waiting-course-copy.test.ts`, `party-table-actions.test.ts` (Changed check 1),
+`order-drafts.db.test.ts` (Changed check 2's "split table" row).
+
+- [ ] **Failing tests.**
+  3. "A803 waiting copy: Split a table takes a bill holding a held dish" (the new party; the copy is
+     after the arrival's fired group).
+  And Changed check 1 rewritten as the table says (with the `removed` event and the Flan's
+  `ticket_items` row `toEqual` before and after, M6), and the "split table" case from 2a moved back
+  into Changed check 2's rewritten `it.each`, so that it has its three planned rows.
+- [ ] **RED.** `… -t 'Split a table'` in the new file → refused `group.held_leaves_party`;
+  `pnpm --filter @waitron/server exec vitest run src/party-table-actions.test.ts src/order-drafts.db.test.ts -t 'held|recalled companion'`
+  → Changed check 1 and the "split table" row fail on the same refusal.
+- [ ] **Implement.** `splitTable` passes "keep" and copies right after `groupArrivingDishes`
+  (`:341`), inside `withMovedSlips`. Update the doc comments of `splitTable` (`:278-283`, "holding
+  no dish held for the kitchen") and `refuseHeldLeavingParty` (`working-order.ts:5005-5008`) to say
+  the counter.
+- [ ] **GREEN.** The new file unfiltered; `src/party-table-actions.test.ts` (89),
+  `src/order-drafts.db.test.ts` (299), and the 2a list again; then the move sweep; types; the
+  location grep prints nothing.
+- [ ] **Deletion controls.** The copy call removed from `splitTable` → case 3 and Changed check 1
+  red; the copy call moved to before `groupArrivingDishes` there → case 3 red (finding 4);
+  `splitTable` given "refuse" again → case 3, Changed check 1 and the "split table" row red.
+- [ ] **Commit.** `git commit -s -m "A803 4b: Split a table takes a bill with held dishes, with its own copy of each held group"`.
+
+## Task 3: what the copy does afterwards (about 60 calls)
 
 **Files.** `waiting-course-copy.test.ts` only, unless a case finds a defect (then test first, fix in
 the file the failure names, and say so in the report).
 
-- [ ] **Cases** (each RED before Task 2 by construction; here they are expected to pass on first
+- [ ] **Cases** (each RED before Tasks 2a and 2b by construction; here they are expected to pass on first
   run, so each gets a deletion control instead):
   1. "… a dish held by hand on a course that does not wait by itself stays held at the new table"
      (R1's shape: Flan with no course, held by hand; seated destination).
@@ -540,10 +701,17 @@ the file the failure names, and say so in the report).
   7. "… the new table's release reminder names the copy once the dishes ahead of it are served"
      (`readReleaseReminders` on the destination, reminder minutes set as the `line-service-*.test.ts`
      files set them; the source's reminder no longer names a removed group).
-- [ ] **Run.** `pnpm --filter @waitron/server exec vitest run src/waiting-course-copy.test.ts`.
+  8. "… each table's Current orders and held count show its own part of the group" (revision 1,
+     M2): a group shared by Bill 1 (Flan, staying) and Bill 2 (Tarta, moving to a free table).
+     `readCurrentOrders` (`order-groups.ts:1863`) of the destination lists the copy, `held`, with
+     the Tarta's row only; of the source, G with the Flan's row only. `readHeldCounts`
+     (`order-groups.ts:1723`) gives 1 for each party.
+- [ ] **Run.** `pnpm --filter @waitron/server exec vitest run src/waiting-course-copy.test.ts`; the
+  location grep (I4) prints nothing.
 - [ ] **Deletion controls.** In `copyHeldGroups`: copy rows inserted with `state: "fired"` and a
   `firedAt` → cases 1, 3 red; one copy per destination instead of per source group → case 2 red;
-  `removeEmptiedHeldGroups` removed → cases 6, 7 red. Restore each.
+  `removeEmptiedHeldGroups` removed → cases 6, 7 red; the lines' `group_id` update dropped (the
+  moved dish left in G) → case 8 red. Restore each.
 - [ ] **Commit.** `git commit -s -m "A803 4b: tests that each table fires its own copy"`.
 
 ## Task 4: rollback and the routes (about 45 calls)
@@ -561,13 +729,19 @@ the file the failure names, and say so in the report).
   3. Route: `POST /api/bills/:id/move` to a free table answers 200 for a bill with a held dish, and
      `GET` of the new party's current orders lists a held group holding it.
   4. Route: `POST /api/parties/:id/split-table` the same.
-- [ ] **RED/GREEN.** Cases 1, 3, 4 would have been red before Task 2 (refused); 2 is a pin of the
+- [ ] **RED/GREEN.** Cases 1, 3, 4 would have been red before Tasks 2a and 2b (refused); 2 is a pin of the
   transaction. `pnpm --filter @waitron/server exec vitest run src/waiting-course-copy.test.ts src/till-api.move-bill.test.ts src/till-api.table-actions.test.ts`.
-- [ ] **Deletion control** for case 2: run the copy in a separate `withTransaction` (a throwaway
-  edit) → case 2 red (the copy survives the failure). Restore.
+- [ ] **Case 2 is a pin of the single transaction**, not a test that could be broken by a second
+  one: a nested `withTransaction` from inside the move is refused by the write queue ("write lock: a
+  body asked for the lock it is already holding", `packages/store/src/write-queue.ts:41-43`), and
+  `copyHeldGroups` takes only `tx` (CLAUDE.md §3: write paths take `tx`, never open their own), so
+  the copy cannot commit apart from the move by construction (revision 1, I3).
+- [ ] **Deletion control** for case 2: the spy's throwing implementation removed (it calls the real
+  `printHoldTickets` and returns) → case 2 red for both paths (the move commits, `rowsOf` differs).
+  This shows the marker error, not something else, is what case 2's equal rows rest on. Restore.
 - [ ] **Commit.** `git commit -s -m "A803 4b: a failed move leaves no copy behind"`.
 
-## Task 5: kitchen paper (about 55 calls)
+## Task 5: kitchen paper (about 60 calls)
 
 **Files.** `waiting-course-copy.test.ts`. No production change is planned (finding 3); if a case
 fails, the fix goes where the failure points, test first, and the report says so.
@@ -592,10 +766,23 @@ Different dishes, one of each (finding 11).
      off; the MOVED slip lists the Burger only; the copy's `holdPrintedAt` null; its FIRE unmarked).
   6. "… Split a table: the leaving bill's MOVED slip lists its held dish under HOLD" (the staying
      bill's own MOVED notice, finding 8 of the 4a plan, is not asserted here; 4c changes it).
-- [ ] **Run.** The file; then the paper probe (measure free memory first).
-- [ ] **Deletion controls.** In `copyHeldGroups`: `holdPrintedAt` set null → case 1 red (Tarta
-  missing from the slip) and case 3 red (FIRE unmarked); the station copy removed → case 1 red
-  (finding 3). Restore each.
+  7. "… moving the bill again: the second MOVED slip lists the held dish under HOLD with its group's
+     number at the third table" (revision 1, I2): after case 1's move to Mesa 8, move Bill 2 on to
+     Mesa 9 (free). Grill's new jobs since a mark are one MOVED slip, From Mesa 8 To Mesa 9:
+     `1.000 x BURG`, `HOLD`, `GROUP m · POSTRES` (m the second copy's number), `1.000 x TARTA`.
+     This is the case that reads the copy's `holdPrintedAt`: a later move's "before" picture lists
+     a held dish only if its group's `holdPrintedAt` is set (`readOnHoldTickets`,
+     `kitchen-print.ts:1566`). It also covers the master plan's "new notices use current
+     destination/name" on a subsequent move.
+- [ ] **Run.** The file; then the paper probe (measure free memory first); the location grep (I4)
+  prints nothing.
+- [ ] **Deletion controls.** In `copyHeldGroups`: `holdPrintedAt` set null → case 7 red (the Tarta
+  missing from the second MOVED slip). The first move's slip and the FIRE do not read the copy's
+  `holdPrintedAt` (the first "before" is read from the source, `move-bill.ts:197-198`; after it
+  `onHeldPaper` and `releaseGroup` read stations only, `kitchen-print.ts:1518-1543`,
+  `order-groups.ts:871-873`), so cases 1 and 3 are not this field's control. The station copy
+  removed → case 1 red (the Tarta missing from the slip) and case 3 red (FIRE unmarked) (finding 3;
+  the reviewer's E3 ran both). Restore each.
 - [ ] **Commit.** `git commit -s -m "A803 4b: kitchen paper for a held dish that changed table"`.
 
 ## Task 6: races (about 40 calls)
@@ -604,6 +791,10 @@ Different dishes, one of each (finding 11).
 
 Pattern: `order-drafts.db.test.ts:5988-6006`. Both commands read their revisions and bodies first;
 each awaits one barrier; `Promise.allSettled` of both; open the barrier.
+
+These are 4b's own races for the copy, not the master plan's `A803 race replay` item, which belongs
+to 4a Task 3 and 4c (`2026-11-01-a803-4-portion-picker.md:1361`). A lost reply followed by a stale
+resubmission is Task 4 case 1 (a stale party revision refused, `rowsOf` equal), not a case here.
 
 - [ ] **Cases.**
   1. "A803 waiting copy: of two moves of one bill read from one revision, one commits and the other
@@ -642,19 +833,16 @@ each awaits one barrier; `Promise.allSettled` of both; open the barrier.
 **Files.** `apps/server/src/guide/en/table-service.md`, `guide/es/table-service.md`,
 `guide/en/kitchen-service.md`, `guide/es/kitchen-service.md`.
 
-Write from the code built in Tasks 1–5, not from this plan.
+Question 1 items 2–4 are the proposed text, EN and ES. Check each sentence against the code built
+in Tasks 1–5 before writing it (CLAUDE.md: a guide is written from the code); write the proposal
+where it holds, and where the code makes a sentence untrue, write what the code does and update
+Question 1 in `~/waitron-campaign-c/questions.md` and the ledger with the new text (it blocks
+landing either way).
 
-- [ ] `table-service.md`: a new section after `#move-dishes`, "## Move a bill or split a table with
-  dishes on hold {#held-dishes-move}" (ES «## Mover una cuenta o dividir una mesa con platos en
-  espera {#held-dishes-move}»): a bill with dishes on hold can move to another table, and Split a
-  table can take it; the other table gets its own group for them, still on hold, and each table
-  fires its own; the till may ask the new table's allergy question before firing there; a bill with
-  dishes on hold cannot move to the counter until their group is fired (the refusal's words). Use
-  the till's words: «en espera», «marchar», «grupo».
-- [ ] `kitchen-service.md#held-work`: one paragraph: when such a bill changes table, a station with
-  the group's HOLD paper gets a MOVED slip listing the dishes that moved, the held ones under HOLD
-  with their group at the new table; that table's FIRE lists only them; nothing already printed is
-  reprinted.
+- [ ] `table-service.md`: a new section after `#move-dishes` with Question 1 item 2's heading and
+  item 3's text, in EN and ES.
+- [ ] `kitchen-service.md#held-work`: Question 1 item 4's paragraph, at the end of the section, in
+  EN and ES.
 - [ ] **GREEN.** G; `pnpm exec prettier --file-info apps/server/src/guide/en/table-service.md` is not
   ignored and `pnpm format:check` passes.
 - [ ] **Commit.** `git commit -s -m "Guides: a bill with dishes on hold can change table; each table fires its own"`.
@@ -673,15 +861,28 @@ Write from the code built in Tasks 1–5, not from this plan.
 - [ ] Say in the ledger and the PR that this is decoded text, not paper; physical printing stays
   unmeasured until done on a printer. Delete the throwaway test.
 
-## Task 10: the whole slice (no commit; about 45 calls)
+## Task 10a: the whole slice, guard suites and audits (no commit; about 40 calls)
 
 - [ ] Every guard suite above, each separately, each count read.
-- [ ] Re-run every deletion control of Tasks 1a–6 against the final code; each named case goes red
-  and comes back green. Record the table in the ledger.
 - [ ] Every removed or changed `expect` line in `git diff 7d3900e7a4 -- '*.test.ts'` is a row of
   "Changed checks" or is in a new case; anything else is a stop.
 - [ ] `rg -n 'held_leaves_party' apps packages` hits only the counter paths, the code's
   registrations and the tests the stay list names.
+- [ ] `rg -n 'locationId|location_id' apps/server/src/waiting-course-copy.test.ts` prints nothing
+  (I4), and `git diff 7d3900e7a4 -- apps packages | rg '^\+.*(locationId|location_id)'` prints
+  nothing (no new location key anywhere in the slice).
+
+## Task 10b: deletion controls of Tasks 1a–2b (no commit; about 65 calls)
+
+- [ ] Re-run, against the final code, each deletion control listed in Tasks 1a, 1b, 2a and 2b (16
+  at revision 1): one throwaway edit, the named case or cases red, restore, green. Record the table
+  in the ledger: control, case, red message, green after restore. `git diff` after the last restore
+  prints only the slice's own changes (no leftover throwaway edit).
+
+## Task 10c: deletion controls of Tasks 3–6 (no commit; about 40 calls)
+
+- [ ] The same for each deletion control listed in Tasks 3, 4, 5 and 6 (8 at revision 1), added to
+  the ledger's table; the same leftover check.
 
 ## Task 11: backlog, record pass and PR (about 35 calls)
 
@@ -698,10 +899,12 @@ Write from the code built in Tasks 1–5, not from this plan.
   "Today a bill holding held dishes cannot leave its party" (`:128-130`).
 - [ ] **Record pass.** Append "## Build record (4b)" to this plan: what was built versus planned,
   each departure with its reason, line numbers that moved, and the deletion-control table from
-  Task 10. The text above it is left as written.
+  Tasks 10b and 10c. The text above it is left as written.
 - [ ] PR body in plain English: what the waiter and the kitchen see; no venue reset, no schema
-  change; "Changed test checks" (the three rows, with the stay list); "For the owner" (Question 1
-  blocks landing; Question 2's default); the paper LOOK's limits. Then `/finish-branch` with this
+  change; "Changed test checks" (the three rows, with the stay list); "For the owner": Question 1
+  blocks landing, listing each of its four texts in EN and ES as they were written (the counter
+  refusal, the guide heading, the `table-service.md` section, the `kitchen-service.md` paragraph);
+  Question 2's default; the paper LOOK's limits. Then `/finish-branch` with this
   plan named.
 - [ ] Ledger `Status: in progress` until landed; then 4c's plan is next.
 
@@ -711,19 +914,22 @@ Write from the code built in Tasks 1–5, not from this plan.
 | --- | --- | --- | --- |
 | 0 | preflight, questions posted, ledger | 15 | no commit |
 | 1a | `copyHeldGroups` | 55 | green |
-| 1b | drafts follow the copy | 40 | green |
-| 2 | the two paths carry held dishes; Changed checks 1–2 | 60 | green |
-| 3 | what the copy does afterwards | 55 | green |
+| 1b | drafts follow the copy (four columns; a staying draft's pin) | 45 | green |
+| 2a | Move this bill carries held dishes; Changed check 2's two move rows | 50 | green |
+| 2b | Split a table carries held dishes; Changed check 1; Changed check 2's split row | 45 | green |
+| 3 | what the copy does afterwards (with Current orders and held counts) | 60 | green |
 | 4 | rollback and routes | 45 | green |
-| 5 | kitchen paper | 55 | green |
-| 6 | races | 40 | green |
+| 5 | kitchen paper (with the second move's slip) | 60 | green |
+| 6 | 4b's own races | 40 | green |
 | 7 | counter words, till comments; Changed check 3 | 30 | green |
-| 8 | guides EN/ES | 30 | green |
+| 8 | guides EN/ES (Question 1's proposals) | 30 | green |
 | 9 | LOOK at the paper | 30 | no commit |
-| 10 | whole slice, deletion controls | 45 | no commit |
+| 10a | whole slice: guard suites and audits | 40 | no commit |
+| 10b | deletion controls of Tasks 1a–2b | 65 | no commit |
+| 10c | deletion controls of Tasks 3–6 | 40 | no commit |
 | 11 | backlog, record pass, PR | 35 | green |
 
-About 535 calls in 12 tasks, none planned above 60.
+About 685 calls in 16 tasks, none planned above 65.
 
 ## Receipts (planning run)
 
