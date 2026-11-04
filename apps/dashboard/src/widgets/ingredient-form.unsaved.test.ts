@@ -4,7 +4,13 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import type { DashboardApi, Ingredient, IngredientInput } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget, reattachAfterDetachedUpdate } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  dialogClosed,
+  mountWidget,
+  putBack,
+  reattachAfterDetachedUpdate,
+} from "./test-helpers.js";
 import "./ingredient-form.js";
 import "../screens/recipe-screen.js";
 
@@ -394,3 +400,86 @@ it("an ingredient put back after a detached update still asks before Escape disc
   expect((await question(app)).open).toBe(true);
   expect(form.open).toBe(true);
 });
+
+function save(form: HTMLElementTagNameMap["dashboard-ingredient-form"]) {
+  return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+}
+function expectChanged(form: HTMLElementTagNameMap["dashboard-ingredient-form"]) {
+  expect(save(form).disabled).toBe(false);
+  expect(save(form).variant).toBe("primary");
+}
+async function expectUnchangedOpen(app: IngredientLeaveApp, form: IngredientLeaveForm) {
+  await form.updateComplete;
+  expect(form.open).toBe(true);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(save(form).disabled).toBe(true);
+  expect(save(form).variant).toBe("secondary");
+}
+type IngredientLeaveForm = HTMLElementTagNameMap["dashboard-ingredient-form"];
+for (const mode of ["edit", "create"] as const) {
+  const opened = mode === "edit" ? stored : null;
+  const openedName = opened?.name ?? "";
+  for (const how of ["at once", "after a detached update"] as const) {
+    it(`${mode} ingredient: an edit made before it was taken out still counts when put back ${how}`, async () => {
+      const { app, form } = await fixture({ ingredient: opened });
+      await name(form, "Sea salt");
+      await putBack(form, how);
+      expect(form.shadowRoot!.querySelector("wt-input")!.value).toBe("Sea salt");
+      expect(app.leave.coordinator.isDirty()).toBe(true);
+      expectChanged(form);
+      await escape(form);
+      expect((await question(app)).open).toBe(true);
+      expect(form.open).toBe(true);
+      const closed = dialogClosed(form.shadowRoot!.querySelector("wt-dialog")!);
+      await choose(app, "discard");
+      await closed;
+      expect(form.open).toBe(false);
+      expect(form.shadowRoot!.querySelector("wt-input")!.value).toBe(openedName);
+      expect(app.leave.coordinator.isDirty()).toBe(false);
+      if (opened) form.ingredient = { ...opened, name: "Stored later" };
+      form.open = true;
+      await expectUnchangedOpen(app, form);
+      expect(form.shadowRoot!.querySelector("wt-input")!.value).toBe(opened ? "Stored later" : "");
+    });
+    it(`${mode} ingredient: an edit typed after being put back ${how} is what Save sends`, async () => {
+      const { app, form } = await fixture({ ingredient: opened });
+      await name(form, "Sea salt");
+      await putBack(form, how);
+      await name(form, "Rock salt");
+      expect(app.leave.coordinator.isDirty()).toBe(true);
+      const sent: unknown[] = [];
+      for (const type of ["update-ingredient", "create-ingredient"])
+        form.addEventListener(type, (event) => sent.push((event as CustomEvent).detail));
+      save(form).click();
+      expect(sent).toEqual([
+        mode === "edit"
+          ? {
+              id: "salt",
+              patch: { name: "Rock salt", active: true, allergens: null, dietaryOrigin: null },
+            }
+          : { name: "Rock salt" },
+      ]);
+    });
+    it(`${mode} ingredient: an edit undone after being put back ${how} is unchanged again`, async () => {
+      const { app, form } = await fixture({ ingredient: opened });
+      await name(form, "Sea salt");
+      await putBack(form, how);
+      await name(form, openedName);
+      expect(app.leave.coordinator.isDirty()).toBe(false);
+      expect(save(form).disabled).toBe(true);
+      expect(save(form).variant).toBe("secondary");
+    });
+  }
+  it(`${mode} ingredient closed after a saved write reopens unchanged`, async () => {
+    const { app, form } = await fixture({ ingredient: opened });
+    await name(form, "Saved salt");
+    form.closeSaved({ name: "Saved salt", active: true, allergens: null, dietaryOrigin: null });
+    await expect.poll(() => form.open).toBe(false);
+    await form.updateComplete;
+    expect(app.leave.coordinator.isDirty()).toBe(false);
+    if (opened) form.ingredient = { ...opened, name: "Stored later" };
+    form.open = true;
+    await expectUnchangedOpen(app, form);
+    expect(form.shadowRoot!.querySelector("wt-input")!.value).toBe(opened ? "Stored later" : "");
+  });
+}

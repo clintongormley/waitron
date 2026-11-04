@@ -220,6 +220,10 @@ export class MenuPublicationsPanel extends LitElement {
         display: block;
         margin-bottom: var(--wt-space-4);
       }
+      .late-refusal {
+        margin: 0;
+        color: var(--wt-color-danger);
+      }
     `,
   ];
 
@@ -251,9 +255,13 @@ export class MenuPublicationsPanel extends LitElement {
   @state() private repeated: RepeatedTime | null = null;
   @state() private attempted = false;
   @state() private scheduleRefusal: ScheduleRefusal | null = null;
+  /** A write that failed once its window had gone: nothing else would say so. */
+  @state() private lateRefusal = false;
 
   /** The menu whose editions are followed. */
   #watching: string | null = null;
+  /** The menu last followed: unlike the watch, it survives a removal from the page. */
+  #followed: string | null = null;
   /** Numbers each list read as it starts; a live answer counts as started when it lands. */
   #readCount = 0;
   /** The number of the read whose answer the table shows, so an older one never replaces it. */
@@ -263,6 +271,7 @@ export class MenuPublicationsPanel extends LitElement {
   /** Replaced at each opening of the schedule form, so a late answer cannot reach a later one. */
   #opening = {};
   #scope?: DraftScope<ScheduleDraft>;
+  #baseline?: ScheduleDraft;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.scheduleBusy &&
@@ -290,6 +299,8 @@ export class MenuPublicationsPanel extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    // A write still out may yet be accepted, so its window must not come back able to send it again.
+    if (this.scheduleBusy) this.scheduling = false;
     this.#opening = {};
     this.confirming = null;
     this.scheduleBusy = false;
@@ -306,14 +317,19 @@ export class MenuPublicationsPanel extends LitElement {
 
   #follow(): void {
     if (!this.isConnected || this.menuId === "" || this.menuId === this.#watching) return;
-    this.answer = null;
-    this.cancelling = null;
-    this.cancelError = null;
-    this.#opening = {};
-    this.confirming = null;
-    this.scheduleBusy = false;
-    this.#disposeDraft();
-    this.scheduling = false;
+    if (this.scheduling && this.menuId === this.#followed) this.#takeDraftScope();
+    else {
+      this.answer = null;
+      this.cancelling = null;
+      this.cancelError = null;
+      this.#opening = {};
+      this.confirming = null;
+      this.scheduleBusy = false;
+      this.#disposeDraft();
+      this.scheduling = false;
+      if (this.menuId !== this.#followed) this.lateRefusal = false;
+    }
+    this.#followed = this.menuId;
     void this.#load();
   }
 
@@ -438,7 +454,14 @@ export class MenuPublicationsPanel extends LitElement {
     this.repeated = null;
     this.attempted = false;
     this.scheduleRefusal = null;
+    this.lateRefusal = false;
     this.#disposeDraft();
+    this.#baseline = this.#draft();
+    this.#takeDraftScope();
+    this.scheduling = true;
+  }
+
+  #takeDraftScope(): void {
     const { coordinator, scope } = draftScopeFor<ScheduleDraft>(this, {
       id: this,
       current: () => this.#draft(),
@@ -453,7 +476,7 @@ export class MenuPublicationsPanel extends LitElement {
     });
     this.#leave = coordinator;
     this.#scope = scope;
-    this.scheduling = true;
+    scope.commit(this.#baseline!);
   }
 
   #scheduleClosed(): void {
@@ -586,11 +609,18 @@ export class MenuPublicationsPanel extends LitElement {
     placed: number | null,
   ): Promise<void> {
     const code = codeOf(error);
+    const rowOutOfDate =
+      code === "menu_publication.not_queued" || code === "menu_publication.not_found";
+    if (opening !== this.#opening) {
+      if (rowOutOfDate && menuId !== this.menuId) void this.#refresh();
+      this.#sayRefusedLate(menuId);
+      return;
+    }
     const params = (error as { params?: Record<string, unknown> }).params ?? {};
     const refusal: ScheduleRefusal = { field: null, code, params, placed };
     if (code === "menu_publication.time_repeated") {
       const repeated = repeatedTime(params);
-      if (opening === this.#opening && repeated !== null) {
+      if (repeated !== null) {
         this.repeated = repeated;
         this.occurrence = "";
         this.scheduleBusy = false;
@@ -608,11 +638,14 @@ export class MenuPublicationsPanel extends LitElement {
     } else if (code === "management.request_invalid" && typeof params.field === "string") {
       const field = REQUEST_FIELDS[params.field] ?? null;
       refusal.field = field === "occurrence" && this.repeated === null ? null : field;
-    } else if (code === "menu_publication.not_queued" || code === "menu_publication.not_found") {
+    } else if (rowOutOfDate) {
       // The row being moved is out of date.
       void this.#refresh();
     }
-    if (opening !== this.#opening) return;
+    if (opening !== this.#opening) {
+      this.#sayRefusedLate(menuId);
+      return;
+    }
     this.scheduleRefusal = refusal;
     if (code === "menu.changed_since_preview")
       this.dispatchEvent(new CustomEvent("wt-preview-retry", { bubbles: true, composed: true }));
@@ -622,6 +655,13 @@ export class MenuPublicationsPanel extends LitElement {
       await this.updateComplete;
       await focusFirstInvalid(this.#scheduleDialog());
     }
+  }
+
+  #sayRefusedLate(menuId: string): void {
+    if (menuId !== this.menuId) return;
+    this.lateRefusal = true;
+    // Out of the page, the read that follows it being put back does this.
+    if (this.isConnected) void this.#refresh();
   }
 
   #columns(): DataTableColumn<Edition>[] {
@@ -847,6 +887,13 @@ export class MenuPublicationsPanel extends LitElement {
                 >${t("menu_publications.schedule")}</wt-button
               >
             </div>`
+          : nothing
+      }
+      ${
+        this.lateRefusal
+          ? html`<p class="late-refusal" role="alert" data-test="late-refusal">
+              ${t("menu_publications.late_refusal")}
+            </p>`
           : nothing
       }
       <wt-data-table

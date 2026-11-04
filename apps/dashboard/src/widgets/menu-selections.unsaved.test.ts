@@ -7,7 +7,9 @@ import { t } from "../i18n/t.js";
 import {
   cleanupWidgets,
   closeReportsDelivered,
+  dialogClosed,
   mountWidget,
+  putBack,
   reattachAfterDetachedUpdate,
 } from "./test-helpers.js";
 import "./add-to-menus.js";
@@ -308,4 +310,222 @@ it("Section Add products put back after a detached update still asks before Canc
   cancel(form);
   expect((await sectionQuestion(app)).open).toBe(true);
   expect(app.cancelled).toBe(0);
+});
+
+const PUT_BACK_WAYS = ["at once", "after a detached update"] as const;
+async function escapeFrom(input: HTMLElement) {
+  input.focus();
+  await userEvent.keyboard("{Escape}");
+}
+function expectDrawn(
+  action: HTMLElementTagNameMap["wt-button"],
+  state: "changed" | "unchanged",
+): void {
+  expect(action.disabled).toBe(state === "unchanged");
+  expect(action.variant).toBe(state === "changed" ? "primary" : "secondary");
+}
+
+type AddToMenusForm = HTMLElementTagNameMap["dashboard-add-to-menus"];
+const placement = (form: AddToMenusForm, id: string) =>
+  form.shadowRoot!.querySelector<HTMLInputElement>(`input[value="${id}"]`)!;
+const addAction = (form: AddToMenusForm) =>
+  form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=add-to-menus]")!;
+async function reopenPlacement(app: MenuSelectionLeaveApp, form: AddToMenusForm) {
+  app.open = false;
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  app.open = true;
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+}
+async function expectPlacementUnchanged(app: MenuSelectionLeaveApp, form: AddToMenusForm) {
+  await form.updateComplete;
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expectDrawn(addAction(form), "unchanged");
+}
+/** Opens the form already showing a failed section, so its opened value is not an empty choice. */
+async function mountOpenedWithFailure() {
+  const { app, form } = await mount();
+  app.open = false;
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  app.open = true;
+  form.open = true;
+  form.failures = [{ sectionId: "starter", reason: "Refused" }];
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(placement(form, "starter").checked).toBe(true);
+  await expectPlacementUnchanged(app, form);
+  return { app, form };
+}
+
+for (const how of PUT_BACK_WAYS) {
+  for (const route of ["cancel", "escape"] as const) {
+    it(`Add to menus: a pick made before being taken out counts when put back ${how}, and ${route} asks`, async () => {
+      const { app, form } = await mount();
+      await toggle(form, "starter");
+      await putBack(form, how);
+      expect(form.open).toBe(true);
+      expect(placement(form, "starter").checked).toBe(true);
+      expect(app.leave.coordinator.isDirty()).toBe(true);
+      expectDrawn(addAction(form), "changed");
+      if (route === "cancel") cancel(form);
+      else await escapeFrom(placement(form, "starter"));
+      const q = await question(app);
+      expect(q.open).toBe(true);
+      expect(app.cancelled).toBe(0);
+      const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
+      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+      await closed;
+      expect(app.cancelled).toBe(1);
+      expect(app.leave.coordinator.isDirty()).toBe(false);
+      await reopenPlacement(app, form);
+      expect(placement(form, "starter").checked).toBe(false);
+      await expectPlacementUnchanged(app, form);
+    });
+  }
+  it(`Add to menus: a pick made after being put back ${how} is what Add sends`, async () => {
+    const { app, form } = await mount();
+    await toggle(form, "starter");
+    await putBack(form, how);
+    await toggle(form, "root");
+    addAction(form).click();
+    expect(app.submitted).toEqual([["root", "starter"]]);
+  });
+  it(`Add to menus: a pick undone after being put back ${how} is unchanged again`, async () => {
+    const { app, form } = await mount();
+    await toggle(form, "starter");
+    await putBack(form, how);
+    await toggle(form, "starter");
+    await expectPlacementUnchanged(app, form);
+  });
+  it(`Add to menus: a failed section preselected after opening counts when put back ${how}`, async () => {
+    const { app, form } = await mount();
+    form.failures = [{ sectionId: "starter", reason: "Refused" }];
+    await form.updateComplete;
+    expect(placement(form, "starter").checked).toBe(true);
+    await putBack(form, how);
+    expect(placement(form, "starter").checked).toBe(true);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    expectDrawn(addAction(form), "changed");
+    cancel(form);
+    expect((await question(app)).open).toBe(true);
+    expect(app.cancelled).toBe(0);
+  });
+  it(`Add to menus: opened showing a failure, an edit keeps that opened value when put back ${how}`, async () => {
+    const { app, form } = await mountOpenedWithFailure();
+    await toggle(form, "root");
+    await putBack(form, how);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    await toggle(form, "root");
+    await expectPlacementUnchanged(app, form);
+    await toggle(form, "starter");
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    cancel(form);
+    const q = await question(app);
+    const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await closed;
+    expect(app.cancelled).toBe(1);
+    form.failures = [];
+    await reopenPlacement(app, form);
+    expect(placement(form, "starter").checked).toBe(false);
+    await expectPlacementUnchanged(app, form);
+  });
+  it(`Add to menus: an accepted placement moves what counts as unchanged, put back ${how}`, async () => {
+    const { app, form } = await mountOpenedWithFailure();
+    await toggle(form, "root");
+    form.commitAdded(["starter"]);
+    await putBack(form, how);
+    expect(placement(form, "root").checked).toBe(true);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    await toggle(form, "root");
+    await expectPlacementUnchanged(app, form);
+  });
+}
+it("Add to menus: a placement accepted while the form is out leaves it unchanged when put back", async () => {
+  const { app, form } = await mountOpenedWithFailure();
+  const parent = form.parentNode!;
+  form.remove();
+  form.commitAdded(["starter"]);
+  parent.prepend(form);
+  await expectPlacementUnchanged(app, form);
+});
+
+type SectionPicker = HTMLElementTagNameMap["dashboard-section-add-products"];
+const product = (form: SectionPicker, id: string) =>
+  form.shadowRoot!.querySelector<HTMLInputElement>(`input[value="${id}"]`)!;
+const sectionAdd = (form: SectionPicker) =>
+  form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=add]")!;
+async function expectSectionUnchanged(app: SectionSelectionLeaveApp, form: SectionPicker) {
+  await form.updateComplete;
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expectDrawn(sectionAdd(form), "unchanged");
+}
+
+for (const how of PUT_BACK_WAYS) {
+  for (const route of ["cancel", "escape"] as const) {
+    it(`Section Add products: a pick made before being taken out counts when put back ${how}, and ${route} asks`, async () => {
+      const { app, form } = await mountSection();
+      await selectProduct(form, "soup");
+      await putBack(form, how);
+      expect(app.open).toBe(true);
+      expect(product(form, "soup").checked).toBe(true);
+      expect(app.leave.coordinator.isDirty()).toBe(true);
+      expectDrawn(sectionAdd(form), "changed");
+      if (route === "cancel") cancel(form);
+      else await escapeFrom(product(form, "soup"));
+      const q = await sectionQuestion(app);
+      expect(q.open).toBe(true);
+      expect(app.cancelled).toBe(0);
+      const closed = dialogClosed(app.shadowRoot!.querySelector("wt-modal")!);
+      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+      await closed;
+      expect(app.cancelled).toBe(1);
+      await form.updateComplete;
+      expect(product(form, "soup").checked).toBe(false);
+      await expectSectionUnchanged(app, form);
+    });
+  }
+  it(`Section Add products: a pick made after being put back ${how} is what Add sends`, async () => {
+    const { app, form } = await mountSection();
+    await selectProduct(form, "soup");
+    await putBack(form, how);
+    await selectProduct(form, "bread");
+    sectionAdd(form).click();
+    expect(app.submitted).toEqual([["bread", "soup"]]);
+  });
+  it(`Section Add products: a pick undone after being put back ${how} is unchanged again`, async () => {
+    const { app, form } = await mountSection();
+    await selectProduct(form, "soup");
+    await putBack(form, how);
+    await selectProduct(form, "soup");
+    await expectSectionUnchanged(app, form);
+  });
+  it(`Section Add products: a saved choice is what counts as unchanged when put back ${how}`, async () => {
+    const { app, form } = await mountSection();
+    await selectProduct(form, "soup");
+    form.commitSaved(["soup"]);
+    await selectProduct(form, "bread");
+    await putBack(form, how);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    expectDrawn(sectionAdd(form), "changed");
+    await selectProduct(form, "bread");
+    await expectSectionUnchanged(app, form);
+    await putBack(form, how);
+    await expectSectionUnchanged(app, form);
+  });
+}
+it("Section Add products: a choice saved while the form is out leaves it unchanged when put back", async () => {
+  const { app, form } = await mountSection();
+  await selectProduct(form, "soup");
+  const parent = form.parentNode!;
+  form.remove();
+  form.commitSaved(["soup"]);
+  parent.prepend(form);
+  await expectSectionUnchanged(app, form);
 });

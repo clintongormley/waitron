@@ -1169,11 +1169,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A category's naming square does not announce the inherited colour's source.**
   [Detail](backlog/catalogue.md#a-categorys-naming-square-does-not-announce-the-inherited-colours-source)
 
-- **Re-check whether these forms keep an edit’s unsaved state when taken out of the page and
-  put back.** Left open after the unit-form fix in A397 part 2 (#1439):
-  the ingredient form, the options list and its option window, the extras list, Add to menus, Add products, Schedule and Change time. It matters only if a
-  screen ever moves an open form. Left open by A331 batch 2a (#1422).
-
 - **A menu published before this keeps a variant's own unit, frozen in its published copy, until the
   menu is next published** — left open by A222 (#1101) (`applyLiveFields`,
   `packages/catalogue/src/menu-document.ts`, serves that copy; read, not run).
@@ -4695,8 +4690,28 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   instead of pressing the form's button; they pass, but never prove the button works. Left open by
   A331 batch 3a (#1401).
 
-- **A542. An open `wt-dialog` moved in the page stays open but is no longer modal** — OPEN.
-  [Detail](backlog/dashboard.md#a542-an-open-wt-dialog-moved-in-the-page-stays-open-but-is-no-longer-modal)
+- **The till's modifier picker still recreates its modal when put back.** A738 added that because
+  `wt-dialog` lost modality there; `wt-dialog` now restores it. With the recreation disabled, the
+  `combined line edits` cases of `apps/till/src/widgets/modifier-picker.unsaved.test.ts` still passed
+  (3 passed). Left open by A397.
+
+- **The department and zone edit dialogs still close on removal and reopen on return**, so they come
+  back on top with focus as at opening, not in their place in opening order. Whether they still need
+  to was not tried. (`packages/venue-service/src/dashboard/department-edit-dialog.ts`,
+  `zone-edit-dialog.ts`.) Left open by A397.
+
+- **An open choice list or native popover inside a dialog closes when a dialog under it is put
+  back**; the person opens it again. Measured once on Chromium, with no case kept: in that dialog a
+  field's value, selection and focus, an open `details` and the scroll of an inner box and a textarea
+  are kept. At e3ec7efd36 the list and popover stayed open. Left open by A397.
+
+- **A Schedule or Change time write that fails after the person has left that menu still says
+  nothing.** The panel says so only for the menu it is on; on another menu, or with the panel gone,
+  nothing tells the person. The Prices tab's `menus.change_not_saved` shows its message at
+  screen level. Left open by A397.
+
+- **Change legal name says nothing when its rename is refused after Back and Discard closed the
+  dialog**; the Schedule window now says so on its panel. Left open by A397.
 
 - **In a text field inside a dialog, with the field's text selected, End and Home do not move the
   caret**, so typing replaces the whole text. Seen on the A721 branch in the Seasons window and the

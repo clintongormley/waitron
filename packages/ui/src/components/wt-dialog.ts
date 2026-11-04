@@ -134,6 +134,16 @@ export class WtDialog extends LitElement {
     `,
   ];
 
+  /** Dialogs shown on the page. A dialog that leaves is dropped, and holds its own place to return
+   * to; one the browser has shut stays until its `open` update runs. */
+  private static readonly openDialogs = new Set<WtDialog>();
+  private static openings = 0;
+  /** This opening's place among all openings: later is higher. */
+  private openedAt = 0;
+  /** Where focus last was inside this dialog. The browser has already moved it by
+   * `disconnectedCallback`, so it cannot be read on leaving. */
+  private lastFocused: HTMLElement | null = null;
+
   private opened = false;
   private openingGeneration = 0;
   private reportedCloseGeneration?: number;
@@ -196,10 +206,14 @@ export class WtDialog extends LitElement {
     super.connectedCallback();
     if (this.hasUpdated) this.observeBody();
     if (this.hasUpdated) this.syncMessageTabStop();
-    if (this.hasUpdated && this.open) this.watchContent();
+    if (this.hasUpdated && this.open) {
+      this.returnToOpeningOrder();
+      this.watchContent();
+    }
   }
 
   override disconnectedCallback(): void {
+    WtDialog.openDialogs.delete(this);
     this.bodyResize.disconnect();
     this.messageResize.disconnect();
     this.observedMessage = null;
@@ -248,6 +262,11 @@ export class WtDialog extends LitElement {
       },
       { capture: true },
     );
+    this.addEventListener(
+      "focusin",
+      (event) => (this.lastFocused = event.composedPath()[0] as HTMLElement),
+      { capture: true },
+    );
   }
 
   @query("dialog") private dialog!: HTMLDialogElement;
@@ -277,24 +296,17 @@ export class WtDialog extends LitElement {
       if (this.open && !this.dialog.open) {
         const focused = deepActiveElement();
         this.returnTarget = focused === document.body ? null : focused;
-        // Before as well as after: the browser picks opening focus inside showModal(), and on the
-        // first render nothing has set a body that is always a tab stop yet.
-        this.syncBodyTabStop();
-        // The heading's help badge comes first in the tree, so without this the browser opens on it
-        // with help on rather than where it opens with help off.
-        const help = this.renderRoot.querySelector<HTMLSlotElement>('slot[name="help"]');
-        help?.toggleAttribute("inert", true);
-        this.dialog.showModal();
-        help?.removeAttribute("inert");
-        this.syncBodyTabStop();
+        this.openedAt = ++WtDialog.openings;
+        this.showModalWithOpeningFocus();
+        WtDialog.openDialogs.add(this);
         this.watchContent();
-        // An overflowing body is a tab stop ahead of its slotted fields, so opening focus lands on
-        // it; a body with something to focus hands it on.
-        if (this.shadowRoot!.activeElement === this.bodyEl && this.bodyTabStop === "overflow")
-          this.focusFirstContent();
       }
       // Also when the browser has already closed the dialog itself, as on Escape.
-      if (!this.open) this.unwatchContent();
+      if (!this.open) {
+        this.unwatchContent();
+        WtDialog.openDialogs.delete(this);
+        this.lastFocused = null;
+      }
       if (!this.open && this.dialog.open) {
         this.dialog.close();
         // Now as well as on the close report a task later: a screen that hands focus back once
@@ -304,6 +316,51 @@ export class WtDialog extends LitElement {
     }
     this.syncBodyTabStop();
     this.syncMessageTabStop();
+  }
+
+  private showModalWithOpeningFocus(): void {
+    // Before as well as after: the browser picks opening focus inside showModal(), and on the
+    // first render nothing has set a body that is always a tab stop yet.
+    this.syncBodyTabStop();
+    // The heading's help badge comes first in the tree, so without this the browser opens on it
+    // with help on rather than where it opens with help off.
+    const help = this.renderRoot.querySelector<HTMLSlotElement>('slot[name="help"]');
+    help?.toggleAttribute("inert", true);
+    this.dialog.showModal();
+    help?.removeAttribute("inert");
+    this.syncBodyTabStop();
+    // An overflowing body is a tab stop ahead of its slotted fields, so opening focus lands on
+    // it; a body with something to focus hands it on.
+    if (this.shadowRoot!.activeElement === this.bodyEl && this.bodyTabStop === "overflow")
+      this.focusFirstContent();
+  }
+
+  /** Leaving the page takes a native dialog out of the top layer but leaves its `open` attribute,
+   * and put back like that it is not modal: everything in it is inert under any modal it is not
+   * inside. A native dialog goes back only on top, so every dialog opened after it goes back again
+   * over it, in order. */
+  private returnToOpeningOrder(): void {
+    if (!this.dialog.open) return;
+    WtDialog.openDialogs.add(this);
+    if (this.dialog.matches(":modal")) return;
+    const above = [...WtDialog.openDialogs]
+      .filter((other) => other.openedAt > this.openedAt)
+      .sort((a, b) => a.openedAt - b.openedAt);
+    this.showAgain();
+    // Asked here, not above: moving focus can run a page's handlers, and one may remove or close
+    // any of these. A dialog off the page is not modal either.
+    for (const each of above) if (each.dialog.matches(":modal")) each.showAgain();
+  }
+
+  /** `close()`, because a modal whose `open` attribute is removed keeps its place in the top layer.
+   * Its native report arrives with the dialog open again, and `onClose` ignores that. */
+  private showAgain(): void {
+    const focused = this.lastFocused;
+    const scrolled = this.bodyEl.scrollTop;
+    this.dialog.close();
+    this.showModalWithOpeningFocus();
+    focused?.focus();
+    this.bodyEl.scrollTop = scrolled;
   }
 
   private onClose(): void {
@@ -323,8 +380,9 @@ export class WtDialog extends LitElement {
     this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
   }
 
-  /** The browser hands focus back to what had it at opening; when it could not, focus is left on
-   * the page body or inside this closed dialog. */
+  /** The browser hands focus back to what had it at opening, or, once this dialog has been put back
+   * on the page, to what had it then. When it could not, or that was the page body, focus is left
+   * on the page body or inside this closed dialog. */
   private refocus(): void {
     const focused = deepActiveElement();
     if (focused !== document.body && !composedContains(this, focused)) return;

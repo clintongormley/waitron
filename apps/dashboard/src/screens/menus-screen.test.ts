@@ -6,6 +6,7 @@ import { commands, page, userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import {
   cleanupWidgets,
+  dialogClosed,
   documentProduct,
   documentSection,
   expectMessageAboveButtons,
@@ -12213,6 +12214,35 @@ for (const route of ["cancel", "escape"] as const) {
     expect(host.leave.coordinator.isDirty()).toBe(false);
   });
 }
+it("W69 Menu Add products reopened after Discard is a new picker, unchanged", async () => {
+  const host = await placementLeaveHost();
+  const el = await mountLunch(api());
+  await editDrinks(el);
+  await rowAction(el, "m-drinks", "open-add-products");
+  const first = inModal<SectionAddProducts>(el, "add-products", "dashboard-section-add-products");
+  await first.updateComplete;
+  first.shadowRoot!.querySelector<HTMLInputElement>('input[value="p-chips"]')!.click();
+  await first.updateComplete;
+  first.querySelector<HTMLElement>("[data-test=add-products-cancel]")!.click();
+  await host.updateComplete;
+  const q = host.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await q.updateComplete;
+  const closed = dialogClosed(modal(el, "add-products"));
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await closed;
+  await rowAction(el, "m-drinks", "open-add-products");
+  const second = inModal<SectionAddProducts>(el, "add-products", "dashboard-section-add-products");
+  await second.updateComplete;
+  expect(second).not.toBe(first);
+  expect(
+    second.shadowRoot!.querySelector<HTMLInputElement>('input[value="p-chips"]')!.checked,
+  ).toBe(false);
+  expect(host.leave.coordinator.isDirty()).toBe(false);
+  const add =
+    second.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=add]")!;
+  expect(add.disabled).toBe(true);
+  expect(add.variant).toBe("secondary");
+});
 for (const succeeds of [true, false]) {
   it(`W69 Menu Add products ${succeeds ? "commits before close and failed refresh" : "keeps a refused choice dirty"}`, async () => {
     const host = await placementLeaveHost();
