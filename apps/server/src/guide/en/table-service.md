@@ -171,10 +171,7 @@ and any earlier step it was hiding. Often you don't need to tap it, because thes
 - The party's first order, which clears every step that started before it.
 - The party leaving.
 
-Until the first order is sent, no step shows while an order is being taken for the table. A bill
-moved in from another table or the counter is treated as the first order of a table that has none,
-but it does not clear steps that started when its dishes were served; the table's own first order
-still does.
+Until the first order is sent, no step shows while an order is being taken for the table.
 
 A cleared step comes back when the moment it starts from happens again, such as more of a course
 being served. A step that repeats every few minutes after the last order comes back with each
@@ -331,8 +328,8 @@ again to choose afresh.
 ## Move a bill or split a table with dishes on hold {#held-dishes-move}
 
 A bill with dishes on hold can go to another table with **Move this bill** or **Split a table**.
-The dishes stay on hold there, in a group with that table's next number. Each table then fires its
-own group: firing one sends none of the other table's dishes.
+The dishes stay on hold there. Each table then fires its own group: firing one sends none of the
+other table's dishes.
 
 ## Name a bill {#bill-names}
 

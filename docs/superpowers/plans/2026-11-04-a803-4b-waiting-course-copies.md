@@ -1194,3 +1194,21 @@ Not run, as `task-10b.md` lists: `item.firedAt === null` dropped (no case covers
 mutant survive at `ebfc5bd60a`), and mutants the 1b and 2a reviews found change no behaviour. `task-10c.md`'s
 late-copy control exercises only the free-table branch of Move this bill. No control re-ran on `f86819f209`
 beyond the three above.
+
+### Owner's last word on the guides (2026-11-04 ~18:26, relayed by the watcher)
+
+The owner turned down the service-step sentence in both wordings and asked that every 4b guide
+sentence pass one test: does it change what staff do? Removed from both languages, leaving the
+behaviour and its tests as they are:
+
+- `table-service.md`, "Clear a service step": the sentence about a moved-in bill and steps.
+- `table-service.md`, the held-dishes section: "in a group with that table's next number".
+- `kitchen-service.md`, the whole held-work paragraph on the MOVED slip and the fire ticket. The slip
+  and the ticket say this themselves, and a cook does nothing different for reading it.
+
+Earlier mentions of these guide texts in this plan and in `~/waitron-campaign-c/questions.md` record
+what was true then. The rule went into root `CLAUDE.md` §3 and `docs/developers/conventions-ui.md`.
+
+A third Codex run (`~/waitron-campaign-c/a803-4b-reviews/finish-codex-c.md`) ran the three behaviour
+fixes the first two runs never saw: no Critical or Important finding. Its performance finding was
+fixed in `d9fc4d238d`; its guide finding went away with the sentence.

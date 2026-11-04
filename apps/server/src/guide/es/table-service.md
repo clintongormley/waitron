@@ -179,10 +179,7 @@ cosas también lo quitan:
 - El primer pedido de los clientes, que quita todos los pasos que empezaron antes.
 - Que los clientes se vayan.
 
-Hasta que se envía el primer pedido, no se muestra ningún paso mientras se toma nota en la mesa. Una
-cuenta que llega de otra mesa o del mostrador se trata como primer pedido si la mesa aún no tiene
-ninguno, pero no quita los pasos que empezaron al servir sus platos; el primer pedido propio de la
-mesa sí los quita.
+Hasta que se envía el primer pedido, no se muestra ningún paso mientras se toma nota en la mesa.
 
 Un paso ya hecho vuelve cuando ocurre otra vez el momento en que empieza, como cuando se sirven más
 platos de un curso. Un paso que se repite cada pocos minutos desde el último pedido vuelve con cada
@@ -347,8 +344,8 @@ pedido. Abre otra vez **Mover platos…** para elegir de nuevo.
 ## Mover una cuenta o separar una mesa con platos en espera {#held-dishes-move}
 
 Una cuenta con platos en espera puede pasar a otra mesa con **Mover esta cuenta** o **Separar una
-mesa**. Allí los platos siguen en espera, en un grupo con el siguiente número de esa mesa. Después
-cada mesa marcha su propio grupo: marchar uno no envía ningún plato de la otra mesa.
+mesa**. Allí los platos siguen en espera. Después cada mesa marcha su propio grupo: marchar uno no envía
+ningún plato de la otra mesa.
 
 ## Poner nombre a una cuenta {#bill-names}
 

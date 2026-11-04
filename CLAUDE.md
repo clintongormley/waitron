@@ -252,6 +252,9 @@ called weaker than its name, the topic file lists what it does not see.
   by trying, and a link to the guide for the rest** (owner, 2026-11-03, A1315). Write it from the
   code that does what it describes, never from memory. Nothing guards it.
   [Receipt](docs/developers/conventions-ui.md#a-help-bubble-orients).
+- **A guide sentence earns its place by changing what staff do; never explain exceptions and corner
+  cases the code handles by itself** (owner, 2026-11-04, A803 4b). Cut it, do not reword it. Nothing
+  guards it. [Receipt](docs/developers/conventions-ui.md#a-guide-says-what-to-do-not-how-the-code-decides).
 - **A screen change updates its guide in English and, where a twin exists, Spanish.**
   Every section heading carries a shared `{#id}`; dashboard/till links use each app's `help-guide.ts`.
   Guards: `apps/server/src/guide-content.test.ts` and `scripts/guide-links.test.ts`, weaker than their
