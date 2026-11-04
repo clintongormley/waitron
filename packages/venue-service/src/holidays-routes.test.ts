@@ -10,7 +10,6 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -24,7 +23,6 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { locationId, type LocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import type { HolidayGeography, HolidayRead, SpecialDaysModel } from "./holiday-types.js";
 import { readHolidays } from "./holidays.js";
@@ -75,7 +73,6 @@ interface Address {
 
 interface Fixture {
   app: Hono;
-  cfg: { locationId: LocationId };
   manager: string;
   supervisor: string;
   staff: string;
@@ -92,7 +89,6 @@ async function fixture(address: Address = {}): Promise<Fixture> {
       province: address.province === undefined ? "Sevilla" : address.province,
       city: address.city === undefined ? "Sevilla" : address.city,
     });
-    const venueId = await venueLocationId(tx);
     const person = async (role: "manager" | "supervisor" | "staff") => {
       const [row] = await tx
         .insert(persons)
@@ -101,7 +97,6 @@ async function fixture(address: Address = {}): Promise<Fixture> {
       return (await startManagementSession(tx, { personId: row!.id })).token;
     };
     return {
-      cfg: { locationId: locationId(venueId) },
       manager: await person("manager"),
       supervisor: await person("supervisor"),
       staff: await person("staff"),

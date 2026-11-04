@@ -90,7 +90,6 @@ async function fixture(nullHeader = false) {
     printTradingName: true,
   });
   return {
-    cfg,
     primary: primary!.id,
     fallback: fallback!.id,
     orderId: order!.id,
@@ -103,10 +102,8 @@ async function authored(departmentId: string, receipt: Record<string, unknown>) 
     .values({ departmentId, receipt })
     .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
 }
-const read = (
-  _cfg: { locationId: ReturnType<typeof locationId> },
-  source: Parameters<typeof resolveInvoiceEmailContact>[1],
-) => withTransaction(suite.db, (tx) => resolveInvoiceEmailContact(tx, source));
+const read = (source: Parameters<typeof resolveInvoiceEmailContact>[1]) =>
+  withTransaction(suite.db, (tx) => resolveInvoiceEmailContact(tx, source));
 
 describe("independent invoice email contact", () => {
   it.each(["order", "sale"] as const)(
@@ -116,12 +113,12 @@ describe("independent invoice email contact", () => {
       await authored(f.primary, { email: "dining@example.com", phone: "+34911234567" });
       await authored(f.fallback, { email: "fallback@example.com", phone: "+34922345678" });
       const source = kind === "order" ? { kind, orderId: f.orderId } : { kind, saleId: f.saleId };
-      expect(await read(f.cfg, source)).toEqual({
+      expect(await read(source)).toEqual({
         email: "dining@example.com",
         phone: "+34911234567",
       });
       await authored(f.primary, { email: "dining@example.com" });
-      expect(await read(f.cfg, source)).toEqual({ email: "dining@example.com" });
+      expect(await read(source)).toEqual({ email: "dining@example.com" });
     },
   );
   it.each([{}, { email: "invalid" }, { email: "valid@example.com", phone: "bad telephone" }])(
@@ -130,7 +127,7 @@ describe("independent invoice email contact", () => {
       const f = await fixture();
       await authored(f.primary, receipt);
       await authored(f.fallback, { email: "fallback@example.com", phone: "+34922345678" });
-      expect(await read(f.cfg, { kind: "order", orderId: f.orderId })).toEqual(
+      expect(await read({ kind: "order", orderId: f.orderId })).toEqual(
         receipt.email === "valid@example.com"
           ? { email: "valid@example.com" }
           : { email: "fallback@example.com", phone: "+34922345678" },
@@ -147,14 +144,14 @@ describe("independent invoice email contact", () => {
         .values({ receipt: { email: "venue@example.com", phone: "+34933456789" } });
       const source =
         kind === "order" ? { kind, orderId: randomUUID() } : { kind, saleId: randomUUID() };
-      expect(await read(f.cfg, source)).toEqual({ email: "fallback@example.com" });
+      expect(await read(source)).toEqual({ email: "fallback@example.com" });
       await authored(f.fallback, { email: "bad", phone: "+34922345678" });
-      expect(await read(f.cfg, source)).toBeNull();
+      expect(await read(source)).toBeNull();
       await suite.db
         .update(departments)
         .set({ isDefault: false })
         .where(eq(departments.id, f.fallback));
-      expect(await read(f.cfg, source)).toBeNull();
+      expect(await read(source)).toBeNull();
     },
   );
   it("uses the sale's recorded department rather than its order's later context", async () => {
@@ -165,10 +162,10 @@ describe("independent invoice email contact", () => {
       .update(orderServiceContexts)
       .set({ departmentId: f.fallback })
       .where(eq(orderServiceContexts.workingOrderId, f.orderId));
-    expect(await read(f.cfg, { kind: "sale", saleId: f.saleId })).toEqual({
+    expect(await read({ kind: "sale", saleId: f.saleId })).toEqual({
       email: "original@example.com",
     });
-    expect(await read(f.cfg, { kind: "order", orderId: f.orderId })).toEqual({
+    expect(await read({ kind: "order", orderId: f.orderId })).toEqual({
       email: "new@example.com",
     });
   });
@@ -176,7 +173,7 @@ describe("independent invoice email contact", () => {
     const f = await fixture(true);
     await authored(f.primary, { email: "wrong-location@example.com" });
     await authored(f.fallback, { email: "first-default@example.com" });
-    expect(await read(f.cfg, { kind: "sale", saleId: f.saleId })).toEqual({
+    expect(await read({ kind: "sale", saleId: f.saleId })).toEqual({
       email: "first-default@example.com",
     });
   });
@@ -187,7 +184,7 @@ describe("contact imported-row boundaries", () => {
     const f = await fixture();
     await authored(f.primary, { phone: "+34911234567" });
     await authored(f.fallback, { email: "fallback@example.com", phone: "not a telephone" });
-    expect(await read(f.cfg, { kind: "sale", saleId: f.saleId })).toEqual({
+    expect(await read({ kind: "sale", saleId: f.saleId })).toEqual({
       email: "fallback@example.com",
     });
   });
@@ -195,7 +192,7 @@ describe("contact imported-row boundaries", () => {
     const f = await fixture();
     await authored(f.primary, { email: "disabled@example.com" });
     await suite.db.update(departments).set({ active: false }).where(eq(departments.id, f.primary));
-    expect(await read(f.cfg, { kind: "sale", saleId: f.saleId })).toEqual({
+    expect(await read({ kind: "sale", saleId: f.saleId })).toEqual({
       email: "disabled@example.com",
     });
   });
@@ -205,7 +202,7 @@ it("does not choose a deleted default when the recorded source has no contact", 
   const f = await fixture();
   await authored(f.fallback, { email: "deleted-default@example.com" });
   await suite.db.update(departments).set({ active: false }).where(eq(departments.id, f.fallback));
-  expect(await read(f.cfg, { kind: "sale", saleId: f.saleId })).toBeNull();
+  expect(await read({ kind: "sale", saleId: f.saleId })).toBeNull();
 });
 
 it("propagates a recorded contact storage failure instead of selecting a fallback", async () => {
@@ -227,7 +224,7 @@ it("propagates a recorded contact storage failure instead of selecting a fallbac
     return original(...args);
   });
   try {
-    await expect(read(f.cfg, { kind: "sale", saleId: f.saleId })).rejects.toBe(failure);
+    await expect(read({ kind: "sale", saleId: f.saleId })).rejects.toBe(failure);
   } finally {
     spy.mockRestore();
   }

@@ -1054,19 +1054,10 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
   What the landed slices left, by owner:
 
-  - **S18:** the contract's node location ids remain for S18 (S3, #2387). Staffing's season,
-    day-plan and month reads still hand venue-service a `{ locationId }` scope, which S6 and S8
-    leave as an ignored `_cfg` and S18 removes, and its rota verbs keep theirs as an unread
-    `_cfg`, which S18 removes (S9, #2389). Printing leaves location reads for their owners: the
-    station screens read's scope in `station-outputs-down.ts` and `receipt-print.ts`'s `cfg`
-    handed to `readPrintedDepartmentReceipt` (both S18, with the module contract's scope; S10,
-    #2396). The attendance recorder keeps an unread optional `locationId` for S18 (S13, #2397).
-    Venue-service's exported functions keep their scope parameter as an unread `_cfg` until S18
-    removes it (S6, #2394). The calendar's exported readers keep an unread `_cfg` until S18
-    (S8, #2405). Left for S18 by S11 (#2411): the unread `_cfg` in `kitchen.ts`, `dead-ends.ts`
-    and `kitchen-allergy.ts`, the `VENUE_SERVICE.stationStates` scopes in `kitchen.ts` and
-    `station-move.ts`, the floor annotator's `cfg`, and `receipt-guests.ts`'s `cfg`. The node's id
-    remains for S18f (S16, #2402).
+  - **S18:** the contract's node location ids remain for S18 (S3, #2387). The attendance
+    recorder keeps an unread optional `locationId` for S18 (S13, #2397). Left for S18 by S11
+    (#2411): the unread `_cfg` in `kitchen.ts`, `dead-ends.ts` and `kitchen-allergy.ts`. The
+    node's id remains for S18f (S16, #2402).
   - **The schema slices S20–S28:** the schema changes remain for S20–S28 (S3, #2387). Until the
     schema slices drop `print_jobs.location_id`, `enqueuePrintJob` takes the venue id as an
     optional `venueId`, so a sale, a kitchen send or a payment's slips read it once, and the demo

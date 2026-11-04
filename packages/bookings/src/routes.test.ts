@@ -33,7 +33,6 @@ const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_0
 const noopLog: Logger = () => {};
 
 interface Venue {
-  cfg: ModuleRouteContext["cfg"];
   /** The route context `BOOKINGS_ROUTES.mount` receives — `core.seatTable` bound to this venue. */
   ctx: ModuleRouteContext;
   /** A live MANAGEMENT session cookie for a `manager` (holds `booking.manage`). */
@@ -76,10 +75,8 @@ async function setupVenue(): Promise<Venue> {
     return { managerSid: managerSession.token, staffSid: staffSession.token };
   });
 
-  const cfg: ModuleRouteContext["cfg"] = {};
   return {
-    cfg,
-    ctx: { db, cfg, core: fakeCore({ locationId, nodeId }) },
+    ctx: { db, cfg: {}, core: fakeCore({ locationId, nodeId }) },
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
   };

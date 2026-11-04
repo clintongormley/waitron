@@ -377,7 +377,7 @@ async function venue() {
   const locationId = await seedLocation("Venue");
   const grill = await seedStation(locationId, "Grill");
   const bar = await seedStation(locationId, "Bar");
-  return { locationId, cfg: { locationId }, grill, bar };
+  return { locationId, grill, bar };
 }
 
 /** A notice written directly, at a chosen moment. */

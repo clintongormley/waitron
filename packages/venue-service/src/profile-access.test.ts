@@ -63,7 +63,6 @@ async function outcome(promise: Promise<unknown>): Promise<unknown> {
 }
 
 interface Venue {
-  cfg: { locationId: LocationId };
   restaurant: string;
   deli: string;
   /** Restaurant zones; `terrace` sits before `dining` by position although it was created later. */
@@ -90,8 +89,7 @@ async function seedProfile(): Promise<string> {
 
 /** Restaurant with two zones, Deli with one, and a till profile with nothing stored yet. */
 async function seedVenueWithZones(): Promise<Venue> {
-  const locationId = await seedLocation(`Venue ${randomUUID()}`);
-  const cfg = { locationId };
+  await seedLocation(`Venue ${randomUUID()}`);
   const ids = await scoped(async (tx) => {
     const restaurant = await createDepartment(tx, {
       name: "Restaurant",
@@ -117,7 +115,7 @@ async function seedVenueWithZones(): Promise<Venue> {
       counter: counter.id,
     };
   });
-  return { cfg, ...ids, profile: await seedProfile() };
+  return { ...ids, profile: await seedProfile() };
 }
 
 function restaurantScope(

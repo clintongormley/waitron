@@ -94,8 +94,7 @@ async function makeTable(cfg: VenueCfg, active = true): Promise<string> {
   return insertDiningTable(cfg.locationId, "12", active);
 }
 
-function scoped<T>(cfg: VenueCfg, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  void cfg;
+function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
     return fn(tx);
   });
@@ -107,7 +106,7 @@ async function seedBooking(
   createdBy: string,
   status: "booked" | "seated" | "completed" | "no_show" | "cancelled",
 ): Promise<string> {
-  return scoped(cfg, async (tx) => {
+  return scoped(async (tx) => {
     const [row] = await tx
       .insert(bookings)
       .values({
@@ -126,9 +125,9 @@ async function seedBooking(
 
 describe("createBooking + listBookings", () => {
   it("creates, lists-by-day ordered, rejects a bad party size, and walks the lifecycle", async () => {
-    const { cfg, createdBy } = await setupVenue();
+    const { createdBy } = await setupVenue();
 
-    const { id } = await scoped(cfg, (tx) =>
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -137,7 +136,7 @@ describe("createBooking + listBookings", () => {
         createdBy,
       }),
     );
-    await scoped(cfg, (tx) =>
+    await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "13:30",
@@ -148,11 +147,11 @@ describe("createBooking + listBookings", () => {
     );
 
     // The seconds come from `storedTime` (`./bookings.ts`): the column is plain text.
-    const listed = await scoped(cfg, (tx) => listBookings(tx, { date: "2026-08-20" }));
+    const listed = await scoped((tx) => listBookings(tx, { date: "2026-08-20" }));
     expect(listed.map((b) => b.bookingTime)).toEqual(["13:30:00", "20:00:00"]);
 
     await expect(
-      scoped(cfg, (tx) =>
+      scoped((tx) =>
         createBooking(tx, {
           bookingDate: "2026-08-20",
           bookingTime: "20:00",
@@ -163,15 +162,15 @@ describe("createBooking + listBookings", () => {
       ),
     ).rejects.toMatchObject({ code: "booking.invalid" });
 
-    await scoped(cfg, (tx) => cancelBooking(tx, id));
-    await expect(scoped(cfg, (tx) => completeBooking(tx, id))).rejects.toMatchObject({
+    await scoped((tx) => cancelBooking(tx, id));
+    await expect(scoped((tx) => completeBooking(tx, id))).rejects.toMatchObject({
       code: "booking.invalid_transition",
     });
   });
 
   it("filters listBookings to the requested date only", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    await scoped(cfg, (tx) =>
+    const { createdBy } = await setupVenue();
+    await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -180,7 +179,7 @@ describe("createBooking + listBookings", () => {
         createdBy,
       }),
     );
-    await scoped(cfg, (tx) =>
+    await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-21",
         bookingTime: "20:00",
@@ -189,14 +188,14 @@ describe("createBooking + listBookings", () => {
         createdBy,
       }),
     );
-    const listed = await scoped(cfg, (tx) => listBookings(tx, { date: "2026-08-20" }));
+    const listed = await scoped((tx) => listBookings(tx, { date: "2026-08-20" }));
     expect(listed).toHaveLength(1);
     expect(listed[0]!.contactName).toBe("Today");
   });
 
   it("stores the optional fields and status='booked'", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const { id } = await scoped(cfg, (tx) =>
+    const { createdBy } = await setupVenue();
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -207,7 +206,7 @@ describe("createBooking + listBookings", () => {
         createdBy,
       }),
     );
-    const row = await scoped(cfg, (tx) => getBooking(tx, id));
+    const row = await scoped((tx) => getBooking(tx, id));
     expect(row).toMatchObject({
       status: "booked",
       contactPhone: "600123456",
@@ -221,12 +220,12 @@ describe("createBooking + listBookings", () => {
   // so a caller can hand the write path a time already in the stored form, and both spellings of one
   // wall-clock time must land on one stored value.
   it("stores an already-HH:MM:SS time unchanged, so one wall-clock time has one stored value", async () => {
-    const { cfg, createdBy } = await setupVenue();
+    const { createdBy } = await setupVenue();
     for (const [time, name] of [
       ["18:15:00", "Sent with seconds"],
       ["18:15", "Sent without"],
     ] as const) {
-      await scoped(cfg, (tx) =>
+      await scoped((tx) =>
         createBooking(tx, {
           bookingDate: "2026-08-21",
           bookingTime: time,
@@ -236,7 +235,7 @@ describe("createBooking + listBookings", () => {
         }),
       );
     }
-    const listed = await scoped(cfg, (tx) => listBookings(tx, { date: "2026-08-21" }));
+    const listed = await scoped((tx) => listBookings(tx, { date: "2026-08-21" }));
     expect(listed.map((b) => b.bookingTime)).toEqual(["18:15:00", "18:15:00"]);
   });
 
@@ -262,7 +261,7 @@ describe("createBooking — optional table link", () => {
   it("accepts an ACTIVE table id", async () => {
     const { cfg, createdBy } = await setupVenue();
     const tableId = await makeTable(cfg);
-    const { id } = await scoped(cfg, (tx) =>
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -272,14 +271,14 @@ describe("createBooking — optional table link", () => {
         createdBy,
       }),
     );
-    const row = await scoped(cfg, (tx) => getBooking(tx, id));
+    const row = await scoped((tx) => getBooking(tx, id));
     expect(row!.tableId).toBe(tableId);
   });
 
   it("rejects an absent table with table.not_found", async () => {
-    const { cfg, createdBy } = await setupVenue();
+    const { createdBy } = await setupVenue();
     await expect(
-      scoped(cfg, (tx) =>
+      scoped((tx) =>
         createBooking(tx, {
           bookingDate: "2026-08-20",
           bookingTime: "20:00",
@@ -296,7 +295,7 @@ describe("createBooking — optional table link", () => {
     const { cfg, createdBy } = await setupVenue();
     const tableId = await makeTable(cfg, false);
     await expect(
-      scoped(cfg, (tx) =>
+      scoped((tx) =>
         createBooking(tx, {
           bookingDate: "2026-08-20",
           bookingTime: "20:00",
@@ -312,8 +311,8 @@ describe("createBooking — optional table link", () => {
 
 describe("updateBooking", () => {
   it("edits fields while booked", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const { id } = await scoped(cfg, (tx) =>
+    const { createdBy } = await setupVenue();
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -322,17 +321,17 @@ describe("updateBooking", () => {
         createdBy,
       }),
     );
-    await scoped(cfg, (tx) =>
+    await scoped((tx) =>
       updateBooking(tx, id, { partySize: 6, contactName: "Taylor (6)", notes: "large" }),
     );
-    const row = await scoped(cfg, (tx) => getBooking(tx, id));
+    const row = await scoped((tx) => getBooking(tx, id));
     expect(row).toMatchObject({ partySize: 6, contactName: "Taylor (6)", notes: "large" });
   });
 
   it("rejects an absent id with booking.not_found", async () => {
-    const { cfg } = await setupVenue();
+    await setupVenue();
     await expect(
-      scoped(cfg, (tx) => updateBooking(tx, randomUUID(), { partySize: 3 })),
+      scoped((tx) => updateBooking(tx, randomUUID(), { partySize: 3 })),
     ).rejects.toMatchObject({ code: "booking.not_found" });
   });
 
@@ -341,17 +340,18 @@ describe("updateBooking", () => {
     async (status) => {
       const { cfg, createdBy } = await setupVenue();
       const id = await seedBooking(cfg, createdBy, status);
-      const before = await scoped(cfg, (tx) => getBooking(tx, id));
-      await expect(
-        scoped(cfg, (tx) => updateBooking(tx, id, { partySize: 3 })),
-      ).rejects.toMatchObject({ code: "booking.invalid_transition", params: { bookingId: id } });
-      expect(await scoped(cfg, (tx) => getBooking(tx, id))).toEqual(before);
+      const before = await scoped((tx) => getBooking(tx, id));
+      await expect(scoped((tx) => updateBooking(tx, id, { partySize: 3 }))).rejects.toMatchObject({
+        code: "booking.invalid_transition",
+        params: { bookingId: id },
+      });
+      expect(await scoped((tx) => getBooking(tx, id))).toEqual(before);
     },
   );
 
   it("rejects a non-positive party size with booking.invalid", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const { id } = await scoped(cfg, (tx) =>
+    const { createdBy } = await setupVenue();
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -360,15 +360,15 @@ describe("updateBooking", () => {
         createdBy,
       }),
     );
-    await expect(
-      scoped(cfg, (tx) => updateBooking(tx, id, { partySize: 0 })),
-    ).rejects.toMatchObject({ code: "booking.invalid" });
+    await expect(scoped((tx) => updateBooking(tx, id, { partySize: 0 }))).rejects.toMatchObject({
+      code: "booking.invalid",
+    });
   });
 
   it("assigns an ACTIVE table on edit", async () => {
     const { cfg, createdBy } = await setupVenue();
     const tableId = await makeTable(cfg);
-    const { id } = await scoped(cfg, (tx) =>
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -377,13 +377,13 @@ describe("updateBooking", () => {
         createdBy,
       }),
     );
-    await scoped(cfg, (tx) => updateBooking(tx, id, { tableId }));
-    expect((await scoped(cfg, (tx) => getBooking(tx, id)))!.tableId).toBe(tableId);
+    await scoped((tx) => updateBooking(tx, id, { tableId }));
+    expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(tableId);
   });
 
   it("rejects an edit that assigns an absent table with table.not_found", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const { id } = await scoped(cfg, (tx) =>
+    const { createdBy } = await setupVenue();
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -393,7 +393,7 @@ describe("updateBooking", () => {
       }),
     );
     await expect(
-      scoped(cfg, (tx) => updateBooking(tx, id, { tableId: randomUUID() })),
+      scoped((tx) => updateBooking(tx, id, { tableId: randomUUID() })),
     ).rejects.toMatchObject({ code: "table.not_found" });
   });
 });
@@ -402,22 +402,22 @@ describe("lifecycle verbs", () => {
   it("cancelBooking: booked → cancelled, and seated → cancelled", async () => {
     const { cfg, createdBy } = await setupVenue();
     const bookedId = await seedBooking(cfg, createdBy, "booked");
-    await scoped(cfg, (tx) => cancelBooking(tx, bookedId));
-    expect((await scoped(cfg, (tx) => getBooking(tx, bookedId)))!.status).toBe("cancelled");
+    await scoped((tx) => cancelBooking(tx, bookedId));
+    expect((await scoped((tx) => getBooking(tx, bookedId)))!.status).toBe("cancelled");
 
     const seatedId = await seedBooking(cfg, createdBy, "seated");
-    await scoped(cfg, (tx) => cancelBooking(tx, seatedId));
-    expect((await scoped(cfg, (tx) => getBooking(tx, seatedId)))!.status).toBe("cancelled");
+    await scoped((tx) => cancelBooking(tx, seatedId));
+    expect((await scoped((tx) => getBooking(tx, seatedId)))!.status).toBe("cancelled");
   });
 
   it("markNoShow: booked → no_show; illegal from another state → booking.invalid_transition", async () => {
     const { cfg, createdBy } = await setupVenue();
     const id = await seedBooking(cfg, createdBy, "booked");
-    await scoped(cfg, (tx) => markNoShow(tx, id));
-    expect((await scoped(cfg, (tx) => getBooking(tx, id)))!.status).toBe("no_show");
+    await scoped((tx) => markNoShow(tx, id));
+    expect((await scoped((tx) => getBooking(tx, id)))!.status).toBe("no_show");
 
     const seatedId = await seedBooking(cfg, createdBy, "seated");
-    await expect(scoped(cfg, (tx) => markNoShow(tx, seatedId))).rejects.toMatchObject({
+    await expect(scoped((tx) => markNoShow(tx, seatedId))).rejects.toMatchObject({
       code: "booking.invalid_transition",
     });
   });
@@ -425,29 +425,29 @@ describe("lifecycle verbs", () => {
   it("completeBooking: seated → completed; illegal from booked → booking.invalid_transition", async () => {
     const { cfg, createdBy } = await setupVenue();
     const seatedId = await seedBooking(cfg, createdBy, "seated");
-    await scoped(cfg, (tx) => completeBooking(tx, seatedId));
-    expect((await scoped(cfg, (tx) => getBooking(tx, seatedId)))!.status).toBe("completed");
+    await scoped((tx) => completeBooking(tx, seatedId));
+    expect((await scoped((tx) => getBooking(tx, seatedId)))!.status).toBe("completed");
 
     const bookedId = await seedBooking(cfg, createdBy, "booked");
-    await expect(scoped(cfg, (tx) => completeBooking(tx, bookedId))).rejects.toMatchObject({
+    await expect(scoped((tx) => completeBooking(tx, bookedId))).rejects.toMatchObject({
       code: "booking.invalid_transition",
     });
   });
 
   it("distinguishes an absent id (booking.not_found) from a wrong-state one (invalid_transition)", async () => {
     const { cfg, createdBy } = await setupVenue();
-    await expect(scoped(cfg, (tx) => cancelBooking(tx, randomUUID()))).rejects.toMatchObject({
+    await expect(scoped((tx) => cancelBooking(tx, randomUUID()))).rejects.toMatchObject({
       code: "booking.not_found",
     });
-    await expect(scoped(cfg, (tx) => markNoShow(tx, randomUUID()))).rejects.toMatchObject({
+    await expect(scoped((tx) => markNoShow(tx, randomUUID()))).rejects.toMatchObject({
       code: "booking.not_found",
     });
-    await expect(scoped(cfg, (tx) => completeBooking(tx, randomUUID()))).rejects.toMatchObject({
+    await expect(scoped((tx) => completeBooking(tx, randomUUID()))).rejects.toMatchObject({
       code: "booking.not_found",
     });
 
     const completedId = await seedBooking(cfg, createdBy, "completed");
-    await expect(scoped(cfg, (tx) => cancelBooking(tx, completedId))).rejects.toMatchObject({
+    await expect(scoped((tx) => cancelBooking(tx, completedId))).rejects.toMatchObject({
       code: "booking.invalid_transition",
     });
   });
@@ -455,8 +455,8 @@ describe("lifecycle verbs", () => {
 
 describe("getBooking", () => {
   it("returns undefined for an absent id", async () => {
-    const { cfg } = await setupVenue();
-    expect(await scoped(cfg, (tx) => getBooking(tx, randomUUID()))).toBeUndefined();
+    await setupVenue();
+    expect(await scoped((tx) => getBooking(tx, randomUUID()))).toBeUndefined();
   });
 });
 
@@ -493,7 +493,7 @@ describe("seatBooking", () => {
   it("seats a booking: opens a tab on the assigned table and links it", async () => {
     const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "4");
-    const { id } = await scoped(cfg, (tx) =>
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -503,16 +503,16 @@ describe("seatBooking", () => {
         createdBy,
       }),
     );
-    const { tabId } = await scoped(cfg, (tx) => seatBooking(tx, id, { seatedBy }, core));
+    const { tabId } = await scoped((tx) => seatBooking(tx, id, { seatedBy }, core));
     expect(tabId).toEqual(expect.any(String));
-    const b = await scoped(cfg, (tx) => getBooking(tx, id));
+    const b = await scoped((tx) => getBooking(tx, id));
     expect(b).toMatchObject({ status: "seated", tabId, tableId });
   });
 
   it("seats the party for the booking's size, as the person who seated it", async () => {
     const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "8");
-    const { id } = await scoped(cfg, (tx) =>
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -530,14 +530,14 @@ describe("seatBooking", () => {
         return core.seatTable(tx, req);
       },
     };
-    await scoped(cfg, (tx) => seatBooking(tx, id, { seatedBy }, recording));
+    await scoped((tx) => seatBooking(tx, id, { seatedBy }, recording));
     expect(asked).toEqual([{ tableId, guestCount: 5, operatorId: seatedBy }]);
   });
 
   it("uses req.tableId when the booking has no table, and stores it", async () => {
     const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "7");
-    const { id } = await scoped(cfg, (tx) =>
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -546,14 +546,14 @@ describe("seatBooking", () => {
         createdBy,
       }),
     );
-    const { tabId } = await scoped(cfg, (tx) => seatBooking(tx, id, { tableId, seatedBy }, core));
-    const b = await scoped(cfg, (tx) => getBooking(tx, id));
+    const { tabId } = await scoped((tx) => seatBooking(tx, id, { tableId, seatedBy }, core));
+    const b = await scoped((tx) => getBooking(tx, id));
     expect(b).toMatchObject({ status: "seated", tabId, tableId });
   });
 
   it("refuses a req.tableId that names no table with table.not_found and leaves the booking booked", async () => {
-    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
-    const { id } = await scoped(cfg, (tx) =>
+    const { core, createdBy, seatedBy } = await setupTillVenue();
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -564,15 +564,15 @@ describe("seatBooking", () => {
     );
     const tableId = randomUUID();
     await expect(
-      scoped(cfg, (tx) => seatBooking(tx, id, { tableId, seatedBy }, core)),
+      scoped((tx) => seatBooking(tx, id, { tableId, seatedBy }, core)),
     ).rejects.toMatchObject({ code: "table.not_found", params: { tableId } });
-    const b = await scoped(cfg, (tx) => getBooking(tx, id));
+    const b = await scoped((tx) => getBooking(tx, id));
     expect(b).toMatchObject({ status: "booked", tableId: null, tabId: null });
   });
 
   it("requires a table: booking.table_required when neither the booking nor req has one", async () => {
-    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
-    const { id } = await scoped(cfg, (tx) =>
+    const { core, createdBy, seatedBy } = await setupTillVenue();
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -581,9 +581,7 @@ describe("seatBooking", () => {
         createdBy,
       }),
     );
-    await expect(
-      scoped(cfg, (tx) => seatBooking(tx, id, { seatedBy }, core)),
-    ).rejects.toMatchObject({
+    await expect(scoped((tx) => seatBooking(tx, id, { seatedBy }, core))).rejects.toMatchObject({
       code: "booking.table_required",
     });
   });
@@ -591,7 +589,7 @@ describe("seatBooking", () => {
   it("refuses a non-booked booking with booking.invalid_transition", async () => {
     const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "9");
-    const { id } = await scoped(cfg, (tx) =>
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -601,10 +599,8 @@ describe("seatBooking", () => {
         createdBy,
       }),
     );
-    await scoped(cfg, (tx) => cancelBooking(tx, id));
-    await expect(
-      scoped(cfg, (tx) => seatBooking(tx, id, { seatedBy }, core)),
-    ).rejects.toMatchObject({
+    await scoped((tx) => cancelBooking(tx, id));
+    await expect(scoped((tx) => seatBooking(tx, id, { seatedBy }, core))).rejects.toMatchObject({
       code: "booking.invalid_transition",
     });
   });
@@ -614,7 +610,7 @@ describe("seatBooking", () => {
   it("seating a no-longer-booked booking throws invalid_transition and opens no tab", async () => {
     const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "3");
-    const { id } = await scoped(cfg, (tx) =>
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -624,13 +620,11 @@ describe("seatBooking", () => {
         createdBy,
       }),
     );
-    await scoped(cfg, (tx) => cancelBooking(tx, id));
-    await expect(
-      scoped(cfg, (tx) => seatBooking(tx, id, { seatedBy }, core)),
-    ).rejects.toMatchObject({
+    await scoped((tx) => cancelBooking(tx, id));
+    await expect(scoped((tx) => seatBooking(tx, id, { seatedBy }, core))).rejects.toMatchObject({
       code: "booking.invalid_transition",
     });
-    const b = await scoped(cfg, (tx) => getBooking(tx, id));
+    const b = await scoped((tx) => getBooking(tx, id));
     expect(b).toMatchObject({ status: "cancelled", tabId: null });
     const tabs = await db.execute<{ n: number }>(sql`select count(*) as n from working_orders`);
     expect(tabs.rows[0]!.n).toBe(0);
@@ -641,7 +635,7 @@ describe("seatBooking", () => {
   it("CAS guard: a booking that leaves `booked` during seatTable is refused and the tab rolled back", async () => {
     const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "3b");
-    const { id } = await scoped(cfg, (tx) =>
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -659,18 +653,18 @@ describe("seatBooking", () => {
       },
     };
     await expect(
-      scoped(cfg, (tx) => seatBooking(tx, id, { seatedBy }, cancellingCore)),
+      scoped((tx) => seatBooking(tx, id, { seatedBy }, cancellingCore)),
     ).rejects.toMatchObject({ code: "booking.invalid_transition" });
-    const b = await scoped(cfg, (tx) => getBooking(tx, id));
+    const b = await scoped((tx) => getBooking(tx, id));
     expect(b).toMatchObject({ status: "booked", tabId: null, tableId });
     const tabs = await db.execute<{ n: number }>(sql`select count(*) as n from working_orders`);
     expect(tabs.rows[0]!.n).toBe(0);
   });
 
   it("refuses an absent booking with booking.not_found", async () => {
-    const { cfg, core, seatedBy } = await setupTillVenue();
+    const { core, seatedBy } = await setupTillVenue();
     await expect(
-      scoped(cfg, (tx) => seatBooking(tx, randomUUID(), { seatedBy }, core)),
+      scoped((tx) => seatBooking(tx, randomUUID(), { seatedBy }, core)),
     ).rejects.toMatchObject({
       code: "booking.not_found",
     });
@@ -679,10 +673,8 @@ describe("seatBooking", () => {
   it("bubbles tab.already_open when the target table already has an open tab", async () => {
     const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "5");
-    await scoped(cfg, (tx) =>
-      core.seatTable(tx, { tableId, guestCount: null, operatorId: seatedBy }),
-    );
-    const { id } = await scoped(cfg, (tx) =>
+    await scoped((tx) => core.seatTable(tx, { tableId, guestCount: null, operatorId: seatedBy }));
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -692,9 +684,7 @@ describe("seatBooking", () => {
         createdBy,
       }),
     );
-    await expect(
-      scoped(cfg, (tx) => seatBooking(tx, id, { seatedBy }, core)),
-    ).rejects.toMatchObject({
+    await expect(scoped((tx) => seatBooking(tx, id, { seatedBy }, core))).rejects.toMatchObject({
       code: "tab.already_open",
     });
   });
@@ -702,7 +692,7 @@ describe("seatBooking", () => {
   it("seats then completes end-to-end (booked → seated → completed)", async () => {
     const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "6");
-    const { id } = await scoped(cfg, (tx) =>
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -712,9 +702,9 @@ describe("seatBooking", () => {
         createdBy,
       }),
     );
-    await scoped(cfg, (tx) => seatBooking(tx, id, { seatedBy }, core));
-    await scoped(cfg, (tx) => completeBooking(tx, id));
-    expect((await scoped(cfg, (tx) => getBooking(tx, id)))!.status).toBe("completed");
+    await scoped((tx) => seatBooking(tx, id, { seatedBy }, core));
+    await scoped((tx) => completeBooking(tx, id));
+    expect((await scoped((tx) => getBooking(tx, id)))!.status).toBe("completed");
   });
 });
 
@@ -722,7 +712,7 @@ it("refuses booking a table with no today's row", async () => {
   const { cfg, createdBy } = await setupVenue();
   const tableId = await makeTable(cfg, false);
   await expect(
-    scoped(cfg, (tx) =>
+    scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -775,8 +765,8 @@ describe("a part of a joined table on a layout", () => {
     return live;
   }
 
-  function book(cfg: VenueCfg, createdBy: string, bookingDate: string, tableId: string) {
-    return scoped(cfg, (tx) =>
+  function book(createdBy: string, bookingDate: string, tableId: string) {
+    return scoped((tx) =>
       createBooking(tx, {
         bookingDate,
         bookingTime: "20:00",
@@ -792,7 +782,7 @@ describe("a part of a joined table on a layout", () => {
     const { cfg, createdBy } = await setupVenue();
     const table = await longTable(cfg.locationId);
     for (const date of ["2026-08-20", "2027-01-15"]) {
-      await expect(book(cfg, createdBy, date, table.c4)).rejects.toMatchObject({
+      await expect(book(createdBy, date, table.c4)).rejects.toMatchObject({
         code: "table.in_joined_table",
         params: { tableId: table.c4, field: "tableId" },
       });
@@ -804,21 +794,21 @@ describe("a part of a joined table on a layout", () => {
   it("books Long table", async () => {
     const { cfg, createdBy } = await setupVenue();
     const table = await longTable(cfg.locationId);
-    const { id } = await book(cfg, createdBy, "2026-08-20", table.long);
-    expect((await scoped(cfg, (tx) => getBooking(tx, id)))!.tableId).toBe(table.long);
+    const { id } = await book(createdBy, "2026-08-20", table.long);
+    expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(table.long);
   });
 
   it("refuses an edit that moves a booking to Counter 5", async () => {
     const { cfg, createdBy } = await setupVenue();
     const table = await longTable(cfg.locationId);
-    const { id } = await book(cfg, createdBy, "2026-08-20", table.long);
+    const { id } = await book(createdBy, "2026-08-20", table.long);
     await expect(
-      scoped(cfg, (tx) => updateBooking(tx, id, { tableId: table.c5 })),
+      scoped((tx) => updateBooking(tx, id, { tableId: table.c5 })),
     ).rejects.toMatchObject({
       code: "table.in_joined_table",
       params: { tableId: table.c5, field: "tableId" },
     });
-    expect((await scoped(cfg, (tx) => getBooking(tx, id)))!.tableId).toBe(table.long);
+    expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(table.long);
   });
 });
 
@@ -916,8 +906,8 @@ describe("books table 4 while today's recorded layout stands it", () => {
     return { live, recordDinner: () => record(dinner!.id, dinnerAt), saveStandardJoined };
   }
 
-  function book(cfg: VenueCfg, createdBy: string, bookingDate: string, tableId: string) {
-    return scoped(cfg, (tx) =>
+  function book(createdBy: string, bookingDate: string, tableId: string) {
+    return scoped((tx) =>
       createBooking(tx, {
         bookingDate,
         bookingTime: "20:00",
@@ -937,63 +927,63 @@ describe("books table 4 while today's recorded layout stands it", () => {
   it("accepts a booking for today at 4 and refuses one at 4+5", async () => {
     const { cfg, createdBy } = await setupVenue();
     const { live } = await inside(cfg.locationId);
-    const { id } = await book(cfg, createdBy, TODAY, live.t4);
-    expect((await scoped(cfg, (tx) => getBooking(tx, id)))!.tableId).toBe(live.t4);
-    await expect(book(cfg, createdBy, TODAY, live.t45)).rejects.toMatchObject(inJoined(live.t45));
+    const { id } = await book(createdBy, TODAY, live.t4);
+    expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(live.t4);
+    await expect(book(createdBy, TODAY, live.t45)).rejects.toMatchObject(inJoined(live.t45));
   });
 
   it("refuses 4 with Dinner recorded", async () => {
     const { cfg, createdBy } = await setupVenue();
     const { live, recordDinner } = await inside(cfg.locationId);
     await recordDinner();
-    await expect(book(cfg, createdBy, TODAY, live.t4)).rejects.toMatchObject(inJoined(live.t4));
+    await expect(book(createdBy, TODAY, live.t4)).rejects.toMatchObject(inJoined(live.t4));
   });
 
   it("books 4 for today after a save of Standard that no reset has applied", async () => {
     const { cfg, createdBy } = await setupVenue();
     const { live, saveStandardJoined } = await inside(cfg.locationId);
     await saveStandardJoined();
-    const { id } = await book(cfg, createdBy, TODAY, live.t4);
-    expect((await scoped(cfg, (tx) => getBooking(tx, id)))!.tableId).toBe(live.t4);
-    await expect(book(cfg, createdBy, TODAY, live.t45)).rejects.toMatchObject(inJoined(live.t45));
+    const { id } = await book(createdBy, TODAY, live.t4);
+    expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(live.t4);
+    await expect(book(createdBy, TODAY, live.t45)).rejects.toMatchObject(inJoined(live.t45));
   });
 
   it("refuses a booking for tomorrow at 4", async () => {
     const { cfg, createdBy } = await setupVenue();
     const { live } = await inside(cfg.locationId);
-    await expect(book(cfg, createdBy, TOMORROW, live.t4)).rejects.toMatchObject(inJoined(live.t4));
+    await expect(book(createdBy, TOMORROW, live.t4)).rejects.toMatchObject(inJoined(live.t4));
   });
 
   it("judges an edit by the patch's date, else the stored booking's", async () => {
     const { cfg, createdBy } = await setupVenue();
     const { live } = await inside(cfg.locationId);
-    const { id } = await book(cfg, createdBy, TOMORROW, live.t45);
-    await expect(
-      scoped(cfg, (tx) => updateBooking(tx, id, { tableId: live.t5 })),
-    ).rejects.toMatchObject(inJoined(live.t5));
-    await scoped(cfg, (tx) => updateBooking(tx, id, { bookingDate: TODAY, tableId: live.t5 }));
-    expect((await scoped(cfg, (tx) => getBooking(tx, id)))!.tableId).toBe(live.t5);
-    await scoped(cfg, (tx) => updateBooking(tx, id, { tableId: live.t4 }));
-    expect((await scoped(cfg, (tx) => getBooking(tx, id)))!.tableId).toBe(live.t4);
+    const { id } = await book(createdBy, TOMORROW, live.t45);
+    await expect(scoped((tx) => updateBooking(tx, id, { tableId: live.t5 }))).rejects.toMatchObject(
+      inJoined(live.t5),
+    );
+    await scoped((tx) => updateBooking(tx, id, { bookingDate: TODAY, tableId: live.t5 }));
+    expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(live.t5);
+    await scoped((tx) => updateBooking(tx, id, { tableId: live.t4 }));
+    expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(live.t4);
   });
 
   it("judges an edit that changes only the date against the booking's table", async () => {
     const { cfg, createdBy } = await setupVenue();
     const { live } = await inside(cfg.locationId);
-    const { id } = await book(cfg, createdBy, TODAY, live.t4);
+    const { id } = await book(createdBy, TODAY, live.t4);
     await expect(
-      scoped(cfg, (tx) => updateBooking(tx, id, { bookingDate: TOMORROW })),
+      scoped((tx) => updateBooking(tx, id, { bookingDate: TOMORROW })),
     ).rejects.toMatchObject(inJoined(live.t4));
-    const stored = await scoped(cfg, (tx) => getBooking(tx, id));
+    const stored = await scoped((tx) => getBooking(tx, id));
     expect(stored).toMatchObject({ bookingDate: TODAY, tableId: live.t4 });
-    await scoped(cfg, (tx) => updateBooking(tx, id, { bookingDate: TODAY, notes: "window" }));
-    expect((await scoped(cfg, (tx) => getBooking(tx, id)))!.notes).toBe("window");
+    await scoped((tx) => updateBooking(tx, id, { bookingDate: TODAY, notes: "window" }));
+    expect((await scoped((tx) => getBooking(tx, id)))!.notes).toBe("window");
   });
 
   it("moves a booking with no table to any date", async () => {
     const { cfg, createdBy } = await setupVenue();
     await inside(cfg.locationId);
-    const { id } = await scoped(cfg, (tx) =>
+    const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: TODAY,
         bookingTime: "20:00",
@@ -1002,7 +992,7 @@ describe("books table 4 while today's recorded layout stands it", () => {
         createdBy,
       }),
     );
-    await scoped(cfg, (tx) => updateBooking(tx, id, { bookingDate: TOMORROW }));
-    expect((await scoped(cfg, (tx) => getBooking(tx, id)))!.bookingDate).toBe(TOMORROW);
+    await scoped((tx) => updateBooking(tx, id, { bookingDate: TOMORROW }));
+    expect((await scoped((tx) => getBooking(tx, id)))!.bookingDate).toBe(TOMORROW);
   });
 });
