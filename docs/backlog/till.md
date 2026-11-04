@@ -2505,11 +2505,11 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
 
 ## A773. Courses, groups and the pass
 
-**A773-2**, firing and the pass, has a [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
-with PR D remaining. PR B is cut into B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
-B4 is cut into B4a and B4b by its [task plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md);
-PR B and PR C ([task plan](../superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) are
-complete. PR D is next. B3
+**A773-2**, firing and the pass, is complete. Its [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
+was cut into PR B (B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
+B4 into B4a and B4b by its [task plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)),
+PR C ([task plan](../superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) and PR D
+([task plan](../superpowers/plans/2026-11-04-a773-2d-tickets-and-retirement.md)). B3
 ([task plan](../superpowers/plans/2026-11-02-a773-2b3-pass-release.md)) built the pass's board
 reads (`GET /api/device/pass-board`, `GET /api/device/pass-monitor-board`) and its Fire
 (`POST /api/device/pass-screen/release`), which gives a card's waiting dishes to their stations
@@ -2521,12 +2521,7 @@ made every kitchen column a choice in Columns, gave the waiter's table screen "a
 added a pass's choice to show or hide other stations' dishes (per profile and per device, migration
 0073). What B4 leaves for PR D and later is in [the B4 plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)'s
 "Left for PR C, PR D and later". Old nonempty stamps remain in regression fixtures, outside the till's
-public contracts. Physical schema and configuration-transfer fields remain for Task 12.
-
-PR D finishes tickets, then removes the retired schema and configuration fields. Preserve separately routed extras and the allergy snapshot child when
-rebuilding ticket items. Recheck current main and other lanes' actual reservations before
-each slice. A797's completed Q42 design revision, pictures and FYI landed on 2026-10-21; no new
-Q42 answer is required. New copy still follows the plan's wording-review gate.
+public contracts.
 
 **The owner's answers (2026-11-02)** to the nine questions B3 asked (B3's plan, "Owner
 questions"): the Spanish copy sheet is approved as written, and B4 may land once its words match
@@ -2554,10 +2549,11 @@ The [A773-1 plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and
 Sent/New order and bill ownership behavior. Physical dragging and partial-serving trials remain
 separate backlog entries. A803 owns its pass/station presentation tail.
 
-Next: PR D (master plan Tasks 11–12): ticket headings and the "Goes with {stations}" cue. On PR D's
-branch, core migration `0205_retire_pass_item_marks` drops `pass_item_marks` and
-`0206_retire_away_at` drops `ticket_items.away_at`; `fire_control` goes with `locations` in A1301
-S28 (PR D plan D113).
+Each kitchen ticket's group heading names the courses of the dishes under it, and a dish that
+does not wait for the pass, whose group has dishes for the pass, prints "Goes with {stations}"
+naming those dishes' stations; the station card shows the same line. Core migrations `0205_retire_pass_item_marks` and `0206_retire_away_at` dropped
+`pass_item_marks` and `ticket_items.away_at`; `fire_control` goes with `locations` in A1301 S28
+(PR D plan D113).
 
 What A797 leaves for the pass (slices 9 and 9b): `apps/till/src/state/kitchen-columns.ts` is the
 Columns store to reuse, and a key missing from a stored layout returns to its default place, not
@@ -2965,7 +2961,8 @@ main bill, has landed (#2360); it leaves open A1256, A1258, A1261, A1263–A1267
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1286–A1294 and A1298–A1300. Remaining slices: 4b, waiting dishes that leave with their own copy of the course; 4c,
 Split a table through the same picker, with A590; pre-bills after asesor S2 (A446). One payment pays one bill. Station modes, pass naming and grouped cross-bill
-firing wait for pending A773-2, independently of S2. New Spanish wording requires approval
+firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
+"A773-2 PR D handoff" paragraph. New Spanish wording requires approval
 during implementation. Each new seating starts at Bill 1
 (owner, 2026-10-19); bills staying at their table retain their numbers.
 [Spec](../superpowers/specs/2026-10-18-a803-bills-and-tables-design.md);
