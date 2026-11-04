@@ -8,7 +8,6 @@ import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import {
   assertOtherFirstSetupAllowed,
-  assertFirstSetupBackupBootTarget,
   assertNoLegacyFirstSetupWorkspace,
   assertNoStartAgainDeletion,
   readPrivacyContact,
@@ -37,8 +36,6 @@ import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
 import { createCloudReplacement } from "./cloud-replacement.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
-import { firstSetupBackupRecoveryFor } from "./first-setup-backup-entry.js";
-import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
 import { mountCloudApi } from "./cloud-api.js";
 import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
 import { liveResourceTypes } from "./live-resources.js";
@@ -195,7 +192,6 @@ import { mountVenueZoneRepairApi } from "./venue-zone-repair-api.js";
 import { mountTillApi } from "./till-api.js";
 import { createDiskFullState, noteFullAtStart, watchForDiskFull } from "./disk-full-state.js";
 import { mountDiskStopApi } from "./disk-stop-api.js";
-import { isUnset } from "./env-value.js";
 import { SPARE_SPACE_BYTES, spareReleased, spareRestorer } from "./spare-space.js";
 import {
   createFreeSpaceState,
@@ -1072,7 +1068,6 @@ async function bootServer(
     assertBuiltApp(config.setupAppDir, "WAITRON_SETUP_APP_DIR");
   }
 
-  await assertFirstSetupBackupBootTarget({ venueDir: config.venueDir, stateDir: config.stateDir });
   await assertNoLegacyFirstSetupWorkspace({ venueDir: config.venueDir, stateDir: config.stateDir });
   await assertNoStartAgainDeletion(config.venueDir);
   const moduleConfig = await readModuleConfig(config.stateDir);
@@ -1135,13 +1130,7 @@ async function bootServer(
   // masking it would erase the difference between a wrong password and none at all. Pinned by
   // `recovery-surface.test.ts` → "the caught error's own words on the page". That is `redactSecrets`
   // alone: the personal-data mask runs in `createLogger`, before the split, so it applies to both.
-  let backupRepairOnly = false;
-  const normalLogSink = tee(stdoutSink, fileSink);
-  const log = createLogger(
-    (line) => (backupRepairOnly ? stdoutSink(line) : normalLogSink(line)),
-    now,
-    () => verbosity.current(),
-  );
+  const log = createLogger(tee(stdoutSink, fileSink), now, () => verbosity.current());
   // Before ANY write, including migrations: a host pointed at another environment's database must
   // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself.
   const stampProbe = await openVenueDatabase(config.venueDir);
@@ -1178,13 +1167,9 @@ async function bootServer(
   // beside it.
   const store = await openVenueDatabase(config.venueDir);
   undoOnFailure.push(() => store.close());
-  // Set by the start when it boots from folders other than the configured ones.
-  const spareDir = isUnset(env.WAITRON_SPARE_SPACE_DIR)
-    ? config.stateDir
-    : env.WAITRON_SPARE_SPACE_DIR;
-  const released = () => spareReleased(spareDir, log);
+  const released = () => spareReleased(config.stateDir, log);
   const restoreSpare = spareRestorer({
-    stateDir: spareDir,
+    stateDir: config.stateDir,
     venueDir: config.venueDir,
     bytes: seams.spareBytes ?? SPARE_SPACE_BYTES,
     log,
@@ -1256,34 +1241,6 @@ async function bootServer(
   let stepDownHere: (request: StepDownRequest) => Promise<StepDownResult> = () =>
     Promise.reject(new Error("stepdown called on a start that has not provided one"));
   seams.stepdown?.mount(app, (request) => stepDownHere(request));
-  const normalSetupRequests = new Set<Promise<void>>();
-  app.use("/setup-api/*", async (c, next) => {
-    const repair = c.req.path.startsWith("/setup-api/first-setup/resolution/backup/");
-    const publicRead =
-      c.req.method === "GET" &&
-      [
-        "/setup-api/status",
-        "/setup-api/discovery",
-        "/setup-api/first-setup/status",
-        "/setup-api/first-setup/resolution",
-      ].includes(c.req.path);
-    if (repair || publicRead) return next();
-    if (backupRepairOnly)
-      return c.json({ error: { code: "setup.not_ready", params: {} } }, 503, {
-        "Cache-Control": "no-store",
-      });
-    let settle!: () => void;
-    const settled = new Promise<void>((done) => {
-      settle = done;
-    });
-    normalSetupRequests.add(settled);
-    try {
-      await next();
-    } finally {
-      settle();
-      normalSetupRequests.delete(settled);
-    }
-  });
   // Registered before every surface below, so each wraps all of them; `/health`, registered above, is
   // deliberately left out of the request log and names no build.
   app.use("*", requestIdMiddleware(log, now));
@@ -1376,26 +1333,6 @@ async function bootServer(
       cloudRecovery,
       bucket: { litestreamBin: config.litestreamBin, now, log, openStore: openBoundedBucket },
     });
-    const backupRepair = firstSetupBackupRecoveryFor(config, env, firstSetupHost, stdoutLog);
-    undoOnFailure.push(() => backupRepair.dispose());
-    let repairHandoff: Promise<void> | undefined;
-    mountFirstSetupBackupApi(
-      app,
-      backupRepair,
-      stdoutLog,
-      () => process.kill(process.pid, "SIGTERM"),
-      {
-        enter: () =>
-          (repairHandoff ??= (async () => {
-            backupRepairOnly = true;
-            await Promise.all([...normalSetupRequests]);
-            // Close this pool before proof binds the source's database sidecars.
-            await firstSetupHost.resolution.withVenueExclusion(() =>
-              firstSetupHost.coordinator.run(() => store.close()),
-            );
-          })()),
-      },
-    );
     mountSetup(
       app,
       {
@@ -1663,7 +1600,7 @@ async function bootServer(
       health,
       log,
       {
-        stopWork: () => backupRepair.dispose(),
+        stopWork: () => Promise.resolve(),
         settleRequests: () => Promise.resolve(),
         closePools: () => store.close(),
       },

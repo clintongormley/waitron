@@ -59,15 +59,9 @@ import { FULL_DISK_BYTES, fullDiskFailure, startFailureCode } from "./boot-failu
 import { SPARE_SPACE_BYTES, releaseSpare, topUpSpare } from "./spare-space.js";
 import { errnoOf } from "./errno.js";
 import type { Statfs } from "./free-bytes.js";
-import {
-  START_FREE_SPACE_FLOOR,
-  freeSpaceAtStart,
-  insideAny,
-  lowestFreeBytes,
-} from "./start-space.js";
+import { START_FREE_SPACE_FLOOR, freeSpaceAtStart, lowestFreeBytes } from "./start-space.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { deleteOldBackupsAtStart } from "./start-backup-room.js";
-import { resolveFirstSetupBackupEntry } from "./first-setup-backup-entry.js";
 import { maskPersonalData } from "./log-personal-data.js";
 import { redactSecrets } from "./redact-secrets.js";
 import "./errors.js";
@@ -345,52 +339,28 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     readVenueHolder: deps.readVenueHolder ?? readVenueHolder,
     log: deps.log,
   };
-  const backupEntry = await resolveFirstSetupBackupEntry(deps);
-  const cleanupRoots = backupEntry.kind === "selected" ? backupEntry.roots : deps;
-  if (backupEntry.kind === "repair") {
-    const logDir = deps.logDir ?? join(deps.stateDir, "logs");
-    // The recovery's originals digest covers both roots, so a deletion inside them would change it.
-    if (!(await insideAny(logDir, [deps.stateDir, deps.venueDir]))) {
-      await freeSpaceAtStart({
-        ...cleanUp,
-        stateDir: deps.stateDir,
-        venueDir: deps.venueDir,
-        logDir,
-        stagingLeftovers: false,
-      });
-    }
-  }
-  // The repair stage keeps its page: its clean-up above is for the deletions only.
-  const space =
-    backupEntry.kind === "repair"
-      ? { freeBytes: null, belowFloor: false }
-      : await freeSpaceAtStart({
-          ...cleanUp,
-          stateDir: cleanupRoots.stateDir,
-          venueDir: cleanupRoots.venueDir,
-          logDir:
-            backupEntry.kind === "selected"
-              ? join(cleanupRoots.stateDir, "logs")
-              : (deps.logDir ?? join(deps.stateDir, "logs")),
-        });
+  const space = await freeSpaceAtStart({
+    ...cleanUp,
+    stateDir: deps.stateDir,
+    venueDir: deps.venueDir,
+    logDir: deps.logDir ?? join(deps.stateDir, "logs"),
+  });
 
-  // A recovery's folders are not the installation the backup room note describes.
-  if (backupEntry.kind !== "repair" && backupEntry.kind !== "selected")
-    await deleteOldBackupsAtStart({
-      stateDir: deps.stateDir,
-      venueDir: deps.venueDir,
-      baseEnv: deps.baseEnv,
-      loadBoxEnv: deps.loadBoxEnv,
-      spareBytes: deps.spareBytes ?? SPARE_SPACE_BYTES,
-      floor,
-      statfs: deps.statfs,
-      lockVenue: cleanUp.lockVenue,
-      readVenueHolder: cleanUp.readVenueHolder,
-      now,
-      log: deps.log,
-    });
+  await deleteOldBackupsAtStart({
+    stateDir: deps.stateDir,
+    venueDir: deps.venueDir,
+    baseEnv: deps.baseEnv,
+    loadBoxEnv: deps.loadBoxEnv,
+    spareBytes: deps.spareBytes ?? SPARE_SPACE_BYTES,
+    floor,
+    statfs: deps.statfs,
+    lockVenue: cleanUp.lockVenue,
+    readVenueHolder: cleanUp.readVenueHolder,
+    now,
+    log: deps.log,
+  });
 
-  if (backupEntry.kind !== "repair") await releaseSpareToStart(deps, cleanupRoots);
+  await releaseSpareToStart(deps, deps);
 
   const admission = await resolveFirstSetupEntry(
     deps,
@@ -434,14 +404,12 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       ...deps.baseEnv,
       WAITRON_STATE_DIR: admission.roots.stateDir,
       WAITRON_VENUE_DIR: admission.roots.venueDir,
-      // The spare stays in the configured state folder; a start that did not move boots from `deps`.
-      WAITRON_SPARE_SPACE_DIR: deps.stateDir,
     },
   };
   const dirs = [rooted.stateDir, rooted.venueDir];
   const moved = rooted.stateDir !== deps.stateDir || rooted.venueDir !== deps.venueDir;
   let belowFloor = space.belowFloor;
-  if (moved && backupEntry.kind !== "repair") {
+  if (moved) {
     const lowest = await lowestFreeBytes([deps.stateDir, deps.venueDir, ...dirs], deps.statfs);
     belowFloor = (lowest ?? floor) < floor;
   }

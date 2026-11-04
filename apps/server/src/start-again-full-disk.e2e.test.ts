@@ -109,10 +109,8 @@ it("without a spare file, the password step of the Start-again flow on a full di
   );
 
   expect(recovered.status, await recovered.clone().text()).toBe(507);
-  // Its logs are in <state>/logs, inside the state folder, so a restart at this repair stage
-  // deletes none (runEntry's rule).
   expect(await recovered.json()).toEqual({
-    error: { code: "storage.disk_full", params: { restartDeletesLogs: false } },
+    error: { code: "storage.disk_full", params: { restartDeletesLogs: true } },
   });
 });
 

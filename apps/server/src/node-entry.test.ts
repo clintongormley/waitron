@@ -6,7 +6,6 @@ import {
   lstat,
   mkdir,
   mkdtemp,
-  realpath,
   readFile,
   readlink,
   rm,
@@ -2346,9 +2345,12 @@ describe("the box's spare file", () => {
     expect(existsSync(markerIn(stateDir))).toBe(false);
   });
 
-  it("a start that did not move hands the boot no spare folder", async () => {
-    // Resolved: the start compares its folders after resolving links, and tmpdir() is one on macOS.
-    const stateDir = await realpath(await mkdtemp(join(tmpdir(), "wt-entry-spare-")));
+  it("a start whose folders sit below a linked folder hands the boot no spare folder", async () => {
+    const real = await mkdtemp(join(tmpdir(), "wt-entry-spare-"));
+    const link = join(await mkdtemp(join(tmpdir(), "wt-entry-spare-link-")), "linked");
+    await symlink(real, link);
+    const stateDir = join(link, "state");
+    await mkdir(stateDir);
     const d = deps({ stateDir, statfs: free(1024 * MiB), spareBytes: 4096 });
     await runEntry(d);
     expect(d.startServer).toHaveBeenCalledOnce();

@@ -29,15 +29,11 @@ import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 import { readBoxPublicCa } from "./box-tls-repair.js";
-import {
-  firstSetupBackupRecoveryFor,
-  resolveFirstSetupBackupEntry,
-} from "./first-setup-backup-entry.js";
-import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
+import { firstSetupBackupRecoveryFor } from "./first-setup-backup-entry.js";
 import { FULL_DISK_BYTES, startFailureCode } from "./boot-failure.js";
 import type { Statfs } from "./free-bytes.js";
 import { releaseSpare, releaseSpareBeforeStartAgain } from "./spare-space.js";
-import { START_FREE_SPACE_FLOOR, insideAny, lowestFreeBytes } from "./start-space.js";
+import { START_FREE_SPACE_FLOOR, lowestFreeBytes } from "./start-space.js";
 
 async function needsResolution(host: ReturnType<typeof createFirstSetupModuleHost>) {
   const pair = await host.store.readResumable();
@@ -68,28 +64,6 @@ export async function resolveFirstSetupEntry(
 ) {
   const refused = await refusedAtStart(roots, log, spare);
   if (refused !== undefined) return refused;
-  const backup = await resolveFirstSetupBackupEntry(roots);
-  if (backup.kind === "repair")
-    return {
-      kind: "resolution" as const,
-      ...(await resolutionApp(backup.roots, environment, requestRestart, log, spare)),
-      roots: backup.roots,
-    };
-  if (backup.kind === "selected") {
-    const admission = await resolveLegacyFirstSetupEntry(
-      backup.roots,
-      environment,
-      requestRestart,
-      log,
-      spare,
-    );
-    if (admission.kind === "resolution") return admission;
-    return {
-      ...admission,
-      run: <T>(body: (venueHeld: boolean) => Promise<T>) =>
-        backup.run(() => admission.run(() => body(true))),
-    };
-  }
   return resolveLegacyFirstSetupEntry(roots, environment, requestRestart, log, spare);
 }
 
@@ -102,30 +76,13 @@ export interface SpareOption {
 }
 
 /**
- * Whether the box's next start deletes old logs to make room, as `runEntry` decides it: at a
- * backup recovery's repair stage only when the log folder is outside both configured folders, and
- * otherwise only while free space reads below the start's floor. Undefined at a selected recovery,
- * whose start cleans the recovery's own logs rather than the box's; while free space reads at or
- * above the floor or cannot be read; and if the stage read throws. An unreadable recovery reads as
- * the repair stage, as `runEntry` reads it.
+ * Whether the box's next start deletes old logs to make room, as `runEntry` decides it: only while
+ * free space reads below the start's floor. Undefined while free space reads at or above the floor
+ * or cannot be read.
  */
 async function restartDeletesLogs(spare: SpareOption): Promise<boolean | undefined> {
-  try {
-    const entry = await resolveFirstSetupBackupEntry({
-      stateDir: spare.stateDir,
-      venueDir: spare.venueDir,
-    });
-    if (entry.kind === "selected") return undefined;
-    if (
-      entry.kind === "repair" &&
-      (await insideAny(spare.logDir, [spare.stateDir, spare.venueDir]))
-    )
-      return false;
-    const free = await lowestFreeBytes([spare.stateDir, spare.venueDir], spare.statfs);
-    return free !== null && free < START_FREE_SPACE_FLOOR ? true : undefined;
-  } catch {
-    return undefined;
-  }
+  const free = await lowestFreeBytes([spare.stateDir, spare.venueDir], spare.statfs);
+  return free !== null && free < START_FREE_SPACE_FLOOR ? true : undefined;
 }
 
 const START_REFUSALS = [
@@ -364,7 +321,6 @@ async function resolutionApp(
         log,
       }),
     );
-  mountFirstSetupBackupApi(app, backup, log, requestRestart);
   app.get("/setup-api/status", async (c) => {
     const pair = await host.store.readResumable().catch(() => null);
     const frozenEnvironment = pair?.state.frozen.environment;
