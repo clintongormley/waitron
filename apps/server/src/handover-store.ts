@@ -23,26 +23,54 @@ export interface HandoverStoreDeps {
   readonly nodeId: string;
 }
 
+function beginTx(
+  tx: NodeTransaction,
+  nodeId: string,
+  binding: HandoverBinding,
+  role: HandoverRole,
+): Promise<"created" | "replayed"> {
+  return beginHandoverOperationTx(tx, {
+    nodeId,
+    operationId: binding.operationId,
+    role,
+    scenario: binding.scenario,
+    sourceNodeId: binding.sourceNodeId,
+    destinationNodeId: binding.destinationNodeId,
+    binding: binding as unknown as Readonly<Record<string, unknown>>,
+    fingerprint: bindingFingerprint(binding),
+    state: initialState(role, binding.scenario),
+    waitingReason: null,
+  });
+}
+
 export function beginHandover(
   deps: HandoverStoreDeps,
   binding: HandoverBinding,
   role: HandoverRole,
 ): Promise<"created" | "replayed"> {
-  const state = initialState(role, binding.scenario);
-  return withNodeTransaction(deps.node, (tx) =>
-    beginHandoverOperationTx(tx, {
-      nodeId: deps.nodeId,
-      operationId: binding.operationId,
-      role,
-      scenario: binding.scenario,
-      sourceNodeId: binding.sourceNodeId,
-      destinationNodeId: binding.destinationNodeId,
-      binding: binding as unknown as Readonly<Record<string, unknown>>,
-      fingerprint: bindingFingerprint(binding),
-      state,
-      waitingReason: null,
-    }),
-  );
+  return withNodeTransaction(deps.node, (tx) => beginTx(tx, deps.nodeId, binding, role));
+}
+
+/** `beginHandover` that also records, in the same transaction, the offer the operation began with. */
+export function beginHandoverFromOffer(
+  deps: HandoverStoreDeps,
+  binding: HandoverBinding,
+  role: HandoverRole,
+  offer: SignedHandoverEnvelope<unknown>,
+): Promise<"created" | "replayed"> {
+  return withNodeTransaction(deps.node, async (tx) => {
+    const outcome = await beginTx(tx, deps.nodeId, binding, role);
+    if (outcome === "created") {
+      await appendHandoverEventTx(tx, {
+        nodeId: deps.nodeId,
+        operationId: binding.operationId,
+        kind: "offer",
+        detail: {},
+        envelope: canonicalize(offer as unknown as CanonicalValue),
+      });
+    }
+    return outcome;
+  });
 }
 
 /** Writes node.db only, never venue.db. Moving to the state already held records nothing. */

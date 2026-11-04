@@ -1357,6 +1357,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The old box's venue data changed after it made its final copy, so it did not send the copy. Nothing was changed.",
     es: "Los datos del local en el equipo antiguo cambiaron después de hacer la copia final, así que no ha enviado la copia. No se ha cambiado nada.",
   },
+  "handover.not_a_spare": {
+    en: "This box is not a spare, so it cannot take over the venue. Nothing was changed.",
+    es: "Este equipo no es un equipo de reserva, así que no puede pasar a llevar el local. No se ha cambiado nada.",
+  },
+  "handover.membership_mismatch": {
+    en: "This box and the main box do not hold the same venue details or the same list of the venue's boxes, so this box did not accept the handover. Nothing was changed.",
+    es: "Este equipo y el equipo principal no tienen los mismos datos del local o la misma lista de equipos del local, así que este equipo no ha aceptado el traspaso. No se ha cambiado nada.",
+  },
   "handover.summary_failed": {
     en: "The old box could not read part of the venue's data from its final copy, so it sent neither the copy nor its description. Its venue data is unchanged. Asking again makes it take a new copy and read that.",
     es: "El equipo antiguo no ha podido leer parte de los datos del local en su copia final, así que no ha enviado ni la copia ni su descripción. Sus datos del local no han cambiado. Si se vuelve a pedir, hará una copia nueva y la leerá.",

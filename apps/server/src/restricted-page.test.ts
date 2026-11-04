@@ -268,6 +268,25 @@ describe("the restricted box's own page", () => {
     expect(spanish.html).not.toContain("final_state");
   });
 
+  it("words the offer's step in English and in Spanish", async () => {
+    await handOver(await seedSuccessor("Bar counter box"));
+    await withNodeTransaction(suite.node, (tx) =>
+      appendHandoverEventTx(tx, {
+        nodeId: NODE,
+        operationId: OP,
+        kind: "offer",
+        detail: {},
+        envelope: "{}",
+      }),
+    );
+    const english = await page("en-GB");
+    expect(english.html).toContain("Handover offered");
+    expect(english.html).not.toContain(": offer<");
+    const spanish = await page("es-ES");
+    expect(spanish.html).toContain("Traspaso ofrecido");
+    expect(spanish.html).not.toContain(": offer<");
+  });
+
   it("shows a step this version has no words for by its recorded name", async () => {
     await handOver(await seedSuccessor("Bar counter box"));
     await withNodeTransaction(suite.node, (tx) =>

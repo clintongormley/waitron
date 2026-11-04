@@ -1,0 +1,395 @@
+import { Hono } from "hono";
+import { sql } from "drizzle-orm";
+import { beforeEach, describe, expect, it } from "vitest";
+import {
+  CORE_MIGRATIONS,
+  readTenant,
+  stampDeployment,
+  writeNodeMembership,
+  type NodeDatabase,
+} from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import {
+  CREDENTIALS_MIGRATIONS,
+  loadKeyRing,
+  nodeSigningPublicKey,
+  type KeyRing,
+} from "@waitron/credentials";
+import {
+  sha256Hex,
+  signEnvelope,
+  verifyEnvelope,
+  type HandoverBinding,
+  type HandoverKind,
+} from "@waitron/handover";
+import {
+  canonicalize,
+  endorseKey,
+  generateNodeKeyPair,
+  signDocumentBody,
+  type CanonicalValue,
+  type MembershipDocumentBody,
+  type SignedMembershipDocument,
+} from "@waitron/membership";
+import { NODE_MIGRATIONS, readHandoverOperation, setNodeMode } from "@waitron/node-db";
+import { mountHandoverDestinationApi } from "./handover-destination-api.js";
+import type { HandoverStatusBody } from "./handover-status-api.js";
+import { advanceHandover, beginHandover } from "./handover-store.js";
+import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import { pinMainBoxKey } from "./testing/pinned-main-box.js";
+
+const RING: KeyRing = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x7).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
+
+const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const OTHER_OP = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const PERSON = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const SOURCE = { nodeId: "11111111-1111-4111-8111-111111111111", ...generateNodeKeyPair() };
+const BYSTANDER = { nodeId: "22222222-2222-4222-8222-222222222222", ...generateNodeKeyPair() };
+const STRANGER = { nodeId: "33333333-3333-4333-8333-333333333333", ...generateNodeKeyPair() };
+
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+});
+
+let self: string;
+let app: Hono;
+let held: SignedMembershipDocument;
+let binding: HandoverBinding;
+
+const store = () => ({ node: suite.node as NodeDatabase, nodeId: self });
+
+beforeEach(async () => {
+  await seedVenue(suite.db);
+  self = await seedNode(suite.db);
+  await stampDeployment(suite.db, "preproduction");
+  await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, self);
+  await setNodeMode({ venue: suite.db, node: suite.node }, self, "mirror");
+  const selfKey = await readNodeIdentityKey(suite.node, RING, self);
+  const body: MembershipDocumentBody = {
+    term: 3,
+    nodes: [
+      { nodeId: SOURCE.nodeId, contactUrl: "https://box-0", standing: "serving-primary" },
+      { nodeId: self, contactUrl: "https://box-1", standing: "serving-secondary" },
+      { nodeId: BYSTANDER.nodeId, contactUrl: "https://box-2", standing: "serving-secondary" },
+    ],
+  };
+  held = {
+    body,
+    signerNodeId: self,
+    signature: signDocumentBody(body, selfKey),
+    endorsements: [
+      endorseKey(SOURCE.nodeId, SOURCE.publicKey, self, selfKey),
+      endorseKey(BYSTANDER.nodeId, BYSTANDER.publicKey, self, selfKey),
+    ],
+  };
+  await writeNodeMembership(suite.db, held);
+  const tenant = await readTenant(suite.db);
+  binding = {
+    operationId: OP,
+    scenario: "controlled",
+    venue: { country: tenant!.country, taxId: tenant!.taxId, environment: "preproduction" },
+    sourceNodeId: SOURCE.nodeId,
+    destinationNodeId: self,
+    membership: {
+      term: 3,
+      digest: sha256Hex(canonicalize(held as unknown as CanonicalValue)),
+    },
+  };
+  app = new Hono();
+  mountHandoverDestinationApi(
+    app,
+    { db: suite.db, node: suite.node, ring: RING, nodeId: self },
+    () => undefined,
+  );
+});
+
+function envelopeOf(
+  overrides: Partial<HandoverBinding> = {},
+  signer: { nodeId: string; privateKey: string } = SOURCE,
+  kind: HandoverKind = "stepdown",
+) {
+  const body = { binding: { ...binding, ...overrides }, authorisedBy: PERSON };
+  return signEnvelope(kind, body as unknown as CanonicalValue, signer);
+}
+
+async function post(raw: unknown): Promise<{ status: number; body: unknown }> {
+  const response = await app.request("/api/node/handover/offer", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: typeof raw === "string" ? raw : JSON.stringify(raw),
+  });
+  return { status: response.status, body: await response.json() };
+}
+
+function refusal(status: number, code: string, params: object = {}) {
+  return { status, body: { error: { code, params } } };
+}
+
+function events(): {
+  operationId: string;
+  kind: string;
+  detail: string;
+  envelope: string | null;
+}[] {
+  return suite.node.all<{
+    operationId: string;
+    kind: string;
+    detail: string;
+    envelope: string | null;
+  }>(
+    sql`select operation_id as operationId, kind, detail, envelope from node_handover_events
+        where node_id = ${self}`,
+  );
+}
+
+async function expectNothingRecorded(): Promise<void> {
+  expect(await readHandoverOperation(suite.node, self, OP)).toBeNull();
+  expect(events()).toEqual([]);
+}
+
+async function signedStatusOf(answer: { status: number; body: unknown }) {
+  expect(answer.status).toBe(200);
+  const key = nodeSigningPublicKey(await readNodeIdentityKey(suite.node, RING, self));
+  const verdict = verifyEnvelope<HandoverStatusBody>(answer.body, "status", (id) =>
+    id === self ? key : undefined,
+  );
+  if (!verdict.valid) throw new Error(`the answer did not verify: ${verdict.reason}`);
+  return verdict.body;
+}
+
+describe("POST /api/node/handover/offer", () => {
+  describe("a valid offer", () => {
+    it("records `prepared` and the offer's envelope, and answers this box's signed status", async () => {
+      const envelope = envelopeOf();
+      expect(await signedStatusOf(await post(envelope))).toEqual({
+        operationId: OP,
+        role: "destination",
+        scenario: "controlled",
+        state: "prepared",
+        sourceNodeId: SOURCE.nodeId,
+        destinationNodeId: self,
+        waitingReason: null,
+      });
+      expect(await readHandoverOperation(suite.node, self, OP)).toMatchObject({
+        role: "destination",
+        state: "prepared",
+        binding,
+      });
+      expect(events()).toEqual([
+        {
+          operationId: OP,
+          kind: "offer",
+          detail: "{}",
+          envelope: canonicalize(envelope as unknown as CanonicalValue),
+        },
+      ]);
+    });
+
+    it("a replay answers the same status and records nothing more", async () => {
+      const first = await post(envelopeOf());
+      const second = await post(envelopeOf());
+      expect(second).toEqual(first);
+      expect(events()).toHaveLength(1);
+    });
+
+    it("a replay after this box moved on answers the state it has now", async () => {
+      await post(envelopeOf());
+      await advanceHandover(store(), OP, "copy_accepted", {});
+      expect((await signedStatusOf(await post(envelopeOf()))).state).toBe("copy_accepted");
+    });
+
+    it("a replay answers on a box that is no longer a mirror, whose chart has moved on", async () => {
+      await post(envelopeOf());
+      await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary");
+      const body = { ...held.body, term: 4 };
+      const selfKey = await readNodeIdentityKey(suite.node, RING, self);
+      await writeNodeMembership(suite.db, {
+        ...held,
+        body,
+        signature: signDocumentBody(body, selfKey),
+      });
+      expect((await signedStatusOf(await post(envelopeOf()))).state).toBe("prepared");
+    });
+
+    it("is accepted once an earlier operation has closed", async () => {
+      await post(envelopeOf({ operationId: OTHER_OP }));
+      await advanceHandover(store(), OTHER_OP, "abandoned", {});
+      expect((await signedStatusOf(await post(envelopeOf()))).operationId).toBe(OP);
+    });
+  });
+
+  describe("the signer", () => {
+    it("refuses a signer this box holds no key for", async () => {
+      const envelope = envelopeOf({ sourceNodeId: STRANGER.nodeId }, STRANGER);
+      expect(await post(envelope)).toEqual(refusal(403, "handover.peer_unknown"));
+      await expectNothingRecorded();
+    });
+
+    it("refuses a signature that does not cover the body", async () => {
+      const envelope = envelopeOf();
+      const tampered = {
+        ...envelope,
+        body: { binding: { ...binding, scenario: "emergency" }, authorisedBy: PERSON },
+      };
+      expect(await post(tampered)).toEqual(refusal(403, "handover.peer_unknown"));
+      await expectNothingRecorded();
+    });
+
+    it("checks the signer before anything the body says", async () => {
+      const envelope = envelopeOf({ destinationNodeId: BYSTANDER.nodeId }, STRANGER);
+      expect(await post(envelope)).toEqual(refusal(403, "handover.peer_unknown"));
+    });
+
+    it("refuses a box it trusts that is not the binding's source", async () => {
+      expect(await post(envelopeOf({}, BYSTANDER))).toEqual(
+        refusal(400, "handover.request_invalid", { field: "sourceNodeId" }),
+      );
+      await expectNothingRecorded();
+    });
+  });
+
+  describe("the destination", () => {
+    it("refuses an offer naming another destination", async () => {
+      expect(await post(envelopeOf({ destinationNodeId: BYSTANDER.nodeId }))).toEqual(
+        refusal(400, "handover.request_invalid", { field: "destinationNodeId" }),
+      );
+      await expectNothingRecorded();
+    });
+  });
+
+  describe("the request's shape", () => {
+    it.each([
+      ["text that is not JSON", "{not json"],
+      ["no envelope at all", "{}"],
+    ])("refuses %s", async (_name, raw) => {
+      expect(await post(raw)).toEqual(
+        refusal(400, "handover.request_invalid", { field: "envelope" }),
+      );
+    });
+
+    it("refuses an envelope signed for another purpose", async () => {
+      expect(await post(envelopeOf({}, SOURCE, "query"))).toEqual(
+        refusal(400, "handover.request_invalid", { field: "envelope" }),
+      );
+      await expectNothingRecorded();
+    });
+
+    it.each([
+      ["a list", [], "body"],
+      ["nothing", null, "body"],
+      ["no binding", { authorisedBy: PERSON }, "body"],
+      ["no person", { binding: "later" }, "body"],
+      ["an extra key", { binding: "later", authorisedBy: PERSON, extra: 1 }, "body"],
+      ["a person that is not an id", { binding: "later", authorisedBy: "someone" }, "authorisedBy"],
+      ["a person that is not text", { binding: "later", authorisedBy: 7 }, "authorisedBy"],
+    ])("refuses a body holding %s", async (_name, shape, field) => {
+      const body =
+        shape !== null && !Array.isArray(shape) && "binding" in shape
+          ? { ...shape, binding }
+          : shape;
+      const envelope = signEnvelope("stepdown", body as unknown as CanonicalValue, SOURCE);
+      expect(await post(envelope)).toEqual(refusal(400, "handover.request_invalid", { field }));
+      await expectNothingRecorded();
+    });
+
+    it("refuses a binding the parser refuses", async () => {
+      const envelope = signEnvelope(
+        "stepdown",
+        { binding: { ...binding, scenario: "other" }, authorisedBy: PERSON } as CanonicalValue,
+        SOURCE,
+      );
+      expect(await post(envelope)).toEqual(
+        refusal(400, "handover.request_invalid", { field: "scenario" }),
+      );
+      await expectNothingRecorded();
+    });
+
+    // A later step names a folder after the operation id.
+    it.each([
+      ["climbs out of its folder", "../x"],
+      ["names a folder below", "a/b"],
+      ["climbs out, shaped like an id", "../aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa"],
+      ["is empty", ""],
+      ["is over-long", `${OP}${"a".repeat(64)}`],
+      ["ends in a line break", `${OP}\n`],
+      ["is an id in capitals", OP.toUpperCase()],
+    ])("refuses an operation id that %s, recording nothing", async (_name, operationId) => {
+      expect(await post(envelopeOf({ operationId }))).toEqual(
+        refusal(400, "handover.request_invalid", { field: "operationId" }),
+      );
+      expect(events()).toEqual([]);
+      expect(suite.node.all(sql`select 1 from node_handover_operations`)).toEqual([]);
+    });
+  });
+
+  describe("on a box that is not a mirror", () => {
+    it("refuses `handover.not_a_spare`", async () => {
+      await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary");
+      expect(await post(envelopeOf())).toEqual(refusal(409, "handover.not_a_spare"));
+      await expectNothingRecorded();
+    });
+
+    it("says so before comparing the chart", async () => {
+      await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary");
+      const membership = { term: 2, digest: binding.membership.digest };
+      expect(await post(envelopeOf({ membership }))).toEqual(refusal(409, "handover.not_a_spare"));
+    });
+  });
+
+  describe("a binding that differs from this box's own", () => {
+    it.each([
+      ["the term", (b: HandoverBinding) => ({ membership: { ...b.membership, term: 2 } })],
+      [
+        "the chart's digest",
+        (b: HandoverBinding) => ({ membership: { ...b.membership, digest: "0".repeat(64) } }),
+      ],
+      ["the tax number", (b: HandoverBinding) => ({ venue: { ...b.venue, taxId: "B00000000" } })],
+      ["the country", (b: HandoverBinding) => ({ venue: { ...b.venue, country: "PT" } })],
+      [
+        "the environment",
+        (b: HandoverBinding) => ({ venue: { ...b.venue, environment: "production" as const } }),
+      ],
+    ])("refuses a different %s", async (_name, change) => {
+      expect(await post(envelopeOf(change(binding)))).toEqual(
+        refusal(409, "handover.membership_mismatch", { operationId: OP }),
+      );
+      await expectNothingRecorded();
+    });
+  });
+
+  it("refuses a box holding no chart as a mismatch, not a fault", async () => {
+    await pinMainBoxKey(suite.node, self, SOURCE);
+    suite.db.run(sql`delete from node_membership`);
+    expect(await post(envelopeOf())).toEqual(
+      refusal(409, "handover.membership_mismatch", { operationId: OP }),
+    );
+    await expectNothingRecorded();
+  });
+
+  describe("another operation", () => {
+    it("refuses `handover.operation_in_progress` while another is open", async () => {
+      await post(envelopeOf({ operationId: OTHER_OP }));
+      expect(await post(envelopeOf())).toEqual(
+        refusal(409, "handover.operation_in_progress", { operationId: OTHER_OP }),
+      );
+      expect(await readHandoverOperation(suite.node, self, OP)).toBeNull();
+      expect(events().map((event) => event.operationId)).toEqual([OTHER_OP]);
+    });
+
+    it("refuses `handover.operation_conflict` for this id under another binding", async () => {
+      await beginHandover(
+        store(),
+        { ...binding, membership: { ...binding.membership, term: 2 } },
+        "destination",
+      );
+      expect(await post(envelopeOf())).toEqual(
+        refusal(409, "handover.operation_conflict", { operationId: OP }),
+      );
+      expect(events()).toEqual([]);
+    });
+  });
+});

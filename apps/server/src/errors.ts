@@ -164,8 +164,8 @@ declare module "@waitron/shared" {
      */
     "handover.known_handover": { successorNodeId: string };
     /**
-     * A box's signed query came from a key this box's stored keys and held chart do not vouch for;
-     * on the handover source routes, also a box it vouches for that is not the operation's
+     * A box's signed query or handover offer came from a key this box's stored keys and held chart
+     * do not vouch for; on the handover source routes, also a box it vouches for that is not the operation's
      * destination.
      */
     "handover.peer_unknown": Record<string, never>;
@@ -187,6 +187,13 @@ declare module "@waitron/shared" {
      * signed.
      */
     "handover.final_copy_changed": { operationId: string };
+    /** A handover offer reached a box that is not a mirror, so it has no way to take over. */
+    "handover.not_a_spare": Record<string, never>;
+    /**
+     * A handover offer's taxpayer, environment, chart term or chart digest differs from this box's
+     * own, or this box holds no chart.
+     */
+    "handover.membership_mismatch": { operationId: string };
     /**
      * A node booting as primary found, by reconciling with its cloud peer, a higher-term membership
      * document that fences it, so it boots read-only rather than sell beside the promoted primary

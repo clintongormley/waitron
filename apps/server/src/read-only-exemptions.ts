@@ -50,6 +50,13 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     authenticates:
       "none needed from the caller: the body is a signed chart, accepted only through `acceptMembershipDocument` against the stored trust set; the answer is one boolean",
   },
+  {
+    method: "POST",
+    path: "/api/node/handover/offer",
+    boxes: ["mirror"],
+    authenticates:
+      "a `stepdown` envelope signed by a key this box stores for that node or the held chart vouches for (`peerKeyOf`), whose binding names its signer as the source and this box as the destination; answers only signed status",
+  },
 ];
 
 function pathMatches(rowPath: string, requestPath: string): boolean {

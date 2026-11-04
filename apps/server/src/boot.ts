@@ -207,6 +207,7 @@ import { createHandoverGate } from "./handover-gate.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
+import { mountHandoverDestinationApi } from "./handover-destination-api.js";
 import { mountHandoverStatusApi } from "./handover-status-api.js";
 import { mountNodeMembershipApi } from "./node-membership-api.js";
 import { readPeerNames } from "./waiting-page.js";
@@ -2287,6 +2288,11 @@ async function bootServer(
   );
   mountPeerStatusApi(app, { db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
   mountHandoverStatusApi(app, { db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
+  mountHandoverDestinationApi(
+    app,
+    { db, node: store.node, ring, nodeId: tradingContext.nodeId },
+    log,
+  );
   mountNodeMembershipApi(
     app,
     {

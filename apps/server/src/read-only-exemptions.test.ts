@@ -50,6 +50,7 @@ describe("the read-only exemption list", () => {
       ["POST", "/management-api/promote/preparation", ["mirror", "fenced"]],
       ["POST", "/api/node/peer-status", ["mirror", "fenced"]],
       ["POST", "/api/node/membership", ["mirror", "fenced"]],
+      ["POST", "/api/node/handover/offer", ["mirror"]],
     ]);
     for (const row of READ_ONLY_EXEMPTIONS) expect(row.authenticates.trim()).not.toBe("");
   });
@@ -303,6 +304,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         preparation: await post(base, "/management-api/promote/preparation"),
         peerStatus: await post(base, "/api/node/peer-status"),
         membership: await handEmptyChart(base),
+        offer: await post(base, "/api/node/handover/offer"),
         // Listed for a fenced box only.
         retire: await post(base, "/api/box/retire"),
         unlisted: await post(base, "/management-api/catalogues"),
@@ -313,6 +315,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         preparation: PREPARATION_REFUSAL,
         peerStatus: { status: 400, code: "handover.request_invalid" },
         membership: { status: 200, body: { accepted: false } },
+        offer: { status: 400, code: "handover.request_invalid" },
         retire: GATED,
         unlisted: GATED,
         statusRead: { status: 200, signerNodeId: mirror.nodeId, state: "prepared" },
@@ -339,6 +342,8 @@ describe("each listed route is reached on a real read-only start, and nothing el
         preparation: await post(base, "/management-api/promote/preparation"),
         peerStatus: await post(base, "/api/node/peer-status"),
         membership: await handEmptyChart(base),
+        // Listed for a mirror only.
+        offer: await post(base, "/api/node/handover/offer"),
         unlisted: await post(base, "/management-api/catalogues"),
       }).toEqual({
         retire: { status: 401, code: "management_session.required" },
@@ -346,6 +351,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         preparation: PREPARATION_REFUSAL,
         peerStatus: { status: 400, code: "handover.request_invalid" },
         membership: { status: 200, body: { accepted: false } },
+        offer: GATED,
         unlisted: GATED,
       });
     } finally {

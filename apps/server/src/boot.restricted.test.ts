@@ -317,6 +317,35 @@ describe("a full start's stepdown, through its test seam", () => {
     });
   }, 60_000);
 
+  it("a full start that is not a mirror refuses a signed handover offer as not a spare", async () => {
+    const { port, venue } = await boot(suite, { restricted: false });
+    const response = await fetch(`http://127.0.0.1:${port}/api/node/handover/offer`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(
+        signEnvelope(
+          "stepdown",
+          {
+            binding: {
+              operationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              scenario: "controlled",
+              venue: { country: "ES", taxId: "B12345678", environment: "preproduction" },
+              sourceNodeId: MAIN_BOX.nodeId,
+              destinationNodeId: venue.cfg.nodeId,
+              membership: { term: 1, digest: "a".repeat(64) },
+            },
+            authorisedBy: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          },
+          MAIN_BOX,
+        ),
+      ),
+    });
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
+      "handover.not_a_spare",
+    );
+  }, 60_000);
+
   it("a full start answers a peer's signed query", async () => {
     const { port, venue } = await boot(suite, { restricted: false });
     const nonce = "f".repeat(20);

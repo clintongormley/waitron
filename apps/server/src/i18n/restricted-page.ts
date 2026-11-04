@@ -35,14 +35,15 @@ export const RESTRICTED_PAGE_WORDS: Readonly<
   },
 };
 
-/** Every event kind an operation records: its states, and the final copy's event. */
-export type RestrictedStepKind = HandoverOperationState | "final_state";
+/** Every event kind an operation records: its states, the offer's event and the final copy's. */
+export type RestrictedStepKind = HandoverOperationState | "offer" | "final_state";
 
 /** Keyed by every kind, so a new state with no wording fails the typecheck. */
 export const RESTRICTED_STEP_WORDS: Readonly<
   Record<RestrictedStepKind, Readonly<Record<SupportedLocale, string>>>
 > = {
   prepared: { "en-GB": "Handover begun", "es-ES": "Traspaso iniciado" },
+  offer: { "en-GB": "Handover offered", "es-ES": "Traspaso ofrecido" },
   source_stepped_down: { "en-GB": "Stopped taking sales", "es-ES": "Ha dejado de vender" },
   filing_relinquished: {
     "en-GB": "Stopped sending invoice records to the tax agency",
