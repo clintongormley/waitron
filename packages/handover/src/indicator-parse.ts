@@ -102,7 +102,10 @@ function nodeLocalRow(raw: unknown, field: string): Record<string, unknown> {
   const named = `nodeLocal.${row.item as string}`;
   if (row.sha256 !== undefined && row.sha256 !== null) digest(row.sha256, `${named}.sha256`);
   if (row.ringVersions !== undefined) {
-    listAt(row.ringVersions, `${named}.ringVersions`).forEach((version, index) => {
+    const versions = listAt(row.ringVersions, `${named}.ringVersions`);
+    // An empty list would pass "every version listed is in M2's ring" with nothing checked.
+    if (versions.length === 0) refuse(`${named}.ringVersions`);
+    versions.forEach((version, index) => {
       atLeast(version, 1, `${named}.ringVersions.${index}`);
     });
   }

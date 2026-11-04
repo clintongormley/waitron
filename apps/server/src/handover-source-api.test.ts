@@ -32,6 +32,7 @@ import { NODE_MIGRATIONS, recordHandoverRestrictionTx } from "@waitron/node-db";
 import { captureFinalCopy, type CaptureDeps } from "./handover-capture.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
+import type { Logger } from "./logger.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 
@@ -90,6 +91,7 @@ interface Boxes {
 async function boxes({
   steppedDown = true,
   modules = MODULES as readonly WaitronModule[],
+  log = (() => {}) as Logger,
 } = {}): Promise<Boxes> {
   const db = suite.db;
   await seedVenue(db);
@@ -153,7 +155,7 @@ async function boxes({
     modules,
   };
   const app = new Hono();
-  mountHandoverSourceApi(app, deps, () => {});
+  mountHandoverSourceApi(app, deps, log);
   return {
     self,
     selfKey,
@@ -372,6 +374,23 @@ describe("the final copy and its indicator, served to the selected box only", ()
       expect(await errorCode(response)).toBe("handover.summary_failed");
     });
   }
+
+  it("a damaged retained-selections file is named in the log, and not in the answer", async () => {
+    const lines: { event: string; fields: Record<string, unknown> | undefined }[] = [];
+    const { app, destination } = await boxes({
+      log: (_level, event, fields) => lines.push({ event, fields }),
+    });
+    await writeFile(join(stateDir, "module-preparation-state.json"), "{ not json");
+
+    const response = await ask(app, "indicator", destination);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.attempt_invalid", params: {} },
+    });
+    const line = lines.find((entry) => entry.event === "setup.attempt_invalid");
+    expect(line?.fields?.logReason).toContain("module-preparation-state.json");
+  });
 
   it("a retake left behind by an earlier crash is removed when the copy is taken again", async () => {
     const { app, deps, destination } = await boxes();

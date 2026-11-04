@@ -49,6 +49,14 @@ const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
+/** Holds RING's key as the one being rotated away from, so a box keyed by RING still reads. */
+const ROTATING_RING: KeyRing = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x5).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "2",
+  WAITRON_CREDENTIALS_KEY_PREVIOUS: Buffer.alloc(32, 0x4).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
+});
+
 const DESTINATION = "22222222-2222-4222-8222-222222222222";
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const OTHER_OP = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -385,6 +393,19 @@ describe("capturing a stepped-down box's final copy", () => {
     );
     expect(modulesFile?.sha256).toBe(sha256Hex(canonicalize({ [off]: false })));
   });
+
+  it.each([
+    ["no rotation under way", RING, [1]],
+    ["a rotation under way", ROTATING_RING, [1, 2]],
+  ])(
+    "lists every ring version with %s, in a body the parser accepts",
+    async (_name, ring, want) => {
+      const self = await steppedDown();
+      const envelope = await captureFinalCopy(deps(self, { ring }), OP);
+      const row = parseIndicator(envelope.body).nodeLocal.find((r) => r.item === "secrets.env");
+      expect(row?.ringVersions).toEqual(want);
+    },
+  );
 
   it("signs this box's retained selections inside the indicator, in a body the parser accepts", async () => {
     const self = await steppedDown();

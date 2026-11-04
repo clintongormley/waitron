@@ -10,6 +10,7 @@ import {
 import { canonicalize } from "@waitron/membership";
 import { readModulePreparationRevisions } from "@waitron/provisioning";
 import { parseEnvFile } from "./env-file.js";
+import { isUnset } from "./env-value.js";
 import { readModuleConfig } from "./module-config.js";
 
 const BACKUP_SETTINGS = "backup.env";
@@ -51,6 +52,10 @@ function ringVersions(ring: KeyRing): number[] {
   return versions.sort((a, b) => a - b);
 }
 
+/**
+ * Only the settings holding a value: the backup settings read an empty value as unset, the same as
+ * no line (`isUnset`), so a file with no values left is the same as no file.
+ */
 async function backupSettingsDigest(stateDir: string): Promise<string | null> {
   let text: string;
   try {
@@ -59,7 +64,8 @@ async function backupSettingsDigest(stateDir: string): Promise<string | null> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
-  return sha256Hex(canonicalize(parseEnvFile(text)));
+  const settings = Object.entries(parseEnvFile(text)).filter(([, value]) => !isUnset(value));
+  return settings.length === 0 ? null : sha256Hex(canonicalize(Object.fromEntries(settings)));
 }
 
 /**

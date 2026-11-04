@@ -7,6 +7,8 @@ import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { NODE_LOCAL_MANIFEST, type NodeLocalItem } from "@waitron/handover";
 import { canonicalize } from "@waitron/membership";
 import { isAppError } from "@waitron/shared";
+import { resolveBackupConfig } from "./backup-config.js";
+import { loadBoxEnv } from "./box-env.js";
 import { buildNodeLocalManifest } from "./handover-manifest.js";
 import { ALL_MODULES } from "./modules.js";
 
@@ -163,6 +165,74 @@ describe("buildNodeLocalManifest", () => {
       expect(await digests(other, "backup.env")).not.toBe(digest);
       await writeFile(join(other, "backup.env"), "A=1\nB=2\nC=3\n");
       expect(await digests(other, "backup.env")).not.toBe(digest);
+    });
+
+    /** The backup settings this folder's box runs on, as a start reads them. */
+    async function backupSettingsRead(folder: string): Promise<string> {
+      const env = await loadBoxEnv({}, folder);
+      return JSON.stringify(
+        resolveBackupConfig({ managedByEnvironment: true, env, sealed: null, venueId: "venue" }),
+      );
+    }
+
+    const SETTINGS = `WAITRON_BACKUP_DIR=/mnt/usb\nWAITRON_BACKUP_RECOVERY_KEY=${"k".repeat(40)}\n`;
+
+    it.each([
+      ["an empty file", ""],
+      ["only blank lines", "\n  \n"],
+      ["only comments", "# kept by hand\n\n"],
+      ["only an empty value", "WAITRON_BACKUP_RETAIN=\n"],
+      ["an empty value padded with spaces", "WAITRON_BACKUP_RETAIN=   \n"],
+      ["a value emptied by a later line", "WAITRON_BACKUP_RETAIN=5\nWAITRON_BACKUP_RETAIN=\n"],
+    ])("backup.env holding %s digests as no file, and the box reads it so", async (_name, text) => {
+      await writeFile(join(stateDir, "backup.env"), text);
+      expect(await digests(stateDir, "backup.env")).toBeNull();
+      expect(await digests(other, "backup.env")).toBeNull();
+      expect(await backupSettingsRead(stateDir)).toBe(await backupSettingsRead(other));
+    });
+
+    it("an empty value digests as no line, and the box reads it so", async () => {
+      await writeFile(join(stateDir, "backup.env"), `${SETTINGS}WAITRON_BACKUP_RETAIN=\n`);
+      await writeFile(join(other, "backup.env"), SETTINGS);
+      const digest = await digests(other, "backup.env");
+      expect(digest).toBe(
+        valuesDigest({
+          WAITRON_BACKUP_DIR: "/mnt/usb",
+          WAITRON_BACKUP_RECOVERY_KEY: "k".repeat(40),
+        }),
+      );
+      expect(await digests(stateDir, "backup.env")).toBe(digest);
+      expect(await backupSettingsRead(stateDir)).toBe(await backupSettingsRead(other));
+    });
+
+    it("the last line of a repeated setting decides, whichever of them is empty", async () => {
+      await writeFile(join(other, "backup.env"), "A=1\n");
+      await writeFile(join(stateDir, "backup.env"), "A=\nA=1\n");
+      expect(await digests(stateDir, "backup.env")).toBe(await digests(other, "backup.env"));
+
+      await writeFile(join(stateDir, "backup.env"), "B=2\nA=1\nA=\n");
+      await writeFile(join(other, "backup.env"), "B=2\n");
+      expect(await digests(stateDir, "backup.env")).toBe(await digests(other, "backup.env"));
+    });
+
+    it("control: a value of two quote marks is a value, for the digest and for the box", async () => {
+      await writeFile(join(stateDir, "backup.env"), `${SETTINGS}WAITRON_BACKUP_AT=""\n`);
+      await writeFile(join(other, "backup.env"), SETTINGS);
+      expect(await digests(stateDir, "backup.env")).not.toBe(await digests(other, "backup.env"));
+      await expect(backupSettingsRead(stateDir)).rejects.toMatchObject({
+        code: "backup.schedule_invalid",
+      });
+      expect(await backupSettingsRead(other)).toContain("/mnt/usb");
+    });
+
+    it("limit: an empty value that hides another file's setting digests as no line, though the box reads them differently", async () => {
+      for (const folder of [stateDir, other]) {
+        await writeFile(join(folder, "trading.env"), "WAITRON_BACKUP_RETAIN=5\n");
+      }
+      await writeFile(join(stateDir, "backup.env"), `${SETTINGS}WAITRON_BACKUP_RETAIN=\n`);
+      await writeFile(join(other, "backup.env"), SETTINGS);
+      expect(await digests(stateDir, "backup.env")).toBe(await digests(other, "backup.env"));
+      expect(await backupSettingsRead(stateDir)).not.toBe(await backupSettingsRead(other));
     });
 
     it("the same module overrides in another order or spacing digest alike", async () => {

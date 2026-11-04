@@ -25,6 +25,7 @@ type Options = GrantChecks & {
   authorize(binding: OperationBinding): Promise<void>;
   withVenueExclusion<T>(run: () => Promise<T>): Promise<T>;
 };
+const FILE_NAME = "module-preparation-state.json";
 const LIMIT = 1024 * 1024;
 function invalid(): never {
   throw new AppError("setup.attempt_invalid", {});
@@ -70,13 +71,18 @@ function snapshot(value: unknown): unknown {
     return invalid();
   }
 }
+async function readStateFile(stateDir: string): Promise<File> {
+  try {
+    return parse(await readDurableHostJson(join(stateDir, FILE_NAME), LIMIT));
+  } catch {
+    throw new AppError("setup.attempt_invalid", {}, { reason: `${FILE_NAME} cannot be read` });
+  }
+}
 export async function readModulePreparationHistory(
   options: { stateDir: string; venueDir: string },
   module: string,
 ): Promise<readonly unknown[]> {
-  const file = parse(
-    await readDurableHostJson(join(options.stateDir, "module-preparation-state.json"), LIMIT),
-  );
+  const file = await readStateFile(options.stateDir);
   return file.revisions
     .filter((row) => row.binding.module === module)
     .map((row) => structuredClone(row.value));
@@ -85,9 +91,7 @@ export async function readModulePreparationHistory(
 export async function readModulePreparationRevisions(options: {
   stateDir: string;
 }): Promise<readonly { binding: OperationBinding; value: unknown }[]> {
-  const file = parse(
-    await readDurableHostJson(join(options.stateDir, "module-preparation-state.json"), LIMIT),
-  );
+  const file = await readStateFile(options.stateDir);
   return file.revisions;
 }
 export function createModulePreparationState(options: Options) {
@@ -106,8 +110,8 @@ export function createModulePreparationState(options: Options) {
       const body = () =>
         options.withVenueExclusion(async () => {
           await options.authorize({ ...binding });
-          const path = join(options.stateDir, "module-preparation-state.json");
-          const file = parse(await readDurableHostJson(path, LIMIT));
+          const path = join(options.stateDir, FILE_NAME);
+          const file = await readStateFile(options.stateDir);
           let value: unknown =
             [...file.revisions].reverse().find((row) => row.binding.module === binding.module)
               ?.value ?? null;

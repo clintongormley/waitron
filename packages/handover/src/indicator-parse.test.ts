@@ -206,6 +206,11 @@ const CASES: readonly [string, string, (body: Mutable) => void][] = [
     (b) => (rowNamed(b, "secrets.env").ringVersions = 3),
   ],
   [
+    "a ring listing with no versions, which would leave a later ring check nothing to check",
+    "nodeLocal.secrets.env.ringVersions",
+    (b) => (rowNamed(b, "secrets.env").ringVersions = []),
+  ],
+  [
     "a ring version of zero",
     "nodeLocal.secrets.env.ringVersions.0",
     (b) => (rowNamed(b, "secrets.env").ringVersions = [0]),

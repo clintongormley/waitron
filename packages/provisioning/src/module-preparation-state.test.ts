@@ -1,12 +1,14 @@
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFirstSetupCoordinator, type FirstSetupHold } from "./index.js";
 import { lockVenueDatabase } from "@waitron/db";
+import type { AppError } from "@waitron/shared";
 import type { OperationBinding } from "@waitron/module";
 import {
   createModulePreparationState,
+  readModulePreparationHistory,
   readModulePreparationRevisions,
 } from "./module-preparation-state.js";
 
@@ -371,4 +373,37 @@ it("refuses to read revisions from a file that is not the file's format", async 
   await expect(
     readModulePreparationRevisions({ stateDir: options.stateDir }),
   ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+});
+
+describe("a damaged file names itself in the log", () => {
+  const FILE = "module-preparation-state.json";
+
+  async function damagedRefusal(text: string): Promise<unknown[]> {
+    const f = await fixture();
+    await fs.writeFile(join(f.stateDir, FILE), text);
+    return Promise.all([
+      readModulePreparationRevisions({ stateDir: f.stateDir }).catch((e: unknown) => e),
+      readModulePreparationHistory(f.options, "fiscal-verifactu").catch((e: unknown) => e),
+      f.store.withState(binding, () => Promise.resolve()).catch((e: unknown) => e),
+    ]);
+  }
+
+  it.each([
+    ["not JSON", "{ not json"],
+    ["the wrong shape", JSON.stringify({ version: 2, revisions: [] })],
+    ["a bad revision", JSON.stringify({ version: 1, revisions: [{ binding: {}, value: 1 }] })],
+    ["over the size limit", " ".repeat(1024 * 1024 + 1)],
+  ])("every read of a file that is %s", async (_name, text) => {
+    for (const refusal of await damagedRefusal(text)) {
+      expect(refusal).toMatchObject({ code: "setup.attempt_invalid", params: {} });
+      expect((refusal as AppError).reason).toContain(FILE);
+      expect(JSON.stringify(refusal)).not.toContain(FILE);
+    }
+  });
+
+  it("control: a file that reads gives no refusal", async () => {
+    const f = await fixture();
+    await fs.writeFile(join(f.stateDir, FILE), JSON.stringify({ version: 1, revisions: [] }));
+    expect(await readModulePreparationRevisions({ stateDir: f.stateDir })).toEqual([]);
+  });
 });
