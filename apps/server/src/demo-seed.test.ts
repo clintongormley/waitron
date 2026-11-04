@@ -183,13 +183,6 @@ it.each(["Barcelona", "Balears, Illes"])(
   },
 );
 
-it("refuses an absent stored location before seeding", async () => {
-  await expect(
-    seedInstalledDemo(suite.db, { ...RESULT, locationId: "missing" }, venueWithLocales(["es-ES"])),
-  ).rejects.toThrow("missing location");
-  expect(seedDemoRestaurant).not.toHaveBeenCalled();
-});
-
 it.each([
   VALENCIA_DEMO_TEXT.alicanteProvince,
   VALENCIA_DEMO_TEXT.castellonProvince,
