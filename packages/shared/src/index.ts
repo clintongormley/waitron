@@ -263,3 +263,25 @@ export { CALENDAR_COLOURS, type CalendarColour } from "./calendar-colours.js";
 
 export { classifyTimeZone, classifySavedTimeZone, timeZoneOffsetMinutes } from "./time-zone.js";
 export type { SavedTimeZone } from "./time-zone.js";
+
+export {
+  canonicalDeliveryIntent,
+  parseDeliveryIntent,
+  parseInvoiceSave,
+} from "./document-delivery.js";
+export type {
+  RoutingOrigin,
+  OperationIdentity,
+  DocumentChoice,
+  Designation,
+  DeliveryContext,
+  PrintIntent,
+  EmailIntent,
+  DeliveryIntent,
+  DeliveryResult,
+  OperationResult,
+  InvoiceSave,
+  InvoiceSaveResult,
+  RecoveryResolution,
+  DocumentOffers,
+} from "./document-delivery.js";

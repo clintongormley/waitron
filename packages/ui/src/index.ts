@@ -222,3 +222,19 @@ export type {
 } from "@waitron/ui-core/unsaved-changes";
 
 export { DragEdgeScroll } from "./drag-edge-scroll.js";
+
+export {
+  DocumentDeliveryRecovery,
+  type DocumentRecoveryApi,
+  type RecoverySubject,
+  type RecoveryEntry,
+  type RecoveryOutcome,
+  type RetainedDocumentOperation,
+  type RecoveredDocumentOperation,
+} from "./document-delivery-recovery.js";
+export {
+  DocumentPrinterForm,
+  type DocumentDeliveryApi,
+  type InvoiceChoiceApi,
+  type DocumentPrinterState,
+} from "./document-printer-form.js";

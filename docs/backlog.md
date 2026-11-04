@@ -3907,10 +3907,11 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **Loose ends left by A663 Part 3b (#1827).**
   [Detail](backlog/printers.md#loose-ends-left-by-a663-part-3b-1827)
 
-- **A790. Choose a document and its permitted printer.** Build the unconnected foundation
-  (Cut A) from the [venue-only plan](superpowers/plans/2026-11-04-a790-venue-document-printer-routing.md),
-  then the complete live routing cut before A739's payment-window integration. Keep the live
-  node/restore recovery prerequisites; overlapping files or migration numbers are resolved on rebase.
+- **A790. Connect document and printer routing to the live entries.** Build Cut B from the
+  [venue-only plan](superpowers/plans/2026-11-04-a790-venue-document-printer-routing.md), using the
+  unmounted offers and browser recovery foundation. Qualify the live node/restore origin before
+  enabling its request services; then connect Orders, till history and Equipment. A739's payment
+  window follows the complete live routing cut; Cut C verifies that integration.
   [Detail](backlog/printers.md#a790-document-and-printer-routing-plan)
 
 - **Loose ends left by A661 (#1745).**
@@ -6070,6 +6071,15 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   [Detail](backlog/replication-cloud.md#a-promoting-standby-may-list-itself-with-an-empty-contacturl)
 
 ### CI, tests and developer tooling
+
+- **Investigate the store's SQL bound-value test timing out in CI.** The unchanged case hit its
+  five-second limit on A790's first run; the local file passes, which does not explain the failure.
+  Retain phase timings before changing the fixture or its deadline.
+  [Receipt and next check](backlog/ci.md#store-bound-value-test-timeout).
+
+- **Investigate the till logo retry's missing request in CI.** Its unchanged retry case counted
+  one request instead of two after the retry. The local file passes; the cause remains unknown.
+  [Receipt and next check](backlog/ci.md#till-logo-retry-missing-request).
 
 - **The resume-authority test's ciphertext damage can leave the value unchanged** (left open by
   A1314). In `apps/server/src/first-setup-backup-resume-authority.test.ts`, `slice(0, -4) + "AAAA"`
