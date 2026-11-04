@@ -630,7 +630,6 @@ it("commits an overdue automatic finish before returning a stale human-command c
       source: "order",
       key: "late-order",
       personId: venue.personId,
-      locationId: venue.cfg.locationId,
       kind: "order",
       at: "2026-01-06T17:00:00Z",
       offsetMinutes: 60,

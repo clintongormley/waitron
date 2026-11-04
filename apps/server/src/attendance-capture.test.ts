@@ -26,7 +26,6 @@ const fact = () => ({
   source: "whole-payment" as const,
   key: "attempt:one",
   personId,
-  locationId,
   kind: "payment" as const,
   at: "2026-01-05T16:40:23.987Z",
   offsetMinutes: 0,
@@ -127,17 +126,6 @@ describe("transactional attendance operation capture", () => {
         endAt: "2026-01-06T03:00:00.000Z",
         dirtyRevision: 1,
       },
-    ]);
-  });
-  it("records an operation for the venue when given no location", async () => {
-    const withoutLocation: Parameters<AttendanceRecorder>[1] = fact();
-    delete withoutLocation.locationId;
-    await capture(withoutLocation);
-    expect(await suite.db.select().from(attendanceOperationFacts)).toMatchObject([
-      { key: "attempt:one", locationId, businessDay: "2026-01-05", outcome: "qualifying" },
-    ]);
-    expect(await suite.db.select().from(attendanceDayWork)).toMatchObject([
-      { locationId, businessDay: "2026-01-05", dirtyRevision: 1 },
     ]);
   });
   it("replay cannot replace the original actor or human request instant", async () => {

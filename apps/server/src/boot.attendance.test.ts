@@ -140,7 +140,6 @@ for (const enabled of [true, false]) {
                 source: "order",
                 key: `old-order:${personId}`,
                 personId,
-                locationId: f.venue.cfg.locationId,
                 kind: "order",
                 at: "2026-01-05T16:40:00Z",
                 offsetMinutes: 60,

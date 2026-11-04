@@ -58,7 +58,6 @@ async function seed() {
     await recordAttendanceFact(tx, {
       source: "order",
       key: "last-order",
-      locationId,
       personId,
       kind: "order",
       at: "2026-01-05T16:40:00Z",
@@ -162,7 +161,6 @@ describe("attendance duty pass", () => {
       recordAttendanceFact(tx, {
         source: "order",
         key: "last",
-        locationId,
         personId,
         kind: "order",
         at: "2026-01-05T16:40:00Z",
@@ -200,7 +198,6 @@ describe("attendance duty pass", () => {
       recordAttendanceFact(tx, {
         source: "draft",
         key: "next-day",
-        locationId,
         personId,
         kind: "order",
         at: "2026-01-06T16:00:00Z",
@@ -287,7 +284,6 @@ describe("a running shift across a clock days off", () => {
       await recordAttendanceFact(tx, {
         source: "order",
         key: "morning-order",
-        locationId,
         personId,
         kind: "order",
         at: "2026-01-07T08:30:00Z",

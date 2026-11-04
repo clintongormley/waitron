@@ -126,15 +126,10 @@ async function captureWholePayment(
   at: Date | undefined,
 ): Promise<void> {
   if (attendance === undefined || personId === undefined || at === undefined) return;
-  const [order] = await tx
-    .select({ locationId: workingOrders.locationId })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, orderId));
   await attendance(tx, {
     source: "whole-payment",
     key: orderId,
     personId,
-    locationId: order!.locationId,
     kind: "payment",
     at: at.toISOString(),
     offsetMinutes: 0,

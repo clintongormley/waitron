@@ -1250,7 +1250,6 @@ describe("bill resolution attendance attribution", () => {
           source: "bill-payment",
           key: id,
           personId: worker!.id,
-          locationId: v.cfg.locationId,
           kind: "payment",
           at: MARK,
           offsetMinutes: 120,

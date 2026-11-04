@@ -1151,10 +1151,7 @@ async function beginBillPayment(
     payment!,
     attendance,
     state === "received" ? "qualified" : "pending",
-    {
-      locationId: cfg.locationId,
-      at: reading.instant.toISOString(),
-    },
+    { at: reading.instant.toISOString() },
   );
   return { payment: payment!, total };
 }
@@ -1164,21 +1161,13 @@ async function captureBillPaymentAttendance(
   payment: PaymentRow,
   attendance: AttendanceRecorder | undefined,
   outcome: "pending" | "qualified" | "refused",
-  requested?: { locationId: string; at: string },
+  requested?: { at: string },
 ): Promise<void> {
   if (attendance === undefined) return;
-  const [order] =
-    requested === undefined
-      ? await tx
-          .select({ locationId: workingOrders.locationId })
-          .from(workingOrders)
-          .where(eq(workingOrders.id, payment.workingOrderId))
-      : [requested];
   await attendance(tx, {
     source: "bill-payment",
     key: payment.id,
     personId: payment.requestedBy,
-    locationId: order!.locationId,
     kind: "payment",
     at: requested?.at ?? payment.createdAt,
     offsetMinutes: 0,
