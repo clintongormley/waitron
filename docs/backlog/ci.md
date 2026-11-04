@@ -1714,3 +1714,28 @@ assertion runs. The retry-disabled controls still detect the missing retry; they
 that its count assertion always reports first. Reproduce the throttled-frame case before choosing
 a wall-clock-bounded observation; keep the retry schedule, request assertions and existing case
 deadline. The related `await failed` can also await a missing event until the case times out.
+
+## Store bound-value test timeout
+
+On 4 November, A790's first CI run
+[41879243123, light-a job126747319929](https://github.com/clintongormley/waitron/actions/runs/41879243123/job/126747319929)
+timed out after 5,000 ms in `packages/store/src/index.test.ts:648`, “refuses a statement binding
+one value more on the reader and the writer of both files”. Its other 319 store cases passed.
+The log does not locate the slow phase. The entire store source tree is byte-identical between
+A790's base `e0da0ad18a` and failed head `87d06fc39e`; the focused local file passed 54 cases.
+That local pass does not explain or repair the CI failure.
+
+The investigation read 94 earlier failed-run logs among the latest 100 failed CI runs; five
+historical logs were unavailable and the remaining run was this occurrence. No matching prior
+failure was found in the logs read. Do not call it a known flake or a branch regression from
+that search alone. Retain timings for opening the store, constructing the large query and each
+reader/writer call on a comparable Linux runner. Preserve every bound-value assertion and locate
+the slow work before changing the fixture or its deadline. A790's campaign receipt is
+`receipts/a790-cut-a-20261104/unresolved-ci-classification.json`; the root-cause fix remains open.
+
+## Till logo retry missing request
+
+A790's 4 November CI runs 41879243123 and 41886182380 counted one request instead of two.
+The observation mechanism was reproduced and corrected by A1332 (#2474); see
+[Count image requests as they are delivered](../developers/testing-guide.md#count-image-requests-as-they-are-delivered).
+The shared-logo and deadline qualifications remain in the logo retry bundle above.

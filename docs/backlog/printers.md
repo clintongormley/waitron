@@ -113,8 +113,10 @@ before A739's payment-window integration. Cut A supplies unmounted authorized of
 tables and shared browser recovery/form models; it mounts no route or screen and changes no
 Equipment writer. Before live Invoice writers create revision rows, include device deletion in
 that writer audit: the new revision table has a restrictive device foreign key, and local save
-journal identities must remain recoverable. The owner approved the
-routing plan and build on 23 October; the 4 November revision applies the later removal of
+journal identities must remain recoverable. Its four new requester columns join the existing
+pending actions-download classification; qualify their export before enabling live writers.
+The page-print transport claim holder is classified separately from a human requester. The owner
+approved the routing plan and build on 23 October; the 4 November revision applies the later removal of
 locations. It introduces no location field, partition or cross-location fixture. Overlapping
 files and migration numbers require inventory and rebase/regeneration, not a release wait.
 
