@@ -597,7 +597,9 @@ party's done steps are slice 8's.
 its minutes later; the till shows the latest due one. An order sent once a step is due clears it,
 and any earlier-due step hidden behind it. The party's first order clears every step that started
 before it, and before that order an open draft hides every step: that is how Take order keeps its
-old rule, since the code does not know which step is Take order. A Done counts from the step's
+old rule, since the code does not know which step is Take order. _(2026-11-04, A803 slice 4b: a party
+with no order of its own counts a bill moved in as its first order, while a dish of it is on a shown
+bill. That arrival does not clear a step started by a serving.)_ A Done counts from the step's
 start, and clears the step shown and the earlier due steps it hid; for "every N minutes since the
 last order" it clears the repeat showing when it was tapped (before any repeat has come, the
 first), and the next repeat after it shows next. "After the step before" starts only from a Done on

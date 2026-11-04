@@ -1080,6 +1080,27 @@ and still has a dish on a shown bill.
 **Control 9's claim.** The plan says the dish "takes the arrival path" with no copy made. Both cases passed
 their earlier assertions and only the source group's `removed` state went red (`task-10b.md`, Note A).
 
+### After the whole-branch review, 2026-11-04
+
+The sections above were written at `f86819f209`. The review that followed changed behaviour in two
+places and added tests:
+
+- **A table that received a bill counts as having ordered** (`8e6727a617`, `f2a197ce89`, with their
+  wording in `9bda7c1462`). A review run showed "Take order" still live after a move to a free table;
+  a fired bill did the same at `721f30a311`, so that path predates this slice and held dishes were a
+  new way to reach it. See "D9's reader" above.
+- **A copy keeps its source group's `createdAt`** (`cd5af616ec`, adding to D4), so the "Held" time
+  survives the move. A party's place in the pass's Held column therefore also moves up when a bill with
+  an older held group arrives (`partyFirstGroupAt`, `pass-card.ts`), not only at a merge.
+- **Four race cases more** (`768e1dbb27`): recall against Move this bill and against Split a table, each
+  asked first in turn. The "5 tests" and "65 race runs" rows above stand for Task 6 as it was.
+
+Two statements above need narrowing. "Printed nothing: no schema change" was true of Task 10a's run;
+`9fb3a616ec` and `dbae81fb65` later changed comments in `packages/db/src/schema/order-groups.ts`, and only
+comments. "No later code changed what it read" was true at `f86819f209`; `cd5af616ec` later changed
+`copyHeldGroups`, and a grep of `kitchen-print.ts` and `moved-slips.ts` finds no read of a group's
+`createdAt`. The paper LOOK was not run again.
+
 ### Line numbers that moved
 
 Task 0's rebase and later work moved these from what the plan cites: `readSentItems` `:1490` to `:1484`;

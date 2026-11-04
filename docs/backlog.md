@@ -1919,6 +1919,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
+- **A1330. A service step's Done does not travel with a moved bill (seen in A803 slice 4b's re-read;
+  the same with the service-step code before that slice's fix).** A step cleared with Done at the old
+  table is back at the new one, already due, so the waiter is asked again for something done.
+
+- **A1331. A party seated later that takes in an older party keeps "Take order" (seen in A803 slice
+  4b's re-read; the same with the service-step code before that slice's fix).** The first order it
+  inherits is earlier than its own seating, and a first order clears only steps that started before
+  it, so the step stays although the table has ordered.
+
 - **A Spanish invoice recipient's locality or province holding a comma is refused only at the
   server.** The server checks a Spanish recipient's joined address by splitting it on commas
   (`completeSpanishPostalAddress`, `packages/country-es/src/spain.ts`), so "Centro, Madrid" as the
