@@ -131,7 +131,6 @@ type RawTransaction = {
 
 export async function readFindTransactions(
   tx: Transaction,
-  cfg: TradingContext,
   query: TransactionsQuery,
   inZones?: OrderZoneCondition,
 ): Promise<TransactionsPage> {
@@ -144,7 +143,7 @@ export async function readFindTransactions(
     sql`${ranked} select count(*) as total from ranked r where ${where}`,
   );
   const { rows: open } = await tx.execute<{ total: number }>(
-    sql`${findBillsRelation(cfg, inZones)} select count(*) as total from bills`,
+    sql`${findBillsRelation(inZones)} select count(*) as total from bills`,
   );
   const key = sorts[query.sort.key] ?? sorts.when!;
   const direction = query.sort.direction === "ascending" ? sql`asc` : sql`desc`;

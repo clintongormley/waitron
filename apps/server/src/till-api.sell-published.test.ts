@@ -942,7 +942,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
     const bacon = await withBacon(v, "public");
     // The tables zone in a department of its own, which serves the helper's menu and not Lunch.
     await withTransaction(suite.db, async (tx) => {
-      const department = await createDepartment(tx, v.cfg, {
+      const department = await createDepartment(tx, {
         name: "Mesas",
         orderStart: "table",
       });
@@ -950,7 +950,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
         .insert(floorZones)
         .values({ locationId: v.cfg.locationId, name: "Test tables" })
         .returning({ id: floorZones.id });
-      await configureZone(tx, v.cfg, { zoneId: zone!.id, departmentId: department.id });
+      await configureZone(tx, { zoneId: zone!.id, departmentId: department.id });
     });
     const tables = await withTransaction(suite.db, (tx) =>
       offerProducts(tx, v.cfg, { zone: "tables", productIds: [bacon.productId] }),

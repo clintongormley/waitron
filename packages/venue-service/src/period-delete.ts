@@ -9,7 +9,6 @@ import {
 import type { LocalDate } from "./hours-types.js";
 import { readRoutingUses, requirePeriod } from "./menu-timetable.js";
 import type { PeriodRoutingUse } from "./menu-timetable-types.js";
-import type { VenueScope } from "./operations.js";
 import { menuPeriods } from "./schema/menus.js";
 import {
   departmentDayRanges,
@@ -126,11 +125,10 @@ export async function readPaintedIn(
  *  lists them. */
 export async function periodDeleteImpact(
   tx: Transaction,
-  cfg: VenueScope,
   periodId: string,
   at: Date,
 ): Promise<PeriodDeleteImpact> {
-  const period = await requirePeriod(tx, cfg, periodId);
+  const period = await requirePeriod(tx, periodId);
   const today = await businessDayAt(tx, at);
   const painted = (await paintedIn(tx, today, periodId)).get(periodId)!;
   const routingUses = (await readRoutingUses(tx, periodId)).get(periodId) ?? [];
@@ -150,13 +148,12 @@ export async function periodDeleteImpact(
 
 export async function deletePeriod(
   tx: Transaction,
-  cfg: VenueScope,
   periodId: string,
   replacementId: string | null,
   at: Date,
   expectedClockRevision: number,
 ): Promise<void> {
-  const period = await requirePeriod(tx, cfg, periodId);
+  const period = await requirePeriod(tx, periodId);
   if (replacementId !== null) {
     const [replacement] =
       replacementId === periodId

@@ -754,7 +754,6 @@ export interface VenueServiceContribution {
   ): Promise<ReadonlyMap<string, ZoneFloorLayout>>;
   readFloorPlanSets(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     filter?: { setIds?: readonly string[]; departmentId?: string },
   ): Promise<readonly FloorPlanSetSummary[]>;
   assertBusinessDayClockChange(
@@ -774,69 +773,53 @@ export interface VenueServiceContribution {
   ): Promise<{ id: string; name: string }[]>;
   listIncomingDepartmentTransfers(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     receiver: DepartmentTransferReceiver,
   ): Promise<DepartmentTransfer[] | null>;
   readIncomingDepartmentTransfer(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     requestId: string,
     receiver: DepartmentTransferReceiver,
   ): Promise<DepartmentTransfer>;
   listDepartmentSentTransfers(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     sender: DepartmentTransferActor,
   ): Promise<DepartmentTransfer[]>;
   listSentDepartmentTransfers(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     tabId: string,
     sender: DepartmentTransferActor,
   ): Promise<DepartmentTransfer[]>;
   requestDepartmentTransfer(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     tabId: string,
     destinationDepartmentId: string,
     sender: DepartmentTransferActor,
   ): Promise<DepartmentTransfer>;
   readDepartmentTransfer(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     requestId: string,
     sender: DepartmentTransferActor,
   ): Promise<DepartmentTransfer>;
   withdrawPendingDepartmentTransfers(tx: Transaction, tabIds: readonly string[]): Promise<void>;
   withdrawDepartmentTransfer(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     requestId: string,
     sender: DepartmentTransferActor,
   ): Promise<DepartmentTransfer>;
   acceptDepartmentTransfer(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     requestId: string,
     receiver: DepartmentTransferReceiver,
     input: { tabRevision: number; zoneId: string; tableId: string | null },
   ): Promise<DepartmentTransfer>;
   declineDepartmentTransfer(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     requestId: string,
     receiver: DepartmentTransferReceiver,
     reason: string,
   ): Promise<DepartmentTransfer>;
-  listServiceZones(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-  ): Promise<readonly ServiceZoneSummary[]>;
-  resolveZoneContext(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    zoneId: string,
-  ): Promise<OrderServiceContext>;
+  listServiceZones(tx: Transaction): Promise<readonly ServiceZoneSummary[]>;
+  resolveZoneContext(tx: Transaction, zoneId: string): Promise<OrderServiceContext>;
   closedZoneIdsAt(
     tx: Transaction,
     at: Date,
@@ -845,7 +828,6 @@ export interface VenueServiceContribution {
   assertZoneTakesNewOrders(tx: Transaction, zoneId: string, at: Date): Promise<void>;
   resolveDepartmentService(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     departmentId: string,
     at: Date,
   ): Promise<{
@@ -871,7 +853,6 @@ export interface VenueServiceContribution {
   readLateSendNeedsManager(tx: Transaction, departmentId: string): Promise<boolean>;
   readKeepOpen(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     zoneId: string,
     at: Date,
   ): Promise<{ zone: KeepOpenSubject | null }>;
@@ -895,25 +876,14 @@ export interface VenueServiceContribution {
   >;
   keepZoneOpen(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     zoneId: string,
     input: { until: string | null },
     at: Date,
   ): Promise<void>;
-  resolveSalePolicy(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    zoneId: string,
-  ): Promise<EffectiveSalePolicy>;
-  recordSaleReceiptHeader(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    saleId: string,
-    zoneId: string | null,
-  ): Promise<void>;
+  resolveSalePolicy(tx: Transaction, zoneId: string): Promise<EffectiveSalePolicy>;
+  recordSaleReceiptHeader(tx: Transaction, saleId: string, zoneId: string | null): Promise<void>;
   readDepartmentReceiptPolicy(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     departmentId: string,
   ): Promise<DepartmentReceiptPolicy>;
   saveDepartmentReceiptSettings(
@@ -951,20 +921,9 @@ export interface VenueServiceContribution {
     receipt: DepartmentReceiptConfig,
     rasters?: ReceiptLogoRasters,
   ): Promise<void>;
-  receiptDepartmentForSale(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    saleId: string,
-  ): Promise<string | null>;
-  receiptDepartmentForOrder(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    orderId: string,
-  ): Promise<string | null>;
-  receiptDefaultDepartment(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-  ): Promise<string | null>;
+  receiptDepartmentForSale(tx: Transaction, saleId: string): Promise<string | null>;
+  receiptDepartmentForOrder(tx: Transaction, orderId: string): Promise<string | null>;
+  receiptDefaultDepartment(tx: Transaction): Promise<string | null>;
   readSaleReceiptHeader(
     tx: Transaction,
     saleId: string,
@@ -978,17 +937,15 @@ export interface VenueServiceContribution {
    *  Keys are the caller's spelling of each id (the first, when two spellings name one product). */
   resolveMakers(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     zoneId: string | null,
     productIds: readonly string[],
     at: Date,
   ): Promise<ReadonlyMap<string, MakerOutcome>>;
   /** Loads one venue moment and one rules snapshot; each question reads only its products' facts. */
-  routingAt(tx: Transaction, cfg: { locationId: LocationId }, at: Date): Promise<MakerResolver>;
+  routingAt(tx: Transaction, at: Date): Promise<MakerResolver>;
   /** Opens a routing snapshot and answers its extra question. */
   resolveExtraMakers(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     zoneId: string | null,
     extras: readonly { key: string; productId: string; dishStationId: string | null }[],
     at: Date,
@@ -1025,7 +982,6 @@ export interface VenueServiceContribution {
    *  not read, `defaultMenuId` is null and no menu is the default, which is what pricing passes. */
   listZoneOffers(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     zoneId: string,
     options?: {
       asserted?: readonly { menuId: string; versionId: string }[];
@@ -1036,20 +992,13 @@ export interface VenueServiceContribution {
   ): Promise<ZoneOffers>;
   resolveDefaultMenu(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     zoneId: string,
     at: Date,
     servedMenuIds: readonly string[],
   ): Promise<string | null>;
-  menuState(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    zoneId: string,
-    at?: Date,
-  ): Promise<ZoneMenuState>;
+  menuState(tx: Transaction, zoneId: string, at?: Date): Promise<ZoneMenuState>;
   resolveNewOrderZone(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     /** A profile with a department starts at its starting zone, ahead of the venue's counter
      *  default; one with a department and no usable zone is refused
      *  `device_profile.no_service_zone`. */
@@ -1126,14 +1075,9 @@ export interface VenueServiceContribution {
     kind: "pass" | "pass_monitor",
     value: boolean | null,
   ): Promise<void>;
-  readDeviceZoneSelection(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    deviceId: string,
-  ): Promise<DeviceZoneSelection>;
+  readDeviceZoneSelection(tx: Transaction, deviceId: string): Promise<DeviceZoneSelection>;
   setDeviceZoneSelection(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     deviceId: string,
     input: DeviceZoneSelectionInput,
   ): Promise<DeviceZoneSelection>;
@@ -1213,48 +1157,27 @@ export interface VenueServiceContribution {
   /** Refused `service_zone.not_allowed` when the profile has a department and `zoneId` is not one of
    *  the zones it may order in now. */
   assertProfileZone(tx: Transaction, profileId: string, zoneId: string): Promise<void>;
-  recordOrderContext(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    workingOrderId: string,
-    zoneId: string,
-  ): Promise<void>;
-  retargetOrderContext(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    workingOrderId: string,
-    zoneId: string,
-  ): Promise<void>;
-  getOrderContext(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    workingOrderId: string,
-  ): Promise<OrderServiceContext>;
-  findOrderContext(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    workingOrderId: string,
-  ): Promise<OrderServiceContext | null>;
+  recordOrderContext(tx: Transaction, workingOrderId: string, zoneId: string): Promise<void>;
+  retargetOrderContext(tx: Transaction, workingOrderId: string, zoneId: string): Promise<void>;
+  getOrderContext(tx: Transaction, workingOrderId: string): Promise<OrderServiceContext>;
+  findOrderContext(tx: Transaction, workingOrderId: string): Promise<OrderServiceContext | null>;
   /** Each named order's frozen service mode in one read; an order with no context is absent. */
   findOrderModes(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     workingOrderIds: readonly string[],
   ): Promise<ReadonlyMap<string, ServiceMode>>;
-  orderZoneIdSql(cfg: { locationId: LocationId }, orderId: SQL): SQL;
+  orderZoneIdSql(orderId: SQL): SQL;
   /** A condition, for a query's WHERE, that holds for an order whose recorded zone is one of
    *  `zoneIds` or that has no recorded zone. `orderId` is the outer query's order id, written
    *  table-qualified. */
-  orderInZones(cfg: { locationId: LocationId }, orderId: SQL, zoneIds: readonly string[]): SQL;
+  orderInZones(orderId: SQL, zoneIds: readonly string[]): SQL;
   /** Each named order's recorded service zone in one read; an order with no context is absent. */
   findOrderZones(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     workingOrderIds: readonly string[],
   ): Promise<ReadonlyMap<string, string>>;
   listLineContexts(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     workingOrderId: string,
   ): Promise<
     readonly {
@@ -1279,7 +1202,6 @@ export interface VenueServiceContribution {
    *  it does not hold is refused `service_zone.offer_not_allowed`. */
   recordLineContexts(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     workingOrderId: string,
     lines: readonly {
       workingOrderLineId: string;
@@ -1297,22 +1219,16 @@ export interface VenueServiceContribution {
   ): Promise<void>;
   copyOrderContext(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     fromWorkingOrderId: string,
     toWorkingOrderId: string,
   ): Promise<void>;
   copyLineContext(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     fromWorkingOrderLineId: string,
     toWorkingOrderLineId: string,
   ): Promise<void>;
   /** `copyLineContext` for each pair, in one read. */
-  copyLineContexts(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    pairs: readonly { from: string; to: string }[],
-  ): Promise<void>;
+  copyLineContexts(tx: Transaction, pairs: readonly { from: string; to: string }[]): Promise<void>;
   /** Which of the lines were sold in Each: by the unit id their context froze, and for a stored
    *  unit by that unit's current seed key; a line with no context is not. */
   readLinesSoldInEach(tx: Transaction, lineIds: readonly string[]): Promise<ReadonlySet<string>>;

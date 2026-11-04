@@ -4640,9 +4640,9 @@ it.each([false, true])(
     const secondProfileId = await seedProfile("till");
     const save = () =>
       withTransaction(suite.db, async (tx) => {
-        const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, venue.cfg, device.deviceId);
+        const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, device.deviceId);
         expect(current.startingZoneId).not.toBeNull();
-        await VENUE_SERVICE.setDeviceZoneSelection(tx, venue.cfg, device.deviceId, {
+        await VENUE_SERVICE.setDeviceZoneSelection(tx, device.deviceId, {
           ...current,
           startingZoneId: current.startingZoneId!,
         });
@@ -4703,7 +4703,7 @@ it.each([false, true])(
       .where(eq(devices.id, device.deviceId));
     expect(
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.readDeviceZoneSelection(tx, venue.cfg, device.deviceId),
+        VENUE_SERVICE.readDeviceZoneSelection(tx, device.deviceId),
       ),
     ).toMatchObject({ profileId: secondProfileId, adjusted: false });
   },

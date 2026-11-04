@@ -51,12 +51,12 @@ async function fixture(db: Transaction) {
   });
   const venueId = await venueLocationId(db);
   const cfg = { locationId: locationId(venueId) };
-  const department = (await createDepartment(db, cfg, { name: "Dining", orderStart: "table" })).id;
+  const department = (await createDepartment(db, { name: "Dining", orderStart: "table" })).id;
   const [terrace] = await db
     .insert(floorZones)
     .values({ ...cfg, name: "Terrace" })
     .returning();
-  await configureZone(db, cfg, { zoneId: terrace!.id, departmentId: department });
+  await configureZone(db, { zoneId: terrace!.id, departmentId: department });
   const stations = await db
     .insert(kitchenStations)
     .values([
@@ -80,7 +80,7 @@ async function fixture(db: Transaction) {
   ).id;
   await addProductToMenu(db, { menuId: menu, productId: product });
   const lunch = (
-    await saveMenuPeriod(db, cfg, department, {
+    await saveMenuPeriod(db, department, {
       name: "Lunch",
       menuId: menu,
       staffMenuIds: [],
@@ -88,7 +88,7 @@ async function fixture(db: Transaction) {
     })
   ).id;
   const afternoon = (
-    await saveMenuPeriod(db, cfg, department, {
+    await saveMenuPeriod(db, department, {
       name: "Afternoon",
       menuId: menu,
       staffMenuIds: [],
@@ -134,15 +134,14 @@ const specialDay = (db: Transaction, input: SpecialDayInput) =>
   saveSpecialDay(db, null, input, at, 0);
 /** A second department whose Monday 15:00-17:00 service reaches the station through its own zone. */
 async function paintableTakeaway(db: Transaction, f: Awaited<ReturnType<typeof fixture>>) {
-  const takeaway = (await createDepartment(db, f.cfg, { name: "Takeaway", orderStart: "table" }))
-    .id;
+  const takeaway = (await createDepartment(db, { name: "Takeaway", orderStart: "table" })).id;
   const [counter] = await db
     .insert(floorZones)
     .values({ ...f.cfg, name: "Counter" })
     .returning();
-  await configureZone(db, f.cfg, { zoneId: counter!.id, departmentId: takeaway });
+  await configureZone(db, { zoneId: counter!.id, departmentId: takeaway });
   const period = (
-    await saveMenuPeriod(db, f.cfg, takeaway, {
+    await saveMenuPeriod(db, takeaway, {
       name: "Lunch",
       menuId: f.menu,
       staffMenuIds: [],
@@ -167,7 +166,7 @@ it("shows a special date's painted Dinner 19:00-01:00 for a station routed only 
   tx(async (db) => {
     const f = await fixture(db);
     const dinner = (
-      await saveMenuPeriod(db, f.cfg, f.department, {
+      await saveMenuPeriod(db, f.department, {
         name: "Dinner",
         menuId: f.menu,
         staffMenuIds: [],
@@ -236,7 +235,6 @@ it("cuts Lunch at 15:00 when its only routing zone closes then", async () =>
     const f = await fixture(db);
     await replaceZoneClosedWeek(
       db,
-      f.cfg,
       f.terrace,
       week("ranges", [{ startsAt: "15:00", endsAt: "06:00" }]),
       0,
@@ -252,7 +250,7 @@ it("unions overlapping zone shares without duplicate ranges", async () =>
       .insert(floorZones)
       .values({ ...f.cfg, name: "Inside" })
       .returning();
-    await configureZone(db, f.cfg, { zoneId: inside!.id, departmentId: f.department });
+    await configureZone(db, { zoneId: inside!.id, departmentId: f.department });
     await setRoutingCell(
       db,
       { row: { kind: "category", categoryId: f.category }, zoneId: inside!.id },
@@ -260,14 +258,12 @@ it("unions overlapping zone shares without duplicate ranges", async () =>
     );
     await replaceZoneClosedWeek(
       db,
-      f.cfg,
       f.terrace,
       week("ranges", [{ startsAt: "14:00", endsAt: "06:00" }]),
       0,
     );
     await replaceZoneClosedWeek(
       db,
-      f.cfg,
       inside!.id,
       week("ranges", [
         { startsAt: "06:00", endsAt: "13:00" },
@@ -284,7 +280,6 @@ it("keeps separate surviving segments around a zone closure", async () =>
     const f = await fixture(db);
     await replaceZoneClosedWeek(
       db,
-      f.cfg,
       f.terrace,
       week("ranges", [{ startsAt: "13:00", endsAt: "14:00" }]),
       0,
@@ -342,7 +337,6 @@ it.each([
     if (kind === "whole zone closed")
       await replaceZoneClosedWeek(
         db,
-        f.cfg,
         f.terrace,
         week("ranges", [{ startsAt: "06:00", endsAt: "06:00" }]),
         0,
@@ -401,7 +395,7 @@ it("reads products from staff menus and routes a variant by its parent's categor
     await db.update(products).set({ active: false }).where(eq(products.id, f.product));
     expect(variant!.parentId).toBe(f.product);
     const { updateMenuPeriod } = await import("./menu-timetable.js");
-    await updateMenuPeriod(db, f.cfg, f.lunch, {
+    await updateMenuPeriod(db, f.lunch, {
       name: "Lunch",
       menuId: empty,
       staffMenuIds: [variantMenu],
@@ -452,15 +446,14 @@ it("keeps cross-midnight service ranges", async () =>
 it("keeps each active department's ranges, cut by its own zone", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    const second = (await createDepartment(db, f.cfg, { name: "Takeaway", orderStart: "table" }))
-      .id;
+    const second = (await createDepartment(db, { name: "Takeaway", orderStart: "table" })).id;
     const [zone] = await db
       .insert(floorZones)
       .values({ ...f.cfg, name: "Counter" })
       .returning();
-    await configureZone(db, f.cfg, { zoneId: zone!.id, departmentId: second });
+    await configureZone(db, { zoneId: zone!.id, departmentId: second });
     const period = (
-      await saveMenuPeriod(db, f.cfg, second, {
+      await saveMenuPeriod(db, second, {
         name: "Lunch",
         menuId: f.menu,
         staffMenuIds: [],
@@ -481,7 +474,6 @@ it("keeps each active department's ranges, cut by its own zone", async () =>
     );
     await replaceZoneClosedWeek(
       db,
-      f.cfg,
       zone!.id,
       week("ranges", [{ startsAt: "16:00", endsAt: "06:00" }]),
       0,
@@ -625,7 +617,6 @@ it("cuts Lunch by the zone's closure in each date's own season", async () =>
     const seasonId = await seasonIds(db);
     await replaceZoneClosedWeek(
       db,
-      f.cfg,
       f.terrace,
       week("ranges", [{ startsAt: "12:00", endsAt: "16:00" }]),
       0,
@@ -788,7 +779,7 @@ it("A724: two reaching zones union their open shares without filling a shared cl
       .insert(floorZones)
       .values({ ...f.cfg, name: "Inside" })
       .returning();
-    await configureZone(db, f.cfg, { zoneId: second!.id, departmentId: f.department });
+    await configureZone(db, { zoneId: second!.id, departmentId: f.department });
     await setRoutingCell(
       db,
       { row: { kind: "category", categoryId: f.category }, zoneId: second!.id },
@@ -797,7 +788,6 @@ it("A724: two reaching zones union their open shares without filling a shared cl
     await replaceMenuWeek(db, f.department, week("slots", [f.lunchRange]), at, 0);
     await replaceZoneClosedWeek(
       db,
-      f.cfg,
       f.terrace,
       week("ranges", [{ startsAt: "13:00", endsAt: "15:00" }]),
       0,
@@ -805,7 +795,6 @@ it("A724: two reaching zones union their open shares without filling a shared cl
     );
     await replaceZoneClosedWeek(
       db,
-      f.cfg,
       second!.id,
       week("ranges", [{ startsAt: "14:00", endsAt: "16:00" }]),
       0,

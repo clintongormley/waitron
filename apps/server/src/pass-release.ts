@@ -71,7 +71,7 @@ export async function releasePassItems(
   );
   if (screen?.available !== true) throw new AppError("device.unauthorized", {});
   const ask = passReleaseAsk(body);
-  await assertSubjectZones(tx, cfg, device.deviceProfileId, [
+  await assertSubjectZones(tx, device.deviceProfileId, [
     ask.target.kind === "group"
       ? { partyId: ask.target.partyId }
       : { orderId: ask.target.workingOrderId },

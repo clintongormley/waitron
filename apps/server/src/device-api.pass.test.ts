@@ -1321,8 +1321,8 @@ describe("A773 pass release: route", () => {
     );
 
     await inTx(f.v, async (tx) => {
-      const deli = await createDepartment(tx, f.v.cfg, { name: "Deli", orderStart: "counter" });
-      const zone = await createServiceZone(tx, f.v.cfg, {
+      const deli = await createDepartment(tx, { name: "Deli", orderStart: "counter" });
+      const zone = await createServiceZone(tx, {
         name: "Deli counter",
         departmentId: deli.id,
       });

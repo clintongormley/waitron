@@ -230,16 +230,14 @@ async function autumnVenue() {
     .returning({ id: seasons.id, name: seasons.name });
   const seasonId = (name: string) => stored.find((season) => season.name === name)!.id;
   return scoped(async (tx) => {
-    const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
-    ).id;
-    const bar = (await createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" })).id;
-    await configureZone(tx, cfg, { zoneId: zone!.id, departmentId: restaurant });
+    const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
+    const bar = (await createDepartment(tx, { name: "Bar", orderStart: "counter" })).id;
+    await configureZone(tx, { zoneId: zone!.id, departmentId: restaurant });
     const period = async (name: string) => {
       const menuId = (await createCatalogue(tx, { name: `${name} ${cfg.locationId}` })).id;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
-      return (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId, staffMenuIds: [] })).id;
+      return (await saveMenuPeriod(tx, restaurant, { name, menuId, staffMenuIds: [] })).id;
     };
     const breakfast = await period("Breakfast");
     const dinner = await period("Dinner");
@@ -594,9 +592,9 @@ describe("saveSeasons", () => {
   });
 
   it("swaps Summer's and Autumn's starts and their names in one call, each id keeping its weeks", async () => {
-    const cfg: VenueScope = { locationId: await newLocation("Swapped seasons") };
+    await newLocation("Swapped seasons");
     const [, summer, autumn] = await scoped((tx) => ensureDefaultSeasons(tx));
-    const kitchen = (await scoped((tx) => createDepartment(tx, cfg, { name: "Kitchen" }))).id;
+    const kitchen = (await scoped((tx) => createDepartment(tx, { name: "Kitchen" }))).id;
     await scoped((tx) => writeDepartmentSeasonWeeks(tx, kitchen, [summer!.id], EMPTY_WEEK()));
     const daysOf = (seasonId: string) =>
       db.select().from(departmentDays).where(eq(departmentDays.seasonId, seasonId));

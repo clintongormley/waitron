@@ -90,7 +90,7 @@ async function fixture(): Promise<Fixture> {
       .insert(catalogues)
       .values({ name: `Calendar ${randomUUID()}` })
       .returning();
-    const calendarPeriod = await saveMenuPeriod(tx, cfg, restaurant!.id, {
+    const calendarPeriod = await saveMenuPeriod(tx, restaurant!.id, {
       name: "Open",
       menuId: calendarMenu!.id,
       staffMenuIds: [],
@@ -242,12 +242,12 @@ describe("the calendar's Closed colour", () => {
     const f = await fixture();
     const deliPeriod = await withTransaction(db, async (tx) => {
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-      const restaurantPeriod = await saveMenuPeriod(tx, f.cfg, f.departmentIds.restaurant, {
+      const restaurantPeriod = await saveMenuPeriod(tx, f.departmentIds.restaurant, {
         name: "Lunch",
         menuId: menu!.id,
         staffMenuIds: [],
       });
-      const deliPeriod = await saveMenuPeriod(tx, f.cfg, f.departmentIds.deli, {
+      const deliPeriod = await saveMenuPeriod(tx, f.departmentIds.deli, {
         name: "Deli",
         menuId: menu!.id,
         staffMenuIds: [],
@@ -290,7 +290,7 @@ describe("the calendar's Closed colour", () => {
     expect(await toneAndClosed("2026-10-21")).toEqual(["special_day", true]);
     await withTransaction(db, async (tx) => {
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-      const period = await saveMenuPeriod(tx, f.cfg, terrace.id, {
+      const period = await saveMenuPeriod(tx, terrace.id, {
         name: "Terrace",
         menuId: menu!.id,
         staffMenuIds: [],

@@ -132,10 +132,10 @@ async function setupVenue(options: {
     dayCutover: "05:00",
     simulatorCard: options.simulatorCard,
     seed: async (tx, cfg) => {
-      const restaurant = await createBareDepartment(tx, cfg, "Restaurant", MONDAY_10_00);
-      const deli = await createBareDepartment(tx, cfg, "Deli", MONDAY_10_00);
+      const restaurant = await createBareDepartment(tx, "Restaurant", MONDAY_10_00);
+      const deli = await createBareDepartment(tx, "Deli", MONDAY_10_00);
       const zone = async (name: string, departmentId: string) =>
-        (await createServiceZone(tx, cfg, { name, departmentId })).id;
+        (await createServiceZone(tx, { name, departmentId })).id;
       const barZone = await zone("Bar", restaurant);
       const diningZone = await zone("Dining room", restaurant);
       const terraceZone = await zone("Terrace", restaurant);
@@ -172,7 +172,7 @@ async function setupVenue(options: {
       if (options.timetable) {
         const period = async (name: string, menu: MenuName) =>
           (
-            await saveMenuPeriod(tx, cfg, restaurant, {
+            await saveMenuPeriod(tx, restaurant, {
               name,
               menuId: menus[menu],
               staffMenuIds: [menus["Drinks menu"], menus["Coffee menu"]],
@@ -246,7 +246,6 @@ const linesOf = (tx: Transaction, workingOrderId: string) =>
 
 async function replacePeriodMembership(
   tx: Transaction,
-  cfg: TradingContext,
   departmentId: string,
   menuIds: readonly string[],
 ) {
@@ -255,7 +254,7 @@ async function replacePeriodMembership(
     .from(menuPeriods)
     .where(eq(menuPeriods.departmentId, departmentId));
   for (const period of periods)
-    await updateMenuPeriod(tx, cfg, period.id, {
+    await updateMenuPeriod(tx, period.id, {
       staffMenuIds: menuIds.filter((id) => id !== period.menuId),
     });
 }
@@ -278,7 +277,7 @@ describe("ordering uses period membership while browsing follows the timetable",
     const v = await setupVenue({ timetable: true });
     at(MONDAY_13_00);
     await withTransaction(suite.db, (tx) =>
-      replacePeriodMembership(tx, v.cfg, v.restaurant, [
+      replacePeriodMembership(tx, v.restaurant, [
         v.menus["Breakfast menu"],
         v.menus["Midday menu"],
         v.menus["Drinks menu"],
@@ -306,7 +305,7 @@ describe("ordering uses period membership while browsing follows the timetable",
     });
 
     await withTransaction(suite.db, (tx) =>
-      replacePeriodMembership(tx, v.cfg, v.restaurant, [
+      replacePeriodMembership(tx, v.restaurant, [
         v.menus["Breakfast menu"],
         v.menus["Midday menu"],
         v.menus["Drinks menu"],
@@ -339,7 +338,7 @@ describe("ordering uses period membership while browsing follows the timetable",
     ]);
 
     await withTransaction(suite.db, (tx) =>
-      replacePeriodMembership(tx, v.cfg, v.restaurant, [
+      replacePeriodMembership(tx, v.restaurant, [
         v.menus["Midday menu"],
         v.menus["Drinks menu"],
         v.menus["Coffee menu"],
@@ -395,8 +394,8 @@ async function mealVenue(weekdays: readonly number[] = [1], simulatorCard = fals
       .where(eq(menuPeriods.departmentId, v.restaurant));
     const lunch = periods.find((period) => period.menuId === v.menus["Midday menu"])!;
     const dinner = periods.find((period) => period.menuId === v.menus["Breakfast menu"])!;
-    await updateMenuPeriod(tx, v.cfg, lunch.id, { name: "Lunch" });
-    await updateMenuPeriod(tx, v.cfg, dinner.id, { name: "Dinner" });
+    await updateMenuPeriod(tx, lunch.id, { name: "Lunch" });
+    await updateMenuPeriod(tx, dinner.id, { name: "Dinner" });
     await replaceMenuWeek(
       tx,
       v.restaurant,
@@ -888,7 +887,7 @@ describe("service periods gate only added dishes and added stored quantities", (
         ).status,
       ).toBe(200);
       expect(resolve).toHaveBeenCalledTimes(1);
-      expect(resolve.mock.calls[0]![2]).toBe(v.restaurant);
+      expect(resolve.mock.calls[0]![1]).toBe(v.restaurant);
       expect(
         (await withTransaction(suite.db, (tx) => linesOf(tx, id))).map(
           (line) => line.unitPriceGross,
@@ -1499,7 +1498,7 @@ describe("a dish whose period ended earlier today", () => {
     const managerCounterVenue = async () => {
       const v = await counterVenue();
       await withTransaction(suite.db, (tx) =>
-        updateDepartment(tx, v.cfg, v.restaurant, { lateSendNeedsManager: true }),
+        updateDepartment(tx, v.restaurant, { lateSendNeedsManager: true }),
       );
       const [manager] = await suite.db
         .select({ id: persons.id })
@@ -1591,7 +1590,7 @@ describe("a dish whose period ended earlier today", () => {
       at(mondayAt(time));
       const v = await mealVenue();
       await withTransaction(suite.db, (tx) =>
-        updateDepartment(tx, v.cfg, v.restaurant, { lateSendNeedsManager: true }),
+        updateDepartment(tx, v.restaurant, { lateSendNeedsManager: true }),
       );
       const [manager] = await suite.db
         .select({ id: persons.id })
@@ -1720,7 +1719,7 @@ describe("a dish whose period ended earlier today", () => {
       let override: { personId: string; pin: string } | undefined;
       if (managerPin !== undefined) {
         await withTransaction(suite.db, (tx) =>
-          updateDepartment(tx, v.cfg, v.restaurant, { lateSendNeedsManager: true }),
+          updateDepartment(tx, v.restaurant, { lateSendNeedsManager: true }),
         );
         const [manager] = await suite.db
           .select({ id: persons.id })
@@ -1851,17 +1850,17 @@ describe("menu-state follows department service periods", () => {
   const setupPeriods = async () => {
     const v = await setupVenue({ timetable: true });
     await withTransaction(suite.db, async (tx) => {
-      const lunch = await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+      const lunch = await saveMenuPeriod(tx, v.restaurant, {
         name: "Lunch",
         menuId: v.menus["Midday menu"],
         staffMenuIds: [v.menus["Drinks menu"]],
       });
-      const afternoon = await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+      const afternoon = await saveMenuPeriod(tx, v.restaurant, {
         name: "Afternoon",
         menuId: v.menus["Coffee menu"],
         staffMenuIds: [],
       });
-      const night = await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+      const night = await saveMenuPeriod(tx, v.restaurant, {
         name: "Night",
         menuId: v.menus["Breakfast menu"],
         staffMenuIds: [],
@@ -1997,7 +1996,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
       const lunch = periods.find((period) => period.name === "Lunch")!;
       const dinner = periods.find((period) => period.name === "Dinner")!;
       const afternoon = (
-        await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        await saveMenuPeriod(tx, v.restaurant, {
           name: "Afternoon",
           menuId: v.menus["Drinks menu"],
           staffMenuIds: [],

@@ -140,27 +140,25 @@ async function casaMarina() {
     noopLog,
   );
   const made = await withTransaction(db, async (tx) => {
-    const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
-    ).id;
-    const bar = (await createDepartment(tx, cfg, { name: "Bar", orderStart: "table" })).id;
-    const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
+    const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
+    const bar = (await createDepartment(tx, { name: "Bar", orderStart: "table" })).id;
+    const deli = (await createDepartment(tx, { name: "Deli", orderStart: "counter" })).id;
     const terrace = (
-      await createServiceZone(tx, cfg, {
+      await createServiceZone(tx, {
         name: "Terrace",
         departmentId: restaurant,
         displayOrder: 2,
       })
     ).id;
     const inside = (
-      await createServiceZone(tx, cfg, {
+      await createServiceZone(tx, {
         name: "Inside",
         departmentId: restaurant,
         displayOrder: 1,
       })
     ).id;
     const counter = (
-      await createServiceZone(tx, cfg, { name: "Counter", departmentId: bar, displayOrder: 0 })
+      await createServiceZone(tx, { name: "Counter", departmentId: bar, displayOrder: 0 })
     ).id;
     for (const [zoneId, labels] of [
       [inside, ["1", "2", "3"]],
@@ -172,8 +170,7 @@ async function casaMarina() {
     const { document } = await buildMenuDocument(tx, menu);
     await publishMenu(tx, menu, menuDocumentHash(document), "person-1");
     const period = async (name: string, colour: "grey" | "blue") =>
-      (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId: menu, staffMenuIds: [], colour }))
-        .id;
+      (await saveMenuPeriod(tx, restaurant, { name, menuId: menu, staffMenuIds: [], colour })).id;
     const lunch = await period("Lunch", "grey");
     const dinner = await period("Dinner", "blue");
     const person = async (role: "manager" | "supervisor") => {
@@ -612,8 +609,8 @@ describe("a period's floor plan choices", () => {
   it("lists each department with a zone holding a table, and its sets with the default first", async () => {
     const v = await casaMarina();
     const garden = await withTransaction(db, async (tx) => {
-      const id = (await createDepartment(tx, v.cfg, { name: "Garden", orderStart: "table" })).id;
-      await createServiceZone(tx, v.cfg, { name: "Lawn", departmentId: id });
+      const id = (await createDepartment(tx, { name: "Garden", orderStart: "table" })).id;
+      await createServiceZone(tx, { name: "Lawn", departmentId: id });
       return id;
     });
     expect((await v.send("POST", "", { departmentId: garden, name: "Lawn" })).status).toBe(201);

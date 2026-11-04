@@ -218,7 +218,7 @@ export async function mergeBills(
   if (intoBillId === fromBillId) throw new AppError("tab.merge_self", { tabId: intoBillId });
   const path = await guardPathParty(tx, intoBillId, command);
   await requireUntouchedPair(tx, intoBillId, path, fromBillId);
-  await assertServiceModesMatch(tx, cfg, fromBillId, intoBillId);
+  await assertServiceModesMatch(tx, fromBillId, intoBillId);
   await mergeCheckedBills(tx, cfg, intoBillId, fromBillId, {
     operatorId: command.operatorId,
     expectedEdits: command.expectedEdits,
@@ -258,7 +258,6 @@ export async function mergeCheckedBills(
   });
   await moveDraftsToBill(
     tx,
-    cfg,
     fromBillId,
     intoBillId,
     known.operatorId,
@@ -292,7 +291,7 @@ export async function transferItems(
   const path = await guardPathParty(tx, fromBillId, command);
   await requireUntouchedPair(tx, fromBillId, path, toBillId);
   assertDistinctTransferLines(fromBillId, transfers);
-  await assertServiceModesMatch(tx, cfg, fromBillId, toBillId);
+  await assertServiceModesMatch(tx, fromBillId, toBillId);
   const edits = await requireBillEditors(
     tx,
     [fromBillId, toBillId],
@@ -380,7 +379,7 @@ export async function moveDishes(
       throw new AppError("bill.other_party", { workingOrderId: toBillId });
     }
     await requireBillOfParty(tx, path.partyId, toBillId);
-    await assertServiceModesMatch(tx, cfg, fromBillId, toBillId);
+    await assertServiceModesMatch(tx, fromBillId, toBillId);
   }
   const { transfers, recalled } = await resolveMoveLines(tx, fromBillId, lineIds);
   const edits = await requireBillEditors(

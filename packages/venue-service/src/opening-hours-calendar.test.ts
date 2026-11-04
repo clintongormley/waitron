@@ -71,13 +71,13 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
     await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
     for (const [index, closed] of closedOn.entries()) {
       const department = (
-        await createDepartment(tx, cfg, {
+        await createDepartment(tx, {
           name: `Dining ${index}${suffix}`,
           orderStart: "table",
         })
       ).id;
       const lunch = (
-        await saveMenuPeriod(tx, cfg, department, { name: "Lunch", menuId, staffMenuIds: [] })
+        await saveMenuPeriod(tx, department, { name: "Lunch", menuId, staffMenuIds: [] })
       ).id;
       await replaceMenuWeek(
         tx,
@@ -296,9 +296,9 @@ async function monthVenue() {
     const { document } = await buildMenuDocument(tx, menuId);
     await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
     const department = async (name: string) =>
-      (await createDepartment(tx, cfg, { name, orderStart: "table" })).id;
+      (await createDepartment(tx, { name, orderStart: "table" })).id;
     const period = async (departmentId: string, name: string) =>
-      (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId, staffMenuIds: [] })).id;
+      (await saveMenuPeriod(tx, departmentId, { name, menuId, staffMenuIds: [] })).id;
     const everyDay = (periodId: string, startsAt: string, endsAt: string) =>
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -309,7 +309,7 @@ async function monthVenue() {
         .insert(floorZones)
         .values({ locationId: cfg.locationId, name, displayOrder })
         .returning({ id: floorZones.id });
-      await configureZone(tx, cfg, { zoneId: row!.id, departmentId });
+      await configureZone(tx, { zoneId: row!.id, departmentId });
       return row!.id;
     };
     const diningDepartment = await department("Dining");
@@ -333,7 +333,6 @@ async function monthVenue() {
     const counter = await zone("Counter", 3, barDepartment);
     await replaceZoneClosedWeek(
       tx,
-      cfg,
       terrace,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -884,11 +883,10 @@ describe("a past day's range around a start change", () => {
       const menuId = (await createCatalogue(tx, { name: `Menu ${randomUUID()}` })).id;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
-      const diningDepartment = (
-        await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" })
-      ).id;
+      const diningDepartment = (await createDepartment(tx, { name: "Dining", orderStart: "table" }))
+        .id;
       const period = async (name: string) =>
-        (await saveMenuPeriod(tx, cfg, diningDepartment, { name, menuId, staffMenuIds: [] })).id;
+        (await saveMenuPeriod(tx, diningDepartment, { name, menuId, staffMenuIds: [] })).id;
       const lunch = await period("Lunch");
       const dinner = await period("Dinner");
       await replaceMenuWeek(
@@ -908,10 +906,9 @@ describe("a past day's range around a start change", () => {
         .insert(floorZones)
         .values({ locationId: cfg.locationId, name: "Terrace", displayOrder: 1 })
         .returning({ id: floorZones.id });
-      await configureZone(tx, cfg, { zoneId: zone!.id, departmentId: diningDepartment });
+      await configureZone(tx, { zoneId: zone!.id, departmentId: diningDepartment });
       await replaceZoneClosedWeek(
         tx,
-        cfg,
         zone!.id,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,

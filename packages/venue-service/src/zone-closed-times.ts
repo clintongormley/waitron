@@ -7,7 +7,7 @@ import {
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { floorZones, readVenueClock, type Transaction } from "@waitron/db";
 import { AppError, type BusinessDayClock } from "@waitron/shared";
-import { resolveZoneContext, wireTime, type VenueScope } from "./operations.js";
+import { resolveZoneContext, wireTime } from "./operations.js";
 import { parseClosedRanges, type ClosedRange, rangeSpan, rangeSpanInDay } from "./service-day.js";
 import { momentAt, resolveZoneClosedDays, type ServiceDay } from "./day-resolver.js";
 import {
@@ -29,14 +29,13 @@ import "./errors.js";
  *  this write read. */
 export async function replaceZoneClosedWeek(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string,
   days: unknown,
   expectedClockRevision: number,
   at: Date = new Date(),
   options: { seasonId?: string; afterWrite?: (read: ServingRead) => Promise<void> } = {},
 ): Promise<void> {
-  const zone = await resolveZoneContext(tx, cfg, zoneId);
+  const zone = await resolveZoneContext(tx, zoneId);
   const clock = await readVenueClock(tx);
   const staged = await stageZoneClosedWeek(
     tx,

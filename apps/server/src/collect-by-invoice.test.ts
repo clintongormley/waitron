@@ -87,8 +87,8 @@ function salesOf(billId: string) {
 }
 
 async function retarget(billId: string, zoneId: string): Promise<void> {
-  await inTx(venue, (tx) => VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, billId, zoneId));
-  const context = await inTx(venue, (tx) => VENUE_SERVICE.findOrderContext(tx, venue.cfg, billId));
+  await inTx(venue, (tx) => VENUE_SERVICE.retargetOrderContext(tx, billId, zoneId));
+  const context = await inTx(venue, (tx) => VENUE_SERVICE.findOrderContext(tx, billId));
   expect(context?.zoneId).toBe(zoneId);
 }
 

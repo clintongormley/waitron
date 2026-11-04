@@ -52,7 +52,7 @@ beforeEach(async () => {
     .insert(sessions)
     .values({ deviceId, personId, tokenHash: hashSessionToken(token) });
   requestCookie = await sessionCookieForTest(suite.db, token);
-  const zone = await createZone(suite.db, cfg, { name: "Tables" });
+  const zone = await createZone(suite.db, { name: "Tables" });
   const table = await createTable(suite.db, cfg, { label: "Table 1", zoneId: zone.id });
   [stepId] = (await setSteps(
     { db: suite.db, cfg },

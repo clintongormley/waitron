@@ -74,8 +74,6 @@ export interface Department {
 
 export async function listDepartments(
   tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: VenueScope,
 ): Promise<(Department & { isDefault: boolean })[]> {
   const rows = await tx
     .select({
@@ -103,7 +101,6 @@ export function wireTime(value: string): string {
 
 export async function listServiceZones(
   tx: Transaction,
-  _cfg: VenueScope,
   options: { withActiveFlag?: boolean } = {},
 ) {
   const rows = await tx
@@ -146,7 +143,7 @@ export async function listServiceZones(
   );
 }
 
-export async function assertDepartment(tx: Transaction, _cfg: VenueScope, departmentId: string) {
+export async function assertDepartment(tx: Transaction, departmentId: string) {
   const [row] = await tx
     .select({ id: departments.id })
     .from(departments)
@@ -173,7 +170,6 @@ type OrderStart = "table" | "counter";
 
 export async function createDepartment(
   tx: Transaction,
-  cfg: VenueScope,
   input: {
     name: string;
     tradingName?: string;
@@ -200,13 +196,12 @@ export async function createDepartment(
   const staffLanguage = await readStarterStaffLanguage(tx);
   await addStarterServiceSteps(tx, row!.id, staffLanguage);
   const menuId = (await readVenue(tx)).defaultCatalogueId;
-  if (menuId !== null) await placeOpenPeriod(tx, cfg, row!.id, menuId, staffLanguage);
+  if (menuId !== null) await placeOpenPeriod(tx, row!.id, menuId, staffLanguage);
   return row!;
 }
 
 export async function updateDepartment(
   tx: Transaction,
-  cfg: VenueScope,
   departmentId: string,
   input: {
     name?: string;
@@ -217,7 +212,7 @@ export async function updateDepartment(
     releaseReminderMinutes?: number | null;
   },
 ): Promise<void> {
-  await assertDepartment(tx, cfg, departmentId);
+  await assertDepartment(tx, departmentId);
   if (input.name !== undefined) await requireDepartmentName(tx, input.name, departmentId);
   if (
     input.name !== undefined ||
@@ -280,7 +275,6 @@ export type VenueReadinessIssue =
  *  that falls where another special day applies. */
 export async function listVenueReadiness(
   tx: Transaction,
-  cfg: VenueScope,
   at: Date = new Date(),
 ): Promise<VenueReadinessIssue[]> {
   const [defaultStation] = await tx
@@ -355,7 +349,7 @@ export async function listVenueReadiness(
     (zone) => zone.departmentId !== null && zone.departmentActive === true,
   );
   if (ready.length === 0) return issues;
-  const liveByZone = await liveDocumentsByZone(tx, cfg);
+  const liveByZone = await liveDocumentsByZone(tx);
   for (const zone of ready) {
     const published = liveByZone.get(zone.id) ?? [];
     if (published.length === 0) {
@@ -379,7 +373,6 @@ export async function listVenueReadiness(
 
 export async function configureZone(
   tx: Transaction,
-  _cfg: VenueScope,
   input: {
     zoneId: string;
     departmentId: string;
@@ -447,7 +440,6 @@ export async function configureZone(
 /** Create the floor zone and its service assignment in the caller's one write transaction. */
 export async function createServiceZone(
   tx: Transaction,
-  cfg: VenueScope,
   input: {
     name: string;
     departmentId: string;
@@ -483,7 +475,7 @@ export async function createServiceZone(
     }
     throw error;
   }
-  await configureZone(tx, cfg, {
+  await configureZone(tx, {
     zoneId,
     departmentId: input.departmentId,
     orderStart: input.orderStart,
@@ -493,7 +485,6 @@ export async function createServiceZone(
 
 export async function resolveZoneContext(
   tx: Transaction,
-  _cfg: VenueScope,
   zoneId: string,
 ): Promise<{
   zoneId: string;
@@ -551,7 +542,6 @@ export interface EffectiveSalePolicy {
 
 export async function resolveSalePolicy(
   tx: Transaction,
-  _cfg: VenueScope,
   zoneId: string,
 ): Promise<EffectiveSalePolicy> {
   const [row] = await tx
@@ -592,11 +582,10 @@ export async function resolveSalePolicy(
 
 export async function recordSaleReceiptHeader(
   tx: Transaction,
-  cfg: VenueScope,
   saleId: string,
   zoneId: string | null,
 ): Promise<void> {
-  const policy = zoneId === null ? null : await resolveSalePolicy(tx, cfg, zoneId);
+  const policy = zoneId === null ? null : await resolveSalePolicy(tx, zoneId);
   await tx.insert(saleReceiptHeaders).values({
     saleId,
     departmentId: policy?.departmentId ?? null,
@@ -627,9 +616,9 @@ type ZonePolicyField = Pick<
   "orderStart" | "paidWhen" | "collectionNumber" | "receiptPrintMode"
 >;
 
-export async function listSalePolicies(tx: Transaction, cfg: VenueScope) {
-  const activeDepartments = await listDepartments(tx, cfg);
-  const activeZones = await listServiceZones(tx, cfg);
+export async function listSalePolicies(tx: Transaction) {
+  const activeDepartments = await listDepartments(tx);
+  const activeZones = await listServiceZones(tx);
   const departmentIds = new Set(activeDepartments.map((department) => department.id));
   const zoneIds = new Set(activeZones.map((zone) => zone.id));
   const departmentRows = (await tx.select().from(departmentSalePolicies)).filter((row) =>
@@ -667,7 +656,6 @@ export async function listSalePolicies(tx: Transaction, cfg: VenueScope) {
 
 export async function setDepartmentSalePolicyField<K extends keyof DepartmentPolicyField>(
   tx: Transaction,
-  _cfg: VenueScope,
   departmentId: string,
   field: K,
   value: DepartmentPolicyField[K],
@@ -688,12 +676,11 @@ export async function setDepartmentSalePolicyField<K extends keyof DepartmentPol
 
 export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string,
   field: K,
   value: ZonePolicyField[K],
 ): Promise<void> {
-  if (!(await listServiceZones(tx, cfg)).some((zone) => zone.id === zoneId)) {
+  if (!(await listServiceZones(tx)).some((zone) => zone.id === zoneId)) {
     throw new AppError("service_zone.not_found", { zoneId });
   }
   await tx
@@ -720,11 +707,10 @@ export interface DepartmentEditInput extends Pick<
 
 export async function saveDepartmentEditSettings(
   tx: Transaction,
-  cfg: VenueScope,
   departmentId: string,
   input: DepartmentEditInput,
 ): Promise<void> {
-  await updateDepartment(tx, cfg, departmentId, {
+  await updateDepartment(tx, departmentId, {
     name: input.name,
     tradingName: input.tradingName,
     ...(input.needsClearing === undefined ? {} : { needsClearing: input.needsClearing }),
@@ -761,11 +747,10 @@ export type ZoneEditInput = ZoneServiceSettingsInput & { name: string };
 
 export async function saveZoneSettings(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string,
   input: ZoneEditInput,
 ): Promise<void> {
-  if (!(await listServiceZones(tx, cfg)).some((zone) => zone.id === zoneId))
+  if (!(await listServiceZones(tx)).some((zone) => zone.id === zoneId))
     throw new AppError("service_zone.not_found", { zoneId });
   try {
     await tx.update(floorZones).set({ name: input.name }).where(eq(floorZones.id, zoneId));
@@ -779,19 +764,18 @@ export async function saveZoneSettings(
       throw new AppError("zone.name_taken", { name: input.name });
     throw error;
   }
-  await saveZoneServiceSettings(tx, cfg, zoneId, input);
+  await saveZoneServiceSettings(tx, zoneId, input);
 }
 
 export async function saveZoneServiceSettings(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string,
   input: ZoneServiceSettingsInput,
 ): Promise<void> {
-  await setZoneSalePolicyOverride(tx, cfg, zoneId, "orderStart", input.orderStart);
-  await setZoneSalePolicyOverride(tx, cfg, zoneId, "paidWhen", input.paidWhen);
-  await setZoneSalePolicyOverride(tx, cfg, zoneId, "collectionNumber", input.collectionNumber);
-  await setZoneSalePolicyOverride(tx, cfg, zoneId, "receiptPrintMode", input.receiptPrintMode);
+  await setZoneSalePolicyOverride(tx, zoneId, "orderStart", input.orderStart);
+  await setZoneSalePolicyOverride(tx, zoneId, "paidWhen", input.paidWhen);
+  await setZoneSalePolicyOverride(tx, zoneId, "collectionNumber", input.collectionNumber);
+  await setZoneSalePolicyOverride(tx, zoneId, "receiptPrintMode", input.receiptPrintMode);
 }
 
 async function zoneMenuIdsByZone(tx: Transaction): Promise<Map<string, string[]>> {
@@ -806,8 +790,6 @@ async function zoneMenuIdsByZone(tx: Transaction): Promise<Map<string, string[]>
 
 export async function liveDocumentsByZone(
   tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: VenueScope,
 ): Promise<Map<string, { menuId: string; document: MenuDocument }[]>> {
   const menusOf = await zoneMenuIdsByZone(tx);
   const live = await readLiveDocuments(tx, [...new Set([...menusOf.values()].flat())]);
@@ -894,7 +876,6 @@ export interface ServiceZoneOffers extends ZoneOffers {
 
 export async function listZoneOffers(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string,
   options: {
     asserted?: readonly { menuId: string; versionId: string }[];
@@ -903,7 +884,7 @@ export async function listZoneOffers(
     withDefault?: false;
   } = {},
 ): Promise<ServiceZoneOffers> {
-  const context = await resolveZoneContext(tx, cfg, zoneId);
+  const context = await resolveZoneContext(tx, zoneId);
   const membership = await zonePeriodMembership(tx, zoneId);
   const published = await zoneLiveDocuments(tx, zoneId, options.asserted, [
     ...new Set(membership.map((row) => row.menuId)),
@@ -917,7 +898,7 @@ export async function listZoneOffers(
   const state =
     options.withDefault === false
       ? null
-      : await zoneServiceState(tx, cfg, zoneId, context.departmentId, at);
+      : await zoneServiceState(tx, zoneId, context.departmentId, at);
   const service = state?.service ?? null;
   const defaultMenuId = service?.open
     ? servedDefault(
@@ -997,7 +978,6 @@ export async function productsOfferedIn(
 
 export async function menuState(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string,
   at: Date = new Date(),
 ): Promise<ZoneMenuState> {
@@ -1021,7 +1001,6 @@ export async function menuState(
     };
   const { service, zoneOpen, zoneKeepOpen } = await zoneServiceState(
     tx,
-    cfg,
     zoneId,
     zone.departmentId,
     at,
@@ -1058,7 +1037,6 @@ export async function menuState(
  */
 export async function resolveNewOrderZone(
   tx: Transaction,
-  cfg: VenueScope,
   input: { zoneId?: string | null; profileId?: string | null },
 ): Promise<{
   zoneId: string;
@@ -1067,7 +1045,7 @@ export async function resolveNewOrderZone(
   serviceMode: ServiceMode;
 }> {
   if (input.zoneId !== undefined && input.zoneId !== null) {
-    return resolveZoneContext(tx, cfg, input.zoneId);
+    return resolveZoneContext(tx, input.zoneId);
   }
   if (input.profileId !== undefined && input.profileId !== null) {
     const zones = await readProfileZones(tx, input.profileId);
@@ -1075,7 +1053,7 @@ export async function resolveNewOrderZone(
       if (zones.startingZoneId === null) {
         throw new AppError("device_profile.no_service_zone", { profileId: input.profileId });
       }
-      return resolveZoneContext(tx, cfg, zones.startingZoneId);
+      return resolveZoneContext(tx, zones.startingZoneId);
     }
   }
   const [policy] = await tx
@@ -1083,17 +1061,16 @@ export async function resolveNewOrderZone(
     .from(zoneServicePolicies)
     .where(eq(zoneServicePolicies.isCounterDefault, true));
   if (policy === undefined) throw new AppError("service_zone.default_missing", {});
-  return resolveZoneContext(tx, cfg, policy.zoneId);
+  return resolveZoneContext(tx, policy.zoneId);
 }
 
 /** Snapshot the zone's current department and payment flow when a new order opens. */
 export async function recordOrderServiceContext(
   tx: Transaction,
-  cfg: VenueScope,
   workingOrderId: string,
   zoneId: string,
 ): Promise<void> {
-  const context = await resolveZoneContext(tx, cfg, zoneId);
+  const context = await resolveZoneContext(tx, zoneId);
   await tx.insert(orderServiceContexts).values({
     workingOrderId,
     locationId: await venueLocationId(tx),
@@ -1106,12 +1083,11 @@ export async function recordOrderServiceContext(
 /** Adopt a new zone's current department and service mode while retaining existing line snapshots. */
 export async function retargetOrderServiceContext(
   tx: Transaction,
-  cfg: VenueScope,
   workingOrderId: string,
   zoneId: string,
 ): Promise<void> {
-  const context = await resolveZoneContext(tx, cfg, zoneId);
-  const previous = await getOrderServiceContext(tx, cfg, workingOrderId);
+  const context = await resolveZoneContext(tx, zoneId);
+  const previous = await getOrderServiceContext(tx, workingOrderId);
   if (previous.departmentId !== context.departmentId)
     await withdrawPendingDepartmentTransfers(tx, [workingOrderId]);
   const updated = await tx
@@ -1130,17 +1106,15 @@ export async function retargetOrderServiceContext(
 
 export async function getOrderServiceContext(
   tx: Transaction,
-  cfg: VenueScope,
   workingOrderId: string,
 ): Promise<{ zoneId: string; departmentId: string; serviceMode: ServiceMode }> {
-  const row = await findOrderServiceContext(tx, cfg, workingOrderId);
+  const row = await findOrderServiceContext(tx, workingOrderId);
   if (row === null) throw new AppError("order.service_context_missing", { workingOrderId });
   return row;
 }
 
 export async function findOrderServiceContext(
   tx: Transaction,
-  _cfg: VenueScope,
   workingOrderId: string,
 ): Promise<{ zoneId: string; departmentId: string; serviceMode: ServiceMode } | null> {
   const [row] = await tx
@@ -1155,7 +1129,7 @@ export async function findOrderServiceContext(
 }
 
 /** `orderId` must be table-qualified so a base-table query correlates to its outer order. */
-export function orderZoneIdSql(_cfg: VenueScope, orderId: SQL): SQL {
+export function orderZoneIdSql(orderId: SQL): SQL {
   return sql`(select osc.zone_id from order_service_contexts osc
     where osc.working_order_id = ${orderId})`;
 }
@@ -1164,7 +1138,7 @@ export function orderZoneIdSql(_cfg: VenueScope, orderId: SQL): SQL {
  * A WHERE condition that holds for an order whose recorded zone is one of `zoneIds`, or that has no
  * recorded zone. `orderId` is the outer query's order id, table-qualified.
  */
-export function orderInZones(_cfg: VenueScope, orderId: SQL, zoneIds: readonly string[]): SQL {
+export function orderInZones(orderId: SQL, zoneIds: readonly string[]): SQL {
   const outside =
     zoneIds.length === 0
       ? sql``
@@ -1179,7 +1153,6 @@ export function orderInZones(_cfg: VenueScope, orderId: SQL, zoneIds: readonly s
 /** Each named order's frozen service mode, read at once; an order with no context is absent. */
 export async function findOrderServiceModes(
   tx: Transaction,
-  _cfg: VenueScope,
   workingOrderIds: readonly string[],
 ): Promise<ReadonlyMap<string, ServiceMode>> {
   if (workingOrderIds.length === 0) return new Map();
@@ -1196,7 +1169,6 @@ export async function findOrderServiceModes(
 /** Each named order's recorded service zone in one read; an order with no context is absent. */
 export async function findOrderServiceZones(
   tx: Transaction,
-  _cfg: VenueScope,
   workingOrderIds: readonly string[],
 ): Promise<ReadonlyMap<string, string>> {
   if (workingOrderIds.length === 0) return new Map();
@@ -1212,7 +1184,6 @@ export async function findOrderServiceZones(
 
 export async function listWorkingLineContexts(
   tx: Transaction,
-  cfg: VenueScope,
   workingOrderId: string,
 ): Promise<
   {
@@ -1233,7 +1204,6 @@ export async function listWorkingLineContexts(
     dietOverride: unknown;
   }[]
 > {
-  void cfg;
   const rows = await tx
     .select({
       workingOrderLineId: workingLineContexts.workingOrderLineId,
@@ -1304,7 +1274,6 @@ export async function readLateSendMarks(
  */
 export async function recordWorkingLineContexts(
   tx: Transaction,
-  cfg: VenueScope,
   workingOrderId: string,
   lines: readonly {
     workingOrderLineId: string;
@@ -1320,7 +1289,7 @@ export async function recordWorkingLineContexts(
   offers: ZoneOffers,
 ): Promise<void> {
   if (lines.length === 0) return;
-  const context = await getOrderServiceContext(tx, cfg, workingOrderId);
+  const context = await getOrderServiceContext(tx, workingOrderId);
   const [department] = await tx
     .select({ name: departments.name })
     .from(departments)
@@ -1395,11 +1364,10 @@ export async function recordWorkingLineContexts(
 /** Copy an order's frozen service policy to a newly-created split/check order. */
 export async function copyOrderServiceContext(
   tx: Transaction,
-  cfg: VenueScope,
   fromWorkingOrderId: string,
   toWorkingOrderId: string,
 ): Promise<void> {
-  const context = await findOrderServiceContext(tx, cfg, fromWorkingOrderId);
+  const context = await findOrderServiceContext(tx, fromWorkingOrderId);
   if (context === null) return;
   await tx.insert(orderServiceContexts).values({
     workingOrderId: toWorkingOrderId,
@@ -1413,11 +1381,9 @@ export async function copyOrderServiceContext(
 /** Copy a line's immutable selling snapshot when a quantity is split onto a new line id. */
 export async function copyWorkingLineContext(
   tx: Transaction,
-  cfg: VenueScope,
   fromWorkingOrderLineId: string,
   toWorkingOrderLineId: string,
 ): Promise<void> {
-  void cfg;
   const [context] = await tx
     .select()
     .from(workingLineContexts)
@@ -1432,10 +1398,8 @@ export async function copyWorkingLineContext(
 /** {@link copyWorkingLineContext} for many lines, in one read. */
 export async function copyWorkingLineContexts(
   tx: Transaction,
-  cfg: VenueScope,
   pairs: readonly { from: string; to: string }[],
 ): Promise<void> {
-  void cfg;
   if (pairs.length === 0) return;
   const contexts = await tx
     .select()
@@ -1525,15 +1489,9 @@ export async function readZoneKeepOpenState(
 
 /** The department's service and the zone's own closure state at `at`, sharing one clock and
  *  one day plan between them. */
-async function zoneServiceState(
-  tx: Transaction,
-  cfg: VenueScope,
-  zoneId: string,
-  departmentId: string,
-  at: Date,
-) {
+async function zoneServiceState(tx: Transaction, zoneId: string, departmentId: string, at: Date) {
   const prepared = await readServiceDayPlan(tx, at);
-  const service = await resolveDepartmentService(tx, cfg, departmentId, at, prepared);
+  const service = await resolveDepartmentService(tx, departmentId, at, prepared);
   const zoneDay = await zoneClosureDays(tx, [zoneId], at, prepared);
   return {
     service,

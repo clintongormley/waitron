@@ -45,14 +45,13 @@ async function venue() {
     });
     const venueId = await venueLocationId(db);
     const cfg = { locationId: locationId(venueId) };
-    const departmentId = (await createDepartment(db, cfg, { name: "Dining", orderStart: "table" }))
-      .id;
+    const departmentId = (await createDepartment(db, { name: "Dining", orderStart: "table" })).id;
     const zone = async (name: string, displayOrder: number, active = true) => {
       const [z] = await db
         .insert(floorZones)
         .values({ locationId: cfg.locationId, name, displayOrder })
         .returning();
-      await configureZone(db, cfg, { zoneId: z!.id, departmentId });
+      await configureZone(db, { zoneId: z!.id, departmentId });
       if (!active)
         await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, z!.id));
       return z!.id;
@@ -91,7 +90,7 @@ describe("zone closed times", () => {
     const v = await venue();
     const seen = await tx(async (db) => {
       let seen: unknown;
-      await replaceZoneClosedWeek(db, v.cfg, v.terrace, week(), 0, at, {
+      await replaceZoneClosedWeek(db, v.terrace, week(), 0, at, {
         afterWrite: async (read) => {
           const written = await db
             .select({ id: zoneDayRanges.id })
@@ -112,14 +111,14 @@ describe("zone closed times", () => {
 
   it("replaces only a zone's normal week, including clearing empty days", async () => {
     const v = await venue();
-    await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(), 0));
+    await tx((db) => replaceZoneClosedWeek(db, v.terrace, week(), 0));
     await tx((db) =>
-      replaceZoneClosedWeek(db, v.cfg, v.bar, week([{ startsAt: "06:00", endsAt: "06:00" }]), 0),
+      replaceZoneClosedWeek(db, v.bar, week([{ startsAt: "06:00", endsAt: "06:00" }]), 0),
     );
     const day = await specialDay("2030-12-25", {
       zonePaint: [{ zoneId: v.terrace, ranges: [{ kind: "closed", ...night[0]! }] }],
     });
-    await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week([]), 0));
+    await tx((db) => replaceZoneClosedWeek(db, v.terrace, week([]), 0));
     const model = await tx((db) => readOpeningHoursModel(db, at));
     const inEverySeason = <T>(week: T) =>
       model.seasons.map((season) => ({ seasonId: season.id, week }));
@@ -141,8 +140,8 @@ describe("zone closed times", () => {
   });
   it("refuses a switched-off department's zone without changing its rows", async () => {
     const b = await venue();
-    await tx((db) => replaceZoneClosedWeek(db, b.cfg, b.terrace, week(), 0));
-    await tx((db) => createDepartment(db, b.cfg, { name: "Other", orderStart: "counter" }));
+    await tx((db) => replaceZoneClosedWeek(db, b.terrace, week(), 0));
+    await tx((db) => createDepartment(db, { name: "Other", orderStart: "counter" }));
     await tx((db) =>
       (async () => {
         await db.execute(
@@ -152,7 +151,7 @@ describe("zone closed times", () => {
       })(),
     );
     await expect(
-      tx((db) => replaceZoneClosedWeek(db, b.cfg, b.terrace, week([]), 0)),
+      tx((db) => replaceZoneClosedWeek(db, b.terrace, week([]), 0)),
     ).rejects.toMatchObject({ code: "service_zone.not_found" });
     const seasonIds = await suite.db
       .select({ id: seasons.id })
@@ -223,10 +222,10 @@ describe("zone closed times", () => {
     [...week().slice(0, 6), null],
   ])("refuses an incomplete or malformed week %j without deleting data", async (days) => {
     const v = await venue();
-    await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(), 0));
-    await expect(
-      tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, days, 0)),
-    ).rejects.toMatchObject({ code: "zone_closed_time.invalid" });
+    await tx((db) => replaceZoneClosedWeek(db, v.terrace, week(), 0));
+    await expect(tx((db) => replaceZoneClosedWeek(db, v.terrace, days, 0))).rejects.toMatchObject({
+      code: "zone_closed_time.invalid",
+    });
     const model = await tx((db) => readOpeningHoursModel(db, at));
     expect(
       model.departments
@@ -248,7 +247,7 @@ describe("zones closed at an instant", () => {
     ["2030-10-08T04:00:00Z", false],
   ])("uses the business day's half-open range at %s", async (instant, closed) => {
     const v = await venue();
-    await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(mondayNight), 0));
+    await tx((db) => replaceZoneClosedWeek(db, v.terrace, week(mondayNight), 0));
     expect([...(await tx((db) => closures.closedZoneIdsAt(db, new Date(instant))))]).toEqual(
       closed ? [v.terrace] : [],
     );
@@ -259,13 +258,7 @@ describe("zones closed at an instant", () => {
   ])("excludes the overnight end inside a business day at %s", async (instant, closed) => {
     const v = await venue();
     await tx((db) =>
-      replaceZoneClosedWeek(
-        db,
-        v.cfg,
-        v.terrace,
-        week([{ startsAt: "23:30", endsAt: "03:00" }]),
-        0,
-      ),
+      replaceZoneClosedWeek(db, v.terrace, week([{ startsAt: "23:30", endsAt: "03:00" }]), 0),
     );
     expect([...(await tx((db) => closures.closedZoneIdsAt(db, new Date(instant))))]).toEqual(
       closed ? [v.terrace] : [],
@@ -273,7 +266,7 @@ describe("zones closed at an instant", () => {
   });
   it("uses a special day's zone paint instead of the week, an open range included", async () => {
     const v = await venue();
-    await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(mondayNight), 0));
+    await tx((db) => replaceZoneClosedWeek(db, v.terrace, week(mondayNight), 0));
     await specialDay("2030-10-07", {
       zonePaint: [
         { zoneId: v.terrace, ranges: [{ kind: "open", startsAt: "23:30", endsAt: "06:00" }] },
@@ -286,7 +279,7 @@ describe("zones closed at an instant", () => {
   });
   it("keeps the week's closures on a repeating special day that paints nothing", async () => {
     const v = await venue();
-    await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(mondayNight), 0));
+    await tx((db) => replaceZoneClosedWeek(db, v.terrace, week(mondayNight), 0));
     await specialDay("2030-10-07", { repeatsYearly: true });
     expect([
       ...(await tx((db) => closures.closedZoneIdsAt(db, new Date("2041-10-07T21:45:00Z")))),
@@ -300,9 +293,7 @@ describe("zones closed at an instant", () => {
       weekday,
       ranges: weekday === 5 ? [{ startsAt: "22:00", endsAt: "23:30" }] : [],
     }));
-    await tx((db) =>
-      replaceZoneClosedWeek(db, v.cfg, v.terrace, friday, 0, at, { seasonId: winter }),
-    );
+    await tx((db) => replaceZoneClosedWeek(db, v.terrace, friday, 0, at, { seasonId: winter }));
     const closedAt = (instant: string) =>
       tx((db) => closures.closedZoneIdsAt(db, new Date(instant)));
     // 22:30 in Madrid on Friday 29 November (Autumn) and Friday 6 December 2030 (Winter).
@@ -311,11 +302,8 @@ describe("zones closed at an instant", () => {
   });
   it("scopes the batch to the selected zones", async () => {
     const v = await venue();
-    for (const [cfg, id] of [
-      [v.cfg, v.terrace],
-      [v.cfg, v.bar],
-    ] as const)
-      await tx((db) => replaceZoneClosedWeek(db, cfg, id, week(mondayNight), 0));
+    for (const id of [v.terrace, v.bar])
+      await tx((db) => replaceZoneClosedWeek(db, id, week(mondayNight), 0));
     const instant = new Date("2030-10-07T21:45:00Z");
     expect([...(await tx((db) => closures.closedZoneIdsAt(db, instant, [v.terrace])))]).toEqual([
       v.terrace,
@@ -324,7 +312,7 @@ describe("zones closed at an instant", () => {
   });
   it("whole-venue closure and an unreadable clock leave zone-only state open", async () => {
     const v = await venue();
-    await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(mondayNight), 0));
+    await tx((db) => replaceZoneClosedWeek(db, v.terrace, week(mondayNight), 0));
     await specialDay("2030-10-07", { closedAllDay: true });
     const instant = new Date("2030-10-07T21:45:00Z");
     expect([...(await tx((db) => closures.closedZoneIdsAt(db, instant)))]).toEqual([]);
@@ -338,10 +326,10 @@ describe("zones closed at an instant", () => {
   });
   it("reports closure separately from department opening and refuses only the closed zone", async () => {
     const v = await venue();
-    await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(mondayNight), 0));
+    await tx((db) => replaceZoneClosedWeek(db, v.terrace, week(mondayNight), 0));
     const instant = new Date("2030-10-07T21:45:00Z");
-    const offers = await tx((db) => listZoneOffers(db, v.cfg, v.terrace, { at: instant }));
-    const state = await tx((db) => menuState(db, v.cfg, v.terrace, instant));
+    const offers = await tx((db) => listZoneOffers(db, v.terrace, { at: instant }));
+    const state = await tx((db) => menuState(db, v.terrace, instant));
     expect(offers.service).toMatchObject({ open: false, zoneOpen: false });
     expect(state.service).toMatchObject({ open: false, zoneOpen: false });
     await expect(
@@ -353,7 +341,7 @@ describe("zones closed at an instant", () => {
   });
   it("reads the clock, special days and closed times once for a batch", async () => {
     const v = await venue();
-    await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(mondayNight), 0));
+    await tx((db) => replaceZoneClosedWeek(db, v.terrace, week(mondayNight), 0));
     const reads = (zoneIds: string[]) =>
       tx(async (db) => {
         const session = (
@@ -389,9 +377,9 @@ describe("zones closed at an instant", () => {
   });
   it("reads several zones' floor closing summaries in the statements one zone takes, answering as one zone at a time does", async () => {
     const v = await venue();
-    await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(mondayNight), 0));
+    await tx((db) => replaceZoneClosedWeek(db, v.terrace, week(mondayNight), 0));
     await tx((db) =>
-      replaceZoneClosedWeek(db, v.cfg, v.bar, week([{ startsAt: "23:45", endsAt: "02:00" }]), 0),
+      replaceZoneClosedWeek(db, v.bar, week([{ startsAt: "23:45", endsAt: "02:00" }]), 0),
     );
     const instant = new Date("2030-10-07T21:40:00Z");
     const ids = [v.terrace, v.bar, v.disabled];
@@ -470,7 +458,7 @@ describe("zones closed at an instant", () => {
   });
   it("reads the day afresh when handed a day read for another business day", async () => {
     const v = await venue();
-    await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(), 0));
+    await tx((db) => replaceZoneClosedWeek(db, v.terrace, week(), 0));
     const mondayLate = new Date("2030-10-07T21:45:00Z");
     const states = await tx(async (db) =>
       VENUE_SERVICE.readZoneClosingStates(

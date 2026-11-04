@@ -3107,7 +3107,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
         const elsewhere = await offerProducts(tx, cfg, {
           orderStart: "counter",
         });
-        await VENUE_SERVICE.retargetOrderContext(tx, cfg, tabId, elsewhere.zoneId);
+        await VENUE_SERVICE.retargetOrderContext(tx, tabId, elsewhere.zoneId);
       }
       const [party] = await tx
         .select({ revision: parties.revision })

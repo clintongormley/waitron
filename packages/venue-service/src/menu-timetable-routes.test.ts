@@ -86,12 +86,10 @@ async function routed() {
   const counterZone = await zone("Deli counter");
   const made = await scoped(async (tx) => {
     await ensureDefaultSeasons(tx);
-    const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
-    ).id;
-    const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
-    await configureZone(tx, cfg, { zoneId: barZone, departmentId: restaurant });
-    await configureZone(tx, cfg, { zoneId: counterZone, departmentId: deli });
+    const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
+    const deli = (await createDepartment(tx, { name: "Deli", orderStart: "counter" })).id;
+    await configureZone(tx, { zoneId: barZone, departmentId: restaurant });
+    await configureZone(tx, { zoneId: counterZone, departmentId: deli });
     const menu = async (name: string) => {
       const id = (await createCatalogue(tx, { name: `${name} ${locationId}` })).id;
       const { document } = await buildMenuDocument(tx, id);
@@ -103,7 +101,7 @@ async function routed() {
     const coffeeMenu = await menu("Coffee");
     const takeawayMenu = await menu("Takeaway deli");
     const morningPeriod = (
-      await saveMenuPeriod(tx, cfg, restaurant, {
+      await saveMenuPeriod(tx, restaurant, {
         name: "Morning service",
         menuId: breakfastMenu,
         staffMenuIds: [],
@@ -1321,7 +1319,7 @@ describe("a period's Floor plan field", () => {
           .insert(floorPlanSets)
           .values({ locationId: r.cfg.locationId })
           .returning({ id: floorPlanSets.id });
-        await linkFloorPlanSet(tx, r.cfg, { setId: row!.id, departmentId, name });
+        await linkFloorPlanSet(tx, { setId: row!.id, departmentId, name });
         return row!.id;
       });
     const standard = await set(r.restaurant, "Standard");

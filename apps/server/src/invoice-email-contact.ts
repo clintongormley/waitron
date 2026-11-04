@@ -12,8 +12,8 @@ export async function resolveInvoiceEmailContact(
   const cfg = { locationId: locationId(await venueLocationId(tx)) };
   const departmentId =
     source.kind === "sale"
-      ? await VENUE_SERVICE.receiptDepartmentForSale(tx, cfg, source.saleId)
-      : await VENUE_SERVICE.receiptDepartmentForOrder(tx, cfg, source.orderId);
+      ? await VENUE_SERVICE.receiptDepartmentForSale(tx, source.saleId)
+      : await VENUE_SERVICE.receiptDepartmentForOrder(tx, source.orderId);
   const contact = async (id: string | null) => {
     if (id === null) return null;
     try {
@@ -32,7 +32,7 @@ export async function resolveInvoiceEmailContact(
   };
   const selected = await contact(departmentId);
   if (selected !== null) return selected;
-  const fallback = await VENUE_SERVICE.receiptDefaultDepartment(tx, cfg);
+  const fallback = await VENUE_SERVICE.receiptDefaultDepartment(tx);
   return fallback === departmentId ? null : contact(fallback);
 }
 

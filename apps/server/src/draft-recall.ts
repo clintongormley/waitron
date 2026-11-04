@@ -211,16 +211,13 @@ export async function saveRecalledLine(
     const ids = new Set(rows.map((row) => row.id));
     await VENUE_SERVICE.recordLineContexts(
       tx,
-      cfg,
       line.workingOrderId,
       modifiers.added.lineContexts.filter((row) => ids.has(row.workingOrderLineId)),
       modifiers.added.offers,
     );
   }
   const reserved =
-    copies === 0
-      ? []
-      : await copyRecalledPortion(tx, cfg, line.id, owned.draftId, portion!, copies);
+    copies === 0 ? [] : await copyRecalledPortion(tx, line.id, owned.draftId, portion!, copies);
   if (quantity !== line.quantity || extrasChanged) {
     await assertBillInvariant(tx, [line.workingOrderId]);
     await refuseOrderOverSimplifiedLimit(tx, cfg, line.workingOrderId, before);
@@ -236,7 +233,6 @@ export async function saveRecalledLine(
  */
 async function copyRecalledPortion(
   tx: Transaction,
-  cfg: TradingContext,
   lineId: string,
   draftId: string,
   portion: { cohortId: string; nextOrdinal: number },
@@ -275,7 +271,7 @@ async function copyRecalledPortion(
     }
   }
   await tx.insert(workingOrderLines).values(rows);
-  await VENUE_SERVICE.copyLineContexts(tx, cfg, contexts);
+  await VENUE_SERVICE.copyLineContexts(tx, contexts);
   await registerPortions(tx, portions);
   await carryLineReductions(tx, contexts);
   await copyAllergyWorkingTicks(tx, dishes);

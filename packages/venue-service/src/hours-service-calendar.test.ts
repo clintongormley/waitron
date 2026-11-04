@@ -47,7 +47,7 @@ async function fixture() {
       ])
       .returning();
     const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-    const period = await saveMenuPeriod(tx, cfg, department!.id, {
+    const period = await saveMenuPeriod(tx, department!.id, {
       name: "Late",
       menuId: menu!.id,
       staffMenuIds: [],
@@ -58,7 +58,7 @@ async function fixture() {
         slots: day === weekday ? [{ periodId: period.id, startsAt: "22:00", endsAt: "03:00" }] : [],
       }));
     await replaceMenuWeek(tx, department!.id, week(1), at, 0);
-    const inactivePeriod = await saveMenuPeriod(tx, cfg, inactive!.id, {
+    const inactivePeriod = await saveMenuPeriod(tx, inactive!.id, {
       name: "Terrace",
       menuId: menu!.id,
       staffMenuIds: [],
@@ -132,7 +132,7 @@ describe("calendar follows department service periods", () => {
     await withTransaction(suite.db, async (tx) => {
       const seasons = await readSeasons(tx);
       const seasonId = (name: string) => seasons.find((season) => season.name === name)!.id;
-      const lunch = await saveMenuPeriod(tx, f.cfg, f.department, {
+      const lunch = await saveMenuPeriod(tx, f.department, {
         name: "Lunch",
         menuId: (await tx.select().from(catalogues))[0]!.id,
         staffMenuIds: [],

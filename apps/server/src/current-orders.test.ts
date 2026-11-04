@@ -692,10 +692,10 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
 // Where a party below changes department, it takes its orders at the venue's own table first, since
 // a zone with no department takes none; only then is its table moved by direct writes.
 describe("the reminder follows the party's department", () => {
-  async function otherDepartment(v: Venue, minutes: number | null): Promise<string> {
+  async function otherDepartment(minutes: number | null): Promise<string> {
     return inTx(async (tx) => {
-      const department = await createDepartment(tx, v.cfg, { name: `Dept ${randomUUID()}` });
-      const zone = await createServiceZone(tx, v.cfg, {
+      const department = await createDepartment(tx, { name: `Dept ${randomUUID()}` });
+      const zone = await createServiceZone(tx, {
         name: `Zone ${randomUUID()}`,
         departmentId: department.id,
       });
@@ -715,7 +715,7 @@ describe("the reminder follows the party's department", () => {
     const v = await setupVenue();
     const a = await servedUpToGroupTwo(v);
     const b = await servedUpToGroupTwo(v);
-    await moveTable(b.tableId, await otherDepartment(v, null));
+    await moveTable(b.tableId, await otherDepartment(null));
 
     expect(await floorReminder(a.tableId)).toEqual({ groupId: a.g3.id, dueAt: T(15) });
     expect((await currentOrders(a.partyId)).reminder).toEqual({ groupId: a.g3.id, dueAt: T(15) });
@@ -726,7 +726,7 @@ describe("the reminder follows the party's department", () => {
   it("reads the department of the party's first table, and the next one's once the first is left", async () => {
     const v = await setupVenue();
     const a = await servedUpToGroupTwo(v);
-    await moveTable(a.tableId, await otherDepartment(v, 5));
+    await moveTable(a.tableId, await otherDepartment(5));
     // Inserted after the party's own table but joined before it, so only `joined_at` makes it first.
     const first = await inTx(async (tx) => {
       const { id } = await createTable(tx, v.cfg, {
@@ -1758,7 +1758,7 @@ describe("where each submission's groups go (spec §3)", () => {
         orderNumber: 2,
         partyId: s.partyId,
       });
-      await VENUE_SERVICE.recordOrderContext(tx, v.cfg, bill!.id, v.zoneId);
+      await VENUE_SERVICE.recordOrderContext(tx, bill!.id, v.zoneId);
       return bill!.id;
     });
     const mia = await save(v, s.partyId, MIA, [item(v, "water")], miaBillId);

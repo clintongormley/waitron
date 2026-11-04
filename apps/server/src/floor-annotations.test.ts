@@ -78,7 +78,7 @@ describe("listTablesWithState — floor-annotator merge", () => {
     const { id: tableId } = await asApp(cfg, async (tx) =>
       createTable(tx, cfg, {
         label: "7",
-        zoneId: (await createZone(tx, cfg, { name: "Tables" })).id,
+        zoneId: (await createZone(tx, { name: "Tables" })).id,
       }),
     );
     await insertBooking(cfg, tableId, "14:00");
@@ -98,7 +98,7 @@ describe("listTablesWithState — floor-annotator merge", () => {
     const { id: tableId } = await asApp(cfg, async (tx) =>
       createTable(tx, cfg, {
         label: "8",
-        zoneId: (await createZone(tx, cfg, { name: "Tables" })).id,
+        zoneId: (await createZone(tx, { name: "Tables" })).id,
       }),
     );
     await insertBooking(cfg, tableId, "14:00");

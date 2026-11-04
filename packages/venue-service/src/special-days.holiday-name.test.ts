@@ -427,13 +427,13 @@ it("finds no special day on an empty list of days", async () => {
 });
 
 describe("the readiness list warns when a later year has no holiday of the name", () => {
-  const warnings = async (v: Venue, at: Date) =>
-    (await scoped((tx) => listVenueReadiness(tx, v.cfg, at))).filter(
+  const warnings = async (at: Date) =>
+    (await scoped((tx) => listVenueReadiness(tx, at))).filter(
       (issue) => issue.code === "special_day.holiday_missing",
     );
 
   it("names each current or next year whose list lacks the name, or that has no list", async () => {
-    const v = await venue();
+    await venue();
     const friday = await yearly("Viernes Santo", "2026-04-03");
     const christmas = await yearly("Natividad del Señor", "2026-12-25");
     const missing = (day: { id: string; name: string }, year: number) => ({
@@ -442,9 +442,9 @@ describe("the readiness list warns when a later year has no holiday of the name"
       holidayName: day.name,
       year,
     });
-    expect(await warnings(v, new Date("2026-06-01T10:00:00Z"))).toEqual([]);
-    expect(await warnings(v, new Date("2027-06-01T10:00:00Z"))).toEqual([missing(friday, 2028)]);
-    expect(await warnings(v, new Date("2028-06-01T10:00:00Z"))).toEqual([
+    expect(await warnings(new Date("2026-06-01T10:00:00Z"))).toEqual([]);
+    expect(await warnings(new Date("2027-06-01T10:00:00Z"))).toEqual([missing(friday, 2028)]);
+    expect(await warnings(new Date("2028-06-01T10:00:00Z"))).toEqual([
       missing(friday, 2028),
       missing(friday, 2029),
       missing(christmas, 2029),
@@ -452,15 +452,15 @@ describe("the readiness list warns when a later year has no holiday of the name"
   });
 
   it("does not warn for a one-off date", async () => {
-    const v = await venue();
+    await venue();
     await save({ name: "Viernes Santo", repeatsYearly: false, dates: dates(["2026-04-03"]) });
-    expect(await warnings(v, new Date("2028-06-01T10:00:00Z"))).toEqual([]);
+    expect(await warnings(new Date("2028-06-01T10:00:00Z"))).toEqual([]);
   });
 });
 
 describe("the readiness list warns when two special days come to share a date", () => {
-  const clashes = async (v: Venue, at: Date) =>
-    (await scoped((tx) => listVenueReadiness(tx, v.cfg, at))).filter(
+  const clashes = async (at: Date) =>
+    (await scoped((tx) => listVenueReadiness(tx, at))).filter(
       (issue) => issue.code === "special_day.date_shared",
     );
   const clash = (
@@ -483,8 +483,8 @@ describe("the readiness list warns when two special days come to share a date", 
     const friday = await yearly("Viernes Santo", "2026-04-03");
     const feria = await rawDay(v, "Feria", "2026-03-26", true);
     const expected = [clash("2027-03-26", feria, "Feria", friday, "Viernes Santo")];
-    expect(await clashes(v, new Date("2026-06-01T10:00:00Z"))).toEqual(expected);
-    expect(await clashes(v, new Date("2027-06-01T10:00:00Z"))).toEqual(expected);
+    expect(await clashes(new Date("2026-06-01T10:00:00Z"))).toEqual(expected);
+    expect(await clashes(new Date("2027-06-01T10:00:00Z"))).toEqual(expected);
     expect(await standing(["2027-03-26"])).toEqual({ "2027-03-26": feria.id });
   });
 
@@ -492,7 +492,7 @@ describe("the readiness list warns when two special days come to share a date", 
     const v = await venue();
     const friday = await yearly("Viernes Santo", "2026-04-03");
     const dinner = await rawDay(v, "Company dinner", "2027-03-26");
-    expect(await clashes(v, new Date("2026-06-01T10:00:00Z"))).toEqual([
+    expect(await clashes(new Date("2026-06-01T10:00:00Z"))).toEqual([
       clash("2027-03-26", dinner, "Company dinner", friday, "Viernes Santo"),
     ]);
   });
@@ -501,21 +501,21 @@ describe("the readiness list warns when two special days come to share a date", 
     const v = await venue();
     await yearly("Viernes Santo", "2026-04-03");
     await rawDay(v, "Company dinner", "2027-03-27");
-    expect(await clashes(v, new Date("2026-06-01T10:00:00Z"))).toEqual([]);
+    expect(await clashes(new Date("2026-06-01T10:00:00Z"))).toEqual([]);
   });
 
   it("says nothing of a clash outside the current and next year", async () => {
     const v = await venue();
     await yearly("Viernes Santo", "2026-04-03");
     await rawDay(v, "Feria", "2026-03-26", true);
-    expect(await clashes(v, new Date("2028-06-01T10:00:00Z"))).toEqual([]);
+    expect(await clashes(new Date("2028-06-01T10:00:00Z"))).toEqual([]);
   });
 
   it("gives two holiday-following dates that meet to the earlier stored date, the holiday's first", async () => {
     const v = await venue();
     const friday = await yearly("Viernes Santo", "2026-04-03");
     const later = await rawDay(v, "Vigilia", "2026-04-04", true, "Viernes Santo");
-    expect(await clashes(v, new Date("2026-06-01T10:00:00Z"))).toEqual([
+    expect(await clashes(new Date("2026-06-01T10:00:00Z"))).toEqual([
       clash("2027-03-26", friday, "Viernes Santo", later, "Vigilia"),
     ]);
   });
@@ -524,7 +524,7 @@ describe("the readiness list warns when two special days come to share a date", 
     const w = await venue();
     const first = await yearly("Viernes Santo", "2026-04-03");
     const earlier = await rawDay(w, "Vigilia", "2026-04-02", true, "Viernes Santo");
-    expect(await clashes(w, new Date("2026-06-01T10:00:00Z"))).toEqual([
+    expect(await clashes(new Date("2026-06-01T10:00:00Z"))).toEqual([
       clash("2027-03-26", earlier, "Vigilia", first, "Viernes Santo"),
     ]);
   });

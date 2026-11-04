@@ -148,7 +148,7 @@ describe("charged cancellation read projections", () => {
       .select()
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, order.billId));
-    const lines = await inTx(venue, (tx) => readTabLines(tx, venue.cfg, order.billId));
+    const lines = await inTx(venue, (tx) => readTabLines(tx, order.billId));
     expect(lines).toMatchObject([
       {
         id: order.parent.id,
@@ -186,7 +186,7 @@ describe("charged cancellation read projections", () => {
     const row = current.groups.flatMap((group) => group.rows)[0]!;
     expect(row).not.toHaveProperty("cancelledQuantity");
     expect(row.extras[0]).not.toHaveProperty("cancelledQuantity");
-    const lines = await inTx(venue, (tx) => readTabLines(tx, venue.cfg, order.billId));
+    const lines = await inTx(venue, (tx) => readTabLines(tx, order.billId));
     for (const line of lines) expect(line).not.toHaveProperty("cancelledQuantity");
     expect((await inTx(venue, (tx) => listOrderGroups(tx, order.partyId))).groups).toMatchObject([
       { summary: "3 × Pizza", lineIds: [order.parent.id] },

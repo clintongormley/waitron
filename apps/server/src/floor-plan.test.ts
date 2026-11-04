@@ -1463,8 +1463,8 @@ describe("short names", () => {
 
   it("a short-name change alone moves the revision of the zone's other layouts", async () => {
     const d = await inTx(v, async (tx) => {
-      const dept = await createDepartment(tx, v.cfg, { name: fresh("Dept"), orderStart: "table" });
-      const inside = await createServiceZone(tx, v.cfg, {
+      const dept = await createDepartment(tx, { name: fresh("Dept"), orderStart: "table" });
+      const inside = await createServiceZone(tx, {
         name: fresh("Inside"),
         departmentId: dept.id,
       });
@@ -1474,7 +1474,7 @@ describe("short names", () => {
           .insert(floorPlanSets)
           .values({ locationId: v.cfg.locationId })
           .returning({ id: floorPlanSets.id });
-        await linkFloorPlanSet(tx, v.cfg, { setId: row!.id, departmentId: dept.id, name });
+        await linkFloorPlanSet(tx, { setId: row!.id, departmentId: dept.id, name });
         setIds.push(row!.id);
       }
       return { zoneId: inside.id, standard: setIds[0]!, dinner: setIds[1]! };

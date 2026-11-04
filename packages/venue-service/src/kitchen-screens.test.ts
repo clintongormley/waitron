@@ -112,19 +112,19 @@ async function seedVenueWithStations() {
   const cold = await seedStation(locationId, "Cold");
   const pastry = await seedStation(locationId, "Pastry");
   const zones = await scoped(async (tx) => {
-    const restaurant = await createDepartment(tx, cfg, {
+    const restaurant = await createDepartment(tx, {
       name: "Restaurant",
       orderStart: "table",
     });
-    const dining = await createServiceZone(tx, cfg, {
+    const dining = await createServiceZone(tx, {
       name: "Dining room",
       departmentId: restaurant.id,
     });
-    const terrace = await createServiceZone(tx, cfg, {
+    const terrace = await createServiceZone(tx, {
       name: "Terrace",
       departmentId: restaurant.id,
     });
-    const counter = await createServiceZone(tx, cfg, {
+    const counter = await createServiceZone(tx, {
       name: "Counter",
       departmentId: restaurant.id,
     });

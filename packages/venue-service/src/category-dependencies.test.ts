@@ -41,7 +41,6 @@ async function venue() {
 
 it("deleting a category removes its own and its subtree's category cells and keeps product cells", async () => {
   const { locationId } = await venue();
-  const cfg = { locationId };
   const { negroniId, barId, foodId } = await withTransaction(suite.db, async (tx) => {
     const [kitchen, bar] = (
       await tx
@@ -113,7 +112,7 @@ it("deleting a category removes its own and its subtree's category cells and kee
   ).toEqual([{ categoryId: foodId, active: false }]);
   await expect(
     withTransaction(suite.db, (tx) =>
-      resolveMakers(tx, cfg, null, [negroniId], new Date("2026-10-02T18:30:00Z")),
+      resolveMakers(tx, null, [negroniId], new Date("2026-10-02T18:30:00Z")),
     ),
   ).resolves.toEqual(
     new Map([[negroniId, { kind: "made", route: { kind: "station", stationId: barId } }]]),

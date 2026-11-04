@@ -2981,7 +2981,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
 
   it("rolls back a partial automatic document on a delivery refusal while committing the invoice", async () => {
     const { cfg, saleId, ticket } = await issued("auto", true, true, async (tx, value) => {
-      await VENUE_SERVICE.recordSaleReceiptHeader(tx, value.cfg, value.saleId, null);
+      await VENUE_SERVICE.recordSaleReceiptHeader(tx, value.saleId, null);
       await tx.execute(
         sql`create trigger test_receipt_delivery_refusal before insert on invoice_deliveries begin select raise(abort, 'optional receipt refusal'); end`,
       );
@@ -3723,7 +3723,7 @@ describe("department receipt presentation on thermal jobs", () => {
     });
     await sell();
     const other = await withTransaction(suite.db, (tx) =>
-      createDepartment(tx, cfg, { name: "Second", tradingName: "Second brand" }),
+      createDepartment(tx, { name: "Second", tradingName: "Second brand" }),
     );
     await storeDepartmentReceipt(other.id, {
       headerSubtitle: { "es-ES": "Second subtitle" },

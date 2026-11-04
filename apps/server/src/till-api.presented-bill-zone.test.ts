@@ -59,11 +59,11 @@ useVenueDb({
 beforeAll(async () => {
   terrace = venue.zoneId;
   ({ indoor, indoorDepartment } = await inTx(venue, async (tx) => {
-    const department = await createDepartment(tx, venue.cfg, {
+    const department = await createDepartment(tx, {
       name: "Interior",
       orderStart: "table",
     });
-    const zone = await createServiceZone(tx, venue.cfg, {
+    const zone = await createServiceZone(tx, {
       name: "Interior",
       departmentId: department.id,
     });
@@ -161,9 +161,7 @@ async function contextOf(billId: string) {
 }
 
 async function indoorContext() {
-  const context = await inTx(venue, (tx) =>
-    VENUE_SERVICE.resolveZoneContext(tx, venue.cfg, indoor),
-  );
+  const context = await inTx(venue, (tx) => VENUE_SERVICE.resolveZoneContext(tx, indoor));
   return { zoneId: indoor, departmentId: indoorDepartment, serviceMode: context.serviceMode };
 }
 
@@ -255,7 +253,7 @@ describe("a presented bill moving with its party", () => {
     const control = await presentedSplit("Tarta", "Pulpo");
     const priced = () =>
       inTx(venue, async (tx) =>
-        issuancePass(tx, venue.cfg, presented, await priceStoredOrderForIssuance(tx, presented)),
+        issuancePass(tx, presented, await priceStoredOrderForIssuance(tx, presented)),
       );
     const before = await priced();
 

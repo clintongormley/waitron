@@ -5,7 +5,6 @@ import { AppError, businessDayAt, businessDayBounds, rawCentsToDecimal } from "@
 import type { BillsQuery, BillRow, FindBillPage } from "./find-bill-types.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readPartyTables } from "./orders-list.js";
-import type { TradingContext } from "./trading-context.js";
 import type { OrderZoneCondition } from "./zone-access.js";
 import "./errors.js";
 
@@ -31,8 +30,8 @@ type RawBill = {
   collection_status: BillRow["collectionStatus"];
 };
 
-export function findBillsRelation(cfg: TradingContext, inZones?: OrderZoneCondition): SQL {
-  const zone = VENUE_SERVICE.orderZoneIdSql(cfg, sql`wo.id`);
+export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
+  const zone = VENUE_SERVICE.orderZoneIdSql(sql`wo.id`);
   return sql`with facts as (
     select wo.id, wo.opened_at, wo.order_number, wo.label, wo.party_id,
       wo.status as order_status, p.name as party_name, p.table_names as party_table_names,
@@ -173,11 +172,10 @@ async function projectBills(tx: Transaction, raw: RawBill[]): Promise<BillRow[]>
 
 export async function readFindBills(
   tx: Transaction,
-  cfg: TradingContext,
   query: BillsQuery,
   inZones?: OrderZoneCondition,
 ): Promise<FindBillPage<BillRow>> {
-  const relation = findBillsRelation(cfg, inZones);
+  const relation = findBillsRelation(inZones);
   const ranked = sql`${relation}, ranked as materialized (
     select r.*, ${query.q === "" ? sql`0` : sql`waitron_search_rank(${query.q}, r.label, r.party_name, r.table_text, cast(r.order_number as text), r.invoice_number)`} as search_rank from bills r
   )`;
@@ -200,12 +198,11 @@ export async function readFindBills(
 
 export async function readFindBill(
   tx: Transaction,
-  cfg: TradingContext,
   workingOrderId: string,
   inZones?: OrderZoneCondition,
 ): Promise<BillRow> {
   const { rows } = await tx.execute<RawBill>(
-    sql`${findBillsRelation(cfg, inZones)} select ${selection} from bills r where r.id = ${workingOrderId} limit 1`,
+    sql`${findBillsRelation(inZones)} select ${selection} from bills r where r.id = ${workingOrderId} limit 1`,
   );
   if (rows.length === 0) throw new AppError("working_order.not_found", { workingOrderId });
   return (await projectBills(tx, rows))[0]!;

@@ -48,8 +48,8 @@ async function switchOn(departmentId: string): Promise<void> {
 
 async function departmentWithTable(cfg: { locationId: LocationId }, name: string) {
   return scoped(async (tx) => {
-    const department = await createDepartment(tx, cfg, { name, orderStart: "table" });
-    const zone = await createServiceZone(tx, cfg, { name, departmentId: department.id });
+    const department = await createDepartment(tx, { name, orderStart: "table" });
+    const zone = await createServiceZone(tx, { name, departmentId: department.id });
     const [table] = await tx
       .insert(diningTables)
       .values({ locationId: cfg.locationId, zoneId: zone.id, label: randomUUID() })

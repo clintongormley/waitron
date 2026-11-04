@@ -79,7 +79,6 @@ interface TransferRow {
  */
 async function withCounts<T extends TransferRow>(
   tx: Transaction,
-  deps: TillApiDeps,
   rows: readonly T[],
   viewer: { departmentId: string; profileId: string } | "receiver",
 ): Promise<(T & { counts?: OrderStateCounts })[]> {
@@ -89,7 +88,6 @@ async function withCounts<T extends TransferRow>(
     const scope = await readZoneScope(tx, viewer.profileId);
     const zones = await VENUE_SERVICE.findOrderZones(
       tx,
-      deps.cfg,
       rows.map((row) => row.tabId),
     );
     visible = (row) =>
@@ -198,8 +196,8 @@ export function mountDepartmentTransferApi(
       const requests = await withTransaction(deps.db, async (tx) => {
         const receiver = await monitoringActor(tx, session);
         if (receiver === null) return null;
-        const rows = await VENUE_SERVICE.listIncomingDepartmentTransfers(tx, deps.cfg, receiver);
-        return rows === null ? null : withCounts(tx, deps, rows, "receiver");
+        const rows = await VENUE_SERVICE.listIncomingDepartmentTransfers(tx, receiver);
+        return rows === null ? null : withCounts(tx, rows, "receiver");
       });
       return c.json(
         requests === null
@@ -215,12 +213,12 @@ export function mountDepartmentTransferApi(
       const requests = await withTransaction(deps.db, async (tx) => {
         const sender = await monitoringActor(tx, session);
         if (sender === null) return [];
-        const rows = await VENUE_SERVICE.listSentDepartmentTransfers(tx, deps.cfg, tabId, sender);
-        const context = await VENUE_SERVICE.getOrderContext(tx, deps.cfg, tabId);
+        const rows = await VENUE_SERVICE.listSentDepartmentTransfers(tx, tabId, sender);
+        const context = await VENUE_SERVICE.getOrderContext(tx, tabId);
         if (context.departmentId === sender.departmentId)
-          await checkZones(tx, deps.cfg, sender, [{ orderId: tabId }]);
+          await checkZones(tx, sender, [{ orderId: tabId }]);
         // Resolution remains visible to the source after responsibility moves; `withCounts` then sends no counts.
-        return withCounts(tx, deps, rows, sender);
+        return withCounts(tx, rows, sender);
       });
       return c.json({ requests });
     }),
@@ -231,8 +229,8 @@ export function mountDepartmentTransferApi(
       const requests = await withTransaction(deps.db, async (tx) => {
         const sender = await monitoringActor(tx, session);
         if (sender === null) return [];
-        const rows = await VENUE_SERVICE.listDepartmentSentTransfers(tx, deps.cfg, sender);
-        return withCounts(tx, deps, rows, sender);
+        const rows = await VENUE_SERVICE.listDepartmentSentTransfers(tx, sender);
+        return withCounts(tx, rows, sender);
       });
       return c.json({ requests });
     }),
@@ -243,12 +241,7 @@ export function mountDepartmentTransferApi(
       const requestId = uuid(c.req.param("id"), "requestId");
       const detail = await withTransaction(deps.db, async (tx) => {
         const receiver = await actor(tx, session);
-        const request = await VENUE_SERVICE.readIncomingDepartmentTransfer(
-          tx,
-          deps.cfg,
-          requestId,
-          receiver,
-        );
+        const request = await VENUE_SERVICE.readIncomingDepartmentTransfer(tx, requestId, receiver);
         const [tab] = await tx
           .select({
             id: workingOrders.id,
@@ -316,8 +309,8 @@ export function mountDepartmentTransferApi(
       const destinationId = uuid(body.destinationDepartmentId, "destinationDepartmentId");
       const result = await withTransaction(deps.db, async (tx) => {
         const sender = await actor(tx, session);
-        await checkZones(tx, deps.cfg, sender, [{ orderId: tabId }]);
-        return VENUE_SERVICE.requestDepartmentTransfer(tx, deps.cfg, tabId, destinationId, sender);
+        await checkZones(tx, sender, [{ orderId: tabId }]);
+        return VENUE_SERVICE.requestDepartmentTransfer(tx, tabId, destinationId, sender);
       });
       return c.json(result);
     }),
@@ -328,9 +321,9 @@ export function mountDepartmentTransferApi(
       const requestId = uuid(c.req.param("id"), "requestId");
       const result = await withTransaction(deps.db, async (tx) => {
         const sender = await actor(tx, session);
-        const request = await VENUE_SERVICE.readDepartmentTransfer(tx, deps.cfg, requestId, sender);
-        await checkZones(tx, deps.cfg, sender, [{ orderId: request.tabId }]);
-        return VENUE_SERVICE.withdrawDepartmentTransfer(tx, deps.cfg, requestId, sender);
+        const request = await VENUE_SERVICE.readDepartmentTransfer(tx, requestId, sender);
+        await checkZones(tx, sender, [{ orderId: request.tabId }]);
+        return VENUE_SERVICE.withdrawDepartmentTransfer(tx, requestId, sender);
       });
       return c.json(result);
     }),
@@ -346,8 +339,8 @@ export function mountDepartmentTransferApi(
         body.tableId === undefined || body.tableId === null ? null : uuid(body.tableId, "tableId");
       const result = await withTransaction(deps.db, async (tx) => {
         const receiver = await actor(tx, session);
-        await checkZones(tx, deps.cfg, receiver, [{ zoneId }]);
-        return VENUE_SERVICE.acceptDepartmentTransfer(tx, deps.cfg, requestId, receiver, {
+        await checkZones(tx, receiver, [{ zoneId }]);
+        return VENUE_SERVICE.acceptDepartmentTransfer(tx, requestId, receiver, {
           tabRevision,
           zoneId,
           tableId,
@@ -366,7 +359,7 @@ export function mountDepartmentTransferApi(
       const reason = body.reason;
       const result = await withTransaction(deps.db, async (tx) => {
         const receiver = await actor(tx, session);
-        return VENUE_SERVICE.declineDepartmentTransfer(tx, deps.cfg, requestId, receiver, reason);
+        return VENUE_SERVICE.declineDepartmentTransfer(tx, requestId, receiver, reason);
       });
       return c.json(result);
     }),

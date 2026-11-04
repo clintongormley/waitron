@@ -980,7 +980,7 @@ async function fileImmediateSale(
   });
   const { priced, clock } = issueMoment(
     await prepareIssueClock(tx, cfg, deps.clock),
-    await issuancePass(tx, cfg, workingOrderId, order),
+    await issuancePass(tx, workingOrderId, order),
     deps.backend,
   );
   // Before the owes-nothing check, so a malformed cash amount is refused whatever is owed.
@@ -1027,7 +1027,6 @@ async function fileImmediateSale(
   await linkSalePortions(tx, saleId, order.identities);
   await recordSaleReceiptFacts(
     tx,
-    cfg,
     { saleId, workingOrderId, counterparty: selected.sale.counterparty },
     guestCount,
   );
@@ -1328,7 +1327,7 @@ async function payIntegrated(
     }
     // P3 files THESE gross lines, whatever changes while the reader runs, at the rates of the day it
     // issues the invoice.
-    const gross = await issuancePass(tx, cfg, req.id, order);
+    const gross = await issuancePass(tx, req.id, order);
     // An open order's lines could still change under the reader, so it is marked in flight (plan
     // D22). A placed order's priced columns are already frozen, and
     // `working_orders_enforce_transition` refuses its `payment_attempt_at` being set.
@@ -1662,7 +1661,6 @@ async function finalizeCapture(
         await linkSalePortions(tx, saleId, identities);
         await recordSaleReceiptFacts(
           tx,
-          cfg,
           { saleId, workingOrderId: req.id, counterparty: selected.sale.counterparty },
           req.guestCount,
         );
@@ -1779,7 +1777,7 @@ async function finalizeRecovery(
       });
       const { priced, clock } = issueMoment(
         await prepareIssueClock(tx, cfg, deps.clock),
-        await issuancePass(tx, cfg, req.id, order),
+        await issuancePass(tx, req.id, order),
         deps.backend,
       );
       const capturedAmount = decimal(captured.amount);
@@ -1838,7 +1836,6 @@ async function finalizeRecovery(
       await linkSalePortions(tx, saleId, order.identities);
       await recordSaleReceiptFacts(
         tx,
-        cfg,
         { saleId, workingOrderId: req.id, counterparty: selected.sale.counterparty },
         req.guestCount,
       );
@@ -1922,7 +1919,7 @@ export async function fireDishesAtPayment(
   // The order's party as the caller already read it in `tx`; omitted, it is read here.
   partyId?: string | null,
 ): Promise<DishesNotSent | null> {
-  const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, workingOrderId);
+  const serviceContext = await VENUE_SERVICE.findOrderContext(tx, workingOrderId);
   if ((serviceContext?.serviceMode ?? "prepay") !== "prepay") {
     if (!paysAfterSending(serviceContext?.serviceMode)) return null;
     const party =

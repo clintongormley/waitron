@@ -99,7 +99,6 @@ async function done(
   const profileId = deviceProfileId ?? (await profile(v));
   return inTx(v, (tx) =>
     markServiceStepDone(tx, {
-      cfg: v.cfg,
       deviceProfileId: profileId,
       partyId,
       stepId,
@@ -143,8 +142,8 @@ async function seatedAtMesa1(v: PartyVenue) {
 
 async function terrace(v: PartyVenue) {
   return inTx(v, async (tx) => {
-    const department = await createDepartment(tx, v.cfg, { name: "Terrace service" });
-    const zone = await createServiceZone(tx, v.cfg, {
+    const department = await createDepartment(tx, { name: "Terrace service" });
+    const zone = await createServiceZone(tx, {
       name: "Terrace",
       departmentId: department.id,
     });

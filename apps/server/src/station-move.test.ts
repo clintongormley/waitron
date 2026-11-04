@@ -325,7 +325,7 @@ describe("release", () => {
         .set({ status: "settled", settledAt: at.toISOString() })
         .where(eq(workingOrders.id, tabId));
       expect((await VENUE_SERVICE.stationStates(tx, at)).get(bar)?.open).toBe(false);
-      const resolver = await VENUE_SERVICE.routingAt(tx, venue.cfg, at);
+      const resolver = await VENUE_SERVICE.routingAt(tx, at);
       expect(await resolver.makers(null, [venue.productId("Burger")])).toEqual(
         new Map([
           [
@@ -2708,7 +2708,7 @@ describe("moveDishesToStation", () => {
         stationId: bar,
         firedAt: expect.any(String),
       });
-      const tabLines = await inTx(venue, (tx) => readTabLines(tx, venue.cfg, tabId));
+      const tabLines = await inTx(venue, (tx) => readTabLines(tx, tabId));
       expect(tabLines.find((line) => line.id === drink!.workingOrderLineId)).toMatchObject({
         stationId: bar,
         movable: false,

@@ -191,7 +191,7 @@ export async function splitDraft(
       await requireBillOfParty(tx, partyId, billId);
       await refusePaymentInFlight(tx, [billId]);
       await requireBillEditor(tx, billId, input.operatorId, expectedEdit);
-      const lines = (await storedLines(tx, cfg, [id])).map(({ line }) => line);
+      const lines = (await storedLines(tx, [id])).map(({ line }) => line);
       const selected = lines.filter((line) => lineIds.includes(line.id));
       if (selected.length !== lineIds.length) throw invalid("lineIds");
       const revision = await checkAndBumpParty(tx, partyId, input.expectedPartyRevision, "open");
@@ -390,7 +390,7 @@ export async function appendRecalledLine(
       .update(orderDrafts)
       .set({ revision: own.revision + 1, updatedAt: nowIso() })
       .where(eq(orderDrafts.id, draftId));
-  const held = await storedLines(tx, cfg, [draftId]);
+  const held = await storedLines(tx, [draftId]);
   const position = held.reduce((maximum, line) => Math.max(maximum, line.position), 0) + 1;
   const place =
     joinGroupId === null
@@ -486,7 +486,7 @@ export async function saveDraft(
   if (lines.length === 0 && edit.draftId === null) return { draft: null, edit };
   let previous: DraftLine[] = [];
   const draft = edit.draftId === null ? null : await requireDraft(tx, edit.draftId, partyId);
-  if (draft !== null) previous = (await storedLines(tx, cfg, [draft.id])).map(({ line }) => line);
+  if (draft !== null) previous = (await storedLines(tx, [draft.id])).map(({ line }) => line);
   const owned = new Map(previous.map((line) => [line.id, line]));
   const named = new Set<string>();
   for (const [index, line] of lines.entries()) {
@@ -546,7 +546,7 @@ export async function saveDraft(
   if (choiceOffers.length > 0) {
     const zoneId = await partyZone(tx, cfg, partyId);
     if (zoneId !== null)
-      snapshot = await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId, {
+      snapshot = await VENUE_SERVICE.listZoneOffers(tx, zoneId, {
         menuItemIds: [...new Set([...choiceOffers, ...freshLines.map((line) => line.menuItemId)])],
         withDefault: false,
       });
@@ -762,7 +762,6 @@ export async function takeOverDraft(
 
 export async function moveDraftsToBill(
   tx: Transaction,
-  cfg: TradingContext,
   fromBillId: string,
   intoBillId: string,
   operatorId: string,
@@ -800,7 +799,6 @@ export async function moveDraftsToBill(
         .where(eq(orderDrafts.id, from.draftId));
       await addDiscardedDraft(
         tx,
-        cfg,
         from.draftId,
         { id: into.draftId, revision: into.draftRevision! },
         operatorId,
@@ -1123,7 +1121,7 @@ export async function submitDraft(
       await refusePaymentInFlight(tx, [billId]);
       const edit = await requireBillEditor(tx, billId, operatorId, expectedEdit);
       await checkAndBumpParty(tx, partyId, input.expectedPartyRevision, "open");
-      const lines = (await storedLines(tx, cfg, [id])).map(({ line }) => line);
+      const lines = (await storedLines(tx, [id])).map(({ line }) => line);
       const known = new Set(lines.map((line) => line.id));
       const named = new Set<string>();
       for (const lineId of groups.flatMap((group) => group.lineIds)) {
@@ -1537,7 +1535,6 @@ async function discardDrafts(tx: Transaction, draftIds: readonly string[]): Prom
  */
 async function addDiscardedDraft(
   tx: Transaction,
-  cfg: TradingContext,
   fromDraftId: string,
   into: { id: string; revision: number },
   ownerId: string,
@@ -1552,7 +1549,7 @@ async function addDiscardedDraft(
     actorId,
     detail: { intoDraftId: into.id },
   });
-  const stored = await storedLines(tx, cfg, [into.id, fromDraftId]);
+  const stored = await storedLines(tx, [into.id, fromDraftId]);
   const combined = absorbLines(
     stored.filter(({ draftId }) => draftId === into.id).map(({ line }) => line),
     stored.filter(({ draftId }) => draftId === fromDraftId).map(({ line }) => line),
@@ -1616,7 +1613,6 @@ function isFresh<T extends DraftLine | DraftLineInput>(
 
 async function storedLines(
   tx: Transaction,
-  cfg: TradingContext,
   draftIds: readonly string[],
 ): Promise<{ draftId: string; position: number; line: DraftLine }[]> {
   const rows = await tx
@@ -1682,7 +1678,7 @@ async function storedLines(
   const recalled: { draftId: string; position: number; line: RecalledDraftLine }[] = [];
   for (const billId of new Set(sources.map((row) => row.billId))) {
     if (billId === null) throw invalid("billId");
-    const bill = await readTabLines(tx, cfg, billId);
+    const bill = await readTabLines(tx, billId);
     const amounts = await tx
       .select({ id: workingOrderLines.id, total: workingOrderLines.lineTotal })
       .from(workingOrderLines)
@@ -1843,7 +1839,6 @@ async function readOpenDrafts(
   if (drafts.length === 0) return [];
   const lines = await storedLines(
     tx,
-    cfg,
     drafts.map((draft) => draft.id),
   );
   const offers =
@@ -1921,7 +1916,7 @@ async function offersFor(
   if (menuItemIds.length === 0) return new Map();
   const zoneId = await partyZone(tx, cfg, partyId);
   if (zoneId === null) return new Map();
-  const { offers } = await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId, {
+  const { offers } = await VENUE_SERVICE.listZoneOffers(tx, zoneId, {
     menuItemIds: [...new Set(menuItemIds)],
     withDefault: false,
   });

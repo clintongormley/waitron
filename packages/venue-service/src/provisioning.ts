@@ -22,7 +22,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary:
       "Create the default department with its starter service steps, counter zone and four seasons, and give each profile that takes orders that department",
-    async run(tx, node) {
+    async run(tx) {
       const staffLanguage = await readStarterStaffLanguage(tx);
       const venue = await readVenue(tx);
       let venueId: string | undefined;
@@ -143,7 +143,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
       const menuId = venue.defaultCatalogueId;
       if (menuId !== null) {
         const counterDepartmentId = policy[0]!.departmentId;
-        await placeOpenPeriod(tx, node, counterDepartmentId, menuId, staffLanguage);
+        await placeOpenPeriod(tx, counterDepartmentId, menuId, staffLanguage);
       }
       // A profile that takes orders and has no scope yet orders in the counter's department,
       // starting there. A kitchen display takes no orders, so it gets none. A scope already saved

@@ -93,20 +93,20 @@ async function seedVenueWithZones(): Promise<Venue> {
   const locationId = await seedLocation(`Venue ${randomUUID()}`);
   const cfg = { locationId };
   const ids = await scoped(async (tx) => {
-    const restaurant = await createDepartment(tx, cfg, {
+    const restaurant = await createDepartment(tx, {
       name: "Restaurant",
       orderStart: "table",
     });
-    const deli = await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" });
-    const dining = await createServiceZone(tx, cfg, {
+    const deli = await createDepartment(tx, { name: "Deli", orderStart: "counter" });
+    const dining = await createServiceZone(tx, {
       name: "Dining room",
       departmentId: restaurant.id,
     });
-    const terrace = await createServiceZone(tx, cfg, {
+    const terrace = await createServiceZone(tx, {
       name: "Terrace",
       departmentId: restaurant.id,
     });
-    const counter = await createServiceZone(tx, cfg, { name: "Counter", departmentId: deli.id });
+    const counter = await createServiceZone(tx, { name: "Counter", departmentId: deli.id });
     await tx.update(floorZones).set({ displayOrder: 2 }).where(eq(floorZones.id, dining.id));
     await tx.update(floorZones).set({ displayOrder: 1 }).where(eq(floorZones.id, terrace.id));
     return {
@@ -347,7 +347,7 @@ describe("a profile's service access", () => {
     const venue = await seedVenueWithZones();
     await save(venue, restaurantScope(venue));
     const patio = await scoped(async (tx) => {
-      const zone = await createServiceZone(tx, venue.cfg, {
+      const zone = await createServiceZone(tx, {
         name: "Patio",
         departmentId: venue.restaurant,
       });
@@ -379,16 +379,14 @@ describe("a profile's service access", () => {
   it("stops offering an allowed zone once it is moved to another department", async () => {
     const other = await seedVenueWithZones();
     await save(other, restaurantScope(other));
-    await scoped((tx) =>
-      configureZone(tx, other.cfg, { zoneId: other.terrace, departmentId: other.deli }),
-    );
+    await scoped((tx) => configureZone(tx, { zoneId: other.terrace, departmentId: other.deli }));
     await expect(read(other)).resolves.toMatchObject({ allowedZoneIds: [other.dining] });
   });
 
   it("starts in the first allowed zone by position once the starting zone is deactivated", async () => {
     const venue = await seedVenueWithZones();
     await scoped(async (tx) => {
-      const zone = await createServiceZone(tx, venue.cfg, {
+      const zone = await createServiceZone(tx, {
         name: "Patio",
         departmentId: venue.restaurant,
       });
@@ -725,9 +723,7 @@ describe("a zone checked against a profile", () => {
   it("refuses a zone moved to another department or deactivated after the profile was saved", async () => {
     const venue = await seedVenueWithZones();
     await save(venue, restaurantScope(venue));
-    await scoped((tx) =>
-      configureZone(tx, venue.cfg, { zoneId: venue.terrace, departmentId: venue.deli }),
-    );
+    await scoped((tx) => configureZone(tx, { zoneId: venue.terrace, departmentId: venue.deli }));
     await expect(check(venue, venue.terrace)).resolves.toEqual(refused(venue.terrace));
     await scoped(async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${venue.dining}`),
@@ -759,7 +755,7 @@ describe("a new order's zone for a profile", () => {
   const start = (venue: Venue, input: { zoneId?: string } = {}) =>
     outcome(
       scoped(async (tx) => {
-        const context = await resolveNewOrderZone(tx, venue.cfg, {
+        const context = await resolveNewOrderZone(tx, {
           ...input,
           profileId: venue.profile,
         });

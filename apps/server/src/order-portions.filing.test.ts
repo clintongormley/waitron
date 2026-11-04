@@ -1295,7 +1295,7 @@ describe("A803 portions: raising a dish", () => {
       await raise(bound.billId, 1, "3");
       expect(one).not.toHaveBeenCalled();
       expect(many).toHaveBeenCalledTimes(1);
-      expect(many.mock.calls[0]![2]).toHaveLength(4);
+      expect(many.mock.calls[0]![1]).toHaveLength(4);
     } finally {
       one.mockRestore();
       many.mockRestore();

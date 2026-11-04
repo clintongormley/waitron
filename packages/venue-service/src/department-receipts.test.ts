@@ -130,7 +130,7 @@ describe("department receipt storage", () => {
     ).toEqual({
       email: "old@example.com",
     });
-    expect(await scoped((tx) => listDepartments(tx, f.cfg))).toEqual([]);
+    expect(await scoped((tx) => listDepartments(tx))).toEqual([]);
     expect(
       await suite.db.select().from(departments).where(eq(departments.id, f.id)),
     ).toContainEqual(expect.objectContaining({ id: f.id, isDefault: true, active: false }));
@@ -433,7 +433,7 @@ describe("department receipt storage", () => {
 
 describe("receipt department lookups", () => {
   it("never substitutes the designated default for a missing or null sale header", async () => {
-    const f = await fixture(false);
+    await fixture(false);
     const nodeId = await seedNode(suite.db);
     const [series] = await suite.db.insert(invoiceSeries).values({ nodeId, code: "F" }).returning();
     const [sale] = await suite.db
@@ -453,7 +453,7 @@ describe("receipt department lookups", () => {
         fiscalState: "not_applicable",
       })
       .returning();
-    expect(await scoped((tx) => receipts.receiptDepartmentForSale(tx, f.cfg, sale!.id))).toBeNull();
+    expect(await scoped((tx) => receipts.receiptDepartmentForSale(tx, sale!.id))).toBeNull();
     await suite.db
       .insert(saleReceiptHeaders)
       .values({ saleId: sale!.id, departmentId: null, tradingName: "", printTradingName: false });
@@ -470,14 +470,14 @@ describe("receipt department lookups", () => {
     });
     try {
       expect(
-        await scoped((tx) => receipts.VENUE_SERVICE.receiptDepartmentForSale(tx, f.cfg, sale!.id)),
+        await scoped((tx) => receipts.VENUE_SERVICE.receiptDepartmentForSale(tx, sale!.id)),
       ).toBeNull();
       expect(selects).toHaveLength(1);
       expect(selects[0]).not.toContain("is_default");
     } finally {
       spy.mockRestore();
     }
-    expect(await scoped((tx) => receipts.receiptDefaultDepartment(tx, f.cfg))).toBeNull();
+    expect(await scoped((tx) => receipts.receiptDefaultDepartment(tx))).toBeNull();
   });
   it("reads the recorded disabled sale department", async () => {
     const f = await fixture(false);
@@ -507,7 +507,7 @@ describe("receipt department lookups", () => {
       printTradingName: true,
     });
     expect(
-      await scoped((tx) => receipts.VENUE_SERVICE.receiptDepartmentForSale(tx, f.cfg, sale!.id)),
+      await scoped((tx) => receipts.VENUE_SERVICE.receiptDepartmentForSale(tx, sale!.id)),
     ).toBe(f.id);
   });
   it("reads authoritative order context without borrowing a default", async () => {
@@ -518,9 +518,7 @@ describe("receipt department lookups", () => {
       source: "readiness_test",
       orderNumber: 1,
     });
-    expect(
-      await scoped((tx) => receipts.receiptDepartmentForOrder(tx, f.cfg, order.id)),
-    ).toBeNull();
+    expect(await scoped((tx) => receipts.receiptDepartmentForOrder(tx, order.id))).toBeNull();
     const [zone] = await suite.db
       .insert(floorZones)
       .values({ locationId: f.cfg.locationId, name: "Bar" })
@@ -533,23 +531,12 @@ describe("receipt department lookups", () => {
       serviceMode: "prepay",
     });
     expect(
-      await scoped((tx) => receipts.VENUE_SERVICE.receiptDepartmentForOrder(tx, f.cfg, order.id)),
+      await scoped((tx) => receipts.VENUE_SERVICE.receiptDepartmentForOrder(tx, order.id)),
     ).toBe(f.id);
   });
   it("ignores a deleted designated default", async () => {
-    const f = await fixture(false);
-    expect(
-      await scoped((tx) => receipts.VENUE_SERVICE.receiptDefaultDepartment(tx, f.cfg)),
-    ).toBeNull();
-  });
-  // A1301: deleted with cfg in S18
-  it("returns the venue's default department whatever location the scope names", async () => {
-    const f = await fixture();
-    expect(
-      await scoped((tx) =>
-        receipts.receiptDefaultDepartment(tx, { locationId: locationId(randomUUID()) }),
-      ),
-    ).toBe(f.id);
+    await fixture(false);
+    expect(await scoped((tx) => receipts.VENUE_SERVICE.receiptDefaultDepartment(tx))).toBeNull();
   });
   it("makes storage available through the module seat", async () => {
     const f = await fixture();
@@ -601,7 +588,7 @@ describe("department-owned address and fiscal description", () => {
       printAddress: true,
       operationDescription: "Dining service",
     });
-    const other = await scoped((tx) => createDepartment(tx, f.cfg, { name: "Deli" }));
+    const other = await scoped((tx) => createDepartment(tx, { name: "Deli" }));
     await scoped((tx) =>
       receipts.writeDepartmentReceipt(tx, f.cfg, other.id, {
         printAddress: true,
@@ -629,7 +616,7 @@ describe("department-owned address and fiscal description", () => {
 describe("receipt and printing policy transaction", () => {
   it("an absent policy uses the established sale reader default until it is repaired", async () => {
     const f = await fixture();
-    expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.cfg, f.id))).toEqual({
+    expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.id))).toEqual({
       receiptPrintMode: "auto",
       printTradingName: false,
     });
@@ -638,7 +625,7 @@ describe("receipt and printing policy transaction", () => {
   it("reads the department creation policy even before an authored receipt exists", async () => {
     const f = await fixture();
     await suite.db.insert(departmentSalePolicies).values({ departmentId: f.id });
-    expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.cfg, f.id))).toEqual({
+    expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.id))).toEqual({
       receiptPrintMode: "auto",
       printTradingName: true,
     });
@@ -657,9 +644,7 @@ describe("receipt and printing policy transaction", () => {
       receipts.saveDepartmentReceiptSettings(tx, f.cfg, f.id, { receipt, policy }),
     );
     expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual(receipt);
-    expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.cfg, f.id))).toEqual(
-      policy,
-    );
+    expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.id))).toEqual(policy);
     expect(
       await suite.db
         .select()
@@ -712,7 +697,7 @@ describe("receipt and printing policy transaction", () => {
     const f = await fixture(false);
     for (const id of [f.id, randomUUID()]) {
       await expect(
-        scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.cfg, id)),
+        scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, id)),
       ).rejects.toMatchObject({ code: "department.not_found" });
       await expect(
         scoped((tx) =>

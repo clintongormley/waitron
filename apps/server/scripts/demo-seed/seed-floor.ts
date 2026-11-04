@@ -93,7 +93,7 @@ export async function seedFloor(
       zone.key === "bar"
         ? defaultPolicy.zone_id
         : (
-            await createServiceZone(tx, cfg, {
+            await createServiceZone(tx, {
               departmentId: defaultPolicy.department_id,
               name: plain(zone.name),
               displayOrder: zone.displayOrder,
@@ -113,7 +113,7 @@ export async function seedFloor(
     zoneIds.set(zone.key, zoneId);
   }
 
-  const upstairsBarZone = await createServiceZone(tx, cfg, {
+  const upstairsBarZone = await createServiceZone(tx, {
     departmentId: defaultPolicy.department_id,
     name: plain(floor.upstairsBarZone),
     displayOrder: 3,
@@ -167,7 +167,7 @@ export async function seedFloor(
     }
   }
 
-  const deliCounterZone = await createServiceZone(tx, cfg, {
+  const deliCounterZone = await createServiceZone(tx, {
     departmentId: deliDepartmentId,
     name: plain(floor.deliCounterZone),
     displayOrder: 4,
@@ -185,18 +185,18 @@ export async function seedFloor(
       );
     const restaurant =
       existing ??
-      (await saveMenuPeriod(tx, cfg, restaurantId, {
+      (await saveMenuPeriod(tx, restaurantId, {
         name: plain(dataSet.menuPeriodName),
         menuId: menuIds.restaurant,
         staffMenuIds: [menuIds.lunch],
       }));
     if (existing !== undefined)
-      await updateMenuPeriod(tx, cfg, existing.id, {
+      await updateMenuPeriod(tx, existing.id, {
         name: plain(dataSet.menuPeriodName),
         menuId: menuIds.restaurant,
         staffMenuIds: [menuIds.lunch],
       });
-    const deli = await saveMenuPeriod(tx, cfg, deliDepartmentId, {
+    const deli = await saveMenuPeriod(tx, deliDepartmentId, {
       name: plain(dataSet.menuPeriodName),
       menuId: menuIds.deli,
       staffMenuIds: [],
@@ -246,7 +246,7 @@ export async function seedFloor(
   for (const departmentId of [defaultPolicy.department_id, deliDepartmentId]) {
     setOf.set(
       departmentId,
-      await createFloorPlanSet(tx, cfg, floorPlanSetsFor(), { departmentId, name: setName }),
+      await createFloorPlanSet(tx, floorPlanSetsFor(), { departmentId, name: setName }),
     );
   }
   for (const [zoneKey, zoneId] of zoneIds) {

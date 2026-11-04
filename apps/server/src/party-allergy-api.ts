@@ -118,7 +118,7 @@ export function mountPartyAllergyApi(app: Hono, deps: TillApiDeps, log: Logger, 
               .limit(1);
             if (table === undefined)
               throw new AppError("party.not_found", { partyId: requestedId });
-            await checkZones(tx, deps.cfg, { device }, [{ partyId }]);
+            await checkZones(tx, { device }, [{ partyId }]);
             const cfg = requestCfg(deps.cfg, session);
             if (method === "get") return readPartyAllergyView(tx, cfg, partyId);
             if (method === "post") return readAllergySendView(tx, cfg, partyId, sendTarget(body));

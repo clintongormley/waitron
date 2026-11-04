@@ -81,7 +81,7 @@ export function mountDepartmentReceiptSettingsApi(
           stored.operationDescription === undefined && cfg.operationDescriptionDefault !== undefined
             ? { ...stored, operationDescription: cfg.operationDescriptionDefault }
             : stored;
-        const policy = await VENUE_SERVICE.readDepartmentReceiptPolicy(tx, cfg, id);
+        const policy = await VENUE_SERVICE.readDepartmentReceiptPolicy(tx, id);
         const venueAddress = await readVenueAddress(tx);
         return {
           receipt,

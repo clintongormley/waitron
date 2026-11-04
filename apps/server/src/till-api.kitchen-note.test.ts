@@ -75,7 +75,7 @@ beforeEach(async () => {
   requestCookie = await sessionCookieForTest(suite.db, token);
   const [party] = await suite.db.insert(parties).values({ openedBy: personId }).returning();
   partyId = party!.id;
-  const zone = await createZone(suite.db, cfg, { name: "Tables" });
+  const zone = await createZone(suite.db, { name: "Tables" });
   tableZoneId = zone.id;
   const table = await createTable(suite.db, cfg, { label: "Table 1", zoneId: zone.id });
   await suite.db.insert(partyTables).values({ partyId, tableId: table.id });
@@ -329,9 +329,9 @@ describe("whole-order kitchen note routes", () => {
   it.each([false, true])(
     "refuses the %s scope outside profile zones and serves it once allowed",
     async (party) => {
-      const elsewhere = await createZone(suite.db, cfg, { name: "Elsewhere" });
-      const [department] = await listDepartments(suite.db, cfg);
-      await recordOrderServiceContext(suite.db, cfg, orderId, tableZoneId);
+      const elsewhere = await createZone(suite.db, { name: "Elsewhere" });
+      const [department] = await listDepartments(suite.db);
+      await recordOrderServiceContext(suite.db, orderId, tableZoneId);
       await setProfileServiceAccess(suite.db, profileId, {
         departmentId: department!.id,
         allowedZoneIds: [elsewhere.id],
@@ -355,8 +355,8 @@ describe("whole-order kitchen note routes", () => {
   );
 
   it("checks the survivor party zone when a retained bill resolves to that party's note", async () => {
-    const elsewhere = await createZone(suite.db, cfg, { name: "Elsewhere" });
-    const [department] = await listDepartments(suite.db, cfg);
+    const elsewhere = await createZone(suite.db, { name: "Elsewhere" });
+    const [department] = await listDepartments(suite.db);
     const [absorbed] = await suite.db
       .insert(parties)
       .values({
@@ -465,8 +465,8 @@ describe("whole-order kitchen note routes", () => {
             .set({ capabilities: [] })
             .where(eq(deviceProfiles.id, profileId));
         else {
-          const elsewhere = await createZone(suite.db, cfg, { name: "Elsewhere" });
-          const [department] = await listDepartments(suite.db, cfg);
+          const elsewhere = await createZone(suite.db, { name: "Elsewhere" });
+          const [department] = await listDepartments(suite.db);
           await setProfileServiceAccess(suite.db, profileId, {
             departmentId: department!.id,
             allowedZoneIds: [elsewhere.id],

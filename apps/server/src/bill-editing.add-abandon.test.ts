@@ -202,7 +202,7 @@ it("adding to the current editor's bill preserves both independently owned outbo
       orderNumber: 2,
       partyId: p.partyId,
     });
-    await VENUE_SERVICE.recordOrderContext(tx, venue.cfg, bill!.id, venue.zoneId);
+    await VENUE_SERVICE.recordOrderContext(tx, bill!.id, venue.zoneId);
     return bill!;
   });
   await save(p);

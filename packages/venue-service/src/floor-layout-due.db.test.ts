@@ -52,7 +52,7 @@ async function newSet(
     .insert(floorPlanSets)
     .values({ locationId: cfg.locationId })
     .returning({ id: floorPlanSets.id });
-  await linkFloorPlanSet(tx, cfg, { setId: row!.id, departmentId, name });
+  await linkFloorPlanSet(tx, { setId: row!.id, departmentId, name });
   return row!.id;
 }
 
@@ -67,21 +67,19 @@ async function fixture() {
     });
     const venueId = await venueLocationId(tx);
     const cfg = { locationId: locationId(venueId) };
-    const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
-    ).id;
-    const bar = (await createDepartment(tx, cfg, { name: "Bar", orderStart: "table" })).id;
+    const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
+    const bar = (await createDepartment(tx, { name: "Bar", orderStart: "table" })).id;
     const dining = await newZone(tx, cfg, "Dining");
     const terrace = await newZone(tx, cfg, "Terrace");
     const garden = await newZone(tx, cfg, "Garden");
     const counter = await newZone(tx, cfg, "Counter");
     const loose = await newZone(tx, cfg, "Store room");
     for (const zoneId of [dining, terrace, garden])
-      await configureZone(tx, cfg, { zoneId, departmentId: restaurant });
-    await configureZone(tx, cfg, { zoneId: counter, departmentId: bar });
+      await configureZone(tx, { zoneId, departmentId: restaurant });
+    await configureZone(tx, { zoneId: counter, departmentId: bar });
     const menu = await createCatalogue(tx, { name: "Menu" });
     const period = async (name: string) =>
-      (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId: menu.id, staffMenuIds: [] })).id;
+      (await saveMenuPeriod(tx, restaurant, { name, menuId: menu.id, staffMenuIds: [] })).id;
     const lunch = await period("Lunch");
     const dinner = await period("Dinner");
     await replaceMenuWeek(
@@ -175,7 +173,7 @@ describe("which floor layout is due", () => {
     const bar = await run(async (tx) => {
       const menu = await createCatalogue(tx, { name: "Bar menu" });
       const period = async (name: string) =>
-        (await saveMenuPeriod(tx, f.cfg, f.bar, { name, menuId: menu.id, staffMenuIds: [] })).id;
+        (await saveMenuPeriod(tx, f.bar, { name, menuId: menu.id, staffMenuIds: [] })).id;
       const morning = await period("Morning");
       const evening = await period("Evening");
       await replaceMenuWeek(

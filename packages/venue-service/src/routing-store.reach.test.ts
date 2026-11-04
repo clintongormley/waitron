@@ -51,7 +51,7 @@ async function fixture(tx: Transaction) {
   });
   const venueId = await venueLocationId(tx);
   const cfg = { locationId: locationId(venueId) };
-  const department = await createDepartment(tx, cfg, {
+  const department = await createDepartment(tx, {
     name: "Dining",
     orderStart: "table",
   });
@@ -61,7 +61,7 @@ async function fixture(tx: Transaction) {
       .insert(floorZones)
       .values({ ...cfg, name })
       .returning();
-    await configureZone(tx, cfg, { zoneId: zone!.id, departmentId: department.id });
+    await configureZone(tx, { zoneId: zone!.id, departmentId: department.id });
     zones.push(zone!.id);
   }
   const [bar, kitchen] = await tx
@@ -138,7 +138,7 @@ describe("what a routing preview works out", () => {
       const f = await fixture(tx);
       vi.mocked(routing.chooseMaker).mockClear();
       vi.mocked(routing.chooseExtraMakerBeside).mockClear();
-      const moves = await previewRoutingChange(tx, f.cfg, {
+      const moves = await previewRoutingChange(tx, {
         kind: "cell",
         address: { row: { kind: "product", productId: f.burger }, zoneId: f.terrace },
         target: { kind: "station", stationId: f.kitchen },
@@ -158,7 +158,7 @@ describe("what a routing preview works out", () => {
       const f = await fixture(tx);
       vi.mocked(routing.chooseMaker).mockClear();
       vi.mocked(routing.chooseExtraMakerBeside).mockClear();
-      await previewRoutingChange(tx, f.cfg, {
+      await previewRoutingChange(tx, {
         kind: "cell",
         address: { row: { kind: "product", productId: f.cheese }, zoneId: f.patio },
         target: { kind: "station", stationId: f.kitchen },

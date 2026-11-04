@@ -8,7 +8,6 @@ import { deviceProfiles, floorZones, readVenueClock, withTransaction } from "@wa
 import type { Database, Transaction } from "@waitron/db";
 import { validateCapabilities } from "@waitron/layouts";
 import { replaceZoneClosedWeek, saveSpecialDay, venueLocalMoment } from "@waitron/venue-service";
-import { locationId as brandLocationId } from "@waitron/shared";
 import type { CountryDemoIdentity } from "@waitron/country";
 import { createPrinter } from "@waitron/printing";
 import {
@@ -140,11 +139,9 @@ export async function seedDemoRestaurant(
         ),
       );
     if (zone === undefined) throw new Error("seedDemoRestaurant: no Terrace zone");
-    const cfg = { locationId: brandLocationId(locationId) };
     const clock = await readVenueClock(tx);
     await replaceZoneClosedWeek(
       tx,
-      cfg,
       zone.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,

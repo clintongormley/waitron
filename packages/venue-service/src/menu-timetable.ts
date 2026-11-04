@@ -37,7 +37,7 @@ import type {
   MenuSlot,
   PeriodRoutingUse,
 } from "./menu-timetable-types.js";
-import { assertDepartment, resolveZoneContext, type VenueScope } from "./operations.js";
+import { assertDepartment, resolveZoneContext } from "./operations.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
@@ -74,12 +74,11 @@ export const STARTER_OPEN_PERIOD_NAMES: readonly string[] = [
 
 export async function placeOpenPeriod(
   tx: Transaction,
-  cfg: VenueScope,
   departmentId: string,
   menuId: string,
   staffLanguage?: StarterStaffLanguage,
 ): Promise<void> {
-  await assertDepartment(tx, cfg, departmentId);
+  await assertDepartment(tx, departmentId);
   const [existing] = await tx
     .select({ id: menuPeriods.id })
     .from(menuPeriods)
@@ -88,7 +87,7 @@ export async function placeOpenPeriod(
   if (existing !== undefined) return;
   const language = staffLanguage ?? (await readStarterStaffLanguage(tx));
   const clockRevision = await readBusinessDayScheduleRevision(tx);
-  const { id } = await saveMenuPeriod(tx, cfg, departmentId, {
+  const { id } = await saveMenuPeriod(tx, departmentId, {
     name: starterName(STARTER_PERIOD_NAMES, OPEN_PERIOD_NAME, language),
     menuId,
     staffMenuIds: [],
@@ -106,7 +105,7 @@ export async function placeOpenPeriod(
   );
 }
 
-export async function requirePeriod(tx: Transaction, cfg: VenueScope, periodId: string) {
+export async function requirePeriod(tx: Transaction, periodId: string) {
   const [row] = await tx
     .select({
       id: menuPeriods.id,
@@ -119,7 +118,7 @@ export async function requirePeriod(tx: Transaction, cfg: VenueScope, periodId: 
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
     .where(eq(menuPeriods.id, periodId));
   if (row === undefined) throw new AppError("menu_period.not_found", { periodId });
-  await assertDepartment(tx, cfg, row.departmentId);
+  await assertDepartment(tx, row.departmentId);
   return row;
 }
 
@@ -229,12 +228,11 @@ function keepOpenSubject(
 
 export async function resolveDepartmentService(
   tx: Transaction,
-  cfg: VenueScope,
   departmentId: string,
   at: Date,
   prepared?: { clock: BusinessDayClock; plan?: DayPlan },
 ): Promise<DepartmentService> {
-  await assertDepartment(tx, cfg, departmentId);
+  await assertDepartment(tx, departmentId);
   const clock = prepared?.clock ?? (await readVenueClock(tx));
   const moment = serviceMomentAt(at, clock);
   const day = await departmentDay(tx, departmentId, moment, clock, prepared?.plan);
@@ -317,13 +315,12 @@ export function servedDefault(
 
 export async function resolveDefaultMenu(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string,
   at: Date,
   servedMenuIds: readonly string[],
 ): Promise<string | null> {
-  const zone = await resolveZoneContext(tx, cfg, zoneId);
-  const service = await resolveDepartmentService(tx, cfg, zone.departmentId, at);
+  const zone = await resolveZoneContext(tx, zoneId);
+  const service = await resolveDepartmentService(tx, zone.departmentId, at);
   return servedDefault(
     service.customerMenuId,
     servedMenuIds.filter((id) => service.orderableMenuIds.includes(id)),
@@ -332,22 +329,20 @@ export async function resolveDefaultMenu(
 
 export async function saveMenuPeriod(
   tx: Transaction,
-  cfg: VenueScope,
   departmentId: string,
   period: MenuPeriodInput,
 ): Promise<{ id: string }> {
-  return writeMenuPeriod(tx, cfg, departmentId, null, period);
+  return writeMenuPeriod(tx, departmentId, null, period);
 }
 
 async function writeMenuPeriod(
   tx: Transaction,
-  cfg: VenueScope,
   departmentId: string,
   periodId: string | null,
   period: MenuPeriodInput,
 ): Promise<{ id: string }> {
   const name = menuPeriodName(period.name);
-  await assertDepartment(tx, cfg, departmentId);
+  await assertDepartment(tx, departmentId);
   if (
     period.colour !== undefined &&
     (typeof period.colour !== "string" || !CALENDAR_COLOURS.includes(period.colour))
@@ -430,11 +425,10 @@ async function writeMenuPeriod(
 
 export async function updateMenuPeriod(
   tx: Transaction,
-  cfg: VenueScope,
   periodId: string,
   period: Partial<MenuPeriodInput>,
 ): Promise<void> {
-  const stored = await requirePeriod(tx, cfg, periodId);
+  const stored = await requirePeriod(tx, periodId);
   const staff = await tx
     .select({ menuId: menuPeriodStaffMenus.menuId })
     .from(menuPeriodStaffMenus)
@@ -444,7 +438,7 @@ export async function updateMenuPeriod(
     .select({ colour: menuPeriods.colour })
     .from(menuPeriods)
     .where(eq(menuPeriods.id, periodId));
-  await writeMenuPeriod(tx, cfg, stored.departmentId, periodId, {
+  await writeMenuPeriod(tx, stored.departmentId, periodId, {
     name: period.name === undefined ? stored.name : period.name,
     menuId: period.menuId === undefined ? stored.menuId : period.menuId,
     colour: period.colour === undefined ? appearance!.colour : period.colour,

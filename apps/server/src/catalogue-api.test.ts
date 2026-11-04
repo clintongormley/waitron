@@ -1780,11 +1780,11 @@ describe("mountCatalogueApi — products", () => {
         .insert(floorZones)
         .values({ locationId: cfg.locationId, name: "Terrace" })
         .returning();
-      const department = await createDepartment(tx, cfg, {
+      const department = await createDepartment(tx, {
         name: "Dining",
         orderStart: "table",
       });
-      await configureZone(tx, cfg, { zoneId: terrace!.id, departmentId: department.id });
+      await configureZone(tx, { zoneId: terrace!.id, departmentId: department.id });
       await setRoutingCell(
         tx,
         { row: { kind: "category", categoryId: cocktails }, zoneId: terrace!.id },

@@ -690,7 +690,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const change = requirePreviewChange(await readJsonBody<Record<string, unknown>>(c));
-        return c.json(await gated(sessionId, (tx) => previewRoutingChange(tx, ctx.cfg, change)));
+        return c.json(await gated(sessionId, (tx) => previewRoutingChange(tx, change)));
       }),
     );
 
@@ -714,10 +714,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const result = await gated(sessionId, async (tx) => ({
-          departments: (await listDepartments(tx, ctx.cfg)).filter(
-            (department) => department.active,
-          ),
-          zones: await listServiceZones(tx, ctx.cfg, { withActiveFlag: true }),
+          departments: (await listDepartments(tx)).filter((department) => department.active),
+          zones: await listServiceZones(tx, { withActiveFlag: true }),
         }));
         return c.json(result);
       }),
@@ -727,13 +725,11 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const result = await gated(sessionId, async (tx) => ({
-          departments: (await listDepartments(tx, ctx.cfg)).filter(
-            (department) => department.active,
-          ),
-          zones: await listServiceZones(tx, ctx.cfg, { withActiveFlag: true }),
-          salePolicies: await listSalePolicies(tx, ctx.cfg),
+          departments: (await listDepartments(tx)).filter((department) => department.active),
+          zones: await listServiceZones(tx, { withActiveFlag: true }),
+          salePolicies: await listSalePolicies(tx),
           readiness: [
-            ...(await listVenueReadiness(tx, ctx.cfg)),
+            ...(await listVenueReadiness(tx)),
             ...(ctx.cfg.operationDescriptionRequired === true &&
             ctx.cfg.operationDescriptionDefault === undefined
               ? await listDepartmentReceiptReadiness(tx, ctx.cfg)
@@ -807,9 +803,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             ? {}
             : { serviceSteps: requireServiceSteps(body.serviceSteps) }),
         };
-        await gated(sessionId, (tx) =>
-          saveDepartmentEditSettings(tx, ctx.cfg, departmentId, input),
-        );
+        await gated(sessionId, (tx) => saveDepartmentEditSettings(tx, departmentId, input));
         return c.body(null, 204);
       }),
     );
@@ -823,14 +817,14 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const name = requireName(body.name, "name");
         const policy = zoneSettingsBody(body);
         await gated(sessionId, async (tx) => {
-          const zone = (await listServiceZones(tx, ctx.cfg)).find((zone) => zone.id === zoneId);
+          const zone = (await listServiceZones(tx)).find((zone) => zone.id === zoneId);
           if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
           if (zone.name !== name)
             await authorizeManager(tx, {
               managementSessionId: sessionId,
               permission: "venue.configure",
             });
-          await saveZoneSettings(tx, ctx.cfg, zoneId, { name, ...policy });
+          await saveZoneSettings(tx, zoneId, { name, ...policy });
         });
         return c.body(null, 204);
       }),
@@ -843,7 +837,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const body = await readJsonBody<Record<string, unknown>>(c);
         onlyKeys(body, ["orderStart", "paidWhen", "collectionNumber", "receiptPrintMode"]);
         const input = zoneSettingsBody(body);
-        await gated(sessionId, (tx) => saveZoneServiceSettings(tx, ctx.cfg, zoneId, input));
+        await gated(sessionId, (tx) => saveZoneServiceSettings(tx, zoneId, input));
         return c.body(null, 204);
       }),
     );
@@ -871,7 +865,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             .where(and(eq(departments.id, departmentId), eq(departments.active, true)));
           if (department === undefined)
             throw new AppError("department.not_found", { departmentId });
-          await updateDepartment(tx, ctx.cfg, departmentId, edit);
+          await updateDepartment(tx, departmentId, edit);
         });
         return c.body(null, 204);
       }),
@@ -888,7 +882,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           if (field === "orderStart")
             await setDepartmentSalePolicyField(
               tx,
-              ctx.cfg,
               departmentId,
               "orderStart",
               value as "table" | "counter",
@@ -896,7 +889,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           else if (field === "paidWhen")
             await setDepartmentSalePolicyField(
               tx,
-              ctx.cfg,
               departmentId,
               field,
               value as "prepay" | "ticket_then_pay",
@@ -904,7 +896,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           else if (field === "collectionNumber")
             await setDepartmentSalePolicyField(
               tx,
-              ctx.cfg,
               departmentId,
               field,
               value as "none" | "numbered",
@@ -912,7 +903,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           else if (field === "receiptPrintMode")
             await setDepartmentSalePolicyField(
               tx,
-              ctx.cfg,
               departmentId,
               field,
               value as "auto" | "on_request",
@@ -920,7 +910,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           else
             await setDepartmentSalePolicyField(
               tx,
-              ctx.cfg,
               departmentId,
               "printTradingName",
               value as boolean,
@@ -936,13 +925,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         return c.json(
           await gated(sessionId, (tx) =>
-            readDepartmentDeleteImpact(
-              tx,
-              ctx.cfg,
-              ctx.core.floorDeletion,
-              departmentId,
-              new Date(),
-            ),
+            readDepartmentDeleteImpact(tx, ctx.core.floorDeletion, departmentId, new Date()),
           ),
         );
       }),
@@ -956,7 +939,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           throw new AppError("management.request_invalid", { field: "body" });
         return c.json(
           await gated(sessionId, (tx) =>
-            deleteDepartment(tx, ctx.cfg, ctx.core.floorDeletion, departmentId, new Date()),
+            deleteDepartment(tx, ctx.core.floorDeletion, departmentId, new Date()),
           ),
         );
       }),
@@ -968,7 +951,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const body = await readJsonBody<Record<string, unknown>>(c);
         onlyKeys(body, ["name", "tradingName"]);
         const department = await gated(sessionId, (tx) =>
-          createDepartment(tx, ctx.cfg, {
+          createDepartment(tx, {
             name: requireString(body.name, "name"),
             tradingName:
               body.tradingName === undefined
@@ -989,7 +972,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const name = requireString(body.name, "name").trim();
         if (name === "") throw new AppError("management.request_invalid", { field: "name" });
         const zone = await gated(sessionId, (tx) =>
-          createServiceZone(tx, ctx.cfg, {
+          createServiceZone(tx, {
             name,
             displayOrder:
               body.displayOrder === undefined ? undefined : requireDisplayOrder(body.displayOrder),
@@ -1013,7 +996,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             .from(floorZones)
             .where(and(eq(floorZones.id, zoneId), eq(floorZones.active, true)));
           if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
-          await configureZone(tx, ctx.cfg, { zoneId, departmentId });
+          await configureZone(tx, { zoneId, departmentId });
         });
         return c.body(null, 204);
       }),
@@ -1030,7 +1013,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           if (field === "orderStart")
             await setZoneSalePolicyOverride(
               tx,
-              ctx.cfg,
               zoneId,
               "orderStart",
               value as "table" | "counter" | null,
@@ -1038,23 +1020,15 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           else if (field === "paidWhen")
             await setZoneSalePolicyOverride(
               tx,
-              ctx.cfg,
               zoneId,
               field,
               value as "prepay" | "ticket_then_pay" | null,
             );
           else if (field === "collectionNumber")
-            await setZoneSalePolicyOverride(
-              tx,
-              ctx.cfg,
-              zoneId,
-              field,
-              value as "none" | "numbered" | null,
-            );
+            await setZoneSalePolicyOverride(tx, zoneId, field, value as "none" | "numbered" | null);
           else if (field === "receiptPrintMode")
             await setZoneSalePolicyOverride(
               tx,
-              ctx.cfg,
               zoneId,
               "receiptPrintMode",
               value as "auto" | "on_request" | null,
@@ -1072,7 +1046,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         return c.json(
-          await gated(sessionId, (tx) => readDepartmentTransferSettings(tx, ctx.cfg, departmentId)),
+          await gated(sessionId, (tx) => readDepartmentTransferSettings(tx, departmentId)),
         );
       }),
     );
@@ -1119,9 +1093,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           staffMenuIds: requireStaffMenuIds(body.staffMenuIds),
           ...floorPlanSetField(body),
         };
-        const period = await gated(sessionId, (tx) =>
-          saveMenuPeriod(tx, ctx.cfg, departmentId, input),
-        );
+        const period = await gated(sessionId, (tx) => saveMenuPeriod(tx, departmentId, input));
         return c.json(period, 201);
       }),
     );
@@ -1141,7 +1113,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const periodId = requireUuidParam(c.req.param("periodId"), "MenuPeriodId");
         return c.json(
-          await viewed(sessionId, (tx) => periodDeleteImpact(tx, ctx.cfg, periodId, new Date())),
+          await viewed(sessionId, (tx) => periodDeleteImpact(tx, periodId, new Date())),
         );
       }),
     );
@@ -1159,7 +1131,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           );
           return deletePeriod(
             tx,
-            ctx.cfg,
             periodId,
             replacementId,
             new Date(),
@@ -1187,7 +1158,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             : { staffMenuIds: requireStaffMenuIds(body.staffMenuIds) }),
           ...floorPlanSetField(body),
         };
-        await gated(sessionId, (tx) => updateMenuPeriod(tx, ctx.cfg, periodId, period));
+        await gated(sessionId, (tx) => updateMenuPeriod(tx, periodId, period));
         return c.body(null, 204);
       }),
     );
@@ -1264,7 +1235,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           const at = new Date();
           await replaceZoneClosedWeek(
             tx,
-            ctx.cfg,
             zoneId,
             body.days,
             body.expectedClockRevision as number,

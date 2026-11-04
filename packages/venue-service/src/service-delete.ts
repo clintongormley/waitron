@@ -8,7 +8,6 @@ import {
   type DeleteImpactRefusal,
   type DeleteTarget,
 } from "@waitron/shared";
-import type { VenueScope } from "./operations.js";
 import {
   departments,
   deviceProfileServiceAccess,
@@ -52,7 +51,6 @@ function uniqueRefusals(rows: readonly DeleteImpactRefusal[]): DeleteImpactRefus
 
 async function selection(
   tx: Transaction,
-  cfg: VenueScope,
   floor: FloorDeletion,
   kind: Kind,
   id: string,
@@ -92,7 +90,7 @@ async function selection(
   const zoneIds = zones.map((row) => row.id);
   const departmentId = kind === "department" ? id : null;
   const floorImpact = await floor.readImpact(tx, zoneIds, now);
-  const settings = await readServiceDeleteSettings(tx, cfg, zoneIds, departmentId);
+  const settings = await readServiceDeleteSettings(tx, zoneIds, departmentId);
   const refusals: DeleteImpactRefusal[] = [];
 
   if (department !== undefined) {
@@ -265,33 +263,30 @@ async function selection(
 
 export async function readZoneDeleteImpact(
   tx: Transaction,
-  cfg: VenueScope,
   floor: FloorDeletion,
   zoneId: string,
   now: Date,
 ): Promise<DeleteImpact> {
-  return (await selection(tx, cfg, floor, "zone", zoneId, now)).impact;
+  return (await selection(tx, floor, "zone", zoneId, now)).impact;
 }
 
 export async function readDepartmentDeleteImpact(
   tx: Transaction,
-  cfg: VenueScope,
   floor: FloorDeletion,
   departmentId: string,
   now: Date,
 ): Promise<DeleteImpact> {
-  return (await selection(tx, cfg, floor, "department", departmentId, now)).impact;
+  return (await selection(tx, floor, "department", departmentId, now)).impact;
 }
 
 async function remove(
   tx: Transaction,
-  cfg: VenueScope,
   floor: FloorDeletion,
   kind: Kind,
   id: string,
   now: Date,
 ): Promise<DeleteImpact> {
-  const { impact, zoneIds, departmentId } = await selection(tx, cfg, floor, kind, id, now);
+  const { impact, zoneIds, departmentId } = await selection(tx, floor, kind, id, now);
   const first = impact.refusals[0];
   if (first !== undefined)
     throw new AppError(
@@ -312,7 +307,7 @@ async function remove(
       null,
     );
   }
-  await clearServiceDeleteSettings(tx, cfg, zoneIds, departmentId);
+  await clearServiceDeleteSettings(tx, zoneIds, departmentId);
   if (zoneIds.length > 0)
     await tx.update(floorZones).set({ active: false }).where(inArray(floorZones.id, zoneIds));
   if (departmentId !== null)
@@ -322,20 +317,18 @@ async function remove(
 
 export async function deleteZone(
   tx: Transaction,
-  cfg: VenueScope,
   floor: FloorDeletion,
   zoneId: string,
   now: Date,
 ): Promise<DeleteImpact> {
-  return remove(tx, cfg, floor, "zone", zoneId, now);
+  return remove(tx, floor, "zone", zoneId, now);
 }
 
 export async function deleteDepartment(
   tx: Transaction,
-  cfg: VenueScope,
   floor: FloorDeletion,
   departmentId: string,
   now: Date,
 ): Promise<DeleteImpact> {
-  return remove(tx, cfg, floor, "department", departmentId, now);
+  return remove(tx, floor, "department", departmentId, now);
 }

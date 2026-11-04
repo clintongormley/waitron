@@ -84,15 +84,13 @@ async function venue() {
     const seasons = await ensureDefaultSeasons(tx);
     const season = (name: StarterSeason) =>
       seasons.find((entry) => entry.name === starterSeasonName(name, "es"))!.id;
-    const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
-    ).id;
-    const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
+    const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
+    const deli = (await createDepartment(tx, { name: "Deli", orderStart: "counter" })).id;
     const menu = (await createCatalogue(tx, { name: `Period menu ${locationId}` })).id;
     const { document } = await buildMenuDocument(tx, menu);
     await publishMenu(tx, menu, menuDocumentHash(document), "person-1");
     const period = async (departmentId: string, name: string) =>
-      (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId: menu, staffMenuIds: [] })).id;
+      (await saveMenuPeriod(tx, departmentId, { name, menuId: menu, staffMenuIds: [] })).id;
     const dinner = await period(restaurant, "Dinner");
     const lunch = await period(restaurant, "Lunch");
     const afternoon = await period(restaurant, "Afternoon");
@@ -198,7 +196,7 @@ describe("where a period is painted", () => {
     const today = await specialDay(v, "Festival", [TODAY], [slot(v.afternoon, "16:00", "19:00")]);
 
     const painted = await scoped((tx) => readPaintedIn(tx, AT));
-    const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.afternoon, AT));
+    const impact = await scoped((tx) => periodDeleteImpact(tx, v.afternoon, AT));
 
     expect(painted.get(v.afternoon)!.specialDays).toEqual([{ id: today, name: "Festival" }]);
     expect(impact.specialDays).toBe(1);
@@ -214,7 +212,7 @@ describe("where a period is painted", () => {
     );
 
     const painted = await scoped((tx) => readPaintedIn(tx, AT));
-    const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.afternoon, AT));
+    const impact = await scoped((tx) => periodDeleteImpact(tx, v.afternoon, AT));
 
     expect(painted.get(v.afternoon)!.specialDays).toEqual([{ id: fair, name: "Fair" }]);
     expect(impact.specialDays).toBe(1);
@@ -255,7 +253,7 @@ describe("where a period is painted", () => {
     );
 
     const painted = await scoped((tx) => readPaintedIn(tx, AT));
-    const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.afternoon, AT));
+    const impact = await scoped((tx) => periodDeleteImpact(tx, v.afternoon, AT));
 
     expect(painted.get(v.afternoon)!.specialDays).toEqual([{ id: twoDates, name: "Two dates" }]);
     expect(painted.get(v.dinner)!.specialDays).toEqual([{ id: twoDates, name: "Two dates" }]);
@@ -282,7 +280,7 @@ describe("where a period is painted", () => {
     await db.update(locations).set({ timeZone: "Not/AZone" }).where(eq(locations.id, v.locationId));
 
     const painted = await scoped((tx) => readPaintedIn(tx, AT));
-    const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.afternoon, AT));
+    const impact = await scoped((tx) => periodDeleteImpact(tx, v.afternoon, AT));
 
     expect(painted.get(v.afternoon)!.specialDays).toEqual([
       { id: pastSpecialDay, name: "Past celebration" },
@@ -315,7 +313,7 @@ describe("what deleting a period touches", () => {
       stationId: v.stationId,
     });
 
-    const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.lunch, AT));
+    const impact = await scoped((tx) => periodDeleteImpact(tx, v.lunch, AT));
     const routing = await scoped((tx) => readRoutingUses(tx));
     const lunchRouting = await scoped((tx) => readRoutingUses(tx, v.lunch));
 
@@ -338,7 +336,7 @@ describe("what deleting a period touches", () => {
   it("names no routing for a period no cell names", async () => {
     const v = await venue();
 
-    const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.afternoon, AT));
+    const impact = await scoped((tx) => periodDeleteImpact(tx, v.afternoon, AT));
 
     expect(impact).toEqual({
       seasons: 0,
@@ -353,11 +351,12 @@ describe("what deleting a period touches", () => {
   });
 
   it("refuses a period that does not exist as not found", async () => {
-    const v = await venue();
+    await venue();
     const periodId = randomUUID();
-    await expect(scoped((tx) => periodDeleteImpact(tx, v.cfg, periodId, AT))).rejects.toMatchObject(
-      { code: "menu_period.not_found", params: { periodId } },
-    );
+    await expect(scoped((tx) => periodDeleteImpact(tx, periodId, AT))).rejects.toMatchObject({
+      code: "menu_period.not_found",
+      params: { periodId },
+    });
   });
 });
 
@@ -471,8 +470,8 @@ describe("deleting a period", () => {
     };
   }
 
-  const remove = (v: Venue, periodId: string, replacementId: string | null, revision = 0) =>
-    scoped((tx) => deletePeriod(tx, v.cfg, periodId, replacementId, AT, revision));
+  const remove = (periodId: string, replacementId: string | null, revision = 0) =>
+    scoped((tx) => deletePeriod(tx, periodId, replacementId, AT, revision));
 
   /** The refusal of `write`'s whole transaction. */
   async function refusal(write: () => Promise<unknown>): Promise<AppError> {
@@ -508,7 +507,7 @@ describe("deleting a period", () => {
         ),
       );
 
-      await remove(v, v.lunch, v.afternoon);
+      await remove(v.lunch, v.afternoon);
 
       const after = await stored(v);
       expect(after.seasons).toEqual([
@@ -531,7 +530,7 @@ describe("deleting a period", () => {
         [slot(v.lunch, "13:00", "15:00"), slot(v.afternoon, "15:00", "16:00")],
       );
 
-      await remove(v, v.lunch, v.afternoon);
+      await remove(v.lunch, v.afternoon);
 
       expect((await stored(v)).specialDays).toEqual([
         "2026-09-01 Afternoon 13:00-16:00",
@@ -542,7 +541,7 @@ describe("deleting a period", () => {
     it("drops the routing lines naming the period, as without a replacement, and keeps the rest", async () => {
       const v = await deleteVenue();
 
-      await remove(v, v.lunch, v.afternoon);
+      await remove(v.lunch, v.afternoon);
 
       expect((await stored(v)).routing).toEqual(
         ["Cocktails Afternoon Kitchen", "Cocktails Dinner Kitchen"].sort(),
@@ -552,12 +551,12 @@ describe("deleting a period", () => {
     it("deletes as many routing lines, of the same row kinds, as the impact read listed before the delete", async () => {
       const v = await deleteVenue();
       const before = (await stored(v)).routing;
-      const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.lunch, AT));
+      const impact = await scoped((tx) => periodDeleteImpact(tx, v.lunch, AT));
       const afternoonUses = async () =>
         (await scoped((tx) => readRoutingUses(tx, v.afternoon))).get(v.afternoon);
       const afternoonBefore = await afternoonUses();
 
-      await remove(v, v.lunch, v.afternoon);
+      await remove(v.lunch, v.afternoon);
 
       const lunchLines = before.filter((line) => line.includes(" Lunch "));
       expect(lunchLines).toHaveLength(2);
@@ -577,7 +576,7 @@ describe("deleting a period", () => {
     it("closes the time the period held in the seasons", async () => {
       const v = await deleteVenue();
 
-      await remove(v, v.lunch, null);
+      await remove(v.lunch, null);
 
       const after = await stored(v);
       expect(after.seasons).toEqual([
@@ -598,7 +597,7 @@ describe("deleting a period", () => {
         [slot(v.afternoon, "12:00", "14:00"), slot(v.lunch, "18:00", "23:00")],
       );
 
-      await remove(v, v.lunch, null);
+      await remove(v.lunch, null);
 
       const resolved = await scoped(async (tx) =>
         resolveDepartmentDays(tx, v.restaurant, [date], await readVenueClock(tx)),
@@ -614,7 +613,7 @@ describe("deleting a period", () => {
     it("drops the routing lines naming the period and keeps the rest", async () => {
       const v = await deleteVenue();
 
-      await remove(v, v.lunch, null);
+      await remove(v.lunch, null);
 
       expect((await stored(v)).routing).toEqual(
         ["Cocktails Afternoon Kitchen", "Cocktails Dinner Kitchen"].sort(),
@@ -627,7 +626,7 @@ describe("deleting a period", () => {
       const plainWednesday = "2026-10-21";
       await specialDay(v, "Festival", [date], [slot(v.lunch, "18:00", "23:00")]);
 
-      await remove(v, v.lunch, null);
+      await remove(v.lunch, null);
 
       const dayRows = await db
         .select({ id: departmentDays.id })
@@ -651,7 +650,7 @@ describe("deleting a period", () => {
         [slot(v.lunch, "13:00", "16:00"), slot(v.afternoon, "16:00", "17:00")],
       );
 
-      await remove(v, v.lunch, null);
+      await remove(v.lunch, null);
 
       expect((await stored(v)).specialDays).toEqual(["2026-09-01 Afternoon 16:00-17:00"]);
     });
@@ -664,7 +663,7 @@ describe("deleting a period", () => {
       const before = await stored(v);
 
       for (const replacementId of [v.deliLunch, v.lunch, randomUUID()]) {
-        const error = await refusal(() => remove(v, v.lunch, replacementId));
+        const error = await refusal(() => remove(v.lunch, replacementId));
         expect(error.code).toBe("menu_period.invalid");
         expect(error.params).toEqual({ field: "replacementPeriodId" });
       }
@@ -672,9 +671,9 @@ describe("deleting a period", () => {
     });
 
     it("refuses a period that does not exist as not found", async () => {
-      const v = await venue();
+      await venue();
       const periodId = randomUUID();
-      const error = await refusal(() => remove(v, periodId, null));
+      const error = await refusal(() => remove(periodId, null));
       expect(error.code).toBe("menu_period.not_found");
       expect(error.params).toEqual({ periodId });
     });
@@ -683,7 +682,7 @@ describe("deleting a period", () => {
       const v = await deleteVenue();
       const before = await stored(v);
 
-      const error = await refusal(() => remove(v, v.lunch, v.afternoon, 1));
+      const error = await refusal(() => remove(v.lunch, v.afternoon, 1));
 
       expect(error.code).toBe("hours.clock_changed");
       expect(await stored(v)).toEqual(before);

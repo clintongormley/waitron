@@ -530,6 +530,6 @@ export async function paymentsOf(v: HasDb, billId: string) {
 
 /** The service zone the bill's context names, or null when it has none. */
 export async function zoneOf(v: Pick<PartyVenue, "db" | "cfg">, billId: string) {
-  const context = await inTx(v, (tx) => VENUE_SERVICE.findOrderContext(tx, v.cfg, billId));
+  const context = await inTx(v, (tx) => VENUE_SERVICE.findOrderContext(tx, billId));
   return context?.zoneId ?? null;
 }

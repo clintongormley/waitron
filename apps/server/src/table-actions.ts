@@ -89,7 +89,7 @@ export async function moveGuests(
   if (table.holding === partyId && held.length === 1) {
     throw new AppError("table.already_in_party", { tableId: toTableId });
   }
-  if (table.holding === null) await refuseUnseatable(tx, cfg, table);
+  if (table.holding === null) await refuseUnseatable(tx, table);
 
   await requireRelocatableBillEditors(
     tx,
@@ -151,7 +151,7 @@ export async function joinTables(
   if (table.holding !== null) {
     return combineAt(tx, cfg, table.holding, partyId, "join", options, zoneId);
   }
-  await refuseUnseatable(tx, cfg, table);
+  await refuseUnseatable(tx, table);
 
   await requireRelocatableBillEditors(
     tx,

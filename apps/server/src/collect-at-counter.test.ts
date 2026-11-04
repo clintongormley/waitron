@@ -366,9 +366,7 @@ async function orderRow(billId: string) {
 }
 
 async function zoneOf(billId: string) {
-  return inTx(venue, async (tx) =>
-    (await VENUE_SERVICE.findOrderZones(tx, venue.cfg, [billId])).get(billId),
-  );
+  return inTx(venue, async (tx) => (await VENUE_SERVICE.findOrderZones(tx, [billId])).get(billId));
 }
 
 async function serve(billId: string, lineNo: number) {

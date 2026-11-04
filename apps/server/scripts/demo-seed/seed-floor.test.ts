@@ -121,15 +121,7 @@ describe("seedFloor", () => {
       const drink = products.find((product) => product.name === "House Negroni")!;
       const makers = [];
       for (const instant of ["2026-10-02T18:00:00Z", "2026-10-06T18:00:00Z"]) {
-        makers.push(
-          await resolveMakers(
-            tx,
-            { locationId: brandLocationId(locationId) },
-            zones[0]!.id,
-            [drink.id],
-            new Date(instant),
-          ),
-        );
+        makers.push(await resolveMakers(tx, zones[0]!.id, [drink.id], new Date(instant)));
       }
       return { hours, periods, makers, stationId: stations[0]!.id, productId: drink.id };
     });
@@ -181,7 +173,7 @@ describe("seedFloor", () => {
         departmentTradingNames: TRADING_NAMES,
         dataSet: CASA_DELGADO_ES,
       });
-      return listSalePolicies(tx, { locationId: brandLocationId(locationId) });
+      return listSalePolicies(tx);
     });
 
     expect(policies.departments).toHaveLength(2);
@@ -402,7 +394,7 @@ describe("seedFloor", () => {
         const { rows: departments } = await tx.execute<{ id: string }>(
           sql`select id from departments where location_id = ${locationId} and active`,
         );
-        const sets = await readFloorPlanSets(tx, cfg);
+        const sets = await readFloorPlanSets(tx);
         const placed: Record<string, string[]> = {};
         for (const set of sets) {
           for (const zoneId of set.zoneIds) {

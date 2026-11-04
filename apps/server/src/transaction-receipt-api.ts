@@ -31,7 +31,6 @@ export function mountTransactionReceiptApi(
         const scope = await resolveTransactionScope(tx, deps.cfg, id);
         await checkZones(
           tx,
-          deps.cfg,
           session,
           scope.workingOrderIds.map((orderId) => ({ orderId })),
         );
@@ -54,7 +53,6 @@ export function mountTransactionReceiptApi(
         const scope = await resolveTransactionScope(tx, cfg, id);
         await checkZones(
           tx,
-          cfg,
           session,
           scope.workingOrderIds.map((orderId) => ({ orderId })),
         );

@@ -2315,11 +2315,11 @@ describe("resets onto a set's layout", () => {
   });
   it("a due reset of a zone whose department has no set resets nothing and answers null", async () => {
     const zoneId = await inTx(v, async (tx) => {
-      const department = await createDepartment(tx, v.cfg, {
+      const department = await createDepartment(tx, {
         name: `Dept ${randomUUID().slice(0, 8)}`,
         orderStart: "table",
       });
-      const zone = await createServiceZone(tx, v.cfg, {
+      const zone = await createServiceZone(tx, {
         name: `Setless ${randomUUID().slice(0, 8)}`,
         departmentId: department.id,
       });
@@ -2342,11 +2342,11 @@ describe("resets onto a set's layout", () => {
 
   it("leaves a zone with tables but no saved due layout as it is at the day's first read", async () => {
     const { zoneId, gaining, tableId, label } = await inTx(v, async (tx) => {
-      const department = await createDepartment(tx, v.cfg, {
+      const department = await createDepartment(tx, {
         name: `Dept ${randomUUID().slice(0, 8)}`,
         orderStart: "table",
       });
-      const zone = await createServiceZone(tx, v.cfg, {
+      const zone = await createServiceZone(tx, {
         name: `Moved ${randomUUID().slice(0, 8)}`,
         departmentId: department.id,
       });
@@ -2364,7 +2364,7 @@ describe("resets onto a set's layout", () => {
         },
         FRIDAY_NIGHT,
       );
-      const moved = await createDepartment(tx, v.cfg, {
+      const moved = await createDepartment(tx, {
         name: `Dept ${randomUUID().slice(0, 8)}`,
         orderStart: "table",
       });
@@ -2398,7 +2398,7 @@ describe("resets onto a set's layout", () => {
         .insert(floorPlanSets)
         .values({ locationId: v.cfg.locationId })
         .returning({ id: floorPlanSets.id });
-      await linkFloorPlanSet(tx, v.cfg, {
+      await linkFloorPlanSet(tx, {
         setId: set!.id,
         departmentId: gaining,
         name: "Standard",
@@ -2443,11 +2443,11 @@ describe("resets onto a set's layout", () => {
 
   it("leaves a zone as it is when its department gains a set with no saved layout", async () => {
     const { zoneId, fromSet } = await inTx(v, async (tx) => {
-      const department = await createDepartment(tx, v.cfg, {
+      const department = await createDepartment(tx, {
         name: `Dept ${randomUUID().slice(0, 8)}`,
         orderStart: "table",
       });
-      const zone = await createServiceZone(tx, v.cfg, {
+      const zone = await createServiceZone(tx, {
         name: `Inside ${randomUUID().slice(0, 8)}`,
         departmentId: department.id,
       });
@@ -2472,7 +2472,7 @@ describe("resets onto a set's layout", () => {
         },
         FRIDAY_NIGHT,
       );
-      const gaining = await createDepartment(tx, v.cfg, {
+      const gaining = await createDepartment(tx, {
         name: `Dept ${randomUUID().slice(0, 8)}`,
         orderStart: "table",
       });
@@ -2484,7 +2484,7 @@ describe("resets onto a set's layout", () => {
         .insert(floorPlanSets)
         .values({ locationId: v.cfg.locationId })
         .returning({ id: floorPlanSets.id });
-      await linkFloorPlanSet(tx, v.cfg, {
+      await linkFloorPlanSet(tx, {
         setId: set!.id,
         departmentId: gaining.id,
         name: "Standard",

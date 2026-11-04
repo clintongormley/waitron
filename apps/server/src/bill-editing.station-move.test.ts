@@ -221,7 +221,7 @@ describe("station movement checks bill editing authority", () => {
         source: "dashboard",
         orderNumber: 2,
       });
-      await VENUE_SERVICE.recordOrderContext(tx, venue.cfg, row!.id, venue.zoneId);
+      await VENUE_SERVICE.recordOrderContext(tx, row!.id, venue.zoneId);
       return { ...p, tabId: row!.id };
     });
     const owned = await save(other, venue.adminId),

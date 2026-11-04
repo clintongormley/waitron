@@ -161,16 +161,16 @@ async function transferredCounterOrder(
     () => {},
   );
   const f = await withTransaction(db, async (tx) => {
-    const a = await createDepartment(tx, v.cfg, { name: randomUUID(), orderStart: "table" });
-    const b = await createDepartment(tx, v.cfg, { name: randomUUID(), orderStart: "table" });
+    const a = await createDepartment(tx, { name: randomUUID(), orderStart: "table" });
+    const b = await createDepartment(tx, { name: randomUUID(), orderStart: "table" });
     await tx.insert(departmentReceipts).values(
       [a, b].map((department) => ({
         departmentId: department.id,
         receipt: { operationDescription: "Restaurante" },
       })),
     );
-    const az = await createServiceZone(tx, v.cfg, { name: randomUUID(), departmentId: a.id });
-    const bz = await createServiceZone(tx, v.cfg, { name: randomUUID(), departmentId: b.id });
+    const az = await createServiceZone(tx, { name: randomUUID(), departmentId: a.id });
+    const bz = await createServiceZone(tx, { name: randomUUID(), departmentId: b.id });
     const profiles: string[] = [];
     for (const [departmentId, zoneId] of [
       [a.id, az.id],
@@ -222,7 +222,7 @@ async function transferredCounterOrder(
   const source = await login(f.source);
   const desk = await login(f.desk);
   const tab = await counterOrder(v, ...names);
-  await withTransaction(db, (tx) => retargetOrderServiceContext(tx, v.cfg, tab, f.az));
+  await withTransaction(db, (tx) => retargetOrderServiceContext(tx, tab, f.az));
   await placeOrder(
     { admission: testTradingAdmission(), db, backend: v.backend, clock: v.clock },
     requestCfg(v.cfg, source),

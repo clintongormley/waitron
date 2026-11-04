@@ -293,7 +293,7 @@ async function venue() {
       .values({ displayName: "Staff one", pinHash: fixturePinHash("5555"), role: "staff" })
       .returning({ id: persons.id });
     const session = await startManagementSession(tx, { personId: manager!.id });
-    const zone = await createZone(tx, cfg, { name: "Bar" });
+    const zone = await createZone(tx, { name: "Bar" });
     return {
       managerCookie: `${MANAGEMENT_COOKIE}=${session.token}`,
       staffId: staff!.id,

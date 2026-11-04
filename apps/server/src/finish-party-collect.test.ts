@@ -65,9 +65,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionAdjustmentVenue(db);
-    elsewhere = (
-      await inTx(venue, (tx) => createZone(tx, venue.cfg, { name: `Terrace-${randomUUID()}` }))
-    ).id;
+    elsewhere = (await inTx(venue, (tx) => createZone(tx, { name: `Terrace-${randomUUID()}` }))).id;
   },
 });
 
@@ -346,9 +344,7 @@ describe("finishing a table by sending the food still to come to the counter", (
 
     expect((await billRow(t.billIds[0]!)).partyId).toBeNull();
     expect((await billRow(t.billIds[1]!)).partyId).toBe(t.partyId);
-    const waiting = (await listCounterWaiting({ db: venue.db }, venue.cfg)).map(
-      (order) => order.id,
-    );
+    const waiting = (await listCounterWaiting({ db: venue.db })).map((order) => order.id);
     expect(waiting).toContain(t.billIds[0]);
     expect(waiting).not.toContain(t.billIds[1]);
   });
@@ -647,7 +643,7 @@ describe("finishing a table by sending the food still to come to the counter", (
 
     expect((await billRow(t.billIds[0]!)).partyId).toBeNull();
     expect((await billRow(t.billIds[1]!)).partyId).toBe(t.partyId);
-    const waiting = await listCounterWaiting({ db: venue.db }, venue.cfg);
+    const waiting = await listCounterWaiting({ db: venue.db });
     expect(waiting.map((order) => order.id)).toContain(t.billIds[0]);
     expect(waiting.map((order) => order.id)).not.toContain(t.billIds[1]);
   });
@@ -674,7 +670,7 @@ describe("finishing a table by sending the food still to come to the counter", (
 async function withZones<T>(zones: string[] | null, fn: () => Promise<T>): Promise<T> {
   const [device] = await venue.db.select().from(devices).where(eq(devices.id, venue.deviceId));
   const profileId = device!.deviceProfileId;
-  const [department] = await listDepartments(venue.db, venue.cfg);
+  const [department] = await listDepartments(venue.db);
   const [access] = await venue.db
     .select()
     .from(deviceProfileServiceAccess)
@@ -714,9 +710,7 @@ async function withZones<T>(zones: string[] | null, fn: () => Promise<T>): Promi
 async function tableWithBillFromElsewhere() {
   const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
   const other = await table([{ name: "Burger" }], "fire", [], [null]);
-  await inTx(venue, (tx) =>
-    VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, other.billIds[0]!, elsewhere),
-  );
+  await inTx(venue, (tx) => VENUE_SERVICE.retargetOrderContext(tx, other.billIds[0]!, elsewhere));
   await pay(other.billIds[0]!, "12.00");
   await combine(t, other);
   const both = { partyId: t.partyId, billIds: [t.billIds[0]!, other.billIds[0]!] };

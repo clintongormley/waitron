@@ -107,7 +107,7 @@ const suite = useVenueDb({
     });
     productId = product.id;
     cfg = makeCfg(locationId, nodeId);
-    const zone = await withTransaction(db, (tx) => createZone(tx, cfg, { name: "Terraza" }));
+    const zone = await withTransaction(db, (tx) => createZone(tx, { name: "Terraza" }));
     seededZoneId = zone.id;
     const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
     menuItemId = offers.offerFor(productId);

@@ -303,7 +303,6 @@ async function writtenFixture(
     if (options.zone)
       await replaceZoneClosedWeek(
         tx,
-        v.cfg,
         v.zoneId!,
         on(ranges).map((entries, weekday) => ({ weekday, ranges: entries })),
         0,
@@ -506,7 +505,7 @@ describe("service boundaries remain chronological", () => {
     const v = await writtenFixture([range("02:30", "02:30")], { weekday: 6, dayCutover: "02:30" });
     const read = (time: string) =>
       withTransaction(suite.db, (tx) =>
-        resolveDepartmentService(tx, v.cfg, v.departmentId, new Date(time)),
+        resolveDepartmentService(tx, v.departmentId, new Date(time)),
       );
     const running = await read(instant);
     expect(running.open).toBe(true);
@@ -551,7 +550,7 @@ describe("every time writer stays open while a change waits", () => {
     await pending(v);
     await expect(
       withTransaction(suite.db, (tx) =>
-        updateMenuPeriod(tx, v.cfg, v.periodId, {
+        updateMenuPeriod(tx, v.periodId, {
           name: "Lunch",
           colour: "blue",
         }),
@@ -565,7 +564,6 @@ describe("every time writer stays open while a change waits", () => {
       withTransaction(suite.db, (tx) =>
         replaceZoneClosedWeek(
           tx,
-          v.cfg,
           v.zoneId!,
           Array.from({ length: 7 }, (_, weekday) => ({
             weekday,
@@ -671,7 +669,7 @@ describe("a waiting change checks the hours written while it waits", () => {
     );
     await waiting(v);
     await expect(
-      withTransaction(suite.db, (tx) => updateMenuPeriod(tx, v.cfg, v.periodId, { name: "Late" })),
+      withTransaction(suite.db, (tx) => updateMenuPeriod(tx, v.periodId, { name: "Late" })),
     ).resolves.toBeUndefined();
   });
   it("creates a period with no ranges while a change waits", async () => {
@@ -683,7 +681,7 @@ describe("a waiting change checks the hours written while it waits", () => {
     );
     await expect(
       withTransaction(suite.db, (tx) =>
-        saveMenuPeriod(tx, v.cfg, v.departmentId, {
+        saveMenuPeriod(tx, v.departmentId, {
           name: "Late",
           menuId,
           staffMenuIds: [],
@@ -746,7 +744,6 @@ describe("a waiting change checks the hours written while it waits", () => {
     withTransaction(suite.db, (tx) =>
       replaceZoneClosedWeek(
         tx,
-        v.cfg,
         v.zoneId!,
         Array.from({ length: 7 }, (_, weekday) => ({
           weekday,
@@ -798,8 +795,8 @@ describe("a waiting change checks the hours written while it waits", () => {
         .map((row) => row.id)
         .sort(),
     );
-  const removePeriod = (v: Awaited<ReturnType<typeof fixture>>, periodId: string) =>
-    withTransaction(suite.db, (tx) => deletePeriod(tx, v.cfg, periodId, null, at, 1));
+  const removePeriod = (periodId: string) =>
+    withTransaction(suite.db, (tx) => deletePeriod(tx, periodId, null, at, 1));
   /** Fri 01:00–03:00 and Sat 03:00–04:00 each fit 05:00; under the waiting 03:00 Friday's ends on
    *  the new start and Saturday's opens on the day before. */
   const waitingStartClash = {
@@ -928,7 +925,7 @@ describe("a waiting change checks the hours written while it waits", () => {
     const otherPeriod = await secondPeriod(v);
     await waiting(v);
     const kept = await stored(v);
-    await expect(removePeriod(v, otherPeriod)).rejects.toMatchObject({
+    await expect(removePeriod(otherPeriod)).rejects.toMatchObject({
       code: "hours.clock_change_conflict",
       params: {
         dayCutover: "03:00",
@@ -948,7 +945,7 @@ describe("a waiting change checks the hours written while it waits", () => {
     expect(await periodsLeft(v)).toEqual([v.periodId, otherPeriod].sort());
     expect(await stored(v)).toEqual(kept);
     expect(kept).toEqual(["6 21:00:00-04:30:00"]);
-    await expect(removePeriod(v, v.periodId)).resolves.toBeUndefined();
+    await expect(removePeriod(v.periodId)).resolves.toBeUndefined();
     expect(await periodsLeft(v)).toEqual([otherPeriod]);
     expect(await stored(v)).toEqual([]);
   });
@@ -961,7 +958,7 @@ describe("a waiting change checks the hours written while it waits", () => {
     const otherPeriod = await secondPeriod(v);
     await waiting(v);
     const kept = await stored(v);
-    await expect(removePeriod(v, otherPeriod)).rejects.toMatchObject({
+    await expect(removePeriod(otherPeriod)).rejects.toMatchObject({
       code: "hours.clock_change_conflict",
       params: waitingStartClash,
     });
@@ -1412,7 +1409,7 @@ describe("undated hours are checked against the start in force", () => {
     await hoursBack(v);
     await expect(
       withTransaction(suite.db, (tx) =>
-        replaceZoneClosedWeek(tx, v.cfg, v.zoneId!, zoneWeek([range("22:00", "04:30")]), 1, at),
+        replaceZoneClosedWeek(tx, v.zoneId!, zoneWeek([range("22:00", "04:30")]), 1, at),
       ),
     ).resolves.toBeUndefined();
   });
@@ -1479,7 +1476,7 @@ describe("undated hours are checked against the start in force", () => {
       });
     });
     await expect(
-      withTransaction(suite.db, (tx) => deletePeriod(tx, v.cfg, other, null, at, 1)),
+      withTransaction(suite.db, (tx) => deletePeriod(tx, other, null, at, 1)),
     ).resolves.toBeUndefined();
   });
   it("leaves a past one-off date to its own start when another week is saved", async () => {
@@ -1537,7 +1534,7 @@ describe("undated hours are checked against the start in force", () => {
       ]);
     });
     await startMovedBack(v);
-    await withTransaction(suite.db, (tx) => deletePeriod(tx, v.cfg, other, v.periodId, at, 1));
+    await withTransaction(suite.db, (tx) => deletePeriod(tx, other, v.periodId, at, 1));
     const rows = await withTransaction(suite.db, (tx) =>
       tx
         .select({ startsAt: departmentDayRanges.startsAt, endsAt: departmentDayRanges.endsAt })
@@ -1611,9 +1608,7 @@ describe("schedule authoring retains date-specific starts", () => {
       ranges: weekday === 3 ? [range("06:00", "08:00")] : [],
     }));
     await expect(
-      withTransaction(suite.db, (tx) =>
-        replaceZoneClosedWeek(tx, v.cfg, v.zoneId!, week, 1, after),
-      ),
+      withTransaction(suite.db, (tx) => replaceZoneClosedWeek(tx, v.zoneId!, week, 1, after)),
     ).rejects.toMatchObject({ code: "zone_closed_time.invalid" });
   });
   it("accepts a one-off menu day under its own 07:00 start", async () => {
@@ -1714,7 +1709,7 @@ describe("dated runtime service across a moved changeover", () => {
       await timeline(v, time);
       const read = (instant: string) =>
         withTransaction(suite.db, (tx) =>
-          resolveDepartmentService(tx, v.cfg, v.departmentId, new Date(instant)),
+          resolveDepartmentService(tx, v.departmentId, new Date(instant)),
         );
       const instants =
         time === "07:00"
@@ -1742,7 +1737,7 @@ describe("dated runtime service across a moved changeover", () => {
       "2026-11-04T03:59:00Z",
     ]) {
       const result = await withTransaction(suite.db, (tx) =>
-        resolveDepartmentService(tx, v.cfg, v.departmentId, new Date(instant)),
+        resolveDepartmentService(tx, v.departmentId, new Date(instant)),
       );
       expect(result.orderableMenuIds).toEqual([]);
     }
@@ -1871,7 +1866,6 @@ it.each([false, true])(
         return zone
           ? replaceZoneClosedWeek(
               tx,
-              v.cfg,
               v.zoneId!,
               on(ranges).map((entries, weekday) => ({ weekday, ranges: entries })),
               0,

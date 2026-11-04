@@ -35,7 +35,6 @@ import type { Logger } from "./logger.js";
 import { withMovedSlips } from "./moved-slips.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { VENUE_SERVICE } from "./modules.js";
-import type { TradingContext } from "./trading-context.js";
 import { requireSession } from "./till-session.js";
 import { checkZones } from "./zone-access.js";
 import {
@@ -173,7 +172,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         const sent = requiredRevision(body);
         const { write, others = [] } = read(body, tableId);
         const answer = await withTransaction(deps.db, async (tx) => {
-          await checkZones(tx, deps.cfg, session, [
+          await checkZones(tx, session, [
             { tableId },
             ...others.map((other) => ({ tableId: other })),
           ]);
@@ -260,14 +259,14 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
       const zoneId = id.toLowerCase();
       const sent = zoneRevision(await bodyOf(c));
       const revision = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ zoneId }]);
+        await checkZones(tx, session, [{ zoneId }]);
         const active = await zoneActive(tx, zoneId);
         const now = deps.clock.now().instant;
         const day = await ensureToday(tx, deps.cfg, removals, now);
         const from = await roomRevision(tx, zoneId);
         await refuseStaleZone(tx, zoneId, sent, from);
         if (!active || day === null) return from;
-        const onto = await recordedOnto(tx, deps.cfg, zoneId, day);
+        const onto = await recordedOnto(tx, zoneId, day);
         if (onto === null) return from;
         return resetZoneOn(tx, removals, zoneId, day, now, onto);
       });
@@ -289,7 +288,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         layoutRevision: whole(body.layoutRevision, "layoutRevision", 0, Number.MAX_SAFE_INTEGER),
       };
       const revision = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ zoneId }]);
+        await checkZones(tx, session, [{ zoneId }]);
         const active = await zoneActive(tx, zoneId);
         const now = deps.clock.now().instant;
         const day = await ensureToday(tx, deps.cfg, removals, now);
@@ -321,11 +320,10 @@ async function zoneActive(tx: Transaction, zoneId: string): Promise<boolean> {
  */
 async function recordedOnto(
   tx: Transaction,
-  cfg: TradingContext,
   zoneId: string,
   day: string,
 ): Promise<ResetOnto | null> {
-  const sets = await VENUE_SERVICE.readFloorPlanSets(tx, cfg);
+  const sets = await VENUE_SERVICE.readFloorPlanSets(tx);
   if (!plannedZones(sets).has(zoneId)) return null;
   const [record] = await tx
     .select({ setId: floorTodayZones.setId, occurrence: floorTodayZones.occurrence })

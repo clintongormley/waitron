@@ -124,11 +124,7 @@ export function mountInvoiceLookupApi(app: Hono, deps: TillApiDeps, log: Logger,
       const session = await requireSession(deps, c);
       const q = requiredSearch(c.req.query("q"));
       const invoices = await withTransaction(deps.db, async (tx) =>
-        lookUpInvoices(
-          tx,
-          q,
-          await orderZoneCondition(tx, deps.cfg, session.device.deviceProfileId),
-        ),
+        lookUpInvoices(tx, q, await orderZoneCondition(tx, session.device.deviceProfileId)),
       );
       return c.json({ invoices });
     }),

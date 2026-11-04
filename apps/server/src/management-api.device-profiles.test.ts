@@ -2094,15 +2094,15 @@ describe("Management API — who and where a device profile serves (W97)", () =>
     await setupTenantOnce();
     cookie = await login(mountApp(), MANAGER_EMAIL);
     place = await withTransaction(suite.db, async (tx) => {
-      const terrace = await createServiceZone(tx, venueCfg, {
+      const terrace = await createServiceZone(tx, {
         name: uniqueName("Terrace"),
         departmentId: ordering.departmentId,
       });
-      const deli = await createDepartment(tx, venueCfg, {
+      const deli = await createDepartment(tx, {
         name: uniqueName("Deli"),
         orderStart: "counter",
       });
-      const deliCounter = await createServiceZone(tx, venueCfg, {
+      const deliCounter = await createServiceZone(tx, {
         name: uniqueName("Deli counter"),
         departmentId: deli.id,
       });
@@ -2547,7 +2547,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
 
   it("reads back a zone switched off since it was chosen, so the manager sees what is stored", async () => {
     const spare = await withTransaction(suite.db, (tx) =>
-      createServiceZone(tx, venueCfg, {
+      createServiceZone(tx, {
         name: uniqueName("Spare"),
         departmentId: ordering.departmentId,
       }),

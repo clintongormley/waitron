@@ -1005,7 +1005,7 @@ describe("bills of two service modes", () => {
     const { partyId, tabId: prepay } = await seat(v, await v.table(label));
     await orderForParty(v, partyId, ["Agua", "Burger"]);
     const tableTab = await splitOff(partyId, prepay, [2]);
-    await inTx(v, (tx) => VENUE_SERVICE.retargetOrderContext(tx, v.cfg, prepay, counter.zoneId));
+    await inTx(v, (tx) => VENUE_SERVICE.retargetOrderContext(tx, prepay, counter.zoneId));
     const modes = v.db.all<{ id: string; mode: string }>(sql`
       select working_order_id as id, service_mode as mode from order_service_contexts
       where working_order_id in (${prepay}, ${tableTab}) order by service_mode`);

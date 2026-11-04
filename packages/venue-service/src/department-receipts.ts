@@ -302,7 +302,6 @@ export async function writeDepartmentReceipt(
 
 export async function receiptDepartmentForSale(
   tx: Transaction,
-  _cfg: VenueScope,
   saleId: string,
 ): Promise<string | null> {
   const [row] = await tx
@@ -314,7 +313,6 @@ export async function receiptDepartmentForSale(
 }
 export async function receiptDepartmentForOrder(
   tx: Transaction,
-  _cfg: VenueScope,
   orderId: string,
 ): Promise<string | null> {
   const [row] = await tx
@@ -323,11 +321,7 @@ export async function receiptDepartmentForOrder(
     .where(eq(orderServiceContexts.workingOrderId, orderId));
   return row?.id ?? null;
 }
-export async function receiptDefaultDepartment(
-  tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: VenueScope,
-): Promise<string | null> {
+export async function receiptDefaultDepartment(tx: Transaction): Promise<string | null> {
   const [row] = await tx
     .select({ id: departments.id })
     .from(departments)
@@ -337,7 +331,6 @@ export async function receiptDefaultDepartment(
 
 export async function readDepartmentReceiptPolicy(
   tx: Transaction,
-  _cfg: VenueScope,
   departmentId: string,
 ): Promise<DepartmentReceiptPolicy> {
   const [row] = await tx
@@ -365,14 +358,12 @@ export async function saveDepartmentReceiptSettings(
   await writeDepartmentReceipt(tx, cfg, departmentId, input.receipt, rasters);
   await setDepartmentSalePolicyField(
     tx,
-    cfg,
     departmentId,
     "receiptPrintMode",
     input.policy.receiptPrintMode,
   );
   await setDepartmentSalePolicyField(
     tx,
-    cfg,
     departmentId,
     "printTradingName",
     input.policy.printTradingName,

@@ -73,15 +73,13 @@ async function routed() {
     .values({ locationId: cfg.locationId, name: "Room", displayOrder: 0 })
     .returning({ id: floorZones.id });
   const made = await scoped(async (tx) => {
-    const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
-    ).id;
-    await configureZone(tx, cfg, { zoneId: zone!.id, departmentId: restaurant });
+    const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
+    await configureZone(tx, { zoneId: zone!.id, departmentId: restaurant });
     const menuId = (await createCatalogue(tx, { name: `Dinner ${cfg.locationId}` })).id;
     const { document } = await buildMenuDocument(tx, menuId);
     await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
     const dinner = (
-      await saveMenuPeriod(tx, cfg, restaurant, { name: "Dinner", menuId, staffMenuIds: [] })
+      await saveMenuPeriod(tx, restaurant, { name: "Dinner", menuId, staffMenuIds: [] })
     ).id;
     const person = async (role: "manager" | "supervisor") => {
       const [row] = await tx

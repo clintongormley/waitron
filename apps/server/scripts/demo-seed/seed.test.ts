@@ -19,7 +19,6 @@ import {
   menuStatus,
   readContentLanguages,
 } from "@waitron/catalogue";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { resolveMakers, setRoutingCell } from "@waitron/venue-service";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { getCountryPack } from "@waitron/country-packs";
@@ -292,7 +291,6 @@ describe("seedDemoRestaurant", () => {
     });
 
     await withTransaction(suite.db, async (tx) => {
-      const cfg = { locationId: brandLocationId(venue.locationId) };
       const { rows: stations } = await tx.execute<{ id: string; name: string }>(sql`
         select id, name from kitchen_stations where location_id = ${venue.locationId}`);
       const { rows: zones } = await tx.execute<{ id: string; name: string }>(sql`
@@ -308,7 +306,6 @@ describe("seedDemoRestaurant", () => {
       expect(
         await resolveMakers(
           tx,
-          cfg,
           downstairs.id,
           [drink.id, dish.id],
           new Date("2026-10-02T18:30:00Z"),
@@ -320,13 +317,7 @@ describe("seedDemoRestaurant", () => {
         ]),
       );
       expect(
-        await resolveMakers(
-          tx,
-          cfg,
-          upstairs.id,
-          [drink.id, dish.id],
-          new Date("2026-10-02T18:30:00Z"),
-        ),
+        await resolveMakers(tx, upstairs.id, [drink.id, dish.id], new Date("2026-10-02T18:30:00Z")),
       ).toEqual(
         new Map([
           [drink.id, { kind: "made", route: { kind: "station", stationId: downstairsStation.id } }],
@@ -351,7 +342,7 @@ describe("seedDemoRestaurant", () => {
       );
       for (const zone of [downstairs, upstairs]) {
         expect(
-          await resolveMakers(tx, cfg, zone.id, [snack.id], new Date("2026-10-02T18:30:00Z")),
+          await resolveMakers(tx, zone.id, [snack.id], new Date("2026-10-02T18:30:00Z")),
         ).toEqual(new Map([[snack.id, { kind: "made", route: { kind: "no_preparation" } }]]));
       }
     });
@@ -388,7 +379,6 @@ describe("seedDemoRestaurant", () => {
     });
 
     await withTransaction(suite.db, async (tx) => {
-      const cfg = { locationId: brandLocationId(venue.locationId) };
       const { rows: retired } = await tx.execute(sql`
         select name from sqlite_master where type = 'table'
         and name in ('hours_week_cells', 'hours_week_periods', 'station_fallbacks')`);
@@ -440,7 +430,7 @@ describe("seedDemoRestaurant", () => {
         ["2026-10-06T18:00:00Z", "Downstairs bar"],
       ] as const) {
         const station = stations.find((candidate) => candidate.name === stationName)!;
-        expect(await resolveMakers(tx, cfg, zones[0]!.id, [drink.id], new Date(instant))).toEqual(
+        expect(await resolveMakers(tx, zones[0]!.id, [drink.id], new Date(instant))).toEqual(
           new Map([
             [drink.id, { kind: "made", route: { kind: "station", stationId: station.id } }],
           ]),

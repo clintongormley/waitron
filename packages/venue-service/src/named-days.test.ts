@@ -60,7 +60,7 @@ async function fixture() {
     const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
     const ids = [];
     for (const owner of [department!, other!]) {
-      const period = await saveMenuPeriod(tx, cfg, owner.id, {
+      const period = await saveMenuPeriod(tx, owner.id, {
         name: "Lunch",
         menuId: menu!.id,
         staffMenuIds: [],
@@ -120,7 +120,7 @@ async function special(
   });
 }
 const service = (f: Fixture, at: string, department = f.department) =>
-  run((tx) => resolveDepartmentService(tx, f.cfg, department, new Date(at)));
+  run((tx) => resolveDepartmentService(tx, department, new Date(at)));
 const read = (
   from: string,
   to = from,

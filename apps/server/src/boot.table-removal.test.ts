@@ -54,11 +54,11 @@ for (const [mode, status] of [
         const now = new Date();
         const venue = await createClockVenue(suite.db, () => now, modules);
         const fixture = await withTransaction(suite.db, async (tx) => {
-          const department = await createDepartment(tx, venue.cfg, {
+          const department = await createDepartment(tx, {
             name: "Dining room",
             orderStart: "table",
           });
-          const zone = await createServiceZone(tx, venue.cfg, {
+          const zone = await createServiceZone(tx, {
             name: "Terrace",
             departmentId: department.id,
           });

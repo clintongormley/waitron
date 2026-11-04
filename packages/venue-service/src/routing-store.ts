@@ -20,7 +20,7 @@ import {
   staffPresentationName,
 } from "@waitron/catalogue";
 import { AppError, normaliseUuid, compareStationNames } from "@waitron/shared";
-import { liveDocumentsByZone, resolveZoneContext, type VenueScope } from "./operations.js";
+import { liveDocumentsByZone, resolveZoneContext } from "./operations.js";
 import {
   cellKey,
   changeReach,
@@ -460,7 +460,6 @@ export async function loadRoutingRules(
 
 export async function previewRoutingChange(
   tx: Transaction,
-  cfg: VenueScope,
   change: RoutingChange,
 ): Promise<RoutingMove[]> {
   const { rules } = await snapshot(tx);
@@ -482,7 +481,7 @@ export async function previewRoutingChange(
   const zoneList = (zones.length ? zones : [{ id: null, name: null }]).filter((zone) =>
     reach.reachesZone(zone.id),
   );
-  const offers = await readExtraOffers(tx, cfg, productsToCheck, zoneList);
+  const offers = await readExtraOffers(tx, productsToCheck, zoneList);
   const compare = (
     before: RoutingRules,
     after: RoutingRules,
@@ -680,7 +679,6 @@ type ExtraOffers = Map<string, Map<string, Set<string | null>>>;
  */
 async function readExtraOffers(
   tx: Transaction,
-  cfg: VenueScope,
   dishes: readonly PreviewProduct[],
   zones: readonly { id: string | null }[],
 ): Promise<ExtraOffers> {
@@ -706,7 +704,7 @@ async function readExtraOffers(
   for (const [dishId, itemIds] of live)
     for (const itemId of itemIds) offer(dishId, itemId, everyZone);
   // A variant is never an offer of its own, and routes exactly as its parent, the offer's product.
-  for (const [zoneId, menus] of await liveDocumentsByZone(tx, cfg))
+  for (const [zoneId, menus] of await liveDocumentsByZone(tx))
     for (const served of menus.flatMap((menu) => documentOffers(menu.document)))
       for (const modifier of served.offeredModifiers)
         if (modifier.kind === "extras")
@@ -804,11 +802,10 @@ function storedUuid(id: string): string {
  */
 export async function routingAt(
   tx: Transaction,
-  cfg: VenueScope,
   at: Date,
   {
     runningPeriod = async (departmentId: string) =>
-      (await resolveDepartmentService(tx, cfg, departmentId, at)).periodId,
+      (await resolveDepartmentService(tx, departmentId, at)).periodId,
   }: { runningPeriod?: (departmentId: string) => Promise<string | null> } = {},
 ): Promise<MakerResolver> {
   const { moment } = await clockAt(tx, at);
@@ -821,7 +818,7 @@ export async function routingAt(
   const anyPeriodLines = (rules.cellPeriods?.size ?? 0) > 0;
   const enterZone = async (zoneId: string | null) => {
     if (zoneId === null) return;
-    const { departmentId } = await resolveZoneContext(tx, cfg, zoneId);
+    const { departmentId } = await resolveZoneContext(tx, zoneId);
     zoneDepartment.set(zoneId, departmentId);
     if (moment !== null && anyPeriodLines && !periods.has(departmentId))
       periods.set(departmentId, await runningPeriod(departmentId));
@@ -914,24 +911,22 @@ export async function routingAt(
 
 export async function resolveMakers(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string | null,
   productIds: readonly string[],
   at: Date,
 ): Promise<ReadonlyMap<string, MakerOutcome>> {
   if (productIds.length === 0) return new Map();
-  return (await routingAt(tx, cfg, at)).makers(zoneId, productIds);
+  return (await routingAt(tx, at)).makers(zoneId, productIds);
 }
 
 export async function resolveExtraMakers(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string | null,
   extras: readonly { key: string; productId: string; dishStationId: string | null }[],
   at: Date,
 ): Promise<ReadonlyMap<string, ExtraMakerOutcome>> {
   if (extras.length === 0) return new Map();
-  return (await routingAt(tx, cfg, at)).extraMakers(zoneId, extras);
+  return (await routingAt(tx, at)).extraMakers(zoneId, extras);
 }
 
 function stationTodayState(

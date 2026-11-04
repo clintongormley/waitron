@@ -43,7 +43,7 @@ async function fixture() {
       .select({ departmentId: zoneServicePolicies.departmentId })
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
-    const terrace = await createServiceZone(tx, v.cfg, {
+    const terrace = await createServiceZone(tx, {
       name: "Terrace",
       departmentId: policy!.departmentId,
     });

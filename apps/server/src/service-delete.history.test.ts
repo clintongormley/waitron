@@ -57,7 +57,7 @@ it("deleted department reprints its original receipt configuration and frozen he
     tx.select().from(departments).where(eq(departments.id, departmentId)),
   );
   const survivorId = await run(async (tx) => {
-    const survivor = await createDepartment(tx, venue.cfg, { name: "Survivor" });
+    const survivor = await createDepartment(tx, { name: "Survivor" });
     await tx
       .update(departments)
       .set({ tradingName: "Frozen trading brand" })
@@ -135,7 +135,7 @@ it("deleted department reprints its original receipt configuration and frozen he
     return row!;
   });
   const sent = await run((tx) =>
-    listSentDepartmentTransfers(tx, venue.cfg, billId, {
+    listSentDepartmentTransfers(tx, billId, {
       departmentId,
       personId: venue.operator.personId,
     }),
@@ -148,7 +148,7 @@ it("deleted department reprints its original receipt configuration and frozen he
       .select()
       .from(deviceProfileServiceAccess)
       .where(eq(deviceProfileServiceAccess.departmentId, departmentId));
-    const survivorZone = await createServiceZone(tx, venue.cfg, {
+    const survivorZone = await createServiceZone(tx, {
       name: "Survivor zone",
       departmentId: survivorId,
     });
@@ -162,18 +162,17 @@ it("deleted department reprints its original receipt configuration and frozen he
   await run((tx) =>
     deleteDepartment(
       tx,
-      venue.cfg,
       moduleCoreServices(venue.cfg, enabledTableRemovals(ALL_MODULES)).floorDeletion,
       departmentId,
       new Date("2026-10-11T12:00:00Z"),
     ),
   );
   await run(async (tx) => {
-    const reused = await createDepartment(tx, venue.cfg, {
+    const reused = await createDepartment(tx, {
       name: original!.name,
       tradingName: "Replacement brand",
     });
-    await createServiceZone(tx, venue.cfg, { name: "counter", departmentId: reused.id });
+    await createServiceZone(tx, { name: "counter", departmentId: reused.id });
     await tx.insert(departmentReceipts).values({
       departmentId: reused.id,
       receipt: { headerSubtitle: { "es-ES": "Replacement subtitle" } },
@@ -189,7 +188,7 @@ it("deleted department reprints its original receipt configuration and frozen he
   expect(afterDetail.lines).toEqual(detail.lines);
   expect(
     await run((tx) =>
-      readDepartmentTransfer(tx, venue.cfg, transfer.id, {
+      readDepartmentTransfer(tx, transfer.id, {
         departmentId,
         personId: venue.operator.personId,
       }),
@@ -197,7 +196,7 @@ it("deleted department reprints its original receipt configuration and frozen he
   ).toEqual(transfer);
   expect(
     await run((tx) =>
-      listSentDepartmentTransfers(tx, venue.cfg, billId, {
+      listSentDepartmentTransfers(tx, billId, {
         departmentId,
         personId: venue.operator.personId,
       }),

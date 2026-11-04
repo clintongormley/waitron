@@ -125,7 +125,7 @@ describe("bookings seat route → real seatTable", () => {
     const tableId = await withTransaction(db, async (tx: Transaction) => {
       const { id } = await createTable(tx, v.tillCfg, {
         label: "7",
-        zoneId: (await createZone(tx, v.tillCfg, { name: "Tables" })).id,
+        zoneId: (await createZone(tx, { name: "Tables" })).id,
       });
       return id;
     });
@@ -169,7 +169,7 @@ describe("bookings seat route → real seatTable", () => {
     const tableId = await withTransaction(db, async (tx: Transaction) => {
       const { id } = await createTable(tx, v.tillCfg, {
         label: "9",
-        zoneId: (await createZone(tx, v.tillCfg, { name: "Tables" })).id,
+        zoneId: (await createZone(tx, { name: "Tables" })).id,
       });
       return id;
     });
@@ -213,7 +213,7 @@ describe("bookings seat route → real seatTable", () => {
     const tableId = await withTransaction(db, async (tx: Transaction) => {
       const { id } = await createTable(tx, v.tillCfg, {
         label: "8",
-        zoneId: (await createZone(tx, v.tillCfg, { name: "Tables" })).id,
+        zoneId: (await createZone(tx, { name: "Tables" })).id,
       });
       await setNeedsClearingInEveryDepartment(tx, true);
       const seated = await seatTable(
@@ -270,7 +270,7 @@ describe("bookings seat route → real seatTable", () => {
     const removals = enabledTableRemovals(ALL_MODULES);
     const now = new Date();
     const tableId = await withTransaction(db, async (tx: Transaction) => {
-      const { id: zoneId } = await createZone(tx, v.tillCfg, { name: "Terrace" });
+      const { id: zoneId } = await createZone(tx, { name: "Terrace" });
       const layout = await defaultLayout(tx, v.tillCfg, zoneId);
       const at = (x: number) => ({
         x,
@@ -347,7 +347,7 @@ describe("bookings seat route → real seatTable", () => {
     const v = await setupVenue();
     const app = mountApp(v.ctx);
     const table = await withTransaction(db, async (tx: Transaction) => {
-      const { id: zoneId } = await createZone(tx, v.tillCfg, { name: "Counter" });
+      const { id: zoneId } = await createZone(tx, { name: "Counter" });
       const entry = (
         key: string,
         label: string,

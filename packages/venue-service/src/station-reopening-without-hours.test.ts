@@ -143,7 +143,7 @@ describe("station reopening without hours", () => {
           const states =
             read === "states"
               ? await stationStates(tx, at)
-              : await (await routingAt(tx, f.cfg, at)).stations();
+              : await (await routingAt(tx, at)).stations();
           expect(states.get(f.bar)).toMatchObject({
             open: true,
             byHand: null,

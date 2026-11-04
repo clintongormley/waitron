@@ -49,7 +49,7 @@ const suite = useVenueDb({
     TABLE_ID = await withTransaction(db, async (tx) => {
       const { id: tableId } = await createTable(tx, cfg, {
         label: "T1",
-        zoneId: (await createZone(tx, cfg, { name: "Tables" })).id,
+        zoneId: (await createZone(tx, { name: "Tables" })).id,
       });
       return tableId;
     });

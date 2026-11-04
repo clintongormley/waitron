@@ -1290,11 +1290,11 @@ async function inService(tableId: string): Promise<boolean> {
 describe("resetting a zone onto a layout", () => {
   it("with no record yet, leaves the zone as it is when its due set holds no saved layout", async () => {
     const zone = await inTx(v, async (tx) => {
-      const department = await createDepartment(tx, v.cfg, {
+      const department = await createDepartment(tx, {
         name: `Dept ${randomUUID().slice(0, 8)}`,
         orderStart: "table",
       });
-      const { id: zoneId } = await createServiceZone(tx, v.cfg, {
+      const { id: zoneId } = await createServiceZone(tx, {
         name: `Inside ${randomUUID().slice(0, 8)}`,
         departmentId: department.id,
       });
@@ -1302,7 +1302,7 @@ describe("resetting a zone onto a layout", () => {
         .insert(floorPlanSets)
         .values({ locationId: v.cfg.locationId })
         .returning({ id: floorPlanSets.id });
-      await linkFloorPlanSet(tx, v.cfg, {
+      await linkFloorPlanSet(tx, {
         setId: set!.id,
         departmentId: department.id,
         name: "Standard",
@@ -1327,11 +1327,11 @@ describe("resetting a zone onto a layout", () => {
 
   it("leaves a zone whose department has no set as it is, answering its revision", async () => {
     const zoneId = await inTx(v, async (tx) => {
-      const department = await createDepartment(tx, v.cfg, {
+      const department = await createDepartment(tx, {
         name: `Dept ${randomUUID().slice(0, 8)}`,
         orderStart: "table",
       });
-      const { id } = await createServiceZone(tx, v.cfg, {
+      const { id } = await createServiceZone(tx, {
         name: `Setless ${randomUUID().slice(0, 8)}`,
         departmentId: department.id,
       });
@@ -1431,7 +1431,7 @@ describe("Reset to … plan", () => {
 
   async function newDepartment(withSet: boolean): Promise<string> {
     return inTx(v, async (tx) => {
-      const department = await createDepartment(tx, v.cfg, {
+      const department = await createDepartment(tx, {
         name: `Dept ${randomUUID().slice(0, 8)}`,
         orderStart: "table",
       });
@@ -1440,7 +1440,7 @@ describe("Reset to … plan", () => {
           .insert(floorPlanSets)
           .values({ locationId: v.cfg.locationId })
           .returning({ id: floorPlanSets.id });
-        await linkFloorPlanSet(tx, v.cfg, {
+        await linkFloorPlanSet(tx, {
           setId: set!.id,
           departmentId: department.id,
           name: "Standard",

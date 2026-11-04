@@ -271,14 +271,14 @@ export async function enqueueSaleReceipt(
       .from(sales)
       .where(eq(sales.id, saleId));
     const context = sale?.workingOrderId
-      ? await VENUE_SERVICE.findOrderContext(tx, cfg, sale.workingOrderId)
+      ? await VENUE_SERVICE.findOrderContext(tx, sale.workingOrderId)
       : null;
     if (context?.serviceMode === "prepay") {
       await enqueueCollectionTicket(tx, cfg, context.zoneId, ticket.orderNumber, printers);
     }
     if ((await reserveStagedInvoiceDelivery(tx, saleId)) !== false) return;
     const mode = context
-      ? (await VENUE_SERVICE.resolveSalePolicy(tx, cfg, context.zoneId)).receiptPrintMode
+      ? (await VENUE_SERVICE.resolveSalePolicy(tx, context.zoneId)).receiptPrintMode
       : "auto";
     if (ticket.invoiceType !== "F1" && mode !== "auto") return;
     await enqueueOriginalReceipt(tx, cfg, ticket, saleId, printers, sale?.operatorId ?? null);
@@ -293,7 +293,7 @@ export async function enqueueCollectionTicket(
   orderNumber: number,
   printers: PrinterLookup = printerLookup(tx, cfg.origin),
 ): Promise<void> {
-  const policy = await VENUE_SERVICE.resolveSalePolicy(tx, cfg, zoneId);
+  const policy = await VENUE_SERVICE.resolveSalePolicy(tx, zoneId);
   if (policy.collectionNumber !== "numbered") return;
   const printer = await printers("receipt");
   if (printer === undefined) return;

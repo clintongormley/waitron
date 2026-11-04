@@ -49,7 +49,7 @@ async function fixture() {
       orderNumber: 2,
       partyId: p.partyId,
     });
-    await VENUE_SERVICE.recordOrderContext(tx, venue.cfg, other!.id, venue.zoneId);
+    await VENUE_SERVICE.recordOrderContext(tx, other!.id, venue.zoneId);
     await placeGroupedRound(
       tx,
       venue.cfg,

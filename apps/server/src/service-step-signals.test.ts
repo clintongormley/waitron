@@ -393,8 +393,8 @@ describe("readTableSteps", () => {
     const v = await setupPartyVenue(suite.db);
     const [setUp] = await setSteps(v, await tablesDepartment(v), [seated("Set up")]);
     const terrace = await inTx(v, async (tx) => {
-      const department = await createDepartment(tx, v.cfg, { name: "Terrace service" });
-      const zone = await createServiceZone(tx, v.cfg, {
+      const department = await createDepartment(tx, { name: "Terrace service" });
+      const zone = await createServiceZone(tx, {
         name: "Terrace",
         departmentId: department.id,
       });

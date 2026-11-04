@@ -1464,13 +1464,11 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireZoneId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
       return c.json(
         await withVenueAuth(deps, sessionId, async (tx) => {
           await requireLiveZone(tx, id);
           return readZoneDeleteImpact(
             tx,
-            cfg,
             floorDeletionFor(deps.tableRemovals ?? []),
             id,
             new Date(),
@@ -1484,13 +1482,12 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireZoneId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
       if ((await c.req.text()) !== "")
         throw new AppError("management.request_invalid", { field: "body" });
       return c.json(
         await withVenueAuth(deps, sessionId, async (tx) => {
           await requireLiveZone(tx, id);
-          return deleteZone(tx, cfg, floorDeletionFor(deps.tableRemovals ?? []), id, new Date());
+          return deleteZone(tx, floorDeletionFor(deps.tableRemovals ?? []), id, new Date());
         }),
       );
     }),

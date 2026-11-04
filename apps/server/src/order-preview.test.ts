@@ -120,7 +120,7 @@ describe("A738 order previews", () => {
       }
     });
     const parked = await listHeldOrders({ db: venue.db }, venue.cfg);
-    const waiting = await listCounterWaiting({ db: venue.db }, venue.cfg);
+    const waiting = await listCounterWaiting({ db: venue.db });
     for (const [i, list] of [
       [0, parked],
       [1, waiting],

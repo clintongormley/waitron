@@ -532,11 +532,11 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
 
     it("leaves a profile's scope alone on a re-run", async () => {
-      const { locationId, profiles, runSeed, access, defaults } = await venue();
+      const { profiles, runSeed, access, defaults } = await venue();
       await runSeed();
       const { department_id } = await defaults();
       const terrace = await db.transaction((tx) =>
-        createServiceZone(tx, { locationId }, { name: "Terrace", departmentId: department_id }),
+        createServiceZone(tx, { name: "Terrace", departmentId: department_id }),
       );
       await db.transaction((tx) =>
         setProfileServiceAccess(tx, profiles.till, {

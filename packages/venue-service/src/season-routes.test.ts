@@ -67,14 +67,12 @@ async function routed() {
   const venueId = await venueLocationId(db);
   const cfg = { locationId: brandLocationId(venueId) };
   const made = await scoped(async (tx) => {
-    const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
-    ).id;
+    const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
     const menuId = (await createCatalogue(tx, { name: `Dinner ${randomUUID()}` })).id;
     const { document } = await buildMenuDocument(tx, menuId);
     await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
     const dinner = (
-      await saveMenuPeriod(tx, cfg, restaurant, { name: "Dinner", menuId, staffMenuIds: [] })
+      await saveMenuPeriod(tx, restaurant, { name: "Dinner", menuId, staffMenuIds: [] })
     ).id;
     await replaceMenuWeek(
       tx,

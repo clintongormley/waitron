@@ -387,7 +387,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           const device = await currentZoneDevice(tx, session);
-          return VENUE_SERVICE.readDeviceZoneSelection(tx, deps.cfg, device.deviceId);
+          return VENUE_SERVICE.readDeviceZoneSelection(tx, device.deviceId);
         }),
       );
     }),
@@ -405,7 +405,6 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
           await assertNoPaymentInProgress(tx, device.deviceId);
           return VENUE_SERVICE.setDeviceZoneSelection(
             tx,
-            deps.cfg,
             device.deviceId,
             body as DeviceZoneSelectionInput,
           );
@@ -600,14 +599,13 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   app.get("/api/device/station-screen", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      const cfg = requestCfg(deps.cfg, device);
       const stations = await withTransaction(deps.db, async (tx) => {
         const screen = await stationScreenOf(tx, c, device);
         const { slots, queues } = await stationScreenSlots(tx, screen);
         const live = [...queues.keys()];
         const now = new Date();
         // An Every screen can still hold ready dishes at a deleted station.
-        const states = await (await VENUE_SERVICE.routingAt(tx, cfg, now)).stations();
+        const states = await (await VENUE_SERVICE.routingAt(tx, now)).stations();
         const down = await stationPrintersDown(tx, now, live, {
           withSwitchedOff: true,
         });

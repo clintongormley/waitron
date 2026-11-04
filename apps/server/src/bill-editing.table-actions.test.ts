@@ -250,7 +250,7 @@ describe("table composition compares every affected bill before moving anything"
       await save(into.partyId, into.tabId, venue.adminId);
       await inTx(venue, async (tx) => {
         const counter = await offerProducts(tx, venue.cfg, { zone: "counter" });
-        await VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, from.tabId, counter.zoneId);
+        await VENUE_SERVICE.retargetOrderContext(tx, from.tabId, counter.zoneId);
       });
       const expected = await edits(from.partyId, into.partyId);
       expect(await request(action, from, into, expected)).toEqual(keptApart(action, from, into));
@@ -272,7 +272,7 @@ describe("table composition compares every affected bill before moving anything"
       await save(into.partyId, into.tabId);
       await inTx(venue, async (tx) => {
         const counter = await offerProducts(tx, venue.cfg, { zone: "counter" });
-        await VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, from.tabId, counter.zoneId);
+        await VENUE_SERVICE.retargetOrderContext(tx, from.tabId, counter.zoneId);
       });
       expect(await request(action, from, into, await edits(from.partyId, into.partyId))).toEqual(
         keptApart(action, from, into),

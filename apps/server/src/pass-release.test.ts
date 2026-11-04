@@ -542,7 +542,7 @@ describe("A773 pass release: set and stamps", () => {
         f.venue.party.tabId,
         [f.burgerLine],
         undefined,
-        routingOnce(tx, f.venue.cfg, new Date("2026-03-14T12:10:00.000Z")),
+        routingOnce(tx, new Date("2026-03-14T12:10:00.000Z")),
       ),
     );
     expect(await rows([f.burger])).toEqual(released);
@@ -588,10 +588,10 @@ async function signedInTillPass(venue: Venue, name: string) {
 }
 
 /** Limits the profile's service to a department of its own, so the party's zone is not its. */
-async function serveElsewhere(venue: Venue, profileId: string): Promise<void> {
+async function serveElsewhere(profileId: string): Promise<void> {
   await withTransaction(db, async (tx) => {
-    const deli = await createDepartment(tx, venue.cfg, { name: "Deli", orderStart: "counter" });
-    const zone = await createServiceZone(tx, venue.cfg, {
+    const deli = await createDepartment(tx, { name: "Deli", orderStart: "counter" });
+    const zone = await createServiceZone(tx, {
       name: "Deli counter",
       departmentId: deli.id,
     });
@@ -616,7 +616,7 @@ describe("A773 pass release: authority", () => {
     const noFlag = await profiledPass(f.venue, "No flag", "kds", ["act-as-kds", "prepare-orders"]);
     const nobody = await profiledPass(f.venue, "Nobody", "till", ALL_PASS);
     const elsewhere = await signedInTillPass(f.venue, "Elsewhere");
-    await serveElsewhere(f.venue, elsewhere.profileId);
+    await serveElsewhere(elsewhere.profileId);
 
     await refusedWhole(
       release(f.venue, { deviceId: noPrepare.deviceId, personId: null }, ask),
@@ -693,7 +693,7 @@ describe("A773 pass release: authority", () => {
     const [hotCard] = await toFire(f.venue, f.hot);
     const ask = askOf(hotCard!);
     const elsewhere = await signedInTillPass(f.venue, "Elsewhere");
-    await serveElsewhere(f.venue, elsewhere.profileId);
+    await serveElsewhere(elsewhere.profileId);
     const malformed = {
       ...ask,
       target: { kind: "group", partyId: f.venue.party.partyId, groupId: "x" },
@@ -1700,9 +1700,9 @@ describe("A773 pass release: races", () => {
      *  service zones to narrow). */
     zones: {
       code: "service_zone.not_allowed",
-      narrow: async (tx: Transaction, venue: Venue, profileId: string) => {
-        const deli = await createDepartment(tx, venue.cfg, { name: "Deli", orderStart: "counter" });
-        const zone = await createServiceZone(tx, venue.cfg, {
+      narrow: async (tx: Transaction, _venue: Venue, profileId: string) => {
+        const deli = await createDepartment(tx, { name: "Deli", orderStart: "counter" });
+        const zone = await createServiceZone(tx, {
           name: "Deli counter",
           departmentId: deli.id,
         });

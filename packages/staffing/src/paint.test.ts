@@ -784,7 +784,7 @@ async function guideVenue() {
       .insert(floorZones)
       .values({ ...cfg, name: "Dining" })
       .returning();
-    await configureZone(tx, cfg, { zoneId: zone!.id, departmentId: v.departmentId });
+    await configureZone(tx, { zoneId: zone!.id, departmentId: v.departmentId });
     const [period] = await tx
       .insert(menuPeriods)
       .values({
@@ -908,8 +908,7 @@ it("A724 keeps the sending department identity of every station range", async ()
       .insert(floorZones)
       .values({ locationId: v.cfg.locationId, name: "Counter" })
       .returning();
-    const cfg = { locationId: locationId(v.cfg.locationId) };
-    await configureZone(tx, cfg, { zoneId: zone!.id, departmentId: department!.id });
+    await configureZone(tx, { zoneId: zone!.id, departmentId: department!.id });
     const [period] = await tx
       .insert(menuPeriods)
       .values({ departmentId: department!.id, menuId: v.menuId, name: "Evening", colour: "green" })

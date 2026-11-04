@@ -51,19 +51,19 @@ async function setMinutes(departmentId: string, minutes: number | null): Promise
     .where(eq(departments.id, departmentId));
 }
 
-async function departmentWithZone(cfg: { locationId: LocationId }, name: string) {
+async function departmentWithZone(name: string) {
   return scoped(async (tx) => {
-    const department = await createDepartment(tx, cfg, { name, orderStart: "table" });
-    const zone = await createServiceZone(tx, cfg, { name, departmentId: department.id });
+    const department = await createDepartment(tx, { name, orderStart: "table" });
+    const zone = await createServiceZone(tx, { name, departmentId: department.id });
     return { departmentId: department.id, zoneId: zone.id };
   });
 }
 
 describe("readReleaseReminderMinutesByZone", () => {
   it("reads each zone's department's minutes, null where the department has reminders off", async () => {
-    const cfg = { locationId: await seedLocation("Reminders on and off") };
-    const a = await departmentWithZone(cfg, "A");
-    const b = await departmentWithZone(cfg, "B");
+    await seedLocation("Reminders on and off");
+    const a = await departmentWithZone("A");
+    const b = await departmentWithZone("B");
     await setMinutes(a.departmentId, 25);
     await setMinutes(b.departmentId, null);
     expect(
@@ -77,8 +77,8 @@ describe("readReleaseReminderMinutesByZone", () => {
   });
 
   it("reads 10 for a department nobody has changed", async () => {
-    const cfg = { locationId: await seedLocation("Reminder untouched") };
-    const a = await departmentWithZone(cfg, "A");
+    await seedLocation("Reminder untouched");
+    const a = await departmentWithZone("A");
     expect(await scoped((tx) => readReleaseReminderMinutesByZone(tx, [a.zoneId]))).toEqual(
       new Map([[a.zoneId, 10]]),
     );
@@ -86,7 +86,7 @@ describe("readReleaseReminderMinutesByZone", () => {
 
   it("leaves out a zone with no department, and an id that is no zone", async () => {
     const cfg = { locationId: await seedLocation("Reminder without department") };
-    const a = await departmentWithZone(cfg, "A");
+    const a = await departmentWithZone("A");
     const [bare] = await db
       .insert(floorZones)
       .values({ locationId: cfg.locationId, name: "No department" })
@@ -101,8 +101,8 @@ describe("readReleaseReminderMinutesByZone", () => {
   });
 
   it("still answers for a department that has been made inactive", async () => {
-    const cfg = { locationId: await seedLocation("Reminder inactive department") };
-    const a = await departmentWithZone(cfg, "A");
+    await seedLocation("Reminder inactive department");
+    const a = await departmentWithZone("A");
     await setMinutes(a.departmentId, 25);
     await db.execute(sql`update departments set active = 0 where id = ${a.departmentId}`);
     expect(await scoped((tx) => readReleaseReminderMinutesByZone(tx, [a.zoneId]))).toEqual(
@@ -122,10 +122,10 @@ describe("readReleaseReminderMinutesByZone", () => {
 
 describe("listDepartmentReminderMinutes", () => {
   it("lists every active department's minutes", async () => {
-    const cfg = { locationId: await seedLocation("Reminder list") };
-    const a = await departmentWithZone(cfg, "A");
-    const b = await departmentWithZone(cfg, "B");
-    const c = await departmentWithZone(cfg, "C");
+    await seedLocation("Reminder list");
+    const a = await departmentWithZone("A");
+    const b = await departmentWithZone("B");
+    const c = await departmentWithZone("C");
     await setMinutes(a.departmentId, 25);
     await setMinutes(b.departmentId, null);
     await setMinutes(c.departmentId, 5);
@@ -139,9 +139,9 @@ describe("listDepartmentReminderMinutes", () => {
 
 describe("updateDepartment", () => {
   it("writes a reminder given alone", async () => {
-    const cfg = { locationId: await seedLocation("Reminder update") };
-    const a = await departmentWithZone(cfg, "A");
-    await scoped((tx) => updateDepartment(tx, cfg, a.departmentId, { releaseReminderMinutes: 5 }));
+    await seedLocation("Reminder update");
+    const a = await departmentWithZone("A");
+    await scoped((tx) => updateDepartment(tx, a.departmentId, { releaseReminderMinutes: 5 }));
     const [row] = await db
       .select({ minutes: departments.releaseReminderMinutes })
       .from(departments)

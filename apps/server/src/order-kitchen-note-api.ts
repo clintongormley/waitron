@@ -63,7 +63,7 @@ export function mountOrderKitchenNoteApi(
               const snapshot = party
                 ? await readPartyKitchenNote(tx, id)
                 : (await readOrderKitchenNotes(tx, [id])).get(id)!;
-              await checkZones(tx, deps.cfg, { device }, [
+              await checkZones(tx, { device }, [
                 "partyId" in snapshot.scope ? { partyId: snapshot.scope.partyId } : { orderId: id },
               ]);
               if (body === undefined) return snapshot;

@@ -200,7 +200,7 @@ async function openBeside(
 ): Promise<string> {
   return asApp(cfg, async (tx) => {
     const party = (await partyRevisionOfOrder(tx, tabId))!;
-    const context = await VENUE_SERVICE.findOrderContext(tx, cfg, tabId);
+    const context = await VENUE_SERVICE.findOrderContext(tx, tabId);
     const id = randomUUID();
     await openGroupedCounterOrder(tx, cfg, id, lines, {
       partyId: party.id,

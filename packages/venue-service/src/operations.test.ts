@@ -106,75 +106,72 @@ const suite = useVenueDb({
 
 describe("order flow from sale policies", () => {
   it("creates a counter department without reading an obsolete style input", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Retired create input")) };
+    await seedLocation("Retired create input");
     await scoped(async (tx) => {
       const department = await createDepartment(
         tx,
-        cfg,
         Object.assign({ name: "Counter" }, { defaultServiceMode: "table_tab" }),
       );
-      const zone = await createServiceZone(tx, cfg, {
+      const zone = await createServiceZone(tx, {
         name: "Counter",
         departmentId: department.id,
       });
-      expect(await resolveSalePolicy(tx, cfg, zone.id)).toMatchObject({
+      expect(await resolveSalePolicy(tx, zone.id)).toMatchObject({
         orderStart: "counter",
         paidWhen: "prepay",
       });
-      expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({ serviceMode: "prepay" });
+      expect(await resolveZoneContext(tx, zone.id)).toMatchObject({ serviceMode: "prepay" });
     });
   });
 
   it("renames a department without reading an obsolete style input", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Retired update input")) };
+    await seedLocation("Retired update input");
     await scoped(async (tx) => {
-      const department = await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" });
-      const zone = await createServiceZone(tx, cfg, {
+      const department = await createDepartment(tx, { name: "Dining", orderStart: "table" });
+      const zone = await createServiceZone(tx, {
         name: "Dining",
         departmentId: department.id,
       });
-      await setDepartmentSalePolicyField(tx, cfg, department.id, "paidWhen", "ticket_then_pay");
+      await setDepartmentSalePolicyField(tx, department.id, "paidWhen", "ticket_then_pay");
       await updateDepartment(
         tx,
-        cfg,
         department.id,
         Object.assign({ name: "Renamed" }, { defaultServiceMode: "prepay" }),
       );
-      expect(await listDepartments(tx, cfg)).toContainEqual(
+      expect(await listDepartments(tx)).toContainEqual(
         expect.objectContaining({ id: department.id, name: "Renamed", tradingName: "Dining" }),
       );
-      expect(await resolveSalePolicy(tx, cfg, zone.id)).toMatchObject({
+      expect(await resolveSalePolicy(tx, zone.id)).toMatchObject({
         orderStart: "table",
         paidWhen: "ticket_then_pay",
       });
-      expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({
+      expect(await resolveZoneContext(tx, zone.id)).toMatchObject({
         serviceMode: "table_tab",
       });
     });
   });
 
   it("moves a zone without reading an obsolete style input", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Retired zone input")) };
+    await seedLocation("Retired zone input");
     await scoped(async (tx) => {
-      const source = await createDepartment(tx, cfg, { name: "Source", orderStart: "counter" });
-      const target = await createDepartment(tx, cfg, { name: "Target", orderStart: "counter" });
-      const zone = await createServiceZone(tx, cfg, {
+      const source = await createDepartment(tx, { name: "Source", orderStart: "counter" });
+      const target = await createDepartment(tx, { name: "Target", orderStart: "counter" });
+      const zone = await createServiceZone(tx, {
         name: "Dining",
         departmentId: source.id,
         orderStart: "table",
       });
-      await setZoneSalePolicyOverride(tx, cfg, zone.id, "paidWhen", "ticket_then_pay");
+      await setZoneSalePolicyOverride(tx, zone.id, "paidWhen", "ticket_then_pay");
       await configureZone(
         tx,
-        cfg,
         Object.assign({ zoneId: zone.id, departmentId: target.id }, { serviceMode: "prepay" }),
       );
-      expect(await resolveSalePolicy(tx, cfg, zone.id)).toMatchObject({
+      expect(await resolveSalePolicy(tx, zone.id)).toMatchObject({
         departmentId: target.id,
         orderStart: "table",
         paidWhen: "ticket_then_pay",
       });
-      expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({
+      expect(await resolveZoneContext(tx, zone.id)).toMatchObject({
         departmentId: target.id,
         serviceMode: "table_tab",
       });
@@ -230,13 +227,13 @@ describe("order flow from sale policies", () => {
   ] as const)(
     "uses $start / $zoneStart / $paid / $zonePaid",
     async ({ start, zoneStart, paid, zonePaid, want }) => {
-      const cfg = { locationId: brandLocationId(await seedLocation(`Flow ${randomUUID()}`)) };
+      await seedLocation(`Flow ${randomUUID()}`);
       await scoped(async (tx) => {
-        const department = await createDepartment(tx, cfg, {
+        const department = await createDepartment(tx, {
           name: "Dining",
           orderStart: start,
         });
-        const zone = await createServiceZone(tx, cfg, {
+        const zone = await createServiceZone(tx, {
           name: "Flow",
           departmentId: department.id,
         });
@@ -246,8 +243,8 @@ describe("order flow from sale policies", () => {
         await tx.execute(
           sql`update zone_sale_policies set order_start = ${zoneStart}, paid_when = ${zonePaid} where zone_id = ${zone.id}`,
         );
-        expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({ serviceMode: want });
-        const listed = await listServiceZones(tx, cfg);
+        expect(await resolveZoneContext(tx, zone.id)).toMatchObject({ serviceMode: want });
+        const listed = await listServiceZones(tx);
         expect(listed).toMatchObject([{ id: zone.id, serviceMode: want }]);
         expect(listed[0]).not.toHaveProperty("serviceModeOverride");
       });
@@ -255,20 +252,18 @@ describe("order flow from sale policies", () => {
   );
 
   it("a department without a sale-policy row starts counter orders with default prepayment", async () => {
-    const cfg = {
-      locationId: brandLocationId(await seedLocation(`Missing policy ${randomUUID()}`)),
-    };
+    await seedLocation(`Missing policy ${randomUUID()}`);
     await scoped(async (tx) => {
-      const department = await createDepartment(tx, cfg, {
+      const department = await createDepartment(tx, {
         name: "Dining",
         orderStart: "table",
       });
-      const zone = await createServiceZone(tx, cfg, { name: "Flow", departmentId: department.id });
+      const zone = await createServiceZone(tx, { name: "Flow", departmentId: department.id });
       await tx.execute(
         sql`delete from department_sale_policies where department_id = ${department.id}`,
       );
-      expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({ serviceMode: "prepay" });
-      const listed = await listServiceZones(tx, cfg);
+      expect(await resolveZoneContext(tx, zone.id)).toMatchObject({ serviceMode: "prepay" });
+      const listed = await listServiceZones(tx);
       expect(listed).toMatchObject([{ id: zone.id, serviceMode: "prepay" }]);
       expect(listed[0]).not.toHaveProperty("serviceModeOverride");
     });
@@ -284,10 +279,8 @@ describe("new department service periods", () => {
       operationDescription: "Hospitality",
       defaultCatalogueId: menu.id,
     });
-    const venueId = await venueLocationId(db);
-    const id = brandLocationId(venueId);
     const department = await scoped((tx) =>
-      createDepartment(tx, { locationId: id }, { name: "Restaurant", orderStart: "counter" }),
+      createDepartment(tx, { name: "Restaurant", orderStart: "counter" }),
     );
     const periods = await db.execute(
       sql`select name, menu_id from menu_periods where department_id = ${department.id}`,
@@ -300,7 +293,7 @@ describe("new department service periods", () => {
     const id = brandLocationId(await seedLocation(`New ${randomUUID()}`));
     await db.update(locations).set({ catalogueId: menu.id }).where(eq(locations.id, id));
     const department = await scoped((tx) =>
-      createDepartment(tx, { locationId: id }, { name: "Restaurant", orderStart: "counter" }),
+      createDepartment(tx, { name: "Restaurant", orderStart: "counter" }),
     );
     const periods = await db.execute(
       sql`select name, menu_id from menu_periods where department_id = ${department.id}`,
@@ -315,9 +308,9 @@ describe("new department service periods", () => {
   });
 
   it("leaves a menu-less venue without periods", async () => {
-    const emptyId = brandLocationId(await seedLocation(`Empty ${randomUUID()}`));
+    await seedLocation(`Empty ${randomUUID()}`);
     const empty = await scoped((tx) =>
-      createDepartment(tx, { locationId: emptyId }, { name: "Restaurant", orderStart: "counter" }),
+      createDepartment(tx, { name: "Restaurant", orderStart: "counter" }),
     );
     expect(
       (await db.execute(sql`select id from menu_periods where department_id = ${empty.id}`)).rows,
@@ -342,16 +335,14 @@ describe("new department service periods", () => {
         sql`select name from departments where location_id = ${id} and name = 'Terrace'`,
       )
     ).rows;
-  const createTerrace = (id: LocationId) =>
-    scoped((tx) =>
-      createDepartment(tx, { locationId: id }, { name: "Terrace", orderStart: "counter" }),
-    );
+  const createTerrace = () =>
+    scoped((tx) => createDepartment(tx, { name: "Terrace", orderStart: "counter" }));
 
   it("with a 21:00 start waiting, refuses a new department whose default week would clash with it", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-02T12:00:00Z") });
     try {
       const id = await waitingLocation("21:00");
-      await expect(createTerrace(id)).rejects.toMatchObject({
+      await expect(createTerrace()).rejects.toMatchObject({
         code: "hours.clock_change_conflict",
         params: {
           dayCutover: "21:00",
@@ -378,7 +369,7 @@ describe("new department service periods", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-02T12:00:00Z") });
     try {
       const id = await waitingLocation("03:00");
-      const department = await createTerrace(id);
+      const department = await createTerrace();
       expect(department).toMatchObject({ name: "Terrace" });
       expect(await terraces(id)).toEqual([{ name: "Terrace" }]);
       const slots = await db.execute(
@@ -497,7 +488,7 @@ describe("venue service routing", () => {
     });
 
     await scoped(async (tx) => {
-      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
+      await expect(listVenueReadiness(tx)).resolves.toEqual([
         { code: "venue.default_station_missing" },
         { code: "venue.department_missing" },
       ]);
@@ -509,12 +500,8 @@ describe("venue service routing", () => {
     const locationId = brandLocationId(await seedLocation("Venue"));
     const zone = await seedZone(locationId, "Terrace");
     await scoped(async (tx) => {
-      const department = await createDepartment(
-        tx,
-        { locationId },
-        { name: "Restaurant", orderStart: "table" },
-      );
-      await configureZone(tx, { locationId }, { zoneId: zone, departmentId: department.id });
+      const department = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
+      await configureZone(tx, { zoneId: zone, departmentId: department.id });
       const menu = await createCatalogue(tx, { name: "Terrace menu" });
       await offerMenuThroughZone(tx, { locationId }, zone, menu.id, { makeDefault: true });
       const { rootSectionId } = await readMenuStructure(tx, menu.id);
@@ -529,7 +516,7 @@ describe("venue service routing", () => {
       };
       // Sections alone sell nothing.
       await publish(tx, menu.id);
-      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([menuEmpty]);
+      await expect(listVenueReadiness(tx)).resolves.toEqual([menuEmpty]);
 
       const product = await createProduct(tx, {
         catalogueId: menu.id,
@@ -541,26 +528,18 @@ describe("venue service routing", () => {
       });
       await addMember(tx, soft.id, { kind: "product", productId: product.id });
       await publish(tx, menu.id);
-      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([]);
+      await expect(listVenueReadiness(tx)).resolves.toEqual([]);
     });
   });
 
   it("counts a department painted in one season alone as placed, and one painted nowhere as not", async () => {
     await seedUnitTenant();
-    const locationId = brandLocationId(await seedLocation("Venue"));
+    await seedLocation("Venue");
     await scoped(async (tx) => {
-      const restaurant = await createDepartment(
-        tx,
-        { locationId },
-        { name: "Restaurant", orderStart: "table" },
-      );
-      const bar = await createDepartment(
-        tx,
-        { locationId },
-        { name: "Bar", orderStart: "counter" },
-      );
+      const restaurant = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
+      const bar = await createDepartment(tx, { name: "Bar", orderStart: "counter" });
       const menu = await createCatalogue(tx, { name: "Lunch menu" });
-      const lunch = await saveMenuPeriod(tx, { locationId }, restaurant.id, {
+      const lunch = await saveMenuPeriod(tx, restaurant.id, {
         name: "Lunch",
         menuId: menu.id,
         staffMenuIds: [],
@@ -578,7 +557,7 @@ describe("venue service routing", () => {
         0,
         { seasonId: summer.id },
       );
-      const noPeriods = (await listVenueReadiness(tx, { locationId })).filter(
+      const noPeriods = (await listVenueReadiness(tx)).filter(
         (issue) => issue.code === "department.no_periods",
       );
       expect(noPeriods).toEqual([
@@ -594,16 +573,8 @@ describe("venue service routing", () => {
     const zone = await seedZone(locationId, "Terrace");
 
     await scoped(async (tx) => {
-      const department = await createDepartment(
-        tx,
-        { locationId },
-        { name: "Restaurant", orderStart: "table" },
-      );
-      const otherDepartment = await createDepartment(
-        tx,
-        { locationId },
-        { name: "Bar", orderStart: "counter" },
-      );
+      const department = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
+      const otherDepartment = await createDepartment(tx, { name: "Bar", orderStart: "counter" });
       const missingBar = {
         code: "department.no_periods",
         departmentId: otherDepartment.id,
@@ -614,21 +585,17 @@ describe("venue service routing", () => {
         departmentId: department.id,
         departmentName: "Restaurant",
       };
-      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
+      await expect(listVenueReadiness(tx)).resolves.toEqual([
         missingBar,
         missingRestaurant,
         { code: "zone.department_missing", zoneId: zone, zoneName: "Terrace" },
       ]);
 
-      await configureZone(
-        tx,
-        { locationId },
-        {
-          zoneId: zone,
-          departmentId: department.id,
-        },
-      );
-      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
+      await configureZone(tx, {
+        zoneId: zone,
+        departmentId: department.id,
+      });
+      await expect(listVenueReadiness(tx)).resolves.toEqual([
         missingBar,
         missingRestaurant,
         { code: "zone.menu_unpublished", zoneId: zone, zoneName: "Terrace" },
@@ -638,12 +605,12 @@ describe("venue service routing", () => {
       await offerMenuThroughZone(tx, { locationId }, zone, menu.id, {
         makeDefault: true,
       });
-      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
+      await expect(listVenueReadiness(tx)).resolves.toEqual([
         missingBar,
         { code: "zone.menu_unpublished", zoneId: zone, zoneName: "Terrace" },
       ]);
       await publish(tx, menu.id);
-      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
+      await expect(listVenueReadiness(tx)).resolves.toEqual([
         missingBar,
         {
           code: "zone.menu_empty",
@@ -673,9 +640,7 @@ describe("venue service routing", () => {
         })(),
       ).resolves.toBeUndefined();
       await tx.execute(sql`update departments set active = false where id = ${otherDepartment.id}`);
-      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
-        { code: "venue.department_missing" },
-      ]);
+      await expect(listVenueReadiness(tx)).resolves.toEqual([{ code: "venue.department_missing" }]);
     });
   });
 
@@ -689,32 +654,20 @@ describe("venue service routing", () => {
     const downstairsBar = await seedStation(locationId, "Downstairs bar");
 
     await scoped(async (tx) => {
-      const department = await createDepartment(
-        tx,
-        { locationId },
-        {
-          name: "Restaurant and bar",
-          orderStart: "table",
-        },
-      );
-      await configureZone(
-        tx,
-        { locationId },
-        {
-          zoneId: upstairsZone,
-          departmentId: department.id,
-        },
-      );
-      await configureZone(
-        tx,
-        { locationId },
-        {
-          zoneId: downstairsZone,
-          departmentId: department.id,
-          orderStart: "counter",
-        },
-      );
-      await expect(listServiceZones(tx, { locationId })).resolves.toEqual([
+      const department = await createDepartment(tx, {
+        name: "Restaurant and bar",
+        orderStart: "table",
+      });
+      await configureZone(tx, {
+        zoneId: upstairsZone,
+        departmentId: department.id,
+      });
+      await configureZone(tx, {
+        zoneId: downstairsZone,
+        departmentId: department.id,
+        orderStart: "counter",
+      });
+      await expect(listServiceZones(tx)).resolves.toEqual([
         {
           id: downstairsZone,
           name: "Downstairs",
@@ -752,26 +705,14 @@ describe("venue service routing", () => {
       );
 
       await expect(
-        resolveMakers(
-          tx,
-          { locationId },
-          upstairsZone,
-          [negroni.id],
-          new Date("2026-10-02T18:30:00Z"),
-        ),
+        resolveMakers(tx, upstairsZone, [negroni.id], new Date("2026-10-02T18:30:00Z")),
       ).resolves.toEqual(
         new Map([
           [negroni.id, { kind: "made", route: { kind: "station", stationId: upstairsBar } }],
         ]),
       );
       await expect(
-        resolveMakers(
-          tx,
-          { locationId },
-          downstairsZone,
-          [negroni.id],
-          new Date("2026-10-02T18:30:00Z"),
-        ),
+        resolveMakers(tx, downstairsZone, [negroni.id], new Date("2026-10-02T18:30:00Z")),
       ).resolves.toEqual(
         new Map([
           [negroni.id, { kind: "made", route: { kind: "station", stationId: downstairsBar } }],
@@ -788,22 +729,14 @@ describe("venue service routing", () => {
     const nodeId = await seedNode(db);
 
     await scoped(async (tx) => {
-      const department = await createDepartment(
-        tx,
-        { locationId },
-        {
-          name: "Deli",
-          orderStart: "counter",
-        },
-      );
-      await configureZone(
-        tx,
-        { locationId },
-        {
-          zoneId: zone,
-          departmentId: department.id,
-        },
-      );
+      const department = await createDepartment(tx, {
+        name: "Deli",
+        orderStart: "counter",
+      });
+      await configureZone(tx, {
+        zoneId: zone,
+        departmentId: department.id,
+      });
       const menu = await createCatalogue(tx, { name: "Deli takeaway" });
       const category = await createCategory(tx, { name: "Cold cuts" });
       const ham = await createProduct(tx, {
@@ -836,12 +769,7 @@ describe("venue service routing", () => {
 
       await tx.execute(sql`
         insert into working_orders (id, source, location_id, node_id, order_number, opened_at) values ('00000000-0000-4000-8000-000000000001', 'dashboard', ${locationId}, ${nodeId}, 1, ${new Date().toISOString()})`);
-      await recordOrderServiceContext(
-        tx,
-        { locationId },
-        "00000000-0000-4000-8000-000000000001",
-        zone,
-      );
+      await recordOrderServiceContext(tx, "00000000-0000-4000-8000-000000000001", zone);
       const workingLineId = "00000000-0000-4000-8000-000000000002";
       await tx.insert(workingOrderLines).values({
         id: workingLineId,
@@ -859,51 +787,46 @@ describe("venue service routing", () => {
       });
       await recordWorkingLineContexts(
         tx,
-        { locationId },
         "00000000-0000-4000-8000-000000000001",
         [{ workingOrderLineId: workingLineId, menuItemId: offer.id }],
-        await listZoneOffers(tx, { locationId }, zone),
+        await listZoneOffers(tx, zone),
       );
-      await configureZone(
-        tx,
-        { locationId },
-        {
-          zoneId: zone,
-          departmentId: department.id,
-          orderStart: "counter",
-        },
-      );
+      await configureZone(tx, {
+        zoneId: zone,
+        departmentId: department.id,
+        orderStart: "counter",
+      });
 
-      await expect(resolveZoneContext(tx, { locationId }, zone)).resolves.toMatchObject({
+      await expect(resolveZoneContext(tx, zone)).resolves.toMatchObject({
         serviceMode: "prepay",
       });
       await expect(
-        getOrderServiceContext(tx, { locationId }, "00000000-0000-4000-8000-000000000001"),
+        getOrderServiceContext(tx, "00000000-0000-4000-8000-000000000001"),
       ).resolves.toEqual({
         zoneId: zone,
         departmentId: department.id,
         serviceMode: "prepay",
       });
-      const visible = await listZoneOffers(tx, { locationId }, zone);
+      const visible = await listZoneOffers(tx, zone);
       expect(visible.defaultMenuId).toBe(menu.id);
       expect(visible.menus.map(versionOf)).toEqual([
         { id: menu.id, name: "Deli takeaway", isDefault: true, versionId },
       ]);
-      await expect(resolveNewOrderZone(tx, { locationId }, {})).resolves.toMatchObject({
+      await expect(resolveNewOrderZone(tx, {})).resolves.toMatchObject({
         zoneId: zone,
         departmentId: department.id,
         serviceMode: "prepay",
       });
-      await setZoneSalePolicyOverride(tx, { locationId }, zone, "paidWhen", "ticket_then_pay");
-      await expect(resolveZoneContext(tx, { locationId }, zone)).resolves.toMatchObject({
+      await setZoneSalePolicyOverride(tx, zone, "paidWhen", "ticket_then_pay");
+      await expect(resolveZoneContext(tx, zone)).resolves.toMatchObject({
         serviceMode: "ticket_then_pay",
       });
-      await expect(resolveNewOrderZone(tx, { locationId }, {})).resolves.toMatchObject({
+      await expect(resolveNewOrderZone(tx, {})).resolves.toMatchObject({
         zoneId: zone,
         departmentId: department.id,
         serviceMode: "ticket_then_pay",
       });
-      await setZoneSalePolicyOverride(tx, { locationId }, zone, "paidWhen", null);
+      await setZoneSalePolicyOverride(tx, zone, "paidWhen", null);
       expect(visible.offers).toHaveLength(1);
       expect(visible.offers[0]).toMatchObject({
         id: offer.id,
@@ -914,7 +837,6 @@ describe("venue service routing", () => {
       await expect(
         recordWorkingLineContexts(
           tx,
-          { locationId },
           "00000000-0000-4000-8000-000000000001",
           [{ workingOrderLineId: workingLineId, menuItemId: hiddenOffer.id }],
           visible,
@@ -927,7 +849,7 @@ describe("venue service routing", () => {
         update departments set name = 'Renamed department'
         where id = ${department.id}`);
       await expect(
-        listWorkingLineContexts(tx, { locationId }, "00000000-0000-4000-8000-000000000001"),
+        listWorkingLineContexts(tx, "00000000-0000-4000-8000-000000000001"),
       ).resolves.toEqual([
         expect.objectContaining({
           workingOrderLineId: workingLineId,
@@ -975,19 +897,14 @@ describe("venue service routing", () => {
         lineTotal: 249,
         category: "Cold cuts",
       });
-      await copyOrderServiceContext(
-        tx,
-        { locationId },
-        "00000000-0000-4000-8000-000000000001",
-        copiedOrderId,
-      );
-      await copyWorkingLineContext(tx, { locationId }, workingLineId, copiedLineId);
-      await expect(getOrderServiceContext(tx, { locationId }, copiedOrderId)).resolves.toEqual({
+      await copyOrderServiceContext(tx, "00000000-0000-4000-8000-000000000001", copiedOrderId);
+      await copyWorkingLineContext(tx, workingLineId, copiedLineId);
+      await expect(getOrderServiceContext(tx, copiedOrderId)).resolves.toEqual({
         zoneId: zone,
         departmentId: department.id,
         serviceMode: "prepay",
       });
-      await expect(listWorkingLineContexts(tx, { locationId }, copiedOrderId)).resolves.toEqual([
+      await expect(listWorkingLineContexts(tx, copiedOrderId)).resolves.toEqual([
         expect.objectContaining({
           workingOrderLineId: copiedLineId,
           menuItemId: offer.id,
@@ -1005,12 +922,8 @@ describe("venue service routing", () => {
     const nodeId = await seedNode(db);
 
     await scoped(async (tx) => {
-      const department = await createDepartment(
-        tx,
-        { locationId },
-        { name: "Deli", orderStart: "counter" },
-      );
-      await configureZone(tx, { locationId }, { zoneId: zone, departmentId: department.id });
+      const department = await createDepartment(tx, { name: "Deli", orderStart: "counter" });
+      await configureZone(tx, { zoneId: zone, departmentId: department.id });
       const menu = await createCatalogue(tx, { name: "Deli takeaway" });
       // Deleting its product_units row makes the offer read resolve it to the synthetic Each unit.
       const sweets = await createProduct(tx, {
@@ -1040,7 +953,7 @@ describe("venue service routing", () => {
       await tx.execute(sql`
         insert into working_orders (id, source, location_id, node_id, order_number, opened_at)
         values (${orderId}, 'dashboard', ${locationId}, ${nodeId}, 1, ${new Date().toISOString()})`);
-      await recordOrderServiceContext(tx, { locationId }, orderId, zone);
+      await recordOrderServiceContext(tx, orderId, zone);
       await tx.insert(workingOrderLines).values({
         id: workingLineId,
         workingOrderId: orderId,
@@ -1058,10 +971,9 @@ describe("venue service routing", () => {
       await expect(
         recordWorkingLineContexts(
           tx,
-          { locationId },
           orderId,
           [{ workingOrderLineId: workingLineId, menuItemId: offer.id }],
-          await listZoneOffers(tx, { locationId }, zone),
+          await listZoneOffers(tx, zone),
         ),
       ).resolves.not.toThrow();
 
@@ -1079,34 +991,22 @@ describe("venue service routing", () => {
     const zone = await seedZone(locationId, "Terrace");
 
     await scoped(async (tx) => {
-      const department = await createDepartment(
-        tx,
-        { locationId },
-        {
-          name: "Restaurant",
-          tradingName: "Terrace restaurant",
-          orderStart: "table",
-        },
-      );
+      const department = await createDepartment(tx, {
+        name: "Restaurant",
+        tradingName: "Terrace restaurant",
+        orderStart: "table",
+      });
       await expect(
-        configureZone(
-          tx,
-          { locationId },
-          {
-            zoneId: "00000000-0000-4000-8000-000000000099",
-            departmentId: department.id,
-          },
-        ),
+        configureZone(tx, {
+          zoneId: "00000000-0000-4000-8000-000000000099",
+          departmentId: department.id,
+        }),
       ).rejects.toMatchObject({ code: "service_zone.not_found" });
       await expect(
-        configureZone(
-          tx,
-          { locationId },
-          {
-            zoneId: zone,
-            departmentId: "00000000-0000-4000-8000-000000000099",
-          },
-        ),
+        configureZone(tx, {
+          zoneId: zone,
+          departmentId: "00000000-0000-4000-8000-000000000099",
+        }),
       ).rejects.toMatchObject({ code: "department.not_found" });
       await expect(
         offerMenuThroughZone(tx, { locationId }, zone, "00000000-0000-4000-8000-000000000099"),
@@ -1116,18 +1016,14 @@ describe("venue service routing", () => {
       await expect(offerMenuThroughZone(tx, { locationId }, zone, menu.id)).rejects.toMatchObject({
         code: "service_zone.not_found",
       });
-      await configureZone(
-        tx,
-        { locationId },
-        {
-          zoneId: zone,
-          departmentId: department.id,
-          orderStart: "counter",
-        },
-      );
+      await configureZone(tx, {
+        zoneId: zone,
+        departmentId: department.id,
+        orderStart: "counter",
+      });
       await offerMenuThroughZone(tx, { locationId }, zone, menu.id);
       const versionId = await publish(tx, menu.id);
-      const terrace = await listZoneOffers(tx, { locationId }, zone);
+      const terrace = await listZoneOffers(tx, zone);
       expect({ ...terrace, menus: terrace.menus.map(versionOf) }).toEqual({
         defaultMenuId: menu.id,
         service: {
@@ -1148,7 +1044,7 @@ describe("venue service routing", () => {
         liveFields: NO_LIVE_FIELDS,
       });
       await expect(
-        getOrderServiceContext(tx, { locationId }, "00000000-0000-4000-8000-000000000099"),
+        getOrderServiceContext(tx, "00000000-0000-4000-8000-000000000099"),
       ).rejects.toMatchObject({ code: "order.service_context_missing" });
     });
   });
@@ -1162,12 +1058,12 @@ async function seedRoutingVenue() {
   const otherZone = await seedZone(locationId, "Terrace");
   const cfg = { locationId };
   await scoped(async (tx) => {
-    const department = await createDepartment(tx, cfg, {
+    const department = await createDepartment(tx, {
       name: "Restaurant",
       orderStart: "table",
     });
-    await configureZone(tx, cfg, { zoneId: zone, departmentId: department.id });
-    await configureZone(tx, cfg, { zoneId: otherZone, departmentId: department.id });
+    await configureZone(tx, { zoneId: zone, departmentId: department.id });
+    await configureZone(tx, { zoneId: otherZone, departmentId: department.id });
   });
   return {
     cfg,
@@ -1234,10 +1130,10 @@ describe("routing outcomes and menu readiness", () => {
       );
 
       await expect(
-        resolveMakers(tx, cfg, zoneId, [cocktail.id], new Date("2026-10-02T18:30:00Z")),
+        resolveMakers(tx, zoneId, [cocktail.id], new Date("2026-10-02T18:30:00Z")),
       ).resolves.toEqual(new Map([[cocktail.id, { kind: "made", route: station(bar) }]]));
       await expect(
-        resolveMakers(tx, cfg, otherZoneId, [cocktail.id], new Date("2026-10-02T18:30:00Z")),
+        resolveMakers(tx, otherZoneId, [cocktail.id], new Date("2026-10-02T18:30:00Z")),
       ).resolves.toEqual(new Map([[cocktail.id, { kind: "made", route: station(kitchen) }]]));
     });
   });
@@ -1278,7 +1174,7 @@ describe("routing outcomes and menu readiness", () => {
         .where(eq(kitchenStations.id, closedGrill));
 
       await expect(
-        resolveMakers(tx, cfg, zoneId, [steak.id], new Date("2026-10-02T18:30:00Z")),
+        resolveMakers(tx, zoneId, [steak.id], new Date("2026-10-02T18:30:00Z")),
       ).resolves.toEqual(new Map([[steak.id, { kind: "no_replacement", stationId: closedGrill }]]));
     });
   });
@@ -1305,16 +1201,16 @@ describe("routing outcomes and menu readiness", () => {
       await offerMenuThroughZone(tx, cfg, zoneId, menu.id, { makeDefault: true });
       await publish(tx, menu.id);
 
-      const served = (await listZoneOffers(tx, cfg, zoneId)).offers;
+      const served = (await listZoneOffers(tx, zoneId)).offers;
       expect(served.map((row) => [row.id, row.available])).toEqual([[offer.id, false]]);
-      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
+      await expect(listVenueReadiness(tx)).resolves.toEqual([]);
       expect(
-        (await listZoneOffers(tx, cfg, otherZoneId)).offers.map((row) => [row.id, row.available]),
+        (await listZoneOffers(tx, otherZoneId)).offers.map((row) => [row.id, row.available]),
       ).toEqual([[offer.id, false]]);
 
       await tx.execute(sql`update products set available = true where id = ${croquette.id}`);
       expect(
-        (await listZoneOffers(tx, cfg, zoneId)).offers.map((row) => [row.id, row.available]),
+        (await listZoneOffers(tx, zoneId)).offers.map((row) => [row.id, row.available]),
       ).toEqual([[offer.id, true]]);
     });
   });
@@ -1322,36 +1218,36 @@ describe("routing outcomes and menu readiness", () => {
 
 describe("service zone name refusals", () => {
   it("creates a service zone with its requested display order and department", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Ordered zones")) };
+    await seedLocation("Ordered zones");
     const department = await scoped((tx) =>
-      createDepartment(tx, cfg, { name: "Restaurant", orderStart: "counter" }),
+      createDepartment(tx, { name: "Restaurant", orderStart: "counter" }),
     );
     const input = { name: "Terrace", departmentId: department.id, displayOrder: 7 };
-    const zone = await scoped((tx) => createServiceZone(tx, cfg, input));
+    const zone = await scoped((tx) => createServiceZone(tx, input));
     const rows = await db
       .select({ displayOrder: floorZones.displayOrder })
       .from(floorZones)
       .where(eq(floorZones.id, zone.id));
     expect(rows).toEqual([{ displayOrder: 7 }]);
-    expect(await scoped((tx) => listServiceZones(tx, cfg))).toEqual([
+    expect(await scoped((tx) => listServiceZones(tx))).toEqual([
       expect.objectContaining({ id: zone.id, departmentId: department.id }),
     ]);
   });
 
   it("keeps a primary-key clash as an internal database error", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Zone key collision")) };
+    await seedLocation("Zone key collision");
     const department = await scoped((tx) =>
-      createDepartment(tx, cfg, { name: "Restaurant", orderStart: "counter" }),
+      createDepartment(tx, { name: "Restaurant", orderStart: "counter" }),
     );
     const existing = await scoped((tx) =>
-      createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id }),
+      createServiceZone(tx, { name: "Terrace", departmentId: department.id }),
     );
     const generateId = vi
       .spyOn(floorZones.id as unknown as { defaultFn: () => string }, "defaultFn")
       .mockReturnValue(existing.id);
     try {
       await expect(
-        scoped((tx) => createServiceZone(tx, cfg, { name: "Garden", departmentId: department.id })),
+        scoped((tx) => createServiceZone(tx, { name: "Garden", departmentId: department.id })),
       ).rejects.toMatchObject({
         errcode: 1555,
         message: "UNIQUE constraint failed: floor_zones.id",
@@ -1359,65 +1255,39 @@ describe("service zone name refusals", () => {
     } finally {
       generateId.mockRestore();
     }
-    expect(await scoped((tx) => listServiceZones(tx, cfg))).toEqual([
+    expect(await scoped((tx) => listServiceZones(tx))).toEqual([
       expect.objectContaining({ id: existing.id, name: "Terrace", departmentId: department.id }),
     ]);
   });
 
   it("reports a duplicate zone name and leaves its original assignment intact", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Zone name collision")) };
+    await seedLocation("Zone name collision");
     const department = await scoped((tx) =>
-      createDepartment(tx, cfg, { name: "Restaurant", orderStart: "counter" }),
+      createDepartment(tx, { name: "Restaurant", orderStart: "counter" }),
     );
     const existing = await scoped((tx) =>
-      createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id }),
+      createServiceZone(tx, { name: "Terrace", departmentId: department.id }),
     );
     await expect(
-      scoped((tx) => createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id })),
+      scoped((tx) => createServiceZone(tx, { name: "Terrace", departmentId: department.id })),
     ).rejects.toMatchObject({ code: "zone.name_taken", params: { name: "Terrace" } });
-    expect(await scoped((tx) => listServiceZones(tx, cfg))).toEqual([
+    expect(await scoped((tx) => listServiceZones(tx))).toEqual([
       expect.objectContaining({ id: existing.id, name: "Terrace", departmentId: department.id }),
     ]);
   });
 });
 
 describe("departments", () => {
-  // A1301: deleted with cfg in S18
-  it("lists the venue's departments whatever location the scope names", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Scope-blind list")) };
-    const department = await scoped((tx) =>
-      createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
-    );
-    const listed = await scoped((tx) =>
-      listDepartments(tx, { locationId: brandLocationId(randomUUID()) }),
-    );
-    expect(listed.map((row) => row.id)).toContain(department.id);
-  });
-
-  // A1301: deleted with cfg in S18
-  it("creates a department on the venue's row whatever location the scope names", async () => {
-    const venue = await seedLocation("Scope-blind create");
-    const department = await scoped((tx) =>
-      createDepartment(tx, { locationId: brandLocationId(randomUUID()) }, { name: "Bar" }),
-    );
-    const [stored] = await db
-      .select({ locationId: departments.locationId })
-      .from(departments)
-      .where(eq(departments.id, department.id));
-    expect(stored!.locationId).toBe(await scoped((tx) => venueLocationId(tx)));
-    expect(stored!.locationId).toBe(venue);
-  });
-
   it("repairs a missing zone sale policy when configuring its existing assignment", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Repair zone policy")) };
+    await seedLocation("Repair zone policy");
     await scoped(async (tx) => {
-      const department = await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" });
-      const zone = await createServiceZone(tx, cfg, {
+      const department = await createDepartment(tx, { name: "Dining", orderStart: "table" });
+      const zone = await createServiceZone(tx, {
         name: "Terrace",
         departmentId: department.id,
       });
       await tx.delete(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, zone.id));
-      await configureZone(tx, cfg, { zoneId: zone.id, departmentId: department.id });
+      await configureZone(tx, { zoneId: zone.id, departmentId: department.id });
       expect(
         await tx.select().from(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, zone.id)),
       ).toEqual([
@@ -1429,22 +1299,22 @@ describe("departments", () => {
           receiptPrintMode: null,
         },
       ]);
-      expect(await resolveSalePolicy(tx, cfg, zone.id)).toMatchObject({
+      expect(await resolveSalePolicy(tx, zone.id)).toMatchObject({
         orderStart: "table",
         paidWhen: "prepay",
       });
-      expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({
+      expect(await resolveZoneContext(tx, zone.id)).toMatchObject({
         serviceMode: "table_tab",
       });
     });
   });
 
   it("keeps all existing zone sale overrides when moving its assignment", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Retain zone policy")) };
+    await seedLocation("Retain zone policy");
     await scoped(async (tx) => {
-      const first = await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" });
-      const second = await createDepartment(tx, cfg, { name: "Bar", orderStart: "table" });
-      const zone = await createServiceZone(tx, cfg, { name: "Terrace", departmentId: first.id });
+      const first = await createDepartment(tx, { name: "Dining", orderStart: "table" });
+      const second = await createDepartment(tx, { name: "Bar", orderStart: "table" });
+      const zone = await createServiceZone(tx, { name: "Terrace", departmentId: first.id });
       const overrides = {
         orderStart: "counter" as const,
         paidWhen: "ticket_then_pay" as const,
@@ -1452,7 +1322,7 @@ describe("departments", () => {
         receiptPrintMode: "on_request" as const,
       };
       await tx.update(zoneSalePolicies).set(overrides).where(eq(zoneSalePolicies.zoneId, zone.id));
-      await configureZone(tx, cfg, { zoneId: zone.id, departmentId: second.id });
+      await configureZone(tx, { zoneId: zone.id, departmentId: second.id });
       expect(
         await tx.select().from(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, zone.id)),
       ).toEqual([
@@ -1461,11 +1331,11 @@ describe("departments", () => {
           ...overrides,
         },
       ]);
-      expect(await resolveSalePolicy(tx, cfg, zone.id)).toMatchObject({
+      expect(await resolveSalePolicy(tx, zone.id)).toMatchObject({
         departmentId: second.id,
         ...overrides,
       });
-      expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({
+      expect(await resolveZoneContext(tx, zone.id)).toMatchObject({
         departmentId: second.id,
         serviceMode: "ticket_then_pay",
       });
@@ -1473,12 +1343,12 @@ describe("departments", () => {
   });
 
   it("creates a zone with explicit order start", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Explicit zone start")) };
+    await seedLocation("Explicit zone start");
     const department = await scoped((tx) =>
-      createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" }),
+      createDepartment(tx, { name: "Restaurant", orderStart: "table" }),
     );
     const zone = await scoped((tx) =>
-      createServiceZone(tx, cfg, {
+      createServiceZone(tx, {
         name: "Counter",
         departmentId: department.id,
         orderStart: "counter",
@@ -1492,16 +1362,16 @@ describe("departments", () => {
   });
 
   it("stores order-start inputs and resolves zone overrides", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Order start storage")) };
+    await seedLocation("Order start storage");
     const row = await scoped((tx) =>
-      createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" }),
+      createDepartment(tx, { name: "Restaurant", orderStart: "table" }),
     );
     const readDepartment = () =>
       db.all(sql`select p.order_start from departments d
       join department_sale_policies p on p.department_id=d.id where d.id=${row.id}`);
     expect(readDepartment()).toEqual([{ order_start: "table" }]);
     const zone = await scoped((tx) =>
-      createServiceZone(tx, cfg, { name: "Terrace", departmentId: row.id }),
+      createServiceZone(tx, { name: "Terrace", departmentId: row.id }),
     );
     const readZone = () =>
       db.all(sql`select p.order_start from zone_service_policies s
@@ -1515,14 +1385,12 @@ describe("departments", () => {
       [{ orderStart: "table" }, "table_tab", "table"],
       [{ orderStart: null }, null, null],
     ] as const) {
-      await scoped((tx) =>
-        configureZone(tx, cfg, { zoneId: zone.id, departmentId: row.id, ...input }),
-      );
+      await scoped((tx) => configureZone(tx, { zoneId: zone.id, departmentId: row.id, ...input }));
       expect(readZone()).toEqual([{ order_start: start }]);
-      expect(await scoped((tx) => resolveSalePolicy(tx, cfg, zone.id))).toMatchObject({
+      expect(await scoped((tx) => resolveSalePolicy(tx, zone.id))).toMatchObject({
         orderStart: start ?? "table",
       });
-      const listed = await scoped((tx) => listSalePolicies(tx, cfg));
+      const listed = await scoped((tx) => listSalePolicies(tx));
       expect(listed.departments).toContainEqual(
         expect.objectContaining({ departmentId: row.id, orderStart: "table" }),
       );
@@ -1540,7 +1408,7 @@ describe("departments", () => {
       ["table_tab", "table"],
     ] as const) {
       await scoped((tx) =>
-        updateDepartment(tx, cfg, row.id, {
+        updateDepartment(tx, row.id, {
           name: row.name,
           tradingName: row.tradingName,
           orderStart: start,
@@ -1549,18 +1417,18 @@ describe("departments", () => {
       expect(readDepartment()).toEqual([{ order_start: start }]);
     }
     await scoped((tx) =>
-      updateDepartment(tx, cfg, row.id, {
+      updateDepartment(tx, row.id, {
         name: row.name,
         tradingName: row.tradingName,
         orderStart: "counter",
       }),
     );
-    await scoped((tx) => setDepartmentSalePolicyField(tx, cfg, row.id, "orderStart", "counter"));
+    await scoped((tx) => setDepartmentSalePolicyField(tx, row.id, "orderStart", "counter"));
     expect(readDepartment()).toEqual([{ order_start: "counter" }]);
-    await scoped((tx) => setDepartmentSalePolicyField(tx, cfg, row.id, "orderStart", "table"));
+    await scoped((tx) => setDepartmentSalePolicyField(tx, row.id, "orderStart", "table"));
     expect(readDepartment()).toEqual([{ order_start: "table" }]);
     await scoped((tx) =>
-      updateDepartment(tx, cfg, row.id, {
+      updateDepartment(tx, row.id, {
         name: row.name,
         tradingName: row.tradingName,
         orderStart: "counter",
@@ -1572,7 +1440,7 @@ describe("departments", () => {
       ["table", "table_tab"],
       [null, null],
     ] as const) {
-      await scoped((tx) => setZoneSalePolicyOverride(tx, cfg, zone.id, "orderStart", value));
+      await scoped((tx) => setZoneSalePolicyOverride(tx, zone.id, "orderStart", value));
       expect(readZone()).toEqual([{ order_start: value }]);
     }
     for (const [style, start] of [
@@ -1581,7 +1449,7 @@ describe("departments", () => {
       ["ticket_then_pay", "counter", "prepay"],
     ] as const) {
       const created = await scoped((tx) =>
-        createDepartment(tx, cfg, { name: `Created ${style}`, orderStart: start }),
+        createDepartment(tx, { name: `Created ${style}`, orderStart: start }),
       );
       expect(
         db.all(
@@ -1590,15 +1458,15 @@ describe("departments", () => {
       ).toEqual([{ order_start: start }]);
     }
     await scoped((tx) =>
-      configureZone(tx, cfg, {
+      configureZone(tx, {
         zoneId: zone.id,
         departmentId: row.id,
         orderStart: "counter",
       }),
     );
-    await scoped((tx) => setZoneSalePolicyOverride(tx, cfg, zone.id, "orderStart", "counter"));
+    await scoped((tx) => setZoneSalePolicyOverride(tx, zone.id, "orderStart", "counter"));
     expect(readZone()).toEqual([{ order_start: "counter" }]);
-    const defaulted = await scoped((tx) => createDepartment(tx, cfg, { name: "Default counter" }));
+    const defaulted = await scoped((tx) => createDepartment(tx, { name: "Default counter" }));
     expect(
       db.all(
         sql`select p.order_start from departments d join department_sale_policies p on p.department_id=d.id where d.id=${defaulted.id}`,
@@ -1609,45 +1477,43 @@ describe("departments", () => {
   it("resolves a recorded zone's receipt policy after the zone is deactivated", async () => {
     const locationId = brandLocationId(await seedLocation("Retained sale policy"));
     const zoneId = await seedZone(locationId, "Old counter");
-    const cfg = { locationId };
     await scoped(async (tx) => {
-      const department = await createDepartment(tx, cfg, {
+      const department = await createDepartment(tx, {
         name: "Restaurant",
         orderStart: "counter",
       });
-      await configureZone(tx, cfg, { zoneId, departmentId: department.id });
-      await setZoneSalePolicyOverride(tx, cfg, zoneId, "receiptPrintMode", "on_request");
+      await configureZone(tx, { zoneId, departmentId: department.id });
+      await setZoneSalePolicyOverride(tx, zoneId, "receiptPrintMode", "on_request");
       await tx.execute(sql`update floor_zones set active = false where id = ${zoneId}`);
     });
 
-    await expect(scoped((tx) => resolveSalePolicy(tx, cfg, zoneId))).resolves.toMatchObject({
+    await expect(scoped((tx) => resolveSalePolicy(tx, zoneId))).resolves.toMatchObject({
       zoneId,
       receiptPrintMode: "on_request",
     });
     await expect(
-      scoped((tx) => setZoneSalePolicyOverride(tx, cfg, zoneId, "receiptPrintMode", "auto")),
+      scoped((tx) => setZoneSalePolicyOverride(tx, zoneId, "receiptPrintMode", "auto")),
     ).rejects.toMatchObject({ code: "service_zone.not_found" });
   });
 
   it("clears one zone override without changing another policy field", async () => {
     const locationId = brandLocationId(await seedLocation("Cleared sale override"));
     const zoneId = await seedZone(locationId, "Terrace");
-    const cfg = { locationId };
     const department = await scoped(async (tx) => {
-      const row = await createDepartment(tx, cfg, {
+      const row = await createDepartment(tx, {
         name: "Restaurant",
         orderStart: "counter",
       });
-      await configureZone(tx, cfg, { zoneId, departmentId: row.id });
+      await configureZone(tx, { zoneId, departmentId: row.id });
       return row;
     });
 
     await scoped(async (tx) => {
-      await setDepartmentSalePolicyField(tx, cfg, department.id, "receiptPrintMode", "on_request");
-      await setZoneSalePolicyOverride(tx, cfg, zoneId, "paidWhen", "ticket_then_pay");
-      await setZoneSalePolicyOverride(tx, cfg, zoneId, "receiptPrintMode", "auto");
-      await setZoneSalePolicyOverride(tx, cfg, zoneId, "receiptPrintMode", null);
-      await expect(resolveSalePolicy(tx, cfg, zoneId)).resolves.toMatchObject({
+      await setDepartmentSalePolicyField(tx, department.id, "receiptPrintMode", "on_request");
+      await setZoneSalePolicyOverride(tx, zoneId, "paidWhen", "ticket_then_pay");
+      await setZoneSalePolicyOverride(tx, zoneId, "receiptPrintMode", "auto");
+      await setZoneSalePolicyOverride(tx, zoneId, "receiptPrintMode", null);
+      await expect(resolveSalePolicy(tx, zoneId)).resolves.toMatchObject({
         paidWhen: "ticket_then_pay",
         receiptPrintMode: "on_request",
       });
@@ -1658,16 +1524,12 @@ describe("departments", () => {
     const locationId = brandLocationId(await seedLocation("Inherited sale policy"));
     const zoneId = await seedZone(locationId, "Terrace");
     const department = await scoped(async (tx) => {
-      const row = await createDepartment(
-        tx,
-        { locationId },
-        {
-          name: "Restaurant",
-          tradingName: "Terrace Kitchen",
-          orderStart: "counter",
-        },
-      );
-      await configureZone(tx, { locationId }, { zoneId, departmentId: row.id });
+      const row = await createDepartment(tx, {
+        name: "Restaurant",
+        tradingName: "Terrace Kitchen",
+        orderStart: "counter",
+      });
+      await configureZone(tx, { zoneId, departmentId: row.id });
       return row;
     });
     await db.execute(sql`
@@ -1679,7 +1541,7 @@ describe("departments", () => {
       update zone_sale_policies set receipt_print_mode = 'auto' where zone_id = ${zoneId}`);
 
     await scoped(async (tx) => {
-      await expect(resolveSalePolicy(tx, { locationId }, zoneId)).resolves.toEqual({
+      await expect(resolveSalePolicy(tx, zoneId)).resolves.toEqual({
         orderStart: "counter",
         zoneId,
         departmentId: department.id,
@@ -1697,15 +1559,11 @@ describe("departments", () => {
     const locationId = brandLocationId(await seedLocation("Zone policy defaults"));
     const zoneId = await seedZone(locationId, "Terrace");
     await scoped(async (tx) => {
-      const department = await createDepartment(
-        tx,
-        { locationId },
-        {
-          name: "Restaurant",
-          orderStart: "counter",
-        },
-      );
-      await configureZone(tx, { locationId }, { zoneId, departmentId: department.id });
+      const department = await createDepartment(tx, {
+        name: "Restaurant",
+        orderStart: "counter",
+      });
+      await configureZone(tx, { zoneId, departmentId: department.id });
     });
 
     const policies = await db.execute<{
@@ -1721,9 +1579,9 @@ describe("departments", () => {
   });
 
   it("gives a newly created department the quick-sale and receipt defaults", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("New department policies")) };
+    await seedLocation("New department policies");
     const department = await scoped((tx) =>
-      createDepartment(tx, cfg, { name: "Terrace", orderStart: "counter" }),
+      createDepartment(tx, { name: "Terrace", orderStart: "counter" }),
     );
 
     const policies = await db.execute<{
@@ -1745,9 +1603,9 @@ describe("departments", () => {
   });
 
   it("refuses department deactivation of an unknown department", async () => {
-    const here = { locationId: brandLocationId(await seedLocation("Venue")) };
+    await seedLocation("Venue");
     await scoped(async (tx) => {
-      await createDepartment(tx, here, {
+      await createDepartment(tx, {
         name: "Restaurant",
         orderStart: "table",
       });
@@ -1758,7 +1616,6 @@ describe("departments", () => {
         scoped((tx) =>
           deleteDepartment(
             tx,
-            here,
             {
               removeSets: async () => {},
               readImpact: async () => ({ refusals: [], removes: [] }),
@@ -1776,16 +1633,15 @@ describe("departments", () => {
   });
 
   it("refuses to remove the venue's last active department", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Single department")) };
+    await seedLocation("Single department");
     const department = await scoped((tx) =>
-      createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
+      createDepartment(tx, { name: "Dining", orderStart: "table" }),
     );
 
     await expect(
       scoped((tx) =>
         deleteDepartment(
           tx,
-          cfg,
           {
             removeSets: async () => {},
             readImpact: async () => ({ refusals: [], removes: [] }),
@@ -1799,7 +1655,7 @@ describe("departments", () => {
       code: "department.last_active",
       params: { departmentId: department.id },
     });
-    expect(await scoped((tx) => listDepartments(tx, cfg))).toEqual([
+    expect(await scoped((tx) => listDepartments(tx))).toEqual([
       expect.objectContaining({ id: department.id, active: true }),
     ]);
   });
@@ -1809,13 +1665,13 @@ describe("departments", () => {
     const terrace = await seedZone(cfg.locationId, "Terrace");
     const dining = await seedZone(cfg.locationId, "Dining room");
     const { restaurant, bar, tableId } = await scoped(async (tx) => {
-      const restaurant = await createDepartment(tx, cfg, {
+      const restaurant = await createDepartment(tx, {
         name: "Restaurant",
         orderStart: "table",
       });
-      const bar = await createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" });
-      await configureZone(tx, cfg, { zoneId: terrace, departmentId: restaurant.id });
-      await configureZone(tx, cfg, { zoneId: dining, departmentId: bar.id });
+      const bar = await createDepartment(tx, { name: "Bar", orderStart: "counter" });
+      await configureZone(tx, { zoneId: terrace, departmentId: restaurant.id });
+      await configureZone(tx, { zoneId: dining, departmentId: bar.id });
       const [table] = await tx
         .insert(diningTables)
         .values({ locationId: cfg.locationId, label: "T12", zoneId: terrace })
@@ -1832,13 +1688,13 @@ describe("departments", () => {
         await tx.execute(sql`update departments set active = false where id = ${restaurant.id}`);
       })(),
     );
-    const departmentsAfter = await scoped((tx) => listDepartments(tx, cfg));
+    const departmentsAfter = await scoped((tx) => listDepartments(tx));
     expect(departmentsAfter).not.toContainEqual(expect.objectContaining({ id: restaurant.id }));
     expect(
       await db.select().from(departments).where(eq(departments.id, restaurant.id)),
     ).toContainEqual(expect.objectContaining({ id: restaurant.id, active: false }));
     expect(departmentsAfter).toContainEqual(expect.objectContaining({ id: bar.id, active: true }));
-    expect(await scoped((tx) => listServiceZones(tx, cfg))).toEqual([
+    expect(await scoped((tx) => listServiceZones(tx))).toEqual([
       expect.objectContaining({ id: dining, departmentId: bar.id }),
     ]);
     expect(
@@ -1876,13 +1732,13 @@ async function seedSellingVenue() {
   const barZone = await seedZone(locationId, "Bar");
   const nodeId = await seedNode(db);
   return scoped(async (tx) => {
-    const restaurant = await createDepartment(tx, cfg, {
+    const restaurant = await createDepartment(tx, {
       name: "Restaurant",
       orderStart: "table",
     });
-    const bar = await createDepartment(tx, cfg, { name: "Bar", orderStart: "table" });
-    await configureZone(tx, cfg, { zoneId: diningZone, departmentId: restaurant.id });
-    await configureZone(tx, cfg, { zoneId: barZone, departmentId: bar.id, orderStart: "counter" });
+    const bar = await createDepartment(tx, { name: "Bar", orderStart: "table" });
+    await configureZone(tx, { zoneId: diningZone, departmentId: restaurant.id });
+    await configureZone(tx, { zoneId: barZone, departmentId: bar.id, orderStart: "counter" });
     const menu = await createCatalogue(tx, { name: "All day" });
     const product = await createProduct(tx, {
       catalogueId: menu.id,
@@ -1921,7 +1777,7 @@ type SellingVenue = Awaited<ReturnType<typeof seedSellingVenue>>;
 it("keeps the receipt's department heading after the department is renamed and its switch changes", async () => {
   const venue = await seedSellingVenue();
   const saleId = await scoped(async (tx) => {
-    await updateDepartment(tx, venue.cfg, venue.barId, {
+    await updateDepartment(tx, venue.barId, {
       name: "Bar",
       tradingName: "Bar La Buena",
       orderStart: "table",
@@ -1947,17 +1803,17 @@ it("keeps the receipt's department heading after the department is renamed and i
         fiscalState: "not_applicable",
       })
       .returning({ id: sales.id });
-    await recordSaleReceiptHeader(tx, venue.cfg, sale!.id, venue.barZone);
+    await recordSaleReceiptHeader(tx, sale!.id, venue.barZone);
     return sale!.id;
   });
 
   await scoped(async (tx) => {
-    await updateDepartment(tx, venue.cfg, venue.barId, {
+    await updateDepartment(tx, venue.barId, {
       name: "Renamed bar",
       tradingName: "New sign",
       orderStart: "table",
     });
-    await setDepartmentSalePolicyField(tx, venue.cfg, venue.barId, "printTradingName", false);
+    await setDepartmentSalePolicyField(tx, venue.barId, "printTradingName", false);
   });
   await expect(scoped((tx) => readSaleReceiptHeader(tx, saleId))).resolves.toEqual({
     departmentId: venue.barId,
@@ -1990,7 +1846,7 @@ it("records an empty receipt heading for a sale without a service zone", async (
         fiscalState: "not_applicable",
       })
       .returning({ id: sales.id });
-    await recordSaleReceiptHeader(tx, venue.cfg, sale!.id, null);
+    await recordSaleReceiptHeader(tx, sale!.id, null);
     return sale!.id;
   });
   await expect(scoped((tx) => readSaleReceiptHeader(tx, saleId))).resolves.toEqual({
@@ -2006,23 +1862,23 @@ it.each(["prepay", "ticket_then_pay"] as const)(
   async (paidWhen) => {
     const venue = await seedSellingVenue();
     await scoped(async (tx) => {
-      await configureZone(tx, venue.cfg, {
+      await configureZone(tx, {
         zoneId: venue.barZone,
         departmentId: venue.barId,
         orderStart: "counter",
       });
-      await setZoneSalePolicyOverride(tx, venue.cfg, venue.barZone, "paidWhen", paidWhen);
+      await setZoneSalePolicyOverride(tx, venue.barZone, "paidWhen", paidWhen);
       const fresh = await openOrder(tx, venue, 1);
-      await recordOrderServiceContext(tx, venue.cfg, fresh, venue.barZone);
-      expect(await getOrderServiceContext(tx, venue.cfg, fresh)).toEqual({
+      await recordOrderServiceContext(tx, fresh, venue.barZone);
+      expect(await getOrderServiceContext(tx, fresh)).toEqual({
         zoneId: venue.barZone,
         departmentId: venue.barId,
         serviceMode: paidWhen,
       });
       const moved = await openOrder(tx, venue, 2);
-      await recordOrderServiceContext(tx, venue.cfg, moved, venue.diningZone);
-      await retargetOrderServiceContext(tx, venue.cfg, moved, venue.barZone);
-      expect(await getOrderServiceContext(tx, venue.cfg, moved)).toEqual({
+      await recordOrderServiceContext(tx, moved, venue.diningZone);
+      await retargetOrderServiceContext(tx, moved, venue.barZone);
+      expect(await getOrderServiceContext(tx, moved)).toEqual({
         zoneId: venue.barZone,
         departmentId: venue.barId,
         serviceMode: paidWhen,
@@ -2034,7 +1890,7 @@ it.each(["prepay", "ticket_then_pay"] as const)(
 it("uses an explicitly selected zone instead of the venue fallback", async () => {
   const venue = await seedSellingVenue();
   await expect(
-    scoped((tx) => resolveNewOrderZone(tx, venue.cfg, { zoneId: venue.barZone })),
+    scoped((tx) => resolveNewOrderZone(tx, { zoneId: venue.barZone })),
   ).resolves.toMatchObject({
     zoneId: venue.barZone,
     departmentId: venue.barId,
@@ -2044,9 +1900,9 @@ it("uses an explicitly selected zone instead of the venue fallback", async () =>
 });
 
 it("refuses an unknown sale-policy zone with the domain error", async () => {
-  const venue = await seedSellingVenue();
+  await seedSellingVenue();
   const zoneId = randomUUID();
-  await expect(scoped((tx) => resolveSalePolicy(tx, venue.cfg, zoneId))).rejects.toMatchObject({
+  await expect(scoped((tx) => resolveSalePolicy(tx, zoneId))).rejects.toMatchObject({
     code: "service_zone.not_found",
     params: { zoneId },
   });
@@ -2057,7 +1913,7 @@ describe("retired and moved zones", () => {
     const venue = await seedSellingVenue();
     const { orderId, saleId } = await scoped(async (tx) => {
       const id = await openOrder(tx, venue, 91);
-      await recordOrderServiceContext(tx, venue.cfg, id, venue.barZone);
+      await recordOrderServiceContext(tx, id, venue.barZone);
       const [series] = await tx
         .insert(invoiceSeries)
         .values({ nodeId: venue.nodeId, code: `T${randomUUID().slice(0, 6)}` })
@@ -2092,7 +1948,7 @@ describe("retired and moved zones", () => {
       })(),
     );
 
-    await expect(scoped((tx) => getOrderServiceContext(tx, venue.cfg, orderId))).resolves.toEqual({
+    await expect(scoped((tx) => getOrderServiceContext(tx, orderId))).resolves.toEqual({
       zoneId: venue.barZone,
       departmentId: venue.barId,
       serviceMode: "prepay",
@@ -2127,13 +1983,13 @@ describe("retired and moved zones", () => {
     await db.insert(floorTodayTables).values({ tableId: table!.id });
 
     await scoped((tx) =>
-      configureZone(tx, venue.cfg, {
+      configureZone(tx, {
         zoneId: venue.barZone,
         departmentId: venue.restaurantId,
       }),
     );
 
-    expect(await scoped((tx) => listServiceZones(tx, venue.cfg))).toContainEqual(
+    expect(await scoped((tx) => listServiceZones(tx))).toContainEqual(
       expect.objectContaining({ id: venue.barZone, departmentId: venue.restaurantId }),
     );
     expect(
@@ -2157,9 +2013,7 @@ describe("retired and moved zones", () => {
         .where(eq(menuPeriods.departmentId, venue.barId)),
     ).toEqual([{ menuId: venue.menuId }]);
     expect(
-      (await scoped((tx) => listZoneOffers(tx, venue.cfg, venue.barZone))).menus.map(
-        (menu) => menu.id,
-      ),
+      (await scoped((tx) => listZoneOffers(tx, venue.barZone))).menus.map((menu) => menu.id),
     ).toEqual([destinationMenu, venue.menuId]);
   });
 });
@@ -2197,22 +2051,20 @@ describe("order service context", () => {
 
   it("moves an order onto another zone's department and service mode, keeping its line snapshots", async () => {
     const venue = await seedSellingVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       const orderId = await openOrder(tx, venue, 1);
-      await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
+      await recordOrderServiceContext(tx, orderId, venue.diningZone);
       const lineId = await addLine(tx, venue, orderId, 1);
       await recordWorkingLineContexts(
         tx,
-        cfg,
         orderId,
         [{ workingOrderLineId: lineId, menuItemId: venue.menuItemId }],
-        await listZoneOffers(tx, cfg, venue.diningZone),
+        await listZoneOffers(tx, venue.diningZone),
       );
 
-      await retargetOrderServiceContext(tx, cfg, orderId, venue.barZone);
+      await retargetOrderServiceContext(tx, orderId, venue.barZone);
 
-      await expect(getOrderServiceContext(tx, cfg, orderId)).resolves.toEqual({
+      await expect(getOrderServiceContext(tx, orderId)).resolves.toEqual({
         zoneId: venue.barZone,
         departmentId: venue.barId,
         serviceMode: "prepay",
@@ -2228,15 +2080,14 @@ describe("order service context", () => {
 
   it("uses the destination zone's effective quick-sale payment timing when moving an order", async () => {
     const venue = await seedSellingVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       const orderId = await openOrder(tx, venue, 1);
-      await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
-      await setZoneSalePolicyOverride(tx, cfg, venue.barZone, "paidWhen", "ticket_then_pay");
+      await recordOrderServiceContext(tx, orderId, venue.diningZone);
+      await setZoneSalePolicyOverride(tx, venue.barZone, "paidWhen", "ticket_then_pay");
 
-      await retargetOrderServiceContext(tx, cfg, orderId, venue.barZone);
+      await retargetOrderServiceContext(tx, orderId, venue.barZone);
 
-      await expect(getOrderServiceContext(tx, cfg, orderId)).resolves.toEqual({
+      await expect(getOrderServiceContext(tx, orderId)).resolves.toEqual({
         zoneId: venue.barZone,
         departmentId: venue.barId,
         serviceMode: "ticket_then_pay",
@@ -2246,13 +2097,10 @@ describe("order service context", () => {
 
   it("records nothing for an empty round, even on an order that has no service context", async () => {
     const venue = await seedSellingVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       const orderId = await openOrder(tx, venue, 1);
-      const offers = await listZoneOffers(tx, cfg, venue.diningZone);
-      await expect(
-        recordWorkingLineContexts(tx, cfg, orderId, [], offers),
-      ).resolves.toBeUndefined();
+      const offers = await listZoneOffers(tx, venue.diningZone);
+      await expect(recordWorkingLineContexts(tx, orderId, [], offers)).resolves.toBeUndefined();
 
       // Control: a round with a line on the same order needs the context the order lacks.
       const lineId = await addLine(tx, venue, orderId, 1);
@@ -2260,7 +2108,6 @@ describe("order service context", () => {
         rejection(
           recordWorkingLineContexts(
             tx,
-            cfg,
             orderId,
             [{ workingOrderLineId: lineId, menuItemId: venue.menuItemId }],
             offers,
@@ -2270,16 +2117,15 @@ describe("order service context", () => {
         code: "order.service_context_missing",
         params: { workingOrderId: orderId },
       });
-      await expect(listWorkingLineContexts(tx, cfg, orderId)).resolves.toEqual([]);
+      await expect(listWorkingLineContexts(tx, orderId)).resolves.toEqual([]);
     });
   });
 
   it("resolves a menu item once however many lines of the round share it", async () => {
     const venue = await seedSellingVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       const orderId = await openOrder(tx, venue, 1);
-      await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
+      await recordOrderServiceContext(tx, orderId, venue.diningZone);
       const [first, second, third] = [
         await addLine(tx, venue, orderId, 1),
         await addLine(tx, venue, orderId, 2),
@@ -2289,16 +2135,16 @@ describe("order service context", () => {
         workingOrderLineId,
         menuItemId: venue.menuItemId,
       });
-      const offers = await listZoneOffers(tx, cfg, venue.diningZone);
+      const offers = await listZoneOffers(tx, venue.diningZone);
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
 
-      await recordWorkingLineContexts(tx, cfg, orderId, [line(first!)], offers);
+      await recordWorkingLineContexts(tx, orderId, [line(first!)], offers);
       const oneLine = prepared.mock.calls.length;
       prepared.mockClear();
-      await recordWorkingLineContexts(tx, cfg, orderId, [line(second!), line(third!)], offers);
+      await recordWorkingLineContexts(tx, orderId, [line(second!), line(third!)], offers);
       expect(prepared).toHaveBeenCalledTimes(oneLine);
 
-      const recorded = await listWorkingLineContexts(tx, cfg, orderId);
+      const recorded = await listWorkingLineContexts(tx, orderId);
       expect(recorded.map((row) => [row.workingOrderLineId, row.menuItemId]).sort()).toEqual(
         [first!, second!, third!].map((id) => [id, venue.menuItemId]).sort(),
       );
@@ -2307,27 +2153,25 @@ describe("order service context", () => {
 
   it("copies no snapshot from an order or a line that never had one", async () => {
     const venue = await seedSellingVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       const from = await openOrder(tx, venue, 1);
       const to = await openOrder(tx, venue, 2);
       const fromLine = await addLine(tx, venue, from, 1);
       const toLine = await addLine(tx, venue, to, 1);
 
-      await expect(copyOrderServiceContext(tx, cfg, from, to)).resolves.toBeUndefined();
-      await expect(copyWorkingLineContext(tx, cfg, fromLine, toLine)).resolves.toBeUndefined();
+      await expect(copyOrderServiceContext(tx, from, to)).resolves.toBeUndefined();
+      await expect(copyWorkingLineContext(tx, fromLine, toLine)).resolves.toBeUndefined();
 
-      await expect(findOrderServiceContext(tx, cfg, to)).resolves.toBeNull();
-      await expect(listWorkingLineContexts(tx, cfg, to)).resolves.toEqual([]);
+      await expect(findOrderServiceContext(tx, to)).resolves.toBeNull();
+      await expect(listWorkingLineContexts(tx, to)).resolves.toEqual([]);
     });
   });
 
   it("copies many lines' snapshots in one read and one write, each from its own line, skipping a line that never had one", async () => {
     const venue = await seedSellingVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       const orderId = await openOrder(tx, venue, 1);
-      await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
+      await recordOrderServiceContext(tx, orderId, venue.diningZone);
       const lineIds: string[] = [];
       for (let lineNo = 1; lineNo <= 7; lineNo++)
         lineIds.push(await addLine(tx, venue, orderId, lineNo));
@@ -2342,7 +2186,6 @@ describe("order service context", () => {
       ];
       await recordWorkingLineContexts(
         tx,
-        cfg,
         orderId,
         [
           { workingOrderLineId: onTime, menuItemId: venue.menuItemId },
@@ -2352,13 +2195,13 @@ describe("order service context", () => {
             late: { periodName: "Lunch", confirmedBy: randomUUID() },
           },
         ],
-        await listZoneOffers(tx, cfg, venue.diningZone),
+        await listZoneOffers(tx, venue.diningZone),
       );
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
 
-      await copyWorkingLineContexts(tx, cfg, []);
+      await copyWorkingLineContexts(tx, []);
       expect(prepared).not.toHaveBeenCalled();
-      await copyWorkingLineContexts(tx, cfg, [
+      await copyWorkingLineContexts(tx, [
         { from: onTime, to: onTimeCopy },
         { from: onTime, to: onTimeCopy2 },
         { from: late, to: lateCopy },
@@ -2502,15 +2345,14 @@ describe("zone offers from the published menus", () => {
 
   it("records a round's line snapshots in as many queries however many distinct offers it holds", async () => {
     const venue = await seedTwoMenuVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       const orderId = await openOrder(tx, venue, 1);
-      await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
+      await recordOrderServiceContext(tx, orderId, venue.diningZone);
       const lineIds = [];
       for (const lineNo of [1, 2, 3, 4]) lineIds.push(await addLine(tx, venue, orderId, lineNo));
-      const offers = await listZoneOffers(tx, cfg, venue.diningZone);
+      const offers = await listZoneOffers(tx, venue.diningZone);
       const round = (lines: { workingOrderLineId: string; menuItemId: string }[]) =>
-        recordWorkingLineContexts(tx, cfg, orderId, lines, offers);
+        recordWorkingLineContexts(tx, orderId, lines, offers);
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
 
       await round([{ workingOrderLineId: lineIds[0]!, menuItemId: venue.menuItemId }]);
@@ -2528,19 +2370,17 @@ describe("zone offers from the published menus", () => {
 
   it("records the version each line's offer was served from, and refuses an offer the snapshot lacks", async () => {
     const venue = await seedTwoMenuVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       const orderId = await openOrder(tx, venue, 1);
-      await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
+      await recordOrderServiceContext(tx, orderId, venue.diningZone);
       const [allDay, dinner, stranger] = [
         await addLine(tx, venue, orderId, 1),
         await addLine(tx, venue, orderId, 2),
         await addLine(tx, venue, orderId, 3),
       ];
-      const offers = await listZoneOffers(tx, cfg, venue.diningZone);
+      const offers = await listZoneOffers(tx, venue.diningZone);
       await recordWorkingLineContexts(
         tx,
-        cfg,
         orderId,
         [
           { workingOrderLineId: allDay!, menuItemId: venue.menuItemId },
@@ -2564,7 +2404,6 @@ describe("zone offers from the published menus", () => {
         rejection(
           recordWorkingLineContexts(
             tx,
-            cfg,
             orderId,
             [{ workingOrderLineId: stranger!, menuItemId: UNKNOWN_ID }],
             offers,
@@ -2578,7 +2417,6 @@ describe("zone offers from the published menus", () => {
       await expect(
         recordWorkingLineContexts(
           tx,
-          cfg,
           orderId,
           [{ workingOrderLineId: stranger!, menuItemId: venue.menuItemId }],
           { ...offers, menus: [] },
@@ -2588,7 +2426,6 @@ describe("zone offers from the published menus", () => {
       const noSuchVersion = await captureError(() =>
         recordWorkingLineContexts(
           tx,
-          cfg,
           orderId,
           [{ workingOrderLineId: stranger!, menuItemId: venue.menuItemId }],
           { ...offers, menus: offers.menus.map((menu) => ({ ...menu, versionId: UNKNOWN_ID })) },
@@ -2600,14 +2437,13 @@ describe("zone offers from the published menus", () => {
 
   it("serves each menu's live version, not its working state, with the version id", async () => {
     const venue = await seedTwoMenuVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       await updateMenuItem(tx, venue.dinner, venue.lemonadeOffer, { grossPrice: "2.50" });
       await updateProduct(tx, venue.lemonade, {
         allergens: { sulphites: {} },
       });
 
-      const served = await listZoneOffers(tx, cfg, venue.diningZone);
+      const served = await listZoneOffers(tx, venue.diningZone);
       expect(served.menus.map(versionOf)).toEqual([
         { id: venue.menuId, name: "All day", isDefault: true, versionId: venue.versionId },
         { id: venue.dinner, name: "Dinner", isDefault: false, versionId: venue.dinnerVersionId },
@@ -2616,7 +2452,7 @@ describe("zone offers from the published menus", () => {
       expect(lemonade).toMatchObject({ unitPrice: "3.00", allergens: {}, available: true });
 
       const republished = await publish(tx, venue.dinner);
-      const after = await listZoneOffers(tx, cfg, venue.diningZone);
+      const after = await listZoneOffers(tx, venue.diningZone);
       expect(after.menus[1]).toMatchObject({ id: venue.dinner, versionId: republished });
       expect(after.offers.find((offer) => offer.id === venue.lemonadeOffer)).toMatchObject({
         unitPrice: "2.50",
@@ -2627,12 +2463,11 @@ describe("zone offers from the published menus", () => {
 
   it("serves the VAT class the live version froze, and no rate, until the menu is republished", async () => {
     const venue = await seedTwoMenuVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       await updateProduct(tx, venue.lemonade, { vatClass: "reduced" });
       await updateProduct(tx, venue.extraLemon, { vatClass: "super_reduced" });
       const lemonadeOf = async () =>
-        (await listZoneOffers(tx, cfg, venue.diningZone)).offers.find(
+        (await listZoneOffers(tx, venue.diningZone)).offers.find(
           (offer) => offer.id === venue.lemonadeOffer,
         )!;
       const frozen = { vatClass: "general" };
@@ -2657,13 +2492,11 @@ describe("zone offers from the published menus", () => {
   it("refuses serving and menu-state reads of an unsupported live document", async () => {
     const venue = await seedTwoMenuVenue();
     await scoped((tx) => liveInEarlierFormat(tx, venue.dinner, venue.dinnerVersionId));
-    await expect(
-      scoped((tx) => listZoneOffers(tx, venue.cfg, venue.diningZone)),
-    ).rejects.toMatchObject({
+    await expect(scoped((tx) => listZoneOffers(tx, venue.diningZone))).rejects.toMatchObject({
       code: "menu.reset_required",
       params: { menuId: venue.dinner },
     });
-    await expect(scoped((tx) => menuState(tx, venue.cfg, venue.diningZone))).rejects.toMatchObject({
+    await expect(scoped((tx) => menuState(tx, venue.diningZone))).rejects.toMatchObject({
       code: "menu.reset_required",
       params: { menuId: venue.dinner },
     });
@@ -2671,14 +2504,13 @@ describe("zone offers from the published menus", () => {
 
   it("serves an unavailable or inactive product marked, in its place", async () => {
     const venue = await seedTwoMenuVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
-      const before = (await listZoneOffers(tx, cfg, venue.diningZone)).offers.map((o) => o.id);
+      const before = (await listZoneOffers(tx, venue.diningZone)).offers.map((o) => o.id);
       expect(before).toEqual([venue.menuItemId, venue.lemonadeOffer, venue.burgerOffer]);
       await updateProduct(tx, venue.lemonade, { available: false });
       await tx.update(products).set({ active: false }).where(eq(products.id, venue.burger));
 
-      const served = (await listZoneOffers(tx, cfg, venue.diningZone)).offers;
+      const served = (await listZoneOffers(tx, venue.diningZone)).offers;
       expect(served.map((offer) => [offer.id, offer.available])).toEqual([
         [venue.menuItemId, true],
         [venue.lemonadeOffer, false],
@@ -2693,7 +2525,7 @@ describe("zone offers from the published menus", () => {
     await scoped(async (tx) => {
       const brunch = await createCatalogue(tx, { name: "Brunch" });
       await offerMenuThroughZone(tx, cfg, venue.diningZone, brunch.id, { makeDefault: true });
-      const served = await listZoneOffers(tx, cfg, venue.diningZone);
+      const served = await listZoneOffers(tx, venue.diningZone);
       expect(served.defaultMenuId).toBe(venue.menuId);
       expect(served.menus.map((menu) => [menu.id, menu.isDefault])).toEqual([
         [venue.menuId, true],
@@ -2705,7 +2537,7 @@ describe("zone offers from the published menus", () => {
       await tx.execute(
         sql`delete from menu_period_staff_menus where department_id = ${venue.barId} and menu_id = ${venue.menuId}`,
       );
-      await expect(listZoneOffers(tx, cfg, venue.barZone)).resolves.toEqual({
+      await expect(listZoneOffers(tx, venue.barZone)).resolves.toEqual({
         defaultMenuId: null,
         service: {
           open: true,
@@ -2731,7 +2563,7 @@ describe("zone offers from the published menus", () => {
     const venue = await seedTwoMenuVenue();
     const { cfg } = venue;
     await scoped(async (tx) => {
-      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
+      await expect(listVenueReadiness(tx)).resolves.toEqual([]);
 
       const brunch = await createCatalogue(tx, { name: "Brunch" });
       await offerMenuThroughZone(tx, cfg, venue.barZone, brunch.id, { makeDefault: true });
@@ -2740,7 +2572,7 @@ describe("zone offers from the published menus", () => {
       );
       // The dining room's unpublished Brunch is beside published menus, so it is not reported.
       await offerMenuThroughZone(tx, cfg, venue.diningZone, brunch.id);
-      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([
+      await expect(listVenueReadiness(tx)).resolves.toEqual([
         { code: "zone.menu_unpublished", zoneId: venue.barZone, zoneName: "Bar" },
       ]);
 
@@ -2752,27 +2584,27 @@ describe("zone offers from the published menus", () => {
         menuId: brunch.id,
         menuName: "Brunch",
       });
-      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([
+      await expect(listVenueReadiness(tx)).resolves.toEqual([
         brunchEmpty(venue.barZone, "Bar"),
         brunchEmpty(venue.diningZone, "Dining room"),
       ]);
 
       // Added to the working state only: the live version is still empty.
       await addProductToMenu(tx, { menuId: brunch.id, productId: venue.burger });
-      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([
+      await expect(listVenueReadiness(tx)).resolves.toEqual([
         brunchEmpty(venue.barZone, "Bar"),
         brunchEmpty(venue.diningZone, "Dining room"),
       ]);
       await publish(tx, brunch.id);
-      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
+      await expect(listVenueReadiness(tx)).resolves.toEqual([]);
     });
   });
 
   it("refuses readiness when an assigned live menu requires a venue reset", async () => {
     const venue = await seedTwoMenuVenue();
-    await expect(scoped((tx) => listVenueReadiness(tx, venue.cfg))).resolves.toEqual([]);
+    await expect(scoped((tx) => listVenueReadiness(tx))).resolves.toEqual([]);
     await scoped((tx) => liveInEarlierFormat(tx, venue.menuId, venue.versionId));
-    await expect(scoped((tx) => listVenueReadiness(tx, venue.cfg))).rejects.toMatchObject({
+    await expect(scoped((tx) => listVenueReadiness(tx))).rejects.toMatchObject({
       code: "menu.reset_required",
       params: { menuId: venue.menuId },
     });
@@ -2780,23 +2612,22 @@ describe("zone offers from the published menus", () => {
 
   it("sells nothing from a published menu once it is deactivated, and keeps selling an active one beside it", async () => {
     const venue = await seedTwoMenuVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       await deactivateCatalogue(tx, venue.menuId);
 
-      const dining = await listZoneOffers(tx, cfg, venue.diningZone);
+      const dining = await listZoneOffers(tx, venue.diningZone);
       expect(dining.defaultMenuId).toBe(venue.dinner);
       expect(dining.menus.map((menu) => menu.id)).toEqual([venue.dinner]);
       expect(dining.offers.map((offer) => offer.id)).toEqual([
         venue.lemonadeOffer,
         venue.burgerOffer,
       ]);
-      expect((await menuState(tx, venue.cfg, venue.diningZone)).menus.map(stateVersionOf)).toEqual([
+      expect((await menuState(tx, venue.diningZone)).menus.map(stateVersionOf)).toEqual([
         { menuId: venue.dinner, versionId: venue.dinnerVersionId },
       ]);
       await expect(
         rejection(
-          listZoneOffers(tx, cfg, venue.diningZone, {
+          listZoneOffers(tx, venue.diningZone, {
             asserted: [{ menuId: venue.menuId, versionId: venue.versionId }],
           }),
         ),
@@ -2806,7 +2637,7 @@ describe("zone offers from the published menus", () => {
       });
 
       // The bar sells All day alone.
-      await expect(listZoneOffers(tx, cfg, venue.barZone)).resolves.toEqual({
+      await expect(listZoneOffers(tx, venue.barZone)).resolves.toEqual({
         defaultMenuId: null,
         service: {
           open: true,
@@ -2830,12 +2661,11 @@ describe("zone offers from the published menus", () => {
 
   it("reports a zone whose only published menu is deactivated", async () => {
     const venue = await seedTwoMenuVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
-      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
+      await expect(listVenueReadiness(tx)).resolves.toEqual([]);
       // The bar sells All day alone; the dining room still has Dinner, which stays active.
       await deactivateCatalogue(tx, venue.menuId);
-      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([
+      await expect(listVenueReadiness(tx)).resolves.toEqual([
         { code: "zone.menu_unpublished", zoneId: venue.barZone, zoneName: "Bar" },
       ]);
     });
@@ -2844,10 +2674,8 @@ describe("zone offers from the published menus", () => {
   it("menuState and listZoneOffers name the same live fields, and both move when a dish changes course", async () => {
     const venue = await seedTwoMenuVenue();
     await scoped(async (tx) => {
-      const before = await menuState(tx, venue.cfg, venue.diningZone);
-      expect((await listZoneOffers(tx, venue.cfg, venue.diningZone)).liveFields).toBe(
-        before.liveFields,
-      );
+      const before = await menuState(tx, venue.diningZone);
+      expect((await listZoneOffers(tx, venue.diningZone)).liveFields).toBe(before.liveFields);
       const [course] = await tx
         .insert(kitchenCourses)
         .values({ locationId: venue.cfg.locationId, name: "Starters" })
@@ -2856,11 +2684,9 @@ describe("zone offers from the published menus", () => {
         .update(products)
         .set({ courseId: course!.id })
         .where(eq(products.id, venue.lemonade));
-      const after = await menuState(tx, venue.cfg, venue.diningZone);
+      const after = await menuState(tx, venue.diningZone);
       expect(after.liveFields).not.toBe(before.liveFields);
-      expect((await listZoneOffers(tx, venue.cfg, venue.diningZone)).liveFields).toBe(
-        after.liveFields,
-      );
+      expect((await listZoneOffers(tx, venue.diningZone)).liveFields).toBe(after.liveFields);
     });
   });
 
@@ -2868,9 +2694,9 @@ describe("zone offers from the published menus", () => {
     const venue = await seedTwoMenuVenue();
     await scoped(async (tx) => {
       await deactivateCatalogue(tx, venue.menuId);
-      expect((await menuState(tx, venue.cfg, venue.barZone)).liveFields).toBe(NO_LIVE_FIELDS);
-      expect((await listZoneOffers(tx, venue.cfg, venue.barZone)).liveFields).toBe(NO_LIVE_FIELDS);
-      expect((await menuState(tx, venue.cfg, UNKNOWN_ID)).liveFields).toBe(NO_LIVE_FIELDS);
+      expect((await menuState(tx, venue.barZone)).liveFields).toBe(NO_LIVE_FIELDS);
+      expect((await listZoneOffers(tx, venue.barZone)).liveFields).toBe(NO_LIVE_FIELDS);
+      expect((await menuState(tx, UNKNOWN_ID)).liveFields).toBe(NO_LIVE_FIELDS);
     });
   });
 
@@ -2881,7 +2707,7 @@ describe("zone offers from the published menus", () => {
         { menuId: venue.menuId, versionId: venue.versionId },
         { menuId: venue.dinner, versionId: venue.dinnerVersionId },
       ];
-      const before = await menuState(tx, venue.cfg, venue.diningZone);
+      const before = await menuState(tx, venue.diningZone);
       expect({ ...before, menus: before.menus.map(stateVersionOf) }).toEqual({
         service: {
           open: true,
@@ -2946,14 +2772,14 @@ describe("zone offers from the published menus", () => {
       );
 
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
-      const { menus: served, unavailable } = await menuState(tx, venue.cfg, venue.diningZone);
+      const { menus: served, unavailable } = await menuState(tx, venue.diningZone);
       expect(prepared).toHaveBeenCalledTimes(15);
       expect(served.map(stateVersionOf)).toEqual(menus);
       expect({ ...unavailable, products: [...unavailable.products].sort() }).toEqual({
         products: [venue.productId, venue.burger, venue.large, venue.extraMint].sort(),
         optionLabels: [WITH_ICE],
       });
-      await expect(menuState(tx, venue.cfg, UNKNOWN_ID)).resolves.toEqual({
+      await expect(menuState(tx, UNKNOWN_ID)).resolves.toEqual({
         service: {
           open: false,
           zoneOpen: true,
@@ -2982,10 +2808,8 @@ describe("zone offers from the published menus", () => {
         },
         "en",
       );
-      expect((await menuState(tx, venue.cfg, venue.diningZone)).unavailable.optionLabels).toEqual([
-        WITH_ICE,
-      ]);
-      const lemonade = (await listZoneOffers(tx, venue.cfg, venue.diningZone)).offers.find(
+      expect((await menuState(tx, venue.diningZone)).unavailable.optionLabels).toEqual([WITH_ICE]);
+      const lemonade = (await listZoneOffers(tx, venue.diningZone)).offers.find(
         (offer) => offer.id === venue.lemonadeOffer,
       )!;
       const ice = lemonade.offeredModifiers.find((entry) => entry.kind === "options")!;
@@ -3000,12 +2824,11 @@ describe("zone offers from the published menus", () => {
 
   it("serves only the offers named, as the whole zone serves them, with every menu listed", async () => {
     const venue = await seedTwoMenuVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       await updateProduct(tx, venue.extraMint, { available: false });
-      const whole = await listZoneOffers(tx, cfg, venue.diningZone);
+      const whole = await listZoneOffers(tx, venue.diningZone);
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
-      const named = await listZoneOffers(tx, cfg, venue.diningZone, {
+      const named = await listZoneOffers(tx, venue.diningZone, {
         menuItemIds: [venue.lemonadeOffer, UNKNOWN_ID],
       });
       expect(named).toEqual({
@@ -3030,7 +2853,7 @@ describe("zone offers from the published menus", () => {
     await scoped(async (tx) => {
       await offerMenuThroughZone(tx, cfg, venue.barZone, venue.dinner);
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
-      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
+      await expect(listVenueReadiness(tx)).resolves.toEqual([]);
       const sqlOf = prepared.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
       expect(sqlOf.filter((text) => /from "menu_publications"/.test(text))).toHaveLength(1);
       expect(sqlOf.filter((text) => /from "menu_period_staff_menus"/.test(text))).toHaveLength(1);
@@ -3075,10 +2898,10 @@ describe("each served menu's structure and Device Home Page", () => {
   it("serves the live structure and Device Home Page, and each menu's version alone in the menu state", async () => {
     const venue = await seedDinnerHome();
     await scoped(async (tx) => {
-      const colaOffer = (await listZoneOffers(tx, venue.cfg, venue.diningZone)).offers.find(
+      const colaOffer = (await listZoneOffers(tx, venue.diningZone)).offers.find(
         (offer) => offer.productId === venue.cola,
       )!.id;
-      const served = await listZoneOffers(tx, venue.cfg, venue.diningZone);
+      const served = await listZoneOffers(tx, venue.diningZone);
       expect(served.menus[1]).toEqual({
         id: venue.dinner,
         name: "Dinner",
@@ -3111,7 +2934,7 @@ describe("each served menu's structure and Device Home Page", () => {
           till: HOME_DISPLAY_DEFAULTS.till,
         },
       });
-      expect((await menuState(tx, venue.cfg, venue.diningZone)).menus).toEqual([
+      expect((await menuState(tx, venue.diningZone)).menus).toEqual([
         {
           menuId: venue.menuId,
           versionId: venue.versionId,
@@ -3131,24 +2954,23 @@ describe("each served menu's structure and Device Home Page", () => {
   it("names the period that ended earlier today on both reads", async () => {
     await seedUnitTenant();
     const locationId = brandLocationId(await seedLocation("Venue"));
-    const cfg = { locationId };
     const zoneId = await seedZone(locationId, "Dining room");
     const { lunchMenu, dinnerMenu } = await scoped(async (tx) => {
-      const restaurant = await createDepartment(tx, cfg, {
+      const restaurant = await createDepartment(tx, {
         name: "Restaurant",
         orderStart: "table",
       });
-      await configureZone(tx, cfg, { zoneId, departmentId: restaurant.id });
+      await configureZone(tx, { zoneId, departmentId: restaurant.id });
       const lunchMenu = (await createCatalogue(tx, { name: "Lunch menu" })).id;
       const dinnerMenu = (await createCatalogue(tx, { name: "Dinner menu" })).id;
       await publish(tx, lunchMenu);
       await publish(tx, dinnerMenu);
-      const lunch = await saveMenuPeriod(tx, cfg, restaurant.id, {
+      const lunch = await saveMenuPeriod(tx, restaurant.id, {
         name: "Lunch",
         menuId: lunchMenu,
         staffMenuIds: [],
       });
-      const dinner = await saveMenuPeriod(tx, cfg, restaurant.id, {
+      const dinner = await saveMenuPeriod(tx, restaurant.id, {
         name: "Dinner",
         menuId: dinnerMenu,
         staffMenuIds: [],
@@ -3171,7 +2993,7 @@ describe("each served menu's structure and Device Home Page", () => {
     // 14:05 in Madrid on Wednesday 7 October 2026.
     const at = new Date("2026-10-07T12:05:00Z");
     await scoped(async (tx) => {
-      const offers = await listZoneOffers(tx, cfg, zoneId, { at });
+      const offers = await listZoneOffers(tx, zoneId, { at });
       expect(offers.menus.map((menu) => [menu.id, menu.endedPeriodName])).toEqual(
         expect.arrayContaining([
           [lunchMenu, "Lunch"],
@@ -3179,7 +3001,7 @@ describe("each served menu's structure and Device Home Page", () => {
         ]),
       );
       expect(offers.menus).toHaveLength(2);
-      const state = await menuState(tx, cfg, zoneId, at);
+      const state = await menuState(tx, zoneId, at);
       expect(state.menus.map((menu) => [menu.menuId, menu.endedPeriodName])).toEqual(
         expect.arrayContaining([
           [lunchMenu, "Lunch"],
@@ -3187,7 +3009,7 @@ describe("each served menu's structure and Device Home Page", () => {
         ]),
       );
       expect(state.menus).toHaveLength(2);
-      const pricing = await listZoneOffers(tx, cfg, zoneId, { at, withDefault: false });
+      const pricing = await listZoneOffers(tx, zoneId, { at, withDefault: false });
       expect(pricing.menus.map((menu) => [menu.id, menu.endedPeriodName])).toEqual(
         expect.arrayContaining([
           [lunchMenu, null],
@@ -3201,24 +3023,23 @@ describe("each served menu's structure and Device Home Page", () => {
   it("names no ended period for a menu the running period also offers", async () => {
     await seedUnitTenant();
     const locationId = brandLocationId(await seedLocation("Venue"));
-    const cfg = { locationId };
     const zoneId = await seedZone(locationId, "Dining room");
     const { lunchMenu, drinksMenu } = await scoped(async (tx) => {
-      const restaurant = await createDepartment(tx, cfg, {
+      const restaurant = await createDepartment(tx, {
         name: "Restaurant",
         orderStart: "table",
       });
-      await configureZone(tx, cfg, { zoneId, departmentId: restaurant.id });
+      await configureZone(tx, { zoneId, departmentId: restaurant.id });
       const lunchMenu = (await createCatalogue(tx, { name: "Lunch menu" })).id;
       const afternoonMenu = (await createCatalogue(tx, { name: "Afternoon menu" })).id;
       const drinksMenu = (await createCatalogue(tx, { name: "Drinks" })).id;
       for (const menuId of [lunchMenu, afternoonMenu, drinksMenu]) await publish(tx, menuId);
-      const lunch = await saveMenuPeriod(tx, cfg, restaurant.id, {
+      const lunch = await saveMenuPeriod(tx, restaurant.id, {
         name: "Lunch",
         menuId: lunchMenu,
         staffMenuIds: [drinksMenu],
       });
-      const afternoon = await saveMenuPeriod(tx, cfg, restaurant.id, {
+      const afternoon = await saveMenuPeriod(tx, restaurant.id, {
         name: "Afternoon",
         menuId: afternoonMenu,
         staffMenuIds: [drinksMenu],
@@ -3241,12 +3062,12 @@ describe("each served menu's structure and Device Home Page", () => {
     // 14:05 in Madrid on Wednesday 7 October 2026, during Afternoon.
     const at = new Date("2026-10-07T12:05:00Z");
     await scoped(async (tx) => {
-      const offers = await listZoneOffers(tx, cfg, zoneId, { at });
+      const offers = await listZoneOffers(tx, zoneId, { at });
       expect(offers.service.periodName).toBe("Afternoon");
       const offered = (id: string) => offers.menus.find((menu) => menu.id === id);
       expect(offered(drinksMenu)).toMatchObject({ orderable: true, endedPeriodName: null });
       expect(offered(lunchMenu)).toMatchObject({ orderable: false, endedPeriodName: "Lunch" });
-      const state = await menuState(tx, cfg, zoneId, at);
+      const state = await menuState(tx, zoneId, at);
       const polled = (id: string) => state.menus.find((menu) => menu.menuId === id);
       expect(polled(drinksMenu)).toMatchObject({ orderable: true, endedPeriodName: null });
       expect(polled(lunchMenu)).toMatchObject({ orderable: false, endedPeriodName: "Lunch" });
@@ -3256,12 +3077,12 @@ describe("each served menu's structure and Device Home Page", () => {
   it("leaves out of the structure an offer whose product is Inactive, keeping its section in place (D5)", async () => {
     const venue = await seedDinnerHome();
     await scoped(async (tx) => {
-      const colaOffer = (await listZoneOffers(tx, venue.cfg, venue.diningZone)).offers.find(
+      const colaOffer = (await listZoneOffers(tx, venue.diningZone)).offers.find(
         (offer) => offer.productId === venue.cola,
       )!.id;
       await tx.update(products).set({ active: false }).where(eq(products.id, venue.cola));
       await publish(tx, venue.dinner);
-      const served = await listZoneOffers(tx, venue.cfg, venue.diningZone);
+      const served = await listZoneOffers(tx, venue.diningZone);
       expect(served.offers.map((offer) => offer.id)).not.toContain(colaOffer);
       expect(served.menus[1]!.structure.members.at(-1)).toMatchObject({
         kind: "section",
@@ -3275,17 +3096,16 @@ describe("each served menu's structure and Device Home Page", () => {
 describe("findOrderServiceModes", () => {
   it("reads every named order's frozen service mode in one query, leaving out an order with none", async () => {
     const venue = await seedSellingVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       const dining = await openOrder(tx, venue, 1);
       const bar = await openOrder(tx, venue, 2);
       const none = await openOrder(tx, venue, 3);
-      await recordOrderServiceContext(tx, cfg, dining, venue.diningZone);
-      await recordOrderServiceContext(tx, cfg, bar, venue.barZone);
+      await recordOrderServiceContext(tx, dining, venue.diningZone);
+      await recordOrderServiceContext(tx, bar, venue.barZone);
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
       prepared.mockClear();
 
-      const modes = await findOrderServiceModes(tx, cfg, [dining, bar, none]);
+      const modes = await findOrderServiceModes(tx, [dining, bar, none]);
 
       expect(prepared).toHaveBeenCalledTimes(1);
       expect(modes).toEqual(
@@ -3298,11 +3118,11 @@ describe("findOrderServiceModes", () => {
   });
 
   it("reads nothing for no orders", async () => {
-    const venue = await seedSellingVenue();
+    await seedSellingVenue();
     await scoped(async (tx) => {
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
       prepared.mockClear();
-      await expect(findOrderServiceModes(tx, venue.cfg, [])).resolves.toEqual(new Map());
+      await expect(findOrderServiceModes(tx, [])).resolves.toEqual(new Map());
       expect(prepared).not.toHaveBeenCalled();
     });
   });
@@ -3315,12 +3135,12 @@ describe("findOrderServiceZones", () => {
       const dining = await openOrder(tx, venue, 1);
       const bar = await openOrder(tx, venue, 2);
       const none = await openOrder(tx, venue, 3);
-      await recordOrderServiceContext(tx, venue.cfg, dining, venue.diningZone);
-      await recordOrderServiceContext(tx, venue.cfg, bar, venue.barZone);
+      await recordOrderServiceContext(tx, dining, venue.diningZone);
+      await recordOrderServiceContext(tx, bar, venue.barZone);
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
       prepared.mockClear();
 
-      expect(await findOrderServiceZones(tx, venue.cfg, [dining, bar, none])).toEqual(
+      expect(await findOrderServiceZones(tx, [dining, bar, none])).toEqual(
         new Map([
           [dining, venue.diningZone],
           [bar, venue.barZone],
@@ -3334,10 +3154,10 @@ describe("findOrderServiceZones", () => {
     const venue = await seedSellingVenue();
     await scoped(async (tx) => {
       const order = await openOrder(tx, venue, 1);
-      await recordOrderServiceContext(tx, venue.cfg, order, venue.diningZone);
+      await recordOrderServiceContext(tx, order, venue.diningZone);
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
       prepared.mockClear();
-      expect(await findOrderServiceZones(tx, venue.cfg, [])).toEqual(new Map());
+      expect(await findOrderServiceZones(tx, [])).toEqual(new Map());
       expect(prepared).not.toHaveBeenCalled();
     });
   });
@@ -3350,10 +3170,10 @@ describe("orderZoneIdSql", () => {
       const dining = await openOrder(tx, venue, 1);
       const bar = await openOrder(tx, venue, 2);
       const none = await openOrder(tx, venue, 3);
-      await recordOrderServiceContext(tx, venue.cfg, dining, venue.diningZone);
-      await recordOrderServiceContext(tx, venue.cfg, bar, venue.barZone);
+      await recordOrderServiceContext(tx, dining, venue.diningZone);
+      await recordOrderServiceContext(tx, bar, venue.barZone);
       const ids = [dining, bar, none];
-      const expression = settingsOperations.orderZoneIdSql(venue.cfg, sql`"working_orders"."id"`);
+      const expression = settingsOperations.orderZoneIdSql(sql`"working_orders"."id"`);
       const query = tx
         .select({ id: workingOrders.id, zoneId: expression })
         .from(workingOrders)
@@ -3382,9 +3202,9 @@ describe("orderInZones", () => {
       const dining = await openOrder(tx, venue, 1);
       const bar = await openOrder(tx, venue, 2);
       const none = await openOrder(tx, venue, 3);
-      await recordOrderServiceContext(tx, venue.cfg, dining, venue.diningZone);
-      await recordOrderServiceContext(tx, venue.cfg, bar, venue.barZone);
-      const shown = async (cfg: typeof venue.cfg, zoneIds: string[]) =>
+      await recordOrderServiceContext(tx, dining, venue.diningZone);
+      await recordOrderServiceContext(tx, bar, venue.barZone);
+      const shown = async (zoneIds: string[]) =>
         (
           await tx
             .select({ id: workingOrders.id })
@@ -3392,17 +3212,15 @@ describe("orderInZones", () => {
             .where(
               and(
                 inArray(workingOrders.id, [dining, bar, none]),
-                orderInZones(cfg, sql`"working_orders"."id"`, zoneIds),
+                orderInZones(sql`"working_orders"."id"`, zoneIds),
               ),
             )
         )
           .map((row) => row.id)
           .sort();
-      expect(await shown(venue.cfg, [venue.diningZone])).toEqual([dining, none].sort());
-      expect(await shown(venue.cfg, [venue.diningZone, venue.barZone])).toEqual(
-        [dining, bar, none].sort(),
-      );
-      expect(await shown(venue.cfg, [])).toEqual([none]);
+      expect(await shown([venue.diningZone])).toEqual([dining, none].sort());
+      expect(await shown([venue.diningZone, venue.barZone])).toEqual([dining, bar, none].sort());
+      expect(await shown([])).toEqual([none]);
     });
   });
 });
@@ -3425,13 +3243,13 @@ for (const { statement, constraint } of [
     const venue = await seedSellingVenue();
     await scoped(async (tx) => {
       const orderId = await openOrder(tx, venue, 1);
-      await recordOrderServiceContext(tx, venue.cfg, orderId, venue.barZone);
+      await recordOrderServiceContext(tx, orderId, venue.barZone);
     });
     const refused = await captureError(() => scoped(async (tx) => tx.execute(statement)));
     expect(engineErrorMessage(refused)).toContain(`CHECK constraint failed: ${constraint}`);
-    await expect(
-      scoped((tx) => resolveZoneContext(tx, venue.cfg, venue.barZone)),
-    ).resolves.toMatchObject({ serviceMode: "prepay" });
+    await expect(scoped((tx) => resolveZoneContext(tx, venue.barZone))).resolves.toMatchObject({
+      serviceMode: "prepay",
+    });
   });
 }
 
@@ -3442,25 +3260,25 @@ describe("reserved venue names", () => {
   ])(
     "refuses a department $action onto a reserved name (active=$active)",
     async ({ active, action }) => {
-      const cfg = { locationId: brandLocationId(await seedLocation("Names")) };
+      await seedLocation("Names");
       const target = await scoped((tx) =>
-        createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" }),
+        createDepartment(tx, { name: "Deli", orderStart: "counter" }),
       );
       const source = await scoped((tx) =>
-        createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" }),
+        createDepartment(tx, { name: "Bar", orderStart: "counter" }),
       );
       const expected = { code: "department.name_taken", params: { name: "Deli" } };
       const write =
         action === "create"
-          ? (tx: Transaction) => createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })
+          ? (tx: Transaction) => createDepartment(tx, { name: "Deli", orderStart: "counter" })
           : (tx: Transaction) =>
-              updateDepartment(tx, cfg, source.id, {
+              updateDepartment(tx, source.id, {
                 name: "Deli",
                 tradingName: "Changed",
                 orderStart: "table",
               });
       await expect(scoped<Department | void>(write)).rejects.toMatchObject(expected);
-      expect(await scoped((tx) => listDepartments(tx, cfg))).toEqual(
+      expect(await scoped((tx) => listDepartments(tx))).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             id: source.id,
@@ -3471,7 +3289,7 @@ describe("reserved venue names", () => {
         ]),
       );
       await scoped((tx) =>
-        updateDepartment(tx, cfg, source.id, {
+        updateDepartment(tx, source.id, {
           name: "Bar",
           tradingName: "Same name allowed",
           orderStart: "counter",
@@ -3481,18 +3299,18 @@ describe("reserved venue names", () => {
   );
 
   it("reuses a deleted zone name with a new id", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Disabled zone names")) };
+    await seedLocation("Disabled zone names");
     const department = await scoped((tx) =>
-      createDepartment(tx, cfg, { name: "Restaurant", orderStart: "counter" }),
+      createDepartment(tx, { name: "Restaurant", orderStart: "counter" }),
     );
     const zone = await scoped((tx) =>
-      createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id }),
+      createServiceZone(tx, { name: "Terrace", departmentId: department.id }),
     );
     await scoped(async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${zone.id}`),
     );
     const replacement = await scoped((tx) =>
-      createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id }),
+      createServiceZone(tx, { name: "Terrace", departmentId: department.id }),
     );
     expect(replacement.id).not.toBe(zone.id);
     expect(await db.select().from(floorZones).where(eq(floorZones.id, replacement.id))).toEqual([
@@ -3506,17 +3324,17 @@ describe("reserved venue names", () => {
 
 describe("combined settings operations", () => {
   it("saves a department's settings when its policy row is missing", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Repair department settings")) };
+    await seedLocation("Repair department settings");
     await scoped(async (tx) => {
-      const department = await createDepartment(tx, cfg, { name: "Dining", orderStart: "counter" });
-      const zone = await createServiceZone(tx, cfg, {
+      const department = await createDepartment(tx, { name: "Dining", orderStart: "counter" });
+      const zone = await createServiceZone(tx, {
         name: "Terrace",
         departmentId: department.id,
       });
       await tx.execute(
         sql`delete from department_sale_policies where department_id = ${department.id}`,
       );
-      await settingsOperations.saveDepartmentEditSettings(tx, cfg, department.id, {
+      await settingsOperations.saveDepartmentEditSettings(tx, department.id, {
         name: "Restaurant",
         tradingName: "Receipt",
         orderStart: "table",
@@ -3525,19 +3343,17 @@ describe("combined settings operations", () => {
       });
       await settingsOperations.setDepartmentSalePolicyField(
         tx,
-        cfg,
         department.id,
         "printTradingName",
         false,
       );
       await settingsOperations.setDepartmentSalePolicyField(
         tx,
-        cfg,
         department.id,
         "receiptPrintMode",
         "on_request",
       );
-      expect(await resolveSalePolicy(tx, cfg, zone.id)).toEqual({
+      expect(await resolveSalePolicy(tx, zone.id)).toEqual({
         zoneId: zone.id,
         departmentId: department.id,
         departmentName: "Restaurant",
@@ -3548,49 +3364,49 @@ describe("combined settings operations", () => {
         collectionNumber: "numbered",
         receiptPrintMode: "on_request",
       });
-      expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({
+      expect(await resolveZoneContext(tx, zone.id)).toMatchObject({
         serviceMode: "table_tab",
       });
     });
   });
 
   it("saves a zone's settings when its policy row is missing", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Repair zone settings")) };
+    await seedLocation("Repair zone settings");
     await scoped(async (tx) => {
-      const department = await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" });
-      const zone = await createServiceZone(tx, cfg, {
+      const department = await createDepartment(tx, { name: "Dining", orderStart: "table" });
+      const zone = await createServiceZone(tx, {
         name: "Terrace",
         departmentId: department.id,
       });
       await tx.delete(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, zone.id));
-      await settingsOperations.saveZoneServiceSettings(tx, cfg, zone.id, {
+      await settingsOperations.saveZoneServiceSettings(tx, zone.id, {
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
         receiptPrintMode: "on_request",
       });
-      expect(await resolveSalePolicy(tx, cfg, zone.id)).toMatchObject({
+      expect(await resolveSalePolicy(tx, zone.id)).toMatchObject({
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
         receiptPrintMode: "on_request",
       });
-      expect(await resolveZoneContext(tx, cfg, zone.id)).toMatchObject({
+      expect(await resolveZoneContext(tx, zone.id)).toMatchObject({
         serviceMode: "ticket_then_pay",
       });
     });
   });
 
   it("lists missing policy rows with the settings form's defaults for repair", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Read missing policies")) };
+    await seedLocation("Read missing policies");
     await scoped(async (tx) => {
-      const department = await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" });
-      const zone = await createServiceZone(tx, cfg, {
+      const department = await createDepartment(tx, { name: "Dining", orderStart: "table" });
+      const zone = await createServiceZone(tx, {
         name: "Terrace",
         departmentId: department.id,
       });
       await tx.delete(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, zone.id));
-      expect((await listSalePolicies(tx, cfg)).zones).toEqual([
+      expect((await listSalePolicies(tx)).zones).toEqual([
         {
           zoneId: zone.id,
           orderStart: null,
@@ -3609,7 +3425,7 @@ describe("combined settings operations", () => {
       await tx.execute(
         sql`delete from department_sale_policies where department_id = ${department.id}`,
       );
-      expect(await listSalePolicies(tx, cfg)).toEqual({
+      expect(await listSalePolicies(tx)).toEqual({
         departments: [],
         zones: [
           {
@@ -3632,10 +3448,10 @@ describe("combined settings operations", () => {
   });
 
   it("writes department fields and zone overrides through the caller transaction", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation(`Settings ${randomUUID()}`)) };
+    await seedLocation(`Settings ${randomUUID()}`);
     const { department, zone } = await scoped(async (tx) => {
-      const department = await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" });
-      const zone = await createServiceZone(tx, cfg, {
+      const department = await createDepartment(tx, { name: "Dining", orderStart: "table" });
+      const zone = await createServiceZone(tx, {
         name: "Terrace",
         departmentId: department.id,
       });
@@ -3644,32 +3460,30 @@ describe("combined settings operations", () => {
     await scoped(async (tx) => {
       await settingsOperations.setDepartmentSalePolicyField(
         tx,
-        cfg,
         department.id,
         "printTradingName",
         true,
       );
       await settingsOperations.setDepartmentSalePolicyField(
         tx,
-        cfg,
         department.id,
         "receiptPrintMode",
         "on_request",
       );
-      await settingsOperations.saveDepartmentEditSettings(tx, cfg, department.id, {
+      await settingsOperations.saveDepartmentEditSettings(tx, department.id, {
         name: "Restaurant",
         tradingName: "Receipt",
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
       });
-      await settingsOperations.saveZoneServiceSettings(tx, cfg, zone.id, {
+      await settingsOperations.saveZoneServiceSettings(tx, zone.id, {
         orderStart: "table",
         paidWhen: "prepay",
         collectionNumber: "none",
         receiptPrintMode: "auto",
       });
-      expect(await resolveSalePolicy(tx, cfg, zone.id)).toEqual({
+      expect(await resolveSalePolicy(tx, zone.id)).toEqual({
         zoneId: zone.id,
         departmentId: department.id,
         departmentName: "Restaurant",
@@ -3680,13 +3494,13 @@ describe("combined settings operations", () => {
         collectionNumber: "none",
         receiptPrintMode: "auto",
       });
-      await settingsOperations.saveZoneServiceSettings(tx, cfg, zone.id, {
+      await settingsOperations.saveZoneServiceSettings(tx, zone.id, {
         orderStart: null,
         paidWhen: null,
         collectionNumber: null,
         receiptPrintMode: null,
       });
-      expect(await resolveSalePolicy(tx, cfg, zone.id)).toEqual({
+      expect(await resolveSalePolicy(tx, zone.id)).toEqual({
         zoneId: zone.id,
         departmentId: department.id,
         departmentName: "Restaurant",
@@ -3704,8 +3518,8 @@ describe("combined settings operations", () => {
 it("keeps a switched-off zone's table rows and today's rows unchanged", async () => {
   const cfg = { locationId: brandLocationId(await seedLocation("Today reopen")) };
   await scoped(async (tx) => {
-    const department = await createDepartment(tx, cfg, { name: "Dining" });
-    const zone = await createServiceZone(tx, cfg, { name: "Dining", departmentId: department.id });
+    const department = await createDepartment(tx, { name: "Dining" });
+    const zone = await createServiceZone(tx, { name: "Dining", departmentId: department.id });
     const [table] = await tx
       .insert(diningTables)
       .values({
@@ -3744,11 +3558,9 @@ it("keeps a switched-off zone's table rows and today's rows unchanged", async ()
 });
 
 it.each(["create", "rename"])("allows department %s onto a deleted name", async (action) => {
-  const cfg = { locationId: brandLocationId(await seedLocation("Deleted names")) };
-  const old = await scoped((tx) =>
-    createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" }),
-  );
-  await scoped((tx) => createDepartment(tx, cfg, { name: "Surviving", orderStart: "counter" }));
+  await seedLocation("Deleted names");
+  const old = await scoped((tx) => createDepartment(tx, { name: "Deli", orderStart: "counter" }));
+  await scoped((tx) => createDepartment(tx, { name: "Surviving", orderStart: "counter" }));
   await scoped((tx) =>
     (async () => {
       await tx.execute(
@@ -3758,14 +3570,14 @@ it.each(["create", "rename"])("allows department %s onto a deleted name", async 
     })(),
   );
   const replacement = await scoped((tx) =>
-    createDepartment(tx, cfg, {
+    createDepartment(tx, {
       name: action === "create" ? "Deli" : "Bar",
       orderStart: "counter",
     }),
   );
   if (action === "rename")
     await scoped((tx) =>
-      updateDepartment(tx, cfg, replacement.id, {
+      updateDepartment(tx, replacement.id, {
         name: "Deli",
         tradingName: "Changed",
         orderStart: "table",
@@ -3775,7 +3587,7 @@ it.each(["create", "rename"])("allows department %s onto a deleted name", async 
   expect(await db.select().from(departments).where(eq(departments.id, old.id))).toContainEqual(
     expect.objectContaining({ id: old.id, name: "Deli", active: false }),
   );
-  expect(await scoped((tx) => listDepartments(tx, cfg))).toEqual(
+  expect(await scoped((tx) => listDepartments(tx))).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
         id: replacement.id,
@@ -3790,16 +3602,14 @@ it.each(["create", "rename"])("allows department %s onto a deleted name", async 
 describe("a line sent late", () => {
   it("records the late mark on a line's context, reads only marked lines, and copies it on a split", async () => {
     const venue = await seedTwoMenuVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       const orderId = await openOrder(tx, venue, 1);
-      await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
+      await recordOrderServiceContext(tx, orderId, venue.diningZone);
       const late = await addLine(tx, venue, orderId, 1);
       const onTime = await addLine(tx, venue, orderId, 2);
       const split = await addLine(tx, venue, orderId, 3);
       await recordWorkingLineContexts(
         tx,
-        cfg,
         orderId,
         [
           {
@@ -3809,7 +3619,7 @@ describe("a line sent late", () => {
           },
           { workingOrderLineId: onTime, menuItemId: venue.menuItemId },
         ],
-        await listZoneOffers(tx, cfg, venue.diningZone),
+        await listZoneOffers(tx, venue.diningZone),
       );
       const stored = await tx.execute<{ late_confirmed_by: string | null }>(sql`
         select late_confirmed_by from working_line_contexts
@@ -3818,7 +3628,7 @@ describe("a line sent late", () => {
       await expect(readLateSendMarks(tx, [late, onTime])).resolves.toEqual(
         new Map([[late, "Lunch"]]),
       );
-      await copyWorkingLineContext(tx, cfg, late, split);
+      await copyWorkingLineContext(tx, late, split);
       await expect(readLateSendMarks(tx, [split, onTime])).resolves.toEqual(
         new Map([[split, "Lunch"]]),
       );

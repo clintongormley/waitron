@@ -111,7 +111,6 @@ async function fixture(): Promise<Fixture> {
         .returning({ id: persons.id });
       return (await startManagementSession(tx, { personId: row!.id })).token;
     };
-    const cfg = { locationId: locationId(location!.id) };
     const [restaurantStation, deliStation] = await tx
       .insert(kitchenStations)
       .values([
@@ -123,7 +122,7 @@ async function fixture(): Promise<Fixture> {
       .insert(catalogues)
       .values({ name: `Calendar ${randomUUID()}` })
       .returning();
-    const calendarPeriod = await saveMenuPeriod(tx, cfg, restaurant!.id, {
+    const calendarPeriod = await saveMenuPeriod(tx, restaurant!.id, {
       name: "Open",
       menuId: calendarMenu!.id,
       staffMenuIds: [],
@@ -373,7 +372,7 @@ describe("reading Hours", () => {
         0,
       );
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-      const period = await saveMenuPeriod(tx, fx.cfg, fx.departmentIds.deli, {
+      const period = await saveMenuPeriod(tx, fx.departmentIds.deli, {
         name: "Deli",
         menuId: menu!.id,
         staffMenuIds: [],

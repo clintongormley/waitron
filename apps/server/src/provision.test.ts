@@ -29,7 +29,6 @@ import {
   saveHolidayArea,
   setRoutingCell,
 } from "@waitron/venue-service";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { provisionAllocatedTestVenue as provisionVenue } from "./testing/allocated-provision.js";
 import { applyHistoricalTestVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -535,11 +534,7 @@ describe("clearProvisionFixture", () => {
         values (${fiesta}, ${result.locationId}, 'Fiesta', 1)`);
       await tx.execute(sql`insert into special_day_dates (id, special_day_id, location_id, date, closed_all_day)
         values (${date}, ${fiesta}, ${result.locationId}, '2026-08-15', 0)`);
-      const department = await createDepartment(
-        tx,
-        { locationId: brandLocationId(result.locationId) },
-        { name: "Restaurant", orderStart: "table" },
-      );
+      const department = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
       await tx.execute(sql`insert into department_days (id, department_id, season_id, weekday, special_day_date_id)
         values (${day}, ${department.id}, null, null, ${date})`);
       await tx.execute(sql`insert into department_day_ranges (id, day_id, department_id, period_id, starts_at, ends_at)
@@ -566,16 +561,15 @@ describe("clearProvisionFixture", () => {
       planVenue(venueRequest(nextNif()), enabledModules(ALL_MODULES, ES_CONFIG)),
       { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
     );
-    const cfg = { locationId: brandLocationId(result.locationId) };
     await withTransaction(db, async (tx) => {
-      const department = await createDepartment(tx, cfg, {
+      const department = await createDepartment(tx, {
         name: "Restaurant",
         orderStart: "table",
       });
       const setId = randomUUID();
       await tx.execute(sql`insert into floor_plan_sets (id, location_id)
         values (${setId}, ${result.locationId})`);
-      await linkFloorPlanSet(tx, cfg, { setId, departmentId: department.id, name: "Standard" });
+      await linkFloorPlanSet(tx, { setId, departmentId: department.id, name: "Standard" });
     });
 
     await clearProvisionFixture(db);

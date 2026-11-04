@@ -250,7 +250,7 @@ describe("A773 requested lifecycle: serving", () => {
         venue.party.tabId,
         [burger.id],
         undefined,
-        routingOnce(tx, venue.cfg, laterAt),
+        routingOnce(tx, laterAt),
       );
       expect(await item(tx, burger.itemId!)).toEqual(before);
       expect(await jobCount(tx)).toBe(jobsBefore);

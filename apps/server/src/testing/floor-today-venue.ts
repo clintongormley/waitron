@@ -163,18 +163,18 @@ export async function setsDepartment(
 }> {
   const name = (base: string) => `${base} ${randomUUID().slice(0, 8)}`;
   return inTx(v, async (tx) => {
-    const department = await createDepartment(tx, v.cfg, {
+    const department = await createDepartment(tx, {
       name: name("Dept"),
       orderStart: "table",
     });
-    const zone = await createServiceZone(tx, v.cfg, {
+    const zone = await createServiceZone(tx, {
       name: name("Inside"),
       departmentId: department.id,
     });
     const menu = await createCatalogue(tx, { name: name("Menu") });
     const period = async (periodName: string) =>
       (
-        await saveMenuPeriod(tx, v.cfg, department.id, {
+        await saveMenuPeriod(tx, department.id, {
           name: periodName,
           menuId: menu.id,
           staffMenuIds: [],
@@ -200,7 +200,7 @@ export async function setsDepartment(
         .insert(floorPlanSets)
         .values({ locationId: v.cfg.locationId })
         .returning({ id: floorPlanSets.id });
-      await linkFloorPlanSet(tx, v.cfg, {
+      await linkFloorPlanSet(tx, {
         setId: row!.id,
         departmentId: department.id,
         name: setName,

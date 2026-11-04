@@ -58,16 +58,14 @@ async function venue() {
     .values({ locationId: cfg.locationId, name: "Dining room", displayOrder: 0 })
     .returning({ id: floorZones.id });
   return scoped(async (tx) => {
-    const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
-    ).id;
-    const bar = (await createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" })).id;
-    await configureZone(tx, cfg, { zoneId: zone!.id, departmentId: restaurant });
+    const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
+    const bar = (await createDepartment(tx, { name: "Bar", orderStart: "counter" })).id;
+    await configureZone(tx, { zoneId: zone!.id, departmentId: restaurant });
     const period = async (departmentId: string, name: string) => {
       const menuId = (await createCatalogue(tx, { name: `${name} ${cfg.locationId}` })).id;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
-      return (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId, staffMenuIds: [] })).id;
+      return (await saveMenuPeriod(tx, departmentId, { name, menuId, staffMenuIds: [] })).id;
     };
     return {
       cfg,

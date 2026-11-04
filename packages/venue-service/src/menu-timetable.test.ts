@@ -136,7 +136,7 @@ describe("Always fixture periods", () => {
       await offerMenuThroughZone(tx, v.cfg, v.sala, v.menus.Café, { makeDefault: true });
     });
     const offers = await scoped((tx) =>
-      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(MONDAY, "15:00") }),
+      listZoneOffers(tx, v.barra, { at: madrid(MONDAY, "15:00") }),
     );
     expect(offers.defaultMenuId).toBe(v.menus.Café);
     expect(
@@ -175,7 +175,7 @@ describe("Always fixture periods", () => {
     for (const time of ["03:00", "06:00", "15:00", "18:00"])
       for (const zoneId of [v.sala, v.barra]) {
         const offers = await scoped((tx) =>
-          listZoneOffers(tx, v.cfg, zoneId, { at: madrid(MONDAY, time) }),
+          listZoneOffers(tx, zoneId, { at: madrid(MONDAY, time) }),
         );
         expect(offers.defaultMenuId).toBe(v.menus.Desayunos);
         expect(offers.service).toEqual({
@@ -209,7 +209,7 @@ describe("service-period writers", () => {
   it("returns only the new period id and updates without a response body", async () => {
     const v = await venue({ timetable: false });
     const created = await scoped((tx) =>
-      saveMenuPeriod(tx, v.cfg, v.restaurant, {
+      saveMenuPeriod(tx, v.restaurant, {
         name: "Lunch",
         menuId: v.menus.Almuerzo,
         staffMenuIds: [],
@@ -217,7 +217,7 @@ describe("service-period writers", () => {
     );
     expect(created).toEqual({ id: expect.any(String) });
     await expect(
-      scoped((tx) => updateMenuPeriod(tx, v.cfg, created.id, { name: "Afternoon" })),
+      scoped((tx) => updateMenuPeriod(tx, created.id, { name: "Afternoon" })),
     ).resolves.toBeUndefined();
     expect(
       await db
@@ -253,14 +253,14 @@ describe("service-period writers", () => {
       );
     expect(stored).toEqual([{ startsAt: "21:00:00", endsAt: "02:30:00" }]);
     const running = await scoped((tx) =>
-      resolveDepartmentService(tx, v.cfg, v.restaurant, new Date("2026-03-29T01:10:00Z")),
+      resolveDepartmentService(tx, v.restaurant, new Date("2026-03-29T01:10:00Z")),
     );
     expect(running).toMatchObject({ open: true, periodId: v.periods!.noches });
     expect(running.orderableMenuIds).toContain(running.customerMenuId);
     expect(
       (
         await scoped((tx) =>
-          resolveDepartmentService(tx, v.cfg, v.restaurant, new Date("2026-03-29T01:30:00Z")),
+          resolveDepartmentService(tx, v.restaurant, new Date("2026-03-29T01:30:00Z")),
         )
       ).periodId,
     ).not.toBe(v.periods!.noches);
@@ -287,14 +287,14 @@ describe("service-period writers", () => {
   it("always creates a new period even if an untyped caller sends an existing id", async () => {
     const v = await venue({ timetable: false });
     const original = await scoped((tx) =>
-      saveMenuPeriod(tx, v.cfg, v.restaurant, {
+      saveMenuPeriod(tx, v.restaurant, {
         name: "Lunch",
         menuId: v.menus.Almuerzo,
         staffMenuIds: [],
       }),
     );
     const created = await scoped((tx) =>
-      saveMenuPeriod(tx, v.cfg, v.restaurant, {
+      saveMenuPeriod(tx, v.restaurant, {
         id: original.id,
         name: "Afternoon",
         menuId: v.menus.Café,
@@ -317,7 +317,7 @@ describe("service-period writers", () => {
   it("refuses explicit null fields rather than treating them as omitted", async () => {
     const v = await venue({ timetable: false });
     const { id } = await scoped((tx) =>
-      saveMenuPeriod(tx, v.cfg, v.restaurant, {
+      saveMenuPeriod(tx, v.restaurant, {
         name: "Lunch",
         menuId: v.menus.Bebidas,
         staffMenuIds: [],
@@ -325,7 +325,7 @@ describe("service-period writers", () => {
     );
     for (const field of ["colour", "staffMenuIds"] as const) {
       await expect(
-        scoped((tx) => updateMenuPeriod(tx, v.cfg, id, { [field]: null } as never)),
+        scoped((tx) => updateMenuPeriod(tx, id, { [field]: null } as never)),
       ).rejects.toMatchObject({ code: "menu_period.invalid", params: { field } });
     }
   });
@@ -398,7 +398,7 @@ describe("service-period writers", () => {
     const v = await venue({ timetable: false });
     await expect(
       scoped((tx) =>
-        saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        saveMenuPeriod(tx, v.restaurant, {
           name: "Lunch",
           menuId: v.menus.Bebidas,
           staffMenuIds: [],
@@ -411,7 +411,7 @@ describe("service-period writers", () => {
   it("refuses changing the customer menu to a retained staff menu and leaves the period untouched", async () => {
     const v = await venue({ timetable: false });
     const { id } = await scoped((tx) =>
-      saveMenuPeriod(tx, v.cfg, v.restaurant, {
+      saveMenuPeriod(tx, v.restaurant, {
         name: "Lunch",
         menuId: v.menus.Bebidas,
         staffMenuIds: [v.menus.Café],
@@ -419,7 +419,7 @@ describe("service-period writers", () => {
       }),
     );
     await expect(
-      scoped((tx) => updateMenuPeriod(tx, v.cfg, id, { menuId: v.menus.Café })),
+      scoped((tx) => updateMenuPeriod(tx, id, { menuId: v.menus.Café })),
     ).rejects.toMatchObject({ code: "menu_period.invalid", params: { field: "staffMenuIds" } });
     expect(
       await db
@@ -432,7 +432,7 @@ describe("service-period writers", () => {
   it("saves an active customer menu outside the old list, trims the name and keeps staff-menu order", async () => {
     const v = await venue({ timetable: false });
     const period = await scoped((tx) =>
-      saveMenuPeriod(tx, v.cfg, v.restaurant, {
+      saveMenuPeriod(tx, v.restaurant, {
         name: " Lunch ",
         menuId: v.menus["Deli para llevar"],
         staffMenuIds: [v.menus.Café, v.menus.Bebidas],
@@ -458,12 +458,12 @@ describe("service-period writers", () => {
       { menuId: v.menus.Bebidas, position: 1 },
     ]);
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, period.id, {
+      updateMenuPeriod(tx, period.id, {
         staffMenuIds: [v.menus.Bebidas, v.menus.Café],
         colour: "purple",
       }),
     );
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, period.id, { name: " Afternoon " }));
+    await scoped((tx) => updateMenuPeriod(tx, period.id, { name: " Afternoon " }));
     expect(await staff()).toEqual([
       { menuId: v.menus.Bebidas, position: 0 },
       { menuId: v.menus.Café, position: 1 },
@@ -474,14 +474,14 @@ describe("service-period writers", () => {
         .from(menuPeriods)
         .where(eq(menuPeriods.id, period.id)),
     ).toEqual([{ name: "Afternoon", colour: "purple", menuId: v.menus["Deli para llevar"] }]);
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, period.id, { staffMenuIds: [] }));
+    await scoped((tx) => updateMenuPeriod(tx, period.id, { staffMenuIds: [] }));
     expect(await staff()).toEqual([]);
   });
 
   it("saves and updates a period in a newer calendar colour", async () => {
     const v = await venue({ timetable: false });
     const { id } = await scoped((tx) =>
-      saveMenuPeriod(tx, v.cfg, v.restaurant, {
+      saveMenuPeriod(tx, v.restaurant, {
         name: "Lunch",
         menuId: v.menus.Bebidas,
         staffMenuIds: [],
@@ -496,7 +496,7 @@ describe("service-period writers", () => {
           .where(eq(menuPeriods.id, id))
       )[0]!.colour;
     expect(await colour()).toBe("indigo");
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, id, { colour: "brown" }));
+    await scoped((tx) => updateMenuPeriod(tx, id, { colour: "brown" }));
     expect(await colour()).toBe("brown");
   });
 
@@ -520,7 +520,7 @@ describe("service-period writers", () => {
     const colours = [];
     for (let index = 0; index < 17; index++) {
       const { id } = await scoped((tx) =>
-        saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        saveMenuPeriod(tx, v.restaurant, {
           name: `Period ${index}`,
           menuId: v.menus.Bebidas,
           staffMenuIds: [],
@@ -560,7 +560,7 @@ describe("service-period writers", () => {
       await db.update(catalogues).set({ active: false }).where(eq(catalogues.id, v.menus.Café));
       await expect(
         scoped((tx) =>
-          saveMenuPeriod(tx, v.cfg, v.restaurant, {
+          saveMenuPeriod(tx, v.restaurant, {
             name: "Lunch",
             menuId: kind === "customer" ? v.menus.Café : v.menus.Bebidas,
             staffMenuIds: kind === "staff" ? [v.menus.Café] : [],
@@ -582,7 +582,7 @@ describe("service-period writers", () => {
       const v = await venue({ timetable: false });
       await expect(
         scoped((tx) =>
-          saveMenuPeriod(tx, v.cfg, v.restaurant, {
+          saveMenuPeriod(tx, v.restaurant, {
             name: "Lunch",
             menuId: v.menus.Bebidas,
             staffMenuIds: kind === "customer" ? [v.menus.Bebidas] : [v.menus.Café, v.menus.Café],
@@ -627,13 +627,12 @@ async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } 
   const mostrador = await zone("Mostrador deli", 3);
   return scoped(async (tx) => {
     const restaurant = (
-      await createDepartment(tx, cfg, { name: `Restaurant${suffix}`, orderStart: "table" })
+      await createDepartment(tx, { name: `Restaurant${suffix}`, orderStart: "table" })
     ).id;
-    const deli = (await createDepartment(tx, cfg, { name: `Deli${suffix}`, orderStart: "counter" }))
-      .id;
+    const deli = (await createDepartment(tx, { name: `Deli${suffix}`, orderStart: "counter" })).id;
     for (const zoneId of [barra, sala, terraza])
-      await configureZone(tx, cfg, { zoneId, departmentId: restaurant });
-    await configureZone(tx, cfg, { zoneId: mostrador, departmentId: deli });
+      await configureZone(tx, { zoneId, departmentId: restaurant });
+    await configureZone(tx, { zoneId: mostrador, departmentId: deli });
     const menus = {} as Record<MenuName, string>;
     for (const name of MENU_NAMES) {
       menus[name] = (
@@ -648,8 +647,7 @@ async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } 
     const v = { cfg, locationId, restaurant, deli, barra, sala, terraza, mostrador, menus };
     if (options.timetable === false) return { ...v, periods: null };
     const period = async (departmentId: string, name: string, menu: MenuName) =>
-      (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId: menus[menu], staffMenuIds: [] }))
-        .id;
+      (await saveMenuPeriod(tx, departmentId, { name, menuId: menus[menu], staffMenuIds: [] })).id;
     const periods = {
       mananas: await period(restaurant, "Mañanas", "Desayunos"),
       mediodia: await period(restaurant, "Mediodía", "Almuerzo"),
@@ -695,14 +693,14 @@ type Venue = Awaited<ReturnType<typeof venue>>;
 type Timed = Venue & { periods: NonNullable<Venue["periods"]> };
 const timed = async (options: { unpublished?: MenuName[] } = {}) => (await venue(options)) as Timed;
 
-const resolve = (v: Venue, zoneId: string, at: Date) =>
+const resolve = (zoneId: string, at: Date) =>
   scoped(async (tx) => {
-    const zone = await resolveZoneContext(tx, v.cfg, zoneId);
-    return resolveDepartmentService(tx, v.cfg, zone.departmentId, at);
+    const zone = await resolveZoneContext(tx, zoneId);
+    return resolveDepartmentService(tx, zone.departmentId, at);
   });
 /** The default and the period in force, the two fields the cases below vary. */
-const choice = async (v: Venue, zoneId: string, at: Date) => {
-  const { customerMenuId: defaultMenuId, periodId } = await resolve(v, zoneId, at);
+const choice = async (zoneId: string, at: Date) => {
+  const { customerMenuId: defaultMenuId, periodId } = await resolve(zoneId, at);
   return { defaultMenuId, periodId };
 };
 
@@ -750,7 +748,7 @@ describe("the menu a zone starts on", () => {
     const v = await timed();
     const { menus, periods } = v;
     const offers = await scoped((tx) =>
-      listZoneOffers(tx, v.cfg, v.sala, { at: madrid(MONDAY, "10:00") }),
+      listZoneOffers(tx, v.sala, { at: madrid(MONDAY, "10:00") }),
     );
     expect(offers.defaultMenuId).toBe(menus.Desayunos);
     expect(offers.service).toEqual({
@@ -769,16 +767,16 @@ describe("the menu a zone starts on", () => {
     expect(offers.menus.filter((menu) => menu.orderable).map((menu) => menu.id)).toEqual([
       menus.Desayunos,
     ]);
-    expect(await choice(v, v.sala, madrid(MONDAY, "12:00"))).toEqual({
+    expect(await choice(v.sala, madrid(MONDAY, "12:00"))).toEqual({
       defaultMenuId: menus.Almuerzo,
       periodId: periods.mediodia,
     });
-    expect(await choice(v, v.sala, madrid(MONDAY, "11:59"))).toEqual({
+    expect(await choice(v.sala, madrid(MONDAY, "11:59"))).toEqual({
       defaultMenuId: menus.Desayunos,
       periodId: periods.mananas,
     });
     for (const time of ["16:00", "17:00"])
-      expect(await choice(v, v.sala, madrid(MONDAY, time))).toEqual({
+      expect(await choice(v.sala, madrid(MONDAY, time))).toEqual({
         defaultMenuId: null,
         periodId: null,
       });
@@ -787,13 +785,13 @@ describe("the menu a zone starts on", () => {
   it("uses the department's customer menu in every zone, with the same ordered staff menus", async () => {
     const v = await timed();
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, v.periods.mananas, {
+      updateMenuPeriod(tx, v.periods.mananas, {
         staffMenuIds: [v.menus.Café, v.menus.Bebidas],
       }),
     );
     for (const zoneId of [v.barra, v.sala, v.terraza]) {
       const offers = await scoped((tx) =>
-        listZoneOffers(tx, v.cfg, zoneId, { at: madrid(MONDAY, "10:00") }),
+        listZoneOffers(tx, zoneId, { at: madrid(MONDAY, "10:00") }),
       );
       expect(offers.defaultMenuId).toBe(v.menus.Desayunos);
       expect(offers.menus.filter((menu) => menu.orderable).map((menu) => menu.id)).toEqual([
@@ -824,11 +822,11 @@ describe("the menu a zone starts on", () => {
         0,
       );
     });
-    expect(await choice(v, v.barra, madrid(TUESDAY, "10:00"))).toEqual({
+    expect(await choice(v.barra, madrid(TUESDAY, "10:00"))).toEqual({
       defaultMenuId: menus.Desayunos,
       periodId: periods.mananas,
     });
-    expect(await choice(v, v.barra, madrid(MONDAY, "08:45"))).toEqual({
+    expect(await choice(v.barra, madrid(MONDAY, "08:45"))).toEqual({
       defaultMenuId: menus.Desayunos,
       periodId: periods.mananas,
     });
@@ -838,7 +836,7 @@ describe("the menu a zone starts on", () => {
     const v = await timed();
     for (const zoneId of [v.barra, v.sala, v.terraza]) {
       const offers = await scoped((tx) =>
-        listZoneOffers(tx, v.cfg, zoneId, { at: madrid(MONDAY, "17:00") }),
+        listZoneOffers(tx, zoneId, { at: madrid(MONDAY, "17:00") }),
       );
       expect(offers.defaultMenuId).toBeNull();
       expect(offers.service.open).toBe(false);
@@ -850,19 +848,19 @@ describe("the menu a zone starts on", () => {
   it("reads the weekend's own slots, and a Friday slot past midnight on Saturday until it ends", async () => {
     const v = await timed();
     const { menus, periods } = v;
-    expect(await choice(v, v.sala, madrid(SATURDAY, "10:00"))).toEqual({
+    expect(await choice(v.sala, madrid(SATURDAY, "10:00"))).toEqual({
       defaultMenuId: null,
       periodId: null,
     });
-    expect(await choice(v, v.sala, madrid(SATURDAY, "13:00"))).toEqual({
+    expect(await choice(v.sala, madrid(SATURDAY, "13:00"))).toEqual({
       defaultMenuId: menus.Almuerzo,
       periodId: periods.mediodia,
     });
-    expect(await choice(v, v.sala, madrid(SATURDAY, "01:00"))).toEqual({
+    expect(await choice(v.sala, madrid(SATURDAY, "01:00"))).toEqual({
       defaultMenuId: menus.Copas,
       periodId: periods.madrugada,
     });
-    expect(await choice(v, v.sala, madrid(SATURDAY, "02:00"))).toEqual({
+    expect(await choice(v.sala, madrid(SATURDAY, "02:00"))).toEqual({
       defaultMenuId: null,
       periodId: null,
     });
@@ -887,11 +885,11 @@ describe("the menu a zone starts on", () => {
         0,
       ),
     );
-    expect(await choice(v, v.sala, forward.instant)).toEqual({
+    expect(await choice(v.sala, forward.instant)).toEqual({
       defaultMenuId: menus.Copas,
       periodId: periods.madrugada,
     });
-    expect(await choice(v, v.sala, new Date(forward.instant.getTime() - 60_000))).toEqual({
+    expect(await choice(v.sala, new Date(forward.instant.getTime() - 60_000))).toEqual({
       defaultMenuId: null,
       periodId: null,
     });
@@ -911,12 +909,12 @@ describe("the menu a zone starts on", () => {
     );
     for (const occurrence of [0, 1]) {
       const at = (time: string) => madrid(backward.date, time, occurrence);
-      expect((await resolve(v, v.sala, at(backward.after))).periodId).toBe(periods.madrugada);
-      expect((await resolve(v, v.sala, at(minutesAfter(boundary, -1)))).periodId).toBe(
+      expect((await resolve(v.sala, at(backward.after))).periodId).toBe(periods.madrugada);
+      expect((await resolve(v.sala, at(minutesAfter(boundary, -1)))).periodId).toBe(
         periods.madrugada,
       );
-      expect((await resolve(v, v.sala, at(boundary))).periodId).toBe(periods.mananas);
-      expect((await resolve(v, v.sala, at(minutesAfter(boundary, 15)))).periodId).toBe(
+      expect((await resolve(v.sala, at(boundary))).periodId).toBe(periods.mananas);
+      expect((await resolve(v.sala, at(minutesAfter(boundary, 15)))).periodId).toBe(
         periods.mananas,
       );
     }
@@ -930,7 +928,7 @@ describe("the menu a zone starts on", () => {
       );
     });
     for (const zoneId of [v.sala, v.barra])
-      expect(await choice(v, zoneId, madrid(MONDAY, "10:00"))).toEqual({
+      expect(await choice(zoneId, madrid(MONDAY, "10:00"))).toEqual({
         defaultMenuId: null,
         periodId: null,
       });
@@ -946,7 +944,7 @@ describe("the menu a zone starts on", () => {
         await tx.execute(sql`update departments set active = false where id = ${v.deli}`);
       })(),
     );
-    await expect(resolve(v, v.mostrador, madrid(MONDAY, "12:30"))).rejects.toMatchObject({
+    await expect(resolve(v.mostrador, madrid(MONDAY, "12:30"))).rejects.toMatchObject({
       code: "service_zone.not_found",
       params: { zoneId: v.mostrador },
     });
@@ -957,11 +955,11 @@ describe("the menu a zone starts on", () => {
     await scoped((tx) =>
       tx.update(catalogues).set({ active: false }).where(eq(catalogues.id, v.menus.Desayunos)),
     );
-    const resolved = await resolve(v, v.sala, madrid(MONDAY, "10:00"));
+    const resolved = await resolve(v.sala, madrid(MONDAY, "10:00"));
     expect(resolved.orderableMenuIds).toEqual([v.menus.Desayunos]);
     expect(resolved.customerMenuId).toBe(v.menus.Desayunos);
     const offers = await scoped((tx) =>
-      listZoneOffers(tx, v.cfg, v.sala, { at: madrid(MONDAY, "10:00") }),
+      listZoneOffers(tx, v.sala, { at: madrid(MONDAY, "10:00") }),
     );
     expect(offers.defaultMenuId).toBeNull();
     expect(offers.menus.every((menu) => !menu.orderable && !menu.isDefault)).toBe(true);
@@ -980,21 +978,21 @@ describe("a special date's menu timetable", () => {
       ],
     });
     const at = (time: string) => madrid(CHRISTMAS, time);
-    expect(await choice(v, v.sala, at("10:00"))).toEqual({
+    expect(await choice(v.sala, at("10:00"))).toEqual({
       defaultMenuId: null,
       periodId: null,
     });
-    expect(await choice(v, v.sala, at("12:00"))).toEqual({
+    expect(await choice(v.sala, at("12:00"))).toEqual({
       defaultMenuId: menus["Brunch de Navidad"],
       periodId: periods.brunch,
     });
-    expect(await choice(v, v.sala, at("16:00"))).toEqual({
+    expect(await choice(v.sala, at("16:00"))).toEqual({
       defaultMenuId: null,
       periodId: null,
     });
-    expect((await resolve(v, v.sala, madrid("2026-12-26", "01:00"))).periodId).toBeNull();
+    expect((await resolve(v.sala, madrid("2026-12-26", "01:00"))).periodId).toBeNull();
     // Deli has no timetable of its own that date, so it follows its week.
-    expect(await choice(v, v.mostrador, at("12:00"))).toEqual({
+    expect(await choice(v.mostrador, at("12:00"))).toEqual({
       defaultMenuId: menus["Deli para llevar"],
       periodId: periods.mediodiaDeli,
     });
@@ -1007,7 +1005,7 @@ describe("a special date's menu timetable", () => {
         { periodId: null, startsAt: "11:00", endsAt: "06:00" },
       ],
     });
-    expect(await choice(v, v.barra, at("10:00"))).toEqual({
+    expect(await choice(v.barra, at("10:00"))).toEqual({
       defaultMenuId: menus.Desayunos,
       periodId: periods.mananas,
     });
@@ -1017,7 +1015,7 @@ describe("a special date's menu timetable", () => {
       paint: [{ periodId: null, startsAt: "06:00", endsAt: "06:00" }],
     });
     for (const time of ["10:00", "12:00"])
-      expect(await choice(v, v.sala, at(time))).toEqual({
+      expect(await choice(v.sala, at(time))).toEqual({
         defaultMenuId: null,
         periodId: null,
       });
@@ -1083,10 +1081,10 @@ describe("the timetable's writers", () => {
     const { menus, periods } = v;
     const absentMenu = randomUUID();
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, periods.noches, { name: "Cenas", menuId: menus.Cena }),
+      updateMenuPeriod(tx, periods.noches, { name: "Cenas", menuId: menus.Cena }),
     );
     expect(
-      await scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { menuId: menus.Cócteles })),
+      await scoped((tx) => updateMenuPeriod(tx, periods.noches, { menuId: menus.Cócteles })),
     ).toBeUndefined();
     expect(
       await db
@@ -1095,7 +1093,7 @@ describe("the timetable's writers", () => {
         .where(eq(menuPeriods.id, periods.noches)),
     ).toEqual([{ name: "Cenas", menuId: menus.Cócteles }]);
     expect(
-      await scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { name: "Noches tarde" })),
+      await scoped((tx) => updateMenuPeriod(tx, periods.noches, { name: "Noches tarde" })),
     ).toBeUndefined();
     expect(
       await db
@@ -1111,30 +1109,30 @@ describe("the timetable's writers", () => {
     });
     // A partial update is still checked like a whole one.
     await expect(
-      scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { menuId: absentMenu })),
+      scoped((tx) => updateMenuPeriod(tx, periods.noches, { menuId: absentMenu })),
     ).rejects.toMatchObject({
       code: "catalogue.not_found",
       params: { catalogueId: absentMenu },
     });
     await expect(
-      scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { name: "  " })),
+      scoped((tx) => updateMenuPeriod(tx, periods.noches, { name: "  " })),
     ).rejects.toMatchObject(invalid("name"));
   });
 
   it("changes a period's menus without a department membership list and preserves other periods", async () => {
     const v = await timed();
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, v.periods.mananas, {
+      updateMenuPeriod(tx, v.periods.mananas, {
         menuId: v.menus.Café,
         staffMenuIds: [v.menus.Bebidas],
       }),
     );
     for (const zoneId of [v.barra, v.sala, v.terraza])
-      expect(await choice(v, zoneId, madrid(MONDAY, "10:00"))).toEqual({
+      expect(await choice(zoneId, madrid(MONDAY, "10:00"))).toEqual({
         defaultMenuId: v.menus.Café,
         periodId: v.periods.mananas,
       });
-    expect(await choice(v, v.barra, madrid(MONDAY, "12:30"))).toEqual({
+    expect(await choice(v.barra, madrid(MONDAY, "12:30"))).toEqual({
       defaultMenuId: v.menus.Almuerzo,
       periodId: v.periods.mediodia,
     });
@@ -1171,9 +1169,7 @@ describe("the timetable's writers", () => {
     await saveDay(v, "2026-10-24", { paint: [slot(periods.mananas, "02:30", "05:00")] });
     await scoped((tx) => replaceMenuWeek(tx, v.restaurant, fridayTail("03:00"), AT, 0));
     // The replacement week was written.
-    expect((await resolve(v, v.sala, madrid("2026-10-31", "02:30"))).periodId).toBe(
-      periods.madrugada,
-    );
+    expect((await resolve(v.sala, madrid("2026-10-31", "02:30"))).periodId).toBe(periods.madrugada);
     await expect(
       scoped((tx) => replaceMenuWeek(tx, v.restaurant, weekOf(() => []).slice(1), AT, 0)),
     ).rejects.toMatchObject(invalid("days"));
@@ -1204,16 +1200,14 @@ describe("the timetable's writers", () => {
   it("deleting a painted period removes its staff menus", async () => {
     const v = await timed();
     const { menus, periods } = v;
-    await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, periods.noches, { staffMenuIds: [menus.Cócteles] }),
-    );
+    await scoped((tx) => updateMenuPeriod(tx, periods.noches, { staffMenuIds: [menus.Cócteles] }));
     expect(
       await db
         .select({ menuId: menuPeriodStaffMenus.menuId })
         .from(menuPeriodStaffMenus)
         .where(eq(menuPeriodStaffMenus.periodId, periods.noches)),
     ).toEqual([{ menuId: menus.Cócteles }]);
-    await scoped((tx) => deletePeriod(tx, v.cfg, periods.noches, null, AT, 0));
+    await scoped((tx) => deletePeriod(tx, periods.noches, null, AT, 0));
     expect(
       await db
         .select()
@@ -1228,7 +1222,7 @@ describe("the opening-hours model's seasons", () => {
     const v = await venue({ timetable: false });
     const seasons = await scoped(async (tx) => {
       const dinner = (
-        await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        await saveMenuPeriod(tx, v.restaurant, {
           name: "Dinner",
           menuId: v.menus.Cena,
           staffMenuIds: [],
@@ -1254,7 +1248,6 @@ describe("the opening-hours model's seasons", () => {
       );
       await replaceZoneClosedWeek(
         tx,
-        v.cfg,
         v.sala,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -1370,7 +1363,7 @@ describe("the opening-hours model's seasons", () => {
     const v = await venue({ timetable: false });
     const spring = await scoped(async (tx) => {
       const dinner = (
-        await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        await saveMenuPeriod(tx, v.restaurant, {
           name: "Dinner",
           menuId: v.menus.Cena,
           staffMenuIds: [],
@@ -1430,7 +1423,7 @@ describe("a period no longer placed anywhere but a past special day", () => {
     const restaurant = model.departments.find((department) => department.id === v.restaurant)!;
     expect(restaurant.periods.find((period) => period.id === periods.brunch)!.weekdays).toEqual([]);
 
-    await scoped((tx) => deletePeriod(tx, v.cfg, periods.brunch, null, AT, 0));
+    await scoped((tx) => deletePeriod(tx, periods.brunch, null, AT, 0));
     expect(await db.select().from(menuPeriods).where(eq(menuPeriods.id, periods.brunch))).toEqual(
       [],
     );
@@ -1441,13 +1434,13 @@ describe("a zone moved to another department", () => {
   it("uses the new department's current period and preserves the other zone's menus", async () => {
     const v = await timed();
     await scoped(async (tx) => {
-      await configureZone(tx, v.cfg, { zoneId: v.barra, departmentId: v.deli });
+      await configureZone(tx, { zoneId: v.barra, departmentId: v.deli });
     });
     const at = madrid(MONDAY, "13:00");
-    const moved = await scoped((tx) => listZoneOffers(tx, v.cfg, v.barra, { at }));
+    const moved = await scoped((tx) => listZoneOffers(tx, v.barra, { at }));
     expect(moved.defaultMenuId).toBe(v.menus["Deli para llevar"]);
     expect(moved.menus.map((menu) => menu.id)).toEqual([v.menus["Deli para llevar"]]);
-    const other = await scoped((tx) => listZoneOffers(tx, v.cfg, v.terraza, { at }));
+    const other = await scoped((tx) => listZoneOffers(tx, v.terraza, { at }));
     expect(other.defaultMenuId).toBe(v.menus.Almuerzo);
     expect(other.menus.filter((menu) => menu.orderable).map((menu) => menu.id)).toEqual([
       v.menus.Almuerzo,
@@ -1457,9 +1450,9 @@ describe("a zone moved to another department", () => {
   it("keeps period membership when a zone is configured again within its department", async () => {
     const v = await timed();
     const before = await scoped((tx) => readOpeningHoursModel(tx, AT));
-    await scoped((tx) => configureZone(tx, v.cfg, { zoneId: v.barra, departmentId: v.restaurant }));
+    await scoped((tx) => configureZone(tx, { zoneId: v.barra, departmentId: v.restaurant }));
     expect(await scoped((tx) => readOpeningHoursModel(tx, AT))).toEqual(before);
-    expect(await choice(v, v.barra, madrid(MONDAY, "10:00"))).toEqual({
+    expect(await choice(v.barra, madrid(MONDAY, "10:00"))).toEqual({
       defaultMenuId: v.menus.Desayunos,
       periodId: v.periods.mananas,
     });
@@ -1491,7 +1484,7 @@ async function recordedLine(v: Timed) {
     await tx.execute(sql`
       insert into working_orders (id, source, location_id, node_id, order_number, opened_at)
       values (${orderId}, 'dashboard', ${v.locationId}, ${nodeId}, 1, ${AT.toISOString()})`);
-    await recordOrderServiceContext(tx, v.cfg, orderId, v.sala);
+    await recordOrderServiceContext(tx, orderId, v.sala);
     const lineId = randomUUID();
     await tx.insert(workingOrderLines).values({
       id: lineId,
@@ -1508,10 +1501,9 @@ async function recordedLine(v: Timed) {
     });
     await recordWorkingLineContexts(
       tx,
-      v.cfg,
       orderId,
       [{ workingOrderLineId: lineId, menuItemId: offer.id }],
-      await listZoneOffers(tx, v.cfg, v.sala),
+      await listZoneOffers(tx, v.sala),
     );
   });
 }
@@ -1557,14 +1549,14 @@ describe("a special day cleared or deleted", () => {
     const neighbour = await paintOn(v, "2026-12-26");
     expect(neighbour.ranges).toHaveLength(1);
     // The week runs Mañanas until 12:00; the painted date closes at 11:00.
-    expect(await choice(v, v.sala, madrid(CHRISTMAS, "11:30"))).toEqual({
+    expect(await choice(v.sala, madrid(CHRISTMAS, "11:30"))).toEqual({
       defaultMenuId: null,
       periodId: null,
     });
 
     await saveDay(v, CHRISTMAS, { id: christmas.id });
     expect(await paintOn(v, CHRISTMAS)).toEqual({ days: 0, ranges: [] });
-    expect(await choice(v, v.sala, madrid(CHRISTMAS, "11:30"))).toEqual({
+    expect(await choice(v.sala, madrid(CHRISTMAS, "11:30"))).toEqual({
       defaultMenuId: v.menus.Desayunos,
       periodId: periods.mananas,
     });
@@ -1575,7 +1567,7 @@ describe("a special day cleared or deleted", () => {
       await db.select().from(specialDayDates).where(eq(specialDayDates.specialDayId, christmas.id)),
     ).toEqual([]);
     for (const time of ["10:00", "11:30"])
-      expect(await choice(v, v.sala, madrid(CHRISTMAS, time))).toEqual({
+      expect(await choice(v.sala, madrid(CHRISTMAS, time))).toEqual({
         defaultMenuId: v.menus.Desayunos,
         periodId: periods.mananas,
       });
@@ -1588,7 +1580,7 @@ describe("the offers a zone lists at an instant", () => {
   it("marks the running period's default, falling back within its menus", async () => {
     const v = await timed();
     const at = madrid(MONDAY, "10:00");
-    const offers = await scoped((tx) => listZoneOffers(tx, v.cfg, v.barra, { at }));
+    const offers = await scoped((tx) => listZoneOffers(tx, v.barra, { at }));
     expect(Object.keys(offers).sort()).toEqual([
       "defaultMenuId",
       "liveFields",
@@ -1600,30 +1592,25 @@ describe("the offers a zone lists at an instant", () => {
     expect(offers.menus.filter((menu) => menu.isDefault).map((menu) => menu.id)).toEqual([
       v.menus.Desayunos,
     ]);
-    const without = await scoped((tx) =>
-      listZoneOffers(tx, v.cfg, v.barra, { at, withDefault: false }),
-    );
+    const without = await scoped((tx) => listZoneOffers(tx, v.barra, { at, withDefault: false }));
     expect(without.defaultMenuId).toBeNull();
     expect(without.menus.some((menu) => menu.isDefault)).toBe(false);
     expect(without.menus.map((menu) => menu.id)).toEqual(offers.menus.map((menu) => menu.id));
 
     const unpublished = await timed({ unpublished: ["Desayunos"] });
     await scoped((tx) =>
-      updateMenuPeriod(tx, unpublished.cfg, unpublished.periods.mananas, {
+      updateMenuPeriod(tx, unpublished.periods.mananas, {
         staffMenuIds: [unpublished.menus.Bebidas],
       }),
     );
-    const fallback = await scoped((tx) =>
-      listZoneOffers(tx, unpublished.cfg, unpublished.barra, { at }),
-    );
+    const fallback = await scoped((tx) => listZoneOffers(tx, unpublished.barra, { at }));
     expect(fallback.defaultMenuId).toBe(unpublished.menus.Bebidas);
   });
 
   it("resolves the default among the menus a caller already found served", async () => {
     const v = await timed();
     const at = madrid(MONDAY, "10:00");
-    const served = (ids: string[]) =>
-      scoped((tx) => resolveDefaultMenu(tx, v.cfg, v.barra, at, ids));
+    const served = (ids: string[]) => scoped((tx) => resolveDefaultMenu(tx, v.barra, at, ids));
     expect(await served([v.menus.Desayunos, v.menus.Café])).toBe(v.menus.Desayunos);
     expect(await served([v.menus.Bebidas, v.menus.Desayunos])).toBe(v.menus.Desayunos);
     expect(await served([])).toBeNull();
@@ -1639,7 +1626,7 @@ describe("statements", () => {
       ).session;
       const spy = vi.spyOn(session, "prepareQuery");
       try {
-        const offers = await listZoneOffers(tx, v.cfg, v.barra, { withDefault: false });
+        const offers = await listZoneOffers(tx, v.barra, { withDefault: false });
         expect(offers.service.zoneOpen).toBe(true);
         expect(
           spy.mock.calls
@@ -1667,11 +1654,11 @@ describe("statements", () => {
     const v = await timed();
     const before = await scoped((tx) => readOpeningHoursModel(tx, AT));
     const statements = await statementsOf((tx) =>
-      configureZone(tx, v.cfg, { zoneId: v.barra, departmentId: v.deli }),
+      configureZone(tx, { zoneId: v.barra, departmentId: v.deli }),
     );
     expect(statements.filter((text) => /"zone_(all_day|period)_menus"/.test(text))).toEqual([]);
     const moved = await scoped((tx) =>
-      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(MONDAY, "13:00") }),
+      listZoneOffers(tx, v.barra, { at: madrid(MONDAY, "13:00") }),
     );
     expect(moved.menus.map((menu) => ({ id: menu.id, orderable: menu.orderable }))).toEqual([
       { id: v.menus["Deli para llevar"], orderable: true },
@@ -1695,7 +1682,7 @@ describe("statements", () => {
       v.mostrador,
     ]);
     const unchanged = await scoped((tx) =>
-      listZoneOffers(tx, v.cfg, v.sala, { at: madrid(MONDAY, "13:00") }),
+      listZoneOffers(tx, v.sala, { at: madrid(MONDAY, "13:00") }),
     );
     expect(unchanged.defaultMenuId).toBe(v.menus.Almuerzo);
   });
@@ -1724,16 +1711,16 @@ describe("statements", () => {
         0,
       ),
     );
-    const few = await statementsOf((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, at));
+    const few = await statementsOf((tx) => resolveDepartmentService(tx, v.restaurant, at));
     await scoped(async (tx) => {
       await replaceMenuWeek(tx, v.restaurant, twentySlots(v.periods), AT, 0);
-      await updateMenuPeriod(tx, v.cfg, v.periods.noches, {
+      await updateMenuPeriod(tx, v.periods.noches, {
         staffMenuIds: [v.menus.Café, v.menus.Cócteles, v.menus.Bebidas],
       });
     });
-    const many = await statementsOf((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, at));
+    const many = await statementsOf((tx) => resolveDepartmentService(tx, v.restaurant, at));
     expect(many).toHaveLength(few.length);
-    const service = await scoped((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, at));
+    const service = await scoped((tx) => resolveDepartmentService(tx, v.restaurant, at));
     expect(service.periodId).toBe(v.periods.noches);
     expect(service.orderableMenuIds).toEqual([
       v.menus.Cena,
@@ -1748,7 +1735,7 @@ describe("statements", () => {
     const busy = await timed();
     await scoped(async (tx) => {
       for (const v of [plain, busy])
-        await updateMenuPeriod(tx, v.cfg, v.periods.mananas, { staffMenuIds: [v.menus.Bebidas] });
+        await updateMenuPeriod(tx, v.periods.mananas, { staffMenuIds: [v.menus.Bebidas] });
       await replaceMenuWeek(
         tx,
         plain.restaurant,
@@ -1760,7 +1747,7 @@ describe("statements", () => {
     });
     const read = (v: Timed) =>
       statementsOf((tx) =>
-        listZoneOffers(tx, v.cfg, v.barra, { menuItemIds: [randomUUID()], withDefault: false }),
+        listZoneOffers(tx, v.barra, { menuItemIds: [randomUUID()], withDefault: false }),
       );
     const none = await read(plain);
     const lots = await read(busy);
@@ -1768,7 +1755,7 @@ describe("statements", () => {
     expect(lots).toHaveLength(none.length);
     const runningPeriodReads = /"locations"/;
     expect(lots.filter((text) => runningPeriodReads.test(text))).toEqual([]);
-    const priced = await scoped((tx) => listZoneOffers(tx, v.cfg, v.barra, { withDefault: false }));
+    const priced = await scoped((tx) => listZoneOffers(tx, v.barra, { withDefault: false }));
     expect(priced.defaultMenuId).toBeNull();
     expect(priced.service).toEqual({
       open: true,
@@ -1789,7 +1776,7 @@ describe("statements", () => {
       ].sort(),
     );
     expect(priced.menus.every((menu) => menu.orderable && !menu.isDefault)).toBe(true);
-    const withDefault = await statementsOf((tx) => listZoneOffers(tx, v.cfg, v.barra));
+    const withDefault = await statementsOf((tx) => listZoneOffers(tx, v.barra));
     expect(withDefault.some((text) => runningPeriodReads.test(text))).toBe(true);
   });
 });
@@ -1838,7 +1825,7 @@ describe("the editor's model", () => {
 
     expect(model.dayCutover).toBe("06:00");
     expect(model.departments.map((department) => department.id)).toEqual(
-      (await scoped((tx) => listDepartments(tx, v.cfg))).map((department) => department.id),
+      (await scoped((tx) => listDepartments(tx))).map((department) => department.id),
     );
     const restaurant = model.departments.find((department) => department.id === v.restaurant)!;
     const weekdays = (...days: number[]) => days;
@@ -1964,7 +1951,7 @@ describe("department service periods", () => {
       .where(eq(locations.id, v.locationId));
     return scoped(async (tx) => {
       const lunch = (
-        await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        await saveMenuPeriod(tx, v.restaurant, {
           name: "Lunch",
           colour: "blue",
           menuId: v.menus.Almuerzo,
@@ -1972,7 +1959,7 @@ describe("department service periods", () => {
         })
       ).id;
       const afternoon = (
-        await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        await saveMenuPeriod(tx, v.restaurant, {
           name: "Afternoon",
           colour: "amber",
           menuId: v.menus.Café,
@@ -1980,7 +1967,7 @@ describe("department service periods", () => {
         })
       ).id;
       const night = (
-        await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        await saveMenuPeriod(tx, v.restaurant, {
           name: "Night",
           colour: "grey",
           menuId: v.menus.Cena,
@@ -2007,7 +1994,7 @@ describe("department service periods", () => {
   };
   type ServiceVenue = Awaited<ReturnType<typeof serviceVenue>>;
   const read = (v: ServiceVenue, date: string, time: string) =>
-    scoped((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, madrid(date, time)));
+    scoped((tx) => resolveDepartmentService(tx, v.restaurant, madrid(date, time)));
 
   it("keys the running period's occurrence as the floor layout rule does", async () => {
     const v = await serviceVenue();
@@ -2079,7 +2066,7 @@ describe("department service periods", () => {
     const v = await serviceVenue();
     await timed();
     const result = await scoped((tx) =>
-      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "13:59") }),
+      listZoneOffers(tx, v.barra, { at: madrid(FRIDAY, "13:59") }),
     );
     expect(result.service).toEqual({
       open: true,
@@ -2113,7 +2100,7 @@ describe("department service periods", () => {
       ].sort((a, b) => a.id.localeCompare(b.id)),
     );
     const afternoon = await scoped((tx) =>
-      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "14:00") }),
+      listZoneOffers(tx, v.barra, { at: madrid(FRIDAY, "14:00") }),
     );
     expect(afternoon.service).toEqual({
       open: true,
@@ -2141,10 +2128,10 @@ describe("department service periods", () => {
   it("falls back only to a served menu of the running period when its customer menu is unpublished", async () => {
     const v = await timed({ unpublished: ["Desayunos"] });
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, v.periods.mananas, { staffMenuIds: [v.menus.Bebidas] }),
+      updateMenuPeriod(tx, v.periods.mananas, { staffMenuIds: [v.menus.Bebidas] }),
     );
     const result = await scoped((tx) =>
-      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(MONDAY, "10:00") }),
+      listZoneOffers(tx, v.barra, { at: madrid(MONDAY, "10:00") }),
     );
     expect(result.defaultMenuId).toBe(v.menus.Bebidas);
     expect(result.menus.filter((menu) => menu.isDefault).map((menu) => menu.id)).toEqual([
@@ -2154,9 +2141,9 @@ describe("department service periods", () => {
       isDefault: false,
       orderable: false,
     });
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.periods.mananas, { staffMenuIds: [] }));
+    await scoped((tx) => updateMenuPeriod(tx, v.periods.mananas, { staffMenuIds: [] }));
     const unserved = await scoped((tx) =>
-      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(MONDAY, "10:00") }),
+      listZoneOffers(tx, v.barra, { at: madrid(MONDAY, "10:00") }),
     );
     expect(unserved.service.open).toBe(true);
     expect(unserved.defaultMenuId).toBeNull();
@@ -2167,12 +2154,12 @@ describe("department service periods", () => {
   it("refuses an asserted menu version outside the period membership while retaining closed-period versions", async () => {
     const v = await serviceVenue();
     const running = await scoped((tx) =>
-      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "13:59") }),
+      listZoneOffers(tx, v.barra, { at: madrid(FRIDAY, "13:59") }),
     );
     const lunch = running.menus.find((menu) => menu.id === v.menus.Almuerzo)!;
     const asserted = [{ menuId: lunch.id, versionId: lunch.versionId }];
     const closed = await scoped((tx) =>
-      listZoneOffers(tx, v.cfg, v.barra, {
+      listZoneOffers(tx, v.barra, {
         at: madrid(FRIDAY, "20:00"),
         asserted,
         withDefault: false,
@@ -2183,13 +2170,13 @@ describe("department service periods", () => {
       orderable: true,
     });
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, v.lunch, {
+      updateMenuPeriod(tx, v.lunch, {
         menuId: v.menus.Café,
         staffMenuIds: [v.menus.Bebidas],
       }),
     );
     await expect(
-      scoped((tx) => listZoneOffers(tx, v.cfg, v.barra, { asserted, withDefault: false })),
+      scoped((tx) => listZoneOffers(tx, v.barra, { asserted, withDefault: false })),
     ).rejects.toMatchObject({
       code: "menu.version_changed",
     });
@@ -2198,7 +2185,7 @@ describe("department service periods", () => {
   it("offers no department-list menus without periods", async () => {
     const v = await venue({ timetable: false });
     const result = await scoped((tx) =>
-      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "13:59") }),
+      listZoneOffers(tx, v.barra, { at: madrid(FRIDAY, "13:59") }),
     );
     expect(result).toEqual({
       defaultMenuId: null,
@@ -2219,7 +2206,7 @@ describe("department service periods", () => {
   it("keeps period menus for a stored basket when closed, with none orderable and no default", async () => {
     const v = await serviceVenue();
     const result = await scoped((tx) =>
-      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "20:00") }),
+      listZoneOffers(tx, v.barra, { at: madrid(FRIDAY, "20:00") }),
     );
     expect(result.service).toEqual({
       open: false,
@@ -2248,7 +2235,7 @@ describe("department service periods", () => {
       .set({ timeZone: "Unreadable/Clock" })
       .where(eq(locations.id, v.locationId));
     const result = await scoped((tx) =>
-      listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "20:00") }),
+      listZoneOffers(tx, v.barra, { at: madrid(FRIDAY, "20:00") }),
     );
     expect(result.service).toEqual({
       open: true,
@@ -2274,7 +2261,7 @@ describe("department service periods", () => {
         0,
       ),
     );
-    const issues = await scoped((tx) => listVenueReadiness(tx, v.cfg));
+    const issues = await scoped((tx) => listVenueReadiness(tx));
     expect(issues.filter((issue) => issue.code === "department.no_periods")).toEqual([
       { code: "department.no_periods", departmentId: v.deli, departmentName: "Deli" },
       { code: "department.no_periods", departmentId: v.restaurant, departmentName: "Restaurant" },
@@ -2288,7 +2275,7 @@ describe("department service periods", () => {
         await tx.execute(sql`update departments set active = false where id = ${v.deli}`);
       })(),
     );
-    const after = await scoped((tx) => listVenueReadiness(tx, v.cfg));
+    const after = await scoped((tx) => listVenueReadiness(tx));
     expect(after.filter((issue) => issue.code === "department.no_periods")).toEqual([
       { code: "department.no_periods", departmentId: v.restaurant, departmentName: "Restaurant" },
     ]);
@@ -2296,7 +2283,7 @@ describe("department service periods", () => {
 
   it("readiness judges distinct published period menus and ignores the retired department list", async () => {
     const v = await serviceVenue();
-    const issues = await scoped((tx) => listVenueReadiness(tx, v.cfg));
+    const issues = await scoped((tx) => listVenueReadiness(tx));
     expect(issues.filter((issue) => issue.code === "department.no_periods")).toEqual([
       { code: "department.no_periods", departmentId: v.deli, departmentName: "Deli" },
     ]);
@@ -2474,11 +2461,9 @@ describe("department service periods", () => {
     expect(repeated).toHaveLength(2);
     for (const instant of repeated) {
       expect(
-        await scoped((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, instant)),
+        await scoped((tx) => resolveDepartmentService(tx, v.restaurant, instant)),
       ).toMatchObject({ orderableMenuIds: [v.menus.Cena] });
-      const service = await scoped((tx) =>
-        resolveDepartmentService(tx, v.cfg, v.restaurant, instant),
-      );
+      const service = await scoped((tx) => resolveDepartmentService(tx, v.restaurant, instant));
       expect(service.endedMenus.map((entry) => entry.menuId)).not.toContain(v.menus.Cena);
     }
     expect(await read(v, "2026-10-25", "03:00")).toMatchObject({ orderableMenuIds: [] });
@@ -2698,7 +2683,7 @@ describe("department service periods", () => {
       .update(locations)
       .set({ timeZone: "not/a-zone" })
       .where(eq(locations.id, v.locationId));
-    const service = await scoped((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, AT));
+    const service = await scoped((tx) => resolveDepartmentService(tx, v.restaurant, AT));
     expect(service).toMatchObject({
       departmentId: v.restaurant,
       open: true,
@@ -2716,7 +2701,7 @@ describe("department service periods", () => {
 
   it("reports an empty department closed", async () => {
     const v = await serviceVenue();
-    expect(await scoped((tx) => resolveDepartmentService(tx, v.cfg, v.deli, AT))).toEqual({
+    expect(await scoped((tx) => resolveDepartmentService(tx, v.deli, AT))).toEqual({
       keepOpen: null,
       departmentId: v.deli,
       open: false,
@@ -2804,7 +2789,7 @@ describe("the routing that names a period", () => {
         AT,
         0,
       );
-      await deletePeriod(tx, v.cfg, periods.noches, null, AT, 0);
+      await deletePeriod(tx, periods.noches, null, AT, 0);
     });
     expect(
       await db
@@ -2897,7 +2882,7 @@ describe("a service period occurrence", () => {
       .set({ dayCutover: "06:00:00" })
       .where(eq(locations.id, v.locationId));
     const period = await scoped((tx) =>
-      saveMenuPeriod(tx, v.cfg, v.restaurant, {
+      saveMenuPeriod(tx, v.restaurant, {
         name: "Same name",
         menuId: v.menus.Almuerzo,
         staffMenuIds: [],
@@ -2922,7 +2907,7 @@ describe("a service period occurrence", () => {
   it("distinguishes repeated days and runs and shares the authoritative key across zone offers and polls", async () => {
     const v = await occurrenceVenue();
     const key = (date: string, time: string) =>
-      scoped((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, madrid(date, time)));
+      scoped((tx) => resolveDepartmentService(tx, v.restaurant, madrid(date, time)));
     const lunch = await key(MONDAY, "13:00");
     expect(lunch.periodOccurrenceKey).toBe(
       JSON.stringify([v.restaurant, MONDAY, v.periodId, "12:00"]),
@@ -2939,9 +2924,9 @@ describe("a service period occurrence", () => {
     );
     for (const zoneId of [v.sala, v.barra]) {
       const offers = await scoped((tx) =>
-        listZoneOffers(tx, v.cfg, zoneId, { at: madrid(MONDAY, "13:00") }),
+        listZoneOffers(tx, zoneId, { at: madrid(MONDAY, "13:00") }),
       );
-      const poll = await scoped((tx) => menuState(tx, v.cfg, zoneId, madrid(MONDAY, "13:00")));
+      const poll = await scoped((tx) => menuState(tx, zoneId, madrid(MONDAY, "13:00")));
       expect(offers.service.periodOccurrenceKey).toBe(lunch.periodOccurrenceKey);
       expect(poll.service.periodOccurrenceKey).toBe(lunch.periodOccurrenceKey);
       expect(offers.defaultMenuId).toBe(v.menus.Almuerzo);
@@ -2958,28 +2943,22 @@ describe("a service period occurrence", () => {
     const v = await occurrenceVenue();
     await saveDay(v, CHRISTMAS, { paint: [slot(v.periodId, "11:00", "16:00")] });
     expect(
-      (
-        await scoped((tx) =>
-          resolveDepartmentService(tx, v.cfg, v.restaurant, madrid(CHRISTMAS, "13:00")),
-        )
-      ).periodOccurrenceKey,
+      (await scoped((tx) => resolveDepartmentService(tx, v.restaurant, madrid(CHRISTMAS, "13:00"))))
+        .periodOccurrenceKey,
     ).toBe(JSON.stringify([v.restaurant, CHRISTMAS, v.periodId, "11:00"]));
     expect(
-      (
-        await scoped((tx) =>
-          resolveDepartmentService(tx, v.cfg, v.deli, madrid(CHRISTMAS, "13:00")),
-        )
-      ).periodOccurrenceKey,
+      (await scoped((tx) => resolveDepartmentService(tx, v.deli, madrid(CHRISTMAS, "13:00"))))
+        .periodOccurrenceKey,
     ).toBeNull();
     expect(
-      (await scoped((tx) => menuState(tx, v.cfg, randomUUID(), madrid(CHRISTMAS, "13:00")))).service
+      (await scoped((tx) => menuState(tx, randomUUID(), madrid(CHRISTMAS, "13:00")))).service
         .periodOccurrenceKey,
     ).toBeNull();
     await db
       .update(locations)
       .set({ timeZone: "not/a-zone" })
       .where(eq(locations.id, v.locationId));
-    const service = await scoped((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, AT));
+    const service = await scoped((tx) => resolveDepartmentService(tx, v.restaurant, AT));
     expect(service.periodOccurrenceKey).toBeNull();
     expect(service.open).toBe(true);
     expect(service.orderableMenuIds).toEqual([v.menus.Almuerzo]);
@@ -2994,7 +2973,7 @@ describe("a service period occurrence", () => {
         ).session;
         const prepared = vi.spyOn(session, "prepareQuery");
         try {
-          const offers = await listZoneOffers(tx, v.cfg, v.sala, {
+          const offers = await listZoneOffers(tx, v.sala, {
             at: madrid(MONDAY, "13:00"),
             ...(withDefault ? {} : { withDefault: false as const }),
           });
@@ -3022,7 +3001,7 @@ describe("placeOpenPeriod", () => {
   it("names the period in the venue's staff language when no language is passed", async () => {
     await seedTenant(db);
     const v = await venue({ timetable: false });
-    await scoped((tx) => placeOpenPeriod(tx, v.cfg, v.restaurant, v.menus.Almuerzo));
+    await scoped((tx) => placeOpenPeriod(tx, v.restaurant, v.menus.Almuerzo));
     expect(
       await db
         .select({ name: menuPeriods.name })

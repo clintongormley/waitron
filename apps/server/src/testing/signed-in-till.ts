@@ -176,11 +176,10 @@ export async function provisionSignedInTill<S extends TillSeed>(
 /** A counter department with no periods and an empty week, for a seed that paints its own. */
 export async function createBareDepartment(
   tx: Transaction,
-  cfg: TradingContext,
   name: string,
   at: Date,
 ): Promise<string> {
-  const departmentId = (await createDepartment(tx, cfg, { name, orderStart: "counter" })).id;
+  const departmentId = (await createDepartment(tx, { name, orderStart: "counter" })).id;
   const initialPeriods = await tx
     .select({ id: menuPeriods.id })
     .from(menuPeriods)
@@ -192,7 +191,7 @@ export async function createBareDepartment(
     at,
     0,
   );
-  for (const period of initialPeriods) await deletePeriod(tx, cfg, period.id, null, at, 0);
+  for (const period of initialPeriods) await deletePeriod(tx, period.id, null, at, 0);
   return departmentId;
 }
 

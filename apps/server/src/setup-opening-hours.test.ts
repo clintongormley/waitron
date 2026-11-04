@@ -103,13 +103,13 @@ describe("setup's saved first opening hours", () => {
   });
 
   it("has no first-Open summary when another period has been added", async () => {
-    const { cfg, department } = await seed();
+    const { department } = await seed();
     const [period] = await suite.db
       .select()
       .from(menuPeriods)
       .where(eq(menuPeriods.departmentId, department.id));
     await withTransaction(suite.db, (tx) =>
-      saveMenuPeriod(tx, cfg, department.id, {
+      saveMenuPeriod(tx, department.id, {
         name: "Evening",
         menuId: period!.menuId,
         staffMenuIds: [],

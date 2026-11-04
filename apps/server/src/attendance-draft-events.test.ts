@@ -199,7 +199,6 @@ describe("natural draft-event attendance snapshots", () => {
     await run(async (tx) =>
       moveDraftsToBill(
         tx,
-        v.cfg,
         from.billId,
         target.tabId,
         other,

@@ -77,8 +77,8 @@ it("keeps retained draft, group, course and ready station history through manage
     };
     const course = { ...createdCourse, name: "Recorded dessert", displayOrder: 3 };
     const defaultStation = (await listStations(tx, v.cfg)).find((row) => row.isDefault)!;
-    const department = (await listDepartments(tx, v.cfg))[0]!;
-    const period = await saveMenuPeriod(tx, v.cfg, department.id, {
+    const department = (await listDepartments(tx))[0]!;
+    const period = await saveMenuPeriod(tx, department.id, {
       name: "Dessert service",
       menuId: v.tables.menuId,
       staffMenuIds: [],
@@ -177,7 +177,7 @@ it("keeps retained draft, group, course and ready station history through manage
     }),
   );
   expect(submitted.groups).toHaveLength(1);
-  const [held] = await inTx(v, (tx) => readTabLines(tx, v.cfg, submitted.tabId));
+  const [held] = await inTx(v, (tx) => readTabLines(tx, submitted.tabId));
   expect(held!.course).toEqual({ id: course.id, name: course.name, displayOrder: 3 });
   expect(submitted.groups[0]!.lineIds).toEqual([held!.id]);
   const refused = await remove("stations", station.id);
@@ -205,7 +205,7 @@ it("keeps retained draft, group, course and ready station history through manage
     lines: await v.db.select().from(workingOrderLines),
     events: await v.db.select().from(orderDraftEvents),
     groups: await inTx(v, (tx) => listOrderGroups(tx, seated.partyId)),
-    tab: await inTx(v, (tx) => readTabLines(tx, v.cfg, submitted.tabId)),
+    tab: await inTx(v, (tx) => readTabLines(tx, submitted.tabId)),
     pass: await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY)),
     rest: await inTx(v, (tx) => readRestOfOrder(tx, [submitted.tabId])),
   });
@@ -317,7 +317,7 @@ it("keeps retained draft, group, course and ready station history through manage
     createCourse(tx, v.cfg, { name: course.name, displayOrder: 0 }),
   );
   expect(reused.id).not.toBe(course.id);
-  expect((await inTx(v, (tx) => readTabLines(tx, v.cfg, submitted.tabId)))[0]!.course).toEqual(
+  expect((await inTx(v, (tx) => readTabLines(tx, submitted.tabId)))[0]!.course).toEqual(
     held!.course,
   );
 });

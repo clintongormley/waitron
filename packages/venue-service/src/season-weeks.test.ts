@@ -69,15 +69,14 @@ async function venue() {
     .values({ locationId: cfg.locationId, name: "Dining room", displayOrder: 0 })
     .returning({ id: floorZones.id });
   return scoped(async (tx) => {
-    const departmentId = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
-    ).id;
-    await configureZone(tx, cfg, { zoneId: zone!.id, departmentId });
+    const departmentId = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" }))
+      .id;
+    await configureZone(tx, { zoneId: zone!.id, departmentId });
     const period = async (name: string) => {
       const menuId = (await createCatalogue(tx, { name: `${name} ${cfg.locationId}` })).id;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
-      return (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId, staffMenuIds: [] })).id;
+      return (await saveMenuPeriod(tx, departmentId, { name, menuId, staffMenuIds: [] })).id;
     };
     return {
       cfg,
@@ -290,7 +289,7 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
   it("with no season named, gives a venue without seasons its four and closes every one, and the zone's read shows each season's week", async () => {
     const v = await venue();
     const night = { startsAt: "23:00", endsAt: "02:00" };
-    await scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([night]), 0, AT));
+    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 0, AT));
     expect(Object.keys(await seasonIds())).toEqual(["Spring", "Summer", "Autumn", "Winter"]);
     expect(await zoneTuesdays(v)).toEqual(everySeason([night]));
     const { Autumn } = await seasonIds();
@@ -304,10 +303,10 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
     const v = await venue();
     const night = { startsAt: "23:00", endsAt: "02:00" };
     const afternoon = { startsAt: "16:00", endsAt: "19:00" };
-    await scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([night]), 0, AT));
+    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 0, AT));
     const { Winter } = await seasonIds();
     await scoped((tx) =>
-      replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([afternoon]), 0, AT, {
+      replaceZoneClosedWeek(tx, v.zoneId, closedWeek([afternoon]), 0, AT, {
         seasonId: Winter!,
       }),
     );
@@ -332,21 +331,21 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
     const v = await venue();
     const night = { startsAt: "23:00", endsAt: "02:00" };
     const afternoon = { startsAt: "16:00", endsAt: "19:00" };
-    await scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([night]), 0, AT));
+    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 0, AT));
     const { Winter } = await seasonIds();
     await scoped((tx) =>
-      replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([afternoon]), 0, AT, {
+      replaceZoneClosedWeek(tx, v.zoneId, closedWeek([afternoon]), 0, AT, {
         seasonId: Winter!,
       }),
     );
     await expect(
-      scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([night]), 5, AT)),
+      scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 5, AT)),
     ).rejects.toMatchObject({ code: "hours.clock_changed" });
     expect((await zoneTuesdays(v)).Winter).toEqual([afternoon]);
-    await scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([night]), 0, AT));
+    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 0, AT));
     expect(await zoneTuesdays(v)).toEqual(everySeason([night]));
     await expect(
-      scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([night]), 5, AT)),
+      scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 5, AT)),
     ).resolves.toBeUndefined();
   });
 
@@ -356,13 +355,13 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
       { startsAt: "13:00", endsAt: "14:00" },
       { startsAt: "14:00", endsAt: "16:00" },
     ];
-    await scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek(split), 0, AT));
+    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek(split), 0, AT));
     const stored = [0, 1, 2, 3, 4, 5, 6].map((weekday) => (weekday === TUESDAY ? split : []));
     for (const seasonId of Object.values(await seasonIds()))
       await scoped((tx) => writeZoneSeasonWeeks(tx, v.zoneId, [seasonId], stored));
     expect(await zoneTuesdays(v)).toEqual(everySeason(split));
     await expect(
-      scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek(split), 5, AT)),
+      scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek(split), 5, AT)),
     ).resolves.toBeUndefined();
   });
 
@@ -371,7 +370,6 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
     await scoped((tx) =>
       replaceZoneClosedWeek(
         tx,
-        v.cfg,
         v.zoneId,
         closedWeek([
           { startsAt: "14:00", endsAt: "16:00" },
@@ -391,7 +389,6 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
       scoped((tx) =>
         replaceZoneClosedWeek(
           tx,
-          v.cfg,
           v.zoneId,
           closedWeek([{ startsAt: "13:00", endsAt: "16:00" }]),
           0,
@@ -405,7 +402,7 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
 
   it("writes every season range as closed, whatever kind it is handed", async () => {
     const v = await venue();
-    await scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([]), 0, AT));
+    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([]), 0, AT));
     const { Winter } = await seasonIds();
     const week = [0, 1, 2, 3, 4, 5, 6].map((weekday) =>
       weekday === TUESDAY ? [{ startsAt: "13:00", endsAt: "16:00", kind: "open" }] : [],
@@ -488,7 +485,7 @@ describe("week writes", () => {
     const afternoon = { startsAt: "16:00", endsAt: "19:00" };
     const save = (tuesday: { startsAt: string; endsAt: string }[], seasonId?: string) =>
       statementsOf((tx) =>
-        replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek(tuesday), 0, AT, { seasonId }),
+        replaceZoneClosedWeek(tx, v.zoneId, closedWeek(tuesday), 0, AT, { seasonId }),
       );
     const rows = async () => {
       const names = Object.fromEntries(
@@ -536,7 +533,6 @@ describe("week writes", () => {
       );
       await replaceZoneClosedWeek(
         tx,
-        v.cfg,
         v.zoneId,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -636,11 +632,11 @@ describe("saveSeasonWeeks", () => {
     await scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([lunch]), AT, 0));
     const more = await scoped(async (tx) => {
       const department = async (name: string) => {
-        const id = (await createDepartment(tx, v.cfg, { name, orderStart: "table" })).id;
+        const id = (await createDepartment(tx, { name, orderStart: "table" })).id;
         const menuId = (await createCatalogue(tx, { name: `${name} ${v.cfg.locationId}` })).id;
         const { document } = await buildMenuDocument(tx, menuId);
         await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
-        const period = (await saveMenuPeriod(tx, v.cfg, id, { name, menuId, staffMenuIds: [] })).id;
+        const period = (await saveMenuPeriod(tx, id, { name, menuId, staffMenuIds: [] })).id;
         return { id, period };
       };
       return { terrace: await department("Terrace"), bar: await department("Bar") };

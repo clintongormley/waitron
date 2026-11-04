@@ -41,7 +41,7 @@ export async function checkedDepartmentReceiptWrite(
     validateOperationDescription,
     options.allowEmptyDescription,
   );
-  const policy = await VENUE_SERVICE.readDepartmentReceiptPolicy(tx, cfg, departmentId);
+  const policy = await VENUE_SERVICE.readDepartmentReceiptPolicy(tx, departmentId);
   if (
     policy.receiptPrintMode !== checked.policy.receiptPrintMode ||
     policy.printTradingName !== checked.policy.printTradingName

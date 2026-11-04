@@ -44,7 +44,7 @@ export async function orderWatchZones(
     else zones.set(order.id, zone);
   }
   if (unresolved.length > 0) {
-    const recorded = await VENUE_SERVICE.findOrderZones(tx, cfg, unresolved);
+    const recorded = await VENUE_SERVICE.findOrderZones(tx, unresolved);
     for (const id of unresolved) zones.set(id, recorded.get(id) ?? null);
   }
   return zones;

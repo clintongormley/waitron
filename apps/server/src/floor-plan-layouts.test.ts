@@ -45,13 +45,13 @@ function fresh(label: string): string {
 /** A department with zone Inside and sets Standard (its default) and Dinner, plus a zone elsewhere. */
 async function department() {
   return inTx(v, async (tx) => {
-    const dept = await createDepartment(tx, v.cfg, { name: fresh("Dept"), orderStart: "table" });
-    const other = await createDepartment(tx, v.cfg, { name: fresh("Other"), orderStart: "table" });
-    const inside = await createServiceZone(tx, v.cfg, {
+    const dept = await createDepartment(tx, { name: fresh("Dept"), orderStart: "table" });
+    const other = await createDepartment(tx, { name: fresh("Other"), orderStart: "table" });
+    const inside = await createServiceZone(tx, {
       name: fresh("Inside"),
       departmentId: dept.id,
     });
-    const elsewhere = await createServiceZone(tx, v.cfg, {
+    const elsewhere = await createServiceZone(tx, {
       name: fresh("Terrace"),
       departmentId: other.id,
     });
@@ -64,7 +64,7 @@ async function department() {
         .insert(floorPlanSets)
         .values({ locationId: v.cfg.locationId })
         .returning({ id: floorPlanSets.id });
-      await linkFloorPlanSet(tx, v.cfg, { setId: row!.id, departmentId: dept.id, name });
+      await linkFloorPlanSet(tx, { setId: row!.id, departmentId: dept.id, name });
       sets[key] = row!.id;
     }
     return { zoneId: inside.id, elsewhere: elsewhere.id, ...sets };

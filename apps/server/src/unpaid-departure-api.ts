@@ -68,7 +68,7 @@ export function mountUnpaidDepartureApi(
         return withIssuanceTransaction(
           deps.db,
           async (tx) => {
-            await checkZones(tx, deps.cfg, session, [{ partyId }]);
+            await checkZones(tx, session, [{ partyId }]);
             return recordUnpaidDeparture(tx, { ...deps, log }, cfg, partyId, checkedRequest, {
               personId,
               sessionId,

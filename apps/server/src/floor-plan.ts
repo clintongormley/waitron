@@ -90,12 +90,8 @@ export async function planOf(tx: Transaction, at: LayoutRef) {
 }
 
 /** The set, refused when it is unknown or its department does not hold the zone. */
-async function requireSetOf(
-  tx: Transaction,
-  cfg: TradingContext,
-  at: LayoutRef,
-): Promise<FloorPlanSetSummary> {
-  const [set] = await VENUE_SERVICE.readFloorPlanSets(tx, cfg, { setIds: [at.setId] });
+async function requireSetOf(tx: Transaction, at: LayoutRef): Promise<FloorPlanSetSummary> {
+  const [set] = await VENUE_SERVICE.readFloorPlanSets(tx, { setIds: [at.setId] });
   if (set === undefined) throw new AppError("floor_plan_set.not_found", { setId: at.setId });
   if (!set.zoneIds.includes(at.zoneId))
     throw new AppError("floor_plan_set.invalid", { field: "zoneId" });
@@ -233,7 +229,7 @@ export async function readLayout(
   at: LayoutRef,
 ): Promise<ZonePlan> {
   await requireZone(tx, cfg, at.zoneId);
-  const set = await requireSetOf(tx, cfg, at);
+  const set = await requireSetOf(tx, at);
   const plan = await planOf(tx, at);
   return {
     zoneId: at.zoneId,
@@ -377,7 +373,7 @@ async function checkSave(
 ): Promise<CheckedZonePlanSave> {
   const { zoneId } = at;
   await requireZone(tx, cfg, zoneId);
-  const { departmentId } = await requireSetOf(tx, cfg, at);
+  const { departmentId } = await requireSetOf(tx, at);
   const plan = await planOf(tx, at);
   const revision = plan?.revision ?? 0;
   if (input.revision !== revision) {
@@ -481,7 +477,7 @@ export async function saveLayout(
   const checked = await checkSave(tx, cfg, removals, at, input, now);
   const saved = await writeSave(tx, at, checked, now);
   if (saved.shared) {
-    const sets = await VENUE_SERVICE.readFloorPlanSets(tx, cfg, {
+    const sets = await VENUE_SERVICE.readFloorPlanSets(tx, {
       departmentId: checked.departmentId,
     });
     const others = sets.map((s) => s.setId).filter((id) => id !== at.setId);

@@ -340,7 +340,7 @@ describe("the numbers an order's sent dishes were sent under, on the counter rea
       OPERATOR,
     );
 
-    const waiting = await listCounterWaiting({ db: v.db }, v.cfg);
+    const waiting = await listCounterWaiting({ db: v.db });
     expect(waiting.find((o) => o.id === o41)).toMatchObject({ formerNumbers: [n40] });
   });
 

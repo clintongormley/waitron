@@ -34,17 +34,17 @@ async function fixture() {
     });
     const venueId = await venueLocationId(tx);
     const cfg = { locationId: locationId(venueId) };
-    const restaurant = await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" });
-    const deli = await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" });
-    const dining = await createServiceZone(tx, cfg, {
+    const restaurant = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
+    const deli = await createDepartment(tx, { name: "Deli", orderStart: "counter" });
+    const dining = await createServiceZone(tx, {
       name: "Dining",
       departmentId: restaurant.id,
     });
-    const terrace = await createServiceZone(tx, cfg, {
+    const terrace = await createServiceZone(tx, {
       name: "Terrace",
       departmentId: restaurant.id,
     });
-    const counter = await createServiceZone(tx, cfg, { name: "Counter", departmentId: deli.id });
+    const counter = await createServiceZone(tx, { name: "Counter", departmentId: deli.id });
     const profiles = await tx
       .insert(deviceProfiles)
       .values([0, 1, 2].map((n) => ({ name: `${randomUUID()} ${n}`, formFactor: "till" as const })))
@@ -80,11 +80,11 @@ async function fixture() {
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 const read = (f: Fixture, deviceId = f.deviceId) =>
-  run((tx) => VENUE_SERVICE.readDeviceZoneSelection(tx, f.cfg, deviceId));
+  run((tx) => VENUE_SERVICE.readDeviceZoneSelection(tx, deviceId));
 async function save(f: Fixture, selectedZoneIds: string[], startingZoneId: string) {
   const current = await read(f);
   return run((tx) =>
-    VENUE_SERVICE.setDeviceZoneSelection(tx, f.cfg, f.deviceId, {
+    VENUE_SERVICE.setDeviceZoneSelection(tx, f.deviceId, {
       profileId: current.profileId,
       snapshot: current.snapshot,
       selectedZoneIds,
@@ -252,7 +252,7 @@ describe("device zone selection", () => {
           [field]: value,
         };
         await expect(
-          run((tx) => VENUE_SERVICE.setDeviceZoneSelection(tx, f.cfg, f.deviceId, input as never)),
+          run((tx) => VENUE_SERVICE.setDeviceZoneSelection(tx, f.deviceId, input as never)),
         ).rejects.toMatchObject({ code: "device_zones.invalid", params: { field } });
       }
       expect(await read(f)).toEqual(current);
@@ -286,7 +286,7 @@ describe("device zone selection", () => {
     };
     await save(f, [f.terrace], f.terrace);
     await expect(
-      run((tx) => VENUE_SERVICE.setDeviceZoneSelection(tx, f.cfg, f.deviceId, input)),
+      run((tx) => VENUE_SERVICE.setDeviceZoneSelection(tx, f.deviceId, input)),
     ).rejects.toMatchObject({ code: "device_zones.changed" });
     await run((tx) =>
       tx
@@ -295,7 +295,7 @@ describe("device zone selection", () => {
         .where(eq(devices.id, f.deviceId)),
     );
     await expect(
-      run((tx) => VENUE_SERVICE.setDeviceZoneSelection(tx, f.cfg, f.deviceId, input)),
+      run((tx) => VENUE_SERVICE.setDeviceZoneSelection(tx, f.deviceId, input)),
     ).rejects.toMatchObject({ code: "device_zones.changed" });
     expect(await save(f, [f.counter], f.counter)).toMatchObject({
       selectedZoneIds: [f.counter],
@@ -308,7 +308,7 @@ describe("device zone selection", () => {
     const current = await read(f);
     await expect(
       run((tx) =>
-        VENUE_SERVICE.setDeviceZoneSelection(tx, f.cfg, f.deviceId, {
+        VENUE_SERVICE.setDeviceZoneSelection(tx, f.deviceId, {
           profileId: f.secondProfileId,
           snapshot: current.snapshot,
           selectedZoneIds: [f.dining],
@@ -334,7 +334,7 @@ describe("device zone selection", () => {
     const results = await Promise.allSettled(
       [f.dining, f.terrace].map((zoneId) =>
         run((tx) =>
-          VENUE_SERVICE.setDeviceZoneSelection(tx, f.cfg, f.deviceId, {
+          VENUE_SERVICE.setDeviceZoneSelection(tx, f.deviceId, {
             profileId: f.profileId,
             snapshot: current.snapshot,
             selectedZoneIds: [zoneId],
@@ -367,8 +367,8 @@ describe("device zone selection", () => {
     const f = await fixture();
     await save(f, [f.terrace], f.terrace);
     await run(async (tx) => {
-      const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, f.cfg, f.otherDeviceId);
-      await VENUE_SERVICE.setDeviceZoneSelection(tx, f.cfg, f.otherDeviceId, {
+      const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, f.otherDeviceId);
+      await VENUE_SERVICE.setDeviceZoneSelection(tx, f.otherDeviceId, {
         ...current,
         startingZoneId: f.dining,
       });
@@ -387,7 +387,7 @@ it("keeps a saved selection when its write transaction rolls back", async () => 
   const before = await save(f, [f.terrace], f.terrace);
   await expect(
     run(async (tx) => {
-      await VENUE_SERVICE.setDeviceZoneSelection(tx, f.cfg, f.deviceId, {
+      await VENUE_SERVICE.setDeviceZoneSelection(tx, f.deviceId, {
         ...before,
         selectedZoneIds: [f.dining],
         startingZoneId: f.dining,
@@ -402,7 +402,7 @@ it("canonicalises UUID spelling and set order without changing the snapshot", as
   const f = await fixture();
   const before = await save(f, [f.terrace, f.dining], f.dining);
   const after = await run((tx) =>
-    VENUE_SERVICE.setDeviceZoneSelection(tx, f.cfg, f.deviceId, {
+    VENUE_SERVICE.setDeviceZoneSelection(tx, f.deviceId, {
       profileId: f.profileId.toUpperCase(),
       snapshot: before.snapshot,
       selectedZoneIds: [f.dining.toUpperCase(), f.terrace.toUpperCase()],
@@ -424,7 +424,7 @@ it("invalidates a snapshot after profile capability, zone wording or department 
   );
   expect((await read(f)).snapshot).not.toBe(current.snapshot);
   await expect(
-    run((tx) => VENUE_SERVICE.setDeviceZoneSelection(tx, f.cfg, f.deviceId, input)),
+    run((tx) => VENUE_SERVICE.setDeviceZoneSelection(tx, f.deviceId, input)),
   ).rejects.toMatchObject({ code: "device_zones.changed" });
   const capability = await read(f);
   await run((tx) =>

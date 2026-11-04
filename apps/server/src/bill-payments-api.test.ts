@@ -1621,7 +1621,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   it("issues a moved bill with the destination department header and receipt mode", async () => {
     const billId = await tabWith("Ensalada");
     const destination = await inTx(async (tx) => {
-      const department = await createDepartment(tx, venue.cfg, {
+      const department = await createDepartment(tx, {
         name: `Destino ${randomUUID()}`,
         tradingName: "Comedor Nuevo",
         orderStart: "table",
@@ -1630,7 +1630,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         departmentId: department.id,
         receipt: { operationDescription: "Restaurante" },
       });
-      const zone = await createServiceZone(tx, venue.cfg, {
+      const zone = await createServiceZone(tx, {
         name: `Zona ${randomUUID()}`,
         departmentId: department.id,
       });
@@ -1681,12 +1681,12 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       join working_order_lines l on l.id = c.working_order_line_id
       where l.working_order_id = ${billId}`);
     const destination = await inTx(async (tx) => {
-      const department = await createDepartment(tx, venue.cfg, {
+      const department = await createDepartment(tx, {
         name: `Destino ${randomUUID()}`,
         tradingName: "Mesa Nueva",
         orderStart: "table",
       });
-      const zone = await createServiceZone(tx, venue.cfg, {
+      const zone = await createServiceZone(tx, {
         name: `Zona ${randomUUID()}`,
         departmentId: department.id,
       });

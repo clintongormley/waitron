@@ -59,12 +59,12 @@ async function venue(tx: Transaction, suffix = "") {
       { ...cfg, name: "Inside" },
     ])
     .returning();
-  const department = await createDepartment(tx, cfg, {
+  const department = await createDepartment(tx, {
     name: "Dining",
     orderStart: "table",
   });
   for (const zone of zones)
-    await configureZone(tx, cfg, { zoneId: zone.id, departmentId: department.id });
+    await configureZone(tx, { zoneId: zone.id, departmentId: department.id });
   const stations = await tx
     .insert(kitchenStations)
     .values([
@@ -459,7 +459,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
     const before = await readStoredCells(f);
     expect(before).toEqual([expect.objectContaining({ zone_id: f.terrace, station_id: f.bar })]);
     const closed = await scoped((tx) =>
-      createDepartment(tx, f.cfg, { name: "Closed", orderStart: "table" }),
+      createDepartment(tx, { name: "Closed", orderStart: "table" }),
     );
     await scoped((tx) =>
       (async () => {
@@ -470,7 +470,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       })(),
     );
     await expect(
-      scoped((tx) => configureZone(tx, f.cfg, { zoneId: f.terrace, departmentId: closed.id })),
+      scoped((tx) => configureZone(tx, { zoneId: f.terrace, departmentId: closed.id })),
     ).rejects.toMatchObject({
       code: "department.not_found",
       params: { departmentId: closed.id },

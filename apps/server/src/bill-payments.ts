@@ -701,7 +701,7 @@ async function issueWhenFullyPaid(
   });
   const { priced, clock } = issueMoment(
     await prepareIssueClock(tx, cfg, deps.clock),
-    await issuancePass(tx, cfg, workingOrderId, stored),
+    await issuancePass(tx, workingOrderId, stored),
     deps.backend,
   );
   const tendersOfBill: SettleSaleTender[] = held
@@ -745,7 +745,6 @@ async function issueWhenFullyPaid(
   await linkSalePortions(tx, saleId, stored.identities);
   await recordSaleReceiptFacts(
     tx,
-    cfg,
     { saleId, workingOrderId, counterparty: selected.sale.counterparty },
     options.guestCount,
   );

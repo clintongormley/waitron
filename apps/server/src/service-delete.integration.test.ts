@@ -98,7 +98,7 @@ const core = () => moduleCoreServices(venue.cfg, enabledTableRemovals(ALL_MODULE
 
 async function target() {
   return run(async (tx) => {
-    const department = await createDepartment(tx, venue.cfg, {
+    const department = await createDepartment(tx, {
       name: randomUUID(),
       orderStart: "table",
     });
@@ -106,7 +106,7 @@ async function target() {
       departmentId: department.id,
       receipt: { operationDescription: "Restaurante" },
     });
-    const zone = await createServiceZone(tx, venue.cfg, {
+    const zone = await createServiceZone(tx, {
       name: randomUUID(),
       departmentId: department.id,
     });
@@ -144,12 +144,10 @@ describe("real module floor deletion", () => {
         )[0]!.id,
     );
     const service = core().floorDeletion;
-    const impact = await run((tx) =>
-      readDepartmentDeleteImpact(tx, venue.cfg, service, f.departmentId, NOW),
-    );
+    const impact = await run((tx) => readDepartmentDeleteImpact(tx, service, f.departmentId, NOW));
     expect(impact.refusals).toContainEqual(expect.objectContaining({ code: "table.booked" }));
     await expect(
-      run((tx) => deleteDepartment(tx, venue.cfg, service, f.departmentId, NOW)),
+      run((tx) => deleteDepartment(tx, service, f.departmentId, NOW)),
     ).rejects.toMatchObject({ code: "table.booked" });
     expect(
       (await run((tx) => tx.select().from(bookings).where(eq(bookings.id, bookingId)))).length,
@@ -167,7 +165,7 @@ describe("real module floor deletion", () => {
     const { standard, dinner } = await run(async (tx) => {
       const standard = (await defaultLayout(tx, venue.cfg, f.zoneId)).setId;
       const dinner = await core().floorPlanSets.create(tx);
-      await linkFloorPlanSet(tx, venue.cfg, {
+      await linkFloorPlanSet(tx, {
         setId: dinner,
         departmentId: f.departmentId,
         name: "Dinner",
@@ -194,14 +192,12 @@ describe("real module floor deletion", () => {
       await run((tx) => tx.select().from(floorPlans).where(inArray(floorPlans.setId, setIds))),
     ).not.toEqual([]);
 
-    const impact = await run((tx) =>
-      readDepartmentDeleteImpact(tx, venue.cfg, service, f.departmentId, NOW),
-    );
+    const impact = await run((tx) => readDepartmentDeleteImpact(tx, service, f.departmentId, NOW));
     expect(impact.removes).toContainEqual(
       expect.objectContaining({ key: "floor_plan_sets", count: 2 }),
     );
 
-    await run((tx) => deleteDepartment(tx, venue.cfg, service, f.departmentId, NOW));
+    await run((tx) => deleteDepartment(tx, service, f.departmentId, NOW));
 
     const after = await run(async (tx) => ({
       periods: await tx
@@ -222,8 +218,7 @@ describe("real module floor deletion", () => {
     const f = await target();
     const service = core().floorDeletion;
     expect(
-      (await run((tx) => readDepartmentDeleteImpact(tx, venue.cfg, service, f.departmentId, NOW)))
-        .refusals,
+      (await run((tx) => readDepartmentDeleteImpact(tx, service, f.departmentId, NOW))).refusals,
     ).toEqual([]);
     const held = gate();
     const release = gate();
@@ -249,7 +244,7 @@ describe("real module floor deletion", () => {
     let entered = false;
     const deletion = run(async (tx) => {
       entered = true;
-      return deleteDepartment(tx, venue.cfg, service, f.departmentId, NOW);
+      return deleteDepartment(tx, service, f.departmentId, NOW);
     });
     expect(queued).toHaveBeenCalledTimes(1);
     queued.mockRestore();
@@ -281,8 +276,7 @@ describe("real module floor deletion", () => {
     const f = await target();
     const service = core().floorDeletion;
     expect(
-      (await run((tx) => readDepartmentDeleteImpact(tx, venue.cfg, service, f.departmentId, NOW)))
-        .refusals,
+      (await run((tx) => readDepartmentDeleteImpact(tx, service, f.departmentId, NOW))).refusals,
     ).toEqual([]);
     const held = gate();
     const release = gate();
@@ -301,7 +295,7 @@ describe("real module floor deletion", () => {
     let entered = false;
     const deletion = run(async (tx) => {
       entered = true;
-      return deleteDepartment(tx, venue.cfg, service, f.departmentId, NOW);
+      return deleteDepartment(tx, service, f.departmentId, NOW);
     });
     expect(queued).toHaveBeenCalledTimes(1);
     queued.mockRestore();
@@ -345,7 +339,7 @@ describe("real module floor deletion", () => {
     const deletion = run(async (tx) => {
       let impact;
       try {
-        impact = await deleteDepartment(tx, venue.cfg, service, f.departmentId, NOW);
+        impact = await deleteDepartment(tx, service, f.departmentId, NOW);
       } finally {
         held.open();
       }
@@ -408,7 +402,7 @@ describe("real module floor deletion", () => {
     const deletion = run(async (tx) => {
       let impact;
       try {
-        impact = await deleteZone(tx, venue.cfg, service, zoneId, NOW);
+        impact = await deleteZone(tx, service, zoneId, NOW);
       } finally {
         held.open();
       }
@@ -447,7 +441,7 @@ describe("real module floor deletion", () => {
     const deletion = run(async (tx) => {
       let impact;
       try {
-        impact = await deleteDepartment(tx, venue.cfg, core().floorDeletion, f.departmentId, NOW);
+        impact = await deleteDepartment(tx, core().floorDeletion, f.departmentId, NOW);
       } finally {
         held.open();
       }
@@ -459,7 +453,7 @@ describe("real module floor deletion", () => {
     let entered = false;
     const transfer = run(async (tx) => {
       entered = true;
-      return requestDepartmentTransfer(tx, venue.cfg, tabId, f.departmentId, {
+      return requestDepartmentTransfer(tx, tabId, f.departmentId, {
         departmentId: source!.departmentId,
         personId: venue.operator.personId,
       });
@@ -642,7 +636,7 @@ describe("mounted authenticated service deletion races", () => {
                     receivingProfileId: receiving!.id,
                     destinationDepartmentIds: [],
                   });
-                  await requestDepartmentTransfer(tx, venue.cfg, tabId, f.departmentId, {
+                  await requestDepartmentTransfer(tx, tabId, f.departmentId, {
                     departmentId: sourceDepartmentId,
                     personId: venue.operator.personId,
                   });
@@ -807,7 +801,7 @@ describe("mounted authenticated service deletion races", () => {
         }),
       ),
       run((tx) =>
-        requestDepartmentTransfer(tx, venue.cfg, tabId, f.departmentId, {
+        requestDepartmentTransfer(tx, tabId, f.departmentId, {
           departmentId: source!.departmentId,
           personId: venue.operator.personId,
         }),
@@ -1007,8 +1001,8 @@ it.each(["zone", "department"] as const)(
     const remove = () =>
       run((tx) =>
         kind === "zone"
-          ? deleteZone(tx, venue.cfg, core().floorDeletion, f.zoneId, NOW)
-          : deleteDepartment(tx, venue.cfg, core().floorDeletion, f.departmentId, NOW),
+          ? deleteZone(tx, core().floorDeletion, f.zoneId, NOW)
+          : deleteDepartment(tx, core().floorDeletion, f.departmentId, NOW),
       );
     const unchanged = await run(completeSnapshot);
     await expect(remove()).rejects.toMatchObject({ code: "zone.table_in_use" });
@@ -1034,7 +1028,7 @@ it.each(["zone", "department"] as const)(
     const finishCommand = await commandFor(venue, seated.partyId);
     await run((tx) => finishTable(tx, { partyId: seated.partyId, ...finishCommand }));
     await run((tx) =>
-      configureZone(tx, venue.cfg, {
+      configureZone(tx, {
         zoneId: f.zoneId,
         departmentId: f.departmentId,
         orderStart: "counter",
@@ -1146,7 +1140,7 @@ it.each(["zone", "department"] as const)(
         .select()
         .from(zoneServicePolicies)
         .where(eq(zoneServicePolicies.zoneId, venue.counter.zoneId));
-      return createServiceZone(tx, venue.cfg, {
+      return createServiceZone(tx, {
         name: `Replacement ${randomUUID()}`,
         departmentId: counterPolicy!.departmentId,
       });
@@ -1349,7 +1343,7 @@ it("rechecks an upcoming booking added after the master editor opened, but allow
   });
   expect(await run(completeSnapshot)).toEqual(before);
   await expect(
-    run((tx) => deleteZone(tx, venue.cfg, core().floorDeletion, f.zoneId, NOW)),
+    run((tx) => deleteZone(tx, core().floorDeletion, f.zoneId, NOW)),
   ).rejects.toMatchObject({ code: "table.booked" });
   expect(await run(completeSnapshot)).toEqual(before);
   expect((await http.cancel(bookingId)).status).toBe(204);

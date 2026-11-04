@@ -31,7 +31,7 @@ async function venueWithSteps(
   const v = await setupPartyVenue(suite.db);
   const { id } = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Desserts" }));
   const departmentId = await inTx(v, async (tx: Transaction) => {
-    const department = await createDepartment(tx, v.cfg, { name: "Steps", orderStart: "table" });
+    const department = await createDepartment(tx, { name: "Steps", orderStart: "table" });
     await saveServiceSteps(tx, department.id, steps(id));
     return department.id;
   });

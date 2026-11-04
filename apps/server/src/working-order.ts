@@ -542,7 +542,6 @@ async function productOptionLists(
  */
 async function readBasketOffers(
   tx: Transaction,
-  cfg: TradingContext,
   workingOrderId: string,
   zoneId: string | undefined,
   lines: readonly { menuVersionId?: unknown }[],
@@ -560,7 +559,7 @@ async function readBasketOffers(
     versionIds.add(menuVersionId.toLowerCase());
   }
   const named = menuItemIds.filter((id): id is string => typeof id === "string");
-  const offers = await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId, {
+  const offers = await VENUE_SERVICE.listZoneOffers(tx, zoneId, {
     menuItemIds: named,
     withDefault: false,
   });
@@ -572,7 +571,7 @@ async function readBasketOffers(
   if (menus.size < stale.length) {
     throw new AppError("management.request_invalid", { field: "menuVersionId" });
   }
-  return VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId, {
+  return VENUE_SERVICE.listZoneOffers(tx, zoneId, {
     asserted: [...menus].map(([versionId, menuId]) => ({ menuId, versionId })),
     menuItemIds: named,
     withDefault: false,
@@ -676,7 +675,6 @@ export async function priceOrderLines(
     snapshot ??
     (await readBasketOffers(
       tx,
-      cfg,
       workingOrderId,
       zoneId,
       requestedLines,
@@ -688,10 +686,10 @@ export async function priceOrderLines(
   const ended = new Map<(typeof requestedLines)[number], string>();
   let alsoSold: ReadonlySet<string> = new Set();
   if (periodCheck === "added" && requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true)) {
-    const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, zoneId!);
+    const context = await VENUE_SERVICE.resolveZoneContext(tx, zoneId!);
     const at = new Date();
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, context.zoneId, at);
-    service = await VENUE_SERVICE.resolveDepartmentService(tx, cfg, context.departmentId, at);
+    service = await VENUE_SERVICE.resolveDepartmentService(tx, context.departmentId, at);
     const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
     const items: { productId: string; variantId: string | null }[] = [];
     for (const line of requestedLines) {
@@ -1129,7 +1127,7 @@ export async function prepareRecalledModifiers(
   );
   if (choices.length === 0) return plans;
   const retained = new Map(
-    (await VENUE_SERVICE.listLineContexts(tx, cfg, orderId)).map((line) => [
+    (await VENUE_SERVICE.listLineContexts(tx, orderId)).map((line) => [
       line.workingOrderLineId,
       line,
     ]),
@@ -1137,12 +1135,11 @@ export async function prepareRecalledModifiers(
   for (const { parent } of choices)
     if (!retained.has(parent.id))
       throw new AppError("order.service_context_missing", { workingOrderId: orderId });
-  const context = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
+  const context = await VENUE_SERVICE.findOrderContext(tx, orderId);
   const snapshot =
     known ??
     (await readBasketOffers(
       tx,
-      cfg,
       orderId,
       context?.zoneId,
       [],
@@ -1651,7 +1648,7 @@ export async function createOpenOrder(
   const deliveryTableId = placement.deliveryTableId ?? null;
   let effectiveZoneId = placement.zoneId;
   if (placement.copyServiceContextFrom !== undefined) {
-    const context = await VENUE_SERVICE.findOrderContext(tx, cfg, placement.copyServiceContextFrom);
+    const context = await VENUE_SERVICE.findOrderContext(tx, placement.copyServiceContextFrom);
     if (context === null) {
       throw new AppError("order.service_context_missing", {
         workingOrderId: placement.copyServiceContextFrom,
@@ -1683,7 +1680,7 @@ export async function createOpenOrder(
         .where(eq(devices.id, cfg.origin.deviceId));
       profileId = device?.profileId;
     }
-    effectiveZoneId = (await VENUE_SERVICE.resolveNewOrderZone(tx, cfg, { profileId })).zoneId;
+    effectiveZoneId = (await VENUE_SERVICE.resolveNewOrderZone(tx, { profileId })).zoneId;
   }
   if (placement.existingService !== true) {
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, effectiveZoneId, new Date());
@@ -1744,11 +1741,11 @@ export async function createOpenOrder(
 
   await insertInChunks(tx, workingOrderLines, lineRows);
   if (placement.copyServiceContextFrom !== undefined) {
-    await VENUE_SERVICE.copyOrderContext(tx, cfg, placement.copyServiceContextFrom, id);
+    await VENUE_SERVICE.copyOrderContext(tx, placement.copyServiceContextFrom, id);
   } else {
-    await VENUE_SERVICE.recordOrderContext(tx, cfg, id, effectiveZoneId);
+    await VENUE_SERVICE.recordOrderContext(tx, id, effectiveZoneId);
   }
-  await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts, offers);
+  await VENUE_SERVICE.recordLineContexts(tx, id, lineContexts, offers);
   await registerPortions(tx, expanded.portions);
 
   if (choice !== undefined) await selectOrderInvoice(tx, choice, cfg, id, gross.total);
@@ -1839,7 +1836,7 @@ export async function openTab(
     throw new AppError("table.needs_moving", { tableId: req.tableId });
   }
 
-  const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, table.zoneId);
+  const context = await VENUE_SERVICE.resolveZoneContext(tx, table.zoneId);
   if (context.serviceMode !== "table_tab") {
     throw new AppError("service_zone.mode_incompatible", {
       zoneId: table.zoneId,
@@ -1905,9 +1902,9 @@ export type RoutingOnce = (() => Promise<MakerResolver>) & {
   readonly opened: () => Promise<MakerResolver> | undefined;
 };
 
-export function routingOnce(tx: Transaction, cfg: TradingContext, at: Date): RoutingOnce {
+export function routingOnce(tx: Transaction, at: Date): RoutingOnce {
   let opened: Promise<MakerResolver> | undefined;
-  return Object.assign(() => (opened ??= VENUE_SERVICE.routingAt(tx, cfg, at)), {
+  return Object.assign(() => (opened ??= VENUE_SERVICE.routingAt(tx, at)), {
     at,
     opened: () => opened,
   });
@@ -2127,7 +2124,7 @@ export async function fireLines(
     routing?: RoutingOnce;
   } & KeptPhase = {},
 ): Promise<FireableLine[]> {
-  const routing = options.routing ?? routingOnce(tx, cfg, new Date());
+  const routing = options.routing ?? routingOnce(tx, new Date());
   const now = routing.at;
   const firedAt = now.toISOString();
   const cancellations = await readLineCancellations(
@@ -2168,7 +2165,7 @@ export async function fireLines(
         : [],
     ),
   );
-  const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
+  const serviceContext = await VENUE_SERVICE.findOrderContext(tx, orderId);
   const productIds = [
     ...new Set(
       lines
@@ -2465,7 +2462,6 @@ async function stampSent(
  */
 async function heldNoRouteLines(
   tx: Transaction,
-  cfg: TradingContext,
   orderId: string,
   scope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] } | "all",
   routing: RoutingOnce,
@@ -2482,7 +2478,7 @@ async function heldNoRouteLines(
     if (any.length === 0) return empty;
     inScope = or(...any);
   }
-  const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
+  const serviceContext = await VENUE_SERVICE.findOrderContext(tx, orderId);
   const candidates = await tx
     .select({
       id: workingOrderLines.id,
@@ -2586,7 +2582,7 @@ async function releaseHeld(
   ticketScope: SQL,
   noRouteScope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] },
   fire?: { heldPaper: ReadonlySet<string> },
-  routing = routingOnce(tx, cfg, new Date()),
+  routing = routingOnce(tx, new Date()),
 ): Promise<void> {
   const firedNow = routing.at.toISOString();
   const pending = await tx
@@ -2594,7 +2590,7 @@ async function releaseHeld(
     .from(ticketItems)
     .where(and(eq(ticketItems.workingOrderId, orderId), ticketScope, heldItem()))
     .limit(1);
-  const pendingNoRoute = await heldNoRouteLines(tx, cfg, orderId, noRouteScope, routing);
+  const pendingNoRoute = await heldNoRouteLines(tx, orderId, noRouteScope, routing);
   if (pending.length > 0 || pendingNoRoute.lines.length > 0) {
     const partyId = await partyOfOrder(tx, orderId);
     // A settled bill keeps the party it was paid under; a merge combines that party's answer into
@@ -2608,7 +2604,7 @@ async function releaseHeld(
     ticketScope,
     firedNow,
   );
-  const noRoute = await heldNoRouteLines(tx, cfg, orderId, noRouteScope, routing);
+  const noRoute = await heldNoRouteLines(tx, orderId, noRouteScope, routing);
   // Only an open order's lines can be removed, so only there is a sold-out line refused; a placed
   // order's held work is committed.
   await finishRelease(
@@ -2637,7 +2633,7 @@ async function finishRelease(
   at: string,
   refuseSoldOut: boolean,
   fire?: { heldPaper: ReadonlySet<string> },
-  routing = routingOnce(tx, cfg, new Date(at)),
+  routing = routingOnce(tx, new Date(at)),
   rerouted: Rerouted = new Map(),
 ): Promise<void> {
   const released = [
@@ -2752,7 +2748,7 @@ export async function sendLines(
       return;
     }
   }
-  const routing = routingOnce(tx, cfg, new Date());
+  const routing = routingOnce(tx, new Date());
   await assertPartyBillOpen(tx, cfg, tabId);
   await requireOrderBillEditor(tx, tabId, authority);
   const namedLines =
@@ -2818,7 +2814,6 @@ export async function sendLines(
   // lines releases the named ones, and a course's no-route lines once nothing routed in that course is still held.
   const noRoute = await heldNoRouteLines(
     tx,
-    cfg,
     tabId,
     lineNos.length === 0
       ? "all"
@@ -3086,7 +3081,7 @@ export async function priceTabRound(
     .select({ maxLineNo: sql<number>`cast(coalesce(max(${workingOrderLines.lineNo}), 0) as int)` })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId));
-  const context = await VENUE_SERVICE.findOrderContext(tx, cfg, tabId);
+  const context = await VENUE_SERVICE.findOrderContext(tx, tabId);
   const { lineRows, portionable, lineContexts, offers } = await priceOrderLines(
     tx,
     cfg,
@@ -3123,7 +3118,7 @@ export async function insertTabRound(
       lineNo: workingOrderLines.lineNo,
       groupId: workingOrderLines.groupId,
     });
-  await VENUE_SERVICE.recordLineContexts(tx, cfg, round.tabId, round.lineContexts, round.offers);
+  await VENUE_SERVICE.recordLineContexts(tx, round.tabId, round.lineContexts, round.offers);
   await refuseOrderOverSimplifiedLimit(tx, cfg, round.tabId, before);
   return inserted;
 }
@@ -4100,12 +4095,11 @@ async function clampServed(tx: Transaction, lineIds: readonly string[]): Promise
  */
 export async function assertServiceModesMatch(
   tx: Transaction,
-  cfg: TradingContext,
   fromOrderId: string,
   toOrderId: string,
 ): Promise<void> {
-  const fromContext = await VENUE_SERVICE.findOrderContext(tx, cfg, fromOrderId);
-  const toContext = await VENUE_SERVICE.findOrderContext(tx, cfg, toOrderId);
+  const fromContext = await VENUE_SERVICE.findOrderContext(tx, fromOrderId);
+  const toContext = await VENUE_SERVICE.findOrderContext(tx, toOrderId);
   if (!modesMatch(fromContext, toContext)) {
     throw new AppError("service_zone.mode_incompatible", {
       zoneId: toContext?.zoneId ?? "unscoped",
@@ -4328,11 +4322,7 @@ export interface TabLine {
 }
 
 /** Read an open tab's lines in line-number order, at their stored prices: no re-price. */
-export async function readTabLines(
-  tx: Transaction,
-  cfg: TradingContext,
-  tabId: string,
-): Promise<TabLine[]> {
+export async function readTabLines(tx: Transaction, tabId: string): Promise<TabLine[]> {
   await assertTabOpen(tx, tabId);
   // `ticket_items` and `working_line_portions` are unique per line, so no join multiplies rows.
   const rows = await tx
@@ -4383,7 +4373,7 @@ export async function readTabLines(
     rows.map((row) => row.id),
   );
   const menuItemByLine = new Map(
-    (await VENUE_SERVICE.listLineContexts(tx, cfg, tabId)).map((context) => [
+    (await VENUE_SERVICE.listLineContexts(tx, tabId)).map((context) => [
       context.workingOrderLineId,
       context.menuItemId,
     ]),
@@ -4942,7 +4932,7 @@ async function carveLines(
         .where(eq(workingOrderLines.id, row.id));
       splitLines.set(row.id, { id: splitRowId, lineNo });
       carried.push({ from: row.id, to: splitRowId });
-      await VENUE_SERVICE.copyLineContext(tx, cfg, row.id, splitRowId);
+      await VENUE_SERVICE.copyLineContext(tx, row.id, splitRowId);
       if (parentLineId === null)
         await copyAllergyWorkingTicks(tx, [{ from: row.id, to: splitRowId }]);
       return splitRowId;
@@ -5300,35 +5290,21 @@ export async function listHeldOrders(
 
 /** Read an open parked order anywhere in the venue, with the snapshots the till rebuilds its basket
  * from even when an offer has since been deactivated. */
-export function getHeldOrder(
-  deps: WorkingOrderDeps,
-  cfg: TradingContext,
-  id: string,
-): Promise<HeldOrder> {
-  return readBasketOrder(deps, cfg, id, eq(workingOrders.status, "open"));
+export function getHeldOrder(deps: WorkingOrderDeps, id: string): Promise<HeldOrder> {
+  return readBasketOrder(deps, id, eq(workingOrders.status, "open"));
 }
 
 /** A counter order sent without payment, read as {@link getHeldOrder} reads an open one, so the till
  * can take its payment. */
-export function getPlacedCounterOrder(
-  deps: WorkingOrderDeps,
-  cfg: TradingContext,
-  id: string,
-): Promise<HeldOrder> {
+export function getPlacedCounterOrder(deps: WorkingOrderDeps, id: string): Promise<HeldOrder> {
   return readBasketOrder(
     deps,
-    cfg,
     id,
     and(eq(workingOrders.status, "placed"), isNull(workingOrders.partyId))!,
   );
 }
 
-async function readBasketOrder(
-  deps: WorkingOrderDeps,
-  cfg: TradingContext,
-  id: string,
-  which: SQL,
-): Promise<HeldOrder> {
+async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): Promise<HeldOrder> {
   return withTransaction(deps.db, async (tx) => {
     const [order] = await tx
       .select({
@@ -5382,10 +5358,7 @@ async function readBasketOrder(
     });
 
     const contextByLine = new Map(
-      (await VENUE_SERVICE.listLineContexts(tx, cfg, id)).map((line) => [
-        line.workingOrderLineId,
-        line,
-      ]),
+      (await VENUE_SERVICE.listLineContexts(tx, id)).map((line) => [line.workingOrderLineId, line]),
     );
     const childrenByParent = new Map<string, typeof lineRows>();
     for (const line of lineRows) {
@@ -5741,11 +5714,7 @@ export async function bumpRevision(tx: Transaction, orderIds: readonly string[])
     .where(and(inArray(workingOrders.id, [...orderIds]), eq(workingOrders.status, "open")));
 }
 
-async function readEditableOrder(
-  tx: Transaction,
-  cfg: TradingContext,
-  orderId: string,
-): Promise<EditableOrder> {
+async function readEditableOrder(tx: Transaction, orderId: string): Promise<EditableOrder> {
   const rows = await tx
     .select({
       id: workingOrderLines.id,
@@ -5821,7 +5790,7 @@ async function readEditableOrder(
           },
   }));
   const menuItemByLine = new Map(
-    (await VENUE_SERVICE.listLineContexts(tx, cfg, orderId)).map((line) => [
+    (await VENUE_SERVICE.listLineContexts(tx, orderId)).map((line) => [
       line.workingOrderLineId,
       line.menuItemId,
     ]),
@@ -5922,8 +5891,8 @@ async function applyLineEdits(
   lateSend?: LateSendConfirmation,
 ): Promise<{ changed: boolean; at?: string }> {
   const before = await totalBeforeEdit(tx, cfg, orderId);
-  const routing = routingOnce(tx, cfg, new Date());
-  const context = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
+  const routing = routingOnce(tx, new Date());
+  const context = await VENUE_SERVICE.findOrderContext(tx, orderId);
   const stationChanges = await readStationChanges(
     tx,
     order.lines.flatMap((line) => (line.ticket === null ? [] : [line.ticket.stationId])),
@@ -5959,7 +5928,7 @@ async function applyLineEdits(
   const defaultLanguage = contentConfig?.defaultLanguage ?? "";
   // Read once for the answers the edits are checked against and for the lines priced below.
   const snapshot = needsModifiers
-    ? await readBasketOffers(tx, cfg, orderId, context?.zoneId, plan.fresh, [
+    ? await readBasketOffers(tx, orderId, context?.zoneId, plan.fresh, [
         ...plan.fresh.map((line) => line.menuItemId),
         ...plan.edits.map(({ parent }) => parent.menuItemId),
       ])
@@ -6631,8 +6600,8 @@ async function applyLineEdits(
   });
   if (inserted.length > 0) {
     await insertInChunks(tx, workingOrderLines, inserted);
-    await VENUE_SERVICE.recordLineContexts(tx, cfg, orderId, insertedContexts, priced.offers);
-    await VENUE_SERVICE.copyLineContexts(tx, cfg, copiedContexts);
+    await VENUE_SERVICE.recordLineContexts(tx, orderId, insertedContexts, priced.offers);
+    await VENUE_SERVICE.copyLineContexts(tx, copiedContexts);
     await registerPortions(tx, newPortions);
     await carryLineReductions(tx, copiedContexts);
     await copyAllergyWorkingTicks(tx, copiedDishes);
@@ -6956,7 +6925,7 @@ export async function updateHeldOrder(
     if (req.lines.length === 0) {
       throw new AppError("sale.empty_basket", {});
     }
-    const order = await readEditableOrder(tx, cfg, id);
+    const order = await readEditableOrder(tx, id);
     const byId = new Map(order.parents.map((parent) => [parent.id, parent]));
     const claimed = new Set<string>();
     const edits: { parent: EditableParent; intent: LineIntent }[] = [];
@@ -7042,7 +7011,7 @@ export async function updateOrderLine(
   await requireEditableOrder(tx, orderId, revision);
   await requireOrderBillEditor(tx, orderId, authority);
   const operatorId = authority.operatorId;
-  const order = await readEditableOrder(tx, cfg, orderId);
+  const order = await readEditableOrder(tx, orderId);
   const line = order.lines.find((candidate) => candidate.lineNo === lineNo);
   if (line === undefined) {
     throw new AppError("tab.line_not_found", { tabId: orderId, lineNo });
@@ -7142,7 +7111,7 @@ export async function placeOrder(
         await requireOrderBillEditor(tx, id, { operatorId, expectedEdit });
         await refusePaymentInFlight(tx, [id]);
         await refuseBillWithPayments(tx, id);
-        const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
+        const serviceContext = await VENUE_SERVICE.findOrderContext(tx, id);
         const orderFlow = serviceContext?.serviceMode ?? "prepay";
 
         await refuseRecalledWrite(tx, eq(workingOrderLines.workingOrderId, id));
@@ -7195,7 +7164,7 @@ export async function priceForIssuance(
     identities: order.identities,
     ...issueMoment(
       await prepareIssueClock(tx, cfg, clock),
-      await issuancePass(tx, cfg, id, order),
+      await issuancePass(tx, id, order),
       backend,
     ),
   };
@@ -7254,7 +7223,6 @@ export async function issueUnpaidInvoice(
   await linkSalePortions(tx, saleId, invoice.identities);
   await recordSaleReceiptFacts(
     tx,
-    cfg,
     { saleId, workingOrderId: id, counterparty: selected.sale.counterparty },
     undefined,
   );
@@ -7458,21 +7426,20 @@ export function handOverOrder(
   submissionId?: string,
   attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
-  if (submissionId === undefined) return handOver(tx, cfg, id, attendance);
+  if (submissionId === undefined) return handOver(tx, id, attendance);
   return runServiceCommand(
     tx,
     { kind: "bill", workingOrderId: id },
     submissionId,
     "order.collect",
     { workingOrderId: id },
-    () => handOver(tx, cfg, id, attendance),
+    () => handOver(tx, id, attendance),
     cfg.madeHereSink,
   );
 }
 
 async function handOver(
   tx: Transaction,
-  cfg: TradingContext,
   id: string,
   attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
@@ -7486,7 +7453,7 @@ async function handOver(
     .where(eq(workingOrders.id, id));
   if (
     order === undefined ||
-    (order.status !== "settled" && !(await sentUnpaidCounterOrder(tx, cfg, id, order)))
+    (order.status !== "settled" && !(await sentUnpaidCounterOrder(tx, id, order)))
   ) {
     throw new AppError("working_order.not_settled", { workingOrderId: id });
   }
@@ -7517,12 +7484,11 @@ const PAY_AFTER_SENDING: ReadonlySet<string> = new Set(["ticket_then_pay"]);
 
 async function sentUnpaidCounterOrder(
   tx: Transaction,
-  cfg: TradingContext,
   id: string,
   order: { status: string; partyId: string | null },
 ): Promise<boolean> {
   if (order.status !== "placed" || order.partyId !== null) return false;
-  const context = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
+  const context = await VENUE_SERVICE.findOrderContext(tx, id);
   return paysAfterSending(context?.serviceMode);
 }
 
@@ -7564,10 +7530,7 @@ export interface CounterWaitingOrder {
  * The venue's counter orders (no party) that are `placed`, or `settled` with a kitchen ticket and no
  * handover, oldest first.
  */
-export async function listCounterWaiting(
-  deps: WorkingOrderDeps,
-  cfg: TradingContext,
-): Promise<CounterWaitingOrder[]> {
+export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<CounterWaitingOrder[]> {
   return withTransaction(deps.db, async (tx) => {
     const firedOrders = tx.selectDistinct({ id: ticketItems.workingOrderId }).from(ticketItems);
     const rows = await tx
@@ -7610,7 +7573,7 @@ export async function listCounterWaiting(
       rows.map((row) => ({ ...row, label: null })),
     );
     const placedIds = rows.filter((row) => row.status === "placed").map((row) => row.id);
-    const modes = await VENUE_SERVICE.findOrderModes(tx, cfg, placedIds);
+    const modes = await VENUE_SERVICE.findOrderModes(tx, placedIds);
     const issued = await readIssuedSales(tx, placedIds);
     const numbers = await readInvoiceNumbers(
       tx,

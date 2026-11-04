@@ -183,7 +183,7 @@ describe("offerProducts", () => {
       .where(and(eq(zoneServicePolicies.zoneId, first.zoneId), eq(menuPeriods.name, "Always")));
     for (const hour of ["03", "15"]) {
       const served = await withTransaction(suite.db, (tx) =>
-        listZoneOffers(tx, venue.cfg, first.zoneId, {
+        listZoneOffers(tx, first.zoneId, {
           at: new Date(`2026-10-08T${hour}:00:00Z`),
         }),
       );
@@ -232,9 +232,7 @@ describe("offerProducts", () => {
         zoneId: offers.zoneId,
         lines: offers.toOfferLines([{ productId: venue.coffee, quantity: "1" }]),
       });
-      const context = await withTransaction(suite.db, (tx) =>
-        getOrderServiceContext(tx, venue.cfg, id),
-      );
+      const context = await withTransaction(suite.db, (tx) => getOrderServiceContext(tx, id));
       expect(context).toEqual({
         zoneId: offers.zoneId,
         departmentId: expect.any(String),
@@ -246,9 +244,7 @@ describe("offerProducts", () => {
   it("defaults quick-sale offers to prepay without reading the retired till setting", async () => {
     const venue = await seedVenueWithMenu(suite.db);
     const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
-    const context = await withTransaction(suite.db, (tx) =>
-      resolveZoneContext(tx, venue.cfg, offers.zoneId),
-    );
+    const context = await withTransaction(suite.db, (tx) => resolveZoneContext(tx, offers.zoneId));
     expect(context.serviceMode).toBe("prepay");
   });
 
@@ -265,9 +261,7 @@ describe("offerProducts", () => {
         zoneId: offers.zoneId,
         lines: offers.toOfferLines([{ productId: venue.coffee, quantity: "1" }]),
       });
-      const context = await withTransaction(suite.db, (tx) =>
-        getOrderServiceContext(tx, venue.cfg, id),
-      );
+      const context = await withTransaction(suite.db, (tx) => getOrderServiceContext(tx, id));
       expect(context).toEqual({
         zoneId: offers.zoneId,
         departmentId: expect.any(String),
@@ -333,8 +327,8 @@ describe("offerProducts", () => {
       const counter = await offerProducts(tx, venue.cfg, { orderStart: "counter" });
       const tables = await offerProducts(tx, venue.cfg, { zone: "tables" });
       return {
-        counter: await resolveZoneContext(tx, venue.cfg, counter.zoneId),
-        tables: await resolveZoneContext(tx, venue.cfg, tables.zoneId),
+        counter: await resolveZoneContext(tx, counter.zoneId),
+        tables: await resolveZoneContext(tx, tables.zoneId),
       };
     });
     expect(context.counter.serviceMode).toBe("prepay");
@@ -349,7 +343,7 @@ describe("offerProducts", () => {
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
       });
-      return resolveZoneContext(tx, venue.cfg, counter.zoneId);
+      return resolveZoneContext(tx, counter.zoneId);
     });
     expect(context.serviceMode).toBe("ticket_then_pay");
   });

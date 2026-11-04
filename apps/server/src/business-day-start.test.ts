@@ -61,13 +61,13 @@ async function authorRange(
   options: { name?: string; everySeason?: boolean } = {},
 ) {
   return inTx(async (tx) => {
-    const department = await createDepartment(tx, venue.cfg, {
+    const department = await createDepartment(tx, {
       name: options.name ?? "Late service",
       orderStart: "counter",
     });
     const menuId = (await tx.execute<{ id: string }>(sql`select id from catalogues limit 1`))
       .rows[0]!.id;
-    const period = await saveMenuPeriod(tx, venue.cfg, department.id, {
+    const period = await saveMenuPeriod(tx, department.id, {
       name: "Service",
       menuId,
       staffMenuIds: [],
@@ -102,7 +102,7 @@ describe("business-day start scheduling", () => {
     const before = await inTx((tx) => readVenueDetails(tx));
     const serviceAt = new Date("2026-11-03T02:30:00.000Z");
     const serviceBefore = await inTx((tx) =>
-      resolveDepartmentService(tx, venue.cfg, department.id, serviceAt),
+      resolveDepartmentService(tx, department.id, serviceAt),
     );
     expect(serviceBefore.open).toBe(true);
     const response = await request("PATCH", "", {
@@ -110,9 +110,7 @@ describe("business-day start scheduling", () => {
       changes: { dayCutover: "03:00" },
     });
     const answer = await response.json();
-    const after = await inTx((tx) =>
-      resolveDepartmentService(tx, venue.cfg, department.id, serviceAt),
-    );
+    const after = await inTx((tx) => resolveDepartmentService(tx, department.id, serviceAt));
     let resave: unknown = "accepted";
     try {
       await inTx((tx) =>

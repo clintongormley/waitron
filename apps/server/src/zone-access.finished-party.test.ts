@@ -37,9 +37,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionAdjustmentVenue(db);
-    elsewhere = (
-      await inTx(venue, (tx) => createZone(tx, venue.cfg, { name: `Terrace-${randomUUID()}` }))
-    ).id;
+    elsewhere = (await inTx(venue, (tx) => createZone(tx, { name: `Terrace-${randomUUID()}` }))).id;
   },
 });
 
@@ -114,7 +112,7 @@ async function read(partyId: string, lineId: string) {
 async function withZones<T>(zones: string[] | null, fn: () => Promise<T>): Promise<T> {
   const [device] = await venue.db.select().from(devices).where(eq(devices.id, venue.deviceId));
   const profileId = device!.deviceProfileId;
-  const [department] = await listDepartments(venue.db, venue.cfg);
+  const [department] = await listDepartments(venue.db);
   await inTx(venue, (tx) =>
     setProfileServiceAccess(
       tx,
@@ -144,7 +142,7 @@ async function patioZone() {
       .select({ departmentId: zoneServicePolicies.departmentId })
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, venue.tables.zoneId));
-    const zone = await createServiceZone(tx, venue.cfg, {
+    const zone = await createServiceZone(tx, {
       name: `Patio-${randomUUID()}`,
       departmentId: policy!.departmentId,
       orderStart: "table",
@@ -194,9 +192,7 @@ describe("a finished party's dishes are checked against its family's bills' zone
         expectedEdit: await readBillEditState(tx, p.billId),
       }),
     );
-    await inTx(venue, (tx) =>
-      VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, moved.billId, elsewhere),
-    );
+    await inTx(venue, (tx) => VENUE_SERVICE.retargetOrderContext(tx, moved.billId, elsewhere));
     await pay(p.billId);
     await pay(moved.billId);
     await finish(p.partyId, [p.billId, moved.billId]);
@@ -233,9 +229,7 @@ describe("a finished party's dishes are checked against its family's bills' zone
         expect(p.billId < moved.billId).toBe(order === "ascending");
         // Merging needs one service mode, so the emptied bill sits in another zone like the tables'.
         const patio = await patioZone();
-        await inTx(venue, (tx) =>
-          VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, moved.billId, patio),
-        );
+        await inTx(venue, (tx) => VENUE_SERVICE.retargetOrderContext(tx, moved.billId, patio));
         await inTx(venue, async (tx) =>
           mergeBills(tx, venue.cfg, p.billId, moved.billId, {
             operatorId: venue.staffId,
@@ -262,9 +256,7 @@ describe("a finished party's dishes are checked against its family's bills' zone
   it("refuses a merged party's dish read through the finished party it joined", async () => {
     const survivor = await servedParty();
     const merged = await servedParty();
-    await inTx(venue, (tx) =>
-      VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, merged.billId, elsewhere),
-    );
+    await inTx(venue, (tx) => VENUE_SERVICE.retargetOrderContext(tx, merged.billId, elsewhere));
     // Paid before the merge, so the bill stays the merged party's and keeps its own zone.
     await pay(merged.billId);
     await inTx(venue, (tx) =>
@@ -315,9 +307,7 @@ describe("a finished party's dishes are checked against its family's bills' zone
 
   it("still judges an open party by its table's zone, not its bills'", async () => {
     const p = await servedParty();
-    await inTx(venue, (tx) =>
-      VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, p.billId, elsewhere),
-    );
+    await inTx(venue, (tx) => VENUE_SERVICE.retargetOrderContext(tx, p.billId, elsewhere));
     const tableZone = await withZones([venue.tables.zoneId], () => read(p.partyId, p.lines[0]!.id));
     expect(tableZone.status, JSON.stringify(tableZone.json)).toBe(200);
     expect(await withZones([elsewhere], () => read(p.partyId, p.lines[0]!.id))).toMatchObject(

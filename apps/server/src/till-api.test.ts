@@ -4655,11 +4655,11 @@ describe("sale-policy order flow routes", () => {
       mountTillApi(app, deps(suite.db), collect([]));
       const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
       const zone = await withTransaction(suite.db, async (tx) => {
-        const department = await createDepartment(tx, cfg, {
+        const department = await createDepartment(tx, {
           name: `Counter flow ${randomUUID()}`,
           orderStart: "table",
         });
-        const zone = await createServiceZone(tx, cfg, {
+        const zone = await createServiceZone(tx, {
           name: `Counter flow ${randomUUID()}`,
           departmentId: department.id,
         });
@@ -4702,11 +4702,11 @@ describe("sale-policy order flow routes", () => {
       mountTillApi(app, deps(suite.db), collect([]));
       const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
       const zoneId = await withTransaction(suite.db, async (tx) => {
-        const department = await createDepartment(tx, cfg, {
+        const department = await createDepartment(tx, {
           name: `Pay flow ${randomUUID()}`,
           orderStart: "counter",
         });
-        const zone = await createServiceZone(tx, cfg, {
+        const zone = await createServiceZone(tx, {
           name: `Pay flow ${randomUUID()}`,
           departmentId: department.id,
         });

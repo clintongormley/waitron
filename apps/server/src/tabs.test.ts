@@ -667,7 +667,7 @@ describe("readTabLines", () => {
         },
       ]),
     );
-    const pending = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const pending = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(pending.find((line) => line.productId === cafeId)).toMatchObject({
       nutrition: { allergens: { milk: {} }, dietaryDeclarations: ["no_meat"] },
     });
@@ -708,7 +708,7 @@ describe("readTabLines", () => {
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, variantId, quantity: "1" }]),
     );
-    const rows = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const rows = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(rows[0]).toMatchObject({
       productId: variantId,
       nutrition: { allergens: { nuts: { kinds: ["almonds"] } }, dietaryDeclarations: ["kosher"] },
@@ -717,7 +717,7 @@ describe("readTabLines", () => {
     await db.execute(
       sql`update products set allergens = null, dietary_declarations = null where id = ${variantId}`,
     );
-    const inherited = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const inherited = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(inherited[0]!.nutrition).toEqual({
       allergens: { milk: {} },
       dietaryDeclarations: ["halal"],
@@ -738,7 +738,7 @@ describe("readTabLines", () => {
     await asApp(cfg, (tx) => fireAll(tx, cfg, tabId));
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
 
-    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(lines).toHaveLength(3);
     expect(lines[0]).toMatchObject({
       lineNo: 1,
@@ -780,7 +780,7 @@ describe("readTabLines", () => {
     );
 
     await asApp(cfg, (tx) => deleteCourse(tx, postres.id));
-    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     const cafe = lines.find((l) => l.productId === cafeId)!;
     const agua = lines.find((l) => l.productId === aguaId)!;
     // The earliest course fires on send; a later one is held.
@@ -810,7 +810,7 @@ describe("readTabLines", () => {
       ]),
     );
 
-    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(lines).toHaveLength(2);
     const parent = lines.find((l) => l.productId === cafeId)!;
     const child = lines.find((l) => l.productId === aguaId)!;
@@ -840,7 +840,7 @@ describe("readTabLines", () => {
         and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.productId, aguaId)),
       );
 
-    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(lines.find((line) => line.productId === aguaId)).toMatchObject({
       quantity: "0.150",
       priceQuantity: "0.050",
@@ -864,7 +864,7 @@ describe("readTabLines", () => {
         },
       ]),
     );
-    const lines = await asApp(venue.cfg, (tx) => readTabLines(tx, venue.cfg, venue.party.tabId));
+    const lines = await asApp(venue.cfg, (tx) => readTabLines(tx, venue.party.tabId));
     const water = lines.find((line) => line.productId === venue.products.water)!;
     const chips = lines.find((line) => line.productId === venue.products.chips)!;
     expect(chips.parentLineNo).toBe(water.lineNo);
@@ -890,7 +890,7 @@ describe("readTabLines", () => {
       ]),
     );
 
-    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(lines).toHaveLength(2);
     const parent = lines.find((l) => l.productId === cafeId)!;
     const child = lines.find((l) => l.productId === aguaId)!;
@@ -914,7 +914,7 @@ describe("readTabLines", () => {
       ]),
     );
 
-    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     const parent = lines.find((l) => l.productId === cafeId)!;
     const child = lines.find((l) => l.productId === aguaId)!;
     expect(parent).toMatchObject({
@@ -950,7 +950,7 @@ describe("readTabLines", () => {
       .where(eq(workingOrderLines.workingOrderId, tabId))
       .orderBy(workingOrderLines.lineNo);
 
-    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
 
     expect(lines.map(({ lineNo, id }) => ({ lineNo, id }))).toEqual(stored);
     expect(stored).toHaveLength(2);
@@ -961,7 +961,7 @@ describe("readTabLines", () => {
     const { tabId } = await asApp(cfg, (tx) =>
       openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
-    const [line] = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const [line] = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(line!.note).toBeNull();
   });
 
@@ -974,12 +974,12 @@ describe("readTabLines", () => {
         { menuItemId: aguaOffer, quantity: "1", hold: true },
       ]),
     );
-    const before = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const before = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(before[0]).toMatchObject({ sentAt: expect.any(String), firedAt: expect.any(String) });
 
     await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]));
 
-    const [recalled, held] = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const [recalled, held] = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(recalled).toMatchObject({
       lineNo: 1,
       firedAt: null,
@@ -997,7 +997,7 @@ describe("readTabLines", () => {
       addTabRound(tx, cfg, tabId, [{ menuItemId: aguaOffer, quantity: "1" }]),
     );
 
-    const [line] = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const [line] = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(line).toMatchObject({ sentAt: expect.any(String), firedAt: null, state: null });
   });
 
@@ -1009,14 +1009,14 @@ describe("readTabLines", () => {
     await asApp(cfg, (tx) =>
       tx.execute(sql`update products set unit_price = 999 where id = ${cafeId}`),
     );
-    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(lines[0]!.unitPriceGross).toBe("1.50");
   });
 
   it("returns [] for an open tab with no lines", async () => {
     const { cfg, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
-    expect(await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId))).toEqual([]);
+    expect(await asApp(cfg, (tx) => readTabLines(tx, tabId))).toEqual([]);
   });
 
   it("refuses a settled tab and an absent id (tab.not_open — assertTabOpen, an UNLOCKED read)", async () => {
@@ -1027,12 +1027,12 @@ describe("readTabLines", () => {
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
-    await expect(asApp(cfg, (tx) => readTabLines(tx, cfg, tabId))).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => readTabLines(tx, tabId))).rejects.toMatchObject({
       code: "tab.not_open",
       params: { tabId },
     });
     const missing = randomUUID();
-    await expect(asApp(cfg, (tx) => readTabLines(tx, cfg, missing))).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => readTabLines(tx, missing))).rejects.toMatchObject({
       code: "tab.not_open",
       params: { tabId: missing },
     });
@@ -1107,7 +1107,7 @@ describe("listTablesWithState (occupancy)", () => {
 
   it("reports pendingToServe (unserved tab lines), 0 for a free table, and carries zoneId", async () => {
     const { cfg, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId } = await setupVenue();
-    const zone = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Comedor" }));
+    const zone = await asApp(cfg, (tx) => createZone(tx, { name: "Comedor" }));
     await asApp(cfg, async (tx) => {
       // Through the table definition: `departments.id` and `.created_at` are `$defaultFn` generators.
       const [department] = await tx
@@ -1277,7 +1277,7 @@ it("returns a tab line's stored staff names and options answers", async () => {
         optionSnapshots,
       })
       .where(eq(workingOrderLines.workingOrderId, tabId));
-    expect((await readTabLines(tx, cfg, tabId))[0]).toMatchObject({
+    expect((await readTabLines(tx, tabId))[0]).toMatchObject({
       name: "Recorded coffee (Large)",
       optionSnapshots,
     });
@@ -1971,7 +1971,7 @@ describe("when a station does not allow changes after sending", () => {
     );
     await expect(asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]))).resolves.toBeUndefined();
 
-    const [line] = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const [line] = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(line).toMatchObject({ sentAt: expect.any(String), state: null, note: "sin hielo" });
   });
 });

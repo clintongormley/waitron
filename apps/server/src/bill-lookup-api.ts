@@ -65,7 +65,7 @@ export function mountBillLookupApi(app: Hono, deps: TillApiDeps, log: Logger, ru
       const session = await requireSession(deps, c);
       const q = requiredSearch(c.req.query("q"));
       const bills = await withTransaction(deps.db, async (tx) =>
-        lookUpBills(tx, q, await orderZoneCondition(tx, deps.cfg, session.device.deviceProfileId)),
+        lookUpBills(tx, q, await orderZoneCondition(tx, session.device.deviceProfileId)),
       );
       return c.json({ bills });
     }),

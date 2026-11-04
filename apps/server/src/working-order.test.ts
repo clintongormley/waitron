@@ -558,13 +558,13 @@ describe("a sold variant line carries its product and relative variant names", (
         .where(eq(workingOrderLines.workingOrderId, orderId));
       await fireLines(tx, cfg, orderId, fired);
       return {
-        tabLines: await readTabLines(tx, cfg, orderId),
+        tabLines: await readTabLines(tx, orderId),
         stationItems: (await listStationQueue(tx, cocina.id))[0]!.items,
         expoItems: boardItems(await readScopedPassBoard(tx, cfg, EVERY)),
       };
     });
     // `getHeldOrder` opens its own transaction, so it runs outside the block above.
-    const held = await getHeldOrder({ db }, cfg, orderId);
+    const held = await getHeldOrder({ db }, orderId);
 
     expect(tabLines.map((l) => l.name)).toEqual([STAFF]);
     expect(stationItems.map((i) => i.name)).toEqual([KITCHEN]);
@@ -595,9 +595,9 @@ describe("a sold variant line carries its product and relative variant names", (
         null,
         { zoneId },
       );
-      return { seeded, tabLines: await readTabLines(tx, cfg, orderId) };
+      return { seeded, tabLines: await readTabLines(tx, orderId) };
     });
-    const held = await getHeldOrder({ db }, cfg, orderId);
+    const held = await getHeldOrder({ db }, orderId);
 
     expect(tabLines).toHaveLength(1);
     expect(tabLines[0]).toMatchObject({
@@ -1532,7 +1532,7 @@ describe("getHeldOrder", () => {
 
       await db.execute(sql`update working_orders set status = ${status} where id = ${id}`);
       const read = status === "open" ? getHeldOrder : getPlacedCounterOrder;
-      await expect(read({ db }, cfg, id)).rejects.toMatchObject({
+      await expect(read({ db }, id)).rejects.toMatchObject({
         code: "order.service_context_missing",
         params: { workingOrderId: id },
       });
@@ -1554,14 +1554,14 @@ describe("getHeldOrder", () => {
       });
       await db.execute(sql`update working_orders set status = ${status} where id = ${id}`);
       const read = status === "open" ? getHeldOrder : getPlacedCounterOrder;
-      expect((await read({ db }, cfg, id)).lines.map((l) => l.quantity)).toEqual([
+      expect((await read({ db }, id)).lines.map((l) => l.quantity)).toEqual([
         "1.000",
         "1.000",
         "1.000",
       ]);
       await db.execute(sql`delete from working_line_contexts where working_order_line_id in
       (select id from working_order_lines where working_order_id = ${id} and line_no = 3)`);
-      await expect(read({ db }, cfg, id)).rejects.toMatchObject({
+      await expect(read({ db }, id)).rejects.toMatchObject({
         code: "order.service_context_missing",
         params: { workingOrderId: id },
       });
@@ -1579,7 +1579,7 @@ describe("getHeldOrder", () => {
     await db.execute(sql`update working_order_lines set product_id = null
       where working_order_id = ${id}`);
 
-    expect((await getHeldOrder({ db }, cfg, id)).lines).toEqual([
+    expect((await getHeldOrder({ db }, id)).lines).toEqual([
       { productId: null, quantity: "1.000", makeAt: null, optionSnapshots: [] },
     ]);
   });
@@ -1764,7 +1764,7 @@ describe("getHeldOrder", () => {
       update units set name = ${JSON.stringify({ [LOCALE]: "kilogram" })}
       where id = ${unitId}`);
 
-    const order = await getHeldOrder({ db }, cfg, id);
+    const order = await getHeldOrder({ db }, id);
     const stored = await db.execute<{
       quantity: string;
       line_total: number;
@@ -1834,7 +1834,7 @@ describe("getHeldOrder", () => {
       ],
     });
 
-    const order = await getHeldOrder({ db }, cfg, id);
+    const order = await getHeldOrder({ db }, id);
 
     // Each of the two coffees is its own line, with its own two picks.
     const coffee = expect.objectContaining({
@@ -1894,7 +1894,7 @@ describe("getHeldOrder", () => {
       await republishMenus(tx);
     });
 
-    const order = await getHeldOrder({ db }, cfg, id);
+    const order = await getHeldOrder({ db }, id);
     expect(order.lines).toEqual([
       expect.objectContaining({
         menuItemId: premiumCafeOfferId,
@@ -1946,7 +1946,7 @@ describe("getHeldOrder", () => {
       })}
       where id = ${cafeId}`);
 
-    const order = await getHeldOrder({ db }, cfg, id);
+    const order = await getHeldOrder({ db }, id);
 
     expect(order.lines.map((line) => line.product?.allergens)).toEqual([
       { gluten: { kinds: ["wheat" as const] } },
@@ -1966,7 +1966,7 @@ describe("getHeldOrder", () => {
     });
 
     const offers = await counterOffers(cfg);
-    const order = await getHeldOrder({ db }, cfg, id);
+    const order = await getHeldOrder({ db }, id);
     // Saved selections and quantities return in lineNo order; a quantity reads back at the three
     // places `thousandthsToDecimal` renders.
     expect({
@@ -2002,9 +2002,9 @@ describe("getHeldOrder", () => {
   });
 
   it("throws working_order.not_found for an unknown id", async () => {
-    const { cfg } = await setupVenue();
+    await setupVenue();
     const missing = randomUUID();
-    await expect(getHeldOrder({ db }, cfg, missing)).rejects.toMatchObject({
+    await expect(getHeldOrder({ db }, missing)).rejects.toMatchObject({
       code: "working_order.not_found",
       params: { workingOrderId: missing },
     });
@@ -2016,7 +2016,7 @@ describe("getHeldOrder", () => {
     await parkProducts(cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
     await setStatus(id, "settled");
 
-    await expect(getHeldOrder({ db }, cfg, id)).rejects.toMatchObject({
+    await expect(getHeldOrder({ db }, id)).rejects.toMatchObject({
       code: "working_order.not_found",
       params: { workingOrderId: id },
     });
@@ -2027,7 +2027,7 @@ describe("getHeldOrder", () => {
     const foreign = await seedForeignNodeOrder(cfg);
 
     // The by-id lookup reaches the foreign-node order like the node's own — a promoted node inherits it.
-    const order = await getHeldOrder({ db }, cfg, foreign);
+    const order = await getHeldOrder({ db }, foreign);
     expect(order.id).toBe(foreign);
     expect(order.lines).toEqual([]);
   });
@@ -2896,7 +2896,7 @@ describe("updateHeldOrder", () => {
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
     await parkProducts(cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
-    const copy = await getHeldOrder({ db }, cfg, id);
+    const copy = await getHeldOrder({ db }, id);
     const line = copy.lines[0]!.workingOrderLineId!;
 
     await updateProducts(cfg, id, {
@@ -2926,20 +2926,20 @@ describe("updateHeldOrder", () => {
     const [order] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
     expect(order!.label).toBeNull();
     // A fresh copy carries the revision the first save left.
-    expect((await getHeldOrder({ db }, cfg, id)).revision).toBe(copy.revision + 1);
+    expect((await getHeldOrder({ db }, id)).revision).toBe(copy.revision + 1);
   });
 
   it("edits an open order from ANOTHER node of the same tenant — reads are venue-wide", async () => {
     const { cfg, cafeId, zoneId } = await setupVenue();
     const foreign = await seedForeignNodeOrder(cfg);
     // An edit prices from the order's own zone, which a raw order row does not carry.
-    await withTransaction(db, (tx) => VENUE_SERVICE.recordOrderContext(tx, cfg, foreign, zoneId));
+    await withTransaction(db, (tx) => VENUE_SERVICE.recordOrderContext(tx, foreign, zoneId));
 
     // The foreign-node order is edited like the node's own: the whole-basket replacement lands.
     await expect(
       updateProducts(cfg, foreign, { lines: [{ productId: cafeId, quantity: "1" }] }),
     ).resolves.toBe(1);
-    const after = await getHeldOrder({ db }, cfg, foreign);
+    const after = await getHeldOrder({ db }, foreign);
     expect(after.lines).toHaveLength(1);
     expect(after.lines[0]!.productId).toBe(cafeId);
     expect(Number(after.lines[0]!.quantity)).toBe(1);
@@ -3339,7 +3339,7 @@ describe("basket-wide modifier resolution (perf)", () => {
     });
 
     expect(listOffers).toHaveBeenCalledTimes(1);
-    expect(listOffers.mock.calls[0]![2]).toBe(offers.zoneId);
+    expect(listOffers.mock.calls[0]![1]).toBe(offers.zoneId);
   });
 
   it("resolves the catalogue once for a note edit of a stored line", async () => {
@@ -3354,7 +3354,7 @@ describe("basket-wide modifier resolution (perf)", () => {
       id,
       lines: [{ productId: cafeId, quantity: "1", options: [answer], note: "sin sal" }],
     });
-    const held = await getHeldOrder({ db }, cfg, id);
+    const held = await getHeldOrder({ db }, id);
 
     const contentLanguages = vi.spyOn(catalogue, "readContentLanguages");
     const listOffers = vi.spyOn(VENUE_SERVICE, "listZoneOffers");
@@ -3392,7 +3392,7 @@ describe("basket-wide modifier resolution (perf)", () => {
       id,
       lines: [{ productId: cafeId, quantity: "1", options: [answer] }],
     });
-    const held = await getHeldOrder({ db }, cfg, id);
+    const held = await getHeldOrder({ db }, id);
     const listOffers = vi.spyOn(VENUE_SERVICE, "listZoneOffers");
 
     await updateProducts(cfg, id, {
@@ -3456,7 +3456,7 @@ describe("basket-wide modifier resolution (perf)", () => {
     });
 
     expect(listOffers).toHaveBeenCalledTimes(1);
-    expect(listOffers.mock.calls[0]![2]).toBe(zoneId);
+    expect(listOffers.mock.calls[0]![1]).toBe(zoneId);
   });
 });
 
@@ -7579,7 +7579,7 @@ describe("frozen answers through a fractional quantity edit", () => {
         zoneId,
         lines: [{ menuItemId, quantity: "0.500", options }],
       });
-      const held = await getHeldOrder({ db }, cfg, result.id);
+      const held = await getHeldOrder({ db }, result.id);
       expect(held.lines).toHaveLength(1);
       const frozen = [
         {
@@ -9614,8 +9614,8 @@ describe("a variant is sold as the product it is", () => {
         .where(eq(workingOrderLines.workingOrderId, orderId));
       return {
         stored: stored!.variantDescriptions,
-        tab: (await readTabLines(tx, twoLocales, orderId)).map((l) => l.name),
-        tabUnitPrecision: (await readTabLines(tx, twoLocales, orderId)).map((l) => l.unitPrecision),
+        tab: (await readTabLines(tx, orderId)).map((l) => l.name),
+        tabUnitPrecision: (await readTabLines(tx, orderId)).map((l) => l.unitPrecision),
         station: (await listStationQueue(tx, barra.id))[0]!.items.map((i) => i.name),
         expo: (await passItems(tx, twoLocales)).map((i) => i.name),
         receipt: await readStoredOrder(tx, orderId).then(({ gross, identities }) =>
@@ -9849,7 +9849,7 @@ describe("a variant is sold as the product it is", () => {
         { menuItemId: cafeOfferId, quantity: "1" },
       ],
     });
-    const held = await getHeldOrder({ db }, cfg, id);
+    const held = await getHeldOrder({ db }, id);
     expect(held.lines.map((l) => [l.menuItemId, l.variantId, l.product?.variantId])).toEqual([
       [wine.offerId, wine.wine175, wine.wine175],
       [cafeOfferId, undefined, undefined],

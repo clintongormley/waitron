@@ -34,8 +34,8 @@ async function seedLocation(name: string): Promise<LocationId> {
   return locationId;
 }
 
-async function department(cfg: { locationId: LocationId }, name: string): Promise<string> {
-  return scoped(async (tx) => (await createDepartment(tx, cfg, { name })).id);
+async function department(name: string): Promise<string> {
+  return scoped(async (tx) => (await createDepartment(tx, { name })).id);
 }
 
 async function switchOn(departmentId: string): Promise<void> {
@@ -47,8 +47,8 @@ async function switchOn(departmentId: string): Promise<void> {
 
 describe("readLateSendNeedsManager", () => {
   it("answers false for a new department and true once the setting is on", async () => {
-    const cfg = { locationId: await seedLocation("Late send read") };
-    const id = await department(cfg, "Restaurant");
+    await seedLocation("Late send read");
+    const id = await department("Restaurant");
     expect(await scoped((tx) => readLateSendNeedsManager(tx, id))).toBe(false);
     await switchOn(id);
     expect(await scoped((tx) => readLateSendNeedsManager(tx, id))).toBe(true);
@@ -57,10 +57,10 @@ describe("readLateSendNeedsManager", () => {
 
 describe("listLateSendManagerDepartmentIds", () => {
   it("lists this venue's active departments with the setting on", async () => {
-    const cfg = { locationId: await seedLocation("Late send list") };
-    const a = await department(cfg, "A");
-    await department(cfg, "B");
-    const c = await department(cfg, "C");
+    await seedLocation("Late send list");
+    const a = await department("A");
+    await department("B");
+    const c = await department("C");
     for (const id of [a, c]) await switchOn(id);
     await db.update(departments).set({ active: false }).where(eq(departments.id, c));
     expect(await scoped((tx) => listLateSendManagerDepartmentIds(tx))).toEqual([a]);

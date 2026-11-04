@@ -238,9 +238,10 @@ it("clears owned daily dates and incoming destinations without reopening their o
         .where(inArray(stationDayStates.stationId, [f.gone, f.other])),
     ).toEqual(rows.slice(2).map((row) => ({ ...row, sendsToStationId: null })));
 
-    expect(
-      (await (await routingAt(tx, f.cfg, at)).makers(null, [product!.id])).get(product!.id),
-    ).toEqual({ kind: "made", route: { kind: "station", stationId: f.home } });
+    expect((await (await routingAt(tx, at)).makers(null, [product!.id])).get(product!.id)).toEqual({
+      kind: "made",
+      route: { kind: "station", stationId: f.home },
+    });
     expect(
       (await routingModel(tx, at)).stationTimes.find((row) => row.stationId === f.other),
     ).toMatchObject({ status: { open: false, why: "closed_by_hand" }, closedSendsTo: f.home });
@@ -446,7 +447,7 @@ it("omits deleted stations from public routing and screen offerings while retain
     expect((await readDeviceKitchenScreens(tx, did))[0]?.stations.map((row) => row.id)).toEqual([
       f.other,
     ]);
-    expect((await (await routingAt(tx, f.cfg, at)).stations()).get(f.gone)).toMatchObject({
+    expect((await (await routingAt(tx, at)).stations()).get(f.gone)).toMatchObject({
       active: false,
       byHand: "closed",
     });

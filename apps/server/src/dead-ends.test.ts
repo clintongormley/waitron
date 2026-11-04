@@ -49,7 +49,6 @@ describe("findDeadEnds", () => {
     const answer = await inTx(v, (tx) =>
       findDeadEnds(
         tx,
-        v.cfg,
         v.counter.zoneId,
         [
           { key: "lager", productId: v.productId("Caña"), quantity: "2", makeAt: null },
@@ -71,7 +70,6 @@ describe("findDeadEnds", () => {
     const chosen = await inTx(v, (tx) =>
       findDeadEnds(
         tx,
-        v.cfg,
         v.counter.zoneId,
         [{ key: "lager", productId: v.productId("Caña"), quantity: "2", makeAt: bar!.id }],
         at,
@@ -84,7 +82,6 @@ describe("findDeadEnds", () => {
     const switchedOff = await inTx(v, (tx) =>
       findDeadEnds(
         tx,
-        v.cfg,
         v.counter.zoneId,
         [{ key: "lager", productId: v.productId("Caña"), quantity: "2", makeAt: null }],
         at,
@@ -105,7 +102,6 @@ describe("findDeadEnds", () => {
     const replaced = await inTx(v, (tx) =>
       findDeadEnds(
         tx,
-        v.cfg,
         v.counter.zoneId,
         [{ key: "lager", productId: v.productId("Caña"), quantity: "2", makeAt: null }],
         at,

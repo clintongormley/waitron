@@ -64,11 +64,9 @@ beforeEach(async () => {
   at("13:50");
   v = await setupPartyVenue(suite.db);
   const f = await run(async (tx) => {
-    const department = (
-      await createDepartment(tx, v.cfg, { name: "Restaurant", orderStart: "counter" })
-    ).id;
-    const zone = (await createServiceZone(tx, v.cfg, { name: "Dining", departmentId: department }))
+    const department = (await createDepartment(tx, { name: "Restaurant", orderStart: "counter" }))
       .id;
+    const zone = (await createServiceZone(tx, { name: "Dining", departmentId: department })).id;
     const menus: { period: string; item: string }[] = [];
     for (const name of ["Lunch", "Afternoon"]) {
       const menu = await createCatalogue(tx, { name });
@@ -78,7 +76,7 @@ beforeEach(async () => {
         grossPrice: name === "Lunch" ? "12.00" : "15.00",
       });
       await publishWorkingMenu(tx, menu.id);
-      const period = await saveMenuPeriod(tx, v.cfg, department, {
+      const period = await saveMenuPeriod(tx, department, {
         name,
         menuId: menu.id,
         staffMenuIds: [],
@@ -144,10 +142,10 @@ beforeEach(async () => {
   managerCookie = await cookie(manager, "1234");
   staffCookie = await cookie(staff, "5555");
   const deli = await run(async (tx) => {
-    const id = (await createDepartment(tx, v.cfg, { name: "Deli", orderStart: "counter" })).id;
+    const id = (await createDepartment(tx, { name: "Deli", orderStart: "counter" })).id;
     return {
       id,
-      zone: (await createServiceZone(tx, v.cfg, { name: "Deli counter", departmentId: id })).id,
+      zone: (await createServiceZone(tx, { name: "Deli counter", departmentId: id })).id,
     };
   });
   deliCookie = await cookie(manager, "1234", deli.id, deli.zone);
@@ -223,7 +221,7 @@ describe("the till keeps a zone open today", () => {
   beforeEach(async () => {
     at("23:00");
     await run(async (tx) => {
-      await configureZone(tx, v.cfg, {
+      await configureZone(tx, {
         zoneId: zone,
         departmentId: department,
         orderStart: "table",
@@ -240,7 +238,6 @@ describe("the till keeps a zone open today", () => {
       );
       await replaceZoneClosedWeek(
         tx,
-        v.cfg,
         zone,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -413,7 +410,6 @@ describe("the till keeps a zone open today", () => {
     await run((tx) =>
       replaceZoneClosedWeek(
         tx,
-        v.cfg,
         zone,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
         0,

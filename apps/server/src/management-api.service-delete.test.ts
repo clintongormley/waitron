@@ -113,8 +113,8 @@ beforeEach(async () => {
 });
 async function target() {
   return run(async (tx) => {
-    const department = await createDepartment(tx, v.cfg, { name: "Events", orderStart: "table" });
-    const zone = await createServiceZone(tx, v.cfg, {
+    const department = await createDepartment(tx, { name: "Events", orderStart: "table" });
+    const zone = await createServiceZone(tx, {
       name: "Garden",
       departmentId: department.id,
     });
@@ -440,11 +440,11 @@ it.each([
 describe("stale floor identifiers", () => {
   async function floorTarget(deleted = true) {
     const f = await run(async (tx) => {
-      const department = await createDepartment(tx, v.cfg, {
+      const department = await createDepartment(tx, {
         name: randomUUID(),
         orderStart: "table",
       });
-      const zone = await createServiceZone(tx, v.cfg, {
+      const zone = await createServiceZone(tx, {
         name: randomUUID(),
         departmentId: department.id,
       });

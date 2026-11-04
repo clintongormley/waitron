@@ -48,8 +48,8 @@ async function seedLocation(name: string): Promise<LocationId> {
 
 async function departmentWithTables(cfg: { locationId: LocationId }, name: string, count = 1) {
   return scoped(async (tx) => {
-    const department = await createDepartment(tx, cfg, { name, orderStart: "table" });
-    const zone = await createServiceZone(tx, cfg, { name, departmentId: department.id });
+    const department = await createDepartment(tx, { name, orderStart: "table" });
+    const zone = await createServiceZone(tx, { name, departmentId: department.id });
     const tables = await tx
       .insert(diningTables)
       .values(

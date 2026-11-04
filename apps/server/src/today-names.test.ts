@@ -647,8 +647,8 @@ async function deliveredCounterOrder(zoneId: string, tableId: string): Promise<s
   );
   const setZone = (orderStart: typeof saved.orderStart, paidWhen: typeof saved.paidWhen) =>
     inTx(v, async (tx) => {
-      await setZoneSalePolicyOverride(tx, v.cfg, zoneId, "orderStart", orderStart);
-      await setZoneSalePolicyOverride(tx, v.cfg, zoneId, "paidWhen", paidWhen);
+      await setZoneSalePolicyOverride(tx, zoneId, "orderStart", orderStart);
+      await setZoneSalePolicyOverride(tx, zoneId, "paidWhen", paidWhen);
     });
   await setZone("counter", "prepay");
   const id = randomUUID();

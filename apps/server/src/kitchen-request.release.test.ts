@@ -356,7 +356,7 @@ describe("A773 waiter request: release", () => {
           venue.party.tabId,
           [requested!.workingOrderLineId, held!.workingOrderLineId],
           undefined,
-          routingOnce(tx, venue.cfg, laterAt),
+          routingOnce(tx, laterAt),
         );
       const row = async () =>
         tx.select().from(ticketItems).where(eq(ticketItems.id, requested!.id));

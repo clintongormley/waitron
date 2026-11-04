@@ -133,7 +133,7 @@ export async function rerouteHeldAtRelease(
     return new Map();
   }
   const resolver = await routing();
-  const zoneId = (await VENUE_SERVICE.findOrderContext(tx, cfg, orderId))?.zoneId ?? null;
+  const zoneId = (await VENUE_SERVICE.findOrderContext(tx, orderId))?.zoneId ?? null;
   const routes = await resolver.makers(zoneId, [...new Set(dishes.map((row) => row.productId!))]);
   const moving = dishes.flatMap((row) => {
     const outcome = routes.get(row.productId!);
