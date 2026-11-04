@@ -102,7 +102,7 @@ interface Seeded {
   menuId: string;
   categoryId: string;
   tableId: string;
-  /** The café's and the water's offers in the table's zone, which is what a round sells. */
+  /** The coffee's and the water's offers in the table's zone, which is what a round sells. */
   coffeeOffer: string;
   waterOffer: string;
   offerFor: (productId: string) => string;
@@ -797,17 +797,17 @@ describe("readTabLines", () => {
 
     await asApp(cfg, (tx) => deleteCourse(tx, postres.id));
     const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
-    const coffeeProduct = lines.find((l) => l.productId === coffeeId)!;
-    const waterProduct = lines.find((l) => l.productId === waterId)!;
+    const coffeeLine = lines.find((l) => l.productId === coffeeId)!;
+    const waterLine = lines.find((l) => l.productId === waterId)!;
     // The earliest course fires on send; a later one is held.
-    expect(coffeeProduct.courseId).toBe(entrantes.id);
-    expect(coffeeProduct.firedAt).not.toBeNull();
-    expect(waterProduct.courseId).toBe(postres.id);
-    expect(waterProduct.course).toEqual({ id: postres.id, name: "Postres", displayOrder: 1 });
-    expect(waterProduct.firedAt).toBeNull();
+    expect(coffeeLine.courseId).toBe(entrantes.id);
+    expect(coffeeLine.firedAt).not.toBeNull();
+    expect(waterLine.courseId).toBe(postres.id);
+    expect(waterLine.course).toEqual({ id: postres.id, name: "Postres", displayOrder: 1 });
+    expect(waterLine.firedAt).toBeNull();
     // Held versus fired is `firedAt`: a held line has a ticket item too, still "queued".
-    expect(coffeeProduct.state).toBe("queued");
-    expect(waterProduct.state).toBe("queued");
+    expect(coffeeLine.state).toBe("queued");
+    expect(waterLine.state).toBe("queued");
   });
 
   it("carries state: null for the child line of an extra no cell decides", async () => {
@@ -2718,12 +2718,12 @@ async function tabWithFiredMains() {
     [2, false],
   ]);
   await asApp(cfg, (tx) => fireTabLines(tx, cfg, tabId, [2]));
-  const [water, coffeeProduct] = await db
+  const [water, coffeeLine] = await db
     .select({ id: workingOrderLines.id })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
-  return { ...venue, tabId, waterLineId: water!.id, coffeeLineId: coffeeProduct!.id };
+  return { ...venue, tabId, waterLineId: water!.id, coffeeLineId: coffeeLine!.id };
 }
 
 /** A tab whose only round was held: one café, with a held ticket item and nothing sent. */

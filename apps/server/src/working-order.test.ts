@@ -2804,7 +2804,7 @@ describe("updateHeldOrder", () => {
 
     // Re-priced: the new total differs from the parked one AND equals the GROSS basket total for the
     // replaced lines (`priceBasket(newLines, "2026-09-27").total`, computed independently of the persisted column) —
-    // water 2.00 + café 1.50 = 3.50 gross, where the parked coffee×2 was 3.00. Asserting against the
+    // water 2.00 + coffee 1.50 = 3.50 gross, where the parked coffee×2 was 3.00. Asserting against the
     // gross pricer (not the summed line_total column) is what fails if the held total reverts to net.
     const grossAfter = await grossBasketTotal(newLines);
     expect(grossAfter).toBe("3.50");
@@ -3322,10 +3322,10 @@ describe("basket-wide modifier resolution (perf)", () => {
     const { cfg, coffeeId, waterId, catalogueId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
       await addExtraList(tx, catalogueId, coffeeId, "Bacon");
-      const coffeeProduct = await addOptionList(tx, coffeeId, "Cooking");
+      const coffeeOptions = await addOptionList(tx, coffeeId, "Cooking");
       await addExtraList(tx, catalogueId, waterId, "Hielo");
-      const waterProduct = await addOptionList(tx, waterId, "Tamano");
-      return { coffeeProduct, waterProduct };
+      const waterOptions = await addOptionList(tx, waterId, "Tamano");
+      return { coffeeOptions, waterOptions };
     });
     const offers = await counterOffers(cfg);
     const listOffers = vi.spyOn(VENUE_SERVICE, "listZoneOffers");
@@ -3337,21 +3337,21 @@ describe("basket-wide modifier resolution (perf)", () => {
           productId: coffeeId,
           quantity: "1",
           options: [
-            { listId: seeded.coffeeProduct.listId, labelId: seeded.coffeeProduct.labelIds[0]! },
+            { listId: seeded.coffeeOptions.listId, labelId: seeded.coffeeOptions.labelIds[0]! },
           ],
         },
         {
           productId: coffeeId,
           quantity: "2",
           options: [
-            { listId: seeded.coffeeProduct.listId, labelId: seeded.coffeeProduct.labelIds[0]! },
+            { listId: seeded.coffeeOptions.listId, labelId: seeded.coffeeOptions.labelIds[0]! },
           ],
         },
         {
           productId: waterId,
           quantity: "1",
           options: [
-            { listId: seeded.waterProduct.listId, labelId: seeded.waterProduct.labelIds[0]! },
+            { listId: seeded.waterOptions.listId, labelId: seeded.waterOptions.labelIds[0]! },
           ],
         },
       ],
@@ -3445,10 +3445,10 @@ describe("basket-wide modifier resolution (perf)", () => {
       });
       await addExtraList(tx, catalogueId, coffeeId, "Bacon");
 
-      const coffeeProduct = await addOptionList(tx, coffeeId, "Cooking");
-      const waterProduct = await addOptionList(tx, waterId, "Tamano");
+      const coffeeOptions = await addOptionList(tx, coffeeId, "Cooking");
+      const waterOptions = await addOptionList(tx, waterId, "Tamano");
       await republishMenus(tx);
-      return { waterOfferId: waterOffer.id, coffeeProduct, waterProduct };
+      return { waterOfferId: waterOffer.id, coffeeOptions, waterOptions };
     });
     const listOffers = vi.spyOn(VENUE_SERVICE, "listZoneOffers");
 
@@ -3460,21 +3460,21 @@ describe("basket-wide modifier resolution (perf)", () => {
           menuItemId: coffeeOfferId,
           quantity: "1",
           options: [
-            { listId: seeded.coffeeProduct.listId, labelId: seeded.coffeeProduct.labelIds[0]! },
+            { listId: seeded.coffeeOptions.listId, labelId: seeded.coffeeOptions.labelIds[0]! },
           ],
         },
         {
           menuItemId: coffeeOfferId,
           quantity: "2",
           options: [
-            { listId: seeded.coffeeProduct.listId, labelId: seeded.coffeeProduct.labelIds[0]! },
+            { listId: seeded.coffeeOptions.listId, labelId: seeded.coffeeOptions.labelIds[0]! },
           ],
         },
         {
           menuItemId: seeded.waterOfferId,
           quantity: "1",
           options: [
-            { listId: seeded.waterProduct.listId, labelId: seeded.waterProduct.labelIds[0]! },
+            { listId: seeded.waterOptions.listId, labelId: seeded.waterOptions.labelIds[0]! },
           ],
         },
       ],
@@ -6914,7 +6914,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
     await withTransaction(db, async (tx) => {
       const bacon = await addExtra(tx, catalogueId, coffeeId, "Bacon");
       const tableId = await makeTable(tx, cfg);
-      // line 1 = café (parent), line 2 = bacon (child), line 3 = water (plain).
+      // line 1 = coffee (parent), line 2 = bacon (child), line 3 = water (plain).
       const tabId = await openExtrasTab(tx, cfg, tableId, [
         {
           productId: coffeeId,

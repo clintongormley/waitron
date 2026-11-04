@@ -663,12 +663,12 @@ describe("KDS-3 expo routes: the All stations board + whole-course ready", () =>
     // A course is released when every one of its dishes is fired.
     const inCourse = (courseId: string | null) =>
       order.items.filter((item) => (item.course?.id ?? null) === courseId);
-    const starterCourse = inCourse(starterCourseId);
-    const mainCourse = inCourse(mainCourseId);
-    expect(starterCourse.length).toBeGreaterThan(0);
-    expect(mainCourse.length).toBeGreaterThan(0);
-    expect(starterCourse.every((item) => item.firedAt !== null)).toBe(true);
-    expect(mainCourse.every((item) => item.firedAt !== null)).toBe(true);
+    const starterItems = inCourse(starterCourseId);
+    const mainItems = inCourse(mainCourseId);
+    expect(starterItems.length).toBeGreaterThan(0);
+    expect(mainItems.length).toBeGreaterThan(0);
+    expect(starterItems.every((item) => item.firedAt !== null)).toBe(true);
+    expect(mainItems.every((item) => item.firedAt !== null)).toBe(true);
     expect(items.get(SOUP)!.firedAt).not.toBeNull();
     expect(items.get(STEAK)!.firedAt).not.toBeNull();
 
