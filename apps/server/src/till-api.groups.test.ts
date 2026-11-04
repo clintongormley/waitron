@@ -1044,13 +1044,17 @@ describe("the line-editing routes act as the session's operator", () => {
   it("puts a fired line's raised quantity in a new fired group credited to the operator", async () => {
     const party = await withGroups();
     const tab = await tabLines(party.tabId);
-    const cana = tab.lines.find((line) => line.groupId === party.fired.id)!;
+    const beerLine = tab.lines.find((line) => line.groupId === party.fired.id)!;
 
-    const changed = await call("PUT", `/api/working-orders/${party.tabId}/lines/${cana.lineNo}`, {
-      quantity: "2",
-      revision: tab.revision,
-      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
-    });
+    const changed = await call(
+      "PUT",
+      `/api/working-orders/${party.tabId}/lines/${beerLine.lineNo}`,
+      {
+        quantity: "2",
+        revision: tab.revision,
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
+      },
+    );
 
     expect(changed.status).toBe(200);
     const added = (await dishLines(party.tabId)).at(-1)!;
@@ -1193,7 +1197,7 @@ describe("POST /api/parties/:id/served, /unserved and /groups/:gid/served", () =
         .from(workingOrderLines)
         .where(eq(workingOrderLines.id, held)),
     );
-    const [canaLine] = await inTx(venue, (tx) =>
+    const [beerLine] = await inTx(venue, (tx) =>
       tx
         .select({ lineNo: workingOrderLines.lineNo })
         .from(workingOrderLines)
@@ -1221,7 +1225,7 @@ describe("POST /api/parties/:id/served, /unserved and /groups/:gid/served", () =
         400,
         refusal("tab.serve_quantity_invalid", {
           tabId: party.tabId,
-          lineNo: canaLine!.lineNo,
+          lineNo: beerLine!.lineNo,
           quantity: "1",
         }),
       ],
@@ -1231,7 +1235,7 @@ describe("POST /api/parties/:id/served, /unserved and /groups/:gid/served", () =
         400,
         refusal("tab.serve_quantity_invalid", {
           tabId: party.tabId,
-          lineNo: canaLine!.lineNo,
+          lineNo: beerLine!.lineNo,
           quantity: "2",
         }),
       ],

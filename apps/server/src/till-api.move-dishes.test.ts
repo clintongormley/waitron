@@ -193,9 +193,9 @@ describe("A803 move dishes route:", () => {
 
   it("moving to an existing bill answers 200 with that bill's id", async () => {
     const { partyId, first, second } = await twoBills();
-    const [paella] = lineIdsOf(first);
+    const [riceLine] = lineIdsOf(first);
 
-    const answer = await post(first, await wellFormed(partyId, first, [paella!], second));
+    const answer = await post(first, await wellFormed(partyId, first, [riceLine!], second));
 
     expect(answer.status).toBe(200);
     expect(answer.json).toEqual({ billId: second });
@@ -297,7 +297,7 @@ describe("A803 move dishes route:", () => {
 
   it("a paid dish is 409 bill.line_paid", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
-    const [paella] = lineIdsOf(tabId);
+    const [riceLine] = lineIdsOf(tabId);
     await takeBillPayment(
       {
         db: venue.db,
@@ -319,7 +319,7 @@ describe("A803 move dishes route:", () => {
       operator,
     );
 
-    const answer = await post(tabId, await wellFormed(partyId, tabId, [paella!], null));
+    const answer = await post(tabId, await wellFormed(partyId, tabId, [riceLine!], null));
 
     expect(answer.status).toBe(409);
     expect(answer.json).toMatchObject({ code: "bill.line_paid" });

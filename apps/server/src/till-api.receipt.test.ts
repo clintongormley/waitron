@@ -215,10 +215,10 @@ async function setupVenue(): Promise<{
   venueReceiptPrinter = null;
   const { each, operatorId, supervisorId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
+    const drinksCategory = await createCategory(tx, { name: "Bebidas" });
     const product = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinksCategory.id,
       name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
@@ -237,7 +237,7 @@ async function setupVenue(): Promise<{
     await publishWorkingMenu(tx, cat.id);
     await tx.insert(routingCells).values({
       locationId: cfg.locationId,
-      categoryId: bebidas.id,
+      categoryId: drinksCategory.id,
       stationId: null,
       noPreparation: true,
     });
