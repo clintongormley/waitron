@@ -26,7 +26,7 @@ import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 
 import { damageIndexes, damagePages } from "../test/damaged-database.js";
 
-it("a held database with a damaged table (no recovery): the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
+it("a held database with a damaged table: the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
   const f = await heldSetup();
   damagePages(venueDb(f), "department_days");
   expect(await labelOf(f)).toBe("occupied");

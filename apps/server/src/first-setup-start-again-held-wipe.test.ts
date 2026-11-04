@@ -37,7 +37,7 @@ import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
 import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
 import { runStagedRestore } from "./restore-request.js";
 
-it("a held setup database with no recovery: the summary answers and Start again deletes it with no password", async () => {
+it("a held setup database: the summary answers and Start again deletes it with no password", async () => {
   const f = await heldSetup();
   const { ids, actions } = await withoutSignIn(f);
   await expect(actions.startAgainSummary(ids)).resolves.toEqual({ reached: "fiscal-finished" });
@@ -46,7 +46,7 @@ it("a held setup database with no recovery: the summary answers and Start again 
   await noConfirmations(f);
 });
 
-it("a held setup database with no recovery, when the box knows no modules, refuses the summary and Start again setup.not_ready before reading what it holds, and nothing changes", async () => {
+it("a held setup database, when the box knows no modules, refuses the summary and Start again setup.not_ready before reading what it holds, and nothing changes", async () => {
   const f = await heldSetup();
   const host = { ...f.host, modules: undefined } as unknown as Held["host"];
   const { ids, actions } = await withoutSignIn(f, host);
@@ -60,7 +60,7 @@ it("a held setup database with no recovery, when the box knows no modules, refus
   expect(holdingsRead.calls).toBe(0);
 });
 
-it("a held setup database with no recovery, its venue.db missing and trading settings saved, refuses the summary and Start again setup.not_ready for state/trading.env, and nothing changes", async () => {
+it("a held setup database, its venue.db missing and trading settings saved, refuses the summary and Start again setup.not_ready for state/trading.env, and nothing changes", async () => {
   const f = await heldSetup({ tradingSettings: true });
   for (const name of ["venue.db", "venue.db-wal", "venue.db-shm"])
     await rm(join(f.roots.venueDir, name), { force: true });
@@ -146,7 +146,7 @@ it("control: the same fresh-box restore beside a missing setup database that was
   expect(await exists(join(f.roots.stateDir, "trading.env"))).toBe(false);
 }, 180_000);
 
-it("a power cut during a held wipe with no recovery: the next start finishes the deletion", async () => {
+it("a power cut during a held wipe: the next start finishes the deletion", async () => {
   const f = await heldSetup();
   const { ids } = await withoutSignIn(f);
   let removed = 0;

@@ -874,7 +874,6 @@ describe("a start on a real full disk", () => {
       expect(page.status).toBe(200);
       expect(page.body).toContain(TITLE);
       expect(page.body).toContain(DELETED);
-      expect(page.body).not.toContain("left by a recovery from backup");
       expect(page.body).toContain("Free space on the box&#39;s disk: 0 MB.");
       expect(readFileSync(join(stateDir, "recovery.json"))).toEqual(stateBytes);
       expect([inodeOf(recoveryLock), inodeOf(venueLock)]).toEqual(inodes);

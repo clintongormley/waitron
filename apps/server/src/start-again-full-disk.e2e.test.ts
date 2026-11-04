@@ -104,7 +104,7 @@ it("on a full disk, Continue's password step answers 507 storage.disk_full", asy
   });
 });
 
-it("in the held state with no recovery, on a full disk with the box's spare file, the spare is not released, and the summary and Start again answer 507 storage.disk_full, deleting nothing", async (ctx) => {
+it("in the held state, on a full disk with the box's spare file, the spare is not released, and the summary and Start again answer 507 storage.disk_full, deleting nothing", async (ctx) => {
   const small = needDisk(ctx);
   const f = await heldSetup();
   expect(realpathSync(f.roots.venueDir).startsWith(`${process.env.TMPDIR}/`)).toBe(true);

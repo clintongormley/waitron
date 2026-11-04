@@ -1,5 +1,7 @@
 # A1127: on a full disk, the box frees a recovery's copy with the help of a spare file
 
+**2026-11-04, A1131bc slice 4:** the discarded recovery's emptying, the repair page's release before Start again, the originals walk and `WAITRON_SPARE_SPACE_DIR` are deleted; only the start releases the spare, and what this design says about the others no longer applies.
+
 **2026-10-29, A1206:** the start-again note and its series-name time floor are retired; what this design says about them, including under "Which walks see it", no longer applies.
 
 **2026-10-28, A1127 slice 2:** the start also releases the spare on a nearly full disk; a release writes `spare-space.released`, which holds the till stop until a start, the free-space watch or Box status's Free button writes the spare back (`conventions-data.md`, "The box's spare file").

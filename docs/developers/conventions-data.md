@@ -3372,13 +3372,13 @@ disk, it still has the room to start and take the venue lock. Within the server,
 it, through `releaseSpare`:
 
 - **The start** (`releaseSpareToStart`, `apps/server/src/node-entry.ts`), before first-setup
-  resolution, whose inspection opens the database: when the lowest free space of the configured
-  and the starting folders is under 8 MiB, or under `FULL_DISK_BYTES` (16 MiB) when the recovery
+  resolution, whose inspection opens the database: when the lower free space of the configured
+  state and venue folders is under 8 MiB, or under `FULL_DISK_BYTES` (16 MiB) when the recovery
   state's last error was `storage.disk_full`. A start at the recovery level still releases, then
   serves the recovery page.
 
 **Old backups go before the spare.** Just before the start's release, `runEntry` calls
-`deleteOldBackupsAtStart` (`apps/server/src/start-backup-room.ts`, called by `runEntry` just before the release). It does anything only under `FULL_DISK_BYTES` (16 MiB) free on the venue
+`deleteOldBackupsAtStart` (`apps/server/src/start-backup-room.ts`). It does anything only under `FULL_DISK_BYTES` (16 MiB) free on the venue
 folder's disk, the one its deletions free, and only with a backup room note that passes every check ([The backup room note](#the-backup-room-note)). It
 deletes old backups toward the start's floor (256 MiB) when the deletable ones reach it, otherwise
 toward the spare plus 16 MiB (24 MiB), and deletes nothing when even that is out of reach. The
