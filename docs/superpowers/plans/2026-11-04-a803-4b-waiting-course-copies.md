@@ -962,3 +962,208 @@ the flan would arrive unfired in a held group and the source would have no held 
   (finding 10).
 
 Read, not run: findings 2–5, 9, 11 and 12, and every line number in the code map.
+
+## Build record (4b)
+
+Written 2026-11-04 at `f86819f209`, on main `9c80824143`. The text above is the plan as reviewed and
+is left as written, including the parts this section corrects. The review reports it names are outside
+the repository, in `~/waitron-campaign-c/a803-4b-reviews/`; the ledger is
+`~/waitron-campaign-c/item-a803-4b-ledger.md`, and the owner's answers are in
+`~/waitron-campaign-c/questions.md`.
+
+### What was built against the plan
+
+Tasks 0 to 10c were carried out. **Move this bill** to a table and **Split a table** now take a bill
+holding held dishes. The other table gets its own held copy of each held group the moving dishes were
+in, numbered from that table's next number. Each table fires its own copy. The MOVED slip lists the
+held dishes under HOLD where their HOLD ticket printed. **Move to the counter** still refuses, with new
+words. The server is the whole change apart from the till's refusal words and a client comment (D12).
+Task 10a's diff of `packages/db/src/schema` and `packages/db/drizzle` against `9c80824143` printed
+nothing: no schema change.
+
+| Task | Commit | Note |
+| --- | --- | --- |
+| 1a | `ebfc5bd60a` | `copyHeldGroups` |
+| 1b | `78eee621c7` | drafts follow the copy |
+| fixes to 1a and 1b | `7758ecaa83` | from their reviews |
+| 2a | `db720af7b3` | Move this bill |
+| 2b | `cff85e389c` | Split a table |
+| 3 | `22e2cbaca6` | tests only, none of them found a defect |
+| 4 | `ac68e1359d` | rollback and routes |
+| 5 | `db1ef44785` | tests of the kitchen paper only; the code already printed it |
+| 6 | `ecd14e9a72` | races |
+| 7 | `af87a9ba55` | the counter's words |
+| fixes to 2b | `cb1e7c885d` | `errors.ts` description, `splitTable` comment, Split attendance case |
+| 8 | `7e37cf630f` | guides as first proposed |
+| fix to 2a | `5531068c9b` | pins that a free table's copy comes after the arriving dishes |
+| guide cut | `71adba2863` | the owner's shorter passages |
+| fixes to Tasks 3 to 8 | `f86819f209` | tests only |
+| 9, 10a, 10b, 10c | no commit | reports in the folder named above; the paper LOOK is in `~/waitron-campaign-c/a803-4b-look/` |
+
+Task 10a ran at `71adba2863`; its guard suites all exited 0 (`task-10a.md` has each command and count).
+The paper LOOK ran at `7e37cf630f` and is decoded print jobs, not paper. The later commits change only
+guides and tests (`git diff --stat 7e37cf630f f86819f209`), so no later code changed what it read.
+
+### Departures from the plan
+
+| Plan said | What happened | Why |
+| --- | --- | --- |
+| Per-task review by a high-effort reviewer after each task | Tasks 3 to 8 had one review, over all their commits (`tasks-3-8.md`) | The ledger records no reason. Tasks 1a, 1b, 2a and 2b each had their own |
+| The guides carry Question 1 items 3 and 4 | Task 8 wrote them; `71adba2863` replaced both with the ~16:05 passages | The owner found them too long and asked for only what a person would not find by trying |
+| ES kitchen paragraph names «marcada FIRE» | The new text names no marker | Spanish paper prints `*** MARCHAR ***` (the Task 9 LOOK). The cut made the question moot for the new text; the older lines became A1328 |
+| Task 11 runs finding 12's probe | The Tasks 3 to 8 reviewer ran it (`tasks-3-8.md`, I1), at `71adba2863` and at `9c80824143`; it was not run again | Its output was already on record. It confirmed finding 12 and found more: the later ticket has no FIRE mark. Filed as A1327 |
+| Task 6 has 3 race cases | 5 tests | The move-and-fire and move-and-Split pairs each run in both orders |
+| Task 6 records the code the loser gets | `party.out_of_date`. The commands take turns on the write lock, and the one asked first won in all 65 race runs the review read (13 runs of 5 cases) | The plan left this to be measured |
+| 16 controls in Task 10b, 8 in Task 10c | 28 and 10 | Reviews added controls for their own fixes. Two of them, the copy moved after the MOVED slips, ran in both tasks |
+| Task 10a diffs against `7d3900e7a4` | Against `9c80824143` | The branch was rebased onto it in Task 0 (A1301 S18b) |
+| `held_leaves_party` hits only the plan's stay list | One more hit, `waiting-course-copy.test.ts:941` | It is this slice's own new case, "Move this bill to the counter still refuses a held dish, writing nothing", a counter path |
+| Control tables recorded in the ledger | Kept in the review reports and copied below | The ledger points to the reports |
+
+Review findings not listed above: `m2`, `m4`, `m5`, `m6`, `m7` of `tasks-3-8.md` and finding F1 of
+`task-10b.md` were fixed in `f86819f209`; `m1` and `m3` are corrected below; `m8` went to the owner as a
+note on the open guide question (questions.md, ~16:15).
+
+### The owner's answers
+
+- **Question 1.** The counter refusal and the guide heading are approved as written, in both languages
+  (~14:00). The two guide passages were cut to the text lane C posted at ~16:05, at the owner's request.
+  **Approval of those passages is still open** when this was written: nothing after ~16:15 answers
+  "4b guide y".
+- **Question 2.** (A): a moved held group takes the new table's next number (~14:05).
+
+### Corrections to the plan's text
+
+**Finding 1's reason is wrong.** It says an empty held group is not harmless because the release
+reminder counts it as the one waiting. It does not: both callers drop empty groups before calling
+`releaseReminder` (`order-groups.ts:1882-1883` and `:2288-2289` at `71adba2863`), and that branch is
+reached only by direct calls in `current-orders.test.ts`. Removing an emptied group protects two other
+things: it no longer sits in the Current orders answer, and it cannot linger as held. Whether the till
+draws such a group was not run. With `removeEmptiedHeldGroups` removed (`tasks-3-8.md`, m1):
+
+| Read | Real code | Mutant |
+| --- | --- | --- |
+| source group state | `removed` | `held` |
+| `readCurrentOrders().groups` | `[["other","fired",1]]` | `[["other","fired",1],["G","held",0]]` |
+| `.reminder`, `readReleaseReminders`, `readHeldCounts` | null, null, none | null, null, none |
+| `fireGroup` on it | `group.not_found` | `management.request_invalid` |
+| state after `releaseHeldWorkOf` | `removed` | `held` |
+
+**Task 3's control inherits that.** It says "`removeEmptiedHeldGroups` removed → cases 6, 7 red". The
+control is "`removeEmptiedHeldGroups` removed → case 6 red". Case 7 stays green, correctly: it pins that
+the source stops reminding, that a copy must be held to be reminded about, and that the due time runs
+from the dishes ahead of the copy.
+
+**Finding 9 names the wrong place.** The refusal when firing a copy at a party with no allergy answer
+comes from `prepareAllergyRelease` in `apps/server/src/party-allergy.ts`, which `fireGroup` reaches
+first, not from the call in `releaseGroup`. Removing `releaseGroup`'s call left the case green; making
+the check do nothing turned it red. The case is sound.
+
+**D11's "the second to run is refused" is true, not always for the reason it gives** (`tasks-3-8.md`, m3).
+In the first race case the loser never reaches the revision check: it is refused by the check that the
+bill has left the party (`bill-actions.ts`, `refuseMovedParty`), which also answers `party.out_of_date`.
+The same goes for "split asked first" of the move-and-Split pair. The set has no gap: with the revision
+check removed from `guardPathParty` the stale-revision case, both move-and-fire orders and "move asked
+first" go red, and with `splitTable`'s check removed "move asked first" goes red.
+
+**Finding 12 said "by reading" and "may".** Run, it does happen, and the later ticket loses its FIRE mark
+too: A1327.
+
+**Plan review round 3's three small points**, which the ledger held for this record:
+`createStation(tx, input)` takes no context argument since `9c80824143`; D9's attendance captures are "up
+to three", because no capture is written when the party has no bill left (seen again in `cb1e7c885d`);
+Question 1 item 4's ES should read «bajo EN ESPERA», which the shipped passage now does.
+
+**Control 9's claim.** The plan says the dish "takes the arrival path" with no copy made. Both cases passed
+their earlier assertions and only the source group's `removed` state went red (`task-10b.md`, Note A).
+
+### Line numbers that moved
+
+Task 0's rebase and later work moved these from what the plan cites: `readSentItems` `:1490` to `:1484`;
+`readOnHoldTickets`' filter `:1566` to `:1560`; the A803 entry in `docs/backlog.md` `:2020` to `:2025`
+before this record's edits; the ES guide's second «HOLD CHANGED» from about `:332` to `:328`. Other line
+numbers above were not re-checked one by one.
+
+### Deletion controls
+
+**These ran at `71adba2863`, before `f86819f209`, which changed tests only.** So a line number in these
+tables is that commit's. Task 10b: 28 controls, all 28 red for the reason claimed and green after restore
+(`task-10b.md`). Task 10c: 10 controls, 14 control-and-case pairs, 13 red and 1 green, the green one
+being case 7 under `removeEmptiedHeldGroups` removed, explained above (`task-10c.md`). Both reports are in
+`~/waitron-campaign-c/a803-4b-reviews/`, and each states its limits; the tables are copied from them unchanged.
+
+Files in Task 10b's tables: W = `waiting-course-copy.test.ts`, PTA = `party-table-actions.test.ts`,
+OD = `order-drafts.db.test.ts`.
+
+**Task 10b, the plan's 16 controls**
+
+| # | Control (the edit) | Case | Red message | Green after restore |
+| --- | --- | --- | --- | --- |
+| 1 | 1a: hold-station intersection removed; the copy takes all of G's recorded stations (`new Set(held ?? [])`) | W "copies the recorded HOLD stations that hold a moved dish" | 1 failed, 42 skipped. W:365 `expect(await holdStationsOf(copyId)).toEqual([grill])`: `expected [ …(2) ] to deeply equal [ Array(1) ]`, one extra station id | 1 passed, 42 skipped |
+| 2 | 1a: `removeEmptiedHeldGroups` call removed from `copyHeldGroups` | W "removes a source group the copy empties" | 1 failed, 42 skipped. W:339 `expected 'held' to be 'removed'` | 1 passed, 42 skipped |
+| 3 | 1a: source-order `orderBy` reversed (position descending) | W "keeps two held groups of one course as two copies" | 1 failed, 42 skipped. W:311 `expect([...copies.keys()]).toEqual([g2, g3])`: the same two ids in reverse order | 1 passed, 42 skipped |
+| 4 | 1a: `remindAt: null` replaced by G's `remindAt` | W "leaves a snooze behind" | 1 failed, 42 skipped. W:528 `expected '2026-11-04T14:34:12.269Z' to be null` | 1 passed, 42 skipped |
+| 5 | 1a: recalled filter `not(isRecalledDish(tx))` removed from the select | W "ignores a recalled dish, …" | 1 failed, 42 skipped. W:507 `expect([...copies]).toEqual([])`: `expected [ [ …(2) ] ] to deeply equal []` | 1 passed, 42 skipped |
+| 6 | 1b: `bill_id` filter dropped from the draft rewrite | W "leaves a staying bill's draft on the source group" | 1 failed, 42 skipped. W:682 `toEqual(before)`: the staying draft's `joinGroupId` and `afterGroupId` changed | 1 passed, 42 skipped |
+| 7 | 1b: recalled-row `join_group_id` update removed | W "points the moving bill's draft at the copy" | 1 failed, 42 skipped. W:664 `recalledRows` `toEqual`: first row's `joinGroupId` differs from the copy | 1 passed, 42 skipped |
+| 8 | 1b: recalled-row `after_group_id` update removed | W "points the moving bill's draft at the copy" | 1 failed, 42 skipped. W:664 `recalledRows` `toEqual`: the hand-made row's `afterGroupId` differs from the copy | 1 passed, 42 skipped |
+| 9 | 2a: "keep" clears held lines as "refuse" does (the `clearGroups` filter loses `!staysHeld`) | W "Move this bill to a free table takes a held dish" and "… to a seated table …" | 2 failed, 41 skipped. W:894 and W:928 `expected 'held' to be 'removed'` on the source group. See note A | 2 passed, 41 skipped |
+| 10 | 2a: copy call removed from the free-table branch | W "… to a free table …" | 1 failed, 42 skipped. W:883 group list: `expected [ [ …(2) ] ] to deeply equal [ [ …(2) ], [ …(2) ] ]`, the held row missing | 1 passed, 42 skipped |
+| 11 | 2a: copy call removed from the seated branch | W "… to a seated table …" | 1 failed, 42 skipped. W:919 group list: the last held row missing | 1 passed, 42 skipped |
+| 12 | 2a: seated branch, copy moved to before `groupArrivingDishes` | W "… to a seated table …" | 1 failed, 42 skipped. W:919 group list: the held copy before the arrival's fired group | 1 passed, 42 skipped |
+| 13 | 2a: counter destination given "keep" | W "Move this bill to the counter still refuses a held dish" | 1 failed, 42 skipped. W:940 `promise resolved "{ partyId: null, …(1) }" instead of rejecting` | 1 passed, 42 skipped |
+| 14 | 2b: copy call removed from `splitTable` | W "Split a table takes a bill holding a held dish"; PTA Changed check 1 "Split a table takes a bill holding a dish held for the kitchen, …" | 2 failed, 130 skipped. W:973 group list: the held row missing. PTA:1455 `expect(flan.groupId).not.toBe(source)`: `expected '<id>' not to be '<id>'` | 2 passed, 130 skipped |
+| 15 | 2b: copy moved to before `groupArrivingDishes` in `splitTable` | W "Split a table takes a bill holding a held dish" | 1 failed, 42 skipped. W:973 group list: the held copy before the arrival's fired group | 1 passed, 42 skipped |
+| 16 | 2b: `splitTable` given "refuse" again | W "Split a table takes …"; PTA Changed check 1; OD Changed check 2's "split table" row | 3 failed, 428 skipped. All three: `AppError: group.held_leaves_party`, thrown at `refuseHeldLeavingParty` (`working-order.ts:5022`), reached from `splitTable` (`table-actions.ts:320`) | 3 passed, 428 skipped |
+
+**Task 10b, controls added by review fixes**
+
+| # | Control (the edit) | Case | Red message | Green after restore |
+| --- | --- | --- | --- | --- |
+| 17 | 1a review I1: the copy's number read from the source party (`nextGroupNumber(tx, fromPartyId)`) | W "copies a held group shared by a leaving and a staying bill" and "keeps two held groups …" | 2 failed, 41 skipped. W:272 `displayNumber` expected 2, received 3. W:320 numbers expected 2, 3, received 3, 4 | 2 passed, 41 skipped |
+| 18 | 1a review I1: the number not advanced between copies (`displayNumber++` becomes `displayNumber`) | W "keeps two held groups …" | 1 failed, 42 skipped. W:320 second copy's number expected 3, received 2 | 1 passed, 42 skipped |
+| 19 | 1a review I2: source-party filter `eq(orderGroups.partyId, fromPartyId)` dropped | W "ignores a recalled dish, … and a dish of another party's held group" | 1 failed, 42 skipped. W:507 `expected [ [ …(2) ] ] to deeply equal []` | 1 passed, 42 skipped |
+| 20 | 1a review I3: recorded-HOLD check `held?.has(…)` dropped | W "gives the copy no HOLD station that never got HOLD paper" | 1 failed, 42 skipped. W:390 `expected [ Array(1) ] to deeply equal []` | 1 passed, 42 skipped |
+| 21 | 1a review I4: attendance not passed to the two `lines_moved` events | W "records attendance for each event it writes" | 1 failed, 42 skipped. W:420 `expected [ { source: 'draft', …(6) } ] to deeply equal [ { source: 'draft', …(6) }, …(2) ]`: the two events' captures missing, the `removed` event's still there | 1 passed, 42 skipped |
+| 22 | 1b review I1: every source group pointed at the first copy in the draft rewrite | W "points each draft reference at its own group's copy" | 1 failed, 42 skipped. W:724 `draftLineRows` `toEqual`: the second group's `joinGroupId` and `afterGroupId` name the first copy | 1 passed, 42 skipped |
+| 23 | 1b review M1: `state = 'open'` filter dropped from the draft rewrite | W "leaves a discarded draft of the moving bill as it was" | 1 failed, 42 skipped. W:744 `toEqual(before)`: the discarded draft's `joinGroupId` changed | 1 passed, 42 skipped |
+| 24 | 2a review I1: free-table branch, copy moved to before `groupArrivingDishes` | W "Move this bill to a free table …" | 1 failed, 42 skipped. W:883 group list: held before fired | 1 passed, 42 skipped |
+| 25 | 2a review m1: a stray second empty held group inserted at the destination by the copy (my edit; the review named no mutant) | OD "a recalled companion travels …", all three rows | 3 failed, 296 skipped. OD:4795 `expected [ { …(14) }, { …(14) } ] to have a length of 1 but got 2` | 3 passed, 296 skipped |
+| 26 | 2b review M1: `splitTable` passes `undefined` for attendance to the copy | W "Split a table records attendance for the copy's event" | 1 failed, 42 skipped. W:1014 `expected [] to deeply equal [ { source: 'draft', …(6) } ]` | 1 passed, 42 skipped |
+| 27 | 2b review I1: `splitTable`'s copy moved to after `withMovedSlips` has queued the slips | W "Split a table: the leaving bill's MOVED slip lists its held dish under HOLD" | 1 failed, 42 skipped. W:1708 expected `GRUPO 2 · DESSERTS`, received `GRUPO 3 · DESSERTS` | 1 passed, 42 skipped |
+| 28 | 2b review I1: Move this bill's copy moved to after `enqueueMovedSlips`, both table branches | W "the MOVED slip lists only the moved dishes, …"; also W "moving the bill again: the second MOVED slip …" | 1 failed, 1 passed, 41 skipped. W:1576 expected `GRUPO 2 · DESSERTS`, received `GRUPO 3 · DESSERTS`. **The second case stayed green: see Findings** | 2 passed, 41 skipped |
+
+**Task 10c** (numbers there are the plan's case numbers for that task)
+
+| Control (the edit) | Case | Red message | Green after restore |
+| --- | --- | --- | --- |
+| T3: `copyHeldGroups` inserts the copy with `state: "fired"` and a `firedAt` | T3.1 dish held by hand stays held | `Tests 2 failed \| 41 skipped (43)`. `:1072` `expected { …(14) } to match object { …(3) }`: `firedAt` null vs a time, `state` "held" vs "fired" | `2 passed \| 41 skipped` |
+| same | T3.3 firing the copy sends none of the source's | Same run. `AppError: group.not_held` from `requireHeldGroup` (`order-groups.ts:2620`): `fire(b, copyId)` is refused because the copy is already fired. This is a domain refusal, not a failed `expect` | same run |
+| T3: one copy for all source groups instead of one per group (later sources reuse the first copy) | T3.2 two held groups stay two | `Tests 1 failed \| 42 skipped (43)`. `:1097` `expected [ [ …(2) ], [ …(2) ] ] to deeply equal [ [ …(2) ], [ …(2) ], [ …(2) ] ]`: the second held row is missing | `1 passed \| 42 skipped` |
+| T3: the `removeEmptiedHeldGroups` call in `copyHeldGroups` deleted | T3.6 moving again removes the emptied one | `Tests 1 failed \| 1 passed \| 41 skipped (43)`. `:1209` `expected { …(14) } to match object { …(2) }`: `state` "removed" vs "held" | `2 passed \| 41 skipped` |
+| same | T3.7 release reminder names the copy | **STAYED GREEN** (the "1 passed" in that run). The plan claims red. See the finding below | same run |
+| T3: the lines' `group_id` update in `copyHeldGroups` deleted (moved dish left in G) | T3.8 each table shows its own part | `Tests 1 failed \| 42 skipped (43)`. `:1291` `expected [ [ …(3) ] ] to deeply equal [ [ …(3) ] ]`: the new table's copy has `[]` rows, and the test's `copyId`, read from the Tarta's line, is the source group G. The source-side assertion above it passed, so the new table's side is what catches this | `1 passed \| 42 skipped` |
+| T4: `throw marker` deleted from the `printHoldTickets` spy (test file edit; it still calls the real one) | T4.2 failure after the copy rolls back (Move this bill) | `Tests 2 failed \| 41 skipped (43)`. `:1385` `expected { …(13) } to deeply equal { …(13) }`: `rowsOf` differs (the move committed: new `partyId`, revision 2 vs 3, `removed` and `lines_moved` events, notices) | `2 passed \| 41 skipped` |
+| same | T4.2 (Split a table) | Same run, same message: `rowsOf` differs | same run |
+| T5: `holdPrintedAt: null` in the copy | T5.7 second MOVED slip | `Tests 1 failed \| 42 skipped (43)`. `:1726` `expected [ [ '*** MOVIDO ***', …(7) ] ] to deeply equal [ [ '*** MOVIDO ***', …(10) ] ]`: `EN ESPERA`, `GRUPO 2 · DESSERTS`, `1.000 x TARTA` missing | `1 passed \| 42 skipped` |
+| T5: station copy deleted (`recordHeldPaper` line in `copyHeldGroups`) | T5.1 MOVED slip | `Tests 2 failed \| 41 skipped (43)`. `:1576` same `(7)` vs `(10)` message: the Tarta and its HOLD heading are missing | `2 passed \| 41 skipped` |
+| same | T5.3 later FIRE | Same run. `:1623` `expected [ [ 'Paper grill 2', …(6) ] ] to deeply equal [ [ '*** MARCHAR ***', …(7) ] ]`: the FIRE ticket is unmarked | same run |
+| T5, from the 2b review: `copyHeldGroups` after `enqueueMovedSlips` in `moveBillOnce` (both call sites moved) | T5.1 MOVED slip | `Tests 1 failed \| 42 skipped (43)`. `:1576` `expected [ [ '*** MOVIDO ***', …(10) ] ] to deeply equal [ [ '*** MOVIDO ***', …(10) ] ]`: expected `GRUPO 2 · DESSERTS`, printed `GRUPO 3 · DESSERTS`, the source's number | `1 passed \| 42 skipped` |
+| T5, from the 2b review: `copyHeldGroups` after `withMovedSlips` returns in `splitTable` | T5.6 Split a table's MOVED slip | `Tests 1 failed \| 42 skipped (43)`. `:1708` `expected [ '1.000 x BURG', 'EN ESPERA', …(3) ] to deeply equal [ '1.000 x BURG', 'EN ESPERA', …(3) ]`: expected `GRUPO 2 · DESSERTS`, printed `GRUPO 3 · DESSERTS` | `1 passed \| 42 skipped` |
+| T6: `guardPathParty` skipped in `moveBillOnce` (a plain read of the bill instead) | T6.1 two moves from one revision | `Tests 1 failed \| 42 skipped (43)`. `judge` `:1793` `expected [ 'left', 'right' ] to have a length of 1 but got 2`: both moves committed | `1 passed \| 42 skipped` |
+
+**Further mutations, from the test fixes in `f86819f209`.** That commit makes the paper and race cases expect
+the group number itself (2, or 3 for the third table and the source's FIRE) rather than read it from the
+copy's row, gives the third table a group of its own so the second-move case can tell the two numbers apart,
+makes the ordered race cases check that the command asked first won, and makes the race commands carry the
+edit state read before they were asked. As the fix round reported them; this record did not run them again:
+
+| Mutation | Result |
+| --- | --- |
+| The copy numbered 1000 | The printed-number cases go red (`tasks-3-8.md` m2: before this commit every paper case stayed green) |
+| Control 28, the copy moved after the MOVED slips | The second-move case now goes red (`task-10b.md` F1: before this commit it stayed green) |
+| Which command is asked first reversed | `expected 'fire' to be 'move'` (`tasks-3-8.md` m5: by reading, before this commit each case would pass on its other branch) |
+
+Not run, as `task-10b.md` lists: `item.firedAt === null` dropped (no case covers it, and a review saw that
+mutant survive at `ebfc5bd60a`), and mutants the 1b and 2a reviews found change no behaviour. `task-10c.md`'s
+late-copy control exercises only the free-table branch of Move this bill. No control re-ran on `f86819f209`
+beyond the three above.

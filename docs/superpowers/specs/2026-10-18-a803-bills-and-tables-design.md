@@ -130,6 +130,7 @@ Boards 08–10.
   still waiting, and fires it separately. (Today a bill holding held dishes cannot leave its party;
   the block is the table-wide held group, `docs/superpowers/specs/2026-09-28-table-actions-design.md`
   around line 380.) The kitchen gets a MOVED notice for the dishes that changed table only.
+  _(2026-11-04: that "Today" describes the time before A803 slice 4b, which lifted the block for a move to a table; only the counter still refuses.)_
 - Guest counts for both tables are set in the same window.
 - The four awkward cases (owner, 2026-10-18, "Yes"):
   1. **A part-paid bill** can go whole, payments and all. Its paid portions cannot be picked off on

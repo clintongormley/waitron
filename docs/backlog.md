@@ -1908,6 +1908,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   portions with different amounts already show as separate rows, but each row reads the same. Draw
   the amount in its unit, as paper does.
 
+- **A1327. A dish waiting for the pass that changes table gets no MOVED line, and its later ticket prints with no FIRE mark (seen in A803 slice 4b's review; predates it).** The cook has a HOLD ticket for the dish,
+  hears nothing about the move, then gets an unmarked ticket that can read as a second dish. Whether
+  a cook may be left with two tickets for one dish is the owner's to judge.
+  [Detail](backlog/kitchen.md#a1327-a-dish-waiting-for-the-pass-that-changes-table-gets-no-moved-line-and-its-later-ticket-prints-with-no-fire-mark)
+
+- **A1328. Older lines of the Spanish kitchen guide name markers Spanish kitchen paper does not print (seen in A803 slice 4b's look; predates it).** They say «marcada FIRE» and «HOLD CHANGED»
+  where the paper prints `*** MARCHAR ***` and `EN ESPERA CAMBIADO`.
+  [Detail](backlog/kitchen.md#a1328-older-lines-of-the-spanish-kitchen-guide-name-markers-spanish-kitchen-paper-does-not-print)
+
 ### The till, devices and table service
 
 - **A Spanish invoice recipient's locality or province holding a comma is refused only at the
@@ -2022,9 +2031,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   there. [Detail](backlog/till.md#a922-discard-on-a-tables-bill-from-parked-orders-fails)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
-  2026-10-18).** Owner-approved design; A773-1 has landed. Remaining slices: 4b, waiting dishes that
-  leave with their own copy of the course; 4c, Split a table through the same picker, with A590;
-  pre-bills through A446, which no longer waits for asesor S2.
+  2026-10-18).** Owner-approved design; A773-1 has landed. Slice 4b, waiting dishes that leave with
+  their own copy of the course, has landed (#PR-4B); it leaves open A1327. Remaining: 4c, Split a table
+  through the same picker, with A590; pre-bills through A446, which no longer waits for asesor S2.
   [Detail](backlog/till.md#a803-bills-and-tables-one-portion-per-order-line-one-bill-switcher-one-picker)
 
 - **A1191. Pay items lists one row per portion (left open by A803 slice 1, D15).** "12 ×
