@@ -5,7 +5,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { LeaveController } from "@waitron/ui";
 import type { DashboardApi, MenuPreview, MenuPublicationsAnswer } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
-import { fill, setLocale, t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import {
   cleanupWidgets,
   closeReportsDelivered,
@@ -504,7 +504,9 @@ for (const p of SCHEDULE_PATHS) {
         if (answered === "once it is back") {
           await answer();
           await expectClosed();
-          expect(app.api.getMenuPublications).toHaveBeenCalledTimes(reads + 1);
+          await expect
+            .poll(() => app.api.getMenuPublications.mock.calls.length)
+            .toBe(outcome === "refused" ? reads + 2 : reads + 1);
           if (outcome === "accepted") {
             expect(tableCell(panel, p.acceptedCell)?.textContent ?? "").not.toContain(
               p.acceptedTime,
@@ -549,7 +551,9 @@ for (const p of SCHEDULE_PATHS) {
           expect(submitAction(dialog).loading).toBe(false);
           expect(app.leave.coordinator.isDirty()).toBe(true);
           expect(p.writeOf(app)).toHaveBeenCalledTimes(1);
-          expect(app.api.getMenuPublications).toHaveBeenCalledTimes(reads + 1);
+          await expect
+            .poll(() => app.api.getMenuPublications.mock.calls.length)
+            .toBe(outcome === "refused" ? reads + 2 : reads + 1);
         }
       });
     }
@@ -610,11 +614,11 @@ for (const p of SCHEDULE_PATHS) {
 const lateRefusal = (panel: Panel) =>
   panel.shadowRoot!.querySelector<HTMLElement>('[data-test="late-refusal"]');
 const lateText = (panel: Panel) => lateRefusal(panel)?.textContent?.trim();
+const LATE_WORDS =
+  "An earlier schedule change may not have gone through. Check Scheduled versions and make the change again if it is not there.";
 const footerMessage = (dialog: Dialog) =>
   dialog.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!.error;
 const occurrenceField = (dialog: Dialog) => dialog.querySelector('[name="occurrence"]');
-const lateWords = (code: string) =>
-  `An earlier schedule change did not go through. ${codeMessage(code)}`;
 
 const REPEATED = {
   code: "menu_publication.time_repeated",
@@ -630,10 +634,16 @@ const EVERY_REFUSAL = [
   PAST,
   { code: "menu_publication.time_skipped", params: {} },
   { code: "menu_publication.overtakes_queued", params: {} },
+  {
+    code: "menu_publication.overtakes_queued",
+    params: { overtaken: [{ versionId: "v-lunch-1" }] },
+  },
   { code: "menu_publication.not_queued", params: {} },
   { code: "menu_publication.not_found", params: {} },
   { code: "menu.changed_since_preview", params: {} },
   { code: "management.request_invalid", params: { field: "activatesAt.occurrence" } },
+  { code: "connection.failed", params: {} },
+  { code: "server.internal", params: {} },
 ];
 
 async function sentAndWaiting(p: (typeof SCHEDULE_PATHS)[number]) {
@@ -655,8 +665,8 @@ async function settled(panel: Panel) {
 for (const p of SCHEDULE_PATHS) {
   for (const answered of ["while it is out", "after being put back"] as const) {
     const refusals = answered === "after being put back" ? EVERY_REFUSAL : [REPEATED, PAST];
-    for (const refusal of refusals) {
-      it(`${p.path}: ${refusal.code} arriving ${answered} shows on the panel until a reopening`, async () => {
+    for (const [index, refusal] of refusals.entries()) {
+      it(`${p.path}: ${refusal.code} (${index}) arriving ${answered} says one sentence on the panel until a reopening`, async () => {
         const { app, panel, dialog, write } = await sentAndWaiting(p);
         const retries = vi.fn();
         panel.addEventListener("wt-preview-retry", retries);
@@ -674,7 +684,7 @@ for (const p of SCHEDULE_PATHS) {
           write.reject(refusal);
           await settled(panel);
         }
-        await expect.poll(() => lateText(panel)).toBe(lateWords(refusal.code));
+        await expect.poll(() => lateText(panel)).toBe(LATE_WORDS);
         expect(lateRefusal(panel)!.getAttribute("role")).toBe("alert");
 
         await panel.updateComplete;
@@ -688,7 +698,7 @@ for (const p of SCHEDULE_PATHS) {
         expect(p.writeOf(app)).toHaveBeenCalledTimes(1);
 
         await putBack(panel, "at once");
-        expect(lateText(panel)).toBe(lateWords(refusal.code));
+        expect(lateText(panel)).toBe(LATE_WORDS);
 
         await vi.waitFor(() => expect(editionRow(panel)).not.toBeNull());
         await p.reopen(panel);
@@ -702,6 +712,51 @@ for (const p of SCHEDULE_PATHS) {
     }
   }
 
+  it(`${p.path}: a late refusal on the panel re-reads the list, so what it says to check is current`, async () => {
+    const { app, panel, write } = await sentAndWaiting(p);
+    app.api.getMenuPublications.mockResolvedValue(LATER_LISTED);
+    await putBack(panel, "at once");
+    await vi.waitFor(() => expect(editionRow(panel)).not.toBeNull());
+    const reads = app.api.getMenuPublications.mock.calls.length;
+    app.api.getMenuPublications.mockResolvedValue(LISTED);
+    write.reject(PAST);
+    await expect.poll(() => lateRefusal(panel)).not.toBeNull();
+    await expect.poll(() => app.api.getMenuPublications.mock.calls.length).toBe(reads + 1);
+    expect(app.api.getMenuPublications).toHaveBeenLastCalledWith("menu-lunch");
+    await expect.poll(() => tableCell(panel, "time-v-lunch-1")?.textContent).toContain("08:00");
+  });
+
+  it(`${p.path}: a window taken out while its overtake refusal reads the list says so on the panel`, async () => {
+    const { app, panel, dialog, write } = await sentAndWaiting(p);
+    const read = deferred();
+    app.api.getMenuPublications.mockReturnValueOnce(read.promise as never);
+    write.reject({
+      code: "menu_publication.overtakes_queued",
+      params: { overtaken: [{ versionId: "v-lunch-1" }] },
+    });
+    await closeReportsDelivered();
+    await putBack(panel, "at once");
+    await settled(panel);
+    read.resolve(LISTED);
+    await expect.poll(() => lateText(panel)).toBe(LATE_WORDS);
+    expect(dialog.open).toBe(false);
+    expect(fieldError(dialog, "time")).toBe("");
+  });
+
+  it(`${p.path}: a late refusal arriving while out reads nothing until put back, then once`, async () => {
+    const { app, panel, write } = await sentAndWaiting(p);
+    const parent = panel.parentNode!;
+    const next = panel.nextSibling;
+    panel.remove();
+    const reads = app.api.getMenuPublications.mock.calls.length;
+    write.reject(PAST);
+    await settled(panel);
+    expect(app.api.getMenuPublications).toHaveBeenCalledTimes(reads);
+    parent.insertBefore(panel, next);
+    await settled(panel);
+    expect(app.api.getMenuPublications).toHaveBeenCalledTimes(reads + 1);
+  });
+
   for (const refusal of [REPEATED, PAST]) {
     it(`${p.path}: ${refusal.code} arriving once a fresh window is open leaves that window alone`, async () => {
       const { app, panel, dialog, write } = await sentAndWaiting(p);
@@ -712,7 +767,7 @@ for (const p of SCHEDULE_PATHS) {
       await enter(dialog, p.edited, p.editAfter);
 
       write.reject(refusal);
-      await expect.poll(() => lateText(panel)).toBe(lateWords(refusal.code));
+      await expect.poll(() => lateText(panel)).toBe(LATE_WORDS);
 
       expect(dialog.open).toBe(true);
       expect(fieldValue(dialog, p.edited)).toBe(p.editAfter);
@@ -739,7 +794,7 @@ for (const p of SCHEDULE_PATHS) {
       await expect.poll(() => p.writeOf(app).mock.calls.length).toBe(2);
 
       write.reject(refusal);
-      await expect.poll(() => lateText(panel)).toBe(lateWords(refusal.code));
+      await expect.poll(() => lateText(panel)).toBe(LATE_WORDS);
       await panel.updateComplete;
       expect(submitAction(dialog).loading).toBe(true);
       expect(occurrenceField(dialog)).toBeNull();
@@ -794,7 +849,7 @@ for (const p of SCHEDULE_PATHS) {
     panel.menuId = "menu-lunch";
     await panel.updateComplete;
     write.reject(PAST);
-    await expect.poll(() => lateText(panel)).toBe(lateWords(PAST.code));
+    await expect.poll(() => lateText(panel)).toBe(LATE_WORDS);
   });
 
   for (const answered of ["while it is out", "after being put back"] as const) {
@@ -837,32 +892,16 @@ for (const p of SCHEDULE_PATHS) {
   });
 }
 
-it("a late overtake refusal names the version in the way, from a list read after it", async () => {
-  const { app, panel, write } = await sentAndWaiting(SCHEDULE_PATHS[0]);
-  await putBack(panel, "at once");
-  const reads = app.api.getMenuPublications.mock.calls.length;
-  write.reject({
-    code: "menu_publication.overtakes_queued",
-    params: { overtaken: [{ versionId: "v-lunch-1" }] },
-  });
-  await expect.poll(() => lateText(panel)).toContain("did not go through");
-  expect(lateText(panel)).toContain(
-    fill("menu_publications.in_the_way_earlier", {
-      number: "1",
-      time: "8 Oct 2026, 08:00",
-    }),
-  );
-  expect(app.api.getMenuPublications).toHaveBeenCalledTimes(reads + 1);
-});
-
-it("a late refusal on the panel follows the screen's language", async () => {
+it("the late refusal names the panel's own heading, in the screen's language", async () => {
   const { panel, write } = await sentAndWaiting(SCHEDULE_PATHS[0]);
   await putBack(panel, "at once");
   write.reject(PAST);
-  await expect.poll(() => lateText(panel)).toBe(lateWords(PAST.code));
+  await expect.poll(() => lateText(panel)).toBe(LATE_WORDS);
+  expect(lateText(panel)).toContain(t("menu_publications.heading"));
   setLocale("es");
   await panel.updateComplete;
-  const spanish = fill("menu_publications.late_refusal", { reason: codeMessage(PAST.code) });
-  expect(spanish).not.toBe(lateWords(PAST.code));
+  const spanish = t("menu_publications.late_refusal");
+  expect(spanish).not.toBe(LATE_WORDS);
+  expect(spanish).toContain(t("menu_publications.heading"));
   await expect.poll(() => lateText(panel)).toBe(spanish);
 });

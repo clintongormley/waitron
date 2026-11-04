@@ -4691,14 +4691,18 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   A331 batch 3a (#1401).
 
 - **The till's modifier picker still recreates its modal when put back.** A738 added that because
-  `wt-dialog` lost modality there; `wt-dialog` now restores it, so the recreation may no longer be
-  needed. Not tried without it. (`apps/till/src/widgets/modifier-picker.ts`.)
+  `wt-dialog` lost modality there; `wt-dialog` now restores it. With the recreation disabled, the
+  `combined line edits` cases of `apps/till/src/widgets/modifier-picker.unsaved.test.ts` still passed
+  (3 passed). The department and zone edit dialogs also close on removal and reopen on return;
+  whether they still need to was not tried. Left open by A397.
 
-- **Dialogs put back together stack in page order, not opening order**, so a dialog opened over
-  another but drawn before it in the page comes back underneath it, and the lower of two dialogs
-  drawn beside each other, put back alone, comes back on top. No screen has been checked for either
-  shape. (`packages/ui/src/components/wt-dialog.ts`; pinned by the two stacking cases in
-  `wt-dialog.test.ts`.)
+- **A Schedule or Change time write refused after the person has left that menu still says
+  nothing.** The panel says so only for the menu it is on; on another menu, or with the panel gone,
+  the person believes it went through. The Prices tab's `menus.change_not_saved` shows its message at
+  screen level. Left open by A397.
+
+- **Change legal name says nothing when its rename is refused after Back and Discard closed the
+  dialog**; the Schedule window now says so on its panel. Left open by A397.
 
 - **In a text field inside a dialog, with the field's text selected, End and Home do not move the
   caret**, so typing replaces the whole text. Seen on the A721 branch in the Seasons window and the

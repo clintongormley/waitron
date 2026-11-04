@@ -255,8 +255,8 @@ export class MenuPublicationsPanel extends LitElement {
   @state() private repeated: RepeatedTime | null = null;
   @state() private attempted = false;
   @state() private scheduleRefusal: ScheduleRefusal | null = null;
-  /** A write refused once its window had gone: nothing else would tell the person it failed. */
-  @state() private lateRefusal: ScheduleRefusal | null = null;
+  /** A write answered with a refusal once its window had gone: nothing else would say so. */
+  @state() private lateRefusal = false;
 
   /** The menu whose editions are followed. */
   #watching: string | null = null;
@@ -327,7 +327,7 @@ export class MenuPublicationsPanel extends LitElement {
       this.scheduleBusy = false;
       this.#disposeDraft();
       this.scheduling = false;
-      if (this.menuId !== this.#followed) this.lateRefusal = null;
+      if (this.menuId !== this.#followed) this.lateRefusal = false;
     }
     this.#followed = this.menuId;
     void this.#load();
@@ -454,7 +454,7 @@ export class MenuPublicationsPanel extends LitElement {
     this.repeated = null;
     this.attempted = false;
     this.scheduleRefusal = null;
-    this.lateRefusal = null;
+    this.lateRefusal = false;
     this.#disposeDraft();
     this.#baseline = this.#draft();
     this.#takeDraftScope();
@@ -608,12 +608,16 @@ export class MenuPublicationsPanel extends LitElement {
     opening: object,
     placed: number | null,
   ): Promise<void> {
+    if (opening !== this.#opening) {
+      this.#sayRefusedLate(menuId);
+      return;
+    }
     const code = codeOf(error);
     const params = (error as { params?: Record<string, unknown> }).params ?? {};
     const refusal: ScheduleRefusal = { field: null, code, params, placed };
     if (code === "menu_publication.time_repeated") {
       const repeated = repeatedTime(params);
-      if (opening === this.#opening && repeated !== null) {
+      if (repeated !== null) {
         this.repeated = repeated;
         this.occurrence = "";
         this.scheduleBusy = false;
@@ -636,7 +640,7 @@ export class MenuPublicationsPanel extends LitElement {
       void this.#refresh();
     }
     if (opening !== this.#opening) {
-      if (menuId === this.menuId) this.lateRefusal = refusal;
+      this.#sayRefusedLate(menuId);
       return;
     }
     this.scheduleRefusal = refusal;
@@ -648,6 +652,13 @@ export class MenuPublicationsPanel extends LitElement {
       await this.updateComplete;
       await focusFirstInvalid(this.#scheduleDialog());
     }
+  }
+
+  #sayRefusedLate(menuId: string): void {
+    if (menuId !== this.menuId) return;
+    this.lateRefusal = true;
+    // Out of the page, the read that follows it being put back does this.
+    if (this.isConnected) void this.#refresh();
   }
 
   #columns(): DataTableColumn<Edition>[] {
@@ -876,11 +887,11 @@ export class MenuPublicationsPanel extends LitElement {
           : nothing
       }
       ${
-        this.lateRefusal === null
-          ? nothing
-          : html`<p class="late-refusal" role="alert" data-test="late-refusal">
-              ${fill("menu_publications.late_refusal", { reason: refusalMessage(this.lateRefusal) })}
+        this.lateRefusal
+          ? html`<p class="late-refusal" role="alert" data-test="late-refusal">
+              ${t("menu_publications.late_refusal")}
             </p>`
+          : nothing
       }
       <wt-data-table
         data-test="editions"
