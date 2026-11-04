@@ -293,6 +293,8 @@ export class MenuPublicationsPanel extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    // That write may yet be accepted, so its window must not come back able to send it again.
+    if (this.scheduleBusy) this.scheduling = false;
     this.#opening = {};
     this.confirming = null;
     this.scheduleBusy = false;

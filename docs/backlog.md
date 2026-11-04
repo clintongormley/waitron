@@ -1169,11 +1169,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A category's naming square does not announce the inherited colour's source.**
   [Detail](backlog/catalogue.md#a-categorys-naming-square-does-not-announce-the-inherited-colours-source)
 
-- **A menu's Schedule or Change time window, put back during its write, can send a second request.**
-  It stays open and counts as changed even once that write is accepted; a throwaway test on the
-  widget counted two requests. No kept test presses twice, and the server's answer was not tried. Only
-  the menus screen draws it and nothing read moves it. Left open by A397L, #2444 (`menu-publications.ts`).
-
 - **A menu published before this keeps a variant's own unit, frozen in its published copy, until the
   menu is next published** — left open by A222 (#1101) (`applyLiveFields`,
   `packages/catalogue/src/menu-document.ts`, serves that copy; read, not run).

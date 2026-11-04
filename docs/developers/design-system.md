@@ -2874,7 +2874,7 @@ and the staffing grid's block editor in the A761 entry):
   The staff edit and new person, variant, purchase and bookings forms, the product
   editor, the unit, ingredient, extras list, option list and option label forms, the menus screen's section and menu details form, an include's Edit
   dialog, the Add to menus and Add products pickers, the Home page tab's shortcut picker and the department dialogs, Settings and zone settings do this, each with an edit-first reconnect case; so does the Patch
-  live menu window, whose committed value is always no changes. A menu's Schedule and Change time window does too, though it takes its scope at opening and again as it is put back rather than in `willUpdate`, so it is not in the list above: put back onto the same menu it keeps its edit, onto a different one it closes unchanged (`menu-publications.unsaved.test.ts`). The recipe editor
+  live menu window, whose committed value is always no changes. A menu's Schedule and Change time window does too, though it takes its scope at opening and again as it is put back rather than in `willUpdate`, so it is not in the list above: put back onto the same menu it keeps its edit, onto a different one it closes unchanged, and taken out during its write it closes as it is put back and reads the list again rather than keep its edit, so it leaves nothing to send a second time (`menu-publications.unsaved.test.ts`). The recipe editor
   clears its choice on removal by design (batch 2a). The till's party name, bill name, Guests, Split a table, invoice recipient,
   extras picker and station dialogs and the floor's Rename window keep it and count it, each with a reconnect case in its
   `*.unsaved.test.ts`. That accounts for every form in the list above;

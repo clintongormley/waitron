@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
+import { LiveData } from "@waitron/dashboard-kit";
 import { LeaveController } from "@waitron/ui";
 import type { DashboardApi, MenuPreview, MenuPublicationsAnswer } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -43,6 +44,7 @@ const PREVIEW = {
 class PublicationsLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   api = {
+    liveData: undefined as LiveData | undefined,
     getMenuPublications: vi.fn().mockResolvedValue(LISTED),
     scheduleMenuPublication: vi.fn().mockResolvedValue({
       versionId: "v-lunch-2",
@@ -292,6 +294,38 @@ const LATER_LISTED: MenuPublicationsAnswer = {
   ],
 };
 
+const tableCell = (panel: Panel, name: string) =>
+  panel
+    .shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector(`[data-test="${name}"]`);
+const scheduleOpen = (panel: Panel) =>
+  panel.shadowRoot!.querySelector('[data-test="schedule-open"]');
+const fieldError = (dialog: Dialog, name: "date" | "time") =>
+  dialog.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name="${name}"]`)!.error;
+
+const SCHEDULE_ACCEPTED: MenuPublicationsAnswer = {
+  ...LISTED,
+  editions: [
+    ...LISTED.editions,
+    {
+      ...LISTED.editions[0]!,
+      versionId: "v-lunch-2",
+      number: 2,
+      contentHash: PREVIEW.hash,
+      local: { date: "2026-10-10", time: "12:00", offset: "+02:00", repeated: false },
+    },
+  ],
+};
+const MOVE_ACCEPTED: MenuPublicationsAnswer = {
+  ...LISTED,
+  editions: [
+    {
+      ...LISTED.editions[0]!,
+      local: { date: "2026-10-09", time: "09:00", offset: "+02:00", repeated: false },
+    },
+  ],
+};
+
 const SCHEDULE_PATHS = [
   {
     path: "Schedule",
@@ -312,6 +346,9 @@ const SCHEDULE_PATHS = [
     ],
     afterUndo: "2026-10-12",
     editAfter: "2026-10-12",
+    acceptedList: SCHEDULE_ACCEPTED,
+    acceptedCell: "time-v-lunch-2",
+    acceptedTime: "12:00",
   },
   {
     path: "Change time",
@@ -330,7 +367,20 @@ const SCHEDULE_PATHS = [
     sent: ["menu-lunch", "v-lunch-1", { activatesAt: { date: "2026-10-09", time: "09:15" } }],
     afterUndo: "09:15",
     editAfter: "09:15",
+    acceptedList: MOVE_ACCEPTED,
+    acceptedCell: "time-v-lunch-1",
+    acceptedTime: "09:00",
   },
+] as const;
+
+const WRITE_ANSWERS = [
+  { outcome: "accepted", answered: "while it is out" },
+  { outcome: "refused", answered: "while it is out" },
+  { outcome: "accepted", answered: "once it is back" },
+  { outcome: "refused", answered: "once it is back" },
+  { outcome: "accepted", answered: "once a fresh window is open" },
+  { outcome: "refused", answered: "once a fresh window is open" },
+  { outcome: "unanswered", answered: "throughout" },
 ] as const;
 
 for (const p of SCHEDULE_PATHS) {
@@ -403,47 +453,143 @@ for (const p of SCHEDULE_PATHS) {
       await expectUnchangedOpen(app, panel, dialog);
       expect(fieldValue(dialog, p.edited)).toBe(p.openedValue);
     });
-    for (const answered of ["while it is out", "once it is back"] as const) {
-      for (const outcome of ["accepted", "refused"] as const) {
-        it(`${p.path}: a write ${outcome} ${answered} (put back ${how}) neither saves nor closes it`, async () => {
-          const { app, panel, dialog } = await p.mountPath();
-          const write = deferred();
-          p.writeOf(app).mockReturnValueOnce(write.promise as never);
-          await enter(dialog, p.edited, p.editedValue);
-          await enter(dialog, p.other, p.otherEdit);
-          submitAction(dialog).click();
-          await expect.poll(() => p.writeOf(app).mock.calls.length).toBe(1);
-          const settle = () =>
-            outcome === "accepted"
-              ? write.resolve({ versionId: "v", number: 2, activatesAt: "" })
-              : write.reject({ code: "menu_publication.time_past", params: {} });
-          const parent = panel.parentNode!;
-          const next = panel.nextSibling;
-          panel.remove();
-          if (answered === "while it is out") {
-            settle();
-            await closeReportsDelivered();
-          }
-          if (how === "after a detached update") await panel.updateComplete;
-          parent.insertBefore(panel, next);
+    for (const { outcome, answered } of WRITE_ANSWERS) {
+      it(`${p.path}: a write ${outcome} ${answered} (put back ${how}) closes the window and sends nothing more`, async () => {
+        const { app, panel, dialog } = await p.mountPath();
+        app.api.liveData = new LiveData();
+        let stored: MenuPublicationsAnswer = LISTED;
+        app.api.getMenuPublications.mockImplementation(async () => stored);
+        const write = deferred();
+        p.writeOf(app).mockReturnValueOnce(write.promise as never);
+        await enter(dialog, p.edited, p.editedValue);
+        await enter(dialog, p.other, p.otherEdit);
+        submitAction(dialog).click();
+        await expect.poll(() => p.writeOf(app).mock.calls.length).toBe(1);
+        const reads = app.api.getMenuPublications.mock.calls.length;
+        const answer = async () => {
+          if (outcome === "accepted") {
+            stored = p.acceptedList;
+            write.resolve({ versionId: "v", number: 2, activatesAt: "" });
+          } else write.reject({ code: "menu_publication.time_past", params: {} });
+          await closeReportsDelivered();
           await panel.updateComplete;
-          if (answered === "once it is back") {
-            settle();
-            await closeReportsDelivered();
-          }
+        };
+
+        const parent = panel.parentNode!;
+        const next = panel.nextSibling;
+        panel.remove();
+        if (answered === "while it is out") await answer();
+        if (how === "after a detached update") await panel.updateComplete;
+        parent.insertBefore(panel, next);
+        await panel.updateComplete;
+        await dialog.updateComplete;
+        await closeReportsDelivered();
+
+        submitAction(dialog).click();
+        await panel.updateComplete;
+        expect(p.writeOf(app)).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => expect(editionRow(panel)).not.toBeNull());
+        expect(app.api.getMenuPublications).toHaveBeenCalledTimes(reads + 1);
+        const expectClosed = async () => {
           await panel.updateComplete;
-          expect(dialog.open).toBe(true);
-          expect(fieldValue(dialog, p.edited)).toBe(p.editedValue);
-          expect(app.leave.coordinator.isDirty()).toBe(true);
+          expect(dialog.open).toBe(false);
+          expect(app.leave.coordinator.isDirty()).toBe(false);
           expect(submitAction(dialog).loading).toBe(false);
-          expect(
-            dialog.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="time"]')!.error,
-          ).toBe("");
-          dialog.querySelector<HTMLElement>('[data-test="schedule-close"]')!.click();
-          expect((await question(app)).open).toBe(true);
-        });
-      }
+          expect(fieldError(dialog, "time")).toBe("");
+          expect((await question(app)).open).toBe(false);
+          expect(p.writeOf(app)).toHaveBeenCalledTimes(1);
+        };
+        await expectClosed();
+
+        if (answered === "once it is back") {
+          await answer();
+          await expectClosed();
+          expect(app.api.getMenuPublications).toHaveBeenCalledTimes(reads + 1);
+          if (outcome === "accepted") {
+            expect(tableCell(panel, p.acceptedCell)?.textContent ?? "").not.toContain(
+              p.acceptedTime,
+            );
+            app.api.liveData.invalidate([{ type: "menu_scheduled_publications" }]);
+            await vi.waitFor(() =>
+              expect(app.api.getMenuPublications).toHaveBeenCalledTimes(reads + 2),
+            );
+          }
+        }
+
+        const accepted = outcome === "accepted" && answered !== "once a fresh window is open";
+        if (accepted) {
+          await expect
+            .poll(() => tableCell(panel, p.acceptedCell)?.textContent)
+            .toContain(p.acceptedTime);
+        } else {
+          await expect
+            .poll(() => tableCell(panel, "time-v-lunch-1")?.textContent)
+            .toContain("08:00");
+          expect(tableCell(panel, "version-v-lunch-2")).toBeNull();
+        }
+
+        if (accepted && p.path === "Schedule") {
+          await expect.poll(() => scheduleOpen(panel)).toBeNull();
+          return;
+        }
+        await p.reopen(panel);
+        await expectUnchangedOpen(app, panel, dialog);
+        expect(fieldValue(dialog, p.edited)).toBe(accepted ? p.editedValue : p.openedValue);
+        expect(fieldValue(dialog, p.other)).toBe(accepted ? p.otherEdit : p.otherOpened);
+        submitAction(dialog).click();
+        await panel.updateComplete;
+        expect(p.writeOf(app)).toHaveBeenCalledTimes(1);
+
+        if (answered === "once a fresh window is open") {
+          await enter(dialog, p.edited, p.editAfter);
+          await answer();
+          expect(dialog.open).toBe(true);
+          expect(fieldValue(dialog, p.edited)).toBe(p.editAfter);
+          expect(fieldError(dialog, "time")).toBe("");
+          expect(submitAction(dialog).loading).toBe(false);
+          expect(app.leave.coordinator.isDirty()).toBe(true);
+          expect(p.writeOf(app)).toHaveBeenCalledTimes(1);
+          expect(app.api.getMenuPublications).toHaveBeenCalledTimes(reads + 1);
+        }
+      });
     }
+    it(`${p.path}: a window reopened after a write closed it keeps its own edit when put back ${how}`, async () => {
+      const { app, panel, dialog } = await p.mountPath();
+      p.writeOf(app).mockReturnValueOnce(deferred().promise as never);
+      await enter(dialog, p.edited, p.editedValue);
+      await enter(dialog, p.other, p.otherEdit);
+      submitAction(dialog).click();
+      await expect.poll(() => p.writeOf(app).mock.calls.length).toBe(1);
+      await putBack(panel, how);
+      await closeReportsDelivered();
+      await vi.waitFor(() => expect(editionRow(panel)).not.toBeNull());
+      await p.reopen(panel);
+      await expectUnchangedOpen(app, panel, dialog);
+      await enter(dialog, p.edited, p.editedValue);
+      await putBack(panel, how);
+      expect(dialog.open).toBe(true);
+      expect(fieldValue(dialog, p.edited)).toBe(p.editedValue);
+      expect(app.leave.coordinator.isDirty()).toBe(true);
+      expect(submitAction(dialog).disabled).toBe(false);
+    });
+    it(`${p.path}: a write refused before being taken out keeps the edit when put back ${how}, and can be sent again`, async () => {
+      const { app, panel, dialog } = await p.mountPath();
+      p.writeOf(app).mockRejectedValueOnce({ code: "menu_publication.time_past", params: {} });
+      await enter(dialog, p.edited, p.editedValue);
+      await enter(dialog, p.other, p.otherEdit);
+      submitAction(dialog).click();
+      await expect.poll(() => fieldError(dialog, "time")).not.toBe("");
+      await expect.poll(() => submitAction(dialog).loading).toBe(false);
+      await putBack(panel, how);
+      expect(dialog.open).toBe(true);
+      expect(fieldValue(dialog, p.edited)).toBe(p.editedValue);
+      expect(app.leave.coordinator.isDirty()).toBe(true);
+      expect(submitAction(dialog).disabled).toBe(false);
+      const closed = dialogClosed(dialog);
+      submitAction(dialog).click();
+      await closed;
+      expect(p.writeOf(app)).toHaveBeenCalledTimes(2);
+    });
   }
   it(`${p.path}: reopening after a save starts unchanged from the stored value`, async () => {
     const { app, panel, dialog } = await p.mountPath();
