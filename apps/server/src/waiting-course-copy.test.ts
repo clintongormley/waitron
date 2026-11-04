@@ -974,6 +974,50 @@ describe("A803 waiting copy: Split a table", () => {
     expect(await kitchenItemOf(flan.id)).toMatchObject({ firedAt: null, requestedAt: null });
     expect((await groupRow(source)).state).toBe("removed");
   });
+
+  it("A803 waiting copy: Split a table records attendance for the copy's event when given a recorder", async () => {
+    const a = await seatWith([
+      { names: ["Burger"], release: "fire" },
+      { names: ["Flan"], release: "hold" },
+    ]);
+    const source = (await lineOf(a.billId, "Flan")).groupId!;
+    const tableId = await v.table(`Copy ${++tableNumber}`);
+    const joining = { operatorId: OPERATOR, expectedPartyRevision: await revisionOf(v, a.partyId) };
+    await inTx(v, (tx) => joinTables(tx, v.cfg, a.partyId, tableId, joining));
+    const splitting = {
+      expectedPartyRevision: await revisionOf(v, a.partyId),
+      operatorId: OPERATOR,
+    };
+    const before = (await eventsOf(source)).length;
+    const facts: Parameters<AttendanceRecorder>[1][] = [];
+    const recorder: AttendanceRecorder = async (_tx, fact) => {
+      facts.push(fact);
+    };
+
+    const result = await inTx(v, (tx) =>
+      splitTable(tx, v.cfg, a.partyId, tableId, a.billId, splitting, { recorder, clock: v.clock }),
+    );
+
+    const copyId = (await lineOf(a.billId, "Flan")).groupId!;
+    expect(copyId).not.toBe(source);
+    const sourceEvents = (await eventsOf(source)).slice(before);
+    const copyEvents = await eventsOf(copyId);
+    expect(sourceEvents.map((event) => event.kind)).toEqual(["lines_moved", "removed"]);
+    expect(copyEvents.map((event) => [event.kind, event.partyId])).toEqual([
+      ["lines_moved", result.partyId],
+    ]);
+    expect(facts.filter((fact) => fact.key === `group:${copyEvents[0]!.id}`)).toEqual([
+      {
+        source: "draft",
+        key: `group:${copyEvents[0]!.id}`,
+        personId: OPERATOR,
+        kind: "order",
+        at: expect.any(String),
+        offsetMinutes: 0,
+        outcome: "qualified",
+      },
+    ]);
+  });
 });
 
 /** Fires the party's group with the real `fireGroup`, reading the party's revision first. */

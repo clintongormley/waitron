@@ -279,9 +279,9 @@ export interface SplitGuestCounts {
 /**
  * `tableId` leaves the party and its today's merge ({@link leaveMergesRestoring}), and a new,
  * unnamed party starts on it, taking `billId`, or a new empty bill when none is chosen. The chosen
- * bill must be an open or presented bill of the party. Its dishes held for the kitchen stay held,
- * in the new party's own copy of each of their groups ({@link copyHeldGroups}). A staying party
- * whose family is left with no bill that is not abandoned is given a new empty one.
+ * bill must be an open or presented bill of the party. Its held dishes not recalled into a draft
+ * move to the new party's own held copy of each of their groups ({@link copyHeldGroups}). A
+ * staying party whose family is left with no bill that is not abandoned is given a new empty one.
  */
 export async function splitTable(
   tx: Transaction,
