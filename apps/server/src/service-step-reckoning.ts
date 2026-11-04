@@ -7,6 +7,8 @@ export interface StepFacts {
   openedAt: number;
   firstOrderAt: number | null;
   lastOrderAt: number | null;
+  /** The order times are dishes arriving from another table: the party has sent no order itself. */
+  ordersArrived?: boolean;
   drafting: boolean;
   courseServedAt: ReadonlyMap<string, number>;
   allServedAt: number | null;
@@ -65,13 +67,32 @@ function repeatShownAt(last: number, every: number, at: number): number {
 }
 
 /**
+ * Dishes can arrive already served, so an arrival's time is later than the serving it came with and
+ * must not clear the steps that serving started.
+ */
+function ordersClear(rule: StepRule, facts: StepFacts): boolean {
+  return (
+    facts.ordersArrived !== true || (rule.start !== "course_served" && rule.start !== "all_served")
+  );
+}
+
+/**
+ * A bill arriving at a free table opens the party and records its order in one transaction, so the
+ * two times can be equal.
+ */
+function firstOrderClears(rule: StepRule, firstOrderAt: number, triggeredAt: number): boolean {
+  return rule.start === "seated" ? firstOrderAt >= triggeredAt : firstOrderAt > triggeredAt;
+}
+
+/**
  * A step's trigger is the moment its start happened. For `since_last_order` it is the repeat
  * showing now — the latest reached, or the first, which is ahead, while none has come — or the one
  * after it when the step's own Done was tapped while that same repeat was showing. It is due at its
  * trigger plus its minutes, or at the repeat itself. A triggered step stays live until its own Done
  * is later than its trigger, an order is sent later than its due time, the party's first order is
- * later than its trigger, or — before the first order — the party has an open draft. Live steps
- * come soonest due first, ties in list order.
+ * later than its trigger, or — before the first order — the party has an open draft. A seated step
+ * also clears at a first order at the same instant. Live steps come soonest due first, ties in list
+ * order.
  */
 export function liveSteps(rules: readonly StepRule[], facts: StepFacts, nowMs: number): LiveStep[] {
   const live: LiveStep[] = [];
@@ -83,8 +104,12 @@ export function liveSteps(rules: readonly StepRule[], facts: StepFacts, nowMs: n
       rule.start === "since_last_order" ? triggeredAt : triggeredAt + rule.minutes * MINUTE_MS;
     const done = facts.doneAt.get(rule.id);
     if (done !== undefined && done > triggeredAt) return;
-    if (facts.lastOrderAt !== null && facts.lastOrderAt > dueAt) return;
-    if (facts.firstOrderAt !== null && facts.firstOrderAt > triggeredAt) return;
+    if (ordersClear(rule, facts)) {
+      if (facts.lastOrderAt !== null && facts.lastOrderAt > dueAt) return;
+      if (facts.firstOrderAt !== null && firstOrderClears(rule, facts.firstOrderAt, triggeredAt)) {
+        return;
+      }
+    }
     live.push({ stepId: rule.id, name: rule.name, triggeredAt, dueAt });
   });
   return live.sort((a, b) => a.dueAt - b.dueAt);
@@ -99,7 +124,7 @@ function occurrenceCleared(rule: StepRule, facts: StepFacts, dueAt: number): boo
   const done = facts.doneAt.get(rule.id);
   const last = facts.lastOrderAt;
   if (rule.start !== "since_last_order") {
-    if (last !== null && last > dueAt) return true;
+    if (ordersClear(rule, facts) && last !== null && last > dueAt) return true;
     return done !== undefined && done > dueAt - rule.minutes * MINUTE_MS;
   }
   if (last === null || dueAt <= last) return true;
