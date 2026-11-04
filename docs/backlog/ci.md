@@ -1423,3 +1423,13 @@ historical logs were unavailable. There is no established root cause or store fi
 A1332 reproduced in the till's logo check. Reproduce the primitive suite with a full timing
 buffer, then retain its exact retry assertions while changing the observation. A1332 changed
 only the till check; it did not qualify or change these sibling cases.
+
+## The logo retry check can outwait its test deadline
+
+`apps/till/src/widgets/till-shell.venue-logo.test.ts`'s `requestsReach` waits up to 300 animation
+frames. A1332's run-it review measured 66–70 ms frames: the request wait then exceeds the
+15-second test deadline, so a missing request can produce only a timeout before its count
+assertion runs. The retry-disabled controls still detect the missing retry; they do not establish
+that its count assertion always reports first. Reproduce the throttled-frame case before choosing
+a wall-clock-bounded observation; keep the retry schedule, request assertions and existing case
+deadline. The related `await failed` can also await a missing event until the case times out.

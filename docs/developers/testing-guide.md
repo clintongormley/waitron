@@ -3,8 +3,9 @@
 ## Count image requests as they are delivered
 
 When a retry test counts resource requests, observe the resource entries as they arrive with a
-scoped `PerformanceObserver`, then disconnect it in `finally`. The retained timing list is a
-bounded observation, so it cannot establish that no new request happened once it is full.
+scoped `PerformanceObserver`, then disconnect it in `finally` and register the same restoration
+with `onTestFinished`: a timed-out test may still be awaiting an event when Vitest ends it. The
+retained timing list is a bounded observation, so it cannot establish that no new request happened once it is full.
 
 On 4 November 2026, A1332 reproduced the till logo check's `expected 2, received 1` failure by
 setting the resource-timing capacity to one. The observer recorded two requests and the shell

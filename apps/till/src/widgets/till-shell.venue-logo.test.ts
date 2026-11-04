@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import {
   applyTokens,
@@ -424,6 +424,12 @@ describe("the bar refits when the logo changes", () => {
         const observer = new PerformanceObserver((list) => {
           requestCount += list.getEntriesByName(new URL(address, location.href).href).length;
         });
+        const restore = () => {
+          observer.disconnect();
+          performance.setResourceTimingBufferSize(250);
+          vi.useRealTimers();
+        };
+        onTestFinished(restore);
         observer.observe({ type: "resource" });
         // Observe delivery: the retained resource-timing buffer can fill before a retry.
         const requests = () => requestCount;
@@ -461,9 +467,7 @@ describe("the bar refits when the logo changes", () => {
             );
           }
         } finally {
-          observer.disconnect();
-          performance.setResourceTimingBufferSize(250);
-          vi.useRealTimers();
+          restore();
         }
       });
     },

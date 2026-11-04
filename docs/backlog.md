@@ -6092,6 +6092,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **The logo retry check can outwait its test deadline** (left open by A1332). Its 300-frame
+  request wait can exceed the unchanged 15-second case deadline when Chromium throttles frames.
+  [Detail](backlog/ci.md#the-logo-retry-check-can-outwait-its-test-deadline).
+
 - **Store bound-value test timeout** (left open by A1332). One CI run timed out while checking
   the reader and writer limits; the slow phase remains unknown. Keep the assertions and deadline.
   [Detail](backlog/ci.md#store-bound-value-test-timeout).
