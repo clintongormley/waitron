@@ -1,11 +1,4 @@
-import type {
-  AeatCertDraft,
-  EmailSettingsDraft,
-  ProvisionBody,
-  RecoveryBackupPreview,
-  RecoveryPreparationSource,
-  RecoveryRestoreCredentials,
-} from "./client.js";
+import type { AeatCertDraft, EmailSettingsDraft, ProvisionBody } from "./client.js";
 
 export interface FirstSetupOwner {
   attemptId: string;
@@ -98,30 +91,6 @@ export function firstSetupHeaders(owner: FirstSetupOwner): Record<string, string
   };
 }
 
-export interface BackupRepairObservation {
-  inspectionId: string;
-  revision: number | null;
-  ownerGeneration: number | null;
-}
-export interface BackupRepairProof {
-  observation: BackupRepairObservation;
-  nodeRecoverySecret: string;
-  context: { oldBoxGone: boolean; soleRecovery: boolean };
-}
-export interface BackupRepairOpenRequest extends BackupRepairProof {
-  source: Exclude<RecoveryPreparationSource, { kind: "staged" }>;
-  recoveryId?: string;
-}
-export interface BackupRepairResumeRequest extends BackupRepairProof {
-  recoveryId: string;
-}
-export interface BackupRepairSession {
-  sessionId: string;
-  recoveryId: string;
-  preview: RecoveryBackupPreview;
-  binding: RecoveryRestoreCredentials["recoveryOperation"]["binding"];
-  input?: unknown;
-}
 export interface StartAgainSummary {
   reached: "claimed" | "named" | "fiscal-started" | "fiscal-finished";
   recoveryRecordDamaged?: true;
@@ -135,20 +104,3 @@ export interface StartAgainConfirm {
 }
 /** Why the server refused Start again with `setup.start_again_refused`. */
 export type StartAgainRefusalCause = "trading-settings" | "setup-finished" | "kept-records";
-export interface BackupRepairStatus {
-  phase: "unstarted" | "prepared" | "placement-started" | "restored" | "selected" | "uncertain";
-  recoveryId?: string;
-  proofRequired: true;
-}
-export type BackupRepairActivity =
-  | { state: "running"; startedAt: string; lastActiveAt: string }
-  | {
-      state: "stopped";
-      startedAt: string;
-      lastActiveSource: "memory" | "saved-step";
-      lastActiveAt: string;
-      phase: Exclude<BackupRepairStatus["phase"], "unstarted" | "uncertain">;
-      recoveryId: string;
-      failed: boolean;
-      cloud: boolean;
-    };

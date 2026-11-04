@@ -1,10 +1,5 @@
 import { firstSetupHeaders } from "./first-setup-types.js";
 import type {
-  BackupRepairActivity,
-  BackupRepairOpenRequest,
-  BackupRepairResumeRequest,
-  BackupRepairSession,
-  BackupRepairStatus,
   FirstSetupOwner,
   FirstSetupState,
   FirstSetupOwnership,
@@ -284,94 +279,6 @@ export class SetupApi {
   constructor(baseUrl = "", fetchImpl: FetchLike = fetch) {
     this.#baseUrl = baseUrl;
     this.#fetchImpl = fetchImpl;
-  }
-
-  firstSetupBackupStatus(): Promise<BackupRepairStatus> {
-    return this.#request("/setup-api/first-setup/resolution/backup/status", "GET");
-  }
-
-  async openFirstSetupBackup(request: BackupRepairOpenRequest): Promise<BackupRepairSession> {
-    const { source, ...proof } = request;
-    const { artifact, ...metadata } = { artifact: undefined as Blob | undefined, ...source };
-    const body = new FormData();
-    body.set("request", JSON.stringify({ ...proof, source: metadata }));
-    if (artifact !== undefined) body.set("artifact", artifact, "backup.waitron");
-    const response = await this.#fetchImpl(
-      this.#baseUrl + "/setup-api/first-setup/resolution/backup/open",
-      {
-        method: "POST",
-        credentials: "include",
-        body,
-      },
-    );
-    if (!response.ok) throw await apiError(response);
-    return response.json() as Promise<BackupRepairSession>;
-  }
-
-  resumeFirstSetupBackup(request: BackupRepairResumeRequest): Promise<BackupRepairSession> {
-    return this.#request("/setup-api/first-setup/resolution/backup/resume", "POST", request);
-  }
-
-  prepareFirstSetupBackup(sessionId: string, proposal: unknown): Promise<unknown> {
-    return this.#request("/setup-api/first-setup/resolution/backup/prepare", "POST", {
-      sessionId,
-      proposal,
-    });
-  }
-
-  commitFirstSetupBackup(sessionId: string, input: unknown): Promise<{ restarting: true }> {
-    return this.#request("/setup-api/first-setup/resolution/backup/commit", "POST", {
-      sessionId,
-      input,
-    });
-  }
-
-  closeFirstSetupBackup(sessionId: string): Promise<{ closed: true }> {
-    return this.#request("/setup-api/first-setup/resolution/backup/close", "POST", { sessionId });
-  }
-
-  renewFirstSetupBackup(sessionId: string): Promise<{ renewed: true }> {
-    return this.#request("/setup-api/first-setup/resolution/backup/renew", "POST", { sessionId });
-  }
-
-  firstSetupBackupActivity(): Promise<{ activity: BackupRepairActivity | null }> {
-    return this.#request("/setup-api/first-setup/resolution/backup/activity", "GET");
-  }
-
-  startFirstSetupBackupCloud(holder?: string): Promise<CloudRecoveryView> {
-    return this.#request(
-      "/setup-api/first-setup/resolution/backup/cloud/start",
-      "POST",
-      holder === undefined ? {} : { holder },
-    );
-  }
-
-  firstSetupBackupCloudStatus(holder?: string): Promise<CloudRecoveryView> {
-    return this.#request(
-      "/setup-api/first-setup/resolution/backup/cloud/status",
-      "POST",
-      holder === undefined ? {} : { holder },
-    );
-  }
-
-  startFirstSetupBackupCloudAgain(holder?: string): Promise<CloudRecoveryView> {
-    return this.#request(
-      "/setup-api/first-setup/resolution/backup/cloud/start-again",
-      "POST",
-      holder === undefined ? {} : { holder },
-    );
-  }
-
-  renewFirstSetupBackupCloud(holder: string): Promise<{ renewed: true }> {
-    return this.#request("/setup-api/first-setup/resolution/backup/cloud/renew", "POST", {
-      holder,
-    });
-  }
-
-  releaseFirstSetupBackupCloud(holder: string): Promise<{ released: true }> {
-    return this.#request("/setup-api/first-setup/resolution/backup/cloud/release", "POST", {
-      holder,
-    });
   }
 
   getDiscovery(): Promise<{ caDownloadAvailable: boolean }> {
