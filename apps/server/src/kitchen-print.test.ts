@@ -47,6 +47,7 @@ import { kitchenNotices, listStationNotices, setStationToday } from "@waitron/ve
 import { setStationPrinting } from "./testing/station-printing.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
+import { fireGroup } from "./order-groups.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import {
   enqueueAllergyCorrectionSlips,
@@ -3310,5 +3311,63 @@ describe("A803 portion grouping", () => {
       count(printedLines(printed.same[0]!.payload), `${thousandthsToDecimal(2000)} x Burger`),
     ).toBe(1);
     expect(printed.different).toHaveLength(2);
+  });
+});
+
+describe("A773 fire paper: course headings", () => {
+  /** Hold a Mains group of a Burger and a Paella at Grill, then fire it; the Grill job's headings. */
+  async function firedGrillHeadings(
+    beforeFire: (tx: Transaction, v: PartyVenue, tabId: string) => Promise<void> = async () => {},
+  ): Promise<string[]> {
+    const v = await setupPartyVenue(db);
+    const { printerId } = await inTx(v, async (tx) => {
+      const { id: grill } = await createStation(tx, v.cfg, { name: "Grill" });
+      const mains = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 2 });
+      for (const name of ["Burger", "Paella"]) {
+        await routeProductTo(tx, v.cfg, v.productId(name), grill);
+        await setProductCourse(tx, v.cfg, v.productId(name), mains.id);
+      }
+      return { printerId: await makeSharedPrinter(tx, "Grill", [grill]) };
+    });
+    const { partyId, tabId } = await seatWithNoAllergies(v, await v.table("Table 141"));
+    const dish = (name: string) => ({ menuItemId: v.item(name), quantity: "1" });
+    const placed = await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, partyId, {
+        groups: [{ lines: [dish("Burger"), dish("Paella")], release: "hold" }],
+        operatorId: OPERATOR,
+        billId: tabId,
+      }),
+    );
+    await inTx(v, (tx) => beforeFire(tx, v, tabId));
+    const expectedPartyRevision = await revisionOf(v, partyId);
+    await inTx(v, (tx) =>
+      fireGroup(tx, v.cfg, partyId, placed.groups[0]!.id, {
+        operatorId: OPERATOR,
+        submissionId: randomUUID(),
+        expectedPartyRevision,
+      }),
+    );
+
+    const jobs = (await asApp(v.cfg, (tx) => printJobsFor(tx))).filter(
+      (job) => job.printerId === printerId,
+    );
+    expect(jobs).toHaveLength(1);
+    const word = kitchenTicketWords("es").group;
+    return printedLines(jobs[0]!.payload).filter((text) => text.startsWith(word));
+  }
+
+  it("A773 fire paper: a waiter's fire prints the group's course on its heading", async () => {
+    expect(await firedGrillHeadings()).toEqual([`${kitchenTicketWords("es").group} 1 · MAINS`]);
+  });
+
+  it("A773 fire paper: the heading names the course the dish's ticket item holds, not its order line's", async () => {
+    const headings = await firedGrillHeadings(async (tx, v, tabId) => {
+      const desserts = await createCourse(tx, v.cfg, { name: "Desserts", displayOrder: 3 });
+      await tx
+        .update(workingOrderLines)
+        .set({ courseId: desserts.id })
+        .where(eq(workingOrderLines.workingOrderId, tabId));
+    });
+    expect(headings).toEqual([`${kitchenTicketWords("es").group} 1 · MAINS`]);
   });
 });

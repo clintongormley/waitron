@@ -955,7 +955,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
         lines: [
           `*** ${kitchenTicketWords("es").hold} ***`,
           ...header,
-          `${kitchenTicketWords("es").group} 2`,
+          `${kitchenTicketWords("es").group} 2 · POSTRES`,
           "1.000 x FLAN",
         ],
       },
@@ -972,7 +972,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
         lines: [
           `*** ${kitchenTicketWords("es").fire} ***`,
           ...header,
-          `${kitchenTicketWords("es").group} 2`,
+          `${kitchenTicketWords("es").group} 2 · POSTRES`,
           "1.000 x FLAN",
         ],
       },
@@ -998,7 +998,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
         lines: [
           `*** ${kitchenTicketWords("es").hold} ***`,
           ...(await head("Aviso 8", ana.tabId)),
-          `${kitchenTicketWords("es").group} 2`,
+          `${kitchenTicketWords("es").group} 2 · POSTRES`,
           "1.000 x FLAN",
         ],
       },
@@ -1059,7 +1059,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
         lines: [
           `*** ${kitchenTicketWords("es").hold} ***`,
           ...(await head("Aviso 6", b2)),
-          `${kitchenTicketWords("es").group} 2`,
+          `${kitchenTicketWords("es").group} 2 · POSTRES`,
           "1.000 x FLAN",
         ],
       },

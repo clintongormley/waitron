@@ -3,6 +3,7 @@ import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   insertInChunks,
+  kitchenCourses,
   kitchenPrintJobLines,
   kitchenPrintJobs,
   kitchenStations,
@@ -195,6 +196,7 @@ async function buildTicketItems(
   const ownRecord = alias(ticketItems, "ticket_own_record");
   const parentRecord = alias(ticketItems, "ticket_parent_record");
   const parentStation = alias(kitchenStations, "ticket_parent_station");
+  const ownCourse = alias(kitchenCourses, "ticket_own_course");
   const storedLineRows = await tx
     .select({
       id: workingOrderLines.id,
@@ -218,9 +220,12 @@ async function buildTicketItems(
       parentVariantName: parentLine.variantName,
       parentVariantKitchenName: parentLine.variantKitchenName,
       parentStationName: parentStation.name,
+      courseName: ownCourse.name,
+      courseOrder: ownCourse.displayOrder,
     })
     .from(workingOrderLines)
     .leftJoin(ownRecord, eq(ownRecord.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(ownCourse, eq(ownCourse.id, ownRecord.courseId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(parentLine, eq(parentLine.id, workingOrderLines.parentLineId))
     .leftJoin(parentRecord, eq(parentRecord.workingOrderLineId, parentLine.id))
@@ -328,6 +333,9 @@ async function buildTicketItems(
         ...(row.groupId !== null && numberLabels.has(row.groupId)
           ? { groupLabel: numberLabels.get(row.groupId)! }
           : {}),
+        ...(row.courseName === null
+          ? {}
+          : { course: { name: row.courseName, order: row.courseOrder! } }),
         qty: row.quantity,
         unit,
         name: kitchenPresentationName(row),
