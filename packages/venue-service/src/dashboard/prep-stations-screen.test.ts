@@ -5807,6 +5807,27 @@ describe("A773 station policy: the pass coverage warning", () => {
     ]);
   });
 
+  it("A1320 two stations sharing a name are judged apart: only the one uncovered everywhere folds", async () => {
+    setLocale("en");
+    const el = await mount(
+      api({
+        load: zonedView(terraceAndHall),
+        readPassCoverage: vi
+          .fn()
+          .mockResolvedValue([
+            gap("grill-a", "Grill", "terrace"),
+            gap("grill-b", "Grill", "terrace"),
+            gap("grill-a", "Grill", "hall"),
+          ]),
+      }),
+    );
+    await settle(el);
+    expect(lines(el)).toEqual([
+      "Nothing fires dishes from Grill in any zone: no pass screen covers them. Set one up under Devices.",
+      "Nothing fires dishes from Grill in Terrace: no pass screen covers them there. Set one up under Devices.",
+    ]);
+  });
+
   it("A1320 a station name holding {devices} stays plain text in the every-zone line", async () => {
     setLocale("en");
     const el = await mount(
