@@ -1685,3 +1685,272 @@ describe("A803 waiting copy: kitchen paper", () => {
     expect((await printed(t.pastry.printer)).slice(second.marks.pastry)).toEqual([]);
   });
 });
+
+declare module "vitest" {
+  interface TaskMeta {
+    raceWinner?: string;
+    raceLoserCode?: string;
+  }
+}
+
+type Outcome = PromiseSettledResult<unknown>;
+
+/**
+ * Starts both commands at once, each after its revisions and body were read, and records the
+ * order each was asked for, began and ended inside its transaction.
+ */
+async function race(
+  commands: Record<string, (tx: Transaction) => Promise<unknown>>,
+): Promise<{ outcomes: Record<string, Outcome>; trace: string[] }> {
+  const trace: string[] = [];
+  let open!: () => void;
+  const barrier = new Promise<void>((resolve) => (open = resolve));
+  const names = Object.keys(commands);
+  const run = async (name: string) => {
+    await barrier;
+    trace.push(`asked ${name}`);
+    return inTx(v, async (tx) => {
+      trace.push(`began ${name}`);
+      try {
+        return await commands[name]!(tx);
+      } finally {
+        trace.push(`ended ${name}`);
+      }
+    });
+  };
+  const racing = Promise.allSettled(names.map(run));
+  open();
+  const settled = await racing;
+  return {
+    outcomes: Object.fromEntries(names.map((name, i) => [name, settled[i]!])),
+    trace,
+  };
+}
+
+/** The one command that committed and the other's refusal code, recorded on the case. */
+function judge(
+  task: { meta: { raceWinner?: string; raceLoserCode?: string } },
+  outcomes: Record<string, Outcome>,
+  trace: string[],
+) {
+  const names = Object.keys(outcomes);
+  // Both were asked for before either ended: they were in flight together.
+  const firstEnd = trace.findIndex((entry) => entry.startsWith("ended"));
+  expect(trace.slice(0, firstEnd).filter((entry) => entry.startsWith("asked"))).toHaveLength(2);
+  const ran = trace.filter((entry) => !entry.startsWith("asked")).map((e) => e.split(" ")[1]);
+  expect(ran).toEqual([ran[0], ran[0], ran[2], ran[2]]);
+  expect(new Set(ran).size).toBe(2);
+  const winners = names.filter((name) => outcomes[name]!.status === "fulfilled");
+  expect(winners).toHaveLength(1);
+  const winner = winners[0]!;
+  const loser = names.find((name) => name !== winner)!;
+  const reason = (outcomes[loser] as PromiseRejectedResult).reason as { code?: string };
+  task.meta.raceWinner = winner;
+  task.meta.raceLoserCode = reason.code;
+  expect(reason).toMatchObject({ code: "party.out_of_date" });
+  return { winner, loser };
+}
+
+function eventKindsSince(groupIds: string[], before: Set<string>) {
+  return v.db
+    .select({
+      id: orderGroupEvents.id,
+      groupId: orderGroupEvents.groupId,
+      kind: orderGroupEvents.kind,
+    })
+    .from(orderGroupEvents)
+    .where(inArray(orderGroupEvents.groupId, groupIds))
+    .orderBy(sql`rowid`)
+    .then((rows) => rows.filter((row) => !before.has(row.id)));
+}
+
+/** The bills' MOVED notices not in `before`. */
+function movedNoticesOf(billIds: string[], before: Set<string>) {
+  return v.db
+    .select({
+      id: kitchenNotices.id,
+      lineName: kitchenNotices.lineName,
+      movedTo: kitchenNotices.movedTo,
+    })
+    .from(kitchenNotices)
+    .where(and(inArray(kitchenNotices.workingOrderId, billIds), eq(kitchenNotices.kind, "moved")))
+    .orderBy(asc(kitchenNotices.lineName))
+    .then((rows) => rows.filter((row) => !before.has(row.id)));
+}
+
+function holderNow(tableId: string) {
+  return inTx(v, (tx) => holderOf(tx, tableId));
+}
+
+describe("A803 waiting copy: races", () => {
+  afterEach(() => inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: false }, paperStations)));
+
+  /** Bill 2's Move this bill to `tableId`, read now from the party's current revision. */
+  async function moveOf(billId: string, partyId: string, tableId: string) {
+    const options = {
+      operatorId: OPERATOR,
+      partyId,
+      expectedPartyRevision: await revisionOf(v, partyId),
+      otherPartyId: null,
+    };
+    return (tx: Transaction) => moveBill(tx, v.cfg, billId, { tableId }, options);
+  }
+
+  it("A803 waiting copy: of two moves of one bill read from one revision, one commits and the other is refused with nothing of its own written", async ({
+    task,
+  }) => {
+    const t = await paperTable(true);
+    const labels = { left: `Mesa 8 (${t.n})`, right: `Mesa 9 (${t.n})` };
+    const tables = { left: await v.table(labels.left), right: await v.table(labels.right) };
+    const marks = {
+      grill: (await printed(t.grill.printer)).length,
+      pastry: (await printed(t.pastry.printer)).length,
+    };
+    const eventsBefore = new Set((await eventsOf(t.g)).map((event) => event.id));
+    const noticesBefore = new Set(
+      (await movedNoticesOf([t.bill1, t.bill2], new Set())).map((notice) => notice.id),
+    );
+
+    const { outcomes, trace } = await race({
+      left: await moveOf(t.bill2, t.partyId, tables.left),
+      right: await moveOf(t.bill2, t.partyId, tables.right),
+    });
+
+    const { winner, loser } = judge(task, outcomes, trace);
+    const won = (outcomes[winner] as PromiseFulfilledResult<{ partyId: string }>).value.partyId;
+    const side = winner as "left" | "right";
+    expect(await holderNow(tables[side])).toBe(won);
+    expect(await holderNow(tables[loser as "left" | "right"])).toBeNull();
+    const tarta = await lineOf(t.bill2, "Tarta");
+    const copies = await groupsOf(won);
+    expect(copies.map((group) => [group.id, group.state])).toEqual([
+      [(await lineOf(t.bill2, "Burger")).groupId, "fired"],
+      [tarta.groupId, "held"],
+    ]);
+    expect(
+      (await eventKindsSince([t.g, tarta.groupId!], eventsBefore)).map((e) => [e.groupId, e.kind]),
+    ).toEqual([
+      [t.g, "lines_moved"],
+      [tarta.groupId, "lines_moved"],
+    ]);
+    expect(
+      (await movedNoticesOf([t.bill1, t.bill2], noticesBefore)).map((n) => [n.lineName, n.movedTo]),
+    ).toEqual([
+      ["BURG", labels[side]],
+      ["TARTA", labels[side]],
+    ]);
+    const copyNumber = (await groupRow(tarta.groupId!)).displayNumber;
+    expect((await printed(t.grill.printer)).slice(marks.grill)).toEqual([
+      movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, labels[side], [
+        "1.000 x BURG",
+        words.hold,
+        `${words.group} ${copyNumber} · DESSERTS`,
+        "1.000 x TARTA",
+      ]),
+    ]);
+    expect((await printed(t.pastry.printer)).slice(marks.pastry)).toEqual([]);
+  });
+
+  for (const order of [
+    ["move", "fire"],
+    ["fire", "move"],
+  ] as const) {
+    it(`A803 waiting copy: a move and a fire of the same held group: one commits, the other is refused (${order[0]} asked first)`, async ({
+      task,
+    }) => {
+      const t = await paperTable(true);
+      const label = `Mesa 8 (${t.n})`;
+      const tableId = await v.table(label);
+      const marks = {
+        grill: (await printed(t.grill.printer)).length,
+        pastry: (await printed(t.pastry.printer)).length,
+      };
+      const eventsBefore = new Set((await eventsOf(t.g)).map((event) => event.id));
+      const noticesBefore = new Set(
+        (await movedNoticesOf([t.bill1, t.bill2], new Set())).map((notice) => notice.id),
+      );
+      const firing = { ...(await commandFor(v, t.partyId)), submissionId: randomUUID() };
+      const commands = {
+        move: await moveOf(t.bill2, t.partyId, tableId),
+        fire: (tx: Transaction) => fireGroup(tx, v.cfg, t.partyId, t.g, firing),
+      };
+
+      const { outcomes, trace } = await race({
+        [order[0]]: commands[order[0]],
+        [order[1]]: commands[order[1]],
+      });
+
+      const { winner } = judge(task, outcomes, trace);
+      const tarta = await lineOf(t.bill2, "Tarta");
+      const newPrints = [
+        ...(await printed(t.grill.printer)).slice(marks.grill),
+        ...(await printed(t.pastry.printer)).slice(marks.pastry),
+      ].map((lines) => lines[0]);
+      if (winner === "move") {
+        const won = (await holderNow(tableId))!;
+        expect(won).not.toBeNull();
+        expect(await groupRow(tarta.groupId!)).toMatchObject({ partyId: won, state: "held" });
+        expect(await kitchenItemOf(tarta.id)).toMatchObject({ firedAt: null, requestedAt: null });
+        expect((await groupRow(t.g)).state).toBe("held");
+        expect(
+          (await eventKindsSince([t.g, tarta.groupId!], eventsBefore)).map((e) => e.kind),
+        ).toEqual(["lines_moved", "lines_moved"]);
+        expect(newPrints).toEqual([`*** ${words.moved} ***`]);
+      } else {
+        expect(await holderNow(tableId)).toBeNull();
+        expect(tarta.groupId).toBe(t.g);
+        expect((await groupRow(t.g)).state).toBe("fired");
+        expect(await kitchenItemOf(tarta.id)).toMatchObject({ firedAt: expect.any(String) });
+        expect((await eventKindsSince([t.g], eventsBefore)).map((e) => e.kind)).toEqual(["fired"]);
+        expect(await movedNoticesOf([t.bill1, t.bill2], noticesBefore)).toEqual([]);
+        expect(newPrints).toEqual([`*** ${words.fire} ***`, `*** ${words.fire} ***`]);
+      }
+    });
+  }
+
+  for (const order of [
+    ["move", "split"],
+    ["split", "move"],
+  ] as const) {
+    it(`A803 waiting copy: a move and Split a table of the same bill: one commits (${order[0]} asked first)`, async ({
+      task,
+    }) => {
+      const a = await seatWith([
+        { names: ["Burger"], release: "fire" },
+        { names: ["Flan"], release: "hold" },
+      ]);
+      const source = (await lineOf(a.billId, "Flan")).groupId!;
+      const joined = await v.table(`Copy ${++tableNumber}`);
+      const joining = {
+        operatorId: OPERATOR,
+        expectedPartyRevision: await revisionOf(v, a.partyId),
+      };
+      await inTx(v, (tx) => joinTables(tx, v.cfg, a.partyId, joined, joining));
+      const free = await v.table(`Copy ${++tableNumber}`);
+      const splitting = await commandFor(v, a.partyId);
+      const commands = {
+        move: await moveOf(a.billId, a.partyId, free),
+        split: (tx: Transaction) => splitTable(tx, v.cfg, a.partyId, joined, a.billId, splitting),
+      };
+
+      const { outcomes, trace } = await race({
+        [order[0]]: commands[order[0]],
+        [order[1]]: commands[order[1]],
+      });
+
+      const { winner } = judge(task, outcomes, trace);
+      const flan = await lineOf(a.billId, "Flan");
+      const won = (await holderNow(winner === "move" ? free : joined))!;
+      expect(won).not.toBe(a.partyId);
+      expect(await holderNow(winner === "move" ? joined : free)).toBe(
+        winner === "move" ? a.partyId : null,
+      );
+      expect((await groupsOf(won)).map((group) => group.state)).toEqual(["fired", "held"]);
+      expect(await groupRow(flan.groupId!)).toMatchObject({ partyId: won, state: "held" });
+      expect((await groupRow(source)).state).toBe("removed");
+      expect(await groupsOf(a.partyId)).toEqual(
+        expect.not.arrayContaining([expect.objectContaining({ state: "held" })]),
+      );
+    });
+  }
+});
