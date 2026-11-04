@@ -1916,20 +1916,47 @@ export async function enqueueMovedSlipsFor(
   cfg: TradingContext,
   before: ReadonlyMap<string, SentWork>,
 ): Promise<void> {
-  const moves = [...before].map(([billId, work]) => ({ work, to: billId }));
-  if (moves.length === 0) return;
-  const now = await readPlacedOrders(tx, [...new Set(moves.map((move) => move.to))]);
-  const changed = moves.filter((move) => kitchenToBeTold(move.work, now.get(move.to)!.places));
+  await notifyOwnBillsWhere(tx, cfg, before, kitchenToBeTold);
+}
+
+/**
+ * {@link enqueueMovedSlipsFor} for the bills `before` read whose kitchen paper printed a name and
+ * no longer has any of its names among the order's places.
+ */
+export async function enqueueMovedSlipsForNamesGone(
+  tx: Transaction,
+  cfg: TradingContext,
+  before: ReadonlyMap<string, SentWork>,
+): Promise<void> {
+  await notifyOwnBillsWhere(tx, cfg, before, (work, after) => {
+    const names = new Set(after.names);
+    return work.places.names.length > 0 && !work.places.names.some((name) => names.has(name));
+  });
+}
+
+/** Tells the kitchen of each bill `before` read, onto the bill itself, where `toBeTold` says so. */
+async function notifyOwnBillsWhere(
+  tx: Transaction,
+  cfg: TradingContext,
+  before: ReadonlyMap<string, SentWork>,
+  toBeTold: (work: SentWork, after: OrderPlaces) => boolean,
+): Promise<void> {
+  if (before.size === 0) return;
+  const now = await readPlacedOrders(tx, [...before.keys()]);
+  const changed = [...before].filter(([billId, work]) => toBeTold(work, now.get(billId)!.places));
   if (changed.length === 0) return;
-  const onOrders = await readTicketItemsOn(tx, [...new Set(changed.map((move) => move.to))]);
+  const onOrders = await readTicketItemsOn(
+    tx,
+    changed.map(([billId]) => billId),
+  );
   await notifyMoved(
     tx,
     cfg,
-    changed.map(({ work, to }) => ({
+    changed.map(([billId, work]) => ({
       before: work,
-      to,
-      after: now.get(to)!,
-      onOrder: onOrders.get(to)!,
+      to: billId,
+      after: now.get(billId)!,
+      onOrder: onOrders.get(billId) ?? [],
       splitFrom: new Map(),
     })),
   );

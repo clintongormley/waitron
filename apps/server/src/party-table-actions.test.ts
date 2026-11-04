@@ -1043,7 +1043,7 @@ describe("MOVED notices for a paid bill left on a party combined away", () => {
     expect(await paidBill(ana.tabId)).toEqual(paid);
   });
 
-  it("tells the kitchen when the party that took the guests splits off a table it joined, and not of the join", async () => {
+  it("tells the kitchen nothing of the paid bill when the party that took the guests splits off a table it joined", async () => {
     const [m4, m7, m9] = await tables("PagoS", 4, 7, 9);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
@@ -1058,10 +1058,7 @@ describe("MOVED notices for a paid bill left on a party combined away", () => {
     const splitting = await cmd(luis.partyId);
     await act((tx) => splitTable(tx, v.cfg, luis.partyId, m9, null, splitting));
 
-    expect(noticesOn([ana.tabId])).toEqual([
-      ...earlier,
-      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoS 7" },
-    ]);
+    expect(noticesOn([ana.tabId])).toEqual(earlier);
     expect(await paidBill(ana.tabId)).toEqual(paid);
   });
 
@@ -1573,7 +1570,7 @@ describe("MOVED notices after a table action", () => {
     expect(noticesOn([luis.tabId])).toEqual(luisNotices);
   });
 
-  it("tells the kitchen of the split bill's dishes at the split table, and the party's other dishes at what it keeps", async () => {
+  it("tells the kitchen of the split bill's dishes at the split table, and nothing of the dishes that stayed", async () => {
     const [m4, m5] = await tables("AvisoS", 4, 5);
     const ana = await seat(v, m4);
     await joinFree(ana.partyId, m5);
@@ -1586,7 +1583,6 @@ describe("MOVED notices after a table action", () => {
 
     expect(noticesOn([ana.tabId, b2])).toEqual([
       ...earlier,
-      { working_order_id: ana.tabId, kind: "moved", line_name: "PAELLA", moved_to: "AvisoS 4" },
       { working_order_id: b2, kind: "moved", line_name: "BURG", moved_to: "AvisoS 5" },
     ]);
   });

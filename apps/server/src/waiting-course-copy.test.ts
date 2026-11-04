@@ -1724,6 +1724,60 @@ describe("A803 waiting copy: kitchen paper", () => {
     ]);
   });
 
+  it("A803 split: what the kitchen is told: a loose held dish on HOLD paper prints under HOLD with its copy's number", async () => {
+    const t = await paperTable(true);
+    const mesa8 = `Mesa 8 (${t.n})`;
+    const tableId = await v.table(mesa8);
+    const joining = { operatorId: OPERATOR, expectedPartyRevision: await revisionOf(v, t.partyId) };
+    await inTx(v, (tx) => joinTables(tx, v.cfg, t.partyId, tableId, joining));
+    const marks = {
+      grill: (await printed(t.grill.printer)).length,
+      pastry: (await printed(t.pastry.printer)).length,
+    };
+    const burger = await lineOf(t.bill2, "Burger");
+    const tarta = await lineOf(t.bill2, "Tarta");
+    const splitting = {
+      operatorId: OPERATOR,
+      expectedPartyRevision: await revisionOf(v, t.partyId),
+      expectedEdits: [await inTx(v, (tx) => readBillEditState(tx, t.bill2))],
+    };
+
+    const { partyId, billId: newBill } = await inTx(v, (tx) =>
+      splitTable(
+        tx,
+        v.cfg,
+        t.partyId,
+        tableId,
+        { wholeBillIds: [], loose: [{ billId: t.bill2, lineIds: [burger.id, tarta.id] }] },
+        splitting,
+      ),
+    );
+
+    const copyId = (await lineOf(newBill, "Tarta")).groupId!;
+    expect((await groupRow(copyId)).displayNumber).not.toBe((await groupRow(t.g)).displayNumber);
+    const fromNumber = await orderNumberOf(t.bill2);
+    const toNumber = await orderNumberOf(newBill);
+    expect((await printed(t.grill.printer)).slice(marks.grill)).toEqual([
+      movedSlip(
+        t.grill.name,
+        `${words.order} ${fromNumber} -> ${toNumber}`,
+        `Mesa 5 (${t.n}), 8 (${t.n})`,
+        mesa8,
+        ["1.000 x BURG", words.hold, `${words.group} 2 · DESSERTS`, "1.000 x TARTA"],
+      ),
+    ]);
+    expect((await printed(t.pastry.printer)).slice(marks.pastry)).toEqual([]);
+
+    await answerNoAllergies(partyId);
+    const beforeFire = (await printed(t.grill.printer)).length;
+
+    await fire(partyId, copyId);
+
+    expect((await printed(t.grill.printer)).slice(beforeFire)).toEqual([
+      fireTicket(t.grill.name, mesa8, toNumber, 2, "1.000 x TARTA"),
+    ]);
+  });
+
   it("A803 waiting copy: moving the bill again: the second MOVED slip lists the held dish under HOLD with its group's number at the third table", async () => {
     const t = await paperTable(true);
     const table8 = `Mesa 8 (${t.n})`;

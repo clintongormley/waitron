@@ -496,18 +496,17 @@ describe("a table split off a group renamed for today, as the kitchen sees it", 
     expect(slips.filter((s) => s.includes(fromTo(name, nine)))).toHaveLength(1);
   });
 
-  it("Table 9 split off an unnamed group with no bill prints one MOVED slip to Counter 6", async () => {
+  it("Table 9 split off an unnamed group with no bill prints no MOVED slip: Counter 6's name is still on the paper", async () => {
     const { table, guests } = await seatedPair(null);
     await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
+    expect((await kitchenJobs()).length).toBeGreaterThan(0);
 
     const printed = await jobsFrom(() => splitTableOff(guests.partyId, table.t9!, null));
 
-    const slips = printed.filter(isMovedSlip);
-    expect(slips).toHaveLength(1);
-    expect(slips[0]!.join(" ")).toContain(prepareText(`A:  ${await labelOf(table.c6!)}`));
+    expect(printed.filter(isMovedSlip)).toEqual([]);
   });
 
-  it("Table 9 split off an unnamed group taking a bill prints a MOVED slip for each bill", async () => {
+  it("Table 9 split off an unnamed group taking a bill prints one MOVED slip, for the bill that left", async () => {
     const { table, guests } = await seatedPair(null);
     await orderForParty(v, guests.partyId, ["Burger", "Burger"], guests.tabId);
     const second = await split(v, guests.partyId, guests.tabId, [2]);
@@ -515,11 +514,9 @@ describe("a table split off a group renamed for today, as the kitchen sees it", 
     const printed = await jobsFrom(() => splitTableOff(guests.partyId, table.t9!, second));
 
     const slips = printed.filter(isMovedSlip).map((lines) => lines.join(" "));
-    expect(slips).toHaveLength(2);
-    const counter6 = prepareText(`A:  ${await labelOf(table.c6!)}`);
-    const table9 = prepareText(`A:  ${await labelOf(table.t9!)}`);
-    expect(slips.filter((s) => s.includes(counter6))).toHaveLength(1);
-    expect(slips.filter((s) => s.includes(table9))).toHaveLength(1);
+    expect(slips).toEqual([
+      expect.stringContaining(prepareText(`A:  ${await labelOf(table.t9!)}`)),
+    ]);
   });
 });
 
