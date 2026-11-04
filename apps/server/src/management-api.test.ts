@@ -1559,13 +1559,12 @@ describe("/management-api/stations (KDS-1 config)", () => {
   });
 
   it("keeps a station open through default changes until it is deleted", async () => {
-    const cfg = { locationId: brandLocationId(venue.locationId) };
     const first = await createStation(unique("Swap default"), { isDefault: true });
     const second = await createStation(unique("Swap closed"));
     // Tuesday 6 October 2026, 12:00 in Madrid.
     const at = new Date("2026-10-06T10:00:00Z");
     const state = async () =>
-      (await withTransaction(suite.db, (tx) => stationStates(tx, cfg, at))).get(second);
+      (await withTransaction(suite.db, (tx) => stationStates(tx, at))).get(second);
     expect(await state()).toMatchObject({ open: true, isDefault: false, active: true });
 
     expect(

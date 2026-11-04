@@ -139,7 +139,7 @@ describe("a new department's starter steps", () => {
     const department = await scoped((tx) =>
       createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
     );
-    expect(await scoped((tx) => listServiceSteps(tx, cfg))).toEqual(
+    expect(await scoped((tx) => listServiceSteps(tx))).toEqual(
       starterSteps(department.id, [...names]),
     );
   });
@@ -154,19 +154,19 @@ describe("service steps", () => {
       gone: await createDepartment(tx, cfg, { name: "Gone", orderStart: "table" }),
     }));
     await scoped(async (tx) => {
-      await saveServiceSteps(tx, cfg, dining.id, [
+      await saveServiceSteps(tx, dining.id, [
         { name: "Set up", start: "seated", courseId: null, minutes: 0 },
         { name: "Take order", start: "after_previous", courseId: null, minutes: 2 },
       ]);
-      await saveServiceSteps(tx, cfg, bar.id, [
+      await saveServiceSteps(tx, bar.id, [
         { name: "Check in", start: "seated", courseId: null, minutes: 5 },
       ]);
-      await saveServiceSteps(tx, cfg, gone.id, [
+      await saveServiceSteps(tx, gone.id, [
         { name: "Gone step", start: "seated", courseId: null, minutes: 0 },
       ]);
       await tx.update(departments).set({ active: false }).where(eq(departments.id, gone.id));
     });
-    const listed = await scoped((tx) => listServiceSteps(tx, cfg));
+    const listed = await scoped((tx) => listServiceSteps(tx));
     const byDepartment = [dining.id, bar.id].sort();
     expect(listed.map((step) => [step.departmentId, step.name])).toEqual(
       byDepartment.flatMap((id) =>
@@ -193,7 +193,7 @@ describe("service steps", () => {
     const mains = await seedCourse(cfg, "Mains", 2);
     const starters = await seedCourse(cfg, "Starters", 1);
     await seedCourse(cfg, "Retired", 0, false);
-    expect(await scoped((tx) => listStepCourses(tx, cfg))).toEqual([
+    expect(await scoped((tx) => listStepCourses(tx))).toEqual([
       { id: starters, name: "Starters" },
       { id: mains, name: "Mains" },
     ]);
@@ -206,7 +206,7 @@ describe("service steps", () => {
       createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
     );
     await scoped((tx) =>
-      saveServiceSteps(tx, cfg, department.id, [
+      saveServiceSteps(tx, department.id, [
         { name: "Set up", start: "seated", courseId: null, minutes: 0 },
         { name: "Take order", start: "after_previous", courseId: null, minutes: 2 },
         { name: "Dessert?", start: "course_served", courseId: mains, minutes: 10 },
@@ -215,7 +215,7 @@ describe("service steps", () => {
     const first = await departmentRows(department.id);
     const [setUp, takeOrder, dessert] = first;
     await scoped((tx) =>
-      saveServiceSteps(tx, cfg, department.id, [
+      saveServiceSteps(tx, department.id, [
         { id: takeOrder!.id, name: "  Order  ", start: "seated", courseId: null, minutes: 3 },
         { id: dessert!.id, name: "Dessert?", start: "course_served", courseId: mains, minutes: 10 },
         { name: "Anything else?", start: "since_last_order", courseId: null, minutes: 20 },
@@ -242,10 +242,10 @@ describe("service steps", () => {
       bar: await createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" }),
     }));
     await scoped(async (tx) => {
-      await saveServiceSteps(tx, cfg, dining.id, [
+      await saveServiceSteps(tx, dining.id, [
         { name: "Set up", start: "seated", courseId: null, minutes: 0 },
       ]);
-      await saveServiceSteps(tx, cfg, bar.id, [
+      await saveServiceSteps(tx, bar.id, [
         { name: "Check in", start: "seated", courseId: null, minutes: 0 },
       ]);
     });
@@ -253,7 +253,7 @@ describe("service steps", () => {
     const before = await departmentRows(dining.id);
     const error = await captureError(() =>
       scoped((tx) =>
-        saveServiceSteps(tx, cfg, dining.id, [
+        saveServiceSteps(tx, dining.id, [
           { name: "New", start: "seated", courseId: null, minutes: 0 },
           { id: barStep!.id, name: "Stolen", start: "seated", courseId: null, minutes: 0 },
         ]),
@@ -277,14 +277,14 @@ describe("service steps", () => {
         createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
       );
       await scoped((tx) =>
-        saveServiceSteps(tx, cfg, department.id, [
+        saveServiceSteps(tx, department.id, [
           { name: "Set up", start: "seated", courseId: null, minutes: 0 },
         ]),
       );
       const before = await departmentRows(department.id);
       const error = await captureError(() =>
         scoped((tx) =>
-          saveServiceSteps(tx, cfg, department.id, [
+          saveServiceSteps(tx, department.id, [
             { name: "Dessert?", start: "course_served", courseId, minutes: 10 },
           ]),
         ),
@@ -300,12 +300,12 @@ describe("service steps", () => {
       createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
     );
     await scoped((tx) =>
-      saveServiceSteps(tx, cfg, department.id, [
+      saveServiceSteps(tx, department.id, [
         { name: "Set up", start: "seated", courseId: null, minutes: 0 },
         { name: "Take order", start: "after_previous", courseId: null, minutes: 2 },
       ]),
     );
-    await scoped((tx) => saveServiceSteps(tx, cfg, department.id, []));
+    await scoped((tx) => saveServiceSteps(tx, department.id, []));
     expect(await departmentRows(department.id)).toEqual([]);
   });
 });
@@ -342,7 +342,7 @@ describe("a step's completions", () => {
       createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
     );
     await scoped((tx) =>
-      saveServiceSteps(tx, cfg, department.id, [
+      saveServiceSteps(tx, department.id, [
         { name: "Set up", start: "seated", courseId: null, minutes: 0 },
         { name: "Take order", start: "after_previous", courseId: null, minutes: 2 },
       ]),
@@ -350,7 +350,7 @@ describe("a step's completions", () => {
     const [setUp, takeOrder] = await departmentRows(department.id);
     const partyId = await doneOnEach([setUp!.id, takeOrder!.id]);
     await scoped((tx) =>
-      saveServiceSteps(tx, cfg, department.id, [
+      saveServiceSteps(tx, department.id, [
         { id: setUp!.id, name: "Lay the table", start: "seated", courseId: null, minutes: 0 },
       ]),
     );

@@ -165,7 +165,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           )
       ).filter(({ capabilities }) => (capabilities as string[]).includes("take-orders"));
       for (const { id } of unscoped) {
-        await setProfileServiceScope(tx, node, id, {
+        await setProfileServiceScope(tx, id, {
           departmentId: policy[0]!.departmentId,
           allowedZoneIds: null,
           startingZoneId: zoneId,

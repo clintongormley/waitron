@@ -465,8 +465,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         pass: await profile("tablet-landscape", ["show-expo", "hand-over-orders"]),
       };
       const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
-      const access = (id: string) =>
-        db.transaction((tx) => readProfileServiceAccess(tx, { locationId }, id));
+      const access = (id: string) => db.transaction((tx) => readProfileServiceAccess(tx, id));
       const defaults = async () => {
         const rows = await db.execute<{ department_id: string; zone_id: string }>(sql`
           select department_id, zone_id from zone_service_policies
@@ -523,7 +522,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       await runSeed();
 
       expect(await bindings()).toEqual(before);
-      const screens = await db.transaction((tx) => readProfileKitchenScreens(tx, { locationId }));
+      const screens = await db.transaction((tx) => readProfileKitchenScreens(tx));
       const till = screens.find((entry) => entry.profileId === profiles.till)?.screens;
       expect({ ...till?.pass, stationIds: [...(till?.pass?.stationIds ?? [])].sort() }).toEqual({
         stationIds: [bar!.id],
@@ -540,7 +539,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         createServiceZone(tx, { locationId }, { name: "Terrace", departmentId: department_id }),
       );
       await db.transaction((tx) =>
-        setProfileServiceAccess(tx, { locationId }, profiles.till, {
+        setProfileServiceAccess(tx, profiles.till, {
           departmentId: department_id,
           allowedZoneIds: [terrace.id],
           startingZoneId: terrace.id,

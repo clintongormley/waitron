@@ -1144,7 +1144,7 @@ describe("venue detail consumer reads", () => {
     const before = retained();
     const readCurrent = () =>
       withTransaction(suite.db, async (tx) => {
-        const states = await stationStates(tx, venue.cfg, at);
+        const states = await stationStates(tx, at);
         const annotations = await BOOKINGS_FLOOR_ANNOTATIONS.annotate(tx, at, [table!.id]);
         return {
           open: stationIds.map((id) => states.get(id)!.open),

@@ -513,7 +513,7 @@ describe("Hours when the venue's clock changes", () => {
 
   const barStatus = (fx: Fixture, at: Date) =>
     withTransaction(db, async (tx) => {
-      const model = await routingModel(tx, fx.cfg, at);
+      const model = await routingModel(tx, at);
       return model.stationTimes.find((times) => times.stationId === fx.bar.id)!.status;
     });
 
@@ -540,7 +540,7 @@ describe("Hours when the venue's clock changes", () => {
     /** Thursday 15 October 2026 02:30 in Madrid. */
     const at = new Date("2026-10-15T00:30:00Z");
     expect(await barStatus(fx, at)).toEqual({ open: true, why: "open" });
-    await withTransaction(db, (tx) => setStationToday(tx, fx.cfg, fx.bar.id, "closed", at));
+    await withTransaction(db, (tx) => setStationToday(tx, fx.bar.id, "closed", at));
     const before = await model(at);
     expect(before.civilDate).toBe("2026-10-15");
     expect(await barStatus(fx, at)).toEqual({ open: false, why: "closed_by_hand" });

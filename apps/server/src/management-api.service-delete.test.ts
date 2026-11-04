@@ -361,7 +361,7 @@ it.each([
         .insert(deviceProfiles)
         .values({ name: "Only garden", formFactor: "till" })
         .returning();
-      await setProfileServiceScope(tx, v.cfg, profile!.id, {
+      await setProfileServiceScope(tx, profile!.id, {
         departmentId: f.departmentId,
         allowedZoneIds: [f.zoneId],
         startingZoneId: f.zoneId,

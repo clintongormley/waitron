@@ -1763,7 +1763,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
                 at,
               )
             : [],
-          stations: await availableStations(tx, cfg, at),
+          stations: await availableStations(tx, at),
         };
       });
       return c.json(answer);
@@ -2227,7 +2227,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (!isUuid(id)) throw new AppError("station.not_found", { stationId: id });
       const queue = await withTransaction(deps.db, async (tx) => ({
         items: await listStationQueue(tx, id),
-        notices: await VENUE_SERVICE.listStationNotices(tx, deps.cfg, id),
+        notices: await VENUE_SERVICE.listStationNotices(tx, id),
         printersDown: (await stationPrintersDown(tx, new Date(), [id])).map(
           ({ printerId, printerName, since }) => ({ printerId, printerName, since }),
         ),
@@ -2238,12 +2238,11 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/kitchen-notices/:id/acknowledge", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c, { action: "prepare-orders" });
-      const cfg = requestCfg(deps.cfg, session);
+      await requireSession(deps, c, { action: "prepare-orders" });
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("kitchen_notice.not_found", { noticeId: id });
       await withTransaction(deps.db, async (tx) => {
-        await VENUE_SERVICE.acknowledgeKitchenNotice(tx, cfg, id);
+        await VENUE_SERVICE.acknowledgeKitchenNotice(tx, id);
       });
       return c.body(null, 200);
     }),
@@ -2800,7 +2799,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const { device } = await requireSession(deps, c);
       const tables = await withTransaction(deps.db, async (tx) => {
-        const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
+        const scope = await readZoneScope(tx, device.deviceProfileId);
         return (await listTables(tx, deps.cfg, deps.clock.now().instant)).filter((table) =>
           inScope(scope, table.zoneId),
         );
@@ -2814,7 +2813,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const { device } = await requireSession(deps, c);
       const state = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
-        const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
+        const scope = await readZoneScope(tx, device.deviceProfileId);
         return (await listTablesWithState(tx, deps.floorAnnotators ?? [], undefined, log)).filter(
           (table) => inScope(scope, table.zoneId),
         );
@@ -2827,7 +2826,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const { device } = await requireSession(deps, c);
       const zones = await withTransaction(deps.db, async (tx) => {
-        const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
+        const scope = await readZoneScope(tx, device.deviceProfileId);
         const visible = (await listZones(tx, deps.cfg)).filter((zone) => inScope(scope, zone.id));
         const ids = visible.map((zone) => zone.id);
         if (ids.length === 0) return [];
@@ -3784,7 +3783,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             })),
             at,
           ),
-          stations: await availableStations(tx, cfg, at),
+          stations: await availableStations(tx, at),
         };
       });
       return c.json(answer);
@@ -3900,7 +3899,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
                 at,
               )
             : [],
-          stations: await availableStations(tx, cfg, at),
+          stations: await availableStations(tx, at),
           revision: order.revision,
         };
       });

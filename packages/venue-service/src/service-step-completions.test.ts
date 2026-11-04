@@ -76,15 +76,15 @@ describe("readTableStepRules", () => {
     const b = await departmentWithTables(cfg, "B");
     const empty = await departmentWithTables(cfg, "Empty");
     await scoped(async (tx) => {
-      await saveServiceSteps(tx, cfg, a.departmentId, [
+      await saveServiceSteps(tx, a.departmentId, [
         { name: "Bread", start: "seated", courseId: null, minutes: 0 },
         { name: "Order", start: "after_previous", courseId: null, minutes: 2 },
         { name: "Drinks?", start: "since_last_order", courseId: null, minutes: 20 },
       ]);
-      await saveServiceSteps(tx, cfg, b.departmentId, [
+      await saveServiceSteps(tx, b.departmentId, [
         { name: "Bill?", start: "all_served", courseId: null, minutes: 10 },
       ]);
-      await saveServiceSteps(tx, cfg, empty.departmentId, []);
+      await saveServiceSteps(tx, empty.departmentId, []);
     });
 
     const read = await scoped((tx) =>
@@ -143,7 +143,7 @@ describe("step completions", () => {
     const a = await departmentWithTables(cfg, "A");
     const [first, second] = (
       await scoped(async (tx) => {
-        await saveServiceSteps(tx, cfg, a.departmentId, [
+        await saveServiceSteps(tx, a.departmentId, [
           { name: "Bread", start: "seated", courseId: null, minutes: 0 },
           { name: "Order", start: "after_previous", courseId: null, minutes: 2 },
         ]);

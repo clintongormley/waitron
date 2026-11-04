@@ -44,7 +44,7 @@ describe("findDeadEnds", () => {
         .update(kitchenStations)
         .set({ isDefault: false })
         .where(eq(kitchenStations.id, kitchen!.id));
-      await setStationToday(tx, v.cfg, bar!.id, "closed", at);
+      await setStationToday(tx, bar!.id, "closed", at);
     });
     const answer = await inTx(v, (tx) =>
       findDeadEnds(
@@ -101,7 +101,7 @@ describe("findDeadEnds", () => {
         name: `Destination bar ${randomUUID()}`,
       })
       .returning({ id: kitchenStations.id });
-    await inTx(v, (tx) => setStationToday(tx, v.cfg, bar!.id, "closed", at, destination!.id));
+    await inTx(v, (tx) => setStationToday(tx, bar!.id, "closed", at, destination!.id));
     const replaced = await inTx(v, (tx) =>
       findDeadEnds(
         tx,

@@ -213,7 +213,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         const rows = await listPendingJoinRequests(tx, deps.cfg, kind);
         if (kind === "print_agent") return { rows, returning: null };
         const ids = rows.map((row) => row.id);
-        return { rows, returning: await returningDevicesOf(tx, deps.cfg, ids) };
+        return { rows, returning: await returningDevicesOf(tx, ids) };
       });
       if (returning === null) return c.json(rows);
       const sessionKey = hashSessionToken(sessionId);

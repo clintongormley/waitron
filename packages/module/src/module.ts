@@ -770,7 +770,6 @@ export interface VenueServiceContribution {
   ): Promise<void>;
   listDepartmentTransferDestinations(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     sender: DepartmentTransferActor,
   ): Promise<{ id: string; name: string }[]>;
   listIncomingDepartmentTransfers(
@@ -869,11 +868,7 @@ export interface VenueServiceContribution {
    * Whether a dish sent after its period ended in this department needs someone holding
    * `venue_service.manage`: the sender, or a manager's PIN.
    */
-  readLateSendNeedsManager(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    departmentId: string,
-  ): Promise<boolean>;
+  readLateSendNeedsManager(tx: Transaction, departmentId: string): Promise<boolean>;
   readKeepOpen(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -999,35 +994,21 @@ export interface VenueServiceContribution {
     at: Date,
   ): Promise<ReadonlyMap<string, ExtraMakerOutcome>>;
   /** Every station's state at one instant, including stations switched off. */
-  stationStates(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    at: Date,
-  ): Promise<ReadonlyMap<string, StationTodayState>>;
+  stationStates(tx: Transaction, at: Date): Promise<ReadonlyMap<string, StationTodayState>>;
   stationDestinations(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     stationId: string,
     at: Date,
   ): Promise<readonly { id: string; name: string; isDefault: boolean }[]>;
   closeStationForToday(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     stationId: string,
     sendsToStationId: string,
     at: Date,
   ): Promise<void>;
-  openStationForToday(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    stationId: string,
-    at: Date,
-  ): Promise<void>;
+  openStationForToday(tx: Transaction, stationId: string, at: Date): Promise<void>;
   /** Base maker for active products and variants, plus whether any active zone's maker or no-replacement answer differs. */
-  describeMakers(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-  ): Promise<
+  describeMakers(tx: Transaction): Promise<
     ReadonlyMap<
       string,
       {
@@ -1080,7 +1061,6 @@ export interface VenueServiceContribution {
    *  `device_profile.access_invalid`. */
   readProfileServiceAccess(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     profileId: string,
   ): Promise<{
     departmentId: string | null;
@@ -1090,29 +1070,21 @@ export interface VenueServiceContribution {
   /** Each live profile's kitchen screens in display order. */
   readProfileKitchenScreens(
     tx: Transaction,
-    cfg: { locationId: LocationId },
   ): Promise<{ profileId: string; screens: ProfileKitchenScreens }[]>;
   /** Replaces the profile's screens, preserving an unchanged stored empty zone bound.
    *  New empty lists and deleted nonempty zone or station choices refuse with field/reason. */
   setProfileKitchenScreens(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     profileId: string,
     screens: ProfileKitchenScreens,
   ): Promise<NarrowedDevice[]>;
   /** Copies a live source's kitchen screens, retaining its explicit empty zone bounds. */
-  copyProfileKitchenScreens(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    sourceId: string,
-    targetId: string,
-  ): Promise<void>;
+  copyProfileKitchenScreens(tx: Transaction, sourceId: string, targetId: string): Promise<void>;
   /** Narrows the device from its current profile to `profileId`, before a switch writes it,
    *  recording what it lost and giving back what `profileId` allows again, as a profile save does;
    *  never refuses. Null: it lost nothing, or the device is unknown. */
   narrowDeviceKitchenScreens(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     deviceId: string,
     profileId: string,
   ): Promise<NarrowedDevice | null>;
@@ -1120,28 +1092,21 @@ export interface VenueServiceContribution {
    *  there is none; never removes anything and never narrows a device. Unchecked: for test set-up. */
   addProfileKitchenScreen(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     profileId: string,
     screen: DeviceKitchenScreen,
   ): Promise<void>;
   /** The device's stored kitchen screens, then the kinds a narrowing took from it. */
-  readDeviceKitchenScreens(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    deviceId: string,
-  ): Promise<ResolvedKitchenScreen[]>;
+  readDeviceKitchenScreens(tx: Transaction, deviceId: string): Promise<ResolvedKitchenScreen[]>;
   /** Each named device's `readDeviceKitchenScreens`, in a fixed number of queries; one unknown
    *  here reads none. */
   readDevicesKitchenScreens(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     deviceIds: readonly string[],
   ): Promise<Map<string, ResolvedKitchenScreen[]>>;
   /** Refuses `kitchen_screen.required` when `profileId` is a kitchen display's and the device's
    *  choice, less what narrowings took, holds no kitchen screen. */
   assertKitchenDisplayHasScreen(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     deviceId: string,
     profileId: string,
   ): Promise<void>;
@@ -1149,7 +1114,6 @@ export interface VenueServiceContribution {
    *  `kitchen_screen.*` or `station.not_allowed` as `assertDeviceKitchenScreens` says. */
   setDeviceKitchenScreens(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     input: { deviceId: string; profileId: string; screens: readonly DeviceKitchenScreen[] },
   ): Promise<void>;
   /** Sets the device's own choice of showing other stations' dishes on its screen of `kind`
@@ -1188,7 +1152,6 @@ export interface VenueServiceContribution {
    *  Writes nothing. */
   assertDeviceKitchenScreens(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     profileId: string,
     screens: readonly DeviceKitchenScreen[],
     deviceId?: string,
@@ -1196,18 +1159,12 @@ export interface VenueServiceContribution {
   /** Refuses an order's zone (null: an order in no zone) the device's pass screen does not show,
    *  and any order on a device with no pass screen once narrowings' removals are taken out
    *  (`kitchen_screen.not_allowed`). */
-  assertPassScreenZone(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    deviceId: string,
-    zoneId: string | null,
-  ): Promise<void>;
+  assertPassScreenZone(tx: Transaction, deviceId: string, zoneId: string | null): Promise<void>;
   /** Each active kitchen display running a station screen, with the stations it shows now; with
    *  `withSwitchedOff`, also the switched-off ones its explicit list names (never "every"'s, never
    *  one a narrowing took). */
   readStationScreens(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     options?: { withSwitchedOff?: boolean },
   ): Promise<{ deviceId: string; stationIds: string[] }[]>;
   /** Each named profile's scope as last saved: `allowedZoneIds` null means every zone of the
@@ -1231,7 +1188,6 @@ export interface VenueServiceContribution {
    *  ones. */
   setProfileServiceScope(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     profileId: string,
     scope: {
       departmentId?: string | null;
@@ -1242,7 +1198,6 @@ export interface VenueServiceContribution {
   /** The department and zone half of {@link readProfileServiceAccess}. */
   readProfileZones(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     profileId: string,
   ): Promise<{
     departmentId: string | null;
@@ -1257,12 +1212,7 @@ export interface VenueServiceContribution {
   ): Promise<Map<string, string[] | null>>;
   /** Refused `service_zone.not_allowed` when the profile has a department and `zoneId` is not one of
    *  the zones it may order in now. */
-  assertProfileZone(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    profileId: string,
-    zoneId: string,
-  ): Promise<void>;
+  assertProfileZone(tx: Transaction, profileId: string, zoneId: string): Promise<void>;
   recordOrderContext(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -1379,7 +1329,6 @@ export interface VenueServiceContribution {
    *  labels the notice `#28 → #27` when it differs. */
   recordKitchenNotices(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     workingOrderId: string,
     items: readonly {
       workingOrderLineId: string;
@@ -1409,18 +1358,13 @@ export interface VenueServiceContribution {
    * A station's unacknowledged notices, oldest first: the newest fifty of the business day, a
    * kitchen-note change's notice kept whole.
    */
-  listStationNotices(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    stationId: string,
-  ): Promise<StationNotice[]>;
+  listStationNotices(tx: Transaction, stationId: string): Promise<StationNotice[]>;
   /**
    * `listStationNotices` for several stations in one statement, a kitchen-note change's notice kept
    * whole; every station asked for has an entry.
    */
   listStationsNotices(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     stationIds: readonly string[],
   ): Promise<Map<string, StationNotice[]>>;
   /**
@@ -1429,7 +1373,6 @@ export interface VenueServiceContribution {
    */
   acknowledgeKitchenNotice(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     id: string,
     scope?: { stationId?: string },
   ): Promise<void>;

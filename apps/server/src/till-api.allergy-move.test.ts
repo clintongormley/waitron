@@ -395,7 +395,7 @@ for (const action of ["preview", "move"] as const) {
       const f = await fixture();
       const [department] = await listDepartments(v.db, v.cfg);
       const restrict = (allowedZoneIds: string[]) =>
-        setProfileServiceAccess(v.db, v.cfg, f.profileId, {
+        setProfileServiceAccess(v.db, f.profileId, {
           departmentId: department!.id,
           allowedZoneIds,
           startingZoneId: allowedZoneIds[0]!,

@@ -35,10 +35,9 @@ export async function requireMakeAtStation(
 
 export async function availableStations(
   tx: Transaction,
-  cfg: TradingContext,
   at: Date,
 ): Promise<DeadEndAnswer["stations"]> {
-  const states = await VENUE_SERVICE.stationStates(tx, cfg, at);
+  const states = await VENUE_SERVICE.stationStates(tx, at);
   return [...states].flatMap(([id, state]) =>
     state.active ? [{ id, name: state.name, open: state.open }] : [],
   );

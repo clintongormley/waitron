@@ -153,7 +153,7 @@ it("deleted department reprints its original receipt configuration and frozen he
       departmentId: survivorId,
     });
     for (const profile of profiles)
-      await setProfileServiceScope(tx, venue.cfg, profile.deviceProfileId, {
+      await setProfileServiceScope(tx, profile.deviceProfileId, {
         departmentId: survivorId,
         allowedZoneIds: null,
         startingZoneId: survivorZone.id,

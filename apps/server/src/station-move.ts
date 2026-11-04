@@ -90,7 +90,7 @@ export async function rerouteHeldAtRelease(
   const opened = routing.opened();
   const states =
     opened === undefined
-      ? await VENUE_SERVICE.stationStates(tx, cfg, routing.at)
+      ? await VENUE_SERVICE.stationStates(tx, routing.at)
       : await (await opened).stations();
   const closed = held.filter((row) => {
     const state = states.get(row.stationId);
@@ -361,7 +361,7 @@ export async function moveDishesToStation(
           )!,
         );
 
-      const stations = await VENUE_SERVICE.stationStates(tx, { locationId: cfg.locationId }, at);
+      const stations = await VENUE_SERVICE.stationStates(tx, at);
       const destination = stations.get(request.stationId);
       if (destination === undefined)
         throw new AppError("station.not_found", { stationId: request.stationId });

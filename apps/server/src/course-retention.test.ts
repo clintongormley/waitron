@@ -220,7 +220,7 @@ async function setup() {
     return ((await res.json()) as { draft: Draft }).draft;
   }
   async function remove(id = stocked.late.id) {
-    await withTransaction(db, (tx) => deleteCourse(tx, cfg, id));
+    await withTransaction(db, (tx) => deleteCourse(tx, id));
   }
   async function submit(draft: Draft, release = "hold") {
     return request(`/api/parties/${seated.partyId}/drafts/${draft.id}/submit`, "POST", {

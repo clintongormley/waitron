@@ -126,7 +126,7 @@ describe("saved kitchen note corrections", () => {
       const before = await read(scope);
       const submissionId = randomUUID();
       const saved = await set(scope, "New time", submissionId, before);
-      const firstNotices = await inTx(v, (tx) => listStationNotices(tx, v.cfg, stationId));
+      const firstNotices = await inTx(v, (tx) => listStationNotices(tx, stationId));
       expect(firstNotices).toHaveLength(1);
       expect(firstNotices[0]).toMatchObject({
         kind: "changed",
@@ -140,7 +140,7 @@ describe("saved kitchen note corrections", () => {
       expect(await set(scope, "New time", submissionId, before)).toEqual(saved);
       expect(await v.db.select().from(printJobs)).toEqual(firstJobs);
       await set(scope, null);
-      const allNotices = await inTx(v, (tx) => listStationNotices(tx, v.cfg, stationId));
+      const allNotices = await inTx(v, (tx) => listStationNotices(tx, stationId));
       expect(allNotices).toHaveLength(2);
       expect(allNotices[0]).toEqual(firstNotices[0]);
       expect(allNotices[1]).toMatchObject({
@@ -495,7 +495,7 @@ it("gives a shared instruction one slip at the printer and one notice at the sta
   const starting = await read(scope);
   const submissionId = randomUUID();
   const saved = await set(scope, "New shared time", submissionId, starting);
-  const notices = await inTx(v, (tx) => listStationNotices(tx, v.cfg, stationId));
+  const notices = await inTx(v, (tx) => listStationNotices(tx, stationId));
   expect(notices).toHaveLength(1);
   expect(notices.map((notice) => notice.orderNoteChange)).toEqual([
     { before: "Old time", after: "New shared time" },
@@ -514,8 +514,8 @@ it("gives a shared instruction one slip at the printer and one notice at the sta
   expect(await v.db.select().from(kitchenNotices)).toHaveLength(rows.length);
   expect(await v.db.select().from(printJobs)).toEqual(jobs);
 
-  await inTx(v, (tx) => VENUE_SERVICE.acknowledgeKitchenNotice(tx, v.cfg, notices[0]!.id));
-  expect(await inTx(v, (tx) => listStationNotices(tx, v.cfg, stationId))).toEqual([]);
+  await inTx(v, (tx) => VENUE_SERVICE.acknowledgeKitchenNotice(tx, notices[0]!.id));
+  expect(await inTx(v, (tx) => listStationNotices(tx, stationId))).toEqual([]);
   const acknowledged = await v.db.select().from(kitchenNotices);
   expect(acknowledged).toHaveLength(3);
   expect(acknowledged.every((row) => row.acknowledgedAt !== null)).toBe(true);
@@ -562,11 +562,11 @@ it("A807 prints one slip per printer for stations that share one", async () => {
   expect(own).toHaveLength(1);
   expect(own[0]).toContain("1.000 x PAELLA");
   const dishes = async (id: string) =>
-    (await inTx(v, (tx) => listStationNotices(tx, v.cfg, id))).map((notice) =>
+    (await inTx(v, (tx) => listStationNotices(tx, id))).map((notice) =>
       notice.dishes?.map((dish) => dish.lineName),
     );
   expect(await dishes(s.grill)).toEqual([["BURG"]]);
-  const [grill] = await inTx(v, (tx) => listStationNotices(tx, v.cfg, s.grill));
+  const [grill] = await inTx(v, (tx) => listStationNotices(tx, s.grill));
   expect(grill!.dishes![0]!.quantity).toEqual(thousandthsToDecimal(2000));
   expect(await dishes(s.pastry)).toEqual([["FLAN"]]);
   expect(await dishes(s.bar)).toEqual([["PAELLA"]]);

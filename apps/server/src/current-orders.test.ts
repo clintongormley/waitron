@@ -1208,7 +1208,7 @@ describe("readCurrentOrders (spec §4)", () => {
         operatorId: MIA,
       }),
     );
-    await inTx((tx) => deleteCourse(tx, v.cfg, mains.id));
+    await inTx((tx) => deleteCourse(tx, mains.id));
     const read = await inTx((tx) => listOrderGroups(tx, s.partyId));
     expect(read.groups).toEqual([
       expect.objectContaining({
@@ -1230,8 +1230,8 @@ describe("readCurrentOrders (spec §4)", () => {
       { ...line(v, "steak"), courseId: mains.id },
       { ...line(v, "water"), courseId: starter.id },
     ]);
-    await inTx((tx) => deleteCourse(tx, v.cfg, mains.id));
-    await inTx((tx) => deleteCourse(tx, v.cfg, starter.id));
+    await inTx((tx) => deleteCourse(tx, mains.id));
+    await inTx((tx) => deleteCourse(tx, starter.id));
     expect(await currentOrders(s.partyId)).toMatchObject({
       retainedCourses: [
         { id: starter.id, name: "Starter", displayOrder: 1, heldUntilFired: false },
@@ -1256,7 +1256,7 @@ describe("readCurrentOrders (spec §4)", () => {
       const s = await seated(v);
       const mains = await inTx((tx) => createCourse(tx, v.cfg, { name: "Mains" }));
       const held = await group(v, s.partyId, "hold", [{ ...line(v, dish), courseId: mains.id }]);
-      if (deleted) await inTx((tx) => deleteCourse(tx, v.cfg, mains.id));
+      if (deleted) await inTx((tx) => deleteCourse(tx, mains.id));
 
       const read = await currentOrders(s.partyId);
 

@@ -910,7 +910,7 @@ describe("splitting held kitchen work onto a check", () => {
 
 /** A station's notices, every field a cook reads, oldest first. */
 async function kitchenNoticesAt(cfg: OriginConfig, stationId: string) {
-  return (await asApp(cfg, (tx) => listStationNotices(tx, cfg, stationId))).map((notice) => ({
+  return (await asApp(cfg, (tx) => listStationNotices(tx, stationId))).map((notice) => ({
     stationId: notice.stationId,
     workingOrderId: notice.workingOrderId,
     orderLabel: notice.orderLabel,

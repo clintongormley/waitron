@@ -50,12 +50,12 @@ async function fixture() {
       .values([0, 1, 2].map((n) => ({ name: `${randomUUID()} ${n}`, formFactor: "till" as const })))
       .returning();
     const profileId = profiles[0]!.id;
-    await setProfileServiceAccess(tx, cfg, profileId, {
+    await setProfileServiceAccess(tx, profileId, {
       departmentId: restaurant.id,
       allowedZoneIds: null,
       startingZoneId: dining.id,
     });
-    await setProfileServiceAccess(tx, cfg, profiles[1]!.id, {
+    await setProfileServiceAccess(tx, profiles[1]!.id, {
       departmentId: deli.id,
       allowedZoneIds: null,
       startingZoneId: counter.id,
@@ -179,7 +179,7 @@ describe("device zone selection", () => {
     const f = await fixture();
     const saved = await save(f, [f.terrace], f.terrace);
     await run((tx) =>
-      setProfileServiceAccess(tx, f.cfg, f.profileId, {
+      setProfileServiceAccess(tx, f.profileId, {
         departmentId: f.restaurant,
         allowedZoneIds: [f.dining],
         startingZoneId: f.dining,
@@ -191,7 +191,7 @@ describe("device zone selection", () => {
       adjusted: true,
     });
     await run((tx) =>
-      setProfileServiceAccess(tx, f.cfg, f.profileId, {
+      setProfileServiceAccess(tx, f.profileId, {
         departmentId: f.restaurant,
         allowedZoneIds: null,
         startingZoneId: f.dining,
@@ -432,7 +432,7 @@ it("invalidates a snapshot after profile capability, zone wording or department 
   );
   expect((await read(f)).snapshot).not.toBe(capability.snapshot);
   await run((tx) =>
-    setProfileServiceAccess(tx, f.cfg, f.profileId, {
+    setProfileServiceAccess(tx, f.profileId, {
       departmentId: null,
       allowedZoneIds: null,
       startingZoneId: null,

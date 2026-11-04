@@ -388,7 +388,6 @@ async function enqueueKitchenAllergyUpdates(
     for (const item of notices)
       await VENUE_SERVICE.recordKitchenNotices(
         tx,
-        cfg,
         orderId,
         [
           {
@@ -501,7 +500,6 @@ export async function notifyKitchenAllergyDestination(
     for (const item of notices)
       await VENUE_SERVICE.recordKitchenNotices(
         tx,
-        cfg,
         orderId,
         [{ ...item, quantity: thousandthsToDecimal(item.quantity) }],
         item.allergyBlock === null ? "allergy_removed" : "allergy_changed",

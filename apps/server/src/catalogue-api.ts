@@ -1397,7 +1397,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const session = requireManagementSession(c);
       return c.json(
         await gated(c, session, async (tx) => {
-          const makers = await VENUE_SERVICE.describeMakers(tx, requireVenueCfg(deps));
+          const makers = await VENUE_SERVICE.describeMakers(tx);
           const stationIds = [
             ...new Set(
               [...makers.values()].flatMap(({ route, unavailableStationId }) =>

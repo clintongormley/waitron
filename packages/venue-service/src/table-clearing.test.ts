@@ -118,6 +118,6 @@ describe("listNeedsClearingDepartmentIds", () => {
     await switchOn(a.departmentId);
     await switchOn(c.departmentId);
     await db.execute(sql`update departments set active = 0 where id = ${c.departmentId}`);
-    expect(await scoped((tx) => listNeedsClearingDepartmentIds(tx, cfg))).toEqual([a.departmentId]);
+    expect(await scoped((tx) => listNeedsClearingDepartmentIds(tx))).toEqual([a.departmentId]);
   });
 });

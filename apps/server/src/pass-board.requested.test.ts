@@ -629,7 +629,7 @@ describe("A773 pass board: scoped", () => {
         groups: [{ lines: [dish(venue, "burger")], release: "hold" }],
       });
       const burgerItem = await ticketItemOf(tx, placed.groups[0]!.lineIds[0]!);
-      await setStationToday(tx, venue.cfg, venue.stations.grill, "closed", new Date(AT));
+      await setStationToday(tx, venue.stations.grill, "closed", new Date(AT));
       const { held } = await readScopedPassBoard(tx, venue.cfg, EVERY);
       expect(held).toHaveLength(1);
       expect(held[0]!.items.find((item) => item.id === burgerItem)).toMatchObject({
@@ -719,13 +719,13 @@ describe("A773 pass board: scoped", () => {
         return { card: card!, item: card!.items.find((item) => item.id === placed.burgerItem)! };
       };
 
-      await setStationToday(tx, venue.cfg, venue.stations.grill, "closed", new Date(AT));
+      await setStationToday(tx, venue.stations.grill, "closed", new Date(AT));
       const closed = await burger();
       expect(closed.item.stationClosed).toBe(true);
       expect(closed.card.releaseTicketItemIds).toEqual([]);
       expect(closed.card.releaseContext).toBeNull();
 
-      await setStationToday(tx, venue.cfg, venue.stations.grill, null, new Date(AT));
+      await setStationToday(tx, venue.stations.grill, null, new Date(AT));
       const reopened = await burger();
       expect(reopened.item.stationClosed).toBe(false);
       expect(reopened.card.releaseTicketItemIds).toEqual([placed.burgerItem]);
@@ -737,7 +737,7 @@ describe("A773 pass board: scoped", () => {
         venue.stations.grill,
         undefined,
         "leave",
-        (at) => setStationToday(tx, venue.cfg, venue.stations.grill, "closed", at),
+        (at) => setStationToday(tx, venue.stations.grill, "closed", at),
         { deviceId: venue.cfg.origin.deviceId, personId: null },
       );
       const left = await burger();
@@ -753,7 +753,7 @@ describe("A773 pass board: scoped", () => {
     await withTransaction(db, async (tx) => {
       const placed = await burgerAndWater(tx, venue);
       const twoDaysBefore = Date.parse(AT) - 2 * 24 * 60 * 60_000;
-      await setStationToday(tx, venue.cfg, venue.stations.grill, "closed", new Date(twoDaysBefore));
+      await setStationToday(tx, venue.stations.grill, "closed", new Date(twoDaysBefore));
       const now = vi.spyOn(Date, "now").mockReturnValueOnce(twoDaysBefore);
       try {
         const { toFire } = await readScopedPassBoard(tx, venue.cfg, EVERY);
@@ -779,7 +779,7 @@ describe("A773 pass board: scoped", () => {
       const chipsLine = await lineIdOf(tx, venue.party.tabId, "Chips");
       const chipsItem = await ticketItemOf(tx, chipsLine);
       await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
-      await setStationToday(tx, venue.cfg, venue.stations.fryer, "closed", new Date(AT));
+      await setStationToday(tx, venue.stations.fryer, "closed", new Date(AT));
       await fireGroup(tx, venue.cfg, venue.party.partyId, groupId, {
         submissionId: randomUUID(),
         expectedPartyRevision: (await partyRow(tx, venue.party.partyId)).revision,

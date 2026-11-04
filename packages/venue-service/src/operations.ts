@@ -750,9 +750,9 @@ export async function saveDepartmentEditSettings(
     })
     .onConflictDoUpdate({ target: departmentSalePolicies.departmentId, set: settings });
   if (input.transfers !== undefined)
-    await setDepartmentTransferSettings(tx, cfg, departmentId, input.transfers);
+    await setDepartmentTransferSettings(tx, departmentId, input.transfers);
   if (input.serviceSteps !== undefined)
-    await saveServiceSteps(tx, cfg, departmentId, input.serviceSteps);
+    await saveServiceSteps(tx, departmentId, input.serviceSteps);
 }
 
 export type ZoneServiceSettingsInput = ZonePolicyField;
@@ -1070,7 +1070,7 @@ export async function resolveNewOrderZone(
     return resolveZoneContext(tx, cfg, input.zoneId);
   }
   if (input.profileId !== undefined && input.profileId !== null) {
-    const zones = await readProfileZones(tx, cfg, input.profileId);
+    const zones = await readProfileZones(tx, input.profileId);
     if (zones.departmentId !== null) {
       if (zones.startingZoneId === null) {
         throw new AppError("device_profile.no_service_zone", { profileId: input.profileId });

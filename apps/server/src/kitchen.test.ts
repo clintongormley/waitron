@@ -430,7 +430,7 @@ describe("kitchen-station config", () => {
         readyWarningAfterMinutes: 3,
       },
     ]);
-    await asApp(cfg, (tx) => deleteStation(tx, cfg, id));
+    await asApp(cfg, (tx) => deleteStation(tx, id));
     expect(await asApp(cfg, (tx) => listStations(tx, cfg))).toEqual([]);
     await expect(
       asApp(cfg, (tx) => updateStation(tx, cfg, id, { active: true } as never)),
@@ -482,7 +482,7 @@ describe("kitchen-station config", () => {
     await expect(
       asApp(cfg, (tx) => updateStation(tx, cfg, missing, { name: "X" })),
     ).rejects.toMatchObject({ code: "station.not_found", params: { stationId: missing } });
-    await expect(asApp(cfg, (tx) => deleteStation(tx, cfg, missing))).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => deleteStation(tx, missing))).rejects.toMatchObject({
       code: "station.not_found",
       params: { stationId: missing },
     });
@@ -671,7 +671,7 @@ describe("kitchen-station config", () => {
       params: { stationId: missing },
     });
     const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Old" }));
-    await asApp(cfg, (tx) => deleteStation(tx, cfg, id));
+    await asApp(cfg, (tx) => deleteStation(tx, id));
     await expect(asApp(cfg, (tx) => setDefaultStation(tx, cfg, id))).rejects.toMatchObject({
       code: "station.not_found",
       params: { stationId: id },
@@ -755,7 +755,7 @@ describe("kitchen-course config", () => {
     await asApp(cfg, (tx) => updateCourse(tx, cfg, a, { name: "Seconds", displayOrder: 9 }));
     const productId = await seedProduct();
     await asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, a));
-    await asApp(cfg, (tx) => deleteCourse(tx, cfg, a));
+    await asApp(cfg, (tx) => deleteCourse(tx, a));
     expect((await asApp(cfg, (tx) => listCourses(tx, cfg))).some((c) => c.id === a)).toBe(false);
     expect(await productCourse(productId)).toBeNull();
     expect(
@@ -798,7 +798,7 @@ describe("kitchen-course config", () => {
     await expect(
       asApp(cfg, (tx) => updateCourse(tx, cfg, missing, { name: "X" })),
     ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: missing } });
-    await expect(asApp(cfg, (tx) => deleteCourse(tx, cfg, missing))).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => deleteCourse(tx, missing))).rejects.toMatchObject({
       code: "course.not_found",
       params: { courseId: missing },
     });

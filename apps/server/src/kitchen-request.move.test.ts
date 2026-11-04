@@ -180,18 +180,18 @@ async function transferredCounterOrder(
         .insert(deviceProfiles)
         .values({ name: randomUUID(), formFactor: "till", capabilities: [...CAPABILITY_FLAGS] })
         .returning();
-      await setProfileServiceScope(tx, v.cfg, profile!.id, {
+      await setProfileServiceScope(tx, profile!.id, {
         departmentId,
         allowedZoneIds: [zoneId],
         startingZoneId: zoneId,
       });
       profiles.push(profile!.id);
     }
-    await setDepartmentTransferSettings(tx, v.cfg, a.id, {
+    await setDepartmentTransferSettings(tx, a.id, {
       receivingProfileId: null,
       destinationDepartmentIds: [b.id],
     });
-    await setDepartmentTransferSettings(tx, v.cfg, b.id, {
+    await setDepartmentTransferSettings(tx, b.id, {
       receivingProfileId: profiles[1]!,
       destinationDepartmentIds: [],
     });

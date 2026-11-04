@@ -1,7 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { DeleteImpactItem } from "@waitron/shared";
-import type { VenueScope } from "./operations.js";
 import { departments } from "./schema/service.js";
 import { serviceSteps } from "./schema/service-steps.js";
 
@@ -9,7 +8,6 @@ export type CourseDeleteSettings = { readonly named: string[]; readonly seated: 
 
 export async function readCourseDeleteSettings(
   tx: Transaction,
-  _cfg: VenueScope,
   courseId: string,
 ): Promise<CourseDeleteSettings> {
   const named = await tx

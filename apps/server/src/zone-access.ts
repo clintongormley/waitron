@@ -1,7 +1,6 @@
 import { and, eq, inArray, ne } from "drizzle-orm";
 import { diningTables, workingOrders } from "@waitron/db";
 import type { Database, SQL, Transaction } from "@waitron/db";
-import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { partyFamily, partyStateAndZone } from "./parties.js";
 import type { TradingContext } from "./trading-context.js";
@@ -66,13 +65,13 @@ export async function assertSubjectZones(
   profileId: string,
   subjects: readonly ZoneSubject[],
 ): Promise<void> {
-  const scope = await readZoneScope(tx, cfg, profileId);
+  const scope = await readZoneScope(tx, profileId);
   if (scope === null) return;
   for (const subject of subjects)
     for (const zoneId of await subjectZones(tx, cfg, subject))
       // venue-service raises the refusal: it re-reads the profile's zones and refuses this one.
       if (zoneId !== null && !scope.has(zoneId))
-        await VENUE_SERVICE.assertProfileZone(tx, cfg, profileId, zoneId);
+        await VENUE_SERVICE.assertProfileZone(tx, profileId, zoneId);
 }
 
 /** {@link assertSubjectZones} for the session's profile, first thing in the route's own transaction. */
@@ -97,12 +96,8 @@ export async function gateZones(
   await assertSubjectZones(deps.db, deps.cfg, session.device.deviceProfileId, subjects);
 }
 
-export async function readZoneScope(
-  tx: Transaction,
-  cfg: { locationId: LocationId },
-  profileId: string,
-): Promise<ZoneScope> {
-  const { allowedZoneIds } = await VENUE_SERVICE.readProfileZones(tx, cfg, profileId);
+export async function readZoneScope(tx: Transaction, profileId: string): Promise<ZoneScope> {
+  const { allowedZoneIds } = await VENUE_SERVICE.readProfileZones(tx, profileId);
   return allowedZoneIds === null ? null : new Set(allowedZoneIds);
 }
 
@@ -119,7 +114,7 @@ export async function orderZoneCondition(
   cfg: TradingContext,
   profileId: string,
 ): Promise<OrderZoneCondition | undefined> {
-  const scope = await readZoneScope(tx, cfg, profileId);
+  const scope = await readZoneScope(tx, profileId);
   if (scope === null) return undefined;
   return (orderId) => VENUE_SERVICE.orderInZones(cfg, orderId, [...scope]);
 }
@@ -130,7 +125,7 @@ export async function visibleOrders<T extends { id: string }>(
   session: { device: { deviceProfileId: string } },
   orders: readonly T[],
 ): Promise<T[]> {
-  const scope = await readZoneScope(deps.db, deps.cfg, session.device.deviceProfileId);
+  const scope = await readZoneScope(deps.db, session.device.deviceProfileId);
   if (scope === null) return [...orders];
   const zones = await VENUE_SERVICE.findOrderZones(
     deps.db,

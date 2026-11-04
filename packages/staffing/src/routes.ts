@@ -258,9 +258,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = normaliseUuid(c.req.param("seasonId"), "SeasonId");
-        return c.json(
-          await gatedBy(VIEW_VENUE, sessionId, (tx) => readSeasonStaffing(tx, ctx.cfg, id)),
-        );
+        return c.json(await gatedBy(VIEW_VENUE, sessionId, (tx) => readSeasonStaffing(tx, id)));
       }),
     );
 
@@ -280,9 +278,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = normaliseUuid(c.req.param("specialDayId"), "SpecialDayId");
-        return c.json(
-          await gatedBy(VIEW_VENUE, sessionId, (tx) => readSpecialDayStaffing(tx, ctx.cfg, id)),
-        );
+        return c.json(await gatedBy(VIEW_VENUE, sessionId, (tx) => readSpecialDayStaffing(tx, id)));
       }),
     );
 

@@ -378,7 +378,7 @@ describe("real module floor deletion", () => {
     });
     const profile = run(async (tx) => {
       enteredProfile = true;
-      return setProfileServiceScope(tx, venue.cfg, profileId, {
+      return setProfileServiceScope(tx, profileId, {
         departmentId: f.departmentId,
         allowedZoneIds: [f.zoneId],
         startingZoneId: f.zoneId,
@@ -619,7 +619,7 @@ describe("mounted authenticated service deletion races", () => {
                     operatorId: venue.operator.personId,
                   });
                 if (kind === "profile")
-                  await setProfileServiceScope(tx, venue.cfg, profileId, {
+                  await setProfileServiceScope(tx, profileId, {
                     departmentId: f.departmentId,
                     allowedZoneIds: [zoneId],
                     startingZoneId: zoneId,
@@ -629,16 +629,16 @@ describe("mounted authenticated service deletion races", () => {
                     .insert(deviceProfiles)
                     .values({ name: "Receiving desk", formFactor: "till" })
                     .returning();
-                  await setProfileServiceScope(tx, venue.cfg, receiving!.id, {
+                  await setProfileServiceScope(tx, receiving!.id, {
                     departmentId: f.departmentId,
                     allowedZoneIds: [zoneId],
                     startingZoneId: zoneId,
                   });
-                  await setDepartmentTransferSettings(tx, venue.cfg, sourceDepartmentId, {
+                  await setDepartmentTransferSettings(tx, sourceDepartmentId, {
                     receivingProfileId: null,
                     destinationDepartmentIds: [f.departmentId],
                   });
-                  await setDepartmentTransferSettings(tx, venue.cfg, f.departmentId, {
+                  await setDepartmentTransferSettings(tx, f.departmentId, {
                     receivingProfileId: receiving!.id,
                     destinationDepartmentIds: [],
                   });
@@ -800,7 +800,7 @@ describe("mounted authenticated service deletion races", () => {
         }),
       ),
       run((tx) =>
-        setProfileServiceScope(tx, venue.cfg, profileId, {
+        setProfileServiceScope(tx, profileId, {
           departmentId: f.departmentId,
           allowedZoneIds: [f.zoneId],
           startingZoneId: f.zoneId,

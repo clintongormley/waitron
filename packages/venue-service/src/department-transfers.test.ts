@@ -79,7 +79,7 @@ async function venue() {
       .insert(deviceProfiles)
       .values({ name: randomUUID(), formFactor: "till", capabilities: ["take-orders"] })
       .returning();
-    await setProfileServiceScope(tx, cfg, profile!.id, {
+    await setProfileServiceScope(tx, profile!.id, {
       departmentId: b.id,
       allowedZoneIds: null,
       startingZoneId: bz.id,
@@ -170,7 +170,7 @@ describe("departmental tab transfers", () => {
           })
           .returning();
         if (formFactor !== "kds")
-          await setProfileServiceScope(tx, v.cfg, profile!.id, {
+          await setProfileServiceScope(tx, profile!.id, {
             departmentId,
             allowedZoneIds: null,
             startingZoneId: departmentId === v.a ? v.az : v.bz,
@@ -185,24 +185,24 @@ describe("departmental tab transfers", () => {
         .select()
         .from(deviceProfiles)
         .where(eq(deviceProfiles.id, v.profile));
-      expect(await service.listDepartmentTransferProfiles(tx, v.cfg, v.b)).toEqual([
+      expect(await service.listDepartmentTransferProfiles(tx, v.b)).toEqual([
         { id: v.profile, name: profile!.name },
       ]);
       await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, v.bz));
-      expect(await service.listDepartmentTransferProfiles(tx, v.cfg, v.b)).toEqual([]);
+      expect(await service.listDepartmentTransferProfiles(tx, v.b)).toEqual([]);
     });
   });
 
   it("keeps responsibility at the source while a durable directional request is pending", async () => {
     const v = await venue();
     await withTransaction(suite.db, (tx) =>
-      service.setDepartmentTransferSettings(tx, v.cfg, v.b, {
+      service.setDepartmentTransferSettings(tx, v.b, {
         receivingProfileId: v.profile,
         destinationDepartmentIds: [],
       }),
     );
     await withTransaction(suite.db, (tx) =>
-      service.setDepartmentTransferSettings(tx, v.cfg, v.a, {
+      service.setDepartmentTransferSettings(tx, v.a, {
         receivingProfileId: null,
         destinationDepartmentIds: [v.b],
       }),
@@ -240,11 +240,11 @@ describe("departmental tab transfers", () => {
   async function ready() {
     const v = await venue();
     await withTransaction(suite.db, async (tx) => {
-      await service.setDepartmentTransferSettings(tx, v.cfg, v.b, {
+      await service.setDepartmentTransferSettings(tx, v.b, {
         receivingProfileId: v.profile,
         destinationDepartmentIds: [],
       });
-      await service.setDepartmentTransferSettings(tx, v.cfg, v.a, {
+      await service.setDepartmentTransferSettings(tx, v.a, {
         receivingProfileId: null,
         destinationDepartmentIds: [v.b],
       });
@@ -281,12 +281,12 @@ describe("departmental tab transfers", () => {
         .insert(deviceProfiles)
         .values({ name: randomUUID(), formFactor: "till" })
         .returning();
-      await setProfileServiceScope(tx, v.cfg, profile!.id, {
+      await setProfileServiceScope(tx, profile!.id, {
         departmentId: v.a,
         allowedZoneIds: null,
         startingZoneId: v.az,
       });
-      await service.setDepartmentTransferSettings(tx, v.cfg, v.a, {
+      await service.setDepartmentTransferSettings(tx, v.a, {
         receivingProfileId: profile!.id,
         destinationDepartmentIds: [v.b],
       });
@@ -353,7 +353,7 @@ describe("departmental tab transfers", () => {
         if (kind === "inactive")
           await tx.update(departments).set({ active: false }).where(eq(departments.id, v.b));
         if (kind === "desk")
-          await service.setDepartmentTransferSettings(tx, v.cfg, v.b, {
+          await service.setDepartmentTransferSettings(tx, v.b, {
             receivingProfileId: null,
             destinationDepartmentIds: [],
           });
@@ -363,7 +363,7 @@ describe("departmental tab transfers", () => {
             .set({ retiredAt: new Date().toISOString() })
             .where(eq(deviceProfiles.id, v.profile));
         if (kind === "scope")
-          await setProfileServiceScope(tx, v.cfg, v.profile, {
+          await setProfileServiceScope(tx, v.profile, {
             departmentId: v.a,
             allowedZoneIds: null,
             startingZoneId: v.az,
@@ -483,7 +483,7 @@ describe("departmental tab transfers", () => {
                 .insert(deviceProfiles)
                 .values({ name: randomUUID(), formFactor: "till" })
                 .returning();
-              await setProfileServiceScope(tx, v.cfg, p!.id, {
+              await setProfileServiceScope(tx, p!.id, {
                 departmentId: v.a,
                 allowedZoneIds: null,
                 startingZoneId: v.az,
@@ -495,7 +495,7 @@ describe("departmental tab transfers", () => {
       if (kind === "missing") target = randomUUID();
       await expect(
         withTransaction(suite.db, (tx) =>
-          service.setDepartmentTransferSettings(tx, v.cfg, v.b, {
+          service.setDepartmentTransferSettings(tx, v.b, {
             receivingProfileId: profileId,
             destinationDepartmentIds: [target],
           }),
@@ -801,14 +801,14 @@ describe("departmental tab transfers", () => {
   it("keeps an already pending transfer actionable when its sending direction is removed", async () => {
     const v = await pending();
     await withTransaction(suite.db, (tx) =>
-      service.setDepartmentTransferSettings(tx, v.cfg, v.a, {
+      service.setDepartmentTransferSettings(tx, v.a, {
         receivingProfileId: null,
         destinationDepartmentIds: [],
       }),
     );
     expect(
       await withTransaction(suite.db, (tx) =>
-        service.listDepartmentTransferDestinations(tx, v.cfg, {
+        service.listDepartmentTransferDestinations(tx, {
           departmentId: v.a,
           personId: "sender",
         }),
@@ -1099,7 +1099,7 @@ describe("departmental tab transfers", () => {
             .set({ retiredAt: new Date().toISOString() })
             .where(eq(deviceProfiles.id, v.profile));
         if (kind === "desk_changed")
-          await service.setDepartmentTransferSettings(tx, v.cfg, v.b, {
+          await service.setDepartmentTransferSettings(tx, v.b, {
             receivingProfileId: null,
             destinationDepartmentIds: [],
           });

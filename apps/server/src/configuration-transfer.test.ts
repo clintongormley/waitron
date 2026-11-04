@@ -4474,7 +4474,7 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
       ])
       .returning({ id: deviceProfiles.id });
     for (const profile of [live!, retired!]) {
-      await setProfileServiceAccess(tx, cfg, profile.id, {
+      await setProfileServiceAccess(tx, profile.id, {
         departmentId: restaurant.id,
         allowedZoneIds: [terrace.id],
         startingZoneId: terrace.id,
@@ -4487,7 +4487,7 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
       .from(deviceProfiles)
       .where(sql`${deviceProfiles.id} not in (${live!.id}, ${retired!.id})`);
     for (const { id } of seeded) {
-      await setProfileServiceAccess(tx, cfg, id, {
+      await setProfileServiceAccess(tx, id, {
         departmentId: null,
         allowedZoneIds: null,
         startingZoneId: null,
@@ -4516,19 +4516,11 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await withTransaction(targetSuite.db, async (tx) => {
-    const [location] = await tx
-      .select({ id: kitchenStations.locationId })
-      .from(kitchenStations)
-      .where(eq(kitchenStations.name, "Grill"));
     const [profile] = await tx
       .select({ id: deviceProfiles.id })
       .from(deviceProfiles)
       .where(eq(deviceProfiles.name, "Terrace handheld"));
-    const access = await readProfileServiceAccess(
-      tx,
-      { locationId: brandLocationId(location!.id) },
-      profile!.id,
-    );
+    const access = await readProfileServiceAccess(tx, profile!.id);
     const zones = new Map(
       (await tx.select({ id: floorZones.id, name: floorZones.name }).from(floorZones)).map(
         (zone) => [zone.id, zone.name],
@@ -4579,14 +4571,14 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
         { name: "Old till", formFactor: "till" },
       ])
       .returning({ id: deviceProfiles.id });
-    await VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, till!.id, {
+    await VENUE_SERVICE.setProfileKitchenScreens(tx, till!.id, {
       station: { stationIds: [grill!.id], zoneIds: null },
       pass: { stationIds: [grill!.id], zoneIds: [terrace.id] },
     });
-    await VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, wall!.id, {
+    await VENUE_SERVICE.setProfileKitchenScreens(tx, wall!.id, {
       pass_monitor: { stationIds: null, zoneIds: null },
     });
-    await VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, retired!.id, {
+    await VENUE_SERVICE.setProfileKitchenScreens(tx, retired!.id, {
       station: { stationIds: [grill!.id], zoneIds: null },
     });
     return { till: till!.id, wall: wall!.id, retired: retired!.id };
@@ -4617,10 +4609,6 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await withTransaction(targetSuite.db, async (tx) => {
-    const [station] = await tx
-      .select({ locationId: kitchenStations.locationId })
-      .from(kitchenStations)
-      .where(eq(kitchenStations.name, "Grill"));
     const names = new Map<string, string>([
       ...(await tx.select({ id: floorZones.id, name: floorZones.name }).from(floorZones)).map(
         (zone): [string, string] => [zone.id, zone.name],
@@ -4635,11 +4623,7 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
       ).map((row): [string, string] => [row.id, row.name]),
     ]);
     const named = (ids: readonly string[] | null) => ids?.map((id) => names.get(id)) ?? null;
-    return (
-      await VENUE_SERVICE.readProfileKitchenScreens(tx, {
-        locationId: brandLocationId(station!.locationId),
-      })
-    )
+    return (await VENUE_SERVICE.readProfileKitchenScreens(tx))
       .filter(({ screens }) => Object.keys(screens).length > 0)
       .map(({ profileId, screens }) => ({
         profile: names.get(profileId),
@@ -5795,7 +5779,7 @@ it("carries a cell's period choices with their cell, including a period whose me
     "a strong passphrase",
   );
   expect(decoded.tables.routing_cell_periods).toHaveLength(2);
-  const target = await applyVenue(planVenue(venue("B24681362"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B24681362"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: async (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
@@ -5842,11 +5826,7 @@ it("carries a cell's period choices with their cell, including a period whose me
     for (const id of [row.cell_id, row.period_id, row.department_id])
       expect(sourceIds).not.toContain(id);
   const model = await withTransaction(targetSuite.db, (tx) =>
-    routingModel(
-      tx,
-      { locationId: brandLocationId(target.locationId) },
-      new Date("2026-10-09T10:00:00Z"),
-    ),
+    routingModel(tx, new Date("2026-10-09T10:00:00Z")),
   );
   const [productLine, categoryLine] = choices.rows;
   expect(
@@ -5954,7 +5934,7 @@ describe("special days in a configuration transfer", () => {
         closedAllDay: true,
       });
       await insertSpecialDay(tx, cfg, { date: "2027-01-01", name: "New Year" });
-      await setStationToday(tx, cfg, bar.id, "closed", AT);
+      await setStationToday(tx, bar.id, "closed", AT);
     });
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
@@ -6075,8 +6055,8 @@ describe("special days in a configuration transfer", () => {
       tuesday: await namedOn(tx, imported.cfg, "2026-10-06"),
       // 23:00 in Madrid on New Year's Eve, and noon on an ordinary Tuesday.
       states: [
-        await stationStates(tx, imported.cfg, new Date("2026-12-31T22:00:00Z")),
-        await stationStates(tx, imported.cfg, AT),
+        await stationStates(tx, new Date("2026-12-31T22:00:00Z")),
+        await stationStates(tx, AT),
       ],
     }));
     expect(read.eve).toMatchObject({
@@ -6468,16 +6448,16 @@ it("round-trips departmental transfer directions and desks with remapped ids, le
         capabilities: ["take-orders"],
       })
       .returning();
-    await setProfileServiceScope(tx, cfg, profile!.id, {
+    await setProfileServiceScope(tx, profile!.id, {
       departmentId: b.id,
       allowedZoneIds: null,
       startingZoneId: zone.id,
     });
-    await setDepartmentTransferSettings(tx, cfg, a.id, {
+    await setDepartmentTransferSettings(tx, a.id, {
       receivingProfileId: null,
       destinationDepartmentIds: [b.id],
     });
-    await setDepartmentTransferSettings(tx, cfg, b.id, {
+    await setDepartmentTransferSettings(tx, b.id, {
       receivingProfileId: profile!.id,
       destinationDepartmentIds: [],
     });
@@ -7169,7 +7149,7 @@ it("round-trips deleted kitchen configuration and preserves archived products an
       .insert(deviceProfiles)
       .values({ name: "Bound till", formFactor: "till" })
       .returning();
-    await VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, profile!.id, {
+    await VENUE_SERVICE.setProfileKitchenScreens(tx, profile!.id, {
       station: { stationIds: [station.id], zoneIds: null },
     });
     await setRoutingCell(
@@ -7177,8 +7157,8 @@ it("round-trips deleted kitchen configuration and preserves archived products an
       { row: { kind: "product", productId: product.id }, zoneId: null },
       { kind: "station", stationId: station.id },
     );
-    await deleteCourse(tx, cfg, course.id);
-    await deleteStation(tx, cfg, station.id);
+    await deleteCourse(tx, course.id);
+    await deleteStation(tx, station.id);
     const live = await createCourse(tx, cfg, { name: "Live starters", displayOrder: 0 });
     return {
       course: course.id,
@@ -7240,7 +7220,7 @@ it("round-trips deleted kitchen configuration and preserves archived products an
     const rows = await targetSuite.db.execute(sql`select count(*) as count from tenants`);
     expect(rows.rows).toEqual([{ count: 0 }]);
   }
-  const target = await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
@@ -7257,11 +7237,9 @@ it("round-trips deleted kitchen configuration and preserves archived products an
       })
       .from(products)
       .where(eq(products.name, "Archived flan")),
-    screens: (
-      await VENUE_SERVICE.readProfileKitchenScreens(tx, {
-        locationId: locationId(target.locationId),
-      })
-    ).filter((row) => row.screens.station !== undefined),
+    screens: (await VENUE_SERVICE.readProfileKitchenScreens(tx)).filter(
+      (row) => row.screens.station !== undefined,
+    ),
   }));
   expect(imported.courses.map(({ id, name, active }) => ({ id, name, active }))).toEqual([
     { id: imported.courses[0]!.id, name: "Live starters", active: true },
@@ -8169,13 +8147,12 @@ describe("A773 pass display policy", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const cfg = { locationId: locationId(source.locationId) };
     const deviceId = await withTransaction(suite.db, async (tx) => {
       const [profile] = await tx
         .insert(deviceProfiles)
         .values({ name: "Hidden pass", formFactor: "till" })
         .returning();
-      await VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, profile!.id, {
+      await VENUE_SERVICE.setProfileKitchenScreens(tx, profile!.id, {
         pass: { stationIds: null, zoneIds: null, showNonPassStations: false },
         pass_monitor: { stationIds: null, zoneIds: null },
       });
@@ -8183,7 +8160,7 @@ describe("A773 pass display policy", () => {
         locationId: source.locationId,
         profileId: profile!.id,
       });
-      await VENUE_SERVICE.setDeviceKitchenScreens(tx, cfg, {
+      await VENUE_SERVICE.setDeviceKitchenScreens(tx, {
         deviceId,
         profileId: profile!.id,
         screens: [{ kind: "pass", stationIds: null, zoneIds: null }],

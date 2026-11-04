@@ -93,7 +93,7 @@ describe("device made-here stations", () => {
       await routeProductTo(tx, venue.cafeId, bar.id);
       const downstairsPrinter = await stationPrinter(tx, downstairs.id);
       const deviceId = await deviceAt(tx, bar.id);
-      await setStationToday(tx, venue.cfg, bar.id, "closed", new Date(), downstairs.id);
+      await setStationToday(tx, bar.id, "closed", new Date(), downstairs.id);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
       const lager = await rawLine(tx, orderId, venue.cafeId, 1);

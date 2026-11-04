@@ -4387,7 +4387,7 @@ describe("advance HOLD tickets (Task 6)", () => {
   }
 
   async function noticesAt(v: Venue) {
-    return (await inTx((tx) => listStationNotices(tx, v.cfg, v.stationId))).map((notice) => ({
+    return (await inTx((tx) => listStationNotices(tx, v.stationId))).map((notice) => ({
       kind: notice.kind,
       lineName: notice.lineName,
       quantity: notice.quantity,
@@ -4417,7 +4417,7 @@ describe("advance HOLD tickets (Task 6)", () => {
     (await linesIn(s.partyId, groupId)).find((row) => row.productId === v.productId[dish])!;
 
   async function noticesWithNotes(v: Venue) {
-    return (await inTx((tx) => listStationNotices(tx, v.cfg, v.stationId))).map((notice) => ({
+    return (await inTx((tx) => listStationNotices(tx, v.stationId))).map((notice) => ({
       kind: notice.kind,
       quantity: notice.quantity,
       direction: notice.direction,
@@ -5351,9 +5351,9 @@ describe("advance HOLD tickets (Task 6)", () => {
         return { v, s, barId, screenId, barPrinter, group: group!.id };
       }
 
-      const noticeKinds = (v: Venue, stationId: string) =>
+      const noticeKinds = (stationId: string) =>
         inTx(async (tx) =>
-          (await listStationNotices(tx, v.cfg, stationId)).map((notice) => ({
+          (await listStationNotices(tx, stationId)).map((notice) => ({
             kind: notice.kind,
             direction: notice.direction,
           })),
@@ -5380,8 +5380,8 @@ describe("advance HOLD tickets (Task 6)", () => {
           ],
         ]);
         expect(await paperAt(barPrinter)).toEqual([]);
-        expect(await noticeKinds(v, barId)).toEqual([{ kind: "void", direction: null }]);
-        expect(await noticeKinds(v, screenId)).toEqual([{ kind: "void", direction: null }]);
+        expect(await noticeKinds(barId)).toEqual([{ kind: "void", direction: null }]);
+        expect(await noticeKinds(screenId)).toEqual([{ kind: "void", direction: null }]);
       });
 
       it("moving a held dish between printed groups takes it off and adds it only at stations recorded for each group", async () => {
@@ -5422,8 +5422,8 @@ describe("advance HOLD tickets (Task 6)", () => {
           { kind: "changed", direction: "removed" },
           { kind: "changed", direction: "added" },
         ];
-        expect(await noticeKinds(v, barId)).toEqual(removedThenAdded);
-        expect(await noticeKinds(v, screenId)).toEqual(removedThenAdded);
+        expect(await noticeKinds(barId)).toEqual(removedThenAdded);
+        expect(await noticeKinds(screenId)).toEqual(removedThenAdded);
         expect(await recorded(second!.id)).toEqual([
           { groupId: second!.id, stationId: v.stationId },
         ]);
@@ -5435,7 +5435,7 @@ describe("advance HOLD tickets (Task 6)", () => {
         await join(v, s, group, ["flan"]);
 
         expect(await recorded(group)).toEqual([{ groupId: group, stationId: v.stationId }]);
-        expect(await noticeKinds(v, screenId)).toEqual([{ kind: "changed", direction: "added" }]);
+        expect(await noticeKinds(screenId)).toEqual([{ kind: "changed", direction: "added" }]);
       });
 
       it("firing one held dish takes it off the HOLD ticket only at a station recorded for the group", async () => {
@@ -5478,7 +5478,7 @@ describe("advance HOLD tickets (Task 6)", () => {
           ],
         ]);
         expect(await paperAt(barPrinter)).toEqual([]);
-        expect(await noticeKinds(v, barId)).toEqual([{ kind: "changed", direction: "added" }]);
+        expect(await noticeKinds(barId)).toEqual([{ kind: "changed", direction: "added" }]);
       });
 
       it("a held dish moved into a printed group holding none of a station's held work gets HOLD CHANGED there, and records it", async () => {
@@ -5517,7 +5517,7 @@ describe("advance HOLD tickets (Task 6)", () => {
           ],
         ]);
         expect(await paperAt(barPrinter)).toEqual([]);
-        expect(await noticeKinds(v, screenId)).toEqual([{ kind: "changed", direction: "added" }]);
+        expect(await noticeKinds(screenId)).toEqual([{ kind: "changed", direction: "added" }]);
       });
 
       it("a station switched on after the group was held gets nothing for a joining dish, and its whole part prints unmarked at the fire", async () => {
@@ -5528,7 +5528,7 @@ describe("advance HOLD tickets (Task 6)", () => {
 
         expect(await paperAt(barPrinter)).toEqual([]);
         expect(await recorded(group)).toEqual([{ groupId: group, stationId: v.stationId }]);
-        expect(await noticeKinds(v, screenId)).toEqual([{ kind: "changed", direction: "added" }]);
+        expect(await noticeKinds(screenId)).toEqual([{ kind: "changed", direction: "added" }]);
 
         await fire(v, s.partyId, group);
 

@@ -209,7 +209,7 @@ describe("A773 requested lifecycle: alerts and slips", () => {
     const venue = await setupSplitExtrasVenue();
     await requestedBurger(venue);
     const impact = await withTransaction(db, (tx) =>
-      readStationDeleteImpact(tx, venue.cfg, venue.stations.grill),
+      readStationDeleteImpact(tx, venue.stations.grill),
     );
     expect(impact.refusals.find((r) => r.code === "station.work_in_progress")).toMatchObject({
       params: { stationId: venue.stations.grill, count: 1 },

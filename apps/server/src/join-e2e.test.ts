@@ -849,7 +849,7 @@ describe("a disabled device comes back as the same device", () => {
     const profileId = await seedProfile("till");
     const kitchenId = await seedProfile("kds");
     await withTransaction(suite.db, (tx) =>
-      offerOnProfile(tx, venue.cfg, kitchenId, stationScreen(venue.defaultStationId)),
+      offerOnProfile(tx, kitchenId, stationScreen(venue.defaultStationId)),
     );
     const holdId = await openWindow(app, venue);
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
@@ -877,7 +877,7 @@ describe("a disabled device comes back as the same device", () => {
     const app = mountWithSignIn(venue);
     const kitchenId = await seedProfile("kds");
     await withTransaction(suite.db, (tx) =>
-      offerOnProfile(tx, venue.cfg, kitchenId, stationScreen(venue.defaultStationId)),
+      offerOnProfile(tx, kitchenId, stationScreen(venue.defaultStationId)),
     );
     const holdId = await openWindow(app, venue);
     const joined = await knock(app, "Pass screen");

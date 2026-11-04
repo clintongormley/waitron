@@ -679,10 +679,10 @@ describe("sending split-off extras", () => {
             extras: [{ listId, picks: [{ productId: chips!, quantity: 1 }] }],
           },
         ]);
-      await setStationToday(tx, cfg, fryer.id, "closed", new Date());
+      await setStationToday(tx, fryer.id, "closed", new Date());
       const without = await order();
       expect((await recordsFor(tx, without)).map((row) => row.stationId)).toEqual([grill.id]);
-      await setStationToday(tx, cfg, fryer.id, "closed", new Date(), kitchen.id);
+      await setStationToday(tx, fryer.id, "closed", new Date(), kitchen.id);
       const withDestination = await order();
       expect((await recordsFor(tx, withDestination)).map((row) => row.stationId).sort()).toEqual(
         [grill.id, kitchen.id].sort(),
@@ -837,7 +837,7 @@ describe("sending split-off extras", () => {
         .update(kitchenStations)
         .set({ active: false })
         .where(eq(kitchenStations.isDefault, true));
-      await setStationToday(tx, cfg, grill.id, "closed", new Date());
+      await setStationToday(tx, grill.id, "closed", new Date());
       await expect(
         fireLines(tx, cfg, orderId, await unsentDishLines(tx, orderId)),
       ).rejects.toMatchObject({ code: "station.no_replacement" });

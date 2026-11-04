@@ -12,7 +12,6 @@ import type {
   ScreenSlot,
 } from "@waitron/module";
 import { AppError, compareStationNames, type ErrorParams } from "@waitron/shared";
-import type { VenueScope } from "./operations.js";
 import {
   deviceKitchenScreenRemovals,
   deviceKitchenScreens,
@@ -48,8 +47,6 @@ const hasDisplay = (kind: KitchenScreenKind) => kind !== "station";
 
 export async function readProfileKitchenScreens(
   tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: VenueScope,
 ): Promise<{ profileId: string; screens: ProfileKitchenScreens }[]> {
   const profiles = await tx
     .select({ id: deviceProfiles.id })
@@ -140,7 +137,6 @@ async function liveFormFactor(tx: Transaction, profileId: string): Promise<strin
 
 export async function setProfileKitchenScreens(
   tx: Transaction,
-  _cfg: VenueScope,
   profileId: string,
   screens: ProfileKitchenScreens,
 ): Promise<NarrowedDevice[]> {
@@ -150,7 +146,6 @@ export async function setProfileKitchenScreens(
 
 export async function copyProfileKitchenScreens(
   tx: Transaction,
-  _cfg: VenueScope,
   sourceId: string,
   targetId: string,
 ): Promise<void> {
@@ -298,7 +293,6 @@ async function insertLists(
  */
 export async function addProfileKitchenScreen(
   tx: Transaction,
-  _cfg: VenueScope,
   profileId: string,
   screen: DeviceKitchenScreen,
 ): Promise<void> {
@@ -540,7 +534,6 @@ function checkedChoice(
 
 export async function assertDeviceKitchenScreens(
   tx: Transaction,
-  _cfg: VenueScope,
   profileId: string,
   screens: readonly DeviceKitchenScreen[],
   deviceId?: string,
@@ -554,7 +547,6 @@ export async function assertDeviceKitchenScreens(
  *  keeps each kept kind's display value. */
 export async function setDeviceKitchenScreens(
   tx: Transaction,
-  _cfg: VenueScope,
   input: { deviceId: string; profileId: string; screens: readonly DeviceKitchenScreen[] },
 ): Promise<void> {
   const { deviceId, profileId, screens } = input;
@@ -661,16 +653,14 @@ function slots(
 /** The device's stored kitchen screens, then the kinds a narrowing took from it. */
 export async function readDeviceKitchenScreens(
   tx: Transaction,
-  cfg: VenueScope,
   deviceId: string,
 ): Promise<ResolvedKitchenScreen[]> {
-  return (await readDevicesKitchenScreens(tx, cfg, [deviceId])).get(deviceId)!;
+  return (await readDevicesKitchenScreens(tx, [deviceId])).get(deviceId)!;
 }
 
 /** Each named device's {@link readDeviceKitchenScreens}; one unknown reads none. */
 export async function readDevicesKitchenScreens(
   tx: Transaction,
-  _cfg: VenueScope,
   deviceIds: readonly string[],
 ): Promise<Map<string, ResolvedKitchenScreen[]>> {
   if (deviceIds.length === 0) return new Map();
@@ -904,7 +894,6 @@ async function narrowDevices(
  */
 export async function narrowDeviceKitchenScreens(
   tx: Transaction,
-  _cfg: VenueScope,
   deviceId: string,
   profileId: string,
 ): Promise<NarrowedDevice | null> {
@@ -935,7 +924,6 @@ export async function narrowDeviceKitchenScreens(
  *  choice, less what narrowings took, holds no kitchen screen. */
 export async function assertKitchenDisplayHasScreen(
   tx: Transaction,
-  _cfg: VenueScope,
   deviceId: string,
   profileId: string,
 ): Promise<void> {
@@ -952,7 +940,6 @@ export async function assertKitchenDisplayHasScreen(
  */
 export async function assertPassScreenZone(
   tx: Transaction,
-  _cfg: VenueScope,
   deviceId: string,
   zoneId: string | null,
 ): Promise<void> {
@@ -976,7 +963,6 @@ export async function assertPassScreenZone(
 
 export async function readStationScreens(
   tx: Transaction,
-  _cfg: VenueScope,
   options: { withSwitchedOff?: boolean } = {},
 ): Promise<{ deviceId: string; stationIds: string[] }[]> {
   const displays = await tx

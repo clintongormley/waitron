@@ -245,7 +245,7 @@ const capabilities = (value: string[]) =>
     .where(eq(deviceProfiles.id, profileId));
 async function scope(allowed: string[]) {
   await withTransaction(store.db, (tx) =>
-    setProfileServiceAccess(tx, cfg, profileId, {
+    setProfileServiceAccess(tx, profileId, {
       departmentId,
       allowedZoneIds: allowed,
       startingZoneId: allowed[0]!,

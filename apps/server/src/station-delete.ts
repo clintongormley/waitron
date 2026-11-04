@@ -24,7 +24,6 @@ import {
 } from "@waitron/db";
 import { clearStationDeleteSettings, readStationDeleteSettings } from "@waitron/venue-service";
 import { bumpRevision } from "./working-order.js";
-import type { TradingContext } from "./trading-context.js";
 import { firedQuantity } from "./kitchen-print.js";
 
 function named(key: string, rows: DeleteTarget[]): DeleteImpactItem {
@@ -34,7 +33,7 @@ function named(key: string, rows: DeleteTarget[]): DeleteImpactItem {
   return { key, count: targets.length, targets };
 }
 
-async function stationDeleteRules(tx: Transaction, cfg: TradingContext, id: string) {
+async function stationDeleteRules(tx: Transaction, id: string) {
   const [station] = await tx
     .select({
       id: kitchenStations.id,
@@ -45,7 +44,7 @@ async function stationDeleteRules(tx: Transaction, cfg: TradingContext, id: stri
     .where(and(eq(kitchenStations.id, id), eq(kitchenStations.active, true)));
   if (!station) throw new AppError("station.not_found", { stationId: id });
   const target = { id: station.id, name: station.name };
-  const settings = await readStationDeleteSettings(tx, cfg, id);
+  const settings = await readStationDeleteSettings(tx, id);
   const preparation = await tx
     .select({
       id: workingOrders.id,
@@ -139,21 +138,16 @@ async function stationDeleteRules(tx: Transaction, cfg: TradingContext, id: stri
   return { impact, unsent, drafts };
 }
 
-export async function readStationDeleteImpact(
-  tx: Transaction,
-  cfg: TradingContext,
-  id: string,
-): Promise<DeleteImpact> {
-  return (await stationDeleteRules(tx, cfg, id)).impact;
+export async function readStationDeleteImpact(tx: Transaction, id: string): Promise<DeleteImpact> {
+  return (await stationDeleteRules(tx, id)).impact;
 }
 
 export async function deleteStation(
   tx: Transaction,
-  cfg: TradingContext,
   id: string,
   now = new Date(),
 ): Promise<DeleteImpact> {
-  const { impact, unsent, drafts } = await stationDeleteRules(tx, cfg, id);
+  const { impact, unsent, drafts } = await stationDeleteRules(tx, id);
   const refusal = impact.refusals[0];
   if (refusal?.code === "station.is_default")
     throw new AppError("station.is_default", { stationId: id });
@@ -167,7 +161,7 @@ export async function deleteStation(
       stationId: id,
       count: Number(refusal.params.count),
     });
-  await clearStationDeleteSettings(tx, cfg, id);
+  await clearStationDeleteSettings(tx, id);
   if (unsent.length) {
     await tx
       .update(workingOrderLines)

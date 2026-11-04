@@ -437,7 +437,7 @@ describe("Cancel item service command", () => {
     expect(after.tickets.map((row) => row.quantity).sort()).toEqual([1000, 2000]);
     const notices = [];
     for (const station of new Set(order.tickets.map((row) => row.stationId)))
-      notices.push(...(await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, station))));
+      notices.push(...(await inTx(venue, (tx) => listStationNotices(tx, station))));
     expect(notices.filter((row) => row.workingOrderId === order.billId)).toMatchObject([
       { quantity: "2.000", wasStarted: true },
       { quantity: "4.000", wasStarted: true },
@@ -474,7 +474,7 @@ describe("Cancel item service command", () => {
     ]);
     const notices = [];
     for (const station of new Set(order.tickets.map((row) => row.stationId)))
-      notices.push(...(await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, station))));
+      notices.push(...(await inTx(venue, (tx) => listStationNotices(tx, station))));
     expect(notices.filter((row) => row.workingOrderId === order.billId)).toMatchObject([
       { quantity: "2.000", wasStarted: true },
       { quantity: "4.000", wasStarted: true },
@@ -557,7 +557,7 @@ describe("Cancel item service command", () => {
       expect(after.party[0]!.revision).toBe(ask.expectedPartyRevision + 1);
       const notices = [];
       for (const station of new Set(order.tickets.map((row) => row.stationId)))
-        notices.push(...(await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, station))));
+        notices.push(...(await inTx(venue, (tx) => listStationNotices(tx, station))));
       const added = notices.filter((row) => row.workingOrderId === order.billId);
       const jobs = (await inTx(venue, (tx) => tx.select().from(printJobs))).filter(
         (row) => !beforeJobs.some((old) => old.id === row.id),
@@ -704,8 +704,8 @@ describe("Cancel item service command", () => {
       (row) => row.workingOrderLineId === order.extra!.id,
     )!.stationId;
     const notices = await inTx(venue, async (tx) => [
-      ...(await listStationNotices(tx, venue.cfg, parentStation)),
-      ...(await listStationNotices(tx, venue.cfg, extraStation)),
+      ...(await listStationNotices(tx, parentStation)),
+      ...(await listStationNotices(tx, extraStation)),
     ]);
     expect(notices.filter((row) => row.workingOrderId === order.billId)).toMatchObject([
       { kind: "void", lineName: "PIZZA", quantity: "2.000", wasStarted: false },
@@ -1046,9 +1046,7 @@ describe("Cancel item service command", () => {
         const lines = printedLines(jobs[0]!.payload).join("\n");
         expect(lines).toContain(kitchenTicketWords("es").holdCancelled);
         expect(lines).toContain("3.000 x PIZZA");
-        const notices = await inTx(venue, (tx) =>
-          listStationNotices(tx, venue.cfg, venue.stationId),
-        );
+        const notices = await inTx(venue, (tx) => listStationNotices(tx, venue.stationId));
         expect(notices.filter((notice) => notice.workingOrderId === order.billId)).toMatchObject([
           { kind: "void", quantity: "3.000", wasStarted: false },
         ]);
@@ -1077,9 +1075,7 @@ describe("Cancel item service command", () => {
         );
         expect(jobs).toHaveLength(printed ? 1 : 0);
         if (printed) expect(printedLines(jobs[0]!.payload).join("\n")).toContain("2.000 x PIZZA");
-        const notices = await inTx(venue, (tx) =>
-          listStationNotices(tx, venue.cfg, venue.stationId),
-        );
+        const notices = await inTx(venue, (tx) => listStationNotices(tx, venue.stationId));
         const added = notices.filter((row) => row.workingOrderId === order.billId);
         if (printed)
           expect(added).toMatchObject([{ kind: "void", quantity: "2.000", wasStarted: false }]);
@@ -1189,7 +1185,7 @@ describe("Cancel item service command", () => {
       expect(printed[0]!.lines).toContain(`*** ${kitchenTicketWords("es").holdCancelled} ***`);
       expect(printed[0]!.lines.join("\n")).toContain("1.000 x RIBEYE");
       const told = async (stationId: string) =>
-        (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, stationId)))
+        (await inTx(venue, (tx) => listStationNotices(tx, stationId)))
           .filter((notice) => notice.workingOrderId === order.billId)
           .map((notice) => ({ kind: notice.kind, lineName: notice.lineName }));
       expect(await told(venue.stationId)).toEqual([{ kind: "void", lineName: "RIBEYE" }]);
@@ -1197,7 +1193,7 @@ describe("Cancel item service command", () => {
       expect(await told(screenId)).toEqual([{ kind: "void", lineName: "GREENS" }]);
     } finally {
       await inTx(venue, async (tx) => {
-        for (const cell of cells) await clearRoutingCell(tx, venue.cfg, cell);
+        for (const cell of cells) await clearRoutingCell(tx, cell);
         await setStationPrinting(tx, { printHeldWork: false }, [venue.stationId]);
         await tx
           .update(kitchenStations)
@@ -1454,8 +1450,8 @@ describe("What a cancel records for refunds", () => {
     );
     expect(stations[0]).not.toBe(stations[1]);
     const notices = await inTx(venue, async (tx) => [
-      ...(await listStationNotices(tx, venue.cfg, stations[0]!)),
-      ...(await listStationNotices(tx, venue.cfg, stations[1]!)),
+      ...(await listStationNotices(tx, stations[0]!)),
+      ...(await listStationNotices(tx, stations[1]!)),
     ]);
     expect(
       notices

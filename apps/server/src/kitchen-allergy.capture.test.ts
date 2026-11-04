@@ -556,7 +556,7 @@ describe("A669 capture", () => {
       const parent = rows.find((row) => row.lineId === original.lineId)!;
       expect(parent.original).toEqual(originalBlock);
       expect(parent.current).toEqual(current);
-      const notices = await inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, v.cfg, stationId));
+      const notices = await inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, stationId));
       expect(
         notices
           .filter((notice) => notice.kind === "allergy_changed")
@@ -564,7 +564,7 @@ describe("A669 capture", () => {
       ).toEqual([{ stationId, quantity: "1.000", allergyBlock: current }]);
       if (separate)
         expect(
-          await inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, v.cfg, extra.stationId)),
+          await inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, extra.stationId)),
         ).toEqual([]);
       const jobs = await v.db.select().from(printJobs);
       for (const old of oldJobs) expect(jobs.find((job) => job.id === old.id)).toEqual(old);
@@ -599,9 +599,7 @@ describe("A669 capture", () => {
           current: cleared,
         },
       ]);
-      const afterRemoval = await inTx(v, (tx) =>
-        VENUE_SERVICE.listStationNotices(tx, v.cfg, stationId),
-      );
+      const afterRemoval = await inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, stationId));
       expect(
         afterRemoval
           .filter((notice) => notice.kind === "allergy_changed")
@@ -654,8 +652,8 @@ describe("A669 capture", () => {
         current: null,
       });
     expect(
-      (await inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, v.cfg, stationId))).filter(
-        (notice) => notice.kind.startsWith("allergy_"),
+      (await inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, stationId))).filter((notice) =>
+        notice.kind.startsWith("allergy_"),
       ),
     ).toEqual([]);
   });

@@ -2073,7 +2073,7 @@ describe("zone-offer catalogue routes", () => {
         .select({ departmentId: zoneServicePolicies.departmentId })
         .from(zoneServicePolicies)
         .where(eq(zoneServicePolicies.zoneId, counterZoneId));
-      await setProfileServiceAccess(tx, cfg, profileId, {
+      await setProfileServiceAccess(tx, profileId, {
         departmentId: policy!.departmentId,
         allowedZoneIds: null,
         startingZoneId: second!.id,
@@ -3639,7 +3639,6 @@ describe("KDS-1 station-display operate routes", () => {
       );
       await VENUE_SERVICE.recordKitchenNotices(
         tx,
-        cfg,
         id,
         [
           {

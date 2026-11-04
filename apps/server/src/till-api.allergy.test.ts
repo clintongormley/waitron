@@ -444,7 +444,7 @@ describe("A669 allergy routes", () => {
     const elsewhere = await createZone(suite.db, cfg, { name: "Elsewhere" });
     const [department] = await listDepartments(suite.db, cfg);
     const restrict = (zoneId: string) =>
-      setProfileServiceAccess(suite.db, cfg, profileId, {
+      setProfileServiceAccess(suite.db, profileId, {
         departmentId: department!.id,
         allowedZoneIds: [zoneId],
         startingZoneId: zoneId,

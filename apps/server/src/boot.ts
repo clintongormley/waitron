@@ -3000,8 +3000,7 @@ async function bootServer(
     contentSuggestionsAlertSource(),
     invoiceDeliveryAlertSource({ testPages }),
     stationOutputAlertSource({
-      stationStates: (tx, at) =>
-        VENUE_SERVICE.stationStates(tx, { locationId: tradingContext.locationId }, at),
+      stationStates: (tx, at) => VENUE_SERVICE.stationStates(tx, at),
     }),
     passScreenAlertSource({ cfg: tradingContext }),
     batteryAlertSource({

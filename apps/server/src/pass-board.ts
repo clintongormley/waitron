@@ -134,7 +134,7 @@ async function readCardRows(
       tx,
       read.filter((row) => phase(row) === "held").map((row) => row.stationId),
     ));
-  const states = await VENUE_SERVICE.stationStates(tx, cfg, new Date(nowMs));
+  const states = await VENUE_SERVICE.stationStates(tx, new Date(nowMs));
   return read.map(
     ({ stationChosenAt, stationRetainedAtRelease, makeAtStationId, deliveryTableId, ...row }) => {
       void deliveryTableId;

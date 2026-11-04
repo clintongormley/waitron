@@ -176,9 +176,7 @@ describe("the pass screen's device routes", () => {
 
     const board = await read(f.app, f.a.cookie);
     const [screen] = (
-      await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.readDeviceKitchenScreens(tx, f.v.cfg, f.a.id),
-      )
+      await withTransaction(suite.db, (tx) => VENUE_SERVICE.readDeviceKitchenScreens(tx, f.a.id))
     ).filter((s) => s.kind === "pass");
     expect(board).toEqual({
       board: { held: [], toFire: [], inProgress: [], ready: [], overview: [] },
@@ -314,7 +312,7 @@ describe("the pass screen's device routes", () => {
       itemId,
     ]);
     await inTx(f.v, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, f.v.cfg, narrowed[0]!.id, {
+      VENUE_SERVICE.setProfileKitchenScreens(tx, narrowed[0]!.id, {
         station: { stationIds: null, zoneIds: null },
       }),
     );
@@ -329,7 +327,7 @@ describe("the pass screen's device routes", () => {
     const refusedDone = await done(f.app, pass.cookie, { ticketItemIds: [itemId], done: true });
     expect(refusedDone.status).toBe(404);
     const screens = await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.readDeviceKitchenScreens(tx, f.v.cfg, pass.id),
+      VENUE_SERVICE.readDeviceKitchenScreens(tx, pass.id),
     );
     expect(screens).toEqual([
       {
@@ -595,9 +593,7 @@ describe("A773 pass board: routes", () => {
     expect(read.board.toFire[0]!.releaseContext).toEqual(expect.any(String));
     expect([...read.board.held, ...read.board.inProgress, ...read.board.ready]).toEqual([]);
     const [screen] = (
-      await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.readDeviceKitchenScreens(tx, f.v.cfg, f.a.id),
-      )
+      await withTransaction(suite.db, (tx) => VENUE_SERVICE.readDeviceKitchenScreens(tx, f.a.id))
     ).filter((s) => s.kind === "pass");
     expect(read.stations).toEqual(screen!.stations);
     expect(read.zones).toBeNull();
@@ -798,7 +794,7 @@ describe("A773 pass display policy", () => {
     const f = await fixture();
     const { burger, paella } = await burgerAndPaella(f, true);
     await inTx(f.v, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, f.v.cfg, f.kds, {
+      VENUE_SERVICE.setProfileKitchenScreens(tx, f.kds, {
         pass: { stationIds: null, zoneIds: null, showNonPassStations: false },
       }),
     );
@@ -1330,7 +1326,7 @@ describe("A773 pass release: route", () => {
         name: "Deli counter",
         departmentId: deli.id,
       });
-      await setProfileServiceAccess(tx, f.v.cfg, profile!.id, {
+      await setProfileServiceAccess(tx, profile!.id, {
         departmentId: deli.id,
         allowedZoneIds: null,
         startingZoneId: zone.id,
@@ -1389,7 +1385,7 @@ describe("A773 pass release: route", () => {
       });
 
     await inTx(f.v, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, f.v.cfg, profileId, {
+      VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
         station: { stationIds: null, zoneIds: null },
       }),
     );

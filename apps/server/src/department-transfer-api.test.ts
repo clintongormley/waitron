@@ -130,18 +130,18 @@ async function ready() {
         .insert(deviceProfiles)
         .values({ name: randomUUID(), formFactor: "till", capabilities: [...CAPABILITY_FLAGS] })
         .returning();
-      await setProfileServiceScope(tx, v.cfg, p!.id, {
+      await setProfileServiceScope(tx, p!.id, {
         departmentId: departmentId!,
         allowedZoneIds: [zoneId!],
         startingZoneId: zoneId!,
       });
       profiles.push(p!.id);
     }
-    await setDepartmentTransferSettings(tx, v.cfg, a.id, {
+    await setDepartmentTransferSettings(tx, a.id, {
       receivingProfileId: null,
       destinationDepartmentIds: [b.id],
     });
-    await setDepartmentTransferSettings(tx, v.cfg, b.id, {
+    await setDepartmentTransferSettings(tx, b.id, {
       receivingProfileId: profiles[1]!,
       destinationDepartmentIds: [],
     });
@@ -829,12 +829,12 @@ describe("departmentless transfer monitoring", () => {
       }
       expect(logged).toEqual([]);
       await withTransaction(suite.db, async (tx) => {
-        await setProfileServiceScope(tx, v.cfg, till.profileId, {
+        await setProfileServiceScope(tx, till.profileId, {
           departmentId: f.b,
           allowedZoneIds: [f.bz],
           startingZoneId: f.bz,
         });
-        await setDepartmentTransferSettings(tx, v.cfg, f.b, {
+        await setDepartmentTransferSettings(tx, f.b, {
           receivingProfileId: till.profileId,
           destinationDepartmentIds: [],
         });
@@ -1058,7 +1058,7 @@ describe("department transfer read boundaries", () => {
     const f = await ready();
     const id = await pending(f);
     await withTransaction(suite.db, (tx) =>
-      setDepartmentTransferSettings(tx, v.cfg, f.b, {
+      setDepartmentTransferSettings(tx, f.b, {
         receivingProfileId: f.otherProfile,
         destinationDepartmentIds: [],
       }),
@@ -2062,7 +2062,7 @@ describe("human transfer identities", () => {
     ).toMatchObject({ status: 200 });
     await withTransaction(suite.db, async (tx) => {
       await configureZone(tx, v.cfg, { zoneId: f.bz, departmentId: f.a });
-      await setProfileServiceScope(tx, v.cfg, f.sourceProfile, {
+      await setProfileServiceScope(tx, f.sourceProfile, {
         departmentId: f.a,
         allowedZoneIds: [f.az, f.bz],
         startingZoneId: f.az,

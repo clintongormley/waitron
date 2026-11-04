@@ -36,7 +36,6 @@ import { passScreenAlertSource, stationOutputAlertSource } from "./alert-sources
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { DeviceKitchenScreen } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -75,10 +74,9 @@ async function stationScreenDevice(values: typeof devices.$inferInsert & { stati
 /** A device row, given `screen` offered on its profile. */
 async function kitchenScreenDevice(row: typeof devices.$inferInsert, screen: DeviceKitchenScreen) {
   const [device] = await suite.db.insert(devices).values(row).returning({ id: devices.id });
-  const cfg = { locationId: locationId(row.locationId) };
   await withTransaction(suite.db, async (tx) => {
-    await VENUE_SERVICE.addProfileKitchenScreen(tx, cfg, row.deviceProfileId, screen);
-    await VENUE_SERVICE.setDeviceKitchenScreens(tx, cfg, {
+    await VENUE_SERVICE.addProfileKitchenScreen(tx, row.deviceProfileId, screen);
+    await VENUE_SERVICE.setDeviceKitchenScreens(tx, {
       deviceId: device!.id,
       profileId: row.deviceProfileId,
       screens: [screen],
@@ -283,9 +281,8 @@ describe("station output status", () => {
       open: false,
     });
     expect(
-      (
-        await withTransaction(suite.db, (tx) => VENUE_SERVICE.stationStates(tx, f.venue.cfg, at))
-      ).get(f.bar)?.open,
+      (await withTransaction(suite.db, (tx) => VENUE_SERVICE.stationStates(tx, at))).get(f.bar)
+        ?.open,
     ).toBe(false);
     expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([
       { stationId: f.bar, stationName: "Bar", lastSeenAt: "2026-10-02T18:00:00.000Z" },
@@ -708,13 +705,11 @@ describe("passScreensDark", () => {
     const pass = await passDevice(f, "pass");
     const bare = await profile("kds");
     await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.narrowDeviceKitchenScreens(tx, f.venue.cfg, pass, bare),
+      VENUE_SERVICE.narrowDeviceKitchenScreens(tx, pass, bare),
     );
     await suite.db.update(devices).set({ deviceProfileId: bare }).where(eq(devices.id, pass));
     expect(
-      await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.readDeviceKitchenScreens(tx, f.venue.cfg, pass),
-      ),
+      await withTransaction(suite.db, (tx) => VENUE_SERVICE.readDeviceKitchenScreens(tx, pass)),
     ).toMatchObject([{ kind: "pass", available: false }]);
     expect(await read(f)).toEqual([]);
   });

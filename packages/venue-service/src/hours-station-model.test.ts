@@ -75,7 +75,7 @@ describe("Calendar without a station-hours page model", () => {
     );
     for (const field of ["subjects", "week", "specialCells", "specialDates"])
       expect(model).not.toHaveProperty(field);
-    const routing = await withTransaction(suite.db, (tx) => routingModel(tx, f.cfg, at));
+    const routing = await withTransaction(suite.db, (tx) => routingModel(tx, at));
     expect(routing.stations).toEqual([
       { id: ids.bar, name: "Bar", active: true, colour: "red" },
       { id: ids.kitchen, name: "Kitchen", active: true, colour: "red" },

@@ -126,7 +126,7 @@ it("refreshes Calendar and routing from special days, clock and daily station st
     tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, kitchen)),
   );
   expect(reaches(station, calendar)).toEqual([]);
-  const today = await announced((tx) => setStationToday(tx, cfg, bar, "closed", at));
+  const today = await announced((tx) => setStationToday(tx, bar, "closed", at));
   expect(reaches(today, calendar)).toEqual([]);
   expect(reaches(today, routing)).toEqual(["station_day_states"]);
   const order = await withTransaction(db, (tx) =>
@@ -201,7 +201,7 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
 
 it("daily station status refreshes routing and special days refresh Opening hours", async () => {
   const at = new Date("2026-10-06T10:00:00Z");
-  const { cfg, bar, dateId } = await withTransaction(db, async (tx) => {
+  const { bar, dateId } = await withTransaction(db, async (tx) => {
     await seedVenue(tx, {
       name: `Retained ${randomUUID()}`,
       invoiceLocales: ["en-GB"],
@@ -224,10 +224,10 @@ it("daily station status refreshes routing and special days refresh Opening hour
       at,
       0,
     );
-    return { cfg, bar: bar!.id, dateId: date.id };
+    return { bar: bar!.id, dateId: date.id };
   });
   const sources = [QUERY_DEPENDENCIES.routing, QUERY_DEPENDENCIES["opening-hours"]];
-  const station = await announced((tx) => setStationToday(tx, cfg, bar, "closed", at));
+  const station = await announced((tx) => setStationToday(tx, bar, "closed", at));
   expect(reaches(station, sources[0]!)).toEqual(["station_day_states"]);
   const named = await announced((tx) =>
     saveSpecialDay(

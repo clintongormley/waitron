@@ -2,16 +2,11 @@ import { and, asc, eq, ne } from "drizzle-orm";
 import { kitchenStations, readVenueClock, type Transaction } from "@waitron/db";
 import { venueMomentAt, type VenueMoment } from "@waitron/reporting";
 import { AppError, compareStationNames } from "@waitron/shared";
-import type { VenueScope } from "./operations.js";
 import { stationDayStates } from "./schema/station-times.js";
 import { routingModel } from "./routing-store.js";
 import "./errors.js";
 
-export async function venueMoment(
-  tx: Transaction,
-  _cfg: VenueScope,
-  at: Date,
-): Promise<VenueMoment | null> {
+export async function venueMoment(tx: Transaction, at: Date): Promise<VenueMoment | null> {
   return venueMomentAt(at, await readVenueClock(tx));
 }
 
@@ -30,14 +25,13 @@ async function requireStation(tx: Transaction, stationId: string) {
 
 export async function setStationToday(
   tx: Transaction,
-  cfg: VenueScope,
   stationId: string,
   state: "open" | "closed" | null,
   at: Date,
   sendsToStationId?: string | null,
 ): Promise<void> {
   await requireStation(tx, stationId);
-  const moment = await venueMoment(tx, cfg, at);
+  const moment = await venueMoment(tx, at);
   if (moment === null) throw new AppError("time_zone.unreadable", {});
   await tx
     .delete(stationDayStates)
@@ -75,7 +69,6 @@ export async function setStationToday(
 
 export async function stationDestinations(
   tx: Transaction,
-  cfg: VenueScope,
   stationId: string,
   at: Date,
 ): Promise<readonly { id: string; name: string; isDefault: boolean }[]> {
@@ -89,7 +82,7 @@ export async function stationDestinations(
     .from(kitchenStations)
     .where(and(eq(kitchenStations.active, true), ne(kitchenStations.id, stationId)))
     .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
-  const model = await routingModel(tx, cfg, at);
+  const model = await routingModel(tx, at);
   const open = new Set(
     model.stationTimes.filter((row) => row.status.open).map((row) => row.stationId),
   );
@@ -100,7 +93,6 @@ export async function stationDestinations(
 
 export async function closeStationForToday(
   tx: Transaction,
-  cfg: VenueScope,
   stationId: string,
   sendsToStationId: string,
   at: Date,
@@ -129,23 +121,20 @@ export async function closeStationForToday(
       sendsToStationId,
       reason: "inactive",
     });
-  if (
-    !(await stationDestinations(tx, cfg, stationId, at)).some((row) => row.id === sendsToStationId)
-  )
+  if (!(await stationDestinations(tx, stationId, at)).some((row) => row.id === sendsToStationId))
     throw new AppError("station.destination_invalid", {
       stationId,
       sendsToStationId,
       reason: "closed",
     });
-  await setStationToday(tx, cfg, stationId, "closed", at, sendsToStationId);
+  await setStationToday(tx, stationId, "closed", at, sendsToStationId);
 }
 
 export async function openStationForToday(
   tx: Transaction,
-  cfg: VenueScope,
   stationId: string,
   at: Date,
 ): Promise<void> {
   await requireStation(tx, stationId);
-  await setStationToday(tx, cfg, stationId, null, at);
+  await setStationToday(tx, stationId, null, at);
 }

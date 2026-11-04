@@ -34,7 +34,7 @@ async function assertScreenShowsStation(
   id: string,
 ): Promise<void> {
   await requireLiveStation(tx, cfg, id);
-  const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, cfg, deviceId)).find(
+  const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, deviceId)).find(
     (candidate) => candidate.kind === "station",
   );
   const shown =
@@ -59,7 +59,7 @@ export function mountStationTodayApi(
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           await assertScreenShowsStation(tx, cfg, device.deviceId, id);
-          const destinations = await VENUE_SERVICE.stationDestinations(tx, cfg, id, new Date());
+          const destinations = await VENUE_SERVICE.stationDestinations(tx, id, new Date());
           const authorizers = await listActivePersonsWithPermission(tx, "venue_service.manage");
           return {
             destinations,
@@ -108,10 +108,10 @@ export function mountStationTodayApi(
               id,
               destination,
               choice,
-              (at) => VENUE_SERVICE.closeStationForToday(tx, cfg, id, destination!, at),
+              (at) => VENUE_SERVICE.closeStationForToday(tx, id, destination!, at),
               { deviceId: cfg.origin.deviceId, personId: authorizedBy },
             );
-          else await VENUE_SERVICE.openStationForToday(tx, cfg, id, new Date());
+          else await VENUE_SERVICE.openStationForToday(tx, id, new Date());
         }),
       );
       return c.body(null, 204);
@@ -129,12 +129,11 @@ export function mountStationTodayApi(
   );
   app.get("/api/stations/:stationId/today", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      await requireSession(deps, c);
       const id = stationId(c.req.param("stationId"));
-      const cfg = requestCfg(deps.cfg, session);
       return c.json(
         await withTransaction(deps.db, async (tx) => {
-          const destinations = await VENUE_SERVICE.stationDestinations(tx, cfg, id, new Date());
+          const destinations = await VENUE_SERVICE.stationDestinations(tx, id, new Date());
           return { destinations, openDishCount: await openDishCount(tx, id) };
         }),
       );
@@ -173,10 +172,10 @@ export function mountStationTodayApi(
               id,
               destination,
               choice,
-              (at) => VENUE_SERVICE.closeStationForToday(tx, cfg, id, destination!, at),
+              (at) => VENUE_SERVICE.closeStationForToday(tx, id, destination!, at),
               { deviceId: cfg.origin.deviceId, personId: authorizedBy },
             );
-          else await VENUE_SERVICE.openStationForToday(tx, cfg, id, new Date());
+          else await VENUE_SERVICE.openStationForToday(tx, id, new Date());
         }),
       );
       return c.body(null, 204);

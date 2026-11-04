@@ -49,9 +49,9 @@ describe("readLateSendNeedsManager", () => {
   it("answers false for a new department and true once the setting is on", async () => {
     const cfg = { locationId: await seedLocation("Late send read") };
     const id = await department(cfg, "Restaurant");
-    expect(await scoped((tx) => readLateSendNeedsManager(tx, cfg, id))).toBe(false);
+    expect(await scoped((tx) => readLateSendNeedsManager(tx, id))).toBe(false);
     await switchOn(id);
-    expect(await scoped((tx) => readLateSendNeedsManager(tx, cfg, id))).toBe(true);
+    expect(await scoped((tx) => readLateSendNeedsManager(tx, id))).toBe(true);
   });
 });
 
@@ -63,6 +63,6 @@ describe("listLateSendManagerDepartmentIds", () => {
     const c = await department(cfg, "C");
     for (const id of [a, c]) await switchOn(id);
     await db.update(departments).set({ active: false }).where(eq(departments.id, c));
-    expect(await scoped((tx) => listLateSendManagerDepartmentIds(tx, cfg))).toEqual([a]);
+    expect(await scoped((tx) => listLateSendManagerDepartmentIds(tx))).toEqual([a]);
   });
 });

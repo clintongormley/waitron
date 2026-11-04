@@ -192,13 +192,12 @@ const factsOf = (
 /** The stored rules' whole choice: the deciding cell and any fallback steps beside the route. */
 const storedChoice = async (
   tx: Transaction,
-  cfg: Parameters<typeof loadRoutingRules>[1],
   facts: ProductFacts,
   zoneId: string | null,
   today: { businessDay: string | null; moment: RoutingMoment } | null = null,
 ): Promise<MakerChoice> =>
   chooseMaker(
-    await loadRoutingRules(tx, cfg, today?.businessDay ?? null),
+    await loadRoutingRules(tx, today?.businessDay ?? null),
     facts,
     zoneId,
     today?.moment ?? null,
@@ -209,7 +208,7 @@ describe("maker descriptions and the deciding cell", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       await setCategoryCell(tx, f.cocktails, station(f.bar));
-      expect(Object.isFrozen((await loadRoutingRules(tx, f.cfg, null)).cells)).toBe(true);
+      expect(Object.isFrozen((await loadRoutingRules(tx, null)).cells)).toBe(true);
     }));
   it("names the unavailable station when no active default remains", async () =>
     scoped(async (tx) => {
@@ -226,7 +225,7 @@ describe("maker descriptions and the deciding cell", () => {
         .update(kitchenStations)
         .set({ active: false })
         .where(eq(kitchenStations.id, f.terraceBar));
-      expect((await describeMakers(tx, f.cfg)).get(f.mojito)).toEqual({
+      expect((await describeMakers(tx)).get(f.mojito)).toEqual({
         route: null,
         variesByZone: false,
         noReplacement: true,
@@ -237,7 +236,7 @@ describe("maker descriptions and the deciding cell", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx.update(products).set({ active: false }).where(eq(products.id, f.mojito));
-      const makers = await describeMakers(tx, f.cfg);
+      const makers = await describeMakers(tx);
       expect(makers.has(f.mojito)).toBe(false);
       expect(makers.has(f.variant)).toBe(false);
       expect(makers.get(f.bread)).toEqual({
@@ -267,7 +266,7 @@ describe("maker descriptions and the deciding cell", () => {
         { row: categoryRow(f.cocktails), zoneId: f.terrace },
         station(f.terraceBar),
       );
-      const makers = await describeMakers(tx, f.cfg);
+      const makers = await describeMakers(tx);
       expect(makers.get(f.mojito)).toEqual({
         route: { kind: "station", stationId: f.bar },
         variesByZone: true,
@@ -291,7 +290,7 @@ describe("maker descriptions and the deciding cell", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       await setRoutingCell(tx, { row: { kind: "all" }, zoneId: f.terrace }, station(f.terraceBar));
-      const makers = await describeMakers(tx, f.cfg);
+      const makers = await describeMakers(tx);
       for (const id of [f.mojito, f.variant, f.bread])
         expect(makers.get(id)).toEqual({
           route: station(f.bar),
@@ -300,7 +299,7 @@ describe("maker descriptions and the deciding cell", () => {
           unavailableStationId: null,
         });
       await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, f.terrace));
-      expect((await describeMakers(tx, f.cfg)).get(f.bread)).toMatchObject({
+      expect((await describeMakers(tx)).get(f.bread)).toMatchObject({
         variesByZone: false,
       });
     }));
@@ -313,7 +312,7 @@ describe("maker descriptions and the deciding cell", () => {
         { row: categoryRow(f.cocktails), zoneId: f.terrace },
         station(f.terraceBar),
       );
-      expect((await describeMakers(tx, f.cfg)).get(f.mojito)).toEqual({
+      expect((await describeMakers(tx)).get(f.mojito)).toEqual({
         route: station(f.terraceBar),
         variesByZone: false,
         noReplacement: false,
@@ -329,7 +328,7 @@ describe("maker descriptions and the deciding cell", () => {
         station(f.terraceBar),
       );
       await setCategoryCell(tx, f.cocktails, station(f.bar));
-      const makers = await describeMakers(tx, f.cfg);
+      const makers = await describeMakers(tx);
       expect(makers.get(f.mojito)).toEqual({
         route: station(f.bar),
         variesByZone: false,
@@ -344,7 +343,7 @@ describe("maker descriptions and the deciding cell", () => {
         unitPrice: "3.00",
         vatClass: "general",
       });
-      expect((await describeMakers(tx, f.cfg)).get(lager.id)).toMatchObject({
+      expect((await describeMakers(tx)).get(lager.id)).toMatchObject({
         variesByZone: true,
       });
     }));
@@ -360,7 +359,7 @@ describe("maker descriptions and the deciding cell", () => {
         .update(kitchenStations)
         .set({ active: false })
         .where(inArray(kitchenStations.id, [f.bar, f.terraceBar]));
-      const makers = await describeMakers(tx, f.cfg);
+      const makers = await describeMakers(tx);
       expect(makers.get(f.mojito)).toEqual({
         route: null,
         variesByZone: true,
@@ -374,7 +373,7 @@ describe("maker descriptions and the deciding cell", () => {
       const f = await fixture(tx);
       const half = await breadVariant(tx, f);
       await setRoutingCell(tx, { row: noCategoryRow, zoneId: f.terrace }, station(f.terraceBar));
-      const makers = await describeMakers(tx, f.cfg);
+      const makers = await describeMakers(tx);
       for (const id of [f.bread, half])
         expect(makers.get(id), id).toEqual({
           route: station(f.bar),
@@ -423,7 +422,7 @@ describe("maker descriptions and the deciding cell", () => {
       await setCategoryCell(tx, f.food, station(f.bar));
       await setRoutingCell(tx, { row: categoryRow(f.food), zoneId: old }, noPrep);
       await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, old));
-      const makers = await describeMakers(tx, f.cfg);
+      const makers = await describeMakers(tx);
       const expected = (variesByZone: boolean) => ({
         route: station(f.bar),
         variesByZone,
@@ -445,9 +444,7 @@ describe("maker descriptions and the deciding cell", () => {
         kind: "made",
         route: station(f.terraceBar),
       });
-      expect(
-        await storedChoice(tx, f.cfg, factsOf(f.variant, f.mojito, f.cocktails), f.terrace),
-      ).toEqual({
+      expect(await storedChoice(tx, factsOf(f.variant, f.mojito, f.cocktails), f.terrace)).toEqual({
         route: station(f.terraceBar),
         decidedBy: { kind: "cell", address },
         fallbacks: [],
@@ -475,9 +472,7 @@ describe("maker descriptions and the deciding cell", () => {
         name: "Terrace Bar",
         active: false,
       });
-      expect(
-        await storedChoice(tx, f.cfg, factsOf(f.mojito, f.mojito, f.cocktails), f.terrace),
-      ).toEqual({
+      expect(await storedChoice(tx, factsOf(f.mojito, f.mojito, f.cocktails), f.terrace)).toEqual({
         route: null,
         decidedBy: { kind: "cell", address },
         fallbacks: [{ stationId: f.terraceBar, why: "switched_off" }],
@@ -494,7 +489,7 @@ describe("maker descriptions and the deciding cell", () => {
         kind: "made",
         route: station(f.bar),
       });
-      expect(await storedChoice(tx, f.cfg, bread, null)).toMatchObject({
+      expect(await storedChoice(tx, bread, null)).toMatchObject({
         route: { kind: "station", stationId: f.bar },
         decidedBy: { kind: "default" },
       });
@@ -502,7 +497,7 @@ describe("maker descriptions and the deciding cell", () => {
       expect((await resolveMakers(tx, f.cfg, null, [f.bread], at)).get(f.bread)).toEqual({
         kind: "no_station",
       });
-      expect(await storedChoice(tx, f.cfg, bread, null)).toMatchObject({
+      expect(await storedChoice(tx, bread, null)).toMatchObject({
         route: null,
         decidedBy: null,
       });
@@ -535,7 +530,7 @@ describe("stored preparation rules", () => {
         .update(kitchenStations)
         .set({ active: false })
         .where(eq(kitchenStations.id, f.terraceBar));
-      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
+      const model = await routingModel(tx, new Date("2026-10-02T18:00:00Z"));
       expect(model.zones.some((zone) => zone.id === garden!.id)).toBe(false);
       expect({ ...model, cells: sortCells(model.cells) }).toEqual({
         zones: [
@@ -564,18 +559,6 @@ describe("stored preparation rules", () => {
       expect(model.stationTimes.map((times) => times.stationId)).toEqual([f.bar]);
     }));
 
-  // A1301: deleted with cfg in S18
-  it("routingModel lists the venue's zones whatever location the scope names", async () =>
-    scoped(async (tx) => {
-      const f = await fixture(tx);
-      const model = await routingModel(
-        tx,
-        { locationId: locationId(randomUUID()) },
-        new Date("2026-10-02T18:00:00Z"),
-      );
-      expect(model.zones).toEqual([{ id: f.terrace, name: "Terrace", departmentId: f.department }]);
-    }));
-
   it("the routing model's stations carry their colours", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
@@ -584,7 +567,7 @@ describe("stored preparation rules", () => {
         .update(kitchenStations)
         .set({ colour: "purple" })
         .where(eq(kitchenStations.id, f.terraceBar));
-      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
+      const model = await routingModel(tx, new Date("2026-10-02T18:00:00Z"));
       expect(model.stations).toEqual([
         { id: f.bar, name: "Bar", active: true, colour: "teal" },
         { id: f.terraceBar, name: "Terrace Bar", active: true, colour: "purple" },
@@ -601,13 +584,13 @@ describe("stored preparation rules", () => {
       ];
       for (const { target, ...address } of written) await setRoutingCell(tx, address, target);
       const at = new Date("2026-10-02T18:00:00Z");
-      const model = await routingModel(tx, f.cfg, at);
+      const model = await routingModel(tx, at);
       expect(sortCells(model.cells)).toEqual(sortCells(written));
       expect(model.products.filter((product) => product.categoryId === null)).toEqual([
         { id: f.bread, name: "Bread", categoryId: null },
       ]);
       await tx.update(products).set({ categoryId: f.food }).where(eq(products.id, f.bread));
-      const categorised = await routingModel(tx, f.cfg, at);
+      const categorised = await routingModel(tx, at);
       expect(categorised.products.filter((product) => product.categoryId === null)).toEqual([]);
       expect(sortCells(categorised.cells)).toEqual(sortCells(written));
     }));
@@ -616,7 +599,7 @@ describe("stored preparation rules", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx.update(products).set({ categoryId: f.food }).where(eq(products.id, f.variant));
-      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
+      const model = await routingModel(tx, new Date("2026-10-02T18:00:00Z"));
       expect(model.products.map((product) => product.id)).toEqual([f.bread, f.mojito]);
     }));
 
@@ -628,7 +611,7 @@ describe("stored preparation rules", () => {
         .update(products)
         .set({ ordering: "not_sold_separately" })
         .where(eq(products.id, f.mojito));
-      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
+      const model = await routingModel(tx, new Date("2026-10-02T18:00:00Z"));
       expect(model.products).toEqual([
         { id: f.bread, name: "Bread", categoryId: null },
         { id: f.mojito, name: "Mojito", categoryId: f.cocktails },
@@ -644,7 +627,7 @@ describe("stored preparation rules", () => {
       ];
       for (const { target, ...address } of cells) await setRoutingCell(tx, address, target);
       const at = new Date("2026-10-02T18:00:00Z");
-      const before = await routingModel(tx, f.cfg, at);
+      const before = await routingModel(tx, at);
       expect(sortCells(before.cells)).toEqual(sortCells(cells));
       const storedMojito = () =>
         tx
@@ -653,11 +636,11 @@ describe("stored preparation rules", () => {
           .where(eq(routingCells.productId, f.mojito));
       await tx.update(products).set({ active: false }).where(eq(products.id, f.mojito));
       expect(await storedMojito()).toEqual([{ stationId: f.terraceBar, zoneId: f.terrace }]);
-      const hidden = await routingModel(tx, f.cfg, at);
+      const hidden = await routingModel(tx, at);
       expect(hidden.products.map((product) => product.id)).toEqual([f.bread]);
       expect(hidden.cells).toEqual([cells[1]]);
       await tx.update(products).set({ active: true }).where(eq(products.id, f.mojito));
-      const shown = await routingModel(tx, f.cfg, at);
+      const shown = await routingModel(tx, at);
       expect(shown.products.map((product) => product.id)).toEqual([f.bread, f.mojito]);
       expect(sortCells(shown.cells)).toEqual(sortCells(cells));
     }));
@@ -672,7 +655,7 @@ describe("stored preparation rules", () => {
         station(f.terraceBar),
       );
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
-      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
+      const model = await routingModel(tx, new Date("2026-10-02T18:00:00Z"));
       expect(model.cells).toContainEqual({
         row: categoryRow(f.beer),
         zoneId: null,
@@ -704,7 +687,7 @@ describe("stored preparation rules", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
-      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
+      const model = await routingModel(tx, new Date("2026-10-02T18:00:00Z"));
       expect(model.defaultStationId).toBeNull();
       expect(model.stations.some((row) => row.id === f.bar)).toBe(false);
       expect(model.stations.some((row) => row.id === f.switchedOff)).toBe(false);
@@ -741,8 +724,8 @@ describe("the browser's selection rules", () => {
       const zones = [null, f.terrace, upstairs!.id];
       const at = new Date("2026-10-02T18:00:00Z");
       const compare = async () => {
-        const server = await loadRoutingRules(tx, f.cfg, null);
-        const model: RoutingModel = JSON.parse(JSON.stringify(await routingModel(tx, f.cfg, at)));
+        const server = await loadRoutingRules(tx, null);
+        const model: RoutingModel = JSON.parse(JSON.stringify(await routingModel(tx, at)));
         const browser = selectionRulesFromModel(model);
         const categoryOf = new Map(
           model.products.map((product) => [product.id, product.categoryId]),
@@ -819,9 +802,9 @@ describe("the browser's selection rules", () => {
         [productRow(f.mojito), f.cocktails],
       ];
       const zones = [null, f.terrace, upstairs!.id, inside!.id];
-      const server = await loadRoutingRules(tx, f.cfg, null);
+      const server = await loadRoutingRules(tx, null);
       const model: RoutingModel = JSON.parse(
-        JSON.stringify(await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))),
+        JSON.stringify(await routingModel(tx, new Date("2026-10-02T18:00:00Z"))),
       );
       const browser = selectionRulesFromModel(model);
       const categoryOf = new Map(model.products.map((product) => [product.id, product.categoryId]));
@@ -869,7 +852,7 @@ describe("resolveMakers", () => {
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, f.cfg.locationId));
       await setCategoryCell(tx, f.drinks, station(f.terraceBar));
-      await closeStationForToday(tx, f.cfg, f.terraceBar, f.bar, at);
+      await closeStationForToday(tx, f.terraceBar, f.bar, at);
       const expected = {
         open: false,
         active: true,
@@ -879,7 +862,7 @@ describe("resolveMakers", () => {
         sendsTo: f.bar,
         why: "closed_by_hand",
       };
-      expect((await stationStates(tx, f.cfg, at)).get(f.terraceBar)).toEqual(expected);
+      expect((await stationStates(tx, at)).get(f.terraceBar)).toEqual(expected);
       const resolver = await routingAt(tx, f.cfg, at);
       expect((await resolver.stations()).get(f.terraceBar)).toEqual(expected);
       expect((await resolver.makers(null, [f.mojito])).get(f.mojito)).toEqual({
@@ -887,12 +870,11 @@ describe("resolveMakers", () => {
         route: station(f.bar),
       });
       expect(
-        (await routingModel(tx, f.cfg, at)).stationTimes.find(
-          (row) => row.stationId === f.terraceBar,
-        )?.closedSendsTo,
+        (await routingModel(tx, at)).stationTimes.find((row) => row.stationId === f.terraceBar)
+          ?.closedSendsTo,
       ).toBe(f.bar);
       const tomorrow = new Date("2026-10-03T18:00:00Z");
-      expect((await stationStates(tx, f.cfg, tomorrow)).get(f.terraceBar)).toEqual({
+      expect((await stationStates(tx, tomorrow)).get(f.terraceBar)).toEqual({
         open: true,
         active: true,
         isDefault: false,
@@ -915,14 +897,14 @@ describe("resolveMakers", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, f.cfg.locationId));
-      expect((await stationStates(tx, f.cfg, at)).get(f.terraceBar)).toMatchObject({
+      expect((await stationStates(tx, at)).get(f.terraceBar)).toMatchObject({
         open: true,
         why: "open",
         byHand: null,
         sendsTo: null,
       });
-      await setStationToday(tx, f.cfg, f.terraceBar, "open", at);
-      expect((await stationStates(tx, f.cfg, at)).get(f.terraceBar)).toMatchObject({
+      await setStationToday(tx, f.terraceBar, "open", at);
+      expect((await stationStates(tx, at)).get(f.terraceBar)).toMatchObject({
         open: true,
         why: "open",
         byHand: null,
@@ -932,13 +914,13 @@ describe("resolveMakers", () => {
         .update(locations)
         .set({ timeZone: "Mars/Base" })
         .where(eq(locations.id, f.cfg.locationId));
-      expect((await stationStates(tx, f.cfg, at)).get(f.terraceBar)).toMatchObject({
+      expect((await stationStates(tx, at)).get(f.terraceBar)).toMatchObject({
         open: true,
         why: "open",
         byHand: null,
         sendsTo: null,
       });
-      expect((await stationStates(tx, f.cfg, at)).get(f.switchedOff)).toBeUndefined();
+      expect((await stationStates(tx, at)).get(f.switchedOff)).toBeUndefined();
       expect((await (await routingAt(tx, f.cfg, at)).stations()).get(f.switchedOff)).toMatchObject({
         open: false,
         why: "switched_off",
@@ -963,7 +945,7 @@ describe("resolveMakers", () => {
         kind: "made",
         route: { kind: "station", stationId: f.terraceBar },
       });
-      await closeStationForToday(tx, f.cfg, f.terraceBar, f.bar, new Date("2026-10-02T20:00:00Z"));
+      await closeStationForToday(tx, f.terraceBar, f.bar, new Date("2026-10-02T20:00:00Z"));
       expect(
         (await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T20:00:00Z"))).get(
           f.mojito,
@@ -986,7 +968,7 @@ describe("resolveMakers", () => {
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, f.cfg.locationId));
       await setCategoryCell(tx, f.drinks, { kind: "station", stationId: f.terraceBar });
-      await setStationToday(tx, f.cfg, f.terraceBar, "closed", new Date("2026-10-02T18:00:00Z"));
+      await setStationToday(tx, f.terraceBar, "closed", new Date("2026-10-02T18:00:00Z"));
       expect(
         (await resolveMakers(tx, f.cfg, null, [f.mojito], new Date("2026-10-02T18:30:00Z"))).get(
           f.mojito,
@@ -1038,7 +1020,7 @@ describe("resolveMakers", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, f.cfg.locationId));
-      const states = await stationStates(tx, f.cfg, new Date("2026-10-02T20:00:00Z"));
+      const states = await stationStates(tx, new Date("2026-10-02T20:00:00Z"));
       expect(states.get(f.bar)).toEqual({
         open: true,
         isDefault: true,
@@ -2258,11 +2240,11 @@ describe("routing previews", () => {
           const address: CellAddress = { row, zoneId };
           for (const target of targets) {
             const moves = await previewRoutingChange(tx, cfg, { kind: "cell", address, target });
-            const before = await loadRoutingRules(tx, cfg, null);
+            const before = await loadRoutingRules(tx, null);
             const saved = await tx.select().from(routingCells);
-            if (target === null) await clearRoutingCell(tx, cfg, address);
+            if (target === null) await clearRoutingCell(tx, address);
             else await setRoutingCell(tx, address, target);
-            const after = await loadRoutingRules(tx, cfg, null);
+            const after = await loadRoutingRules(tx, null);
             await tx.delete(routingCells);
             await tx.insert(routingCells).values(saved);
             expect([address, target, moves.map(moveKey).sort()]).toEqual([
@@ -2301,9 +2283,9 @@ describe("timed routing", () => {
       await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
       await setCategoryCell(tx, f.cocktails, { kind: "station", stationId: f.terraceBar });
       const { at } = fridayLate;
-      await setStationToday(tx, f.cfg, f.terraceBar, "closed", at);
+      await setStationToday(tx, f.terraceBar, "closed", at);
       const mojito = factsOf(f.mojito, f.mojito, f.cocktails);
-      expect(await storedChoice(tx, f.cfg, mojito, null, fridayLate)).toEqual({
+      expect(await storedChoice(tx, mojito, null, fridayLate)).toEqual({
         route: { kind: "station", stationId: f.bar },
         decidedBy: { kind: "cell", address: { row: categoryRow(f.cocktails), zoneId: null } },
         fallbacks: [{ stationId: f.terraceBar, why: "closed_by_hand" }],
@@ -2313,21 +2295,21 @@ describe("timed routing", () => {
         mojito: { kind: "made", route: station(f.bar) },
         terraceBar: { open: false, why: "closed_by_hand" },
       });
-      await setStationToday(tx, f.cfg, f.terraceBar, "open", at);
+      await setStationToday(tx, f.terraceBar, "open", at);
       expect(await routedAt(tx, f, at)).toMatchObject({
         mojito: { kind: "made", route: station(f.terraceBar) },
         terraceBar: { open: true, why: "open" },
       });
-      expect(await storedChoice(tx, f.cfg, mojito, null, fridayLate)).toMatchObject({
+      expect(await storedChoice(tx, mojito, null, fridayLate)).toMatchObject({
         route: station(f.terraceBar),
         fallbacks: [],
       });
-      await setStationToday(tx, f.cfg, f.terraceBar, "closed", at);
+      await setStationToday(tx, f.terraceBar, "closed", at);
       expect(await routedAt(tx, f, at)).toMatchObject({
         mojito: { kind: "made", route: station(f.bar) },
         terraceBar: { open: false, why: "closed_by_hand" },
       });
-      expect(await storedChoice(tx, f.cfg, mojito, null, fridayLate)).toMatchObject({
+      expect(await storedChoice(tx, mojito, null, fridayLate)).toMatchObject({
         route: station(f.bar),
         fallbacks: [{ stationId: f.terraceBar, why: "closed_by_hand" }],
       });
@@ -2351,13 +2333,13 @@ describe("timed routing", () => {
       const { at } = fridayLate;
       await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
       await setCategoryCell(tx, f.cocktails, { kind: "station", stationId: f.terraceBar });
-      await setStationToday(tx, f.cfg, f.terraceBar, "closed", at);
+      await setStationToday(tx, f.terraceBar, "closed", at);
       expect(await routedAt(tx, f, at)).toMatchObject({
         mojito: { kind: "made", route: station(f.bar) },
         terraceBar: { open: false, why: "closed_by_hand" },
       });
       expect(
-        await storedChoice(tx, f.cfg, factsOf(f.mojito, f.mojito, f.cocktails), null, fridayLate),
+        await storedChoice(tx, factsOf(f.mojito, f.mojito, f.cocktails), null, fridayLate),
       ).toMatchObject({
         route: { kind: "station", stationId: f.bar },
         fallbacks: [{ stationId: f.terraceBar, why: "closed_by_hand" }],
@@ -2436,7 +2418,7 @@ describe("extra maker resolution", () => {
           ["cheese", { kind: "follows_dish", why: "no_rule" }],
         ]),
       );
-      const rules = await loadRoutingRules(tx, f.cfg, null);
+      const rules = await loadRoutingRules(tx, null);
       const dish = chooseMaker(rules, factsOf(f.mojito, f.mojito, f.cocktails), null, null);
       expect(
         [factsOf(f.chips, f.chips, f.sides), factsOf(f.cheese, f.cheese, f.toppings)].map((extra) =>
@@ -2460,12 +2442,12 @@ describe("extra maker resolution", () => {
       const f = await extrasFixture(tx);
       await setCategoryCell(tx, f.cocktails, { kind: "station", stationId: f.grill });
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
-      await setStationToday(tx, f.cfg, f.grill, "closed", fixedInstant);
+      await setStationToday(tx, f.grill, "closed", fixedInstant);
       expect(
         (await resolveMakers(tx, f.cfg, null, [f.mojito], fixedInstant)).get(f.mojito),
       ).toEqual({ kind: "no_replacement", stationId: f.grill });
       const today = { businessDay: "2026-10-02", moment: { weekday: 5, timeOfDay: "18:30" } };
-      const rules = await loadRoutingRules(tx, f.cfg, today.businessDay);
+      const rules = await loadRoutingRules(tx, today.businessDay);
       const dish = chooseMaker(rules, factsOf(f.mojito, f.mojito, f.cocktails), null, today.moment);
       expect(dish.route).toBeNull();
       expect(
@@ -2551,7 +2533,7 @@ describe("extra maker resolution", () => {
         .update(kitchenStations)
         .set({ isDefault: false })
         .where(eq(kitchenStations.id, f.bar));
-      await setStationToday(tx, f.cfg, f.fryer, "closed", fixedInstant);
+      await setStationToday(tx, f.fryer, "closed", fixedInstant);
       expect(
         await resolveExtraMakers(
           tx,
@@ -2598,7 +2580,7 @@ describe("routing from cells", () => {
         ]),
       );
       const mojito = factsOf(f.mojito, f.mojito, f.cocktails);
-      expect(await storedChoice(tx, f.cfg, mojito, f.terrace)).toMatchObject({
+      expect(await storedChoice(tx, mojito, f.terrace)).toMatchObject({
         route: station(f.bar),
         decidedBy: { kind: "default" },
         fallbacks: [],
@@ -2612,7 +2594,7 @@ describe("routing from cells", () => {
           [f.bread, { kind: "no_station" }],
         ]),
       );
-      expect(await storedChoice(tx, f.cfg, mojito, f.terrace)).toMatchObject({
+      expect(await storedChoice(tx, mojito, f.terrace)).toMatchObject({
         route: null,
         decidedBy: null,
         noReplacement: false,
@@ -2632,16 +2614,16 @@ describe("routing from cells", () => {
       ];
       const ids = [f.mojito, f.variant];
       for (const facts of both)
-        expect(await storedChoice(tx, f.cfg, facts, f.terrace)).toMatchObject({
+        expect(await storedChoice(tx, facts, f.terrace)).toMatchObject({
           route: station(f.bar),
           decidedBy: { kind: "cell", address: productCell },
         });
       expect(await (await routingAt(tx, f.cfg, fixedInstant)).makers(f.terrace, ids)).toEqual(
         new Map(ids.map((id) => [id, { kind: "made", route: station(f.bar) }])),
       );
-      await clearRoutingCell(tx, f.cfg, productCell);
+      await clearRoutingCell(tx, productCell);
       for (const facts of both) {
-        const chosen = await storedChoice(tx, f.cfg, facts, f.terrace);
+        const chosen = await storedChoice(tx, facts, f.terrace);
         expect(chosen.route).toEqual(station(f.terraceBar));
         expect(chosen.decidedBy).toEqual({ kind: "cell", address: terraceCell });
       }
@@ -2673,7 +2655,7 @@ describe("routing from cells", () => {
         decidedBy: unknown,
       ): Promise<void> => {
         for (const id of ids)
-          expect(await storedChoice(tx, f.cfg, factsById.get(id)!, f.terrace), id).toMatchObject({
+          expect(await storedChoice(tx, factsById.get(id)!, f.terrace), id).toMatchObject({
             route,
             decidedBy,
           });
@@ -2691,14 +2673,14 @@ describe("routing from cells", () => {
       const breadEvery: CellAddress = { row: productRow(f.bread), zoneId: null };
       await setRoutingCell(tx, breadEvery, station(f.bar));
       await routed([f.bread, half], station(f.bar), cell(breadEvery));
-      await clearRoutingCell(tx, f.cfg, breadEvery);
+      await clearRoutingCell(tx, breadEvery);
 
-      await clearRoutingCell(tx, f.cfg, noCategoryTerrace);
+      await clearRoutingCell(tx, noCategoryTerrace);
       const noCategoryEvery: CellAddress = { row: noCategoryRow, zoneId: null };
       await setRoutingCell(tx, noCategoryEvery, station(f.bar));
       await routed([f.bread, half], station(f.bar), cell(noCategoryEvery));
       await routed([f.mojito, f.variant], station(f.terraceBar), cell(allTerrace));
-      await clearRoutingCell(tx, f.cfg, noCategoryEvery);
+      await clearRoutingCell(tx, noCategoryEvery);
       await routed([f.bread, half], station(f.terraceBar), cell(allTerrace));
     }));
 
@@ -2710,7 +2692,7 @@ describe("routing from cells", () => {
       const extrasCell: CellAddress = { row: categoryRow(f.extras), zoneId: null };
       await setRoutingCell(tx, extrasCell, station(f.terraceBar));
       const variant = factsOf(f.chipsVariant, f.chips, f.sides);
-      const rules = await loadRoutingRules(tx, f.cfg, null);
+      const rules = await loadRoutingRules(tx, null);
       const dish = chooseMaker(rules, variant, f.terrace, null);
       expect(dish.route).toEqual(station(f.grill));
       expect(dish.decidedBy).toEqual({ kind: "cell", address: variantCell });
@@ -2755,7 +2737,7 @@ describe("routing from cells", () => {
       expect(
         (await resolveMakers(tx, f.cfg, null, [f.chipsVariant], fixedInstant)).get(f.chipsVariant),
       ).toEqual({ kind: "made", route: station(f.fryer) });
-      expect((await storedChoice(tx, f.cfg, variant, null)).decidedBy).toEqual({
+      expect((await storedChoice(tx, variant, null)).decidedBy).toEqual({
         kind: "cell",
         address: { row: categoryRow(f.sides), zoneId: null },
       });
@@ -2766,12 +2748,12 @@ describe("routing from cells", () => {
       const f = await extrasFixture(tx);
       const address: CellAddress = { row: categoryRow(f.sides), zoneId: null };
       await setRoutingCell(tx, address, station(f.terraceBar));
-      await setStationToday(tx, f.cfg, f.terraceBar, "closed", fixedInstant);
+      await setStationToday(tx, f.terraceBar, "closed", fixedInstant);
       expect((await resolveMakers(tx, f.cfg, null, [f.chips], fixedInstant)).get(f.chips)).toEqual({
         kind: "made",
         route: station(f.bar),
       });
-      const chosen = await storedChoice(tx, f.cfg, factsOf(f.chips, f.chips, f.sides), null, {
+      const chosen = await storedChoice(tx, factsOf(f.chips, f.chips, f.sides), null, {
         businessDay: "2026-10-02",
         moment: { weekday: 5, timeOfDay: "18:30" },
       });
@@ -2803,7 +2785,7 @@ describe("routingAt", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       const resolver = await routingAt(tx, f.cfg, fixedInstant);
-      await setStationToday(tx, f.cfg, f.terraceBar, "closed", fixedInstant);
+      await setStationToday(tx, f.terraceBar, "closed", fixedInstant);
       await tx
         .update(kitchenStations)
         .set({ active: false })
@@ -2946,8 +2928,8 @@ describe("hours from special dates", () => {
         const prepared = vi.spyOn(session, "prepareQuery");
         try {
           await (await routingAt(tx, f.cfg, at)).stations();
-          await stationStates(tx, f.cfg, at);
-          await routingModel(tx, f.cfg, at);
+          await stationStates(tx, at);
+          await routingModel(tx, at);
           return prepared.mock.calls.length;
         } finally {
           prepared.mockRestore();
@@ -2965,7 +2947,7 @@ describe("hours from special dates", () => {
       await closedOn(tx, "2026-10-08", more[0]!.id);
       await closedOn(tx, "2026-10-10", more[1]!.id);
       expect(await reads()).toBe(few);
-      expect((await stationStates(tx, f.cfg, at)).get(f.terraceBar)).toMatchObject({ open: true });
+      expect((await stationStates(tx, at)).get(f.terraceBar)).toMatchObject({ open: true });
     }));
 });
 
@@ -3004,7 +2986,7 @@ describe("routing on repeating special days", () => {
           await (await routingAt(tx, f.cfg, new Date(instant))).makers(null, [f.mojito]),
         ).toEqual(new Map([[f.mojito, { kind: "made", route: station(f.terraceBar) }]]));
       }
-      const model = await routingModel(tx, f.cfg, new Date("2027-01-01T12:00:00Z"));
+      const model = await routingModel(tx, new Date("2027-01-01T12:00:00Z"));
       expect(model.stationTimes.find((row) => row.stationId === f.terraceBar)?.status).toEqual({
         open: true,
         why: "open",
@@ -3224,8 +3206,8 @@ describe("saving a cell's period choices", () => {
     zoneId: f.terrace,
   });
   const line = (periodId: string, target: RouteTarget) => ({ periodId, target });
-  const modelCell = async (tx: Transaction, f: Choices, address: CellAddress) =>
-    (await routingModel(tx, f.cfg, at)).cells.find(
+  const modelCell = async (tx: Transaction, address: CellAddress) =>
+    (await routingModel(tx, at)).cells.find(
       (cell) => cellKey(cell) === cellKey({ ...address, target: noPrep }),
     );
   const storedLines = (tx: Transaction) =>
@@ -3240,7 +3222,7 @@ describe("saving a cell's period choices", () => {
         .insert(floorZones)
         .values({ ...f.cfg, name: "Garden" })
         .returning();
-      const { zones } = await routingModel(tx, f.cfg, at);
+      const { zones } = await routingModel(tx, at);
       expect(zones).toEqual([
         { id: garden!.id, name: "Garden", departmentId: null },
         { id: f.patio, name: "Patio", departmentId: f.barDepartment },
@@ -3283,19 +3265,19 @@ describe("saving a cell's period choices", () => {
       await setRoutingCell(tx, everyZone(f), station(f.upstairs), [
         line(f.lunch, station(f.downstairs)),
       ]);
-      expect(await modelCell(tx, f, everyZone(f))).toEqual({
+      expect(await modelCell(tx, everyZone(f))).toEqual({
         ...everyZone(f),
         target: station(f.upstairs),
         periods: [line(f.lunch, station(f.downstairs))],
       });
       await setRoutingCell(tx, everyZone(f), station(f.bar));
-      expect(await modelCell(tx, f, everyZone(f))).toEqual({
+      expect(await modelCell(tx, everyZone(f))).toEqual({
         ...everyZone(f),
         target: station(f.bar),
         periods: [line(f.lunch, station(f.downstairs))],
       });
       await setRoutingCell(tx, everyZone(f), station(f.bar), []);
-      expect(await modelCell(tx, f, everyZone(f))).toEqual({
+      expect(await modelCell(tx, everyZone(f))).toEqual({
         ...everyZone(f),
         target: station(f.bar),
       });
@@ -3310,9 +3292,9 @@ describe("saving a cell's period choices", () => {
         line(f.staffLunch, noPrep),
       ]);
       expect(await storedLines(tx)).toHaveLength(2);
-      await clearRoutingCell(tx, f.cfg, everyZone(f));
+      await clearRoutingCell(tx, everyZone(f));
       expect(await storedLines(tx)).toEqual([]);
-      expect(await modelCell(tx, f, everyZone(f))).toBeUndefined();
+      expect(await modelCell(tx, everyZone(f))).toBeUndefined();
     }));
 
   it("refuses another department's period, an unknown or repeated period, a period offering none of the row and a switched-off station, writing nothing", async () =>
@@ -3357,7 +3339,7 @@ describe("saving a cell's period choices", () => {
         ).rejects.toMatchObject({ code, params });
       }
       expect(await storedLines(tx)).toEqual([]);
-      expect((await routingModel(tx, f.cfg, at)).cells).toEqual([]);
+      expect((await routingModel(tx, at)).cells).toEqual([]);
     }));
 
   it("checks a product row's line against that product alone", async () =>
@@ -3391,7 +3373,7 @@ describe("saving a cell's period choices", () => {
         line(f.staffLunch, station(f.downstairs)),
         line(f.barLunch, noPrep),
       ]);
-      expect((await modelCell(tx, f, everyZone(f)))?.periods).toEqual(
+      expect((await modelCell(tx, everyZone(f)))?.periods).toEqual(
         expect.arrayContaining([
           line(f.staffLunch, station(f.downstairs)),
           line(f.barLunch, noPrep),
@@ -3409,7 +3391,7 @@ describe("saving a cell's period choices", () => {
       await setRoutingCell(tx, everyZone(f), station(f.bar), [
         line(f.lunch, station(f.downstairs)),
       ]);
-      expect(await modelCell(tx, f, everyZone(f))).toEqual({
+      expect(await modelCell(tx, everyZone(f))).toEqual({
         ...everyZone(f),
         target: station(f.bar),
         periods: [{ ...line(f.lunch, station(f.downstairs)), notOffered: true }],
@@ -3450,7 +3432,7 @@ describe("saving a cell's period choices", () => {
         await setRoutingCell(tx, mojitoRow(f), station(f.upstairs), [
           line(f.lunch, station(f.downstairs)),
         ]);
-        expect(await modelCell(tx, f, mojitoRow(f))).toStrictEqual({
+        expect(await modelCell(tx, mojitoRow(f))).toStrictEqual({
           ...mojitoRow(f),
           target: station(f.upstairs),
           periods: [line(f.lunch, station(f.downstairs))],
@@ -3461,11 +3443,11 @@ describe("saving a cell's period choices", () => {
           target: station(f.upstairs),
           periods: [{ ...line(f.lunch, station(f.downstairs)), notOffered: true }],
         };
-        expect(await modelCell(tx, f, mojitoRow(f))).toStrictEqual(marked);
+        expect(await modelCell(tx, mojitoRow(f))).toStrictEqual(marked);
         await setRoutingCell(tx, mojitoRow(f), station(f.upstairs), [
           line(f.lunch, station(f.downstairs)),
         ]);
-        expect(await modelCell(tx, f, mojitoRow(f))).toStrictEqual(marked);
+        expect(await modelCell(tx, mojitoRow(f))).toStrictEqual(marked);
       }));
 
     it("leaves a line unmarked while only the period's staff-only menu offers the product", async () =>
@@ -3474,11 +3456,11 @@ describe("saving a cell's period choices", () => {
         await setRoutingCell(tx, mojitoRow(f), station(f.upstairs), [
           line(f.staffLunch, station(f.downstairs)),
         ]);
-        expect((await modelCell(tx, f, mojitoRow(f)))?.periods).toStrictEqual([
+        expect((await modelCell(tx, mojitoRow(f)))?.periods).toStrictEqual([
           line(f.staffLunch, station(f.downstairs)),
         ]);
         await takeOffLunchMenu(tx, f, f.mojito);
-        expect((await modelCell(tx, f, mojitoRow(f)))?.periods).toStrictEqual([
+        expect((await modelCell(tx, mojitoRow(f)))?.periods).toStrictEqual([
           { ...line(f.staffLunch, station(f.downstairs)), notOffered: true },
         ]);
       }));
@@ -3490,7 +3472,7 @@ describe("saving a cell's period choices", () => {
         await setRoutingCell(tx, drinksRow, station(f.upstairs), [
           line(f.lunch, station(f.downstairs)),
         ]);
-        const periodsOf = async () => (await modelCell(tx, f, drinksRow))?.periods;
+        const periodsOf = async () => (await modelCell(tx, drinksRow))?.periods;
         expect(await periodsOf()).toStrictEqual([line(f.lunch, station(f.downstairs))]);
         await addProductToMenu(tx, { menuId: f.lunchMenu, productId: f.daiquiri });
         await takeOffLunchMenu(tx, f, f.mojito);
@@ -3518,7 +3500,7 @@ describe("saving a cell's period choices", () => {
             stationId: f.downstairs,
           })),
         );
-        expect((await modelCell(tx, f, beerRow))?.periods).toStrictEqual([
+        expect((await modelCell(tx, beerRow))?.periods).toStrictEqual([
           { ...line(f.lunch, station(f.downstairs)), notOffered: true },
           { ...line(f.staffLunch, station(f.downstairs)), notOffered: true },
         ]);
@@ -3538,11 +3520,11 @@ describe("saving a cell's period choices", () => {
         await setRoutingCell(tx, mojitoRow(f), station(f.upstairs), [
           line(f.brunch, station(f.downstairs)),
         ]);
-        expect((await modelCell(tx, f, mojitoRow(f)))?.periods).toStrictEqual([
+        expect((await modelCell(tx, mojitoRow(f)))?.periods).toStrictEqual([
           line(f.brunch, station(f.downstairs)),
         ]);
         await tx.delete(sectionMembers).where(eq(sectionMembers.id, variantMember!.id));
-        expect((await modelCell(tx, f, mojitoRow(f)))?.periods).toStrictEqual([
+        expect((await modelCell(tx, mojitoRow(f)))?.periods).toStrictEqual([
           { ...line(f.brunch, station(f.downstairs)), notOffered: true },
         ]);
       }));
@@ -3557,13 +3539,13 @@ describe("saving a cell's period choices", () => {
         const productListReads = () =>
           prepared.mock.calls.filter(([query]) => query.sql.includes("coalesce(")).length;
         try {
-          await routingModel(tx, f.cfg, at);
+          await routingModel(tx, at);
           expect(productListReads()).toBe(0);
           await setRoutingCell(tx, mojitoRow(f), station(f.upstairs), [
             line(f.lunch, station(f.downstairs)),
           ]);
           prepared.mockClear();
-          await routingModel(tx, f.cfg, at);
+          await routingModel(tx, at);
           expect(productListReads()).toBe(1);
         } finally {
           prepared.mockRestore();
@@ -3605,7 +3587,7 @@ describe("saving a cell's period choices", () => {
         params: { periodId: f.lunch, reason: "not_offered" },
       });
       expect(await storedLines(tx)).toHaveLength(2);
-      expect(await modelCell(tx, f, terraceCell(f))).toBeUndefined();
+      expect(await modelCell(tx, terraceCell(f))).toBeUndefined();
     }));
 
   it("drops a zone's lines for its old department's periods when the zone moves department, keeping its plain choices", async () =>
@@ -3618,11 +3600,11 @@ describe("saving a cell's period choices", () => {
         line(f.lunch, station(f.downstairs)),
       ]);
       await configureZone(tx, f.cfg, { zoneId: f.terrace, departmentId: f.barDepartment });
-      expect(await modelCell(tx, f, terraceCell(f))).toEqual({
+      expect(await modelCell(tx, terraceCell(f))).toEqual({
         ...terraceCell(f),
         target: station(f.upstairs),
       });
-      expect((await modelCell(tx, f, everyZone(f)))?.periods).toEqual([
+      expect((await modelCell(tx, everyZone(f)))?.periods).toEqual([
         line(f.lunch, station(f.downstairs)),
       ]);
       await configureZone(tx, f.cfg, { zoneId: f.patio, departmentId: f.barDepartment });
@@ -3811,7 +3793,7 @@ describe("saving a cell's period choices", () => {
         new Date("2026-10-02T10:00:00Z"),
         0,
       );
-      const order = (await routingModel(tx, f.cfg, at)).periods
+      const order = (await routingModel(tx, at)).periods
         .map((period) => period.id)
         .filter((id) => id === early || id === late);
       expect(order).toEqual([early, late]);
@@ -3847,7 +3829,7 @@ describe("saving a cell's period choices", () => {
       // By name Lunch sorts before Staff lunch; only Winter's earlier start puts Staff lunch first.
       await paint(f.lunch, "12:00", "13:00", Summer!);
       await paint(f.staffLunch, "08:00", "09:00", Winter!);
-      const order = (await routingModel(tx, f.cfg, at)).periods
+      const order = (await routingModel(tx, at)).periods
         .map((period) => period.id)
         .filter((id) => id === f.lunch || id === f.staffLunch);
       expect(order).toEqual([f.staffLunch, f.lunch]);
@@ -3889,7 +3871,7 @@ describe("saving a cell's period choices", () => {
           colour: "blue",
         })
       ).id;
-      const { periods } = await routingModel(tx, f.cfg, at);
+      const { periods } = await routingModel(tx, at);
       const dining = { departmentId: f.department, departmentName: "Dining" };
       // Monday first: Sunday's Brunch is the week's last, though weekday 0; Aperitivo, placed on no
       // day, comes after every placed period.
@@ -3923,7 +3905,7 @@ describe("saving a cell's period choices", () => {
         .update(departments)
         .set({ active: false })
         .where(eq(departments.id, f.barDepartment));
-      const after = (await routingModel(tx, f.cfg, at)).periods;
+      const after = (await routingModel(tx, at)).periods;
       expect(after.find((period) => period.id === f.barLunch)).toEqual({
         id: f.barLunch,
         departmentId: f.barDepartment,
@@ -3943,7 +3925,7 @@ it("A725 Routes station names use Spanish alphabetical order", async () => {
   const f = await withTransaction(db, (tx) => fixture(tx));
   await db.update(kitchenStations).set({ name: "Ásador" }).where(eq(kitchenStations.id, f.bar));
   const model = await withTransaction(db, (tx) =>
-    routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z")),
+    routingModel(tx, new Date("2026-10-02T18:00:00Z")),
   );
   expect(model.stations.map(({ name }) => name)).toEqual(["Ásador", "Terrace Bar"]);
 });

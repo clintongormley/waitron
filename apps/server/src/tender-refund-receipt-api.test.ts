@@ -298,7 +298,7 @@ it("checks every original source zone on read and reprint and admits the allowed
       .select()
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, venue.zoneId));
-    await setProfileServiceAccess(tx, venue.cfg, id, {
+    await setProfileServiceAccess(tx, id, {
       departmentId: policy!.departmentId,
       allowedZoneIds: [venue.zoneId],
       startingZoneId: venue.zoneId,
@@ -406,7 +406,7 @@ it("requires every substituted original order's zone before exposing an acknowle
       .select()
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, venue.counterZone));
-    await setProfileServiceAccess(tx, venue.cfg, id, {
+    await setProfileServiceAccess(tx, id, {
       departmentId: policy!.departmentId,
       allowedZoneIds: [venue.zoneId],
       startingZoneId: venue.zoneId,

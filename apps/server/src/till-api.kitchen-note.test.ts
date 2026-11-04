@@ -332,7 +332,7 @@ describe("whole-order kitchen note routes", () => {
       const elsewhere = await createZone(suite.db, cfg, { name: "Elsewhere" });
       const [department] = await listDepartments(suite.db, cfg);
       await recordOrderServiceContext(suite.db, cfg, orderId, tableZoneId);
-      await setProfileServiceAccess(suite.db, cfg, profileId, {
+      await setProfileServiceAccess(suite.db, profileId, {
         departmentId: department!.id,
         allowedZoneIds: [elsewhere.id],
         startingZoneId: elsewhere.id,
@@ -344,7 +344,7 @@ describe("whole-order kitchen note routes", () => {
         "service_zone.not_allowed",
       );
       expect(await suite.db.select().from(serviceCommands)).toHaveLength(0);
-      await setProfileServiceAccess(suite.db, cfg, profileId, {
+      await setProfileServiceAccess(suite.db, profileId, {
         departmentId: department!.id,
         allowedZoneIds: [tableZoneId],
         startingZoneId: tableZoneId,
@@ -371,7 +371,7 @@ describe("whole-order kitchen note routes", () => {
       .set({ partyId: absorbed!.id })
       .where(eq(workingOrders.id, billId));
     await writeKitchenNote(suite.db, { partyId }, 0, "Private dining instructions");
-    await setProfileServiceAccess(suite.db, cfg, profileId, {
+    await setProfileServiceAccess(suite.db, profileId, {
       departmentId: department!.id,
       allowedZoneIds: [elsewhere.id],
       startingZoneId: elsewhere.id,
@@ -381,7 +381,7 @@ describe("whole-order kitchen note routes", () => {
       403,
       "service_zone.not_allowed",
     );
-    await setProfileServiceAccess(suite.db, cfg, profileId, {
+    await setProfileServiceAccess(suite.db, profileId, {
       departmentId: department!.id,
       allowedZoneIds: [tableZoneId],
       startingZoneId: tableZoneId,
@@ -467,7 +467,7 @@ describe("whole-order kitchen note routes", () => {
         else {
           const elsewhere = await createZone(suite.db, cfg, { name: "Elsewhere" });
           const [department] = await listDepartments(suite.db, cfg);
-          await setProfileServiceAccess(suite.db, cfg, profileId, {
+          await setProfileServiceAccess(suite.db, profileId, {
             departmentId: department!.id,
             allowedZoneIds: [elsewhere.id],
             startingZoneId: elsewhere.id,

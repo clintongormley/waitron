@@ -3,7 +3,6 @@ import { kitchenCourses, type Transaction } from "@waitron/db";
 import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import type { VenueScope } from "./operations.js";
 import { departments } from "./schema/service.js";
 import { serviceSteps, type ServiceStepStart } from "./schema/service-steps.js";
 import { STARTER_STEP_NAMES } from "./starter-content.js";
@@ -26,11 +25,7 @@ export interface ServiceStepInput {
   minutes: number;
 }
 
-export async function listServiceSteps(
-  tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: VenueScope,
-): Promise<ServiceStep[]> {
+export async function listServiceSteps(tx: Transaction): Promise<ServiceStep[]> {
   return tx
     .select({
       id: serviceSteps.id,
@@ -46,11 +41,7 @@ export async function listServiceSteps(
     .orderBy(asc(serviceSteps.departmentId), asc(serviceSteps.position), asc(serviceSteps.id));
 }
 
-export async function listStepCourses(
-  tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: VenueScope,
-): Promise<{ id: string; name: string }[]> {
+export async function listStepCourses(tx: Transaction): Promise<{ id: string; name: string }[]> {
   return tx
     .select({ id: kitchenCourses.id, name: kitchenCourses.name })
     .from(kitchenCourses)
@@ -61,7 +52,6 @@ export async function listStepCourses(
 /** Rows not sent are deleted and sent ids are updated in place, so a kept step keeps its id. */
 export async function saveServiceSteps(
   tx: Transaction,
-  _cfg: VenueScope,
   departmentId: string,
   steps: readonly ServiceStepInput[],
 ): Promise<void> {

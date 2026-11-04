@@ -229,7 +229,7 @@ async function snapshot(tabId: string, itemId: string) {
   return {
     barJobs: (await jobs(barPrinter)).length,
     grillJobs: (await jobs(grillPrinter)).length,
-    notices: (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar))).length,
+    notices: (await inTx(venue, (tx) => listStationNotices(tx, bar))).length,
     item: (
       await inTx(venue, (tx) => tx.select().from(ticketItems).where(eq(ticketItems.id, itemId)))
     )[0],
@@ -249,7 +249,7 @@ async function noticesAt(stationId: string, at: Date) {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(at);
   try {
-    return await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, stationId));
+    return await inTx(venue, (tx) => listStationNotices(tx, stationId));
   } finally {
     vi.useRealTimers();
   }
@@ -319,12 +319,12 @@ describe("release", () => {
     const oldGrillJobs = (await jobs(grillPrinter)).length;
     const at = new Date("2026-10-02T18:45:00.000Z");
     await inTx(venue, async (tx) => {
-      await setStationToday(tx, venue.cfg, bar, "closed", at);
+      await setStationToday(tx, bar, "closed", at);
       await tx
         .update(workingOrders)
         .set({ status: "settled", settledAt: at.toISOString() })
         .where(eq(workingOrders.id, tabId));
-      expect((await VENUE_SERVICE.stationStates(tx, venue.cfg, at)).get(bar)?.open).toBe(false);
+      expect((await VENUE_SERVICE.stationStates(tx, at)).get(bar)?.open).toBe(false);
       const resolver = await VENUE_SERVICE.routingAt(tx, venue.cfg, at);
       expect(await resolver.makers(null, [venue.productId("Burger")])).toEqual(
         new Map([
@@ -395,7 +395,7 @@ describe("release", () => {
         .update(kitchenStations)
         .set({ isDefault: false })
         .where(eq(kitchenStations.id, grill));
-      await setStationToday(tx, venue.cfg, bar, "closed", at);
+      await setStationToday(tx, bar, "closed", at);
     });
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(at);
@@ -445,7 +445,7 @@ describe("release", () => {
         .update(kitchenStations)
         .set({ isDefault: true })
         .where(eq(kitchenStations.id, grill));
-      await setStationToday(tx, venue.cfg, bar, "closed", at);
+      await setStationToday(tx, bar, "closed", at);
     });
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(at);
@@ -481,8 +481,8 @@ describe("release", () => {
   it("prints FIRE for work kept at its station and From for work rerouted in the same group", async () => {
     const at = new Date("2026-10-02T18:45:00.000Z");
     const cell = await inTx(venue, async (tx) => {
-      await setStationToday(tx, venue.cfg, bar, null, at);
-      await setStationToday(tx, venue.cfg, grill, null, at);
+      await setStationToday(tx, bar, null, at);
+      await setStationToday(tx, grill, null, at);
       await setStationPrinting(tx, { printHeldWork: true });
       return routeProduct(tx, venue.productId("Vino"), { kind: "station", stationId: grill });
     });
@@ -519,7 +519,7 @@ describe("release", () => {
         .update(kitchenStations)
         .set({ isDefault: true })
         .where(eq(kitchenStations.id, grill));
-      await setStationToday(tx, venue.cfg, bar, "closed", at);
+      await setStationToday(tx, bar, "closed", at);
     });
     const before = (await jobs(grillPrinter)).length;
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -548,7 +548,7 @@ describe("release", () => {
     } finally {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
-        await clearRoutingCell(tx, venue.cfg, cell);
+        await clearRoutingCell(tx, cell);
         await tx
           .update(kitchenStations)
           .set({ isDefault: false })
@@ -584,7 +584,7 @@ describe("release", () => {
     );
     const at = new Date("2026-10-02T18:45:00.000Z");
     await handleOpenReleaseAlerts(at);
-    await inTx(venue, (tx) => setStationToday(tx, venue.cfg, grill, "closed", at));
+    await inTx(venue, (tx) => setStationToday(tx, grill, "closed", at));
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(at);
     try {
@@ -620,7 +620,7 @@ describe("release", () => {
         .update(kitchenStations)
         .set({ isDefault: true })
         .where(eq(kitchenStations.id, grill));
-      await setStationToday(tx, venue.cfg, bar, "closed", at);
+      await setStationToday(tx, bar, "closed", at);
     });
     const barJobs = (await jobs(barPrinter)).length;
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -664,22 +664,20 @@ describe("release", () => {
         .update(kitchenStations)
         .set({ isDefault: true })
         .where(eq(kitchenStations.id, grill));
-      await setStationToday(tx, venue.cfg, bar, "closed", at);
+      await setStationToday(tx, bar, "closed", at);
     });
     const barJobs = (await jobs(barPrinter)).length;
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(at);
     try {
-      const barNotices = (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar))).length;
+      const barNotices = (await inTx(venue, (tx) => listStationNotices(tx, bar))).length;
       await inTx(venue, (tx) => sendLines(tx, venue.cfg, tabId, [line!.lineNo]));
       const [after] = await inTx(venue, (tx) =>
         tx.select().from(ticketItems).where(eq(ticketItems.id, item.id)),
       );
       expect(after).toMatchObject({ stationId: grill, firedAt: at.toISOString() });
       expect((await jobs(barPrinter)).length).toBe(barJobs);
-      expect((await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar))).length).toBe(
-        barNotices,
-      );
+      expect((await inTx(venue, (tx) => listStationNotices(tx, bar))).length).toBe(barNotices);
     } finally {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
@@ -743,7 +741,7 @@ describe("release", () => {
         .update(ticketItems)
         .set({ stationId: grill })
         .where(eq(ticketItems.workingOrderLineId, group.lineId));
-      await setStationToday(tx, venue.cfg, grill, "closed", at);
+      await setStationToday(tx, grill, "closed", at);
     });
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(at);
@@ -766,7 +764,7 @@ describe("release", () => {
       vi.setSystemTime(at);
       try {
         await inTx(venue, async (tx) => {
-          await setStationToday(tx, venue.cfg, grill, null, at);
+          await setStationToday(tx, grill, null, at);
           await routeProductTo(tx, venue.productId("Burger"), grill);
         });
         const group = await heldBurger();
@@ -781,7 +779,7 @@ describe("release", () => {
           tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
         );
         expect(before).toMatchObject({ stationId: grill, stationChosenAt: null, firedAt: null });
-        await inTx(venue, (tx) => closeStationForToday(tx, venue.cfg, grill, bar, at));
+        await inTx(venue, (tx) => closeStationForToday(tx, grill, bar, at));
         await fireHeldBurger(group);
         const [after] = await inTx(venue, (tx) =>
           tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
@@ -794,7 +792,7 @@ describe("release", () => {
       } finally {
         vi.useRealTimers();
         await inTx(venue, async (tx) => {
-          await setStationToday(tx, venue.cfg, grill, null, at);
+          await setStationToday(tx, grill, null, at);
           await routeProductTo(tx, venue.productId("Burger"), bar);
         });
       }
@@ -813,7 +811,7 @@ describe("release", () => {
       );
       expect(item!.stationId).toBe(bar);
     } finally {
-      await inTx(venue, (tx) => clearRoutingCell(tx, venue.cfg, cell));
+      await inTx(venue, (tx) => clearRoutingCell(tx, cell));
     }
   });
 
@@ -828,7 +826,7 @@ describe("release", () => {
         .update(kitchenStations)
         .set({ isDefault: true })
         .where(eq(kitchenStations.id, grill));
-      await setStationToday(tx, venue.cfg, bar, "closed", at);
+      await setStationToday(tx, bar, "closed", at);
       return id;
     });
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -851,7 +849,7 @@ describe("release", () => {
     } finally {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
-        await clearRoutingCell(tx, venue.cfg, cell);
+        await clearRoutingCell(tx, cell);
         await tx
           .update(kitchenStations)
           .set({ isDefault: false })
@@ -877,7 +875,7 @@ describe("release", () => {
         .update(ticketItems)
         .set({ madeHere: true })
         .where(eq(ticketItems.workingOrderLineId, group.lineId));
-      await setStationToday(tx, venue.cfg, bar, "closed", at);
+      await setStationToday(tx, bar, "closed", at);
     });
     const grillJobs = (await jobs(grillPrinter)).length;
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -915,7 +913,7 @@ describe("release", () => {
         label: `Bar till ${randomUUID()}`,
       });
       await tx.insert(deviceMadeHereStations).values({ deviceId: tillId, stationId: bar });
-      await setStationToday(tx, venue.cfg, grill, null, new Date("2026-10-02T18:45:00.000Z"));
+      await setStationToday(tx, grill, null, new Date("2026-10-02T18:45:00.000Z"));
       const cell = await routeProduct(tx, venue.productId("Vino"), {
         kind: "station",
         stationId: grill,
@@ -972,7 +970,7 @@ describe("release", () => {
     ).toEqual([false]);
     const at = new Date("2026-10-02T18:45:00.000Z");
     await inTx(venue, async (tx) => {
-      await setStationToday(tx, venue.cfg, grill, "closed", at);
+      await setStationToday(tx, grill, "closed", at);
     });
     const barJobs = (await jobs(barPrinter)).length;
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -1006,7 +1004,7 @@ describe("release", () => {
       await inTx(venue, async (tx) => {
         for (const stationId of [bar, grill])
           await detachPrinterFromStation(tx, { stationId, printerId: passPrinter });
-        await clearRoutingCell(tx, venue.cfg, cell);
+        await clearRoutingCell(tx, cell);
       });
     }
   });
@@ -1067,7 +1065,7 @@ describe("release", () => {
     );
     expect(chips).toMatchObject({ stationId: split.stations.fryer, firedAt: null });
     await splitTx(async (tx) => {
-      await setStationToday(tx, split.cfg, split.stations.fryer, "closed", at);
+      await setStationToday(tx, split.stations.fryer, "closed", at);
     });
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(at);
@@ -1175,14 +1173,7 @@ describe("release", () => {
           .update(kitchenStations)
           .set({ isDefault: true })
           .where(eq(kitchenStations.id, grill));
-        await setStationToday(
-          tx,
-          venue.cfg,
-          bar,
-          "closed",
-          new Date("2026-10-02T19:00:00.000Z"),
-          grill,
-        );
+        await setStationToday(tx, bar, "closed", new Date("2026-10-02T19:00:00.000Z"), grill);
       });
       const RealDate = globalThis.Date;
       const barJobsBefore = (await jobs(barPrinter)).length;
@@ -1261,7 +1252,7 @@ describe("release", () => {
         resolveMakers.mockRestore();
         stationStates.mockRestore();
         await inTx(venue, async (tx) => {
-          await setStationToday(tx, venue.cfg, bar, null, at);
+          await setStationToday(tx, bar, null, at);
           await tx
             .update(locations)
             .set(clockBefore!)
@@ -1522,7 +1513,7 @@ describe("moveDishesToStation", () => {
       return ids;
     });
     const cell = await inTx(venue, async (tx) => {
-      await setStationToday(tx, venue.cfg, grill, null, new Date());
+      await setStationToday(tx, grill, null, new Date());
       return routeProduct(tx, venue.productId("Vino"), { kind: "station", stationId: grill });
     });
     const tableId = await venue.table(`R-${randomUUID().slice(0, 8)}`);
@@ -1567,13 +1558,13 @@ describe("moveDishesToStation", () => {
         .update(kitchenStations)
         .set({ isDefault: true })
         .where(eq(kitchenStations.id, downstairs.id));
-      await setStationToday(tx, venue.cfg, bar, "closed", at);
+      await setStationToday(tx, bar, "closed", at);
       const [held] = await tx
         .select({ stationChosenAt: ticketItems.stationChosenAt, stationId: ticketItems.stationId })
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderLineId, group.lineId));
       expect(held).toMatchObject({ stationId: bar, stationChosenAt: null });
-      expect((await VENUE_SERVICE.stationStates(tx, venue.cfg, at)).get(bar)?.open).toBe(false);
+      expect((await VENUE_SERVICE.stationStates(tx, at)).get(bar)?.open).toBe(false);
     });
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(at);
@@ -1582,7 +1573,7 @@ describe("moveDishesToStation", () => {
     } finally {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
-        await clearRoutingCell(tx, venue.cfg, cell);
+        await clearRoutingCell(tx, cell);
         await tx
           .update(kitchenStations)
           .set({ isDefault: false })
@@ -1695,10 +1686,9 @@ describe("moveDishesToStation", () => {
     expect(item.stationId).toBe(bar);
     const oldBarJobs = (await jobs(barPrinter)).length;
     const oldGrillJobs = (await jobs(grillPrinter)).length;
-    const oldBarNotices = await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar));
+    const oldBarNotices = await inTx(venue, (tx) => listStationNotices(tx, bar));
     const latestBarNotice = oldBarNotices.at(-1)?.createdAt;
-    const oldGrillNotices = (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, grill)))
-      .length;
+    const oldGrillNotices = (await inTx(venue, (tx) => listStationNotices(tx, grill))).length;
     const s1 = { submissionId: randomUUID(), lineIds: [item.workingOrderLineId], stationId: grill };
     // This shared venue keeps earlier notices, so this move must sort after its latest Bar notice.
     const movedAt = new Date(
@@ -1744,10 +1734,8 @@ describe("moveDishesToStation", () => {
     expect(grillPaper).toContain("From Bar");
     expect(grillPaper).toContain("BURG");
     expect(grillPaper).not.toMatch(/^\s*(?:\*+\s*)?(?:HOLD|FIRE)\b/m);
-    expect((await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, grill))).length).toBe(
-      oldGrillNotices,
-    );
-    const notices = await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar));
+    expect((await inTx(venue, (tx) => listStationNotices(tx, grill))).length).toBe(oldGrillNotices);
+    const notices = await inTx(venue, (tx) => listStationNotices(tx, bar));
     expect(notices.at(-1)?.workingOrderId).toBe(tabId);
     expect(notices.at(-1)).toMatchObject({ kind: "rerouted", reroutedTo: "Grill" });
     const back = await inTx(venue, (tx) =>
@@ -1766,7 +1754,7 @@ describe("moveDishesToStation", () => {
     const beforeReplay = {
       bar: (await jobs(barPrinter)).length,
       grill: (await jobs(grillPrinter)).length,
-      notices: (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar))).length,
+      notices: (await inTx(venue, (tx) => listStationNotices(tx, bar))).length,
       revision: (
         await inTx(venue, (tx) =>
           tx
@@ -1786,7 +1774,7 @@ describe("moveDishesToStation", () => {
     expect({
       bar: (await jobs(barPrinter)).length,
       grill: (await jobs(grillPrinter)).length,
-      notices: (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar))).length,
+      notices: (await inTx(venue, (tx) => listStationNotices(tx, bar))).length,
       revision: (
         await inTx(venue, (tx) =>
           tx
@@ -1854,7 +1842,7 @@ describe("moveDishesToStation", () => {
     const movedPaper = decodeTicket((await jobs(grillPrinter))[grillCount]!.payload);
     expect(movedPaper).toContain("HOLD");
     expect(movedPaper).toContain("From Bar");
-    const rerouted = await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar));
+    const rerouted = await inTx(venue, (tx) => listStationNotices(tx, bar));
     expect(rerouted.at(-1)).toMatchObject({ kind: "rerouted", reroutedTo: "Grill" });
     const grillBeforeFire = (await jobs(grillPrinter)).length;
     const newRevision = (
@@ -2041,7 +2029,7 @@ describe("moveDishesToStation", () => {
           expect(fired[0]).toContain("PAELLA");
         });
       } finally {
-        await inTx(venue, (tx) => clearRoutingCell(tx, venue.cfg, cell));
+        await inTx(venue, (tx) => clearRoutingCell(tx, cell));
       }
     });
   });
@@ -2242,8 +2230,8 @@ describe("moveDishesToStation", () => {
     const before = {
       bar: (await jobs(barPrinter)).length,
       grill: (await jobs(grillPrinter)).length,
-      barNotices: (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar))).length,
-      grillNotices: (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, grill))).length,
+      barNotices: (await inTx(venue, (tx) => listStationNotices(tx, bar))).length,
+      grillNotices: (await inTx(venue, (tx) => listStationNotices(tx, grill))).length,
       revision: (
         await inTx(venue, (tx) =>
           tx
@@ -2271,8 +2259,8 @@ describe("moveDishesToStation", () => {
     expect({
       bar: (await jobs(barPrinter)).length,
       grill: (await jobs(grillPrinter)).length,
-      barNotices: (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar))).length,
-      grillNotices: (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, grill))).length,
+      barNotices: (await inTx(venue, (tx) => listStationNotices(tx, bar))).length,
+      grillNotices: (await inTx(venue, (tx) => listStationNotices(tx, grill))).length,
       revision: (
         await inTx(venue, (tx) =>
           tx
@@ -2348,7 +2336,7 @@ describe("moveDishesToStation", () => {
       ),
     ).rejects.toMatchObject({ code: "station.not_found", params: { stationId: inactive } });
     expect(await snapshot(tabId, item.id)).toEqual(before);
-    await inTx(venue, (tx) => setStationToday(tx, venue.cfg, grill, "closed", new Date()));
+    await inTx(venue, (tx) => setStationToday(tx, grill, "closed", new Date()));
     try {
       const result = await inTx(venue, (tx) =>
         moveDishesToStation(
@@ -2365,7 +2353,7 @@ describe("moveDishesToStation", () => {
       );
       expect(result.moved).toHaveLength(1);
     } finally {
-      await inTx(venue, (tx) => setStationToday(tx, venue.cfg, grill, null, new Date()));
+      await inTx(venue, (tx) => setStationToday(tx, grill, null, new Date()));
     }
   });
 
@@ -2790,14 +2778,14 @@ describe("moveDishesToStation", () => {
     const before = {
       barJobs: (await jobs(barPrinter)).length,
       grillJobs: (await jobs(grillPrinter)).length,
-      notices: (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar))).length,
+      notices: (await inTx(venue, (tx) => listStationNotices(tx, bar))).length,
     };
     await inTx(venue, (tx) => moveDishesToStation(tx, venue.cfg, tabId, request, mover()));
     expect(
       {
         barJobs: (await jobs(barPrinter)).length,
         grillJobs: (await jobs(grillPrinter)).length,
-        notices: (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar))).length,
+        notices: (await inTx(venue, (tx) => listStationNotices(tx, bar))).length,
       },
       "the counts of print jobs and kitchen notices stay the same after replay",
     ).toEqual(before);
@@ -2886,8 +2874,7 @@ describe("moveDishesToStation", () => {
         split.stations.fryer,
         split.stations.kitchen,
         "send",
-        (at) =>
-          closeStationForToday(tx, split.cfg, split.stations.fryer, split.stations.kitchen, at),
+        (at) => closeStationForToday(tx, split.stations.fryer, split.stations.kitchen, at),
         { deviceId: split.cfg.origin.deviceId, personId: null },
       ),
     );
@@ -3124,7 +3111,7 @@ describe("moveDishesToStation", () => {
         return await fn();
       } finally {
         await inTx(venue, async (tx) => {
-          for (const cell of cells) await clearRoutingCell(tx, venue.cfg, cell);
+          for (const cell of cells) await clearRoutingCell(tx, cell);
           await setStationPrinting(tx, { printHeldWork: barBefore!.printHeldWork }, [bar]);
           await detachPrinterFromStation(tx, { stationId: kitchen, printerId: kitchenPrinter });
           await tx
@@ -3208,7 +3195,7 @@ describe("moveDishesToStation", () => {
       (await jobs(printerId)).slice(from).map((job) => decodeTicket(job.payload));
 
     const reroutes = async (stationId: string, tabId: string) =>
-      (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, stationId)))
+      (await inTx(venue, (tx) => listStationNotices(tx, stationId)))
         .filter((notice) => notice.workingOrderId === tabId)
         .map((notice) => ({
           kind: notice.kind,
@@ -3300,7 +3287,7 @@ describe("moveDishesToStation", () => {
             .update(kitchenStations)
             .set({ isDefault: true })
             .where(eq(kitchenStations.id, grill));
-          await setStationToday(tx, venue.cfg, bar, "closed", at);
+          await setStationToday(tx, bar, "closed", at);
         });
         const barBefore = (await jobs(barPrinter)).length;
         const grillBefore = (await jobs(grillPrinter)).length;
@@ -3311,7 +3298,7 @@ describe("moveDishesToStation", () => {
         } finally {
           vi.useRealTimers();
           await inTx(venue, async (tx) => {
-            await setStationToday(tx, venue.cfg, bar, null, at);
+            await setStationToday(tx, bar, null, at);
             await tx
               .update(kitchenStations)
               .set({ isDefault: false })

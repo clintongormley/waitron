@@ -995,7 +995,7 @@ describe("the tab routes that release lines, on a party with groups", () => {
       // The venue is shared by the whole file.
       await inTx(venue, async (tx) => {
         await setProductCourse(tx, venue.cfg, cake!.id, cake!.courseId);
-        await deleteCourse(tx, venue.cfg, courseId);
+        await deleteCourse(tx, courseId);
       });
     }
   });
@@ -1317,7 +1317,7 @@ describe("POST /api/parties/:id/served refusals that need their own setup", () =
         addTabRound(tx, venue.cfg, party.tabId, [{ ...dish("Pulpo"), hold: true }]),
       );
     } finally {
-      await inTx(venue, (tx) => clearRoutingCell(tx, venue.cfg, pulpoCell));
+      await inTx(venue, (tx) => clearRoutingCell(tx, pulpoCell));
     }
     const [line] = await inTx(venue, (tx) =>
       tx

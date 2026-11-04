@@ -130,7 +130,7 @@ async function secondDeviceOnOwnProfile(till: Till) {
     })
     .returning({ id: deviceProfiles.id });
   await withTransaction(suite.db, (tx) =>
-    setProfileServiceAccess(tx, till.cfg, profile!.id, {
+    setProfileServiceAccess(tx, profile!.id, {
       departmentId: till.departmentId,
       allowedZoneIds: null,
       startingZoneId: till.startingZoneId,

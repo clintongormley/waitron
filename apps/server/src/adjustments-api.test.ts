@@ -262,7 +262,7 @@ describe("corrections through order actions on a station's printers", () => {
         for (const [printerId, stationIds] of listed)
           for (const stationId of stationIds)
             await detachPrinterFromStation(tx, { stationId, printerId });
-        await clearRoutingCell(tx, venue.cfg, {
+        await clearRoutingCell(tx, {
           row: { kind: "product", productId: beerId },
           zoneId: null,
         });

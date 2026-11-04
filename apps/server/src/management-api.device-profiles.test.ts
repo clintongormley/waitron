@@ -1491,7 +1491,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       const deviceName = uniqueName("Grill screen");
       const deviceId = await withTransaction(suite.db, async (tx) => {
         const { deviceId } = await seedDevice(tx, { profileId: id, label: deviceName });
-        await VENUE_SERVICE.setDeviceKitchenScreens(tx, venueCfg, {
+        await VENUE_SERVICE.setDeviceKitchenScreens(tx, {
           deviceId,
           profileId: id,
           screens: [{ kind: "station", stationIds: [grill, cold], zoneIds: null }],
@@ -1511,7 +1511,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       const body = (await res.json()) as ProfileRow & { narrowedDevices: unknown };
       expect(body.name).toBe(renamed);
       const grillName = await withTransaction(suite.db, async (tx) =>
-        (await VENUE_SERVICE.readDeviceKitchenScreens(tx, venueCfg, deviceId))[0]!.stations.find(
+        (await VENUE_SERVICE.readDeviceKitchenScreens(tx, deviceId))[0]!.stations.find(
           (slot) => slot.id === grill,
         ),
       );

@@ -329,7 +329,7 @@ describe("A773 hold paper: recall and cancel", () => {
           .orderBy(sql`rowid`),
       );
     const notices = async (order: Order) =>
-      (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, venue.stationId))).filter(
+      (await inTx(venue, (tx) => listStationNotices(tx, venue.stationId))).filter(
         (notice) => notice.workingOrderId === order.billId,
       );
 
@@ -561,9 +561,9 @@ describe("A773 hold paper: extras off and moves", () => {
 
     const pass = await passOn(db, venue);
     const card = await withTransaction(db, async (tx) => {
-      const screen = (
-        await VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, pass.deviceId)
-      ).find((candidate) => candidate.kind === "pass")!;
+      const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, pass.deviceId)).find(
+        (candidate) => candidate.kind === "pass",
+      )!;
       return (await readScopedPassBoard(tx, venue.cfg, passScopeOf(screen))).toFire.find(
         (found) => found.target.kind === "group" && found.target.groupId === groupId,
       )!;

@@ -2891,7 +2891,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
 
     expect(await dishesNamed(portions.billId, "Burger")).toEqual([members[0]]);
     const voids = async (billId: string) =>
-      (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, venue.stationId)))
+      (await inTx(venue, (tx) => listStationNotices(tx, venue.stationId)))
         .filter((notice) => notice.workingOrderId === billId)
         .map(({ kind, lineName, quantity, wasStarted }) => ({
           kind,

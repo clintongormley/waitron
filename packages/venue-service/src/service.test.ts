@@ -224,8 +224,8 @@ describe("station day seats", () => {
   it("lists destinations by name and omits the source and unavailable stations", async () => {
     await withTransaction(suite.db, async (tx) => {
       const f = await stationFixture(tx);
-      await setStationToday(tx, f.cfg, f.closed, "closed", AT);
-      expect(await VENUE_SERVICE.stationDestinations(tx, f.cfg, f.grill, AT)).toEqual([
+      await setStationToday(tx, f.closed, "closed", AT);
+      expect(await VENUE_SERVICE.stationDestinations(tx, f.grill, AT)).toEqual([
         { id: f.bar, name: "Bar", isDefault: false },
         { id: f.kitchen, name: "Kitchen", isDefault: true },
       ]);
@@ -235,7 +235,7 @@ describe("station day seats", () => {
   it("closes the chosen station for this business day and records its destination", async () => {
     await withTransaction(suite.db, async (tx) => {
       const f = await stationFixture(tx);
-      await VENUE_SERVICE.closeStationForToday(tx, f.cfg, f.grill, f.bar, AT);
+      await VENUE_SERVICE.closeStationForToday(tx, f.grill, f.bar, AT);
       expect(
         await tx.select().from(stationDayStates).where(eq(stationDayStates.stationId, f.grill)),
       ).toEqual([
@@ -247,7 +247,7 @@ describe("station day seats", () => {
           sendsToStationId: f.bar,
         },
       ]);
-      expect((await VENUE_SERVICE.stationStates(tx, f.cfg, AT)).get(f.grill)).toMatchObject({
+      expect((await VENUE_SERVICE.stationStates(tx, AT)).get(f.grill)).toMatchObject({
         open: false,
         byHand: "closed",
         sendsTo: f.bar,
@@ -259,12 +259,12 @@ describe("station day seats", () => {
   it("opens a station by deleting its closure and destination", async () => {
     await withTransaction(suite.db, async (tx) => {
       const f = await stationFixture(tx);
-      await setStationToday(tx, f.cfg, f.grill, "closed", AT, f.bar);
-      await VENUE_SERVICE.openStationForToday(tx, f.cfg, f.grill, AT);
+      await setStationToday(tx, f.grill, "closed", AT, f.bar);
+      await VENUE_SERVICE.openStationForToday(tx, f.grill, AT);
       expect(
         await tx.select().from(stationDayStates).where(eq(stationDayStates.stationId, f.grill)),
       ).toEqual([]);
-      expect((await VENUE_SERVICE.stationStates(tx, f.cfg, AT)).get(f.grill)).toMatchObject({
+      expect((await VENUE_SERVICE.stationStates(tx, AT)).get(f.grill)).toMatchObject({
         open: true,
         byHand: null,
         sendsTo: null,

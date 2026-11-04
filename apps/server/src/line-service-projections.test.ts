@@ -377,8 +377,8 @@ describe("charged cancellation read projections", () => {
       ]);
     });
     const notices = await inTx(venue, async (tx) => {
-      const parentNotices = await listStationNotices(tx, venue.cfg, venue.stationId);
-      const extraNotices = await listStationNotices(tx, venue.cfg, extraStationId);
+      const parentNotices = await listStationNotices(tx, venue.stationId);
+      const extraNotices = await listStationNotices(tx, extraStationId);
       return [...parentNotices, ...extraNotices].filter(
         (notice) => notice.workingOrderId === order.billId,
       );

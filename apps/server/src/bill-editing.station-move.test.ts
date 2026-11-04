@@ -245,7 +245,7 @@ describe("station movement checks bill editing authority", () => {
           grill,
           bar,
           "send",
-          (at) => VENUE_SERVICE.closeStationForToday(tx, venue.cfg, grill, bar, at),
+          (at) => VENUE_SERVICE.closeStationForToday(tx, grill, bar, at),
           { deviceId: venue.deviceId, personId: venue.operatorId },
         ),
       );
@@ -258,14 +258,10 @@ describe("station movement checks bill editing authority", () => {
       }
       expect(await edit(p.tabId)).toEqual(a.edit);
       expect(await edit(q.tabId)).toEqual(b.edit);
-      const states = await inTx(venue, (tx) =>
-        VENUE_SERVICE.stationStates(tx, venue.cfg, new Date()),
-      );
+      const states = await inTx(venue, (tx) => VENUE_SERVICE.stationStates(tx, new Date()));
       expect(states.get(grill)!.open).toBe(false);
     } finally {
-      await inTx(venue, (tx) =>
-        VENUE_SERVICE.openStationForToday(tx, venue.cfg, grill, new Date()),
-      );
+      await inTx(venue, (tx) => VENUE_SERVICE.openStationForToday(tx, grill, new Date()));
     }
   });
   it("replays a completed move after another person takes over", async () => {

@@ -779,7 +779,7 @@ describe("readTabLines", () => {
       ]),
     );
 
-    await asApp(cfg, (tx) => deleteCourse(tx, cfg, postres.id));
+    await asApp(cfg, (tx) => deleteCourse(tx, postres.id));
     const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
     const cafe = lines.find((l) => l.productId === cafeId)!;
     const agua = lines.find((l) => l.productId === aguaId)!;
@@ -1594,7 +1594,7 @@ async function ticketOfLine(
 
 /** A station's notices, as the fields a cook reads. */
 async function noticesAt(cfg: OriginConfig, stationId: string) {
-  return (await asApp(cfg, (tx) => listStationNotices(tx, cfg, stationId))).map((notice) => ({
+  return (await asApp(cfg, (tx) => listStationNotices(tx, stationId))).map((notice) => ({
     kind: notice.kind,
     lineName: notice.lineName,
     quantity: notice.quantity,
@@ -3295,7 +3295,7 @@ describe("the kitchen screen and the expo board are told which lines were sold i
     }
 
     expect(await linesOf(tabId)).toEqual([]);
-    const notices = await asApp(cfg, (tx) => listStationNotices(tx, cfg, stationId));
+    const notices = await asApp(cfg, (tx) => listStationNotices(tx, stationId));
     expect(notices.map((notice) => [notice.kind, notice.lineName, notice.soldInEach])).toEqual([
       ["void", "Bread", false],
       ["void", "Almendras", false],

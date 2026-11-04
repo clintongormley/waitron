@@ -460,7 +460,7 @@ beforeAll(async () => {
   personId = person!.id;
   restaurantProfile = await profile();
   await inTx(v, async (tx) =>
-    setProfileServiceAccess(tx, v.cfg, restaurantProfile, {
+    setProfileServiceAccess(tx, restaurantProfile, {
       departmentId: await departmentOf(tx, v.tables.zoneId),
       allowedZoneIds: null,
       startingZoneId: f.bar,
@@ -470,7 +470,7 @@ beforeAll(async () => {
   plain = await signIn(await profile());
   deliProfile = await profile();
   await inTx(v, async (tx) =>
-    setProfileServiceAccess(tx, v.cfg, deliProfile, {
+    setProfileServiceAccess(tx, deliProfile, {
       departmentId: await departmentOf(tx, f.deliCounter),
       allowedZoneIds: null,
       startingZoneId: f.deliCounter,
@@ -1895,7 +1895,7 @@ describe("a Restaurant profile in its own zones", () => {
         name: "Snug",
         departmentId: restaurantId,
       });
-      await setProfileServiceAccess(tx, v.cfg, profileId, {
+      await setProfileServiceAccess(tx, profileId, {
         departmentId: restaurantId,
         allowedZoneIds: [zone.id],
         startingZoneId: zone.id,
@@ -2098,7 +2098,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     const profileId = await profile();
     await inTx(v, async (tx) => {
       await tx.update(deviceProfiles).set({ formFactor }).where(eq(deviceProfiles.id, profileId));
-      await setProfileServiceAccess(tx, v.cfg, profileId, {
+      await setProfileServiceAccess(tx, profileId, {
         departmentId: await departmentOf(tx, f.restTables),
         allowedZoneIds: [f.restTables],
         startingZoneId: f.restTables,
@@ -2118,7 +2118,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     const profileId = await profile();
     await inTx(v, async (tx) => {
       await tx.update(deviceProfiles).set({ formFactor }).where(eq(deviceProfiles.id, profileId));
-      await setProfileServiceAccess(tx, v.cfg, profileId, {
+      await setProfileServiceAccess(tx, profileId, {
         departmentId: await departmentOf(tx, f.restTables),
         allowedZoneIds: [f.restTables, f.counter],
         startingZoneId: f.restTables,

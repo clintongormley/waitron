@@ -46,8 +46,8 @@ describe("station reopening without hours", () => {
   it("removes the closure without loading routing or the station calendar", async () => {
     const f = await withTransaction(suite.db, async (tx) => {
       const f = await fixture(tx);
-      await setStationToday(tx, f.cfg, f.bar, "closed", at, f.kitchen);
-      await setStationToday(tx, f.cfg, f.grill, "closed", at, f.kitchen);
+      await setStationToday(tx, f.bar, "closed", at, f.kitchen);
+      await setStationToday(tx, f.grill, "closed", at, f.kitchen);
       return f;
     });
     await withTransaction(suite.db, async (tx) => {
@@ -57,7 +57,7 @@ describe("station reopening without hours", () => {
       const prepared = vi.spyOn(session, "prepareQuery");
       let queries: string[];
       try {
-        await openStationForToday(tx, f.cfg, f.bar, at);
+        await openStationForToday(tx, f.bar, at);
         queries = prepared.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
       } finally {
         prepared.mockRestore();
@@ -91,12 +91,12 @@ describe("station reopening without hours", () => {
   it("an explicit open clears the closure and its destination instead of storing an override", async () => {
     await withTransaction(suite.db, async (tx) => {
       const f = await fixture(tx);
-      await setStationToday(tx, f.cfg, f.bar, "closed", at, f.kitchen);
-      await setStationToday(tx, f.cfg, f.bar, "open", at);
+      await setStationToday(tx, f.bar, "closed", at, f.kitchen);
+      await setStationToday(tx, f.bar, "open", at);
       expect(
         await tx.select().from(stationDayStates).where(eq(stationDayStates.stationId, f.bar)),
       ).toEqual([]);
-      expect((await stationStates(tx, f.cfg, at)).get(f.bar)).toEqual({
+      expect((await stationStates(tx, at)).get(f.bar)).toEqual({
         name: "Bar",
         active: true,
         isDefault: false,
@@ -119,16 +119,16 @@ describe("station reopening without hours", () => {
           open: true,
           sendsToStationId: f.grill,
         });
-        await setStationToday(tx, f.cfg, f.grill, "closed", at, f.kitchen);
+        await setStationToday(tx, f.grill, "closed", at, f.kitchen);
         if (read === "rules") {
-          const rules = await loadRoutingRules(tx, f.cfg, "2026-10-09");
+          const rules = await loadRoutingRules(tx, "2026-10-09");
           expect(rules.timing.get(f.bar)).toMatchObject({ today: null, todaySendsTo: null });
           expect(rules.timing.get(f.grill)).toMatchObject({
             today: "closed",
             todaySendsTo: f.kitchen,
           });
         } else if (read === "model") {
-          const model = await routingModel(tx, f.cfg, at);
+          const model = await routingModel(tx, at);
           expect(model.stationTimes.find((row) => row.stationId === f.bar)).toMatchObject({
             status: { open: true, why: "open" },
             today: null,
@@ -142,7 +142,7 @@ describe("station reopening without hours", () => {
         } else {
           const states =
             read === "states"
-              ? await stationStates(tx, f.cfg, at)
+              ? await stationStates(tx, at)
               : await (await routingAt(tx, f.cfg, at)).stations();
           expect(states.get(f.bar)).toMatchObject({
             open: true,

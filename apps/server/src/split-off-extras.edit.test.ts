@@ -469,14 +469,7 @@ describe("editing split-off extras", () => {
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
       await addTabRound(tx, venue.cfg, id, [line(venue, "burger", "1", 1)]);
-      await setStationToday(
-        tx,
-        venue.cfg,
-        venue.stations.fryer,
-        "closed",
-        new Date(),
-        venue.stations.grill,
-      );
+      await setStationToday(tx, venue.stations.fryer, "closed", new Date(), venue.stations.grill);
       await edit(tx, venue, 1, { note: "No salt" });
       expect((await state(tx, id)).items.map((item) => item.stationId)).toEqual([
         venue.stations.grill,

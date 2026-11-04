@@ -240,7 +240,7 @@ describe("A669 atomic", () => {
       const before = await kitchenState(f.v.db);
       const inside: { kind: string; allergyBlock: unknown }[][] = [];
       const enqueue = vi.spyOn(printing, "enqueuePrintJob").mockImplementation(async (tx) => {
-        const notices = await VENUE_SERVICE.listStationNotices(tx, f.v.cfg, f.ticket.stationId);
+        const notices = await VENUE_SERVICE.listStationNotices(tx, f.ticket.stationId);
         inside.push(notices.map(({ kind, allergyBlock }) => ({ kind, allergyBlock })));
         throw new Error("controlled print failure after allergy notice");
       });

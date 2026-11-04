@@ -1218,7 +1218,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const made = await dish("Chosen closed lager");
     const chosen = await station("Closed chosen bar");
     await routeTo(made.productId, chosen);
-    await inTx(v, (tx) => setStationToday(tx, v.cfg, chosen, "closed", new Date()));
+    await inTx(v, (tx) => setStationToday(tx, chosen, "closed", new Date()));
     const id = randomUUID();
     const paid = await app.request("/api/sales", {
       method: "POST",
@@ -1516,7 +1516,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       lines: [{ menuItemId: made.counterOffer, quantity: "1" }],
     });
     await inTx(v, async (tx) => fireLines(tx, v.cfg, id, await unsentDishLines(tx, id)));
-    await inTx(v, (tx) => setStationToday(tx, v.cfg, original, "closed", new Date()));
+    await inTx(v, (tx) => setStationToday(tx, original, "closed", new Date()));
     const revision = await inTx(v, (tx) => readOrderRevision(tx, id));
     await inTx(v, (tx) => updateOrderLine(tx, v.cfg, id, 1, { quantity: "2" }, revision, OPERATOR));
     const items = await kitchenItems(id);

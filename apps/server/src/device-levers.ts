@@ -69,7 +69,7 @@ export function mountDeviceLevers(
       if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
       await withTransaction(deps.db, async (tx) => {
         const zoneId = await orderZone(tx, deps.cfg, orderId);
-        await VENUE_SERVICE.assertPassScreenZone(tx, deps.cfg, device.deviceId, zoneId);
+        await VENUE_SERVICE.assertPassScreenZone(tx, device.deviceId, zoneId);
         await bumpCourseReady(tx, cfg, orderId, courseId, { deviceId: device.deviceId });
       });
       return c.body(null, 200);
@@ -87,7 +87,7 @@ export function mountDeviceLevers(
       const args = groupCommand(device.deviceId, body);
       const answer = await withTransaction(deps.db, async (tx) => {
         const zoneId = (await partyWatchZones(tx, deps.cfg, [partyId])).get(partyId) ?? null;
-        await VENUE_SERVICE.assertPassScreenZone(tx, deps.cfg, device.deviceId, zoneId);
+        await VENUE_SERVICE.assertPassScreenZone(tx, device.deviceId, zoneId);
         return bumpGroupReady(tx, cfg, partyId, groupId, args, { deviceId: device.deviceId });
       });
       return c.json(answer);

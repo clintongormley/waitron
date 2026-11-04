@@ -293,8 +293,8 @@ describe("setRoutingCell / clearRoutingCell", () => {
         no_category: 0,
       },
     ]);
-    await scoped((tx) => clearRoutingCell(tx, f.cfg, address));
-    await scoped((tx) => clearRoutingCell(tx, f.cfg, address));
+    await scoped((tx) => clearRoutingCell(tx, address));
+    await scoped((tx) => clearRoutingCell(tx, address));
     expect(await readStoredCells(f)).toEqual([]);
   });
 
@@ -313,7 +313,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       for (const address of addresses) await setRoutingCell(tx, address, station(f.kitchen));
     });
     expect(await readStoredCells(f)).toHaveLength(7);
-    await scoped((tx) => clearRoutingCell(tx, f.cfg, addresses[1]!));
+    await scoped((tx) => clearRoutingCell(tx, addresses[1]!));
     expect(await readStoredCell(f, addresses[1]!)).toBeUndefined();
     for (const address of [addresses[0]!, ...addresses.slice(2)])
       expect(await readStoredCell(f, address)).toMatchObject({ station_id: f.kitchen });
@@ -350,7 +350,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       },
       terraceRow,
     ]);
-    await scoped((tx) => clearRoutingCell(tx, f.cfg, everyZone));
+    await scoped((tx) => clearRoutingCell(tx, everyZone));
     expect(await readStoredCells(f)).toEqual([terraceRow]);
   });
 
@@ -366,7 +366,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       no_preparation: 1,
       no_category: 0,
     });
-    await scoped((tx) => clearRoutingCell(tx, f.cfg, address));
+    await scoped((tx) => clearRoutingCell(tx, address));
     expect(await readStoredCell(f, address)).toBeUndefined();
   });
 
@@ -388,7 +388,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
         no_category: 0,
       },
     ]);
-    await scoped((tx) => clearRoutingCell(tx, f.cfg, upper));
+    await scoped((tx) => clearRoutingCell(tx, upper));
     expect(await readStoredCells(f)).toEqual([]);
   });
 
@@ -417,7 +417,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
         code: "route.subject_not_found",
         params,
       });
-      await expect(scoped((tx) => clearRoutingCell(tx, f.cfg, address))).rejects.toMatchObject({
+      await expect(scoped((tx) => clearRoutingCell(tx, address))).rejects.toMatchObject({
         code: "route.subject_not_found",
         params,
       });
@@ -476,7 +476,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       params: { departmentId: closed.id },
     });
     expect(await readStoredCells(f)).toEqual(before);
-    await scoped((tx) => clearRoutingCell(tx, f.cfg, address));
+    await scoped((tx) => clearRoutingCell(tx, address));
     expect(await readStoredCells(f)).toEqual([]);
   });
 
@@ -522,7 +522,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
     expect(await readStoredCells(f)).toEqual([allRow, noneRow(f.kitchen)]);
     await scoped((tx) => setRoutingCell(tx, none, station(f.bar)));
     expect(await readStoredCells(f)).toEqual([allRow, noneRow(f.bar)]);
-    await scoped((tx) => clearRoutingCell(tx, f.cfg, none));
+    await scoped((tx) => clearRoutingCell(tx, none));
     expect(await readStoredCells(f)).toEqual([allRow]);
     await scoped((tx) => setRoutingCell(tx, none, station(f.kitchen)));
     await scoped((tx) => setRoutingCell(tx, all, station(f.kitchen)));
@@ -530,7 +530,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       { ...allRow, station_id: f.kitchen },
       noneRow(f.kitchen),
     ]);
-    await scoped((tx) => clearRoutingCell(tx, f.cfg, all));
+    await scoped((tx) => clearRoutingCell(tx, all));
     expect(await readStoredCells(f)).toEqual([noneRow(f.kitchen)]);
   });
 
@@ -548,7 +548,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
         no_category: 1,
       },
     ]);
-    await scoped((tx) => clearRoutingCell(tx, f.cfg, address));
+    await scoped((tx) => clearRoutingCell(tx, address));
     expect(await readStoredCells(f)).toEqual([]);
   });
 
@@ -562,7 +562,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       code: "service_zone.not_found",
       params: { zoneId: f.inside },
     });
-    await expect(scoped((tx) => clearRoutingCell(tx, f.cfg, inside))).rejects.toMatchObject({
+    await expect(scoped((tx) => clearRoutingCell(tx, inside))).rejects.toMatchObject({
       code: "service_zone.not_found",
       params: { zoneId: f.inside },
     });
@@ -584,7 +584,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
     for (const write of [
       (tx: Transaction) => setRoutingCell(tx, address, station(f.kitchen)),
       (tx: Transaction) => setRoutingCell(tx, address, noPrep),
-      (tx: Transaction) => clearRoutingCell(tx, f.cfg, address),
+      (tx: Transaction) => clearRoutingCell(tx, address),
     ])
       await expect(scoped(write)).rejects.toMatchObject({
         code: "management.request_invalid",
@@ -597,7 +597,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
     const f = await setup();
     const address: CellAddress = { row: { kind: "all" }, zoneId: f.terrace };
     await scoped((tx) => setRoutingCell(tx, address, station(f.kitchen)));
-    await scoped((tx) => clearRoutingCell(tx, f.cfg, address));
+    await scoped((tx) => clearRoutingCell(tx, address));
     const defaults = await db
       .select({ id: kitchenStations.id, isDefault: kitchenStations.isDefault })
       .from(kitchenStations)

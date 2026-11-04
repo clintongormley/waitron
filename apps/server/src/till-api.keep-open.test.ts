@@ -126,7 +126,7 @@ beforeEach(async () => {
       .values({ name: randomUUID(), formFactor: "till", capabilities: ["take-orders"] })
       .returning({ id: deviceProfiles.id });
     await run((tx) =>
-      setProfileServiceAccess(tx, v.cfg, profile!.id, {
+      setProfileServiceAccess(tx, profile!.id, {
         departmentId: allowedDepartment,
         allowedZoneIds: null,
         startingZoneId: startingZone,

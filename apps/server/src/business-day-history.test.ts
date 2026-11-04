@@ -478,7 +478,6 @@ it.each(["void", "tender", "payment", "refund", "notice"])(
         ).rows[0]!;
         await recordKitchenNotices(
           tx,
-          venue.cfg,
           bill,
           [
             {

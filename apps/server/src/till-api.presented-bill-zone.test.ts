@@ -96,7 +96,7 @@ async function zoneTill(zoneId: string): Promise<string> {
         capabilities: [...BASIC_ACTIONS, "take-cash"],
       })
       .returning({ id: deviceProfiles.id });
-    await setProfileServiceAccess(tx, venue.cfg, profile!.id, {
+    await setProfileServiceAccess(tx, profile!.id, {
       departmentId,
       allowedZoneIds: [zoneId],
       startingZoneId: zoneId,

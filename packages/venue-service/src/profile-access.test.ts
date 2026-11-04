@@ -133,9 +133,8 @@ function restaurantScope(
 }
 
 const save = (venue: Venue, input: ProfileServiceAccessInput) =>
-  scoped((tx) => setProfileServiceAccess(tx, venue.cfg, venue.profile, input));
-const read = (venue: Venue) =>
-  scoped((tx) => readProfileServiceAccess(tx, venue.cfg, venue.profile));
+  scoped((tx) => setProfileServiceAccess(tx, venue.profile, input));
+const read = (venue: Venue) => scoped((tx) => readProfileServiceAccess(tx, venue.profile));
 
 /** No device holds the seeded profile, so `device_profile_form_factor_locked` lets it change. */
 async function makeSharedDisplay(venue: Venue): Promise<void> {
@@ -512,8 +511,8 @@ describe("a profile's service access", () => {
 
 describe("a profile's stored scope", () => {
   const scopes = (ids: string[]) => scoped((tx) => readProfileServiceScopes(tx, ids));
-  const setScope = (venue: Venue, scope: Parameters<typeof setProfileServiceScope>[3]) =>
-    scoped((tx) => setProfileServiceScope(tx, venue.cfg, venue.profile, scope));
+  const setScope = (venue: Venue, scope: Parameters<typeof setProfileServiceScope>[2]) =>
+    scoped((tx) => setProfileServiceScope(tx, venue.profile, scope));
 
   it("reads every zone as null, a subset by position, and a profile with none as all null", async () => {
     const venue = await seedVenueWithZones();
@@ -706,7 +705,7 @@ describe("a profile's stored scope", () => {
 
 describe("a zone checked against a profile", () => {
   const check = (venue: Venue, zoneId: string) =>
-    outcome(scoped((tx) => assertProfileZone(tx, venue.cfg, venue.profile, zoneId)));
+    outcome(scoped((tx) => assertProfileZone(tx, venue.profile, zoneId)));
   const refused = (zoneId: string) => ({ code: "service_zone.not_allowed", params: { zoneId } });
 
   it("allows each zone of the profile and refuses another department's", async () => {

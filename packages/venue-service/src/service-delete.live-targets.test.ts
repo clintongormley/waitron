@@ -116,7 +116,7 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
     "transfer settings write",
     "department.not_found",
     (tx, f) =>
-      service.setDepartmentTransferSettings(tx, f.cfg, f.gone, {
+      service.setDepartmentTransferSettings(tx, f.gone, {
         receivingProfileId: null,
         destinationDepartmentIds: [],
       }),

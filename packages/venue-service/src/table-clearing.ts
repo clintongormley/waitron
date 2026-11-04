@@ -1,6 +1,5 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { diningTables, type Transaction } from "@waitron/db";
-import type { VenueScope } from "./operations.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 
 export async function readTablesNeedingClearing(
@@ -19,11 +18,7 @@ export async function readTablesNeedingClearing(
   return new Set(rows.map((row) => row.id));
 }
 
-export async function listNeedsClearingDepartmentIds(
-  tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: VenueScope,
-): Promise<string[]> {
+export async function listNeedsClearingDepartmentIds(tx: Transaction): Promise<string[]> {
   const rows = await tx
     .select({ id: departments.id })
     .from(departments)

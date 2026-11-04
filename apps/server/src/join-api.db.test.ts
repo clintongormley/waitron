@@ -613,7 +613,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
     const pass: DeviceKitchenScreen = { kind: "pass", stationIds: null, zoneIds: null };
-    await withTransaction(suite.db, (tx) => offerOnProfile(tx, venue.cfg, profileId, pass));
+    await withTransaction(suite.db, (tx) => offerOnProfile(tx, profileId, pass));
     const made = await knock(venue, { kind: "device", label: "Pass screen" });
     await claimFor(app, venue, made, holdId);
     const path = `/management-api/device-join-requests/${made.joinId}/accept`;
@@ -622,7 +622,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect(accepted.status).toBe(200);
     expect(
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, made.joinId),
+        VENUE_SERVICE.readDeviceKitchenScreens(tx, made.joinId),
       ),
     ).toMatchObject([{ kind: "pass", available: true }]);
     const malformed = await knock(venue, { kind: "device", label: "Bad screen" });
@@ -670,9 +670,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
-    await withTransaction(suite.db, (tx) =>
-      offerOnProfile(tx, venue.cfg, profileId, stationScreen(venue)),
-    );
+    await withTransaction(suite.db, (tx) => offerOnProfile(tx, profileId, stationScreen(venue)));
     const made = await knock(venue, { kind: "device", label: "Kitchen screen" });
     await claimFor(app, venue, made, holdId);
     const res = await send(
@@ -706,7 +704,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     });
     expect(
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, made.joinId),
+        VENUE_SERVICE.readDeviceKitchenScreens(tx, made.joinId),
       ),
     ).toMatchObject([
       { kind: "station", stations: [{ id: venue.defaultStationId, available: true }] },
@@ -774,9 +772,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
-    await withTransaction(suite.db, (tx) =>
-      offerOnProfile(tx, venue.cfg, profileId, stationScreen(venue)),
-    );
+    await withTransaction(suite.db, (tx) => offerOnProfile(tx, profileId, stationScreen(venue)));
     const made = await knock(venue, { kind: "device", label: "Kitchen screen" });
     await claimFor(app, venue, made, holdId);
     const res = await send(
@@ -847,7 +843,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       createStation(tx, venue.cfg, { name: "Grill" }),
     );
     await withTransaction(suite.db, (tx) =>
-      offerOnProfile(tx, venue.cfg, profileId, {
+      offerOnProfile(tx, profileId, {
         kind: "station",
         stationIds: [grill.id],
         zoneIds: null,

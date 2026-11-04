@@ -1920,7 +1920,7 @@ describe("a refused save writes nothing", () => {
         .set({ heldUntilFired })
         .where(eq(kitchenCourses.id, v.courseId));
       await save(v, partyId, ALEX, null, 0, [item(v, "beer", { courseId: v.courseId })]);
-      await inTx((tx) => deleteCourse(tx, v.cfg, v.courseId));
+      await inTx((tx) => deleteCourse(tx, v.courseId));
 
       const [draft] = await draftsOf(v, partyId);
       expect(draft!.lines[0]!.course).toMatchObject({ id: v.courseId, heldUntilFired });
@@ -1942,7 +1942,7 @@ describe("a refused save writes nothing", () => {
       })
       .from(kitchenCourses)
       .where(eq(kitchenCourses.id, v.courseId));
-    await inTx((tx) => deleteCourse(tx, v.cfg, v.courseId));
+    await inTx((tx) => deleteCourse(tx, v.courseId));
     const [retained] = await draftsOf(v, partyId);
     expect(retained!.lines[0]).toEqual({ ...draft.lines[0], course });
     await refusedWritingNothing(

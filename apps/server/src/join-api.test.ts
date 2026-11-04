@@ -54,7 +54,7 @@ it("join approval gives a kitchen display its pass screen and rejects a second s
     .values({ name: "Watcher KDS", formFactor: "kds", capabilities: [] })
     .returning({ id: deviceProfiles.id });
   await withTransaction(suite.db, (tx) =>
-    VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profile!.id, {
+    VENUE_SERVICE.setProfileKitchenScreens(tx, profile!.id, {
       station: { stationIds: null, zoneIds: null },
       pass: { stationIds: null, zoneIds: null },
     }),
@@ -93,7 +93,7 @@ it("join approval gives a kitchen display its pass screen and rejects a second s
   expect(accepted.status).toBe(200);
   expect(
     await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, made.joinId),
+      VENUE_SERVICE.readDeviceKitchenScreens(tx, made.joinId),
     ),
   ).toMatchObject([{ kind: "pass", available: true, zones: null }]);
 });
@@ -113,7 +113,7 @@ it("join approval gives a device the kitchen screens the accept names, refusing 
     .values({ name: "Pass KDS", formFactor: "kds", capabilities: [] })
     .returning({ id: deviceProfiles.id });
   await withTransaction(suite.db, (tx) =>
-    VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profile!.id, {
+    VENUE_SERVICE.setProfileKitchenScreens(tx, profile!.id, {
       station: { stationIds: null, zoneIds: null },
     }),
   );
@@ -155,7 +155,7 @@ it("join approval gives a device the kitchen screens the accept names, refusing 
   });
   expect(accepted.status).toBe(200);
   const shown = await withTransaction(suite.db, (tx) =>
-    VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, made.joinId),
+    VENUE_SERVICE.readDeviceKitchenScreens(tx, made.joinId),
   );
   expect(shown).toMatchObject([
     { kind: "station", stations: [{ id: venue.defaultStationId, available: true }] },
@@ -184,7 +184,7 @@ it("join approval refuses a zone the profile's pass screen does not offer with k
     .values({ name: "Pass KDS", formFactor: "kds", capabilities: [] })
     .returning({ id: deviceProfiles.id });
   await withTransaction(suite.db, (tx) =>
-    VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profile!.id, {
+    VENUE_SERVICE.setProfileKitchenScreens(tx, profile!.id, {
       pass: { stationIds: null, zoneIds: [offered!.id] },
     }),
   );
@@ -230,7 +230,7 @@ describe("A773 pass display policy", () => {
       .values({ name: "Pass KDS", formFactor: "kds", capabilities: [] })
       .returning({ id: deviceProfiles.id });
     await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profile!.id, {
+      VENUE_SERVICE.setProfileKitchenScreens(tx, profile!.id, {
         pass: { stationIds: null, zoneIds: null, showNonPassStations: false },
       }),
     );
@@ -265,7 +265,7 @@ describe("A773 pass display policy", () => {
       expect({ label, rows }).toEqual({ label, rows: [{ screen: "pass", value: null }] });
       expect(
         await withTransaction(suite.db, (tx) =>
-          VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, made.joinId),
+          VENUE_SERVICE.readDeviceKitchenScreens(tx, made.joinId),
         ),
       ).toMatchObject([
         { kind: "pass", showNonPassStations: false, nonPassStationsOverride: null },

@@ -120,7 +120,7 @@ async function snapshot(order: Fixture) {
       .select()
       .from(serviceCommands)
       .where(eq(serviceCommands.scopeId, order.billId)),
-    notices: (await listStationNotices(tx, venue.cfg, venue.stationId)).filter(
+    notices: (await listStationNotices(tx, venue.stationId)).filter(
       (notice) => notice.workingOrderId === order.billId,
     ),
   }));

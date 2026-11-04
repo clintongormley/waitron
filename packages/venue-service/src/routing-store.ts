@@ -355,11 +355,7 @@ export async function setRoutingCell(
     );
 }
 
-export async function clearRoutingCell(
-  tx: Transaction,
-  _cfg: VenueScope,
-  address: CellAddress,
-): Promise<void> {
+export async function clearRoutingCell(tx: Transaction, address: CellAddress): Promise<void> {
   const valid = await validateRoutingCell(tx, address, null);
   await tx.delete(routingCells).where(cellAt(valid.address));
 }
@@ -457,7 +453,6 @@ async function snapshot(tx: Transaction, scope: SnapshotScope = UNTIMED) {
 
 export async function loadRoutingRules(
   tx: Transaction,
-  _cfg: VenueScope,
   businessDay: string | null,
 ): Promise<RoutingRules> {
   return (await snapshot(tx, { businessDay })).rules;
@@ -955,7 +950,6 @@ function stationTodayState(
 
 export async function stationStates(
   tx: Transaction,
-  _cfg: VenueScope,
   at: Date,
 ): Promise<ReadonlyMap<string, StationTodayState>> {
   const { moment } = await clockAt(tx, at);
@@ -975,10 +969,7 @@ export async function stationStates(
   );
 }
 
-export async function describeMakers(
-  tx: Transaction,
-  cfg: VenueScope,
-): Promise<
+export async function describeMakers(tx: Transaction): Promise<
   ReadonlyMap<
     string,
     {
@@ -989,7 +980,7 @@ export async function describeMakers(
     }
   >
 > {
-  const rules = await loadRoutingRules(tx, cfg, null);
+  const rules = await loadRoutingRules(tx, null);
   // A zone no cell names routes every product as Every zone does.
   const zoned = new Set(rules.cells.map((cell) => cell.zoneId));
   const zones = (await activeZones(tx)).filter(({ id }) => zoned.has(id));
@@ -1031,11 +1022,7 @@ export async function describeMakers(
   return result;
 }
 
-export async function routingModel(
-  tx: Transaction,
-  _cfg: VenueScope,
-  at: Date,
-): Promise<RoutingModel> {
+export async function routingModel(tx: Transaction, at: Date): Promise<RoutingModel> {
   const { clock, moment } = await clockAt(tx, at);
   const { rules, folders, stations } = await snapshot(tx, scopeAt(moment));
   const context = moment === null ? null : serviceDayContext(clock, moment.businessDay);

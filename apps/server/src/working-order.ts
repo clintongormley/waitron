@@ -770,7 +770,7 @@ export async function priceOrderLines(
   const marks = new Map<number, { periodName: string; confirmedBy: string }>();
   if (late.length > 0) {
     const { departmentId } = service!;
-    const needsManager = await VENUE_SERVICE.readLateSendNeedsManager(tx, cfg, departmentId);
+    const needsManager = await VENUE_SERVICE.readLateSendNeedsManager(tx, departmentId);
     if (lateSend === undefined || late.some((dish) => !lateSend.menuIds.has(dish.menuId))) {
       throw new AppError("menu_period.ended", {
         departmentId,
@@ -2179,9 +2179,7 @@ export async function fireLines(
   ];
 
   const makers = await (await routing()).makers(serviceContext?.zoneId ?? null, productIds);
-  const keepStates = options.keepStations?.size
-    ? await VENUE_SERVICE.stationStates(tx, cfg, now)
-    : null;
+  const keepStates = options.keepStations?.size ? await VENUE_SERVICE.stationStates(tx, now) : null;
   const stationFor = (line: FireableLine): string | null => {
     const chosen = chosenStations.get(line.id);
     if (chosen !== undefined) return chosen;

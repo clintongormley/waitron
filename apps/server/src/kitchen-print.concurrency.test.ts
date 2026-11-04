@@ -245,9 +245,9 @@ describe("A773 pass release: a printer two pass screens share", () => {
     };
     const board = (by: PassActor) =>
       withTransaction(suite.db, async (tx) => {
-        const pass = (
-          await VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, by.deviceId)
-        ).find((candidate) => candidate.kind === "pass")!;
+        const pass = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, by.deviceId)).find(
+          (candidate) => candidate.kind === "pass",
+        )!;
         return readScopedPassBoard(tx, venue.cfg, passScopeOf(pass));
       });
     const front = await screen("Front pass");

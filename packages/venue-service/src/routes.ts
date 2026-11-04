@@ -499,7 +499,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         if (c.req.query("week") !== undefined)
           throw new AppError("management.request_invalid", { field: "week" });
         return c.json(
-          await viewed(sessionId, (tx) => stationServiceTimes(tx, ctx.cfg, stationId, from, to)),
+          await viewed(sessionId, (tx) => stationServiceTimes(tx, stationId, from, to)),
         );
       }),
     );
@@ -679,7 +679,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         return c.json(
           await gatedAs(sessionId, async (tx, role) => ({
-            ...(await routingModel(tx, ctx.cfg, new Date())),
+            ...(await routingModel(tx, new Date())),
             canMakeDefault: roleHasPermission(role, "venue.configure"),
           })),
         );
@@ -702,7 +702,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const { address, target, periods } = requireCellChange(body);
         await gated(sessionId, (tx) =>
           target === null
-            ? clearRoutingCell(tx, ctx.cfg, address)
+            ? clearRoutingCell(tx, address)
             : setRoutingCell(tx, address, target, periods),
         );
         return c.body(null, 204);
@@ -740,10 +740,10 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               : []),
           ],
           releaseReminderMinutesByDepartment: await listDepartmentReminderMinutes(tx),
-          needsClearingDepartmentIds: await listNeedsClearingDepartmentIds(tx, ctx.cfg),
-          lateSendManagerDepartmentIds: await listLateSendManagerDepartmentIds(tx, ctx.cfg),
-          serviceSteps: await listServiceSteps(tx, ctx.cfg),
-          courses: await listStepCourses(tx, ctx.cfg),
+          needsClearingDepartmentIds: await listNeedsClearingDepartmentIds(tx),
+          lateSendManagerDepartmentIds: await listLateSendManagerDepartmentIds(tx),
+          serviceSteps: await listServiceSteps(tx),
+          courses: await listStepCourses(tx),
         }));
         return c.json(result);
       }),
@@ -1081,7 +1081,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         return c.json(
-          await gated(sessionId, (tx) => listDepartmentTransferProfiles(tx, ctx.cfg, departmentId)),
+          await gated(sessionId, (tx) => listDepartmentTransferProfiles(tx, departmentId)),
         );
       }),
     );
@@ -1091,9 +1091,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         const body = await readJsonBody<Record<string, unknown>>(c);
         const input = requireTransferSettings(body);
-        await gated(sessionId, (tx) =>
-          setDepartmentTransferSettings(tx, ctx.cfg, departmentId, input),
-        );
+        await gated(sessionId, (tx) => setDepartmentTransferSettings(tx, departmentId, input));
         return c.body(null, 204);
       }),
     );

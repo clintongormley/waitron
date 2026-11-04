@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -76,18 +75,18 @@ describe("A669 storage notice payload", () => {
     ];
     await expect(
       inTx((tx) =>
-        recordKitchenNotices(tx, v.cfg, order.orderId, items, "allergy_changed", {
+        recordKitchenNotices(tx, order.orderId, items, "allergy_changed", {
           allergyBlock: block,
         }),
       ),
     ).resolves.toBeUndefined();
     await inTx((tx) =>
-      recordKitchenNotices(tx, v.cfg, order.orderId, items, "allergy_removed", {
+      recordKitchenNotices(tx, order.orderId, items, "allergy_removed", {
         allergyBlock: null,
       }),
     );
-    await inTx((tx) => recordKitchenNotices(tx, v.cfg, order.orderId, items, "void"));
-    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    await inTx((tx) => recordKitchenNotices(tx, order.orderId, items, "void"));
+    const notices = await inTx((tx) => listStationNotices(tx, v.grill));
     expect(notices.map(({ kind, allergyBlock }) => ({ kind, allergyBlock }))).toEqual([
       { kind: "allergy_changed", allergyBlock: block },
       { kind: "allergy_removed", allergyBlock: null },
@@ -115,19 +114,19 @@ describe("A669 storage notice payload", () => {
     ];
     for (let n = 0; n < 55; n++)
       await inTx((tx) =>
-        recordKitchenNotices(tx, v.cfg, order.orderId, items, "allergy_changed", {
+        recordKitchenNotices(tx, order.orderId, items, "allergy_changed", {
           allergyBlock: { ...block, who: `Guest ${n}` },
         }),
       );
     await inTx((tx) =>
-      recordKitchenNotices(tx, v.cfg, order.orderId, items, "allergy_removed", {
+      recordKitchenNotices(tx, order.orderId, items, "allergy_removed", {
         allergyBlock: null,
       }),
     );
     await db.update(kitchenNotices).set({ createdAt: "2001-01-01T00:00:00.000Z" });
     for (let n = 0; n < 55; n++)
-      await inTx((tx) => recordKitchenNotices(tx, v.cfg, order.orderId, items, "void"));
-    const read = () => inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+      await inTx((tx) => recordKitchenNotices(tx, order.orderId, items, "void"));
+    const read = () => inTx((tx) => listStationNotices(tx, v.grill));
     const notices = await read();
     expect(
       notices.filter((row) => row.kind === "allergy_changed").map((row) => row.allergyBlock?.who),
@@ -135,9 +134,9 @@ describe("A669 storage notice payload", () => {
     const removed = notices.filter((row) => row.kind === "allergy_removed");
     expect(removed.map((row) => row.allergyBlock)).toEqual([null]);
     expect(notices.filter((row) => row.kind === "void")).toHaveLength(50);
-    await inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, removed[0]!.id, { stationId: v.grill }));
+    await inTx((tx) => acknowledgeKitchenNotice(tx, removed[0]!.id, { stationId: v.grill }));
     expect((await read()).some((row) => row.id === removed[0]!.id)).toBe(false);
-    await inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, notices[0]!.id, { stationId: v.grill }));
+    await inTx((tx) => acknowledgeKitchenNotice(tx, notices[0]!.id, { stationId: v.grill }));
     expect((await read()).filter((row) => row.kind === "allergy_changed")).toHaveLength(54);
     expect((await read()).some((row) => row.id === notices[0]!.id)).toBe(false);
   });
@@ -180,7 +179,6 @@ describe("A669 storage notice payload", () => {
       inTx((tx) =>
         recordKitchenNotices(
           tx,
-          v.cfg,
           order.orderId,
           [
             {
@@ -207,7 +205,6 @@ describe("whole-order instruction changes", () => {
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
-        v.cfg,
         order.orderId,
         [
           {
@@ -222,7 +219,7 @@ describe("whole-order instruction changes", () => {
       ),
     );
     change.after = "Mutated caller text";
-    const [notice] = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    const [notice] = await inTx((tx) => listStationNotices(tx, v.grill));
     expect(notice).toMatchObject({
       kind: "changed",
       note: "no onions",
@@ -231,8 +228,8 @@ describe("whole-order instruction changes", () => {
       wasStarted: true,
       orderNoteChange: { before: "All together", after: "Dessert later" },
     });
-    await inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, notice!.id));
-    expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([]);
+    await inTx((tx) => acknowledgeKitchenNotice(tx, notice!.id));
+    expect(await inTx((tx) => listStationNotices(tx, v.grill))).toEqual([]);
   });
 
   it("retains an explicit removal and omits the payload on other changed notices", async () => {
@@ -247,14 +244,14 @@ describe("whole-order instruction changes", () => {
       },
     ];
     await inTx((tx) =>
-      recordKitchenNotices(tx, v.cfg, order.orderId, items, "changed", {
+      recordKitchenNotices(tx, order.orderId, items, "changed", {
         orderNoteChange: { before: "Together", after: null },
       }),
     );
     await inTx((tx) =>
-      recordKitchenNotices(tx, v.cfg, order.orderId, items, "changed", { direction: "added" }),
+      recordKitchenNotices(tx, order.orderId, items, "changed", { direction: "added" }),
     );
-    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    const notices = await inTx((tx) => listStationNotices(tx, v.grill));
     expect(notices[0]).toHaveProperty("orderNoteChange", { before: "Together", after: null });
     expect(notices[1]).not.toHaveProperty("orderNoteChange");
   });
@@ -271,7 +268,6 @@ describe("whole-order instruction changes", () => {
       inTx((tx) =>
         recordKitchenNotices(
           tx,
-          v.cfg,
           order.orderId,
           [
             {
@@ -413,7 +409,6 @@ describe("recordKitchenNotices", () => {
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
-        v.cfg,
         order.orderId,
         [
           {
@@ -433,7 +428,7 @@ describe("recordKitchenNotices", () => {
       ),
     );
 
-    const grill = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    const grill = await inTx((tx) => listStationNotices(tx, v.grill));
     expect(grill).toEqual([
       {
         id: expect.any(String),
@@ -454,7 +449,7 @@ describe("recordKitchenNotices", () => {
         createdAt: expect.any(String),
       },
     ]);
-    const bar = await inTx((tx) => listStationNotices(tx, v.cfg, v.bar));
+    const bar = await inTx((tx) => listStationNotices(tx, v.bar));
     expect(bar).toEqual([
       expect.objectContaining({
         lineName: "Lemonade",
@@ -471,7 +466,6 @@ describe("recordKitchenNotices", () => {
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
-        v.cfg,
         order.orderId,
         [
           {
@@ -484,9 +478,9 @@ describe("recordKitchenNotices", () => {
         "void",
       ),
     );
-    expect(
-      (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((n) => n.lineName),
-    ).toEqual(["PZ (LRG PZ)"]);
+    expect((await inTx((tx) => listStationNotices(tx, v.grill))).map((n) => n.lineName)).toEqual([
+      "PZ (LRG PZ)",
+    ]);
   });
 
   it("copies a weighed line's unit, in every language it was recorded in", async () => {
@@ -509,7 +503,6 @@ describe("recordKitchenNotices", () => {
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
-        v.cfg,
         order.orderId,
         [
           {
@@ -523,7 +516,7 @@ describe("recordKitchenNotices", () => {
       ),
     );
     await db.delete(workingOrderLines).where(eq(workingOrderLines.id, octopus!.id));
-    expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([
+    expect(await inTx((tx) => listStationNotices(tx, v.grill))).toEqual([
       expect.objectContaining({
         lineName: "Octopus",
         unitName: { en: "kg", "es-ES": "kilo" },
@@ -639,7 +632,6 @@ describe("recordKitchenNotices", () => {
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
-        v.cfg,
         order.orderId,
         [...lineIds, order.burgerLineId].map((workingOrderLineId) => ({
           workingOrderLineId,
@@ -655,7 +647,7 @@ describe("recordKitchenNotices", () => {
     await inTx((tx) => deleteUnit(tx, seededEach!.id));
 
     expect(
-      (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((notice) => [
+      (await inTx((tx) => listStationNotices(tx, v.grill))).map((notice) => [
         notice.lineName,
         notice.soldInEach,
       ]),
@@ -682,7 +674,7 @@ describe("recordKitchenNotices", () => {
       const unknown = "00000000-0000-4000-8000-00000000dead";
       await expect(
         inTx((tx) =>
-          recordKitchenNotices(tx, v.cfg, unknown, [item(order.burgerLineId, v.grill)], "void"),
+          recordKitchenNotices(tx, unknown, [item(order.burgerLineId, v.grill)], "void"),
         ),
       ).rejects.toMatchObject({
         code: "working_order.not_found",
@@ -699,7 +691,6 @@ describe("recordKitchenNotices", () => {
         inTx((tx) =>
           recordKitchenNotices(
             tx,
-            v.cfg,
             order.orderId,
             [item(order.burgerLineId, v.grill), item(order.lemonadeLineId, stationId)],
             "void",
@@ -719,7 +710,6 @@ describe("recordKitchenNotices", () => {
         inTx((tx) =>
           recordKitchenNotices(
             tx,
-            v.cfg,
             order.orderId,
             [item(order.burgerLineId, v.grill, quantity)],
             "void",
@@ -735,14 +725,9 @@ describe("recordKitchenNotices", () => {
         const order = await seedOrder(1, null);
         await expect(
           inTx((tx) =>
-            recordKitchenNotices(
-              tx,
-              v.cfg,
-              order.orderId,
-              [item(order.burgerLineId, v.grill)],
-              kind,
-              { direction: "added" },
-            ),
+            recordKitchenNotices(tx, order.orderId, [item(order.burgerLineId, v.grill)], kind, {
+              direction: "added",
+            }),
           ),
         ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field: "direction" } });
         expect(await db.select().from(kitchenNotices)).toEqual([]);
@@ -756,14 +741,9 @@ describe("recordKitchenNotices", () => {
         const order = await seedOrder(1, null);
         await expect(
           inTx((tx) =>
-            recordKitchenNotices(
-              tx,
-              v.cfg,
-              order.orderId,
-              [item(order.burgerLineId, v.grill)],
-              kind,
-              { cancelledExtra: "Gherkins" },
-            ),
+            recordKitchenNotices(tx, order.orderId, [item(order.burgerLineId, v.grill)], kind, {
+              cancelledExtra: "Gherkins",
+            }),
           ),
         ).rejects.toMatchObject({
           code: "kitchen_notice.invalid",
@@ -778,13 +758,7 @@ describe("recordKitchenNotices", () => {
       const order = await seedOrder(1, null);
       await expect(
         inTx((tx) =>
-          recordKitchenNotices(
-            tx,
-            v.cfg,
-            order.orderId,
-            [item(order.burgerLineId, v.grill)],
-            "rerouted",
-          ),
+          recordKitchenNotices(tx, order.orderId, [item(order.burgerLineId, v.grill)], "rerouted"),
         ),
       ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field: "reroutedTo" } });
       expect(await db.select().from(kitchenNotices)).toEqual([]);
@@ -795,14 +769,9 @@ describe("recordKitchenNotices", () => {
       const order = await seedOrder(1, null);
       await expect(
         inTx((tx) =>
-          recordKitchenNotices(
-            tx,
-            v.cfg,
-            order.orderId,
-            [item(order.burgerLineId, v.grill)],
-            "recalled",
-            { reroutedTo: "Grill" },
-          ),
+          recordKitchenNotices(tx, order.orderId, [item(order.burgerLineId, v.grill)], "recalled", {
+            reroutedTo: "Grill",
+          }),
         ),
       ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field: "reroutedTo" } });
       expect(await db.select().from(kitchenNotices)).toEqual([]);
@@ -815,14 +784,9 @@ describe("recordKitchenNotices", () => {
         const order = await seedOrder(1, null);
         await expect(
           inTx((tx) =>
-            recordKitchenNotices(
-              tx,
-              v.cfg,
-              order.orderId,
-              [item(order.burgerLineId, v.grill)],
-              kind,
-              { fromNumber: 28 },
-            ),
+            recordKitchenNotices(tx, order.orderId, [item(order.burgerLineId, v.grill)], kind, {
+              fromNumber: 28,
+            }),
           ),
         ).rejects.toMatchObject({
           code: "kitchen_notice.invalid",
@@ -837,14 +801,10 @@ describe("recordKitchenNotices", () => {
       const order = await seedOrder(1, null);
       await expect(
         inTx((tx) =>
-          recordKitchenNotices(
-            tx,
-            v.cfg,
-            order.orderId,
-            [item(order.burgerLineId, v.grill)],
-            "rerouted",
-            { reroutedTo: "Grill", fromNumber: 28 },
-          ),
+          recordKitchenNotices(tx, order.orderId, [item(order.burgerLineId, v.grill)], "rerouted", {
+            reroutedTo: "Grill",
+            fromNumber: 28,
+          }),
         ),
       ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field: "fromNumber" } });
       expect(await db.select().from(kitchenNotices)).toEqual([]);
@@ -855,14 +815,9 @@ describe("recordKitchenNotices", () => {
       const order = await seedOrder(1, null);
       await expect(
         inTx((tx) =>
-          recordKitchenNotices(
-            tx,
-            v.cfg,
-            order.orderId,
-            [item(order.burgerLineId, v.grill)],
-            "changed",
-            { direction: "sideways" as "added" },
-          ),
+          recordKitchenNotices(tx, order.orderId, [item(order.burgerLineId, v.grill)], "changed", {
+            direction: "sideways" as "added",
+          }),
         ),
       ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field: "direction" } });
       expect(await db.select().from(kitchenNotices)).toEqual([]);
@@ -873,7 +828,7 @@ describe("recordKitchenNotices", () => {
       const order = await seedOrder(1, null);
       const other = await seedOrder(2, null);
       const refusal = inTx((tx) =>
-        recordKitchenNotices(tx, v.cfg, order.orderId, [item(other.burgerLineId, v.grill)], "void"),
+        recordKitchenNotices(tx, order.orderId, [item(other.burgerLineId, v.grill)], "void"),
       );
       await expect(refusal).rejects.toThrow(
         `recordKitchenNotices: line ${other.burgerLineId} is not on order ${order.orderId}`,
@@ -889,7 +844,6 @@ describe("recordKitchenNotices", () => {
       await inTx((tx) =>
         recordKitchenNotices(
           tx,
-          v.cfg,
           order.orderId,
           [
             {
@@ -903,7 +857,7 @@ describe("recordKitchenNotices", () => {
         ),
       );
     }
-    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    const notices = await inTx((tx) => listStationNotices(tx, v.grill));
     expect(notices.map((notice) => [notice.orderLabel, notice.kind])).toEqual([
       ["#7", "recalled"],
       ["#7", "changed"],
@@ -922,15 +876,15 @@ describe("recordKitchenNotices", () => {
       },
     ];
     await inTx(async (tx) => {
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", {
+      await recordKitchenNotices(tx, order.orderId, burger, "changed", {
         direction: "added",
       });
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", {
+      await recordKitchenNotices(tx, order.orderId, burger, "changed", {
         direction: "removed",
       });
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed");
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "void");
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "moved", { movedTo: "Table 2" });
+      await recordKitchenNotices(tx, order.orderId, burger, "changed");
+      await recordKitchenNotices(tx, order.orderId, burger, "void");
+      await recordKitchenNotices(tx, order.orderId, burger, "moved", { movedTo: "Table 2" });
     });
     expect(
       (await db.execute(sql`select kind, direction from kitchen_notices order by rowid`)).rows,
@@ -956,15 +910,15 @@ describe("recordKitchenNotices", () => {
       },
     ];
     await inTx(async (tx) => {
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", {
+      await recordKitchenNotices(tx, order.orderId, burger, "changed", {
         direction: "removed",
       });
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", {
+      await recordKitchenNotices(tx, order.orderId, burger, "changed", {
         direction: "added",
       });
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "void");
+      await recordKitchenNotices(tx, order.orderId, burger, "void");
     });
-    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    const notices = await inTx((tx) => listStationNotices(tx, v.grill));
     expect(notices.map((notice) => [notice.kind, notice.direction])).toEqual([
       ["changed", "removed"],
       ["changed", "added"],
@@ -985,15 +939,15 @@ describe("recordKitchenNotices", () => {
       },
     ];
     await inTx(async (tx) => {
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", {
+      await recordKitchenNotices(tx, order.orderId, burger, "changed", {
         cancelledExtra: "Gherkins",
       });
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", {
+      await recordKitchenNotices(tx, order.orderId, burger, "changed", {
         direction: "added",
       });
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "void");
+      await recordKitchenNotices(tx, order.orderId, burger, "void");
     });
-    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    const notices = await inTx((tx) => listStationNotices(tx, v.grill));
     expect(notices[0]).toEqual({
       id: expect.any(String),
       stationId: v.grill,
@@ -1021,7 +975,6 @@ describe("recordKitchenNotices", () => {
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
-        v.cfg,
         order.orderId,
         [
           {
@@ -1035,7 +988,7 @@ describe("recordKitchenNotices", () => {
         { movedTo: "Table 7" },
       ),
     );
-    expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([
+    expect(await inTx((tx) => listStationNotices(tx, v.grill))).toEqual([
       {
         id: expect.any(String),
         stationId: v.grill,
@@ -1065,20 +1018,20 @@ describe("recordKitchenNotices", () => {
       { workingOrderLineId: o.burgerLineId, stationId: v.grill, quantity: ONE, wasStarted: false },
     ];
     await inTx(async (tx) => {
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger(order), "moved", {
+      await recordKitchenNotices(tx, order.orderId, burger(order), "moved", {
         movedTo: "Table 7",
         fromNumber: 28,
       });
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger(order), "moved", {
+      await recordKitchenNotices(tx, order.orderId, burger(order), "moved", {
         movedTo: "Table 7",
         fromNumber: 27,
       });
-      await recordKitchenNotices(tx, v.cfg, labelled.orderId, burger(labelled), "moved", {
+      await recordKitchenNotices(tx, labelled.orderId, burger(labelled), "moved", {
         fromNumber: 28,
       });
     });
     expect(
-      (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((notice) => [
+      (await inTx((tx) => listStationNotices(tx, v.grill))).map((notice) => [
         notice.orderLabel,
         notice.movedTo,
       ]),
@@ -1095,7 +1048,6 @@ describe("recordKitchenNotices", () => {
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
-        v.cfg,
         order.orderId,
         [
           {
@@ -1109,7 +1061,7 @@ describe("recordKitchenNotices", () => {
         { reroutedTo: "Grill" },
       ),
     );
-    expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.bar))).toEqual([
+    expect(await inTx((tx) => listStationNotices(tx, v.bar))).toEqual([
       expect.objectContaining({
         kind: "rerouted",
         reroutedTo: "Grill",
@@ -1141,7 +1093,6 @@ describe("recordKitchenNotices", () => {
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
-        v.cfg,
         order.orderId,
         [
           {
@@ -1160,15 +1111,16 @@ describe("recordKitchenNotices", () => {
         "recalled",
       ),
     );
-    expect(
-      (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((n) => n.lineName),
-    ).toEqual(["Lemonade", "BRGR"]);
+    expect((await inTx((tx) => listStationNotices(tx, v.grill))).map((n) => n.lineName)).toEqual([
+      "Lemonade",
+      "BRGR",
+    ]);
   });
 
   it("records nothing for no items", async () => {
-    const v = await venue();
+    await venue();
     const order = await seedOrder(3, null);
-    await inTx((tx) => recordKitchenNotices(tx, v.cfg, order.orderId, [], "void"));
+    await inTx((tx) => recordKitchenNotices(tx, order.orderId, [], "void"));
     expect(await db.select().from(kitchenNotices)).toEqual([]);
   });
 
@@ -1178,7 +1130,6 @@ describe("recordKitchenNotices", () => {
     await inTx(async (tx) => {
       await recordKitchenNotices(
         tx,
-        v.cfg,
         order.orderId,
         [
           {
@@ -1192,9 +1143,9 @@ describe("recordKitchenNotices", () => {
       );
       await tx.delete(workingOrderLines).where(eq(workingOrderLines.id, order.burgerLineId));
     });
-    expect(
-      (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((n) => n.lineName),
-    ).toEqual(["BRGR"]);
+    expect((await inTx((tx) => listStationNotices(tx, v.grill))).map((n) => n.lineName)).toEqual([
+      "BRGR",
+    ]);
   });
 });
 
@@ -1213,9 +1164,9 @@ describe("listStationNotices", () => {
       );
     }
     const acknowledged = await noticeAt(v.grill, order.orderId, new Date().toISOString(), "Done");
-    await inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, acknowledged));
+    await inTx((tx) => acknowledgeKitchenNotice(tx, acknowledged));
 
-    const names = (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map(
+    const names = (await inTx((tx) => listStationNotices(tx, v.grill))).map(
       (notice) => notice.lineName,
     );
     expect(names).toEqual(Array.from({ length: 50 }, (_, index) => `N${index + 5}`));
@@ -1230,7 +1181,7 @@ describe("listStationNotices", () => {
     await noticeAt(v.grill, order.orderId, hoursAgo(1), "an hour ago");
     await noticeAt(v.grill, order.orderId, hoursAgo(0.1), "just now");
     const listed = async () =>
-      (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((n) => n.lineName);
+      (await inTx((tx) => listStationNotices(tx, v.grill))).map((n) => n.lineName);
 
     // The day began about 23.5 hours ago: yesterday's notice from 23 hours ago is still today's.
     await db.update(locations).set({ dayCutover: cutoverFromNow(30) });
@@ -1244,23 +1195,10 @@ describe("listStationNotices", () => {
     const v = await venue();
     const order = await seedOrder(1, null);
     await noticeAt(v.bar, order.orderId, new Date().toISOString(), "at the bar");
-    expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([]);
-    expect(
-      (await inTx((tx) => listStationNotices(tx, v.cfg, v.bar))).map((n) => n.lineName),
-    ).toEqual(["at the bar"]);
-  });
-});
-
-// A1301: deleted with cfg in S18
-describe("listStationsNotices and the scope", () => {
-  it("returns a notice at the venue's station whatever location the scope names", async () => {
-    const v = await venue();
-    const order = await seedOrder(1, null);
-    await noticeAt(v.grill, order.orderId, new Date().toISOString(), "at the grill");
-    const notices = await inTx((tx) =>
-      listStationsNotices(tx, { locationId: brandLocationId(randomUUID()) }, [v.grill]),
-    );
-    expect(notices.get(v.grill)!.map((notice) => notice.lineName)).toEqual(["at the grill"]);
+    expect(await inTx((tx) => listStationNotices(tx, v.grill))).toEqual([]);
+    expect((await inTx((tx) => listStationNotices(tx, v.bar))).map((n) => n.lineName)).toEqual([
+      "at the bar",
+    ]);
   });
 });
 
@@ -1291,7 +1229,7 @@ describe.each([
       await noticeAt(v.bar, order.orderId, at, `B${index}`);
     }
 
-    const notices = await inTx((tx) => listStationsNotices(tx, v.cfg, [v.bar, v.grill]));
+    const notices = await inTx((tx) => listStationsNotices(tx, [v.bar, v.grill]));
 
     expect([...notices].map(([id, list]) => [id, list.map((notice) => notice.lineName)])).toEqual([
       [v.bar, Array.from({ length: 50 }, (_, index) => `B${index + 5}`)],
@@ -1308,7 +1246,7 @@ describe.each([
       await noticeAt(v.grill, order.orderId, at, `N${index}`);
     }
 
-    const notices = await inTx((tx) => listStationsNotices(tx, v.cfg, [v.grill, v.bar]));
+    const notices = await inTx((tx) => listStationsNotices(tx, [v.grill, v.bar]));
 
     expect(notices.get(v.grill)!.map((notice) => notice.lineName)).toEqual(
       Array.from({ length: 50 }, (_, index) => `N${index + 1}`),
@@ -1339,7 +1277,7 @@ describe.each([
       })
       .returning();
 
-    const notices = await inTx((tx) => listStationsNotices(tx, v.cfg, [v.bar]));
+    const notices = await inTx((tx) => listStationsNotices(tx, [v.bar]));
 
     expect(notices.get(v.bar)).toEqual([
       {
@@ -1381,19 +1319,17 @@ describe.each([
     it("reads three stations' notices in one statement, and sends no more statements than for one station", async () => {
       const v = await venue();
       const third = await seedStation(v.locationId, "Dessert");
-      const one = await statementsOf((tx) => listStationsNotices(tx, v.cfg, [v.grill]));
-      const three = await statementsOf((tx) =>
-        listStationsNotices(tx, v.cfg, [v.grill, v.bar, third]),
-      );
+      const one = await statementsOf((tx) => listStationsNotices(tx, [v.grill]));
+      const three = await statementsOf((tx) => listStationsNotices(tx, [v.grill, v.bar, third]));
 
       expect(three.filter(readsNotices)).toHaveLength(1);
       expect(three).toHaveLength(one.length);
     });
 
     it("sends none for no stations", async () => {
-      const v = await venue();
-      expect(await statementsOf((tx) => listStationsNotices(tx, v.cfg, []))).toEqual([]);
-      expect(await inTx((tx) => listStationsNotices(tx, v.cfg, []))).toEqual(new Map());
+      await venue();
+      expect(await statementsOf((tx) => listStationsNotices(tx, []))).toEqual([]);
+      expect(await inTx((tx) => listStationsNotices(tx, []))).toEqual(new Map());
     });
   });
 });
@@ -1411,22 +1347,22 @@ describe("acknowledgeKitchenNotice", () => {
           .where(eq(kitchenNotices.id, id))
       )[0]!.at;
     const before = new Date().toISOString();
-    await inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, id));
-    expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([]);
+    await inTx((tx) => acknowledgeKitchenNotice(tx, id));
+    expect(await inTx((tx) => listStationNotices(tx, v.grill))).toEqual([]);
     expect((await acknowledgedAt())! >= before).toBe(true);
 
     // Moved back by hand so a second acknowledgement in the same millisecond cannot pass for one
     // that kept the first time.
     const first = "2026-01-01T00:00:00.000Z";
     await db.update(kitchenNotices).set({ acknowledgedAt: first }).where(eq(kitchenNotices.id, id));
-    await inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, id));
+    await inTx((tx) => acknowledgeKitchenNotice(tx, id));
     expect(await acknowledgedAt()).toBe(first);
   });
 
   it("refuses an unknown notice as not found", async () => {
-    const v = await venue();
+    await venue();
     const unknown = "00000000-0000-4000-8000-00000000dead";
-    await expect(inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, unknown))).rejects.toMatchObject({
+    await expect(inTx((tx) => acknowledgeKitchenNotice(tx, unknown))).rejects.toMatchObject({
       code: "kitchen_notice.not_found",
       params: { noticeId: unknown },
     });
@@ -1440,14 +1376,14 @@ describe("acknowledgeKitchenNotice for one station", () => {
     const atGrill = await noticeAt(v.grill, order.orderId, new Date().toISOString());
 
     await expect(
-      inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, atGrill, { stationId: v.bar })),
+      inTx((tx) => acknowledgeKitchenNotice(tx, atGrill, { stationId: v.bar })),
     ).rejects.toMatchObject({ code: "kitchen_notice.not_found", params: { noticeId: atGrill } });
     expect(
-      (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((notice) => notice.id),
+      (await inTx((tx) => listStationNotices(tx, v.grill))).map((notice) => notice.id),
     ).toEqual([atGrill]);
 
-    await inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, atGrill, { stationId: v.grill }));
-    expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([]);
+    await inTx((tx) => acknowledgeKitchenNotice(tx, atGrill, { stationId: v.grill }));
+    expect(await inTx((tx) => listStationNotices(tx, v.grill))).toEqual([]);
   });
 });
 
@@ -1473,17 +1409,15 @@ it.each(["03:00", "07:00"])(
         ? ["2026-11-04T05:00:00Z", "2026-11-04T06:59:00Z"]
         : ["2026-11-04T02:59:00Z"]) {
         vi.setSystemTime(new Date(time));
+        expect((await inTx((tx) => listStationNotices(tx, v.grill))).map((n) => n.id)).toEqual([
+          kept,
+        ]);
         expect(
-          (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((n) => n.id),
-        ).toEqual([kept]);
-        expect(
-          (await inTx((tx) => listStationsNotices(tx, v.cfg, [v.grill])))
-            .get(v.grill)!
-            .map((n) => n.id),
+          (await inTx((tx) => listStationsNotices(tx, [v.grill]))).get(v.grill)!.map((n) => n.id),
         ).toEqual([kept]);
       }
       vi.setSystemTime(new Date(`2026-11-04T${cutover}:00Z`));
-      expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([]);
+      expect(await inTx((tx) => listStationNotices(tx, v.grill))).toEqual([]);
     } finally {
       vi.useRealTimers();
     }
@@ -1524,7 +1458,6 @@ describe("A807 one notice per kitchen-note change", () => {
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
-        v.cfg,
         order.orderId,
         [
           at(v.grill, order.burgerLineId),
@@ -1537,7 +1470,7 @@ describe("A807 one notice per kitchen-note change", () => {
     );
     const [first] = await rawRows();
 
-    const notices = await inTx((tx) => listStationsNotices(tx, v.cfg, [v.grill, v.bar]));
+    const notices = await inTx((tx) => listStationsNotices(tx, [v.grill, v.bar]));
 
     const grill = notices.get(v.grill)!;
     expect(grill).toHaveLength(1);
@@ -1564,7 +1497,6 @@ describe("A807 one notice per kitchen-note change", () => {
       await inTx((tx) =>
         recordKitchenNotices(
           tx,
-          v.cfg,
           order.orderId,
           [
             at(v.grill, order.burgerLineId),
@@ -1577,21 +1509,19 @@ describe("A807 one notice per kitchen-note change", () => {
       );
       const rows = await rawRows();
 
-      await inTx((tx) =>
-        acknowledgeKitchenNotice(tx, v.cfg, rows[pick]!.id, { stationId: v.grill }),
-      );
+      await inTx((tx) => acknowledgeKitchenNotice(tx, rows[pick]!.id, { stationId: v.grill }));
 
       const after = await rawRows();
       expect(after.map((row) => row.acknowledgedAt !== null)).toEqual([true, true, false]);
-      expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([]);
-      expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.bar))).toHaveLength(1);
+      expect(await inTx((tx) => listStationNotices(tx, v.grill))).toEqual([]);
+      expect(await inTx((tx) => listStationNotices(tx, v.bar))).toHaveLength(1);
 
       const first = "2026-01-01T00:00:00.000Z";
       await db
         .update(kitchenNotices)
         .set({ acknowledgedAt: first })
         .where(eq(kitchenNotices.stationId, v.grill));
-      await inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, rows[1 - pick]!.id));
+      await inTx((tx) => acknowledgeKitchenNotice(tx, rows[1 - pick]!.id));
       expect((await rawRows()).slice(0, 2).map((row) => row.acknowledgedAt)).toEqual([
         first,
         first,
@@ -1618,31 +1548,17 @@ describe("A807 one notice per kitchen-note change", () => {
     const order = await seedOrder(4, null);
     const other = await seedOrder(5, null);
     await inTx((tx) =>
-      recordKitchenNotices(
-        tx,
-        v.cfg,
-        order.orderId,
-        [at(v.grill, order.burgerLineId)],
-        "changed",
-        change,
-      ),
+      recordKitchenNotices(tx, order.orderId, [at(v.grill, order.burgerLineId)], "changed", change),
     );
     const target = second.order === "same" ? order : other;
     await inTx((tx) =>
-      recordKitchenNotices(
-        tx,
-        v.cfg,
-        target.orderId,
-        [at(v.grill, target.lemonadeLineId)],
-        "changed",
-        {
-          orderNoteChange: second.orderNoteChange,
-        },
-      ),
+      recordKitchenNotices(tx, target.orderId, [at(v.grill, target.lemonadeLineId)], "changed", {
+        orderNoteChange: second.orderNoteChange,
+      }),
     );
     await sameTime();
 
-    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    const notices = await inTx((tx) => listStationNotices(tx, v.grill));
 
     expect(notices.map(dishNames)).toEqual([["BRGR"], ["Lemonade"]]);
   });
@@ -1652,7 +1568,7 @@ describe("A807 one notice per kitchen-note change", () => {
     const order = await seedOrder(4, null);
     for (const lineId of [order.burgerLineId, order.lemonadeLineId])
       await inTx((tx) =>
-        recordKitchenNotices(tx, v.cfg, order.orderId, [at(v.grill, lineId)], "changed", change),
+        recordKitchenNotices(tx, order.orderId, [at(v.grill, lineId)], "changed", change),
       );
     const [one, two] = await rawRows();
     const now = Date.now();
@@ -1665,7 +1581,7 @@ describe("A807 one notice per kitchen-note change", () => {
       .set({ createdAt: new Date(now + 1).toISOString() })
       .where(eq(kitchenNotices.id, two!.id));
 
-    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    const notices = await inTx((tx) => listStationNotices(tx, v.grill));
 
     expect(notices.map(dishNames)).toEqual([["BRGR"], ["Lemonade"]]);
   });
@@ -1675,11 +1591,11 @@ describe("A807 one notice per kitchen-note change", () => {
     const order = await seedOrder(4, null);
     for (const lineId of [order.burgerLineId, order.lemonadeLineId])
       await inTx((tx) =>
-        recordKitchenNotices(tx, v.cfg, order.orderId, [at(v.grill, lineId)], "changed", change),
+        recordKitchenNotices(tx, order.orderId, [at(v.grill, lineId)], "changed", change),
       );
     await sameTime();
 
-    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    const notices = await inTx((tx) => listStationNotices(tx, v.grill));
 
     expect(notices.map(dishNames)).toEqual([["BRGR", "Lemonade"]]);
   });
@@ -1690,7 +1606,6 @@ describe("A807 one notice per kitchen-note change", () => {
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
-        v.cfg,
         order.orderId,
         [
           at(v.grill, order.burgerLineId, ONE),
@@ -1709,7 +1624,7 @@ describe("A807 one notice per kitchen-note change", () => {
       .set({ note: "extra cheese" })
       .where(eq(kitchenNotices.id, rows[4]!.id));
 
-    const [notice] = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    const [notice] = await inTx((tx) => listStationNotices(tx, v.grill));
 
     expect(
       notice!.dishes!.map(({ lineName, quantity, note, wasStarted }) => [
@@ -1749,7 +1664,6 @@ describe("A807 one notice per kitchen-note change", () => {
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
-        v.cfg,
         order.orderId,
         [
           at(v.grill, fish!.id, portion),
@@ -1762,7 +1676,7 @@ describe("A807 one notice per kitchen-note change", () => {
       ),
     );
 
-    const [notice] = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    const [notice] = await inTx((tx) => listStationNotices(tx, v.grill));
 
     expect(notice!.dishes!.map(({ lineName, quantity }) => [lineName, quantity])).toEqual([
       ["Hake", portion],
@@ -1793,7 +1707,6 @@ describe("A807 one notice per kitchen-note change", () => {
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
-        v.cfg,
         order.orderId,
         [
           at(v.grill, fish!.id),
@@ -1813,7 +1726,7 @@ describe("A807 one notice per kitchen-note change", () => {
       .set({ unitName: { en: "glass" }, soldInEach: true })
       .where(eq(kitchenNotices.lineName, "Lemonade"));
 
-    const [notice] = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    const [notice] = await inTx((tx) => listStationNotices(tx, v.grill));
 
     expect(notice!.dishes!.map(({ lineName, quantity }) => [lineName, quantity])).toEqual([
       ["Hake", ONE],
@@ -1831,7 +1744,6 @@ describe("A807 one notice per kitchen-note change", () => {
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
-        v.cfg,
         order.orderId,
         [
           at(v.grill, order.burgerLineId),
@@ -1847,7 +1759,7 @@ describe("A807 one notice per kitchen-note change", () => {
     for (let index = 0; index < 48; index += 1)
       await noticeAt(v.grill, order.orderId, ago(1), `V${index}`);
 
-    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    const notices = await inTx((tx) => listStationNotices(tx, v.grill));
 
     expect(notices).toHaveLength(49);
     expect(dishNames(notices[0]!)).toEqual(["BRGR", "Lemonade", "PZ (LRG PZ)"]);
@@ -1857,24 +1769,17 @@ describe("A807 one notice per kitchen-note change", () => {
     const v = await venue();
     const order = await seedOrder(1, null);
     await inTx((tx) =>
-      recordKitchenNotices(tx, v.cfg, order.orderId, [at(v.grill, order.burgerLineId)], "changed", {
+      recordKitchenNotices(tx, order.orderId, [at(v.grill, order.burgerLineId)], "changed", {
         direction: "added",
       }),
     );
     await inTx((tx) =>
-      recordKitchenNotices(
-        tx,
-        v.cfg,
-        order.orderId,
-        [at(v.grill, order.lemonadeLineId)],
-        "changed",
-        {
-          cancelledExtra: "Cheese",
-        },
-      ),
+      recordKitchenNotices(tx, order.orderId, [at(v.grill, order.lemonadeLineId)], "changed", {
+        cancelledExtra: "Cheese",
+      }),
     );
 
-    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    const notices = await inTx((tx) => listStationNotices(tx, v.grill));
 
     expect(notices).toHaveLength(2);
     for (const notice of notices) expect(notice).not.toHaveProperty("dishes");

@@ -395,7 +395,7 @@ describe("the till's station day", () => {
 
   it("a rejected destination leaves dishes and closure unchanged", async () => {
     const item = await stationDish();
-    await inTx(v, (tx) => setStationToday(tx, v.cfg, pastry, "closed", new Date(), bar));
+    await inTx(v, (tx) => setStationToday(tx, pastry, "closed", new Date(), bar));
     const before = await rows();
     const answer = await call("PUT", today(), {
       state: "closed",
@@ -532,7 +532,7 @@ describe("the till's station day", () => {
     expect(await rows()).toEqual([]);
   });
   it("refuses a destination closed since the choices were read", async () => {
-    await inTx(v, (tx) => setStationToday(tx, v.cfg, pastry, "closed", new Date(), bar));
+    await inTx(v, (tx) => setStationToday(tx, pastry, "closed", new Date(), bar));
     const before = await rows();
     const answer = await call("PUT", today(), { state: "closed", sendsToStationId: pastry });
     expect(answer.status).toBe(409);
@@ -540,7 +540,7 @@ describe("the till's station day", () => {
     expect(await rows()).toEqual(before);
   });
   it("opens a closed station and clears its manual destination", async () => {
-    await inTx(v, (tx) => setStationToday(tx, v.cfg, grill, "closed", new Date(), bar));
+    await inTx(v, (tx) => setStationToday(tx, grill, "closed", new Date(), bar));
     expect((await call("PUT", today(), { state: "open" })).status).toBe(204);
     expect(await rows()).toEqual([]);
     const listed = await call("GET", "/api/stations");
@@ -796,7 +796,7 @@ describe("the kitchen display's station day", () => {
     });
   });
   it("reopens its station with a manager PIN and clears the destination", async () => {
-    await inTx(v, (tx) => setStationToday(tx, v.cfg, grill, "closed", new Date(), bar));
+    await inTx(v, (tx) => setStationToday(tx, grill, "closed", new Date(), bar));
     expect(
       (
         await deviceCall("PUT", path(), {

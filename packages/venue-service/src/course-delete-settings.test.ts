@@ -30,11 +30,10 @@ beforeAll(() => {
 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(db, fn);
 
-type Scope = { locationId: LocationId };
-const readCourseDeleteSettings = async (tx: Transaction, cfg: Scope, courseId: string) =>
-  courseDeleteSettingsRemoves(await read(tx, cfg, courseId));
-const clearCourseDeleteSettings = async (tx: Transaction, cfg: Scope, courseId: string) =>
-  clear(tx, await read(tx, cfg, courseId));
+const readCourseDeleteSettings = async (tx: Transaction, courseId: string) =>
+  courseDeleteSettingsRemoves(await read(tx, courseId));
+const clearCourseDeleteSettings = async (tx: Transaction, courseId: string) =>
+  clear(tx, await read(tx, courseId));
 
 type Step = [name: string, start: ServiceStepStart, minutes?: number, course?: "dessert"];
 
@@ -87,7 +86,7 @@ it("counts the steps that start when the course is served, in every department",
     ["Set up", "seated"],
     ["Dessert?", "course_served", 5, "dessert"],
   ]);
-  expect(await run((tx) => readCourseDeleteSettings(tx, cfg, courseId))).toEqual([
+  expect(await run((tx) => readCourseDeleteSettings(tx, courseId))).toEqual([
     { key: "course_service_steps", count: 2, targets: [] },
   ]);
 });
@@ -95,7 +94,7 @@ it("counts the steps that start when the course is served, in every department",
 it("reports nothing when no step names it", async () => {
   const { cfg, courseId } = await venue("Nothing");
   await department(cfg, courseId, "Dining", [["Set up", "seated"]]);
-  expect(await run((tx) => readCourseDeleteSettings(tx, cfg, courseId))).toEqual([]);
+  expect(await run((tx) => readCourseDeleteSettings(tx, courseId))).toEqual([]);
 });
 
 it("clears them and leaves other steps", async () => {
@@ -105,12 +104,12 @@ it("clears them and leaves other steps", async () => {
     ["Dessert?", "course_served", 10, "dessert"],
     ["Anything else?", "all_served", 10],
   ]);
-  await run((tx) => clearCourseDeleteSettings(tx, cfg, courseId));
+  await run((tx) => clearCourseDeleteSettings(tx, courseId));
   expect(await stepsOf(dining)).toEqual([
     { name: "Set up", start: "seated", minutes: 0 },
     { name: "Anything else?", start: "all_served", minutes: 10 },
   ]);
-  expect(await run((tx) => readCourseDeleteSettings(tx, cfg, courseId))).toEqual([]);
+  expect(await run((tx) => readCourseDeleteSettings(tx, courseId))).toEqual([]);
 });
 
 it("a step left first that started after the step before now starts When seated, its minutes kept", async () => {
@@ -119,11 +118,11 @@ it("a step left first that started after the step before now starts When seated,
     ["Dessert?", "course_served", 10, "dessert"],
     ["Coffee", "after_previous", 5],
   ]);
-  expect(await run((tx) => readCourseDeleteSettings(tx, cfg, courseId))).toEqual([
+  expect(await run((tx) => readCourseDeleteSettings(tx, courseId))).toEqual([
     { key: "course_service_steps", count: 1, targets: [] },
     { key: "course_seated_steps", count: 1, targets: [] },
   ]);
-  await run((tx) => clearCourseDeleteSettings(tx, cfg, courseId));
+  await run((tx) => clearCourseDeleteSettings(tx, courseId));
   expect(await stepsOf(dining)).toEqual([{ name: "Coffee", start: "seated", minutes: 5 }]);
 });
 
@@ -147,11 +146,11 @@ it("every step tied at the lowest remaining position that starts after the step 
     { departmentId: dining, position: 1, name: "Tea", start: "after_previous", minutes: 3 },
     { departmentId: dining, position: 2, name: "Bill", start: "after_previous", minutes: 2 },
   ]);
-  expect(await run((tx) => readCourseDeleteSettings(tx, cfg, courseId))).toEqual([
+  expect(await run((tx) => readCourseDeleteSettings(tx, courseId))).toEqual([
     { key: "course_service_steps", count: 1, targets: [] },
     { key: "course_seated_steps", count: 2, targets: [] },
   ]);
-  await run((tx) => clearCourseDeleteSettings(tx, cfg, courseId));
+  await run((tx) => clearCourseDeleteSettings(tx, courseId));
   expect((await stepsOf(dining)).sort((a, b) => a.name.localeCompare(b.name))).toEqual([
     { name: "Bill", start: "after_previous", minutes: 2 },
     { name: "Coffee", start: "seated", minutes: 5 },
@@ -166,10 +165,10 @@ it("a step that stays below another keeps After the step before", async () => {
     ["Dessert?", "course_served", 10, "dessert"],
     ["Coffee", "after_previous", 5],
   ]);
-  expect(await run((tx) => readCourseDeleteSettings(tx, cfg, courseId))).toEqual([
+  expect(await run((tx) => readCourseDeleteSettings(tx, courseId))).toEqual([
     { key: "course_service_steps", count: 1, targets: [] },
   ]);
-  await run((tx) => clearCourseDeleteSettings(tx, cfg, courseId));
+  await run((tx) => clearCourseDeleteSettings(tx, courseId));
   expect(await stepsOf(dining)).toEqual([
     { name: "Set up", start: "seated", minutes: 0 },
     { name: "Coffee", start: "after_previous", minutes: 5 },
@@ -182,10 +181,10 @@ it("a first step that does not start after the step before is left as it is", as
     ["Dessert?", "course_served", 10, "dessert"],
     ["Anything else?", "all_served", 10],
   ]);
-  expect(await run((tx) => readCourseDeleteSettings(tx, cfg, courseId))).toEqual([
+  expect(await run((tx) => readCourseDeleteSettings(tx, courseId))).toEqual([
     { key: "course_service_steps", count: 1, targets: [] },
   ]);
-  await run((tx) => clearCourseDeleteSettings(tx, cfg, courseId));
+  await run((tx) => clearCourseDeleteSettings(tx, courseId));
   expect(await stepsOf(dining)).toEqual([
     { name: "Anything else?", start: "all_served", minutes: 10 },
   ]);

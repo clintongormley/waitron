@@ -32,7 +32,7 @@ async function venueWithSteps(
   const { id } = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Desserts" }));
   const departmentId = await inTx(v, async (tx: Transaction) => {
     const department = await createDepartment(tx, v.cfg, { name: "Steps", orderStart: "table" });
-    await saveServiceSteps(tx, v.cfg, department.id, steps(id));
+    await saveServiceSteps(tx, department.id, steps(id));
     return department.id;
   });
   return { v, id, departmentId };
@@ -66,7 +66,7 @@ describe("deleting a course with service steps", () => {
   it("deleting a course nothing names deletes the row outright", async () => {
     const v = await setupPartyVenue(suite.db);
     const { id } = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Unused" }));
-    await inTx(v, (tx) => deleteCourse(tx, v.cfg, id));
+    await inTx(v, (tx) => deleteCourse(tx, id));
     expect(await courseRows(v, id)).toEqual([]);
   });
 
@@ -76,7 +76,7 @@ describe("deleting a course with service steps", () => {
       step("Dessert?", "course_served", 10, course),
       step("Anything else?", "all_served", 10),
     ]);
-    await inTx(v, (tx) => deleteCourse(tx, v.cfg, id));
+    await inTx(v, (tx) => deleteCourse(tx, id));
     expect(await stepsOf(v, departmentId)).toEqual([
       { name: "Set up", start: "seated", minutes: 0 },
       { name: "Anything else?", start: "all_served", minutes: 10 },
@@ -93,7 +93,7 @@ describe("deleting a course with service steps", () => {
     await inTx(v, (tx) =>
       addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.item("Flan"), quantity: "1", courseId: id }]),
     );
-    await inTx(v, (tx) => deleteCourse(tx, v.cfg, id));
+    await inTx(v, (tx) => deleteCourse(tx, id));
     expect(await stepsOf(v, departmentId)).toEqual([
       { name: "Set up", start: "seated", minutes: 0 },
     ]);
@@ -111,7 +111,7 @@ describe("deleting a course with service steps", () => {
         .set({ courseId: id })
         .where(eq(products.id, v.productId("Flan"))),
     );
-    expect((await inTx(v, (tx) => readCourseDeleteImpact(tx, v.cfg, id))).removes).toEqual([
+    expect((await inTx(v, (tx) => readCourseDeleteImpact(tx, id))).removes).toEqual([
       { key: "course_products", count: 1, targets: [] },
       { key: "course_service_steps", count: 1, targets: [] },
     ]);
@@ -147,7 +147,7 @@ describe("deleting a course with service steps", () => {
       );
       return party!.id;
     });
-    await inTx(v, (tx) => deleteCourse(tx, v.cfg, id));
+    await inTx(v, (tx) => deleteCourse(tx, id));
     expect(
       await inTx(v, (tx) =>
         tx
@@ -163,7 +163,7 @@ describe("deleting a course with service steps", () => {
       step("Dessert?", "course_served", 10, course),
       step("Coffee", "after_previous", 5),
     ]);
-    expect((await inTx(v, (tx) => deleteCourse(tx, v.cfg, id))).removes).toEqual([
+    expect((await inTx(v, (tx) => deleteCourse(tx, id))).removes).toEqual([
       { key: "course_service_steps", count: 1, targets: [] },
       { key: "course_seated_steps", count: 1, targets: [] },
     ]);

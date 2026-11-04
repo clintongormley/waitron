@@ -585,7 +585,7 @@ describe("the order of a sale's refusals", () => {
         .select({ departmentId: zoneServicePolicies.departmentId })
         .from(zoneServicePolicies)
         .where(eq(zoneServicePolicies.zoneId, v.counter.zoneId));
-      await setProfileServiceAccess(tx, v.cfg, restaurantOnly, {
+      await setProfileServiceAccess(tx, restaurantOnly, {
         departmentId: policy!.departmentId,
         allowedZoneIds: null,
         startingZoneId: v.counter.zoneId,

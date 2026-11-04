@@ -373,7 +373,7 @@ describe("markServiceStepDone", () => {
     await inTx(v, (tx) => tx.insert(partyTables).values({ partyId, tableId: terraceTable }));
     const tablesOnly = await profile(v);
     await inTx(v, (tx) =>
-      setProfileServiceAccess(tx, v.cfg, tablesOnly, {
+      setProfileServiceAccess(tx, tablesOnly, {
         departmentId: restaurant,
         allowedZoneIds: [v.tables.zoneId],
         startingZoneId: v.tables.zoneId,

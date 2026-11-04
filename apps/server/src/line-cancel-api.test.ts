@@ -884,7 +884,7 @@ describe("the public cancellation read and command", () => {
         );
       try {
         await inTx(venue, (tx) =>
-          setProfileServiceAccess(tx, venue.cfg, profileId, {
+          setProfileServiceAccess(tx, profileId, {
             departmentId: department!.id,
             allowedZoneIds: [elsewhere.id],
             startingZoneId: elsewhere.id,
@@ -897,7 +897,7 @@ describe("the public cancellation read and command", () => {
         expect(await frozen()).toEqual(before);
       } finally {
         await inTx(venue, (tx) =>
-          setProfileServiceAccess(tx, venue.cfg, profileId, {
+          setProfileServiceAccess(tx, profileId, {
             departmentId: null,
             allowedZoneIds: null,
             startingZoneId: null,
@@ -1174,7 +1174,7 @@ describe("the public cancellation read and command", () => {
           capabilities: ["take-orders"],
         })
         .returning();
-      await setProfileServiceAccess(tx, venue.cfg, created!.id, {
+      await setProfileServiceAccess(tx, created!.id, {
         departmentId: department!.id,
         allowedZoneIds: [elsewhere.id],
         startingZoneId: elsewhere.id,

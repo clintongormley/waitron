@@ -129,7 +129,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
     })
     .returning({ id: deviceProfiles.id });
   await withTransaction(db, (tx) =>
-    setProfileServiceAccess(tx, cfg, profile!.id, {
+    setProfileServiceAccess(tx, profile!.id, {
       departmentId: seeded.departmentId,
       allowedZoneIds: null,
       startingZoneId: seeded.startingZoneId,

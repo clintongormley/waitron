@@ -98,7 +98,7 @@ it("an empty order records the device profile's starting zone instead of the cou
     VENUE_SERVICE.resolveZoneContext(tx, venue.cfg, venue.tables.zoneId),
   );
   await withTransaction(suite.db, (tx) =>
-    setProfileServiceScope(tx, venue.cfg, device!.deviceProfileId, {
+    setProfileServiceScope(tx, device!.deviceProfileId, {
       departmentId: zone.departmentId,
       allowedZoneIds: null,
       startingZoneId: venue.tables.zoneId,
@@ -120,7 +120,7 @@ it("an explicit zone wins over the profile starting zone", async () => {
     VENUE_SERVICE.resolveZoneContext(tx, venue.cfg, venue.tables.zoneId),
   );
   await withTransaction(suite.db, (tx) =>
-    setProfileServiceScope(tx, venue.cfg, device!.deviceProfileId, {
+    setProfileServiceScope(tx, device!.deviceProfileId, {
       departmentId: zone.departmentId,
       allowedZoneIds: null,
       startingZoneId: venue.tables.zoneId,

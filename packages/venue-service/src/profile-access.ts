@@ -2,7 +2,6 @@ import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { deviceProfiles, floorZones } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, type ErrorParams } from "@waitron/shared";
-import type { VenueScope } from "./operations.js";
 import {
   departments,
   deviceProfileServiceAccess,
@@ -44,10 +43,9 @@ function refuse(field: Refusal["field"], reason: Refusal["reason"]): never {
 
 export async function readProfileServiceAccess(
   tx: Transaction,
-  cfg: VenueScope,
   profileId: string,
 ): Promise<ProfileServiceAccess> {
-  return readProfileZones(tx, cfg, profileId);
+  return readProfileZones(tx, profileId);
 }
 
 /**
@@ -57,11 +55,10 @@ export async function readProfileServiceAccess(
  */
 export async function assertProfileZone(
   tx: Transaction,
-  cfg: VenueScope,
   profileId: string,
   zoneId: string,
 ): Promise<void> {
-  const { allowedZoneIds } = await readProfileZones(tx, cfg, profileId);
+  const { allowedZoneIds } = await readProfileZones(tx, profileId);
   if (allowedZoneIds !== null && !allowedZoneIds.includes(zoneId)) {
     throw new AppError("service_zone.not_allowed", { zoneId });
   }
@@ -70,7 +67,6 @@ export async function assertProfileZone(
 /** The zone half of {@link ProfileServiceAccess}. */
 export async function readProfileZones(
   tx: Transaction,
-  _cfg: VenueScope,
   profileId: string,
 ): Promise<Pick<ProfileServiceAccess, "departmentId" | "allowedZoneIds" | "startingZoneId">> {
   const [profile] = await tx
@@ -207,7 +203,6 @@ export interface StoredProfileServiceScope {
 /** Replaces the profile's whole service scope, after checking every id against the venue's rows. */
 export async function setProfileServiceAccess(
   tx: Transaction,
-  _cfg: VenueScope,
   profileId: string,
   input: ProfileServiceAccessInput,
 ): Promise<void> {
@@ -231,7 +226,6 @@ const NO_SCOPE: ProfileServiceScope = {
  */
 export async function setProfileServiceScope(
   tx: Transaction,
-  _cfg: VenueScope,
   profileId: string,
   input: Partial<ProfileServiceScope>,
 ): Promise<void> {

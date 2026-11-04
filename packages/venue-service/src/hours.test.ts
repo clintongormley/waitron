@@ -159,7 +159,7 @@ const dateSnapshot = (f: Fixture, subject: HoursSubject, date: LocalDate) =>
         .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
         .where(eq(specialDayDates.locationId, f.cfg.locationId))
     ).find((row) => occursOn({ date: row.date, repeats: row.repeatsYearly }, date));
-    const states = await stationStates(tx, f.cfg, new Date(`${date}T10:00:00Z`));
+    const states = await stationStates(tx, new Date(`${date}T10:00:00Z`));
     return {
       subject,
       openingDate: day.date,
@@ -678,7 +678,7 @@ describe("special-day station occurrences", () => {
       (await calendar("2025-12-20", "2025-12-31")).every((day) => day.tone === "standard"),
     ).toBe(true);
     for (const at of ["2027-12-25T12:00:00Z", "2025-12-25T12:00:00Z"]) {
-      const states = await withTransaction(db, (tx) => stationStates(tx, f.cfg, new Date(at)));
+      const states = await withTransaction(db, (tx) => stationStates(tx, new Date(at)));
       for (const id of [f.bar.id, f.restaurant.id, f.kitchen.id])
         expect(states.get(id)?.open).toBe(true);
     }

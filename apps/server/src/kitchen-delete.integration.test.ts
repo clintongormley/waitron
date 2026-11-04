@@ -215,7 +215,7 @@ it("keeps retained draft, group, course and ready station history through manage
       .insert(deviceProfiles)
       .values({ name: "Dessert KDS", formFactor: "kds" })
       .returning();
-    await setProfileKitchenScreens(tx, v.cfg, profile!.id, {
+    await setProfileKitchenScreens(tx, profile!.id, {
       station: { stationIds: null, zoneIds: null },
     });
     const { deviceId } = await seedDevice(tx, {
@@ -223,7 +223,7 @@ it("keeps retained draft, group, course and ready station history through manage
       label: "Off dessert display",
     });
     await tx.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
-    await setDeviceKitchenScreens(tx, v.cfg, {
+    await setDeviceKitchenScreens(tx, {
       deviceId,
       profileId: profile!.id,
       screens: [{ kind: "station", stationIds: [station.id], zoneIds: null }],
@@ -237,7 +237,7 @@ it("keeps retained draft, group, course and ready station history through manage
   });
   expect(await history()).toEqual(before);
   await inTx(v, (tx) =>
-    setDeviceKitchenScreens(tx, v.cfg, {
+    setDeviceKitchenScreens(tx, {
       deviceId: display.id,
       profileId: display.deviceProfileId!,
       screens: [{ kind: "station", stationIds: null, zoneIds: null }],
@@ -325,7 +325,7 @@ it("keeps retained draft, group, course and ready station history through manage
 it("recomputes course impact after a queued product-default write commits", async () => {
   const v = await setupPartyVenue(suite.db);
   const course = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Queued dessert" }));
-  expect(await inTx(v, (tx) => readCourseDeleteImpact(tx, v.cfg, course.id))).toEqual({
+  expect(await inTx(v, (tx) => readCourseDeleteImpact(tx, course.id))).toEqual({
     target: { id: course.id, name: "Queued dessert" },
     refusals: [],
     ends: [],
@@ -347,7 +347,7 @@ it("recomputes course impact after a queued product-default write commits", asyn
   });
   let deletion: ReturnType<typeof deleteCourse>;
   try {
-    deletion = inTx(v, (tx) => deleteCourse(tx, v.cfg, course.id));
+    deletion = inTx(v, (tx) => deleteCourse(tx, course.id));
     await asked.promise;
   } finally {
     lock.mockRestore();
@@ -380,9 +380,7 @@ it("refuses a queued station delete after another writer sends preparing food", 
     return row;
   });
   const seated = await seat(v, await v.table("Table queued"));
-  expect((await inTx(v, (tx) => readStationDeleteImpact(tx, v.cfg, station.id))).refusals).toEqual(
-    [],
-  );
+  expect((await inTx(v, (tx) => readStationDeleteImpact(tx, station.id))).refusals).toEqual([]);
   const entered = deferred();
   const release = deferred();
   const writer = inTx(v, async (tx) => {
@@ -401,7 +399,7 @@ it("refuses a queued station delete after another writer sends preparing food", 
   });
   let result: Promise<unknown>;
   try {
-    result = inTx(v, (tx) => deleteStation(tx, v.cfg, station.id)).catch((error: unknown) => error);
+    result = inTx(v, (tx) => deleteStation(tx, station.id)).catch((error: unknown) => error);
     await asked.promise;
   } finally {
     lock.mockRestore();

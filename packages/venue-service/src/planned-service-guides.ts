@@ -2,7 +2,6 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/catalogue";
 import type { BusinessDayClock } from "@waitron/shared";
-import type { VenueScope } from "./operations.js";
 import type { CalendarColour, LocalDate } from "./hours-types.js";
 import {
   readDayPlan,
@@ -79,7 +78,6 @@ function timeAt(minute: number, cutover: string): string {
 
 export async function readPlannedServiceGuides(
   tx: Transaction,
-  cfg: VenueScope,
   stationIds: readonly string[],
   request: ServiceGuideRequest,
 ): Promise<PlannedServiceGuides> {
@@ -162,7 +160,7 @@ export async function readPlannedServiceGuides(
       .from(products)
       .leftJoin(parentProducts, parentJoin)
       .where(and(eq(products.active, true), inArray(routedId, offeredIds)));
-    const base = await loadRoutingRules(tx, cfg, null);
+    const base = await loadRoutingRules(tx, null);
     const rules = {
       ...base,
       zoneDepartment: new Map(zones.map(({ id, departmentId }) => [id, departmentId])),

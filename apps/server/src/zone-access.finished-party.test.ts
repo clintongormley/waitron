@@ -118,7 +118,6 @@ async function withZones<T>(zones: string[] | null, fn: () => Promise<T>): Promi
   await inTx(venue, (tx) =>
     setProfileServiceAccess(
       tx,
-      venue.cfg,
       profileId,
       zones === null
         ? { departmentId: null, allowedZoneIds: null, startingZoneId: null }
@@ -129,7 +128,7 @@ async function withZones<T>(zones: string[] | null, fn: () => Promise<T>): Promi
     return await fn();
   } finally {
     await inTx(venue, (tx) =>
-      setProfileServiceAccess(tx, venue.cfg, profileId, {
+      setProfileServiceAccess(tx, profileId, {
         departmentId: null,
         allowedZoneIds: null,
         startingZoneId: null,

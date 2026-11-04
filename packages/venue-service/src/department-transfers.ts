@@ -79,18 +79,13 @@ async function activeDepartment(tx: Transaction, departmentId: string) {
   if (row === undefined) throw new AppError("department.not_found", { departmentId });
 }
 
-async function usableProfile(
-  tx: Transaction,
-  cfg: VenueScope,
-  departmentId: string,
-  profileId: string,
-) {
+async function usableProfile(tx: Transaction, departmentId: string, profileId: string) {
   const [profile] = await tx
     .select({ formFactor: deviceProfiles.formFactor })
     .from(deviceProfiles)
     .where(and(eq(deviceProfiles.id, profileId), isNull(deviceProfiles.retiredAt)));
   if (profile === undefined || profile.formFactor === "kds") return false;
-  const scope = await readProfileZones(tx, cfg, profileId);
+  const scope = await readProfileZones(tx, profileId);
   return (
     scope.departmentId === departmentId &&
     scope.allowedZoneIds !== null &&
@@ -100,7 +95,6 @@ async function usableProfile(
 
 export async function listDepartmentTransferProfiles(
   tx: Transaction,
-  cfg: VenueScope,
   departmentId: string,
 ): Promise<{ id: string; name: string }[]> {
   await activeDepartment(tx, departmentId);
@@ -111,21 +105,20 @@ export async function listDepartmentTransferProfiles(
     .orderBy(asc(deviceProfiles.name), asc(deviceProfiles.id));
   const choices: { id: string; name: string }[] = [];
   for (const profile of profiles) {
-    if (await usableProfile(tx, cfg, departmentId, profile.id)) choices.push(profile);
+    if (await usableProfile(tx, departmentId, profile.id)) choices.push(profile);
   }
   return choices;
 }
 
 export async function setDepartmentTransferSettings(
   tx: Transaction,
-  cfg: VenueScope,
   departmentId: string,
   input: Omit<DepartmentTransferSettings, "departmentId">,
 ): Promise<void> {
   await activeDepartment(tx, departmentId);
   if (
     input.receivingProfileId !== null &&
-    !(await usableProfile(tx, cfg, departmentId, input.receivingProfileId))
+    !(await usableProfile(tx, departmentId, input.receivingProfileId))
   )
     throw new AppError("department_transfer.settings_invalid", { field: "receivingProfileId" });
   const destinationIds = [...new Set(input.destinationDepartmentIds)];
@@ -206,7 +199,7 @@ export async function requestDepartmentTransfer(
     .where(eq(departmentTransferDesks.departmentId, destinationDepartmentId));
   if (
     desk === undefined ||
-    !(await usableProfile(tx, cfg, destinationDepartmentId, desk.receivingProfileId))
+    !(await usableProfile(tx, destinationDepartmentId, desk.receivingProfileId))
   )
     throw new AppError("department_transfer.desk_unavailable", {
       departmentId: destinationDepartmentId,
@@ -317,7 +310,6 @@ async function pendingRequest(tx: Transaction, cfg: VenueScope, requestId: strin
 
 async function receives(
   tx: Transaction,
-  cfg: VenueScope,
   departmentId: string,
   receiver: DepartmentTransferReceiver,
 ): Promise<boolean> {
@@ -328,17 +320,16 @@ async function receives(
   return (
     receiver.departmentId === departmentId &&
     desk?.receivingProfileId === receiver.profileId &&
-    (await usableProfile(tx, cfg, departmentId, receiver.profileId))
+    (await usableProfile(tx, departmentId, receiver.profileId))
   );
 }
 
 async function checkReceiver(
   tx: Transaction,
-  cfg: VenueScope,
   departmentId: string,
   receiver: DepartmentTransferReceiver,
 ) {
-  if (!(await receives(tx, cfg, departmentId, receiver)))
+  if (!(await receives(tx, departmentId, receiver)))
     throw new AppError("department_transfer.not_allowed", {});
 }
 
@@ -375,7 +366,7 @@ export async function acceptDepartmentTransfer(
   input: { tabRevision: number; zoneId: string; tableId: string | null },
 ) {
   const request = await pendingRequest(tx, cfg, requestId);
-  await checkReceiver(tx, cfg, request.destinationDepartmentId, receiver);
+  await checkReceiver(tx, request.destinationDepartmentId, receiver);
   const [tab] = await tx.select().from(workingOrders).where(eq(workingOrders.id, request.tabId));
   if (tab === undefined || (tab.status !== "open" && tab.status !== "placed"))
     throw new AppError("department_transfer.tab_unavailable", { tabId: request.tabId });
@@ -407,7 +398,7 @@ export async function acceptDepartmentTransfer(
   // A single-tab acceptance must not change the table links or order groups shared by other bills.
   if (tab.partyId !== null)
     throw new AppError("department_transfer.structure_unsupported", { tabId: tab.id });
-  const scope = await readProfileZones(tx, cfg, receiver.profileId);
+  const scope = await readProfileZones(tx, receiver.profileId);
   if (!scope.allowedZoneIds?.includes(input.zoneId))
     throw new AppError("department_transfer.destination_invalid", { field: "zoneId" });
   if (input.tableId !== null) {
@@ -447,14 +438,13 @@ export async function declineDepartmentTransfer(
   reason: string,
 ) {
   const request = await pendingRequest(tx, cfg, requestId);
-  await checkReceiver(tx, cfg, request.destinationDepartmentId, receiver);
+  await checkReceiver(tx, request.destinationDepartmentId, receiver);
   if (!reason.trim()) throw new AppError("department_transfer.reason_required", {});
   return resolveRequest(tx, requestId, receiver, { status: "declined", reason: reason.trim() });
 }
 
 export async function listDepartmentTransferDestinations(
   tx: Transaction,
-  cfg: VenueScope,
   sender: DepartmentTransferActor,
 ): Promise<{ id: string; name: string }[]> {
   await activeDepartment(tx, sender.departmentId);
@@ -479,7 +469,7 @@ export async function listDepartmentTransferDestinations(
     .orderBy(asc(departments.name), asc(departments.id));
   const choices: { id: string; name: string }[] = [];
   for (const row of rows)
-    if (await usableProfile(tx, cfg, row.id, row.profileId))
+    if (await usableProfile(tx, row.id, row.profileId))
       choices.push({ id: row.id, name: row.name });
   return choices;
 }
@@ -549,7 +539,7 @@ export async function listIncomingDepartmentTransfers(
   cfg: VenueScope,
   receiver: DepartmentTransferReceiver,
 ) {
-  if (!(await receives(tx, cfg, receiver.departmentId, receiver))) return null;
+  if (!(await receives(tx, receiver.departmentId, receiver))) return null;
   return summarizeTransfers(tx, await listDepartmentTransfers(tx, cfg, receiver.departmentId));
 }
 
@@ -560,7 +550,7 @@ export async function readIncomingDepartmentTransfer(
   receiver: DepartmentTransferReceiver,
 ) {
   const request = await pendingRequest(tx, cfg, requestId);
-  await checkReceiver(tx, cfg, request.destinationDepartmentId, receiver);
+  await checkReceiver(tx, request.destinationDepartmentId, receiver);
   return (await summarizeTransfers(tx, [request]))[0]!;
 }
 

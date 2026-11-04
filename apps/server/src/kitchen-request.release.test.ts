@@ -406,14 +406,7 @@ describe("A773 waiter request: release", () => {
       expect(await items(tx, venue.party.tabId)).toEqual([
         expect.objectContaining({ stationId: venue.stations.grill, firedAt: null }),
       ]);
-      await setStationToday(
-        tx,
-        venue.cfg,
-        venue.stations.grill,
-        "closed",
-        new Date(),
-        venue.stations.kitchen,
-      );
+      await setStationToday(tx, venue.stations.grill, "closed", new Date(), venue.stations.kitchen);
       await setStationsWaitForPass(tx, true, [venue.stations.kitchen]);
       const before = await jobCounts(tx, venue);
       await fire(tx, venue, placed.groups[0]!.id);

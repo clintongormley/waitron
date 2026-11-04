@@ -209,7 +209,7 @@ describe("paper for a move to another station", () => {
           "Grill",
         );
         return {
-          notices: await listStationNotices(tx, cfg, bar.id),
+          notices: await listStationNotices(tx, bar.id),
           jobs: (await printJobsFor(tx)).filter((job) => !before.has(job.id)),
           barPrinter,
         };
@@ -1034,7 +1034,7 @@ describe("every correction reaches the station as a notice, printer or not", () 
       );
       return {
         stationId: barStation.id,
-        notices: await listStationNotices(tx, cfg, barStation.id),
+        notices: await listStationNotices(tx, barStation.id),
         jobs: await printJobsFor(tx),
       };
     });
@@ -1075,7 +1075,7 @@ describe("every correction reaches the station as a notice, printer or not", () 
       );
       return {
         printerId,
-        notices: await listStationNotices(tx, cfg, kitchenStation.id),
+        notices: await listStationNotices(tx, kitchenStation.id),
         slips: (await printJobsFor(tx)).filter((job) => !before.has(job.id)),
       };
     });
@@ -1740,7 +1740,7 @@ describe("dish extras on kitchen tickets", () => {
       };
       const orderId = party.tabId;
       await addTabRound(tx, cfg, orderId, [pick]);
-      await setStationToday(tx, cfg, stations.fryer, "closed", new Date());
+      await setStationToday(tx, stations.fryer, "closed", new Date());
       await addTabRound(tx, cfg, orderId, [pick]);
       const before = new Set((await printJobsFor(tx)).map((job) => job.id));
       await reprintOrderTickets(tx, cfg, orderId);
@@ -3077,7 +3077,7 @@ describe("A803 portion grouping", () => {
           fire: true,
         });
         await enqueueCorrectionSlips(tx, cfg, k.tabId, await firedAt(tx, k.tabId, k.kitchen), kind);
-        const portions = await listStationNotices(tx, cfg, k.kitchen);
+        const portions = await listStationNotices(tx, k.kitchen);
         const chips = { menuItemId: k.offer(k.ids.chips), quantity: "1" };
         await addTabRound(tx, cfg, k.tabId, [chips]);
         await addTabRound(tx, cfg, k.tabId, [chips]);
@@ -3086,7 +3086,7 @@ describe("A803 portion grouping", () => {
         await enqueueCorrectionSlips(tx, cfg, k.tabId, unbound, kind);
         return {
           portions: portions.map(({ quantity }) => quantity),
-          unbound: (await listStationNotices(tx, cfg, k.fryer)).map(({ quantity }) => quantity),
+          unbound: (await listStationNotices(tx, k.fryer)).map(({ quantity }) => quantity),
         };
       });
 
@@ -3112,7 +3112,7 @@ describe("A803 portion grouping", () => {
       );
       const [first, second, noted] = await firedAt(tx, k.tabId, k.kitchen);
       const noticesAt = async (stationId: string) =>
-        (await listStationNotices(tx, cfg, stationId)).length;
+        (await listStationNotices(tx, stationId)).length;
       const during = async (items: CorrectionItem[]) => {
         const before = [await noticesAt(k.kitchen), await noticesAt(k.fryer)];
         await enqueueCorrectionSlips(tx, cfg, k.tabId, items, "RECALLED");
@@ -3172,7 +3172,7 @@ describe("A803 portion grouping", () => {
         })),
         "VOID",
       );
-      return (await listStationNotices(tx, cfg, k.fryer)).map(({ quantity }) => quantity);
+      return (await listStationNotices(tx, k.fryer)).map(({ quantity }) => quantity);
     });
 
     expect(fryer).toEqual([thousandthsToDecimal(4000)]);
@@ -3200,7 +3200,7 @@ describe("A803 portion grouping", () => {
         ],
         { kind: "HOLD CANCELLED" },
       );
-      return (await listStationNotices(tx, cfg, k.kitchen)).length;
+      return (await listStationNotices(tx, k.kitchen)).length;
     });
 
     expect(added).toBe(2);
@@ -3248,7 +3248,7 @@ describe("A803 portion grouping", () => {
         const cancelled = await jobsDuring(tx, () =>
           enqueueHoldCorrections(tx, cfg, k.tabId, oysters, { kind: "HOLD CANCELLED" }),
         );
-        const notices = await listStationNotices(tx, cfg, k.kitchen);
+        const notices = await listStationNotices(tx, k.kitchen);
         return { count: oysters.length, changed, cancelled, notices };
       });
 

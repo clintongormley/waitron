@@ -176,12 +176,12 @@ it("delete starting zone advances only within allowed surviving zones and Every 
     ]);
     await clearServiceDeleteSettings(tx, f.cfg, [f.gone], null);
     await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, f.gone));
-    expect(await readProfileZones(tx, f.cfg, f.explicit)).toEqual({
+    expect(await readProfileZones(tx, f.explicit)).toEqual({
       departmentId: f.department,
       allowedZoneIds: [f.allowed],
       startingZoneId: f.allowed,
     });
-    expect(await readProfileZones(tx, f.cfg, f.every)).toEqual({
+    expect(await readProfileZones(tx, f.every)).toEqual({
       departmentId: f.department,
       allowedZoneIds: [f.forbidden, f.allowed],
       startingZoneId: f.forbidden,
@@ -201,7 +201,7 @@ it("delete starting zone advances only within allowed surviving zones and Every 
       },
     ]);
     const [stored] = await readProfileServiceScopes(tx, [f.explicit]);
-    await setProfileServiceScope(tx, f.cfg, f.explicit, stored!);
+    await setProfileServiceScope(tx, f.explicit, stored!);
     expect((await readProfileServiceScopes(tx, [f.explicit]))[0]).toEqual(stored);
     expect(
       await tx
@@ -295,10 +295,9 @@ it("delete last screen zone leaves an explicit empty parent on disabled devices 
     );
     expect(await tx.select().from(deviceKitchenScreenStations)).toEqual(stationBounds.devices);
     expect(
-      (await readProfileKitchenScreens(tx, f.cfg)).find((row) => row.profileId === f.explicit)
-        ?.screens,
+      (await readProfileKitchenScreens(tx)).find((row) => row.profileId === f.explicit)?.screens,
     ).toEqual({ pass: { stationIds: [station!.id], zoneIds: [], showNonPassStations: true } });
-    expect(await readDeviceKitchenScreens(tx, f.cfg, d!.id)).toEqual([]);
+    expect(await readDeviceKitchenScreens(tx, d!.id)).toEqual([]);
     expect(
       await tx
         .select()
@@ -697,7 +696,7 @@ it("delete without a surviving configured zone leaves default_missing and never 
       .set({ active: false })
       .where(inArray(floorZones.id, [f.gone, f.forbidden, f.allowed, f.elsewhere]));
     expect(await readServiceDeleteSettings(tx, f.cfg, [], null)).toEqual([]);
-    expect(await readProfileZones(tx, f.cfg, f.explicit)).toEqual({
+    expect(await readProfileZones(tx, f.explicit)).toEqual({
       departmentId: f.department,
       allowedZoneIds: [],
       startingZoneId: null,
@@ -726,7 +725,7 @@ it("delete keeps missing-parent and KDS service access unrestricted while a reta
     await tx.delete(deviceProfileZones).where(eq(deviceProfileZones.deviceProfileId, f.explicit));
     await clearServiceDeleteSettings(tx, f.cfg, [f.gone], null);
     await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, f.gone));
-    expect(await readProfileZones(tx, f.cfg, f.explicit)).toEqual({
+    expect(await readProfileZones(tx, f.explicit)).toEqual({
       departmentId: f.department,
       allowedZoneIds: [],
       startingZoneId: null,
@@ -745,7 +744,7 @@ it("delete keeps missing-parent and KDS service access unrestricted while a reta
       },
     ]);
     for (const profileId of [unbound!.id, f.kitchen]) {
-      expect(await readProfileZones(tx, f.cfg, profileId)).toEqual({
+      expect(await readProfileZones(tx, profileId)).toEqual({
         departmentId: null,
         allowedZoneIds: null,
         startingZoneId: null,

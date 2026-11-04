@@ -327,7 +327,7 @@ it("a substitution uses its own receipt, and source-zone access checks all of it
       .select()
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, venue.counterZone));
-    await setProfileServiceAccess(tx, venue.cfg, profileId, {
+    await setProfileServiceAccess(tx, profileId, {
       departmentId: policy!.departmentId,
       allowedZoneIds: [venue.zoneId],
       startingZoneId: venue.zoneId,
@@ -448,7 +448,7 @@ it("allows an orderless invoice even when the permitted-zone set is empty", asyn
       .select()
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, venue.counterZone));
-    await setProfileServiceAccess(tx, venue.cfg, profileId, {
+    await setProfileServiceAccess(tx, profileId, {
       departmentId: policy!.departmentId,
       allowedZoneIds: [venue.counterZone],
       startingZoneId: venue.counterZone,
