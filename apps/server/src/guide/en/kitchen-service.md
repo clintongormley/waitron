@@ -71,6 +71,9 @@ Firing held work at the same station does not duplicate an existing allergy corr
 a dish into a draft ends its old kitchen work. Sending that draft again creates a new kitchen copy
 from the instructions you confirm for that send.
 
+On kitchen paper, a group's heading names the courses of its dishes, in course order:
+**GROUP 3 · STARTERS, MAINS**. A reprint shows them as they are when you reprint.
+
 ## Reprint the original, then check its notices {#reprints}
 
 A reprint repeats the original allergy block. It does not issue another correction notice, so
@@ -181,6 +184,9 @@ in the row. With every column hidden, the row and **Columns** stay, so you can b
 Each card carries its order's kitchen note and any printing problem. On a till, a card also offers
 **Reprint**, and **Collect** once its order is paid and waiting to be collected; a kitchen screen
 that nobody signs in on shows neither.
+
+Once a card's dishes are sent to be cooked, it shows **Goes with kitchen food** under them when they
+go out with food from the pass ([Make a station wait for the pass](kitchen-service.md#station-waits)).
 
 ## Work the pass {#pass-screen}
 
@@ -336,6 +342,11 @@ in its **Waits for the pass** column. When the waiter then requests cooking, the
 to the pass's **To fire** column, and they wait on the station's screen until the pass fires them.
 Switching it on or off decides only where dishes requested afterwards go; a dish already requested
 stays where it is. A configuration export carries the setting.
+
+A dish that does not wait for the pass starts at once. When its group also has dishes for the pass,
+waiting for it or fired by it and not yet served, the dish's ticket and its card on the station's
+screen say **Goes with kitchen food**: send it out with that food, not on its own. An advance HOLD
+ticket never says it.
 
 Only a pass screen whose device can press **Fire** releases the dishes. For a station's dishes in a
 service zone, that takes both of these:
