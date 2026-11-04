@@ -1406,7 +1406,11 @@ on 4 November. The other 319 store cases passed. The log does not identify the s
 A790's corrected head and the later A1009 PR passed this package; that does not repair the
 unexplained timeout. A1332's unchanged local file passed 54 cases; a separate traced copy kept
 all assertions and reported store opening and all twelve query-construction/execution timings.
-The comparable-Linux attempt was refused with exit 75 because lane I held the shared test box.
+The first Linux attempts were refused while other lanes held the shared test box. Once acquired,
+the x86_64 Linux 7.0.0 / Node 26.11.1 trace passed: opening took 7.8 ms, query construction
+35–67 ms per call and execution 95–142 ms per call. The unchanged full package then passed
+320 cases with coverage above its thresholds. Neither run reproduced the timeout; neither
+establishes what delayed the original CI case.
 
 If it recurs, retain phase timings and a stack sample before changing the fixture or deadline.
 The original investigation read 94 earlier failed-run logs without a matching failure; five
