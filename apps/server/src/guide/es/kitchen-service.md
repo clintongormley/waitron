@@ -141,7 +141,8 @@ adelantado los grupos en espera y si un plato ya enviado a ella se puede retirar
 **Platos iguales en una comanda de cocina**, **Imprimir por adelantado los grupos en espera** y
 **Cambios tras el envío**: **No permitidos**, **Solo en
 espera** o **En espera o sin empezar**. También fija si sus platos esperan a que el pase los marche,
-en **Espera al pase**: consulta [Haz que una estación espere al pase](kitchen-service.md#station-waits). Un plato que la cocina ha empezado nunca se retira. Un plato
+en **Espera al pase**: consulta [Haz que una estación espere al pase](kitchen-service.md#station-waits).
+Un plato que la cocina ha empezado nunca se retira. Un plato
 que no fue a ninguna estación, sin ningún extra que fuera a una estación propia, se puede retirar
 sea cual sea el ajuste de las estaciones.
 
@@ -231,7 +232,8 @@ tiempo dice **Olvidado**, y la fila encima de las columnas cuenta las tarjetas e
 retraso**). Cada plato muestra su estado y su estación, como **Preparando · Parrilla**; un plato en
 espera no muestra ninguno de los dos.
 
-Un plato cuya [estación espera al pase](kitchen-service.md#station-waits) no se prepara hasta que el pase lo marcha. Cuando el camarero
+Un plato cuya [estación espera al pase](kitchen-service.md#station-waits) no se prepara hasta que
+el pase lo marcha. Cuando el camarero
 [pide la preparación](kitchen-service.md#request-cooking), su tarjeta pasa a **Por marchar** y el
 plato dice **Esperando al pase · Parrilla**. Toca **Marchar** en la tarjeta para enviar a sus
 estaciones los platos que esperan a este pase; la tarjeta pasa entonces a **En curso**. Si la mesa
@@ -347,7 +349,8 @@ atenuados y no avanzan al tocarlos; en el pase, una tarjeta con todos sus platos
 pantalla del pedido de la mesa, un plato dice **en el pase** mientras él, o uno de sus extras,
 espera a que el pase lo marche.
 Una vez enviados a preparar, puedes avanzar los platos hasta Listo en su estación. Un plato cuya
-[estación espera al pase](kitchen-service.md#station-waits) va en cambio a la columna **Por marchar** del pase: consulta
+[estación espera al pase](kitchen-service.md#station-waits) va en cambio a la columna
+**Por marchar** del pase: consulta
 [Trabaja en el pase](kitchen-service.md#pass-screen).
 Si el equipo no tiene espacio en disco, no se puede avanzar un plato. La estación dice
 **No se ha guardado: el equipo no tiene espacio en disco. Avisa al encargado.** y el plato se
@@ -366,23 +369,23 @@ pestaña **Servicio** del panel.
 Para que el pase decida cuándo se preparan los platos de una estación, edítala en **Estaciones de
 preparación** y activa **Espera al pase**, bajo **Impresoras**. La tabla de estaciones muestra **Sí**
 o **No** en su columna **Espera al pase**. Cuando el camarero pide después la preparación, los
-platos de la estación van a la columna **Por marchar** del pase, y la pantalla de la estación los
-muestra como **Esperando al pase** hasta que el pase los marcha. Activarlo o desactivarlo solo
-cambia los platos que se piden después; un plato ya pedido se queda donde está. Una exportación de
-la configuración incluye el ajuste.
+platos de la estación van a la columna **Por marchar** del pase, y esperan en la pantalla de la
+estación hasta que el pase los marcha. Activarlo o desactivarlo solo decide adónde van los platos
+que se piden después; un plato ya pedido se queda donde está. Una exportación de la configuración
+incluye el ajuste.
 
 Solo una pantalla de pase cuyo dispositivo puede pulsar **Marchar** envía los platos. Para los
 platos de una estación en una zona de servicio, hacen falta las dos cosas:
 
 - En **Perfiles de dispositivo**, el perfil del dispositivo ofrece una pantalla de pase con la
   estación y la zona en sus listas: **Pantalla de pase** en **Pantallas de cocina que pueden usar
-  sus dispositivos** en una pantalla de cocina, **Botón Pase** en **Pantallas que muestra** en un
-  terminal o un dispositivo de mano. También tiene activados **Prepara pedidos** y **Lleva el pase**
-  en **Qué puede hacer**. En un perfil de terminal o de dispositivo de mano con un departamento, la
-  zona también tiene que ser una de las que sirve, en **Dónde sirve**.
+  sus dispositivos** en una pantalla de cocina, **Botón Pase** en **Pantallas que muestra** en una
+  caja o un terminal de camarero. También tiene activado **Prepara pedidos** en **Qué puede hacer**,
+  y **Lleva el pase** en **Pantallas que muestra**. En un perfil de caja o de terminal de camarero
+  con un departamento, la zona también tiene que ser una de las que sirve, en **Dónde sirve**.
 - En **Dispositivos**, el dispositivo está habilitado y su ventana **Editar** elige la pantalla de
-  pase (**Pantalla** en una pantalla de cocina, **La pantalla de pase muestra** en un terminal o un
-  dispositivo de mano), con la estación y la zona en sus listas. Un plato cuyo pedido no tiene zona
+  pase (**Pantalla** en una pantalla de cocina, **La pantalla de pase muestra** en una caja o un
+  terminal de camarero), con la estación y la zona en sus listas. Un plato cuyo pedido no tiene zona
   de servicio necesita una pantalla de pase con todas las zonas.
 
 Puedes guardar una estación que espera al pase aunque ninguna pantalla de pase la cubra. Hasta que
@@ -390,7 +393,7 @@ alguna la cubra, **Estaciones de preparación** lo dice encima de sus pestañas,
 ejemplo: **Nadie marcha los platos de Parrilla en Terraza: ninguna pantalla de pase los cubre allí.
 Configura una en Dispositivos.** También nombra una estación con platos que ya esperan al pase sin
 nada que los marche, aunque la estación ya no espere. El aviso vuelve a comprobarlo cuando cambian
-las estaciones, los dispositivos o los perfiles, y cada minuto.
+las estaciones, las zonas, los dispositivos o los perfiles, y cada minuto.
 
 ## Eliminar una estación de preparación {#delete-prep-station}
 
