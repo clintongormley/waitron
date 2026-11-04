@@ -358,8 +358,7 @@ async function monthVenue() {
   });
 }
 
-const readMonth = (v: { cfg: VenueScope }, month: string) =>
-  run((tx) => readOpeningHoursMonth(tx, v.cfg, month, AT));
+const readMonth = (month: string) => run((tx) => readOpeningHoursMonth(tx, month, AT));
 
 describe("the Opening hours month read", () => {
   it("gives December 2030 by value: Autumn's last Saturday, Winter's first Sunday and a painted special day", async () => {
@@ -383,7 +382,7 @@ describe("the Opening hours month read", () => {
         },
       ],
     });
-    const month = await readMonth(v, "2030-12");
+    const month = await readMonth("2030-12");
     expect(month.month).toBe("2030-12");
     expect(month.today).toBe("2026-10-09");
     expect(month.seasons).toEqual([
@@ -484,8 +483,8 @@ describe("the Opening hours month read", () => {
   });
 
   it("covers the month with whole Monday-to-Sunday weeks, its neighbours' dates marked outside it", async () => {
-    const v = await monthVenue();
-    const month = await readMonth(v, "2030-12");
+    await monthVenue();
+    const month = await readMonth("2030-12");
     expect(month.days).toHaveLength(42);
     expect(month.days.slice(0, 7).map(({ date, inMonth }) => ({ date, inMonth }))).toEqual([
       { date: "2030-11-25", inMonth: false },
@@ -505,7 +504,7 @@ describe("the Opening hours month read", () => {
       { date: "2031-01-05", inMonth: false },
     ]);
     expect(month.days.filter(({ inMonth }) => inMonth)).toHaveLength(31);
-    const june = await readMonth(v, "2026-06");
+    const june = await readMonth("2026-06");
     expect([june.days[0]!.date, june.days.at(-1)!.date, june.days.length]).toEqual([
       "2026-06-01",
       "2026-07-05",
@@ -514,9 +513,9 @@ describe("the Opening hours month read", () => {
   });
 
   it("ends a touched season where the occurrence holding the month ends, 29 February into a leap year", async () => {
-    const v = await monthVenue();
+    await monthVenue();
     const lastDays = async (month: string) =>
-      (await readMonth(v, month)).seasons.map(({ name, lastDay }) => ({ name, lastDay }));
+      (await readMonth(month)).seasons.map(({ name, lastDay }) => ({ name, lastDay }));
     expect(await lastDays("2027-12")).toEqual([
       { name: starterSeasonName("Autumn", "es"), lastDay: "11-30" },
       { name: starterSeasonName("Winter", "es"), lastDay: "02-29" },
@@ -534,7 +533,7 @@ describe("the Opening hours month read", () => {
       repeatsYearly: false,
       dates: [{ date: "2025-12-29", closedAllDay: true }],
     });
-    const month = await readMonth(v, "2025-12");
+    const month = await readMonth("2025-12");
     const dayOn = (date: string) => month.days.find((day) => day.date === date)!;
     expect(dayOn("2026-01-01")).toMatchObject({
       inMonth: false,
@@ -564,7 +563,7 @@ describe("the Opening hours month read", () => {
       repeatsYearly: false,
       dates: [{ date: "2025-12-29", closedAllDay: true }],
     });
-    const month = await readMonth(v, "2025-12");
+    const month = await readMonth("2025-12");
     const { frame, tables } = await run(async (tx) => {
       const session = (tx as unknown as { session: { prepareQuery: (...a: never[]) => unknown } })
         .session;
@@ -618,7 +617,7 @@ describe("the Opening hours month read", () => {
       effectiveBusinessDay: "2030-12-10",
       dayCutover: "07:00:00",
     });
-    const month = await readMonth(v, "2030-12");
+    const month = await readMonth("2030-12");
     const day = (date: string) => month.days.find((d) => d.date === date)!;
     expect([day("2030-12-08"), day("2030-12-09"), day("2030-12-10")]).toMatchObject([
       { dayCutover: "06:00", endMinute: 1440 },
@@ -644,7 +643,7 @@ describe("the Opening hours month read", () => {
       .update(locations)
       .set({ timeZone: "Not/AZone" })
       .where(eq(locations.id, v.cfg.locationId));
-    const month = await readMonth(v, "2030-12");
+    const month = await readMonth("2030-12");
     expect(month.today).toBeNull();
     expect(month.days).toHaveLength(42);
     expect(month.days.find((day) => day.date === "2030-12-10")).toMatchObject({
@@ -667,8 +666,7 @@ describe("the Opening hours month read", () => {
       province: "Sevilla",
       city: "Sevilla",
     });
-    const venueId = await venueLocationId(suite.db);
-    const month = await readMonth({ cfg: { locationId: locationId(venueId) } }, "2030-12");
+    const month = await readMonth("2030-12");
     expect(month.seasons).toEqual([]);
     expect(month.days).toHaveLength(42);
     expect(month.days.map(({ seasonId, departments }) => ({ seasonId, departments }))).toEqual(
@@ -707,7 +705,7 @@ describe("the Opening hours month read", () => {
   });
 
   it("reads the location once when a repeating special day follows a public holiday, and places it by that holiday", async () => {
-    const v = await venue();
+    await venue();
     const easterWeek = await special({
       name: "Easter week",
       repeatsYearly: true,
@@ -724,7 +722,7 @@ describe("the Opening hours month read", () => {
       const prepared = vi.spyOn(session, "prepareQuery");
       try {
         return {
-          month: await readOpeningHoursMonth(tx, v.cfg, "2026-04", AT),
+          month: await readOpeningHoursMonth(tx, "2026-04", AT),
           tables: prepared.mock.calls.flatMap((call) =>
             [...(call[0] as { sql: string }).sql.matchAll(/\b(?:from|join) "(\w+)"/g)].map(
               (match) => match[1]!,
@@ -743,20 +741,22 @@ describe("the Opening hours month read", () => {
   });
 
   it("sends the same statements for one department as for several, not one per day or department", async () => {
-    const statementsFor = async (v: { cfg: VenueScope }) =>
+    const statementsFor = async () =>
       run(async (tx) => {
         const session = (tx as unknown as { session: { prepareQuery: (...a: never[]) => unknown } })
           .session;
         const prepared = vi.spyOn(session, "prepareQuery");
         try {
-          await readOpeningHoursMonth(tx, v.cfg, "2030-12", AT);
+          await readOpeningHoursMonth(tx, "2030-12", AT);
           return prepared.mock.calls.length;
         } finally {
           prepared.mockRestore();
         }
       });
-    const one = await statementsFor(await venue([[1]]));
-    expect(await statementsFor(await venue([[1], [1], [1]]))).toBe(one);
+    await venue([[1]]);
+    const one = await statementsFor();
+    await venue([[1], [1], [1]]);
+    expect(await statementsFor()).toBe(one);
     expect(one).toBeLessThan(40);
   });
 });
@@ -923,8 +923,7 @@ describe("a past day's range around a start change", () => {
       return { cfg, diningDepartment, lunch, dinner, terrace: zone!.id };
     });
   }
-  const october = (v: { cfg: VenueScope }) =>
-    run((tx) => readOpeningHoursMonth(tx, v.cfg, "2026-10", AFTER_RETURN));
+  const october = () => run((tx) => readOpeningHoursMonth(tx, "2026-10", AFTER_RETURN));
   const onSaturday = (month: Awaited<ReturnType<typeof october>>, date: string) => {
     const day = month.days.find((d) => d.date === date)!;
     return {
@@ -936,7 +935,7 @@ describe("a past day's range around a start change", () => {
 
   it("draws it cut at the day's own changeover, and a day under today's start as stored", async () => {
     const v = await lateSaturday();
-    const month = await october(v);
+    const month = await october();
     expect(onSaturday(month, "2026-10-24")).toEqual({
       dayCutover: "03:00",
       ranges: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "03:00" }],
@@ -951,7 +950,7 @@ describe("a past day's range around a start change", () => {
 
   it("cuts a range fitting a shortened day's own start at that day's end", async () => {
     const v = await lateSaturday();
-    const tuesday = (await october(v)).days.find((d) => d.date === "2026-10-20")!;
+    const tuesday = (await october()).days.find((d) => d.date === "2026-10-20")!;
     expect({ dayCutover: tuesday.dayCutover, ranges: tuesday.departments[0]!.ranges }).toEqual({
       dayCutover: "05:00",
       ranges: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "03:00" }],
@@ -980,7 +979,7 @@ describe("a past day's range around a start change", () => {
         1,
       ),
     );
-    expect(onSaturday(await october(v), "2026-10-24").ranges).toEqual([
+    expect(onSaturday(await october(), "2026-10-24").ranges).toEqual([
       { periodId: v.lunch, startsAt: "12:00", endsAt: "15:00" },
       { periodId: v.dinner, startsAt: "22:00", endsAt: "03:00" },
     ]);

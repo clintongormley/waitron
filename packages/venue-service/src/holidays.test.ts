@@ -683,9 +683,9 @@ describe("transactions and other callers", () => {
   });
 
   it("gives a calendar reader the same facts, unaffected by special dates", async () => {
-    const cfg = await venue();
+    await venue();
     const read = await run((tx) => store.readHolidays(tx, "2026-01-01", "2026-12-31"));
-    expect(await run((tx) => store.readHolidayFacts(tx, cfg, "2026-01-01", "2026-12-31"))).toEqual(
+    expect(await run((tx) => store.readHolidayFacts(tx, "2026-01-01", "2026-12-31"))).toEqual(
       read.facts,
     );
     await run((tx) =>

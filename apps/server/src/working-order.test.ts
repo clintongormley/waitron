@@ -4212,10 +4212,10 @@ describe("a sale on a Spanish public holiday", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid", province: "Sevilla", city: "Sevilla" })
         .where(eq(locations.id, cfg.locationId));
-      expect(await readHolidayFacts(tx, cfg, HOLIDAY, HOLIDAY)).toEqual([
+      expect(await readHolidayFacts(tx, HOLIDAY, HOLIDAY)).toEqual([
         expect.objectContaining({ date: HOLIDAY, scope: "national" }),
       ]);
-      expect(await readHolidayFacts(tx, cfg, ORDINARY, ORDINARY)).toEqual([]);
+      expect(await readHolidayFacts(tx, ORDINARY, ORDINARY)).toEqual([]);
       await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, cfg, { name: "Upstairs bar" });
       const downstairs = await createStation(tx, cfg, { name: "Downstairs bar" });

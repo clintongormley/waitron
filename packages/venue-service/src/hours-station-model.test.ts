@@ -71,7 +71,7 @@ describe("Calendar without a station-hours page model", () => {
       return { bar: bar!.id, prep: prep!.id, kitchen: kitchen!.id };
     });
     const model = await withTransaction(suite.db, (tx) =>
-      readSpecialDaysModel(tx, f.cfg, "2026-10-09", "2026-10-09", at),
+      readSpecialDaysModel(tx, "2026-10-09", "2026-10-09", at),
     );
     for (const field of ["subjects", "week", "specialCells", "specialDates"])
       expect(model).not.toHaveProperty(field);
@@ -97,7 +97,7 @@ describe("Calendar without a station-hours page model", () => {
     const f = await fixture();
     const special = await festival(f);
     const model = await withTransaction(suite.db, (tx) =>
-      readSpecialDaysModel(tx, f.cfg, "2026-10-09", "2026-10-09", at),
+      readSpecialDaysModel(tx, "2026-10-09", "2026-10-09", at),
     );
     for (const field of ["subjects", "week", "specialCells", "specialDates"])
       expect(model).not.toHaveProperty(field);

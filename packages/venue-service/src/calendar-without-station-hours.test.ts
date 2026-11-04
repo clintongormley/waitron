@@ -53,11 +53,9 @@ it.each(["calendar", "special days", "opening hours"] as const)(
           closed: true,
         };
         if (reader === "calendar") {
-          expect(await readCalendarDays(tx, cfg, "2027-10-10", "2027-10-10")).toEqual([
-            calendarDay,
-          ]);
+          expect(await readCalendarDays(tx, "2027-10-10", "2027-10-10")).toEqual([calendarDay]);
         } else if (reader === "special days") {
-          const model = await readSpecialDaysModel(tx, cfg, "2027-10-10", "2027-10-10", at);
+          const model = await readSpecialDaysModel(tx, "2027-10-10", "2027-10-10", at);
           expect(model.days).toEqual([calendarDay]);
         } else {
           expect(await readOpeningHoursModel(tx, at)).not.toHaveProperty("namedDays");

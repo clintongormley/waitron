@@ -471,10 +471,10 @@ describe("station times on a public holiday", () => {
   it("keeps station status the same on a Spanish national holiday and an ordinary Monday", async () => {
     await db.transaction(async (tx) => {
       const f = await sevilleVenue(tx);
-      expect(await readHolidayFacts(tx, f.cfg, HOLIDAY, HOLIDAY)).toEqual([
+      expect(await readHolidayFacts(tx, HOLIDAY, HOLIDAY)).toEqual([
         expect.objectContaining({ date: HOLIDAY, scope: "national" }),
       ]);
-      expect(await readHolidayFacts(tx, f.cfg, ORDINARY, ORDINARY)).toEqual([]);
+      expect(await readHolidayFacts(tx, ORDINARY, ORDINARY)).toEqual([]);
 
       const times = async (date: string, time: string) =>
         (await routingModel(tx, f.cfg, new Date(`${date}T${time}:00Z`))).stationTimes;

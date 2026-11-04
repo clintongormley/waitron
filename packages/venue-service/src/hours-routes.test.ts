@@ -408,7 +408,7 @@ describe("reading Hours", () => {
       .set({ active: false })
       .where(eq(departments.id, fx.departmentIds.restaurant));
     const deli = await withTransaction(db, (tx) =>
-      readCalendarDays(tx, fx.cfg, "2030-10-14", "2030-10-15"),
+      readCalendarDays(tx, "2030-10-14", "2030-10-15"),
     );
     expect(deli.map((day) => [day.tone, day.closed])).toEqual([
       ["special_day", true],
@@ -428,7 +428,7 @@ describe("reading Hours", () => {
       ),
     );
     const open = await withTransaction(db, (tx) =>
-      readCalendarDays(tx, fx.cfg, "2030-10-14", "2030-10-15"),
+      readCalendarDays(tx, "2030-10-14", "2030-10-15"),
     );
     expect(open.map((day) => [day.tone, day.closed])).toEqual([
       ["special_day", true],
@@ -437,13 +437,13 @@ describe("reading Hours", () => {
   });
 
   it("reads the model in the same number of statements whatever the range and its special dates", async () => {
-    const fx = await fixture();
+    await fixture();
     for (const date of ["2030-11-03", "2030-11-10", "2030-11-17", "2030-11-24"])
       await createDay(date, { name: date, closedAllDay: true });
     const statements = (from: string, to: string) =>
       withTransaction(db, async (tx) => {
         const reads = vi.spyOn(tx, "select");
-        const model = await readSpecialDaysModel(tx, fx.cfg, from, to, new Date());
+        const model = await readSpecialDaysModel(tx, from, to, new Date());
         const count = reads.mock.calls.length;
         reads.mockRestore();
         return { count, days: model.days.length };
@@ -463,7 +463,7 @@ describe("reading Hours", () => {
     for (const date of ["2030-10-12", "2030-10-15", "2030-10-16"])
       days[date] = (await createDay(date, { name: date, at })).id;
     const read = () =>
-      withTransaction(db, (tx) => readSpecialDaysModel(tx, fx.cfg, "2030-10-13", "2030-10-15", at));
+      withTransaction(db, (tx) => readSpecialDaysModel(tx, "2030-10-13", "2030-10-15", at));
 
     const model = await read();
     expect(model.civilDate).toBe("2030-10-06");
@@ -517,18 +517,18 @@ describe("Hours when the venue's clock changes", () => {
       return model.stationTimes.find((times) => times.stationId === fx.bar.id)!.status;
     });
 
-  const model = (fx: Fixture, at: Date) =>
-    withTransaction(db, (tx) => readSpecialDaysModel(tx, fx.cfg, "2026-10-12", "2026-10-18", at));
+  const model = (at: Date) =>
+    withTransaction(db, (tx) => readSpecialDaysModel(tx, "2026-10-12", "2026-10-18", at));
 
   it("moves the civil date with a new time zone, keeping special days without closing stations", async () => {
     const fx = await fixture();
     await createDay("2026-10-15", { at: new Date("2026-10-01T10:00:00Z") });
-    const madrid = await model(fx, AT);
+    const madrid = await model(AT);
     expect(madrid.civilDate).toBe("2026-10-15");
     expect(await barStatus(fx, AT)).toEqual({ open: true, why: "open" });
 
     await setClock(fx, { timeZone: "America/New_York" });
-    const newYork = await model(fx, AT);
+    const newYork = await model(AT);
     expect(newYork.civilDate).toBe("2026-10-14");
     expect(newYork.timeZone).toBe("America/New_York");
     expect(await barStatus(fx, AT)).toEqual({ open: true, why: "open" });
@@ -541,12 +541,12 @@ describe("Hours when the venue's clock changes", () => {
     const at = new Date("2026-10-15T00:30:00Z");
     expect(await barStatus(fx, at)).toEqual({ open: true, why: "open" });
     await withTransaction(db, (tx) => setStationToday(tx, fx.cfg, fx.bar.id, "closed", at));
-    const before = await model(fx, at);
+    const before = await model(at);
     expect(before.civilDate).toBe("2026-10-15");
     expect(await barStatus(fx, at)).toEqual({ open: false, why: "closed_by_hand" });
 
     await setClock(fx, { dayCutover: "02:00:00" });
-    const after = await model(fx, at);
+    const after = await model(at);
     expect(await barStatus(fx, at)).toEqual({ open: true, why: "open" });
     expect(after).toEqual({
       ...before,

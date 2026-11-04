@@ -231,7 +231,7 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     return byYear;
   }
 
-  const readHolidayFacts: HolidayReader = async (tx, _cfg, from, to, place) =>
+  const readHolidayFacts: HolidayReader = async (tx, from, to, place) =>
     (await readHolidays(tx, from, to, place)).facts;
 
   async function readHolidayAreaModel(tx: Transaction): Promise<HolidayAreaModel> {

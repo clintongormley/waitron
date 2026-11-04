@@ -21,7 +21,6 @@ import type { CalendarTone, HolidayFact, LocalDate } from "./hours-types.js";
 import { calendarDays } from "./hours.js";
 import { readActiveDepartments } from "./menu-timetable.js";
 import { holidayAreaSummary } from "./named-days.js";
-import type { VenueScope } from "./operations.js";
 import { seasonOn, type Season } from "./season-rules.js";
 import { readSeasons } from "./seasons.js";
 import type { ClosedRange, ServiceRange } from "./service-day.js";
@@ -209,7 +208,6 @@ export async function readCalendarMonthPlan(
 /** `month` is a `YYYY-MM` the caller has checked. */
 export async function readOpeningHoursMonth(
   tx: Transaction,
-  cfg: VenueScope,
   month: string,
   at: Date,
 ): Promise<OpeningHoursMonth> {
@@ -237,7 +235,7 @@ export async function readOpeningHoursMonth(
     cut,
   );
   const factsOn = new Map<LocalDate, HolidayFact[]>();
-  for (const fact of await readHolidayFacts(tx, cfg, dates[0]!, dates.at(-1)!, frame.place))
+  for (const fact of await readHolidayFacts(tx, dates[0]!, dates.at(-1)!, frame.place))
     factsOn.set(fact.date, [...(factsOn.get(fact.date) ?? []), fact]);
   return {
     ...status,

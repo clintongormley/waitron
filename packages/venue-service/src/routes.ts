@@ -510,9 +510,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const from = c.req.query("from") ?? "";
         const to = c.req.query("to") ?? "";
         const at = new Date();
-        return c.json(
-          await viewed(sessionId, (tx) => readSpecialDaysModel(tx, ctx.cfg, from, to, at)),
-        );
+        return c.json(await viewed(sessionId, (tx) => readSpecialDaysModel(tx, from, to, at)));
       }),
     );
 
@@ -532,9 +530,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const month = parseCalendarMonth(c.req.query("month"));
         if (month === null) throw new AppError("management.request_invalid", { field: "month" });
         const at = new Date();
-        return c.json(
-          await viewed(sessionId, (tx) => readOpeningHoursMonth(tx, ctx.cfg, month, at)),
-        );
+        return c.json(await viewed(sessionId, (tx) => readOpeningHoursMonth(tx, month, at)));
       }),
     );
 

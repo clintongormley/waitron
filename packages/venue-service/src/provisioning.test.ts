@@ -384,7 +384,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
     const venueId = await venueLocationId(db);
     const locationId = brandLocationId(venueId);
-    const cfg = { locationId };
     const node = { locationId, nodeId: await seedNode(db) };
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     const stored = async () =>
@@ -430,7 +429,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     );
     const readDays = () =>
       db.transaction((tx) =>
-        readSpecialDaysModel(tx, cfg, "2026-06-04", "2026-06-04", new Date("2026-01-01T12:00:00Z")),
+        readSpecialDaysModel(tx, "2026-06-04", "2026-06-04", new Date("2026-01-01T12:00:00Z")),
       );
     const before = await readDays();
     await runSeed();
