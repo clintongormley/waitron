@@ -477,6 +477,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 ### The setup wizard, onboarding and the demo venue
 
+- **A1322. A failed setup always offers Start again; remove "Continue with your setup password" (owner, 2026-11-04).**
+  Today, once a setup has saved the settings the box sells with, Start again is refused and Continue is the only choice, so a lost password means reinstalling.
+  Remove Continue and its password step, and let Start again delete such a setup, still refusing when the database holds an invoice or another record Waitron never deletes.
+  This replaces the owner's 16 October order (Continue first). Not yet checked: what else depends on Continue, including its repair of a damaged setup record.
+
 - **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).**
   **Build remains open**; Cloud's qualified trial journey is prerequisite G1 in the plan.
   [Detail](backlog/setup.md#a1186-the-setup-tour-offers-waitron-clouds-level-2-trial-owner-2026-10-29).
@@ -5034,6 +5039,11 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 ### The box: backups, upgrades and recovery
 
+- **A1323. One master key for the venue (owner, 2026-11-04; wanted, not designed).**
+  The owner keeps one key, printed in the recovery pack, in place of the backup key and the server key; the box keeps only a check value and numbered backup keys calculated from it.
+  Design it beside A1187 and A1188, which change the same restore steps. It changes the fiscal authority check, so the owner lands it.
+  [Detail](backlog/box.md#a1323-one-master-key-for-the-venue)
+
 - **A1187 part 2: the recovery pack's emergency start page (owner, 2026-10-29).**
   Waits for A1188 part 1, whose card facts the page prints, for people holding `node.promote`.
   [Detail](backlog/box.md#a1187-part-2-the-recovery-packs-emergency-start-page-owner-2026-10-29).
@@ -6946,6 +6956,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `apps/server/src/catalogue-api.ts` are left for whoever next prunes unraised codes.
 
 ### Data protection and legal compliance
+
+- **A1324. Waitron does not encrypt the bucket copy (owner, 2026-11-04).**
+  Backup archives are encrypted on the box, but the live copy to the owner's bucket is not: Litestream 0.5 removed its encryption, and the 2026-09-16 topology design (§7.4) accepted the provider's encryption instead.
+  That design argued from fiscal records, which AEAT already holds; it does not cover the staff and customer data in the same file, and no code asks the provider for encryption.
+  Decide with A980 whether the box must encrypt before upload, and how.
 
 _Formerly entries spread across the old sections._
 
