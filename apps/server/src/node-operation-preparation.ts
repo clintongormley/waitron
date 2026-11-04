@@ -204,6 +204,8 @@ export function createNodeOperationPreparation(options: {
     );
   };
   return {
+    // Read from the configured modules: a module's `recovery` can exist only once configured.
+    hasRecoveryOperation: modules.some((module) => module.operations?.recovery !== undefined),
     async withLiveRecovery<T>(
       supplied: OperationBinding,
       key: unknown,

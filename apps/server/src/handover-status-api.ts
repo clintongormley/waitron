@@ -28,7 +28,12 @@ const STATUS = {
 
 const OPERATION_ID_MAX_LENGTH = 64;
 
-async function handoverPageOf(
+/** The address of an operation's page on the box at `contactUrl`. */
+export function handoverPageAt(contactUrl: string, operationId: string): string {
+  return `${contactUrl.replace(/\/+$/, "")}/handover/${operationId}`;
+}
+
+export async function handoverPageOf(
   deps: PeerStatusApiDeps,
   operation: HandoverOperation,
 ): Promise<string | undefined> {
@@ -45,7 +50,7 @@ async function handoverPageOf(
     (entry) => entry.nodeId === operation.destinationNodeId,
   )?.contactUrl;
   if (contactUrl === undefined || contactUrl === "") return undefined;
-  return `${contactUrl.replace(/\/+$/, "")}/handover/${operation.operationId}`;
+  return handoverPageAt(contactUrl, operation.operationId);
 }
 
 /** `operation`'s state as this box signs it: no chart and no nonce, so any caller may read it. */

@@ -7,6 +7,7 @@ import { readNodeMembership, withNodeTransaction } from "@waitron/db";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
 import { signEnvelope, verifyEnvelope } from "@waitron/handover";
+import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import {
   generateNodeKeyPair,
   signDocumentBody,
@@ -15,6 +16,7 @@ import {
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverRestriction, recordHandoverRestrictionTx } from "@waitron/node-db";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { StartedServer, StartServerSeams } from "./boot.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
@@ -66,10 +68,15 @@ async function stop(): Promise<void> {
 
 async function boot(
   suite: VenueDb,
-  options: { restricted: boolean; seams?: StartServerSeams },
+  options: {
+    restricted: boolean;
+    seams?: StartServerSeams;
+    beforeStart?: () => Promise<void>;
+  },
 ): Promise<{ port: number; venue: Venue }> {
   beforeServerStarts();
   const venue = await setupVenue(suite.db);
+  await options.beforeStart?.();
   const nodeId = venue.cfg.nodeId;
   const ring = loadKeyRing(KEY_ENV);
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, nodeId);
@@ -344,6 +351,46 @@ describe("a full start's stepdown, through its test seam", () => {
     expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
       "handover.not_a_spare",
     );
+  }, 60_000);
+
+  const startHandover = (port: number, cookie: string) =>
+    fetch(`http://127.0.0.1:${port}/management-api/handover`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+        origin: "https://dashboard.example",
+      },
+      body: JSON.stringify({
+        operationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        destinationNodeId: "00000000-0000-4000-8000-0000000000cc",
+        signIn: { method: "password", password: "correct horse" },
+      }),
+    });
+
+  it("a full start refuses a handover from a person without node.promote", async () => {
+    const { port, venue } = await boot(suite, { restricted: false });
+    const response = await startHandover(port, venue.managerCookie);
+    expect(response.status).toBe(403);
+    expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
+      "authorization.not_permitted",
+    );
+  }, 60_000);
+
+  it("a full start with Veri*Factu enabled takes a handover as far as checking the destination", async () => {
+    let cookie = "";
+    const { port } = await boot(suite, {
+      restricted: false,
+      beforeStart: async () => {
+        const { token } = await openManagementSession(suite.db, "admin");
+        cookie = `${MANAGEMENT_COOKIE}=${token}`;
+      },
+    });
+    const response = await startHandover(port, cookie);
+    expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
+      "handover.destination_not_spare",
+    );
+    expect(response.status).toBe(409);
   }, 60_000);
 
   it("a full start answers a peer's signed query", async () => {

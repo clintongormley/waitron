@@ -5874,6 +5874,11 @@ Not in any track until the standalone primary is done.
   `packages/handover/src/manifest.ts`; whether a handover needs rows for them is not decided. Left
   open by A1018 Slice 4 (Slice 4's Ruling R5).
 
+- **A venue with no module that can prepare a promotion cannot hand over.** A venue without
+  Veri\*Factu is refused `handover.venue_not_supported` before anything is recorded, because no
+  plan yet builds its path, including whose invoice series the new main box takes. A947 3b's table
+  expects Slice 5 to reach these venues. Left open by A1018 Slice 5 (Ruling P9).
+
 - **A1018 Slice 5 must merge the old box's never-activated minute names into the new box's own
   preparation file (Task 5.7).** The owner decided on 2026-11-04 that such a name counts as used
   (Slice 4's Ruling R3, built as planned in #2442); until Task 5.7 is built a spare can still reuse

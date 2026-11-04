@@ -24,6 +24,11 @@ export interface HandoverBinding {
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 
+/** Whether `value` is an operation id `parseBinding` accepts. */
+export function isOperationId(value: unknown): value is string {
+  return typeof value === "string" && UUID_V4.test(value);
+}
+
 function refuse(field: string): never {
   throw new AppError("handover.request_invalid", { field });
 }

@@ -8,6 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashSecret } from "@waitron/identity";
 import type { ModuleOperationHost, ModuleOperationPreparation } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
+import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { nodeId } from "@waitron/shared";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
@@ -121,4 +122,23 @@ it("hands a conflict switch to the module with its isolation answers and not rel
     noParallelRecovery: false,
     oldMachineRelinquished: false,
   });
+});
+
+it.each([
+  ["fiscal-verifactu", true],
+  ["fiscal-none", false],
+])("says whether %s can prepare a promotion, from the module as configured", (name, expected) => {
+  const module = ALL_MODULES.find((candidate) => candidate.name === name)!;
+  const preparation = createNodeOperationPreparation({
+    db: suite.db,
+    nodeDb: suite.node,
+    node,
+    modules: [module],
+    stateDir: join(root!, "state"),
+    venueDir: join(root!, "venue"),
+    coordinator: createFirstSetupCoordinator(),
+    environment: {},
+    isLiveWritable: () => true,
+  });
+  expect(preparation.hasRecoveryOperation).toBe(expected);
 });

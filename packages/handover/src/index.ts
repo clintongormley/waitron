@@ -13,7 +13,7 @@ export {
   signEnvelope,
   verifyEnvelope,
 } from "./envelope.js";
-export { bindingFingerprint, parseBinding } from "./binding.js";
+export { bindingFingerprint, isOperationId, parseBinding } from "./binding.js";
 export type { HandoverBinding, HandoverScenario } from "./binding.js";
 export { assembleIndicator, signIndicator } from "./indicator.js";
 export type {

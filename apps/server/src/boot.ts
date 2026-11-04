@@ -208,6 +208,7 @@ import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
+import { mountHandoverSourceStartApi } from "./handover-source-start-api.js";
 import { mountHandoverStatusApi } from "./handover-status-api.js";
 import { mountNodeMembershipApi } from "./node-membership-api.js";
 import { readPeerNames } from "./waiting-page.js";
@@ -3382,6 +3383,22 @@ async function bootServer(
       run: promoteRun,
       requestFromBox: seams.requestFromBox,
       nodePreparation,
+    },
+    log,
+  );
+  mountHandoverSourceStartApi(
+    app,
+    {
+      db,
+      node: store.node,
+      ring,
+      nodeId: tradingContext.nodeId,
+      advertisedOrigin: config.advertisedOrigin,
+      credentialKeyRing: totpKeyRing,
+      rpId: config.managementRpId,
+      origin: config.managementOrigin,
+      venueCanPromote: nodePreparation.hasRecoveryOperation,
+      stepDownAfterOffer: async () => {},
     },
     log,
   );

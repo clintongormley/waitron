@@ -1369,6 +1369,26 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The box offering this handover is not the main box on this box's list of the venue's boxes, or the two boxes hold different venue details or different lists, so this box did not accept the handover. Nothing was changed.",
     es: "El equipo que ofrece este traspaso no es el equipo principal en la lista de equipos del local de este equipo, o los dos equipos tienen datos del local o listas distintos, así que este equipo no ha aceptado el traspaso. No se ha cambiado nada.",
   },
+  "handover.not_main_box": {
+    en: "This box is not the venue's main box, so it cannot hand the venue over. Nothing was changed.",
+    es: "Este equipo no es el equipo principal del local, así que no puede traspasar el local. No se ha cambiado nada.",
+  },
+  "handover.venue_not_supported": {
+    en: "A handover between boxes is not available yet for this venue's way of filing invoices. Nothing was changed and this box keeps selling.",
+    es: "El traspaso entre equipos aún no está disponible para la forma de presentar facturas de este local. No se ha cambiado nada y este equipo sigue vendiendo.",
+  },
+  "handover.destination_not_spare": {
+    en: "The box you chose is not a spare waiting to take over this venue, so the handover did not start. This box keeps selling.",
+    es: "El equipo elegido no es un equipo de reserva a la espera de llevar este local, así que el traspaso no ha empezado. Este equipo sigue vendiendo.",
+  },
+  "handover.destination_unaddressable": {
+    en: "The venue's list of boxes holds no address of its own for the box you chose, so this box cannot reach it. The handover did not start and this box keeps selling.",
+    es: "La lista de equipos del local no tiene una dirección propia para el equipo elegido, así que este equipo no puede llegar a él. El traspaso no ha empezado y este equipo sigue vendiendo.",
+  },
+  "handover.destination_unreachable": {
+    en: "The box you chose did not answer, or its answer could not be checked, so the handover did not start. This box keeps selling. Try again with a new handover once that box is running.",
+    es: "El equipo elegido no ha respondido, o no se ha podido comprobar su respuesta, así que el traspaso no ha empezado. Este equipo sigue vendiendo. Inténtalo de nuevo con otro traspaso cuando ese equipo esté en marcha.",
+  },
   "handover.summary_failed": {
     en: "The old box could not read part of the venue's data from its final copy, so it sent neither the copy nor its description. Its venue data is unchanged. Asking again makes it take a new copy and read that.",
     es: "El equipo antiguo no ha podido leer parte de los datos del local en su copia final, así que no ha enviado ni la copia ni su descripción. Sus datos del local no han cambiado. Si se vuelve a pedir, hará una copia nueva y la leerá.",

@@ -80,7 +80,7 @@ const ROUTABLE: readonly NodeStanding[] = ["serving-primary", "serving-secondary
 
 const DEFAULT_TIMEOUT_MS = 5000;
 
-function originOf(url: string): string {
+export function originOf(url: string): string {
   try {
     return new URL(url).origin;
   } catch {
@@ -321,6 +321,38 @@ function partsReadable(status: PeerStatusBody): boolean {
   );
 }
 
+/** One signed exchange with another box, stopped at `timeoutMs`; a failure is thrown. */
+export async function postToBox(
+  deps: Pick<AskPeerStatusDeps, "fetch" | "authorityOf"> & { timeoutMs: number },
+  nodeId: string,
+  url: string,
+  body: string,
+): Promise<{ status: number; text: string }> {
+  const signal = AbortSignal.timeout(deps.timeoutMs);
+  if (deps.fetch !== undefined) {
+    const res = await deps.fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+      signal,
+    });
+    return { status: res.status, text: await res.text() };
+  }
+  const ca = deps.authorityOf?.(nodeId);
+  return boxExchange(
+    new URL(url),
+    {
+      method: "POST",
+      // Unchecked without a pinned authority: the request carries no credential, and only an answer
+      // whose signed envelope verifies can be taken as a yes.
+      trust: ca === undefined ? { rejectUnauthorized: false } : { ca, rejectUnauthorized: true },
+      signal,
+      body,
+    },
+    MAX_STATUS_BYTES,
+  );
+}
+
 /**
  * The real `ask`: POST a signed query to the peer's `/api/node/peer-status` and keep the answer
  * only when it is signed as a status by the box asked, under a key this box trusts, and echoes
@@ -332,31 +364,6 @@ export function askPeerStatus(
   const nonceOf = deps.nonce ?? (() => randomBytes(16).toString("hex"));
   const now = deps.now ?? Date.now;
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const post = async (peer: RoutableServer, url: string, body: string) => {
-    const signal = AbortSignal.timeout(timeoutMs);
-    if (deps.fetch !== undefined) {
-      const res = await deps.fetch(url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body,
-        signal,
-      });
-      return { status: res.status, text: await res.text() };
-    }
-    const ca = deps.authorityOf?.(peer.nodeId);
-    return boxExchange(
-      new URL(url),
-      {
-        method: "POST",
-        // Unchecked without a pinned authority: the answer counts only once its signed envelope
-        // verifies and echoes this query's nonce, and the query carries no credential.
-        trust: ca === undefined ? { rejectUnauthorized: false } : { ca, rejectUnauthorized: true },
-        signal,
-        body,
-      },
-      MAX_STATUS_BYTES,
-    );
-  };
   return async (peer) => {
     const silent = (reason: SilentReason) => {
       deps.onSilent?.(peer.nodeId, reason);
@@ -366,8 +373,9 @@ export function askPeerStatus(
     let answer: { status: number; text: string };
     try {
       const query = await deps.sign({ nonce, atMs: now() });
-      answer = await post(
-        peer,
+      answer = await postToBox(
+        { ...deps, timeoutMs },
+        peer.nodeId,
         `${peer.url.replace(/\/+$/, "")}/api/node/peer-status`,
         JSON.stringify(query),
       );

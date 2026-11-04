@@ -7,6 +7,7 @@ import {
   type HandoverBinding,
   type SignedHandoverEnvelope,
 } from "@waitron/handover";
+import { servingPrimaryNodeId } from "@waitron/membership";
 import { readHandoverOperation, readNodeMode } from "@waitron/node-db";
 import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { AppError, isUuid } from "@waitron/shared";
@@ -65,10 +66,7 @@ async function matchesThisBox(deps: PeerStatusApiDeps, binding: HandoverBinding)
   // `currentBinding` treats a box with no chart as a fault; a spare may simply not hold one yet.
   const held = await readNodeMembership(deps.db);
   if (held === null) return false;
-  const namesSourceAsMain = held.body.nodes.some(
-    (entry) => entry.nodeId === binding.sourceNodeId && entry.standing === "serving-primary",
-  );
-  if (!namesSourceAsMain) return false;
+  if (servingPrimaryNodeId(held) !== binding.sourceNodeId) return false;
   const own = await currentBinding(
     deps,
     binding.scenario,

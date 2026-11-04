@@ -196,6 +196,19 @@ declare module "@waitron/shared" {
      * own, this box holds no chart, or its chart does not name the offer's source `serving-primary`.
      */
     "handover.membership_mismatch": { operationId: string };
+    /** A handover was started on a box whose held chart does not name it the serving main box. */
+    "handover.not_main_box": Record<string, never>;
+    /** A handover was started in a venue where no enabled module can prepare a promotion. */
+    "handover.venue_not_supported": Record<string, never>;
+    /**
+     * A handover named a box the held chart does not list as a spare, or a spare answered that the
+     * operation is no longer waiting for the offer.
+     */
+    "handover.destination_not_spare": { destinationNodeId: string };
+    /** A handover named a spare whose chart address is empty or is this box's own. */
+    "handover.destination_unaddressable": { destinationNodeId: string };
+    /** A handover's spare did not answer in time, or gave an answer this box could not verify. */
+    "handover.destination_unreachable": { destinationNodeId: string };
     /**
      * A node booting as primary found, by reconciling with its cloud peer, a higher-term membership
      * document that fences it, so it boots read-only rather than sell beside the promoted primary
