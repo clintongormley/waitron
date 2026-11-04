@@ -7,6 +7,7 @@ import {
   arrangeTicketItems,
   crossRefText,
   formatCorrectionSlip,
+  formatKitchenNoteChangeSlip,
   formatKitchenTicket,
   formatMovedSlip,
   joinKitchenTickets,
@@ -1750,6 +1751,246 @@ describe("a dish sent after its period", () => {
       "GROUP 2",
       "** AFTER LUNCH — AGREED **",
       "1 x Fish",
+      "",
+    ]);
+  });
+});
+
+describe("A773 fire paper: group headings name their dishes' courses", () => {
+  const at = new Date(2026, 7, 17, 14, 30);
+  const starters = { name: "Starters", order: 1 };
+  const mains = { name: "Mains", order: 2 };
+  const desserts = { name: "Desserts", order: 4 };
+  const drinks = { name: "Drinks", order: 5 };
+  const station = (items: KitchenTicketItem[], locale = "en-GB"): KitchenTicket => ({
+    locale,
+    scope: "station",
+    stationName: "Grill",
+    tableLabel: "Table 4",
+    orderNumber: "A-17",
+    firedAt: at,
+    items,
+  });
+  const shared = (
+    stations: { stationName: string; items: KitchenTicketItem[] }[],
+  ): KitchenTicket => ({
+    locale: "en-GB",
+    scope: "stations",
+    stations,
+    tableLabel: "Table 4",
+    orderNumber: "A-17",
+    firedAt: at,
+  });
+  const lines = (ticket: KitchenTicket) => printedLines(formatKitchenTicket(ticket, KITCHEN_80));
+
+  it("A773 fire paper: a group heading names its dishes' course", () => {
+    const items = [
+      { qty: 2, name: "Steak", group: 3, course: mains },
+      { qty: 1, name: "Fish", group: 3, course: mains },
+    ];
+    expect(lines(station(items))).toEqual([
+      "Grill",
+      "Table 4",
+      "A-17",
+      "14:30",
+      "GROUP 3 · MAINS",
+      "2 x Steak",
+      "1 x Fish",
+      "",
+    ]);
+    expect(lines(station(items, "es-ES"))).toContain(`${kitchenTicketWords("es").group} 3 · MAINS`);
+  });
+
+  it("A773 fire paper: two courses list in course order, once each", () => {
+    const heading = lines(
+      station([
+        { qty: 1, name: "Steak", group: 3, course: mains },
+        { qty: 1, name: "Soup", group: 3, course: starters },
+        { qty: 1, name: "Fish", group: 3, course: mains },
+      ]),
+    )[4];
+    expect(heading).toBe("GROUP 3 · STARTERS, MAINS");
+  });
+
+  it("A773 fire paper: a dish with no course adds nothing", () => {
+    expect(
+      lines(
+        station([
+          { qty: 1, name: "Bread", group: 4 },
+          { qty: 1, name: "Flan", group: 4, course: desserts },
+        ]),
+      )[4],
+    ).toBe("GROUP 4 · DESSERTS");
+    expect(
+      lines(
+        station([
+          { qty: 1, name: "Bread", group: 4 },
+          { qty: 1, name: "Flan", group: 4 },
+        ]),
+      )[4],
+    ).toBe("GROUP 4");
+  });
+
+  it("A773 fire paper: the origin tables stay beside the number", () => {
+    expect(
+      lines(
+        station([{ qty: 1, name: "Steak", group: 1, groupLabel: "Terrace 4, 9", course: mains }]),
+      )[4],
+    ).toBe("GROUP 1 · Terrace 4, 9 · MAINS");
+  });
+
+  it("A773 fire paper: a ticket spanning groups heads each with its own courses", () => {
+    expect(
+      lines(
+        station([
+          { qty: 1, name: "Soup", group: 3, course: starters },
+          { qty: 1, name: "Steak", group: 4, course: mains },
+        ]),
+      ),
+    ).toEqual([
+      "Grill",
+      "Table 4",
+      "A-17",
+      "14:30",
+      "GROUP 3 · STARTERS",
+      "1 x Soup",
+      "GROUP 4 · MAINS",
+      "1 x Steak",
+      "",
+    ]);
+  });
+
+  it("A773 fire paper: a shared-printer ticket names every course its one group has", () => {
+    expect(
+      lines(
+        shared([
+          { stationName: "Grill", items: [{ qty: 1, name: "Steak", group: 2, course: mains }] },
+          { stationName: "Bar", items: [{ qty: 2, name: "Beer", group: 2, course: drinks }] },
+        ]),
+      ),
+    ).toEqual([
+      "Grill · Bar",
+      "Table 4",
+      "A-17",
+      "14:30",
+      "GROUP 2 · MAINS, DRINKS",
+      "Grill",
+      "1 x Steak",
+      "Bar",
+      "2 x Beer",
+      "",
+    ]);
+  });
+
+  it("A773 fire paper: on a shared ticket spanning groups, each section's heading names its own dishes' courses", () => {
+    expect(
+      lines(
+        shared([
+          {
+            stationName: "Grill",
+            items: [
+              { qty: 1, name: "Steak", group: 3, course: mains },
+              { qty: 1, name: "Flan", group: 4, course: desserts },
+            ],
+          },
+          { stationName: "Bar", items: [{ qty: 2, name: "Beer", group: 3, course: drinks }] },
+        ]),
+      ),
+    ).toEqual([
+      "Grill · Bar",
+      "Table 4",
+      "A-17",
+      "14:30",
+      "Grill",
+      "GROUP 3 · MAINS",
+      "1 x Steak",
+      "GROUP 4 · DESSERTS",
+      "1 x Flan",
+      "Bar",
+      "GROUP 3 · DRINKS",
+      "2 x Beer",
+      "",
+    ]);
+  });
+
+  it("A773 fire paper: two dishes alike but for their course do not merge", () => {
+    const arranged = arrangeTicketItems(
+      [
+        { qty: 1, name: "Steak", group: 3, course: starters },
+        { qty: 1, name: "Steak", group: 3, course: mains },
+      ],
+      "combined",
+    );
+    expect(arranged).toHaveLength(2);
+    expect(lines(station(arranged)).slice(4)).toEqual([
+      "GROUP 3 · STARTERS, MAINS",
+      "1.000 x Steak",
+      "1.000 x Steak",
+      "",
+    ]);
+  });
+
+  it("A773 fire paper: correction, kitchen-note and MOVED slips name the course", () => {
+    const correction = printedLines(
+      formatCorrectionSlip(
+        {
+          kind: "VOID",
+          locale: "en-GB",
+          stationName: "Grill",
+          tableLabel: "Table 4",
+          orderNumber: "A-17",
+          at: at.toISOString(),
+          item: { qty: 1, name: "Steak", group: 2, course: mains },
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(correction).toContain("GROUP 2 · MAINS");
+
+    const note = printedLines(
+      formatKitchenNoteChangeSlip(
+        {
+          locale: "en-GB",
+          stations: [
+            { stationName: "Grill", items: [{ qty: 1, name: "Steak", group: 2, course: mains }] },
+          ],
+          tableLabel: "Table 4",
+          orderNumber: "A-17",
+          at: at.toISOString(),
+          orderNoteChange: { before: "Old", after: "New" },
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(note).toContain("GROUP 2 · MAINS");
+
+    const moved = printedLines(
+      formatMovedSlip(
+        {
+          stationName: "Grill",
+          fromNumber: "28",
+          fromText: "Table 91",
+          toText: "Table 92",
+          at: at.toISOString(),
+          items: [
+            { qty: "1.000", name: "SOUP", group: 1, course: starters },
+            { qty: "1.000", name: "STEAK", group: 2, course: mains },
+          ],
+          held: [{ group: 3, items: [{ qty: "1.000", name: "FLAN", group: 3, course: desserts }] }],
+          locale: "en-GB",
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(moved.slice(5)).toEqual([
+      "14:30",
+      "GROUP 1 · STARTERS",
+      "1.000 x SOUP",
+      "GROUP 2 · MAINS",
+      "1.000 x STEAK",
+      "HOLD",
+      "GROUP 3 · DESSERTS",
+      "1.000 x FLAN",
       "",
     ]);
   });
