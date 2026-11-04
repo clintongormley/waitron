@@ -369,3 +369,11 @@ export {
 
 export { tenderRefunds, tenderRefundState } from "./schema/tender-refunds.js";
 export { nextStationColour } from "./station-colour.js";
+
+export * from "./schema/document-delivery-requests.js";
+
+export * from "./schema/device-invoice-save-operations.js";
+
+export * from "./schema/device-invoice-revisions.js";
+
+export * from "./schema/document-page-jobs.js";
