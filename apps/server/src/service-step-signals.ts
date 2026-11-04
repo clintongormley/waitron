@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, not, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, not, or, sql } from "drizzle-orm";
 import {
   lineServiceCancellations,
   orderDrafts,
@@ -38,6 +38,11 @@ export interface TableStepFacts {
   facts: StepFacts;
 }
 
+interface OrderTimes {
+  first: number;
+  last: number;
+}
+
 function pushTo<T>(map: Map<string, T[]>, key: string, value: T): void {
   const list = map.get(key);
   if (list === undefined) map.set(key, [value]);
@@ -63,7 +68,9 @@ export async function readTableSteps(
 /**
  * Each seated table's department steps and the facts of the party sitting there they are reckoned
  * from, keyed by table; a table in no department is absent. Dishes and orders are the party's
- * family's, Done and drafts the party's own. Six statements for all the parties, none for none.
+ * family's, Done and drafts the party's own; a family with no order of its own has its dishes'
+ * arrival from another table or the counter as its orders, while the family has any dish on a
+ * shown bill. Six statements for all the parties, none for none.
  */
 export async function readStepFacts(
   tx: Transaction,
@@ -114,25 +121,43 @@ export async function readStepFacts(
   for (const { partyId, ...dish } of dishRows)
     for (const root of rootsOf.get(partyId!)!) pushTo(dishes, root, dish);
 
-  const orders = new Map<string, { first: number; last: number }>();
+  // A party with orders of its own keeps their times: a bill arriving is not this table ordering.
+  const orders = new Map<string, OrderTimes>();
+  const arrivals = new Map<string, OrderTimes>();
+  const isArrival = sql<number>`${orderGroupEvents.kind} = 'lines_moved'`;
   const orderRows = await tx
-    .select({ partyId: orderGroupEvents.partyId, createdAt: orderGroupEvents.createdAt })
+    .select({
+      partyId: orderGroupEvents.partyId,
+      isArrival,
+      // Every event is stamped by the column's `nowIso`, so text order is time order.
+      first: sql<string>`min(${orderGroupEvents.createdAt})`,
+      last: sql<string>`max(${orderGroupEvents.createdAt})`,
+    })
     .from(orderGroupEvents)
     .where(
       and(
         inArray(orderGroupEvents.partyId, members),
-        inArray(orderGroupEvents.kind, ["submitted", "joined"]),
+        or(
+          inArray(orderGroupEvents.kind, ["submitted", "joined"]),
+          and(
+            eq(orderGroupEvents.kind, "lines_moved"),
+            sql`json_extract(${orderGroupEvents.detail}, '$.arrived') = 1`,
+          ),
+        ),
       ),
-    );
+    )
+    .groupBy(orderGroupEvents.partyId, isArrival);
   for (const row of orderRows) {
-    const at = Date.parse(row.createdAt);
+    const first = Date.parse(row.first);
+    const last = Date.parse(row.last);
+    const times = row.isArrival === 1 ? arrivals : orders;
     for (const root of rootsOf.get(row.partyId)!) {
-      const seen = orders.get(root);
-      orders.set(
+      const seen = times.get(root);
+      times.set(
         root,
         seen === undefined
-          ? { first: at, last: at }
-          : { first: Math.min(seen.first, at), last: Math.max(seen.last, at) },
+          ? { first, last }
+          : { first: Math.min(seen.first, first), last: Math.max(seen.last, last) },
       );
     }
   }
@@ -148,11 +173,16 @@ export async function readStepFacts(
 
   for (const party of parties) {
     const served = servedTimes(dishes.get(party.partyId) ?? []);
-    const ordered = orders.get(party.partyId);
+    const own = orders.get(party.partyId);
+    // An arrival counts only while a dish is still here: the event outlives the bill moving on.
+    const arrived =
+      own === undefined && dishes.has(party.partyId) ? arrivals.get(party.partyId) : undefined;
+    const ordered = own ?? arrived;
     const facts = {
       openedAt: Date.parse(party.openedAt),
       firstOrderAt: ordered?.first ?? null,
       lastOrderAt: ordered?.last ?? null,
+      ordersArrived: arrived !== undefined,
       drafting: drafting.has(party.partyId),
       courseServedAt: served.courseServedAt,
       allServedAt: served.allServedAt,

@@ -573,8 +573,8 @@ declare module "@waitron/shared" {
      */
     "group.not_found": { groupId: string } | { lineId: string };
     /**
-     * A line of a held group was asked to move to another party's bill. A group belongs to its
-     * party, so held work may not leave it; fire the group first.
+     * A bill holding a line of a held group was asked to move to the counter. A counter order has
+     * no party and so no groups to hold the line in; fire the group first.
      */
     "group.held_leaves_party": { tabId: string; lineNo: number };
     /**

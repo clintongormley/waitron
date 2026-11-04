@@ -26,6 +26,7 @@ function facts(overrides: Partial<StepFacts> = {}): StepFacts {
     openedAt: at("20:30"),
     firstOrderAt: null,
     lastOrderAt: null,
+    ordersArrived: false,
     drafting: false,
     courseServedAt: new Map(),
     allServedAt: null,
@@ -188,6 +189,46 @@ describe("liveSteps", () => {
     ]);
   });
 
+  it("a first order at the same instant as the party sat down clears a seated step", () => {
+    const rules = [rule("Take order", "seated", 5)];
+    const ordered = { firstOrderAt: at("20:30"), lastOrderAt: at("20:30") };
+    expect(liveSteps(rules, facts(ordered), at("20:31"))).toEqual([]);
+    const before = { firstOrderAt: at("20:29"), lastOrderAt: at("20:29") };
+    expect(liveSteps(rules, facts(before), at("20:31"))).toEqual([
+      live("Take order", "20:30", "20:35"),
+    ]);
+  });
+
+  it("order times that are dishes arriving from another table leave a step their serving started", () => {
+    const rules = [
+      rule("Anything else?", "all_served", 10),
+      rule("Dessert?", "course_served", 10, "mains"),
+    ];
+    const arrived = {
+      firstOrderAt: at("21:30"),
+      lastOrderAt: at("21:30"),
+      allServedAt: at("21:00"),
+      courseServedAt: new Map([["mains", at("21:00")]]),
+    };
+    expect(liveSteps(rules, facts({ ...arrived, ordersArrived: true }), at("21:31"))).toEqual([
+      live("Anything else?", "21:00", "21:10"),
+      live("Dessert?", "21:00", "21:10"),
+    ]);
+    expect(liveSteps(rules, facts(arrived), at("21:31"))).toEqual([]);
+  });
+
+  it("order times that are dishes arriving from another table still clear a step waiting for an order", () => {
+    const rules = [rule("Set up", "seated", 0), rule("Take order", "after_previous", 2)];
+    const doneAt = new Map([["Set up", at("20:33")]]);
+    const arrived = {
+      doneAt,
+      firstOrderAt: at("20:34"),
+      lastOrderAt: at("20:34"),
+      ordersArrived: true,
+    };
+    expect(liveSteps(rules, facts(arrived), at("20:36"))).toEqual([]);
+  });
+
   it("Dessert? survives a drinks round sent while it waits out its minutes", () => {
     const rules = [rule("Dessert?", "course_served", 10, "mains")];
     const served = {
@@ -324,6 +365,16 @@ describe("stepsClearedByDone", () => {
     expect(
       stepsClearedByDone(rules, facts(ordered), shown("Drinks?", "22:20"), at("22:45")),
     ).toEqual(["Drinks?"]);
+  });
+
+  it("a Done still clears a step their serving started when the order times are dishes arriving later", () => {
+    const rules = [rule("Anything else?", "all_served", 10)];
+    const times = { firstOrderAt: at("21:30"), lastOrderAt: at("21:30"), allServedAt: at("21:00") };
+    const shown = { stepId: "Anything else?", dueAt: at("21:10") };
+    expect(
+      stepsClearedByDone(rules, facts({ ...times, ordersArrived: true }), shown, at("21:31")),
+    ).toEqual(["Anything else?"]);
+    expect(stepsClearedByDone(rules, facts(times), shown, at("21:31"))).toEqual([]);
   });
 
   it("a step that is not live clears nothing", () => {

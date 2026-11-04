@@ -325,6 +325,12 @@ meantime, the till names that bill before the reason, such as **Bill 2: This bil
 someone else has unsent dishes on either bill, take over their order first. Open **Move dishes…**
 again to choose afresh.
 
+## Move a bill or split a table with dishes on hold {#held-dishes-move}
+
+A bill with dishes on hold can go to another table with **Move this bill** or **Split a table**.
+The dishes stay on hold there. Each table then fires its own group: firing one sends none of the
+other table's dishes.
+
 ## Name a bill {#bill-names}
 
 A party's bills are numbered, and the till shows each one with its number and any name you give it,

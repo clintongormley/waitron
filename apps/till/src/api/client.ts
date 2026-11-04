@@ -4699,7 +4699,7 @@ export class TillApi {
    * `tableId` leaves the party and a new party starts there with `billId`, or with a new empty bill
    * when it is null → `POST /api/parties/:id/split-table`, answering the new party and its bill. `guestCounts`, when given, is each side's
    * guest count afterwards; without it the staying party keeps its count. Rejects, among others, `table.not_shared`,
-   * `table.not_joined`, `group.held_leaves_party` and `party.out_of_date`.
+   * `table.not_joined` and `party.out_of_date`.
    */
   splitTable(
     partyId: string,

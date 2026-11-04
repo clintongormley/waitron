@@ -242,6 +242,7 @@ Every table action below runs in one transaction and checks the revision of ever
   a bill holding dishes that are still held for the kitchen cannot leave the party (refused, as
   `group.held_leaves_visit` is today); dishes already sent leave their kitchen group and keep their
   preparation and service state. Combining two parties keeps whole kitchen groups, as today.
+  _(2026-11-04, A803 slice 4b: such a bill can now go to another table with its own held copy of each held group; only a move to the counter is still refused, as `group.held_leaves_party`.)_
 - **Service area of a moved bill** — an unpresented bill takes the receiving side's service area
   (the party's, or the deli's) for everything added to it afterwards: menu, prices, preparation
   routing and service mode. A **presented** bill keeps its own service area when it moves: it takes no
@@ -387,6 +388,7 @@ change the design most:
 - Kitchen groups: a bill holding held dishes cannot leave its party; a bill whose dishes were sent
   leaves with them outside any group, keeping their preparation and service state. _(2026-09-29,
   plan P16 and Task 9: read as the side the bill leaves; the receiving party groups the dishes.)_
+  _(2026-11-04, A803 slice 4b: the first half now holds only for a move to the counter; to another table the bill goes, with its own held copy.)_
 - MOVED notices: after a bill move, a deli move and a table action, only the dishes whose destination
   changed get a notice.
 - Service area: a deli bill moved into a table party keeps its existing item's price and VAT class,

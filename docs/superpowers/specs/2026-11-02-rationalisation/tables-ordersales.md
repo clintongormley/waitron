@@ -131,7 +131,10 @@ which `activity_log` is not. Read back by the appender (previous hash), `package
 ### 1.4 `order_groups` — a batch of a party's order released to the kitchen together
 
 Keep, unchanged. First and last order times stay a read of the group events
-(`apps/server/src/service-step-signals.ts:118-136`), now from `order_events`. If §8 M7 fails, the group
+(`apps/server/src/service-step-signals.ts:118-136`), now from `order_events`. _(2026-11-04, A803 slice 4b: this read is now at
+`service-step-signals.ts:125-163`, groups by party, and also takes `lines_moved` events whose `detail` has
+`arrived` as a party's order times when it has none of its own; M7's `last_joined_at` would have to carry
+those too.)_ If §8 M7 fails, the group
 gains a column `last_joined_at text null` instead. Core, `state`. ≈400–600/day, ≈150,000–220,000/year.
 
 ### 1.5 `order_group_hold_stations` — stations that printed a held group's HOLD ticket

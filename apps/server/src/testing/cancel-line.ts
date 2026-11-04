@@ -73,7 +73,7 @@ export function cancelReasonId(tx: Transaction): Promise<string> {
 
 /** A person with `id`, added as a supervisor when no person has that id: an adjustment is
  * requested by someone, and a supervisor holds the refund permission a sent dish's cancel needs. */
-async function ensureOperator(tx: Transaction, id: string): Promise<string> {
+export async function ensureOperator(tx: Transaction, id: string): Promise<string> {
   await tx
     .insert(persons)
     .values({ id, displayName: `Operator ${id}`, role: "supervisor" })

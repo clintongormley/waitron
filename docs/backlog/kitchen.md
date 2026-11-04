@@ -265,6 +265,64 @@ Spanish](till.md#a-custom-unit-extra-still-shows-a-dot-in-spanish-and-its-kitche
   when it became Ready, or is it enough that a cook can collapse Ready to a strip that draws no
   cards (slice 9)? Seen in A797 slice 8's LOOK.
 
+## A1327. A dish waiting for the pass that changes table gets no MOVED line, and its later ticket prints with no FIRE mark
+
+**A1327. A dish waiting for the pass that changes table gets no MOVED line, and its later ticket prints with no FIRE mark (seen in A803 slice 4b's review; predates it).** The dish here is one the waiter has fired
+and the pass has not yet released (Requested), and whose HOLD ticket has already printed. The review
+of 4b found, by running it, that when its bill changes table:
+
+- the MOVED slip has no line for it. `readSentItems` (`apps/server/src/kitchen-print.ts`) builds its
+  list of what a station already has from dishes the pass has released and from dishes of a group
+  still held. This dish is neither: it is not released, and its group is no longer held.
+- its later release ticket has no FIRE mark, because the group now holding it has no record of HOLD
+  paper.
+
+A throwaway probe fired a held group at a station that waits for the pass, moved the bill to a free
+table, and released the dish with the real `releasePassItems`. It printed:
+
+```
+before move: {"requested":true,"fired":false}
+slip:    ["*** MOVIDO ***","Paper grill 3","Pedido 6","De: Mesa 5 (3)","A:  Mesa 8 (3)","15:41","1.000 x BURG",""]
+release: ["Paper grill 3","Mesa 8 (3)","6","15:41","GRUPO 1 · DESSERTS","1.000 x TARTA",""]
+```
+
+So the cook holds a HOLD ticket for a tarta at Mesa 5, is told nothing about it moving, and then gets
+a plain tarta ticket for Mesa 8, which a cook can read as a second dish.
+
+The probe was run at the branch tip of the time (`71adba2863`; the one later commit before this entry,
+`f86819f209`, changed tests only) and again with `apps/server/src` checked out from `9c80824143`, the
+main commit 4b was built on. The second run printed the same slip and the same unmarked ticket
+(`Tests 1 passed | 16 skipped (17)`). So this predates 4b; how far back it goes was not traced.
+
+4b adds one more way to reach it: fire a copy at such a station, then move the bill again. That slip
+read, with the review's own `…` for the lines it left out,
+`["*** MOVIDO ***",…,"De: Mesa 8 (7)","A:  Mesa 9 (7)","15:26","1.000 x BURG",""]`, and again names
+no tarta. The release ticket after that second route was not quoted.
+
+Whether a cook may be left with two tickets for one dish is the owner's to judge. Nothing is decided
+and 4b changes none of it.
+
+## A1328. Older lines of the Spanish kitchen guide name markers Spanish kitchen paper does not print
+
+**A1328. Older lines of the Spanish kitchen guide name markers Spanish kitchen paper does not print (seen in A803 slice 4b's look; predates it).** On Spanish kitchen paper the fire ticket
+prints `*** MARCHAR ***` (decoded print jobs, not paper:
+`~/waitron-campaign-c/a803-4b-look/es-58mm-3-fire-copy-at-Mesa8-grill.txt` and the `es-80mm` twin)
+and the word table has `fire: "MARCHAR"` and `holdChanged: "EN ESPERA CAMBIADO"`
+(`apps/server/src/i18n/kitchen-ticket.ts:63`, `:66`). `EN ESPERA CAMBIADO` was read in that table and
+not seen on a decoded ticket. The guide `apps/server/src/guide/es/kitchen-service.md` still says:
+
+- `:71` «una comanda HOLD CHANGED cuando se añade al grupo un plato en espera»;
+- `:73` «la comanda marcada FIRE»;
+- `:75` «la comanda marcada FIRE de esa impresora lleva las dos»;
+- `:324` «las comandas de corrección como **HOLD CHANGED**».
+
+By `git blame`, `:71`, `:73` and `:75` come from `c072fd5db6` (2026-10-24) and `:324` from
+`78339a68ca` (2026-10-30). The question was put to the owner in lane C's ~15:50 entry of 2026-11-04 in
+`~/waitron-campaign-c/questions.md`: use the paper's words (recommended), or keep these because a
+guide's language and a kitchen's can differ. 4b's own new text names no marker, so the question stayed
+open for these older lines only. A803 slice 4b does not change them. Their Spanish words need the
+owner's answer first.
+
 ## Decisions and deliberate limits
 
 ### A switched-off course uses Fire now (owner, 2026-10-17; C80)
@@ -392,6 +450,7 @@ the change (plan PR 8 Decision 1).
   unsent with nothing prompting anyone, since `finishTable` does not look at held dishes. The same
   run found that holding alone would not do: the dishes need held kitchen items, or the course's
   Send sends nothing.
+  _(2026-11-04, A803 slice 4b: a bill holding a held course can now move to another table, with its own held copy; it still cannot move to the counter.)_
 
 - **The till's Join that pushes tables together reads what was sent from the target group's
   tables, as the floor plan's merge does (A704, owner 2026-10-15).** A counter order

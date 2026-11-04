@@ -21,7 +21,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import type { SQL } from "drizzle-orm";
+import type { Column, SQL } from "drizzle-orm";
 import { staffPresentationName } from "@waitron/catalogue";
 import {
   devices,
@@ -32,6 +32,7 @@ import {
   orderGroupEvents,
   orderGroupHoldStations,
   orderGroups,
+  orderDraftLines,
   orderDraftRecalledLines,
   orderDrafts,
   ticketItems,
@@ -744,6 +745,193 @@ export async function moveGroupsToParty(
       .set({ partyId: intoPartyId, position: ++position })
       .where(eq(orderGroups.id, group.id));
   }
+}
+
+/**
+ * Give each held group of `fromPartyId` holding one of `lineIds` a held copy at `toPartyId`, and
+ * move those lines and their extras to it. Returns source group id → copy id.
+ */
+export async function copyHeldGroups(
+  tx: Transaction,
+  fromPartyId: string,
+  toPartyId: string,
+  lineIds: readonly string[],
+  operatorId: string,
+  attendance?: { recorder: AttendanceRecorder; at: string },
+): Promise<Map<string, string>> {
+  const copies = new Map<string, string>();
+  if (lineIds.length === 0) return copies;
+  const rows = await tx
+    .select({
+      lineId: workingOrderLines.id,
+      billId: workingOrderLines.workingOrderId,
+      groupId: orderGroups.id,
+      submittedBy: orderGroups.submittedBy,
+      holdPrintedAt: orderGroups.holdPrintedAt,
+      createdAt: orderGroups.createdAt,
+    })
+    .from(workingOrderLines)
+    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+    .where(
+      and(
+        inArray(workingOrderLines.id, [...new Set(lineIds)]),
+        isNull(workingOrderLines.parentLineId),
+        eq(orderGroups.partyId, fromPartyId),
+        eq(orderGroups.state, "held"),
+        not(isRecalledDish(tx)),
+      ),
+    )
+    .orderBy(
+      asc(orderGroups.position),
+      asc(orderGroups.createdAt),
+      asc(orderGroups.id),
+      asc(workingOrders.orderNumber),
+      asc(workingOrderLines.lineNo),
+    );
+  const sources = new Map<
+    string,
+    { submittedBy: string; holdPrintedAt: string | null; createdAt: string; lineIds: string[] }
+  >();
+  for (const row of rows) {
+    const source = sources.get(row.groupId);
+    if (source === undefined)
+      sources.set(row.groupId, {
+        submittedBy: row.submittedBy,
+        holdPrintedAt: row.holdPrintedAt,
+        createdAt: row.createdAt,
+        lineIds: [row.lineId],
+      });
+    else source.lineIds.push(row.lineId);
+  }
+  if (sources.size === 0) return copies;
+  const recorded = await heldPaperStations(tx, [...sources.keys()]);
+  const kitchen = await dishKitchenItems(
+    tx,
+    rows.map((row) => row.lineId),
+  );
+  let position = await lastPosition(tx, toPartyId);
+  let displayNumber = await nextGroupNumber(tx, toPartyId);
+  for (const [sourceId, source] of sources) {
+    const [copy] = await tx
+      .insert(orderGroups)
+      .values({
+        partyId: toPartyId,
+        position: ++position,
+        displayNumber: displayNumber++,
+        numberPartyId: toPartyId,
+        state: "held",
+        firedAt: null,
+        firedBy: null,
+        firedByDeviceId: null,
+        submittedBy: source.submittedBy,
+        requestKind: "next_course",
+        holdPrintedAt: source.holdPrintedAt,
+        remindAt: null,
+        createdAt: source.createdAt,
+      })
+      .returning({ id: orderGroups.id });
+    const copyId = copy!.id;
+    copies.set(sourceId, copyId);
+    const held = recorded.get(sourceId);
+    const stations = new Set<string>();
+    for (const lineId of source.lineIds)
+      for (const item of kitchen.get(lineId) ?? [])
+        if (item.firedAt === null && held?.has(item.stationId) === true)
+          stations.add(item.stationId);
+    if (stations.size > 0) await recordHeldPaper(tx, copyId, stations);
+    await tx
+      .update(workingOrderLines)
+      .set({ groupId: copyId })
+      .where(
+        or(
+          inArray(workingOrderLines.id, source.lineIds),
+          inArray(workingOrderLines.parentLineId, source.lineIds),
+        ),
+      );
+    await recordGroupEvent(
+      tx,
+      {
+        partyId: fromPartyId,
+        groupId: sourceId,
+        kind: "lines_moved",
+        actorId: operatorId,
+        detail: { lineIds: source.lineIds, to: copyId },
+      },
+      attendance,
+    );
+    await recordGroupEvent(
+      tx,
+      {
+        partyId: toPartyId,
+        groupId: copyId,
+        kind: "lines_moved",
+        actorId: operatorId,
+        detail: { lineIds: source.lineIds, from: sourceId, arrived: true },
+      },
+      attendance,
+    );
+  }
+  await pointDraftsAtCopies(tx, new Set(rows.map((row) => row.billId)), copies);
+  await removeEmptiedHeldGroups(tx, fromPartyId, [...sources.keys()], operatorId, attendance);
+  return copies;
+}
+
+/**
+ * Rewrites the open drafts of `billIds` from each source group to its copy. A staying bill's
+ * draft is left alone: `validateDraftPlaces` holds a draft to its own party's groups.
+ */
+async function pointDraftsAtCopies(
+  tx: Transaction,
+  billIds: ReadonlySet<string>,
+  copies: ReadonlyMap<string, string>,
+): Promise<void> {
+  const drafts = tx
+    .select({ id: orderDrafts.id })
+    .from(orderDrafts)
+    .where(and(inArray(orderDrafts.billId, [...billIds]), eq(orderDrafts.state, "open")));
+  const sourceIds = [...copies.keys()];
+  const toCopy = (column: Column) =>
+    sql`case ${column} ${sql.join(
+      [...copies].map(([sourceId, copyId]) => sql`when ${sourceId} then ${copyId}`),
+      sql` `,
+    )} else ${column} end`;
+  await tx
+    .update(orderDraftLines)
+    .set({ joinGroupId: toCopy(orderDraftLines.joinGroupId) })
+    .where(
+      and(
+        inArray(orderDraftLines.draftId, drafts),
+        inArray(orderDraftLines.joinGroupId, sourceIds),
+      ),
+    );
+  await tx
+    .update(orderDraftLines)
+    .set({ afterGroupId: toCopy(orderDraftLines.afterGroupId) })
+    .where(
+      and(
+        inArray(orderDraftLines.draftId, drafts),
+        inArray(orderDraftLines.afterGroupId, sourceIds),
+      ),
+    );
+  await tx
+    .update(orderDraftRecalledLines)
+    .set({ joinGroupId: toCopy(orderDraftRecalledLines.joinGroupId) })
+    .where(
+      and(
+        inArray(orderDraftRecalledLines.draftId, drafts),
+        inArray(orderDraftRecalledLines.joinGroupId, sourceIds),
+      ),
+    );
+  await tx
+    .update(orderDraftRecalledLines)
+    .set({ afterGroupId: toCopy(orderDraftRecalledLines.afterGroupId) })
+    .where(
+      and(
+        inArray(orderDraftRecalledLines.draftId, drafts),
+        inArray(orderDraftRecalledLines.afterGroupId, sourceIds),
+      ),
+    );
 }
 
 /**
@@ -2198,7 +2386,10 @@ export async function heldPaperStations(
   return byGroup;
 }
 
-/** Permanent paper numbers of held groups whose HOLD ticket was queued. */
+/**
+ * Paper numbers of held groups with `holdPrintedAt` set; a held copy takes that time from its source
+ * but has its own number.
+ */
 export async function printedHeldGroups(
   tx: Transaction,
   groupIds: readonly string[],

@@ -341,6 +341,12 @@ o pagado, la caja nombra esa cuenta antes del motivo, por ejemplo **Cuenta 2: Es
 pagada**. Si otra persona tiene platos sin enviar en alguna de las dos cuentas, toma antes su
 pedido. Abre otra vez **Mover platos…** para elegir de nuevo.
 
+## Mover una cuenta o separar una mesa con platos en espera {#held-dishes-move}
+
+Una cuenta con platos en espera puede pasar a otra mesa con **Mover esta cuenta** o **Separar una
+mesa**. Allí los platos siguen en espera. Después cada mesa marcha su propio grupo: marchar uno no envía
+ningún plato de la otra mesa.
+
 ## Poner nombre a una cuenta {#bill-names}
 
 Las cuentas de unos clientes van numeradas, y la caja muestra cada una con su número y el nombre que

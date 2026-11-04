@@ -1063,6 +1063,41 @@ describe("the move route", () => {
     expect(holderOf(to)).toBe(answer.json.partyId);
   });
 
+  it("A803 waiting copy: moves a bill holding a held dish to a free table, where the new party's Current orders lists it in a held group", async () => {
+    const ana = await seatedWith(venue);
+    const placed = await post(`/api/parties/${ana.partyId}/groups`, {
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, ana.tabId)),
+      submissionId: randomUUID(),
+      expectedPartyRevision: revisionOf(ana.partyId),
+      groups: [
+        { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" },
+        { lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }], release: "hold" },
+      ],
+    });
+    expect(placed.status).toBe(200);
+    const [tarta] = venue.db.all<{ id: string }>(
+      sql`select id from working_order_lines where working_order_id = ${ana.tabId} and name = 'Tarta'`,
+    );
+    const to = await freeTable();
+
+    const answer = await moveTo(ana.tabId, to, { partyId: ana.partyId, otherPartyId: null });
+
+    expect(answer.status).toBe(200);
+    const partyId = answer.json.partyId as string;
+    expect(partyId).not.toBe(ana.partyId);
+    const read = await send(
+      venue.app,
+      venue.cookie,
+      "GET",
+      `/api/parties/${partyId}/current-orders`,
+    );
+    expect(read.status).toBe(200);
+    const groups = read.json.groups as { state: string; rows: { lineId: string }[] }[];
+    expect(
+      groups.filter((group) => group.rows.some((row) => row.lineId === tarta!.id)),
+    ).toMatchObject([{ state: "held" }]);
+  });
+
   it("answers a move sent with the target read free to its own party's table with 409 table.already_in_party, changing nothing", async () => {
     const { ana, luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
     const revisions = [revisionOf(ana.partyId), revisionOf(luis.partyId)];

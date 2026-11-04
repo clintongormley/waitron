@@ -24,6 +24,8 @@ on its card, a seated-blue table with "🛎 Dessert?" on the map, the step with 
 and a tap on Done, an order sent once it is due, the party's first order, or the party leaving
 clears it.
 
+_(2026-11-04, A803 slice 4b: a party with no order of its own counts a bill moved in as its first order, while its family has any dish on a shown bill; a bill that has left still counts while another dish remains. That arrival does not clear a step started by a serving.)_
+
 **Architecture:** a new venue-service table, `service_step_completions`, records each Done (party,
 step, time, person). The server works out each seated table's steps on every floor read in a pure
 function, `liveSteps` (`apps/server/src/service-step-reckoning.ts`), from facts read in six
