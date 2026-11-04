@@ -196,3 +196,78 @@ describe("document routing schema", () => {
     ).toEqual([{ id: audit, sale_id: sale!.id, page_job_id: job, person_id: person }]);
   });
 });
+
+it("review L6: accepted requests require a result and acceptance order together", async () => {
+  const error = await captureError(() =>
+    protocolRow("document_delivery_requests", randomUUID(), randomUUID(), randomUUID(), "accepted"),
+  );
+  expect(CHECK_VIOLATION).toContain((error as { errcode: number }).errcode);
+});
+it("review L6: prepared requests cannot carry accepted result or order", async () => {
+  const key = randomUUID();
+  await protocolRow("document_delivery_requests", randomUUID(), randomUUID(), key);
+  const error = await captureError(() =>
+    suite.db.execute(
+      sql`update document_delivery_requests set accepted_result = '{}', acceptance_order = 1 where request_key = ${key}`,
+    ),
+  );
+  expect(CHECK_VIOLATION).toContain((error as { errcode: number }).errcode);
+});
+it("review L6: an origin cannot allocate one acceptance order to two requests", async () => {
+  const node = randomUUID();
+  const epoch = randomUUID();
+  const first = randomUUID();
+  const second = randomUUID();
+  await protocolRow("document_delivery_requests", node, epoch, first);
+  await protocolRow("document_delivery_requests", node, epoch, second);
+  await suite.db.execute(
+    sql`update document_delivery_requests set status = 'accepted', accepted_result = '{}', acceptance_order = 1 where request_key = ${first}`,
+  );
+  const error = await captureError(() =>
+    suite.db.execute(
+      sql`update document_delivery_requests set status = 'accepted', accepted_result = '{}', acceptance_order = 1 where request_key = ${second}`,
+    ),
+  );
+  expect(UNIQUE_VIOLATION).toContain((error as { errcode: number }).errcode);
+  await suite.db.execute(
+    sql`update document_delivery_requests set status = 'accepted', accepted_result = '{}', acceptance_order = 2 where request_key = ${second}`,
+  );
+  expect(
+    suite.db.all(
+      sql`select acceptance_order from document_delivery_requests order by acceptance_order`,
+    ),
+  ).toEqual([{ acceptance_order: 1 }, { acceptance_order: 2 }]);
+});
+
+it.each([
+  { status: "accepted", result: null, order: 1 },
+  { status: "accepted", result: "{}", order: null },
+  { status: "prepared", result: "{}", order: null },
+  { status: "prepared", result: null, order: 1 },
+])(
+  "review L6: refuses inconsistent $status result=$result order=$order",
+  async ({ status, result, order }) => {
+    const key = randomUUID();
+    await protocolRow("document_delivery_requests", randomUUID(), randomUUID(), key);
+    const error = await captureError(() =>
+      suite.db.execute(
+        sql`update document_delivery_requests set status = ${status}, accepted_result = ${result}, acceptance_order = ${order} where request_key = ${key}`,
+      ),
+    );
+    expect(CHECK_VIOLATION).toContain((error as { errcode: number }).errcode);
+  },
+);
+it("review L6: distinct origins may independently accept order one", async () => {
+  const epoch = randomUUID();
+  for (const node of [randomUUID(), randomUUID()]) {
+    const key = randomUUID();
+    await protocolRow("document_delivery_requests", node, epoch, key);
+    await suite.db.execute(
+      sql`update document_delivery_requests set status = 'accepted', accepted_result = '{}', acceptance_order = 1 where request_key = ${key}`,
+    );
+  }
+  expect(suite.db.all(sql`select acceptance_order from document_delivery_requests`)).toEqual([
+    { acceptance_order: 1 },
+    { acceptance_order: 1 },
+  ]);
+});

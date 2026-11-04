@@ -126,8 +126,8 @@ describe("document selection", () => {
     model.open(
       offers({
         context,
-        chosenPrinterId: null,
-        defaultPrinterId: b,
+        chosenPrinterId: a,
+        defaultPrinterId: null,
         printers: [offers().printers[1]!],
       }),
       b,
@@ -740,6 +740,7 @@ it("known acceptance recovered from inventory stays accepted when its acknowledg
         operation,
         subjectId: saleId,
         fingerprint: "a".repeat(64),
+        rememberPreference: true,
         outcome: { state: "accepted", result: accepted },
       },
     ],
@@ -752,4 +753,268 @@ it("known acceptance recovered from inventory stays accepted when its acknowledg
   expect(model.state).toBe("accepted");
   expect(model.canPrint).toBe(false);
   expect(await recovery.readPreference("receipt")).toBe(a);
+});
+
+describe("review: Invoice and stale callback races", () => {
+  it("H1: another tab's unanswered device save holds Invoice Print", async () => {
+    const { model } = await form("invoice");
+    const other = await DocumentDeliveryRecovery.open(origin.applianceId);
+    stores.push(other);
+    await other.qualifyOrigin(origin);
+    model.open(
+      offers({
+        context: { surface: "till", deviceId, profileId },
+        chosenPrinterId: a,
+        invoiceRevision: 0,
+      }),
+      null,
+    );
+    await model.recover(seat());
+    expect(model.canPrint).toBe(true);
+    await other.retainOperation({
+      kind: "invoice-save",
+      operation: { origin, key: crypto.randomUUID() },
+      subjectId: deviceId,
+      fingerprint: "a".repeat(64),
+    });
+    await vi.waitFor(() => expect(model.canPrint).toBe(false));
+  });
+  it("H2: another recovery cannot confirm an Invoice selection that was never saved", async () => {
+    const { model } = await form("invoice");
+    model.open(
+      offers({
+        context: { surface: "till", deviceId, profileId },
+        chosenPrinterId: a,
+        invoiceRevision: 0,
+      }),
+      null,
+    );
+    await model.recover(seat());
+    model.selectPrinter(b);
+    expect(model.canPrint).toBe(false);
+    await model.recover(seat());
+    expect(model.canPrint).toBe(false);
+  });
+  it("H3: older accepted Invoice recovery cannot replace newer offered revision", async () => {
+    const { model } = await form("invoice");
+    const operation = { origin, key: crypto.randomUUID() };
+    const api = seat({
+      inventory: async (_origin, subject) =>
+        subject.kind === "device"
+          ? [
+              {
+                operation,
+                subjectId: deviceId,
+                fingerprint: "a".repeat(64),
+                outcome: {
+                  state: "accepted",
+                  result: {
+                    origin,
+                    saveId: operation.key,
+                    deviceId,
+                    revision: 5,
+                    chosenId: a,
+                    resolvedId: a,
+                  },
+                },
+              },
+            ]
+          : [],
+    });
+    model.open(
+      offers({
+        context: { surface: "till", deviceId, profileId },
+        chosenPrinterId: b,
+        invoiceRevision: 7,
+      }),
+      null,
+    );
+    await model.recover(api);
+    expect(model.printerId).toBe(b);
+    expect(model.canPrint).toBe(true);
+  });
+  it("H4: late print acceptance is retained without acknowledgement after reopening the same sale", async () => {
+    const { model, recovery } = await form();
+    const delayed = deferred<OperationResult<DeliveryResult>>();
+    let key = "";
+    let acknowledgements = 0;
+    const acceptedWork = crypto.randomUUID();
+    const api = seat({
+      accept: async (operation) => {
+        key = operation.key;
+        return delayed.promise;
+      },
+      recover: async (operation) => ({
+        state: "accepted",
+        result: result(operation.key, { work: { kind: "receipt-job", id: acceptedWork } }),
+      }),
+      acknowledge: async () => {
+        acknowledgements++;
+      },
+    });
+    model.open(offers(), a);
+    await model.recover(api);
+    const sending = model.submit(api);
+    await vi.waitFor(() => expect(key).not.toBe(""));
+    model.open(offers(), a);
+    delayed.resolve({
+      state: "accepted",
+      result: result(key, { work: { kind: "receipt-job", id: acceptedWork } }),
+    });
+    await sending;
+    expect(acknowledgements).toBe(0);
+    expect(model.state).toBe("ready");
+    expect(model.canPrint).toBe(false);
+    const retained = await recovery.recoverOutstanding({ kind: "sale", id: saleId }, api);
+    expect(retained.map((entry) => entry.operation.key)).toEqual([key]);
+  });
+  it("H6: an Invoice preparation that returns after close never sends acceptance", async () => {
+    const { model } = await form("invoice");
+    const prepared = deferred<OperationResult<InvoiceSaveResult>>();
+    let prepares = 0;
+    let accepts = 0;
+    const api: InvoiceChoiceApi = {
+      ...seat(),
+      prepare: async () => {
+        prepares++;
+        return prepared.promise;
+      },
+      accept: async () => {
+        accepts++;
+        return { state: "prepared" };
+      },
+    };
+    model.open(
+      offers({
+        context: { surface: "till", deviceId, profileId },
+        chosenPrinterId: a,
+        invoiceRevision: 0,
+      }),
+      null,
+    );
+    await model.recover(seat());
+    const saving = model.saveInvoice(b, api);
+    await vi.waitFor(() => expect(prepares).toBe(1));
+    model.close();
+    prepared.resolve({ state: "prepared" });
+    await saving;
+    expect(accepts).toBe(0);
+  });
+  it("M1: refused save cannot restore a printer withdrawn during the save", async () => {
+    const { model } = await form("invoice");
+    const response = deferred<OperationResult<InvoiceSaveResult>>();
+    let sent = false;
+    const api: InvoiceChoiceApi = {
+      ...seat(),
+      prepare: async () => {
+        sent = true;
+        return response.promise;
+      },
+      accept: async () => ({ state: "prepared" }),
+    };
+    model.open(
+      offers({
+        context: { surface: "till", deviceId, profileId },
+        chosenPrinterId: a,
+        invoiceRevision: 0,
+      }),
+      null,
+    );
+    await model.recover(seat());
+    const saving = model.saveInvoice(b, api);
+    await vi.waitFor(() => expect(sent).toBe(true));
+    model.applyOffers(
+      offers({
+        context: { surface: "till", deviceId, profileId },
+        chosenPrinterId: a,
+        invoiceRevision: 0,
+        printers: [offers().printers[1]!],
+      }),
+    );
+    response.resolve({ state: "refused", code: "printer.unavailable" });
+    await saving;
+    expect(model.printerId).toBeNull();
+    expect(model.canPrint).toBe(false);
+  });
+  it("M2: context replacement during prepare clears its old saving state and gate", async () => {
+    const { model } = await form();
+    const prepared = deferred<OperationResult<DeliveryResult>>();
+    let sent = false;
+    const api = seat({
+      prepare: async () => {
+        sent = true;
+        return prepared.promise;
+      },
+    });
+    model.open(offers(), a);
+    await model.recover(api);
+    const sending = model.submit(api);
+    await vi.waitFor(() => expect(sent).toBe(true));
+    model.applyOffers(offers({ saleId: b }));
+    prepared.resolve({ state: "prepared" });
+    await sending;
+    await model.recover(seat());
+    expect(model.state).toBe("ready");
+    expect(model.canPrint).toBe(false);
+  });
+  it("M4: Receipt with no chosen printer consumes the eligible profile default", async () => {
+    const { model } = await form();
+    model.open(
+      offers({
+        context: { surface: "till", deviceId, profileId },
+        chosenPrinterId: null,
+        defaultPrinterId: b,
+      }),
+      null,
+    );
+    expect(model.printerId).toBe(b);
+  });
+  it("L3: accepting a device Receipt changes no dashboard printer memory", async () => {
+    const { model, recovery } = await form();
+    model.open(
+      offers({ context: { surface: "till", deviceId, profileId }, chosenPrinterId: a }),
+      null,
+    );
+    await model.recover(seat());
+    await model.submit(seat());
+    expect(model.state).toBe("accepted");
+    expect(await recovery.readPreference("receipt")).toBeNull();
+  });
+});
+
+it("review L4: save fingerprints use normalized field order even when origin fields arrive reversed", async () => {
+  const { model, recovery } = await form("invoice");
+  let saveId = "";
+  const reversed = {
+    recoveryEpoch: origin.recoveryEpoch,
+    nodeId: origin.nodeId,
+    applianceId: origin.applianceId,
+  };
+  const api: InvoiceChoiceApi = {
+    ...seat(),
+    prepare: async (save) => {
+      saveId = save.saveId;
+      return { state: "prepared" };
+    },
+    accept: async () => ({ state: "prepared" }),
+    recover: async () => ({ state: "prepared" }),
+  };
+  model.open(
+    offers({
+      origin: reversed,
+      context: { surface: "till", deviceId, profileId },
+      chosenPrinterId: a,
+      invoiceRevision: 0,
+    }),
+    null,
+  );
+  await model.recover(seat());
+  await model.saveInvoice(b, api);
+  const canonical = `{"origin":{"applianceId":"${origin.applianceId}","nodeId":"${origin.nodeId}","recoveryEpoch":"${origin.recoveryEpoch}"},"applianceId":"${origin.applianceId}","saveId":"${saveId}","deviceId":"${deviceId}","expectedRevision":0,"selection":{"id":"${b}"}}`;
+  const expected = Array.from(
+    new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical))),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+  const retained = await recovery.recoverOutstanding({ kind: "device", id: deviceId }, api);
+  expect(retained[0]?.fingerprint).toBe(expected);
 });

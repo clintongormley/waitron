@@ -11,6 +11,7 @@ import { assertSubjectZones } from "./zone-access.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
 import { readVisibleOrder } from "./orders-list.js";
 import { readInvoiceDeliveries } from "./invoice-delivery-status.js";
+import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { canEmailInvoice } from "./invoice-email-contact.js";
 import { readOfferedReceiptLanguages } from "./venue-locale.js";
 import type { Transaction } from "@waitron/db";
@@ -184,6 +185,7 @@ export async function readDocumentOffers(
     });
     emailAllowed = emailAllowed && roleHasPermission(session.role, "report.export");
   }
+  if (full) await expireInvoiceDeliveryClaims(tx);
   const state = full
     ? await readInvoiceDeliveries(tx, saleId, {
         emailAvailable: await canEmailInvoice(tx, saleId, emailAllowed),
