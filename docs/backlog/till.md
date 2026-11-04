@@ -612,6 +612,8 @@ To decide before building:
 **2026-10-20, A773-2:** the pass's Done/Undo HTTP route is retired. The sign-in work must use
 the remaining preparation actions and planned pass release rather than extend those former marks.
 
+**2026-11-04, A773-2 PR D:** the marks' table was dropped (core 0205).
+
 ## Task 7 (#789, each person's draft kept on the server)
 
 **2026-10-19, A773-1:** the [per-bill ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
@@ -1062,8 +1064,8 @@ may predate that branch:
   the held after a +; below the width its columns need, a kitchen board shows them as tabs; a late
   card's tab, and its collapsed column, carry a red bar) landed in #2144, from the plan's slice 9c; it
   builds `overviewRows` (`apps/till/src/state/kitchen-overview.ts`), the one counting function
-  A773-2's pass reuses. What is left of A797: slices 10–11, and 12b after
-  A773-2 (slice 12 is A773-2's own). Build slices (design §8), in the owner's
+  A773-2's pass reuses. What is left of A797: slices 10–11 and 12b
+  (slice 12 is A773-2's own). Build slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
   A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits
@@ -2505,11 +2507,11 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
 
 ## A773. Courses, groups and the pass
 
-**A773-2**, firing and the pass, has a [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
-with PR D remaining. PR B is cut into B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
-B4 is cut into B4a and B4b by its [task plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md);
-PR B and PR C ([task plan](../superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) are
-complete. PR D is next. B3
+**A773-2**, firing and the pass: its [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
+was cut into PR B (B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
+B4 into B4a and B4b by its [task plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)),
+PR C ([task plan](../superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) and PR D
+([task plan](../superpowers/plans/2026-11-04-a773-2d-tickets-and-retirement.md)). B3
 ([task plan](../superpowers/plans/2026-11-02-a773-2b3-pass-release.md)) built the pass's board
 reads (`GET /api/device/pass-board`, `GET /api/device/pass-monitor-board`) and its Fire
 (`POST /api/device/pass-screen/release`), which gives a card's waiting dishes to their stations
@@ -2521,12 +2523,7 @@ made every kitchen column a choice in Columns, gave the waiter's table screen "a
 added a pass's choice to show or hide other stations' dishes (per profile and per device, migration
 0073). What B4 leaves for PR D and later is in [the B4 plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)'s
 "Left for PR C, PR D and later". Old nonempty stamps remain in regression fixtures, outside the till's
-public contracts. Physical schema and configuration-transfer fields remain for Task 12.
-
-PR D finishes tickets, then removes the retired schema and configuration fields. Preserve separately routed extras and the allergy snapshot child when
-rebuilding ticket items. Recheck current main and other lanes' actual reservations before
-each slice. A797's completed Q42 design revision, pictures and FYI landed on 2026-10-21; no new
-Q42 answer is required. New copy still follows the plan's wording-review gate.
+public contracts.
 
 **The owner's answers (2026-11-02)** to the nine questions B3 asked (B3's plan, "Owner
 questions"): the Spanish copy sheet is approved as written, and B4 may land once its words match
@@ -2553,9 +2550,6 @@ The [A773-1 plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and
 [ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md) govern the landed
 Sent/New order and bill ownership behavior. Physical dragging and partial-serving trials remain
 separate backlog entries. A803 owns its pass/station presentation tail.
-
-Next: PR D (master plan Tasks 11–12): ticket headings, "Goes with kitchen food", and removing
-`away_at`, `pass_item_marks` and `fire_control`.
 
 What A797 leaves for the pass (slices 9 and 9b): `apps/till/src/state/kitchen-columns.ts` is the
 Columns store to reuse, and a key missing from a stored layout returns to its default place, not
@@ -2963,7 +2957,8 @@ main bill, has landed (#2360); it leaves open A1256, A1258, A1261, A1263–A1267
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1286–A1294 and A1298–A1300. Remaining slices: 4b, waiting dishes that leave with their own copy of the course; 4c,
 Split a table through the same picker, with A590; pre-bills after asesor S2 (A446). One payment pays one bill. Station modes, pass naming and grouped cross-bill
-firing wait for pending A773-2, independently of S2. New Spanish wording requires approval
+firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
+"A773-2 PR D handoff" paragraph. New Spanish wording requires approval
 during implementation. Each new seating starts at Bill 1
 (owner, 2026-10-19); bills staying at their table retain their numbers.
 [Spec](../superpowers/specs/2026-10-18-a803-bills-and-tables-design.md);
@@ -3185,3 +3180,13 @@ reaches them, also moves Waitron's own from the browser's 700 to Bold's 600, on 
 tills and the setup screens; the design did not discuss it. The way not taken: a
 heading weight held at 700, which no hand-set Bold would reach. The rule stands unless the owner
 says otherwise.
+
+## Delete the tests and fixtures that still set `fireControl` with A1301 S28
+
+Left open by A773-2 PR D, its plan's D113. Nothing reads the setting; tests still pass it to the
+till's setup answer or write the `fire_control` column, and they pass. List them with
+`grep -rlE 'fireControl|fire_control' apps/till apps/server packages --include='*.ts' --include='*.json' | grep -v /drizzle/`:
+the till's test files and its `apps/till/test/` fixtures, the server and package tests named in
+[kitchen.md](kitchen.md), and
+`apps/server/src/testing/fixtures/configuration-v1-before-printing-retirement.json`. The
+hash-pinned `madrid-before-move.*.json` captures change only when they are recaptured.

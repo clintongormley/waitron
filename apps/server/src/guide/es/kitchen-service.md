@@ -79,6 +79,12 @@ Enviar a preparar el trabajo en espera en la misma estación no duplica una corr
 existente. Recuperar un plato a un borrador termina su trabajo anterior en cocina. Volver a enviar
 ese borrador crea una copia nueva con las instrucciones que confirmas para ese envío.
 
+## Lee el encabezado de un grupo en el papel de cocina {#group-headings}
+
+En el papel de cocina, el encabezado de un grupo nombra los cursos de los platos impresos debajo, en
+el orden de los cursos: **GRUPO 3 · ENTRANTES, PRINCIPALES**. Una reimpresión los muestra como estén
+al reimprimir.
+
 ## Reimprime el original y comprueba sus avisos {#reprints}
 
 Una reimpresión repite el bloque de alergias original. No genera otro aviso de corrección, así que
@@ -207,6 +213,11 @@ Cada tarjeta lleva la nota para cocina de su pedido y cualquier problema de impr
 terminal, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pedido está pagado y
 pendiente de recoger; una pantalla de cocina en la que nadie inicia sesión no muestra ninguno de los
 dos.
+
+Cuando una tarjeta tiene un plato que se empezó sin esperar al pase y su grupo tiene platos para el
+pase, la tarjeta muestra debajo de sus platos **Sale con** y los nombres de las estaciones de esos
+platos, por ejemplo **Sale con Parrilla y Pastelería** ([Haz que una estación espere
+al pase](kitchen-service.md#station-waits)).
 
 ## Trabaja en el pase {#pass-screen}
 
@@ -373,6 +384,13 @@ platos de la estación van a la columna **Por marchar** del pase, y esperan en l
 estación hasta que el pase los marcha. Activarlo o desactivarlo solo decide adónde van los platos
 que se piden después; un plato ya pedido se queda donde está. Una exportación de la configuración
 incluye el ajuste.
+
+Un plato que no espera al pase se empieza enseguida. Si su grupo tiene también platos para el pase,
+esperándolo o ya marchados por él y sin servir, la comanda del plato y su tarjeta en la pantalla de
+la estación dicen **Sale con** y los nombres de las estaciones de esos platos, por ejemplo **Sale
+con Parrilla y Pastelería**: sácalo con esos platos, no por separado. Un
+ticket anticipado de espera nunca lo dice. Una comanda lo dice según estén las cosas al imprimirse;
+una reimpresión lo vuelve a comprobar.
 
 Solo una pantalla de pase cuyo dispositivo puede pulsar **Marchar** envía los platos. Para los
 platos de una estación en una zona de servicio, hacen falta las dos cosas:

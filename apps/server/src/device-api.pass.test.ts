@@ -8,7 +8,6 @@ import {
   devices,
   kitchenStations,
   locations,
-  passItemMarks,
   printJobs,
   ticketItems,
   workingOrderLines,
@@ -139,20 +138,11 @@ async function burgerOrder(v: Awaited<ReturnType<typeof setupPartyVenue>>) {
 }
 
 describe("the pass screen's device routes", () => {
-  it("A773 waiter authority: Done and Undo cannot write marks or change kitchen work", async () => {
+  it("A773 waiter authority: Done and Undo cannot change kitchen work", async () => {
     const f = await fixture();
     const itemId = await burgerOrder(f.v);
-    await inTx(f.v, (tx) =>
-      tx.insert(passItemMarks).values({
-        deviceId: f.a.id,
-        ticketItemId: itemId,
-        doneAt: "2026-10-20T12:00:00.000Z",
-        doneByPersonId: null,
-      }),
-    );
     const before = await inTx(f.v, async (tx) => ({
       items: await tx.select().from(ticketItems),
-      marks: await tx.select().from(passItemMarks),
     }));
     for (const cookie of [f.a.cookie, f.b.cookie, ""]) {
       for (const marked of [true, false]) {
@@ -161,7 +151,6 @@ describe("the pass screen's device routes", () => {
         expect(
           await inTx(f.v, async (tx) => ({
             items: await tx.select().from(ticketItems),
-            marks: await tx.select().from(passItemMarks),
           })),
         ).toEqual(before);
         expect(items(await read(f.app, f.a.cookie))).toEqual([itemId]);
@@ -208,11 +197,6 @@ describe("the pass screen's device routes", () => {
     expect(marked.status).toBe(404);
     expect(items(await read(f.app, f.a.cookie))).toEqual([itemId]);
     expect(items(await read(f.app, f.b.cookie))).toEqual([itemId]);
-    expect(
-      await inTx(f.v, (tx) =>
-        tx.select().from(passItemMarks).where(eq(passItemMarks.ticketItemId, itemId)),
-      ),
-    ).toEqual([]);
     expect((await done(f.app, f.b.cookie, { ticketItemIds: [itemId], done: true })).status).toBe(
       404,
     );
@@ -234,7 +218,6 @@ describe("the pass screen's device routes", () => {
     expect(await anonymousRead.json()).toMatchObject({ error: { code: "session.required" } });
     const anonymous = await done(f.app, till.cookie, { ticketItemIds: [itemId], done: true });
     expect(anonymous.status).toBe(404);
-    expect(await inTx(f.v, (tx) => tx.select().from(passItemMarks))).toEqual([]);
 
     const [person] = await inTx(f.v, (tx) => tx.select({ id: persons.id }).from(persons).limit(1));
     const session = await inTx(f.v, (tx) =>
@@ -243,11 +226,6 @@ describe("the pass screen's device routes", () => {
     const signedIn = `${till.cookie}; ${SESSION_COOKIE}=${session.token}`;
     expect(items(await read(f.app, signedIn))).toEqual([itemId]);
     expect((await done(f.app, signedIn, { ticketItemIds: [itemId], done: true })).status).toBe(404);
-    expect(
-      await inTx(f.v, (tx) =>
-        tx.select().from(passItemMarks).where(eq(passItemMarks.deviceId, till.id)),
-      ),
-    ).toEqual([]);
     expect(items(await read(f.app, signedIn))).toEqual([itemId]);
   });
 
@@ -273,12 +251,10 @@ describe("the pass screen's device routes", () => {
         expect(refused.status).toBe(404);
       }
     }
-    expect(await inTx(f.v, (tx) => tx.select().from(passItemMarks))).toEqual([]);
     expect(items(await read(f.app, tablesOnly.cookie))).toEqual([itemId]);
     expect(
       (await done(f.app, tablesOnly.cookie, { ticketItemIds: [itemId], done: true })).status,
     ).toBe(404);
-    expect(await inTx(f.v, (tx) => tx.select().from(passItemMarks))).toEqual([]);
   });
 
   it("lists a counter sale's dish on a pass screen limited to the counter's zone while Done stays retired", async () => {
@@ -314,11 +290,6 @@ describe("the pass screen's device routes", () => {
       (await done(f.app, counterOnly.cookie, { ticketItemIds: [counterItem!.id], done: true }))
         .status,
     ).toBe(404);
-    expect(
-      await inTx(f.v, (tx) =>
-        tx.select().from(passItemMarks).where(eq(passItemMarks.deviceId, counterOnly.id)),
-      ),
-    ).toEqual([]);
     expect(items(await read(f.app, counterOnly.cookie))).toEqual([counterItem!.id]);
     expect(items(await read(f.app, f.a.cookie)).sort()).toEqual(
       [tableItemId, counterItem!.id].sort(),
@@ -357,7 +328,6 @@ describe("the pass screen's device routes", () => {
     }
     const refusedDone = await done(f.app, pass.cookie, { ticketItemIds: [itemId], done: true });
     expect(refusedDone.status).toBe(404);
-    expect(await inTx(f.v, (tx) => tx.select().from(passItemMarks))).toEqual([]);
     const screens = await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.readDeviceKitchenScreens(tx, f.v.cfg, pass.id),
     );
@@ -376,7 +346,7 @@ describe("the pass screen's device routes", () => {
     ]);
   });
 
-  it("retires malformed Done and mixed local/foreign Done and Undo without writing marks", async () => {
+  it("retires malformed Done and mixed local/foreign Done and Undo", async () => {
     const f = await fixture();
     const local = await burgerOrder(f.v);
     const badDone = await done(f.app, f.a.cookie, { ticketItemIds: [local], done: "true" });
@@ -431,19 +401,11 @@ describe("the pass screen's device routes", () => {
         stationId: foreignStation!.id,
       })
       .returning({ id: ticketItems.id });
-    const marks = () =>
-      inTx(f.v, (tx) =>
-        tx
-          .select({ ticketItemId: passItemMarks.ticketItemId })
-          .from(passItemMarks)
-          .where(eq(passItemMarks.deviceId, f.a.id)),
-      );
     const mixed = await done(f.app, f.a.cookie, {
       ticketItemIds: [local, foreignItem!.id],
       done: true,
     });
     expect(mixed.status).toBe(404);
-    expect(await marks()).toEqual([]);
     expect((await done(f.app, f.a.cookie, { ticketItemIds: [local], done: true })).status).toBe(
       404,
     );
@@ -452,16 +414,14 @@ describe("the pass screen's device routes", () => {
       done: false,
     });
     expect(mixedUndo.status).toBe(404);
-    expect(await marks()).toEqual([]);
     expect((await done(f.app, f.a.cookie, { ticketItemIds: [local], done: false })).status).toBe(
       404,
     );
-    expect(await marks()).toEqual([]);
   });
 });
 
 describe("the pass monitor's device route", () => {
-  it("lists the pass queue with no marks, and offers no Done", async () => {
+  it("lists the pass queue, and offers no Done", async () => {
     const f = await fixture();
     const itemId = await burgerOrder(f.v);
     const monitor = await f.device("Pass monitor", f.kds, {
@@ -487,7 +447,7 @@ describe("the pass monitor's device route", () => {
 });
 
 describe("a pass monitor on a till", () => {
-  it("needs a signed-in session, then lists its zones' dishes with no marks", async () => {
+  it("needs a signed-in session, then lists its zones' dishes", async () => {
     const f = await fixture();
     const itemId = await burgerOrder(f.v);
     const monitorOn = async (name: string, zoneId: string) => {

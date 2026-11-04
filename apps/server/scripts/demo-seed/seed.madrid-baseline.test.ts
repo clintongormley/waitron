@@ -33,7 +33,7 @@ const ADDED_TABLES = [
   "working_line_portions",
 ];
 /** Tables dropped after the capture; the seed wrote no row to them. */
-const REMOVED_TABLES = ["mirror_config", "node_roles"];
+const REMOVED_TABLES = ["mirror_config", "node_roles", "pass_item_marks"];
 const byName = <T>(tables: Record<string, T>) =>
   Object.fromEntries(Object.entries(tables).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -164,6 +164,8 @@ for (const locale of ["en", "es"] as const) {
       const parties = expected[phase].tables.parties!;
       parties.columns = parties.columns.filter((column) => column.name !== "main_bill_id");
       parties.foreignKeys = parties.foreignKeys.filter((key) => key.from !== "main_bill_id");
+      const ticketItems = expected[phase].tables.ticket_items!;
+      ticketItems.columns = ticketItems.columns.filter((column) => column.name !== "away_at");
       for (const name of ["workforce_chains", "time_entries", "pay_period_closures"]) {
         const table = expected[phase].tables[name]!;
         table.columns = table.columns.filter((column) => column.name !== "location_id");

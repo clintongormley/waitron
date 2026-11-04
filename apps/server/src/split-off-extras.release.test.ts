@@ -66,7 +66,6 @@ async function rows(tx: Transaction, tabId: string) {
       firedAt: ticketItems.firedAt,
       courseId: ticketItems.courseId,
       state: ticketItems.state,
-      awayAt: ticketItems.awayAt,
     })
     .from(ticketItems)
     .where(eq(ticketItems.workingOrderId, tabId));
@@ -111,9 +110,6 @@ describe("releasing split-off extras", () => {
         "ready",
         "ready",
       ]);
-      expect((await rows(tx, venue.party.tabId)).items.every((item) => item.awayAt === null)).toBe(
-        true,
-      );
     });
   });
 

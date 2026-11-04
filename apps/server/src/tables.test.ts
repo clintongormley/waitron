@@ -13,7 +13,6 @@ import {
   floorZones,
   parties,
   partyTables,
-  nowIso,
   venueLocationId,
   ticketItems,
   withTransaction,
@@ -550,10 +549,6 @@ describe("listTablesWithState — A773 no dispatch state", () => {
     expect(row).toMatchObject({ readyToServe: 2, pendingToServe: 2 });
     expect(row).not.toHaveProperty("enRoute");
 
-    const away = items.find((i) => i.lineId === lines[0]!.id)!;
-    await asApp(cfg, (tx) =>
-      tx.update(ticketItems).set({ awayAt: nowIso() }).where(eq(ticketItems.id, away.id)),
-    );
     const ready = row;
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
     expect(row).toEqual(ready);

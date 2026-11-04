@@ -170,7 +170,6 @@ export { invoicePdfDownloads } from "./schema/invoice-pdf-downloads.js";
 export { kitchenPrintJobLines } from "./schema/kitchen-print-job-lines.js";
 export { kitchenPrintJobs } from "./schema/kitchen-print-jobs.js";
 export { stationPrinters } from "./schema/station-printers.js";
-export { passItemMarks } from "./schema/pass-item-marks.js";
 export { ticketItemMoves } from "./schema/ticket-item-moves.js";
 export { type AllergenMap, catalogues, categories, products } from "./schema/catalogue.js";
 export { locationCatalogues } from "./schema/location-catalogues.js";

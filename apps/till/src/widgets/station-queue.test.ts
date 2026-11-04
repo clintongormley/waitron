@@ -5462,3 +5462,89 @@ describe("A773 held column", () => {
     expect(held?.textContent?.trim()).toBe("+3");
   });
 });
+
+describe("A773 fire paper: the cue on the station card", () => {
+  const plainGroup = {
+    id: "g-4",
+    position: 4,
+    displayNumber: 4,
+    numberPartyId: "pa-1",
+    state: "fired" as const,
+  };
+  const dessertsGroup = { ...plainGroup, goesWith: ["Grill"] as const };
+  const twoStationsGroup = { ...plainGroup, goesWith: ["Grill", "Pastry"] as const };
+  const mountCard = (items: StationQueueItem[]) =>
+    mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [ageBill(7, items)],
+      stationId: "st-bar",
+      now: AGE_NOW,
+    });
+  const cue = (el: TillStationQueue) =>
+    cardOf(el, 7).querySelector<HTMLElement>("[data-goes-with]");
+
+  it("A773 fire paper: a released card whose group has dishes held for the pass names their stations", async () => {
+    const moscatel = ageDish("moscatel", 18, { name: "Moscatel", group: dessertsGroup });
+    const { el } = await mountCard([moscatel]);
+    expect(cue(el)).not.toBeNull();
+    expect(cue(el)!.textContent!.trim()).toBe("Goes with Grill");
+    const lines = [...cardOf(el, 7).querySelectorAll(".line-name")];
+    expect(
+      lines.at(-1)!.compareDocumentPosition(cue(el)!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    cleanupWidgets();
+
+    const previousLocale = currentLocale();
+    setLocale("es-ES");
+    try {
+      const spanish = await mountCard([moscatel]);
+      expect(cue(spanish.el)!.textContent!.trim()).toBe("Sale con Grill");
+    } finally {
+      setLocale(previousLocale);
+    }
+    cleanupWidgets();
+
+    const both = ageDish("moscatel", 18, { name: "Moscatel", group: twoStationsGroup });
+    const twoNames = await mountCard([both]);
+    expect(cue(twoNames.el)!.textContent!.trim()).toBe("Goes with Grill and Pastry");
+    cleanupWidgets();
+
+    setLocale("es-ES");
+    try {
+      const spanish = await mountCard([both]);
+      expect(cue(spanish.el)!.textContent!.trim()).toBe("Sale con Grill y Pastry");
+    } finally {
+      setLocale(previousLocale);
+    }
+    cleanupWidgets();
+
+    const held = await mountCard([
+      ageDish("held", 18, { firedAt: null, group: { ...dessertsGroup, state: "held" } }),
+    ]);
+    expect(cue(held.el)).toBeNull();
+    cleanupWidgets();
+
+    const grill = await mountCard([
+      ageDish("tarta", 18, { name: "Tarta", passControlled: true, group: dessertsGroup }),
+    ]);
+    expect(cue(grill.el)).toBeNull();
+    cleanupWidgets();
+
+    const heldBeside = await mountCard([
+      ageDish("held", 18, { firedAt: null, group: dessertsGroup }),
+      ageDish("moscatel", 18, { name: "Moscatel", group: dessertsGroup }),
+    ]);
+    expect(cue(heldBeside.el)!.textContent!.trim()).toBe("Goes with Grill");
+    cleanupWidgets();
+
+    const tartaBeside = await mountCard([
+      ageDish("tarta", 18, { name: "Tarta", passControlled: true, group: dessertsGroup }),
+      ageDish("moscatel", 18, { name: "Moscatel", group: dessertsGroup }),
+    ]);
+    expect(cue(tartaBeside.el)!.textContent!.trim()).toBe("Goes with Grill");
+    cleanupWidgets();
+
+    const plain = await mountCard([ageDish("moscatel", 18, { group: plainGroup })]);
+    expect(cardOf(plain.el, 7)).not.toBeNull();
+    expect(cue(plain.el)).toBeNull();
+  });
+});

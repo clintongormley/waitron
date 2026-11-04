@@ -420,6 +420,27 @@ exact paths/signatures against the new Requested/pass design before writing code
 - This is an explicitly deferred integration checklist, not a seventh implementation slice or a claim that station/pass tests already exist. Update both guides and inspect phone
   pass in both themes before closing §3.2/§3.3/§6's multi-bill-fire requirements.
 
+**A773-2 PR D handoff (2026-11-04).** PR D still prints one ticket per bill, per station (plan
+`2026-11-04-a773-2d-tickets-and-retirement.md`, D124). The seams a cross-bill ticket changes:
+
+- the per-bill loops in `releaseGroup` (`apps/server/src/order-groups.ts`, its `byOrder` loop) and in
+  `releasePassItems` (`apps/server/src/pass-release.ts`, its `byOrder` loop), and the same shape in
+  `printHoldTickets`' `byBill` loop for HOLD paper;
+- the per-bill loops for slips: `correctHoldTickets`' `byBill` loop (`order-groups.ts`) for HOLD
+  corrections, `enqueueOrderKitchenNoteChange`'s `byOrder` loop (`kitchen-print.ts`) for correction
+  slips, and `readTicketItemsOn`'s `byOrder` map (`kitchen-print.ts`), which `enqueueMovedSlips` and
+  `enqueueMovedSlipsFor` read for MOVED slips;
+- `planKitchenTickets` and `enqueueKitchenTickets` (`apps/server/src/kitchen-print.ts`), which take
+  one `orderId`, and `linkKitchenJob`, which links a job to one `working_order_id`;
+- `buildTicketItems` (`kitchen-print.ts`), where a bill name would join each dish beside its
+  `course`; `goesWith` (the names of the stations the dish goes out with) is added after it, in
+  `planKitchenTickets`, so slips never carry it.
+
+What a cross-bill ticket reuses unchanged: the heading's course list is computed from the dishes
+under each heading (`headingCourses`, `apps/server/src/kitchen-ticket.ts`), and the cue's group fact
+(`passStationsByGroup`, `apps/server/src/working-order.ts`) already reads a group across every bill
+of the party.
+
 ## Recorded move/join/split defects: closure requires an experiment
 
 Read each detailed entry in `docs/backlog/till.md` at implementation time; none is deleted by this plan. Slice 4 owns A590's integration fix. Other entries remain unless separately

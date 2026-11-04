@@ -2,7 +2,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { parties, passItemMarks, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import { parties, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readScopedPassBoard, type PassScope } from "./pass-board.js";
@@ -39,7 +39,7 @@ const counts = (board: PassBoard) =>
 describe.each(["table", "counter"] as const)("A773 no dispatch projection: %s", (service) => {
   // The pass monitor's and the expo board's routes both read the board without release ids.
   it.each(["pass", "monitor and expo"] as const)(
-    "keeps the %s read identical after legacy Away and Done stamps",
+    "keeps the %s read identical across reads, with no Away fields",
     async (reader) => {
       const work =
         service === "table"
@@ -70,27 +70,13 @@ describe.each(["table", "counter"] as const)("A773 no dispatch projection: %s", 
           expect(card).not.toHaveProperty("away");
           for (const dish of card.items) expect(dish).not.toHaveProperty("awayAt");
         }
-        await inTx(v, async (tx) => {
-          await tx
-            .update(ticketItems)
-            .set({ awayAt: "2026-10-20T12:00:00.000Z" })
-            .where(eq(ticketItems.id, item.id));
-          await tx.insert(passItemMarks).values({
-            deviceId: v.cfg.origin.deviceId,
-            ticketItemId: item.id,
-            doneAt: "2026-10-20T12:00:00.000Z",
-            doneByPersonId: OPERATOR,
-          });
-        });
         const stored = await inTx(v, async (tx) => ({
           ticket: await tx.select().from(ticketItems).where(eq(ticketItems.id, item.id)),
-          marks: await tx.select().from(passItemMarks),
         }));
         expect(await read()).toEqual(before);
         expect(
           await inTx(v, async (tx) => ({
             ticket: await tx.select().from(ticketItems).where(eq(ticketItems.id, item.id)),
-            marks: await tx.select().from(passItemMarks),
           })),
         ).toEqual(stored);
       } finally {
@@ -132,26 +118,6 @@ async function tableWork(quantity = "1", shape?: "grouped") {
 }
 
 describe("A773 lifetime", () => {
-  it("keeps a ready paid dish on both boards despite legacy Away and device Done marks", async () => {
-    const { v, party, item } = await tableWork();
-    await pay(v, party.tabId, "12.00");
-    const expected = [{ id: item.id, qty: "1.000" }];
-    expect(await boards(v)).toEqual({ screen: expected, monitor: expected });
-    await inTx(v, async (tx) => {
-      await tx.insert(passItemMarks).values({
-        deviceId: v.cfg.origin.deviceId,
-        ticketItemId: item.id,
-        doneAt: new Date().toISOString(),
-        doneByPersonId: OPERATOR,
-      });
-      await tx
-        .update(ticketItems)
-        .set({ awayAt: new Date().toISOString() })
-        .where(eq(ticketItems.id, item.id));
-    });
-    expect(await boards(v)).toEqual({ screen: expected, monitor: expected });
-  });
-
   it("shows only the remaining quantity, restores it on Undo and keeps the original ready time", async () => {
     const { v, party, item } = await tableWork("2", "grouped");
     await pay(v, party.tabId, "24.00");

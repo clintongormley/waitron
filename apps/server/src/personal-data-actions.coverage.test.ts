@@ -54,7 +54,6 @@ const NOT_YET: Record<string, string> = Object.fromEntries(
     "order_portion_events.actor_id",
     "parties.closed_by",
     "parties.opened_by",
-    "pass_item_marks.done_by_person_id",
     "receipt_reprints.person_id",
     "recovery_packs.made_by",
     "sales.authorized_by",

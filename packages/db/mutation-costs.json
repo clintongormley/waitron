@@ -69,7 +69,6 @@
   "src/schema/origin.ts": 6.6,
   "src/schema/page-printers.ts": 31.9,
   "src/schema/parties.ts": 71.7,
-  "src/schema/pass-item-marks.ts": 25.7,
   "src/schema/print-agents.ts": 16.7,
   "src/schema/print-jobs.ts": 35.2,
   "src/schema/printer-holders.ts": 23.8,

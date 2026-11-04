@@ -9,8 +9,13 @@ import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { TickingClock, baseStyles, registerIcons } from "@waitron/ui";
-import { type TimingBand, classifyBand, thousandthsToDecimal } from "@waitron/shared";
-import { clockTime, t } from "../i18n/t.js";
+import {
+  type TimingBand,
+  classifyBand,
+  conjunctionList,
+  thousandthsToDecimal,
+} from "@waitron/shared";
+import { clockTime, currentLocale, fill, t } from "../i18n/t.js";
 import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { dishLine, trimQuantity } from "./dish-format.js";
@@ -135,6 +140,22 @@ export function stationColumnNames(): Map<ColumnKey, string> {
     ["overview", t("station.overview")],
     ...Object.entries(DRAWN).map(([key, drawn]) => [key as ColumnKey, drawn.name()] as const),
   ]);
+}
+
+/** The cue naming the stations a card's group goes out with, when the card holds a released dish the
+ * pass does not control. */
+function goesWith(card: KitchenCard): TemplateResult | typeof nothing {
+  const stations = card.group?.goesWith;
+  if (
+    stations === undefined ||
+    !card.items.some((item) => item.phase !== "held" && !item.passControlled)
+  ) {
+    return nothing;
+  }
+  const names = conjunctionList(stations, currentLocale());
+  return html`<p class="goes-with" data-goes-with>
+    ${fill(t("station.goes_with"), { stations: names })}
+  </p>`;
 }
 
 function afterPeriodWords(period: string): string {
@@ -542,6 +563,12 @@ export class TillStationQueue extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         color: var(--wt-color-text-muted);
         text-transform: uppercase;
+      }
+
+      .goes-with {
+        margin: 0;
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
       }
 
       .held-note {
@@ -1315,7 +1342,7 @@ export class TillStationQueue extends LitElement {
       ${card.orders.map((order) => this.#kitchenNote(order, tag(order)))}
       ${card.orders.map((order) => this.#printProblem(order, tag(order)))}
       ${sections.map((section) => this.#courseSection(section, row, sections.length > 1))}
-      ${card.orders.map((order) => this.#elsewhere(order, tag(order)))}
+      ${goesWith(card)} ${card.orders.map((order) => this.#elsewhere(order, tag(order)))}
       ${card.orders.map((order) => this.#collectAction(order, tag(order)))}
       ${card.orders.map((order) => this.#reprintAction(order, tag(order)))}
       ${

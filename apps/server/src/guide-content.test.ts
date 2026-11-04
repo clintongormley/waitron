@@ -54,6 +54,7 @@ describe("the user guides", () => {
         "allergy-copies",
         "corrections",
         "held-work",
+        "group-headings",
         "reprints",
         "service-lifetime",
         "kitchen-screen",

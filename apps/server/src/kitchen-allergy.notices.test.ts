@@ -206,10 +206,7 @@ describe("A669 notices", () => {
     "guest edits notify %s work without replacing its original",
     async (state) => {
       const p = await sent();
-      await v.db
-        .update(ticketItems)
-        .set({ state, awayAt: new Date().toISOString() })
-        .where(eq(ticketItems.workingOrderId, p.tabId));
+      await v.db.update(ticketItems).set({ state }).where(eq(ticketItems.workingOrderId, p.tabId));
       await edit(p, patch(p, { who: "Corrected guest", note: "Separate tools" }));
       const block = { ...original, who: "Corrected guest", note: "Separate tools" };
       expect(

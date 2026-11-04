@@ -629,7 +629,7 @@ the server checks each at the route, never trusting the till's copy:
   refuses explicit effective KDS bindings, including off devices, and unfinished food. Removing
   the last station from a profile or device scope keeps its parent with an empty station list;
   removing the whole screen kind records a different no-longer-available state. The former pass
-  Done/Undo route is retired; legacy `pass_item_marks` rows do not hide food from either board.
+  Done/Undo route is retired.
 - **Who may sign in.** `GET /api/staff` with a device lists only the people its profile admits
   (`listStaffAdmittedTo`, `@waitron/identity`); a list of colleagues that is not a sign-in list,
   such as the schedule's, asks with `everyone=true`. A switch to another approved profile checks

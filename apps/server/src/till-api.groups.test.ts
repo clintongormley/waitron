@@ -1494,7 +1494,6 @@ async function groupTickets(groupId: string) {
       .select({
         state: ticketItems.state,
         firedAt: ticketItems.firedAt,
-        awayAt: ticketItems.awayAt,
       })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
@@ -1689,8 +1688,8 @@ describe("the pass routes, one after the other", () => {
 
     expect(readied.status).toBe(200);
     expect(readied.json).toEqual({ revision: party.revision + 2 });
-    expect((await groupTickets(party.fired.id)).map((item) => [item.state, item.awayAt])).toEqual(
-      before.map(() => ["ready", null]),
+    expect((await groupTickets(party.fired.id)).map((item) => [item.state])).toEqual(
+      before.map(() => ["ready"]),
     );
     const listed = (await call("GET", `/api/parties/${party.partyId}/groups`)).json as unknown as {
       groups: { id: string; ready?: boolean }[];
@@ -1712,7 +1711,6 @@ describe("the pass routes, one after the other", () => {
 
     expect(sent.status).toBe(404);
     expect(await passSnapshot(party, party.fired.id)).toEqual(beforeAway);
-    expect((await groupTickets(party.fired.id)).every((item) => item.awayAt === null)).toBe(true);
   });
 });
 

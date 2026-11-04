@@ -266,6 +266,8 @@ These additions also change incoming closure for original rows: `parties` receiv
 
 **2026-10-24:** `service_settings` was dropped (A756 PR 8, venue-service migration 0069); it had no keys in or out.
 
+**2026-11-04:** `pass_item_marks` was dropped (A773-2 PR D, core migration 0205), and `ticket_items.away_at` (core 0206). This removes `pass_item_marks(ticket_item_id)` from `ticket_items`' incoming closure and `pass_item_marks(device_id)` from `devices`'.
+
 ## Local application tables
 
 | Module      | Table                | appendOnly | Policy and retirement event                                                                                                                                        | Retained purpose/privacy                                                                                                                                                      | Concrete dependencies, source-reading-only                                                                                               | Source sites                                                                                              |

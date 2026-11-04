@@ -130,7 +130,6 @@ async function fixture({
           readyAt: state === "ready" ? at : null,
           queuedAt: at,
           quantity: legacyQuantity ? null : line.quantity - cancelled * ratio,
-          awayAt: at,
           madeHere,
         })
         .where(eq(ticketItems.workingOrderLineId, line.id));

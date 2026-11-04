@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, passItemMarks, ticketItems, workingOrderLines } from "@waitron/db";
+import { deviceProfiles, ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -184,66 +184,8 @@ describe("pass screen", () => {
     expect(await orderIds()).toEqual([]);
   });
 
-  it("legacy Done marks stay device-specific but never hide food from either pass", async () => {
-    const { v, grill, outside } = await terraceVenue();
-    const [a, b] = await passDevices(v, 2);
-    const [burger] = await inTx(v, (tx) =>
-      tx
-        .select()
-        .from(ticketItems)
-        .where(
-          and(eq(ticketItems.workingOrderId, outside.tabId), eq(ticketItems.stationId, grill)),
-        ),
-    );
-    const boardBefore = await read(v, EVERY);
-    const at = new Date("2026-10-01T12:00:00.000Z");
-    await inTx(v, (tx) =>
-      tx.insert(passItemMarks).values({
-        deviceId: a!,
-        ticketItemId: burger!.id,
-        doneAt: at.toISOString(),
-        doneByPersonId: null,
-      }),
-    );
-    expect(ids(await read(v, EVERY))).toContain(burger!.id);
-    expect(await read(v, EVERY)).toEqual(boardBefore);
-    const person = randomUUID();
-    await inTx(v, (tx) =>
-      tx.insert(passItemMarks).values({
-        deviceId: b!,
-        ticketItemId: burger!.id,
-        doneAt: at.toISOString(),
-        doneByPersonId: person,
-      }),
-    );
-    const both = await inTx(v, (tx) =>
-      tx.select().from(passItemMarks).where(eq(passItemMarks.ticketItemId, burger!.id)),
-    );
-    expect(both).toHaveLength(2);
-    expect(both).toEqual(
-      expect.arrayContaining([
-        { deviceId: a, ticketItemId: burger!.id, doneAt: at.toISOString(), doneByPersonId: null },
-        { deviceId: b, ticketItemId: burger!.id, doneAt: at.toISOString(), doneByPersonId: person },
-      ]),
-    );
-    await inTx(v, (tx) =>
-      tx
-        .delete(passItemMarks)
-        .where(and(eq(passItemMarks.deviceId, a!), eq(passItemMarks.ticketItemId, burger!.id))),
-    );
-    expect(ids(await read(v, EVERY))).toContain(burger!.id);
-    expect(
-      await inTx(v, (tx) =>
-        tx.select().from(passItemMarks).where(eq(passItemMarks.ticketItemId, burger!.id)),
-      ),
-    ).toEqual([
-      { deviceId: b, ticketItemId: burger!.id, doneAt: at.toISOString(), doneByPersonId: person },
-    ]);
-  });
-
-  it("A773 no dispatch state: splitting keeps the source mark without copying it or hiding food", async () => {
+  it("A773 no dispatch state: splitting a dish keeps both its kitchen items on the pass", async () => {
     const v = await setupPartyVenue(suite.db);
-    const [device] = await passDevices(v, 1);
     const party = await seat(v, await v.table("Split table"));
     await orderForParty(v, party.partyId, ["Burger"], party.tabId);
     const [item] = await inTx(v, (tx) =>
@@ -255,11 +197,6 @@ describe("pass screen", () => {
         .set({ quantity: 2000 })
         .where(eq(workingOrderLines.id, item!.workingOrderLineId));
       await tx.update(ticketItems).set({ quantity: 2000 }).where(eq(ticketItems.id, item!.id));
-      await tx.insert(passItemMarks).values({
-        deviceId: device!,
-        ticketItemId: item!.id,
-        doneAt: new Date().toISOString(),
-      });
       await carveOffLines(tx, v.cfg, party.tabId, party.tabId, [{ lineNo: 1, quantity: "1" }], {
         refuseHeld: false,
       });
@@ -273,11 +210,6 @@ describe("pass screen", () => {
       )
     ).map((row) => row.id);
     expect(itemIds).toHaveLength(2);
-    const marks = await inTx(v, (tx) =>
-      tx.select().from(passItemMarks).where(eq(passItemMarks.deviceId, device!)),
-    );
-    expect(marks).toHaveLength(1);
-    expect(marks[0]!.ticketItemId).toBe(item!.id);
     expect(ids(await read(v, EVERY)).sort()).toEqual([...itemIds].sort());
   });
 });
@@ -299,24 +231,6 @@ describe("a pass's sections", () => {
     ]);
     expect(groupCards(everything).map(dishes)).toEqual([[["BURG", true]], [["CANA", true]]]);
     expect(boardCards(everything)).toHaveLength(3);
-  });
-
-  it("a pass monitor keeps both of a bill's dishes after a legacy Away stamp", async () => {
-    const { v, grill, counterId } = await twoSectionVenue();
-    const counterItems = await inTx(v, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, counterId)),
-    );
-    const starter = counterItems.find((item) => item.stationId !== grill)!;
-    await inTx(v, (tx) =>
-      tx
-        .update(ticketItems)
-        .set({ awayAt: new Date().toISOString() })
-        .where(eq(ticketItems.id, starter.id)),
-    );
-    expect(dishes(billCard(await read(v, EVERY), counterId))).toEqual([
-      ["CANA", true],
-      ["BURG", true],
-    ]);
   });
 });
 
@@ -361,7 +275,7 @@ describe("the pass board", () => {
 });
 
 describe("retired pass completion", () => {
-  it("refuses Done and Undo for an id that names no dish without writing marks", async () => {
+  it("refuses Done and Undo for an id that names no dish", async () => {
     const v = await setupPartyVenue(suite.db);
     const [device] = await passDevices(v, 1);
     const app = new Hono();
@@ -381,14 +295,12 @@ describe("retired pass completion", () => {
       });
       expect(response.status).toBe(404);
     }
-    expect(await inTx(v, (tx) => tx.select().from(passItemMarks))).toEqual([]);
   });
 });
 
 describe("pass monitor", () => {
-  it("lists its scoped dishes independently of legacy Done and Away stamps", async () => {
+  it("lists its scoped dishes", async () => {
     const { v, grill, terrace, outside, inside, counterId } = await terraceVenue();
-    const [device] = await passDevices(v, 1);
     const grillOnly: PassScope = { stationIds: [grill], zoneIds: null };
     const before = await read(v, grillOnly);
     expect(boardOrderIds(before, { inView: true })).toEqual(
@@ -407,21 +319,7 @@ describe("pass monitor", () => {
           and(eq(ticketItems.workingOrderId, outside.tabId), eq(ticketItems.stationId, grill)),
         ),
     );
-    await inTx(v, (tx) =>
-      tx.insert(passItemMarks).values({
-        deviceId: device!,
-        ticketItemId: burger!.id,
-        doneAt: new Date().toISOString(),
-      }),
-    );
-    expect(await read(v, grillOnly)).toEqual(before);
 
-    await inTx(v, (tx) =>
-      tx
-        .update(ticketItems)
-        .set({ awayAt: new Date().toISOString() })
-        .where(eq(ticketItems.id, burger!.id)),
-    );
     expect(boardOrderIds(await read(v, EVERY))).toContain(outside.tabId);
     expect(boardOrderIds(await read(v, grillOnly), { inView: true })).toEqual(
       [outside.tabId, inside.tabId, counterId].sort(),

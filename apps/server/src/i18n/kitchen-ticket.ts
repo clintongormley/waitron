@@ -29,6 +29,7 @@ const ENGLISH_KITCHEN_WORDS = {
   recalled: "RECALLED",
   holdChanged: "HOLD CHANGED",
   holdCancelled: "HOLD CANCELLED",
+  goesWith: "Goes with {stations}",
 } as const;
 
 export type KitchenTicketWords = { readonly [Key in keyof typeof ENGLISH_KITCHEN_WORDS]: string };
@@ -64,6 +65,7 @@ export const KITCHEN_TICKET_WORDS: Readonly<Record<KitchenLanguage, KitchenTicke
     recalled: "RETIRADO",
     holdChanged: "EN ESPERA CAMBIADO",
     holdCancelled: "EN ESPERA CANCELADO",
+    goesWith: "Sale con {stations}",
   },
 };
 

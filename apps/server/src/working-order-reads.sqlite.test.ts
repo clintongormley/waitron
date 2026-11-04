@@ -224,12 +224,9 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
     expect(boardItems(expo).map((item) => item.name)).toEqual(["Burger"]);
     expect(floor[0]).toMatchObject({ pendingToServe: 2, readyToServe: 0, timingBand: "fresh" });
 
-    await db
-      .update(ticketItems)
-      .set({ state: "ready", awayAt: nowIso() })
-      .where(eq(ticketItems.id, burger!.id));
-    const afterLegacyAway = await withTransaction(db, (tx) => readScopedPassBoard(tx, cfg, EVERY));
-    expect(boardOrderIds(afterLegacyAway)).toContain(order!.id);
+    await db.update(ticketItems).set({ state: "ready" }).where(eq(ticketItems.id, burger!.id));
+    const afterReady = await withTransaction(db, (tx) => readScopedPassBoard(tx, cfg, EVERY));
+    expect(boardOrderIds(afterReady)).toContain(order!.id);
   });
 
   it("removes an order with only a made-here item from expo", async () => {

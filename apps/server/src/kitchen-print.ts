@@ -3,6 +3,7 @@ import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   insertInChunks,
+  kitchenCourses,
   kitchenPrintJobLines,
   kitchenPrintJobs,
   kitchenStations,
@@ -64,6 +65,7 @@ import { heldPaperStations, readGroupNumberLabels } from "./order-groups.js";
 import { freezeKitchenAllergyItems } from "./kitchen-allergy.js";
 import type { KitchenTicketItem, MovedSlip, OtherStationItem } from "./kitchen-ticket.js";
 import type { TradingContext } from "./trading-context.js";
+import { passStationsByGroup } from "./working-order.js";
 import "./errors.js";
 
 /**
@@ -186,6 +188,8 @@ async function buildTicketItems(
       group: number | null;
       position: number | null;
       item: KitchenTicketItem;
+      passControlled: boolean;
+      madeHere: boolean;
     }
   >
 > {
@@ -195,6 +199,7 @@ async function buildTicketItems(
   const ownRecord = alias(ticketItems, "ticket_own_record");
   const parentRecord = alias(ticketItems, "ticket_parent_record");
   const parentStation = alias(kitchenStations, "ticket_parent_station");
+  const ownCourse = alias(kitchenCourses, "ticket_own_course");
   const storedLineRows = await tx
     .select({
       id: workingOrderLines.id,
@@ -218,9 +223,14 @@ async function buildTicketItems(
       parentVariantName: parentLine.variantName,
       parentVariantKitchenName: parentLine.variantKitchenName,
       parentStationName: parentStation.name,
+      courseName: ownCourse.name,
+      courseOrder: ownCourse.displayOrder,
+      passControlled: ownRecord.passControlled,
+      madeHere: ownRecord.madeHere,
     })
     .from(workingOrderLines)
     .leftJoin(ownRecord, eq(ownRecord.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(ownCourse, eq(ownCourse.id, ownRecord.courseId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(parentLine, eq(parentLine.id, workingOrderLines.parentLineId))
     .leftJoin(parentRecord, eq(parentRecord.workingOrderLineId, parentLine.id))
@@ -308,7 +318,14 @@ async function buildTicketItems(
 
   const byLine = new Map<
     string,
-    { lineNo: number; group: number | null; position: number | null; item: KitchenTicketItem }
+    {
+      lineNo: number;
+      group: number | null;
+      position: number | null;
+      item: KitchenTicketItem;
+      passControlled: boolean;
+      madeHere: boolean;
+    }
   >();
   for (const row of lineRows) {
     const unit =
@@ -319,6 +336,8 @@ async function buildTicketItems(
       lineNo: row.lineNo,
       group: row.group,
       position: row.position,
+      passControlled: row.passControlled === true,
+      madeHere: row.madeHere === true,
       item: {
         allergy:
           row.ticketItemId === null
@@ -328,6 +347,9 @@ async function buildTicketItems(
         ...(row.groupId !== null && numberLabels.has(row.groupId)
           ? { groupLabel: numberLabels.get(row.groupId)! }
           : {}),
+        ...(row.courseName === null
+          ? {}
+          : { course: { name: row.courseName, order: row.courseOrder! } }),
         qty: row.quantity,
         unit,
         name: kitchenPresentationName(row),
@@ -584,6 +606,12 @@ async function planKitchenTickets(
 
   const language = await readKitchenLanguage(tx);
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds, language);
+  const passStations =
+    mark === "HOLD"
+      ? new Map<string, readonly string[]>()
+      : await passStationsByGroup(tx, [
+          ...new Set([...itemsByLine.values()].flatMap(({ item }) => item.groupId ?? [])),
+        ]);
   const stationNames =
     known === undefined
       ? await readStations(tx, stationIds)
@@ -602,7 +630,12 @@ async function planKitchenTickets(
   >();
   for (const fired of firedItems) {
     const entry = itemsByLine.get(fired.workingOrderLineId)!;
-    const item = atFiredQuantity(entry.item, fired);
+    const fresh = atFiredQuantity(entry.item, fired);
+    const goesWith =
+      fresh.groupId === undefined || entry.passControlled || entry.madeHere
+        ? undefined
+        : passStations.get(fresh.groupId);
+    const item = goesWith === undefined ? fresh : { ...fresh, goesWith };
     const bucket = itemsByStation.get(fired.stationId) ?? [];
     bucket.push({
       lineNo: entry.lineNo,

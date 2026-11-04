@@ -137,11 +137,6 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("kitchen_courses", "state", STATE),
   classify("station_printers", "state", STATE),
   classify(
-    "pass_item_marks",
-    "state",
-    "each device's own Done marks, live service in flight; copied to a standby, never drained back",
-  ),
-  classify(
     "ticket_item_moves",
     "state",
     "who moved a dish to another station, live service in flight; copied to a standby, never drained back",

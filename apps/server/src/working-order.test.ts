@@ -5175,7 +5175,6 @@ async function courseItemsFor(
     productId: string | null;
     courseId: string | null;
     firedAt: string | null;
-    awayAt: string | null;
     state: string;
   }[]
 > {
@@ -5185,7 +5184,6 @@ async function courseItemsFor(
       productId: workingOrderLines.productId,
       courseId: ticketItems.courseId,
       firedAt: ticketItems.firedAt,
-      awayAt: ticketItems.awayAt,
       state: ticketItems.state,
     })
     .from(ticketItems)
@@ -5802,7 +5800,7 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
     });
   });
 
-  it("refuses an AWAY (ready + dispatched) line with ticket.already_started, naming its item id", async () => {
+  it("refuses a ready line with ticket.already_started, naming its item id", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -5816,13 +5814,8 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
       const item = byLine(await courseItemsFor(tx, tabId), starter);
       await advanceTicketItem(tx, cfg, item.id, "preparing");
       await advanceTicketItem(tx, cfg, item.id, "ready");
-      await tx
-        .update(ticketItems)
-        .set({ awayAt: "2026-10-20T12:00:00.000Z" })
-        .where(eq(ticketItems.id, item.id));
       const away = byLine(await courseItemsFor(tx, tabId), starter);
       expect(away.state).toBe("ready");
-      expect(away.awayAt).not.toBeNull();
 
       await expect(recallLines(tx, cfg, tabId, [1])).rejects.toMatchObject({
         code: "ticket.already_started",
@@ -6200,7 +6193,7 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
     });
   });
 
-  it("keeps counter course labels in display order and releases every course independently of legacy Away", async () => {
+  it("keeps counter course labels in display order and releases every course", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -6221,9 +6214,6 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
       expect(d1!.firedAt).not.toBeNull(); // Counter Send releases every course.
 
       await fireProductLine(tx, cfg, orderId, main);
-      const items = await courseItemsFor(tx, orderId);
-      const entItem = items.find((i) => i.courseId === ent.id)!;
-      await tx.update(ticketItems).set({ awayAt: nowIso() }).where(eq(ticketItems.id, entItem.id));
 
       const after = await readScopedPassBoard(tx, cfg, EVERY);
       expect(boardOrderIds(after)).toEqual([orderId]);
@@ -6234,7 +6224,7 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
     });
   });
 
-  it("keeps every unserved item after partial and whole-order legacy Away stamps", async () => {
+  it("keeps every unserved item on the pass board", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -6247,16 +6237,8 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(a), line(b)]);
       const items = await courseItemsFor(tx, orderId);
 
-      await tx
-        .update(ticketItems)
-        .set({ awayAt: nowIso() })
-        .where(eq(ticketItems.id, items[0]!.id));
       expect(boardOrderIds(await readScopedPassBoard(tx, cfg, EVERY))).toEqual([orderId]);
 
-      await tx
-        .update(ticketItems)
-        .set({ awayAt: nowIso() })
-        .where(eq(ticketItems.id, items[1]!.id));
       const board = await readScopedPassBoard(tx, cfg, EVERY);
       expect(boardOrderIds(board)).toEqual([orderId]);
       expect(
@@ -6457,8 +6439,6 @@ describe("bumpCourseReady — course preparation without dispatch", () => {
       await bumpCourseReady(tx, cfg, orderId, courseId);
       items = await courseItemsFor(tx, orderId);
       expect(items.every((i) => i.state === "ready")).toBe(true);
-
-      expect(items.every((i) => i.awayAt === null)).toBe(true);
     });
   });
 
@@ -6487,12 +6467,9 @@ describe("bumpCourseReady — course preparation without dispatch", () => {
       items = await courseItemsFor(tx, orderId);
       expect(byLine(items, starter).state).toBe("ready");
 
-      expect(byLine(items, starter).awayAt).toBeNull();
-
       await fireProductLine(tx, cfg, orderId, main);
       items = await courseItemsFor(tx, orderId);
       expect(byLine(items, main).state).toBe("queued");
-      expect(byLine(items, main).awayAt).toBeNull();
     });
   });
 
@@ -6516,9 +6493,7 @@ describe("bumpCourseReady — course preparation without dispatch", () => {
         tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId));
       const readied = await read();
       expect(readied).toHaveLength(2);
-      expect(
-        readied.every((i) => i.state === "ready" && i.readyAt !== null && i.awayAt === null),
-      ).toBe(true);
+      expect(readied.every((i) => i.state === "ready" && i.readyAt !== null)).toBe(true);
       await tx
         .update(ticketItems)
         .set({ readyAt: "2026-10-20T12:00:00.000Z" })

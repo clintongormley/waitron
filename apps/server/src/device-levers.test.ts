@@ -163,7 +163,7 @@ async function firedEvent(groupId: string) {
 
 async function itemsOf(orderId: string) {
   return suite.db
-    .select({ state: ticketItems.state, firedAt: ticketItems.firedAt, awayAt: ticketItems.awayAt })
+    .select({ state: ticketItems.state, firedAt: ticketItems.firedAt })
     .from(ticketItems)
     .where(eq(ticketItems.workingOrderId, orderId));
 }
@@ -431,7 +431,7 @@ describe("a kitchen display's retained Ready actions", () => {
       (await send(f.app, f.pass.cookie, coursePath(held.tabId, f.mains, "ready"))).status,
     ).toBe(200);
     expect(await itemsOf(held.tabId)).toEqual([
-      expect.objectContaining({ state: "ready", firedAt: expect.any(String), awayAt: null }),
+      expect.objectContaining({ state: "ready", firedAt: expect.any(String) }),
     ]);
   });
 
@@ -451,7 +451,7 @@ describe("a kitchen display's retained Ready actions", () => {
       200,
     );
     expect(await itemsOf(counter)).toEqual([
-      expect.objectContaining({ state: "ready", firedAt: expect.any(String), awayAt: null }),
+      expect.objectContaining({ state: "ready", firedAt: expect.any(String) }),
     ]);
   });
 
@@ -466,9 +466,7 @@ describe("a kitchen display's retained Ready actions", () => {
     const path = groupPath(held.partyId, held.groupId, "ready");
     const first = await send(f.app, f.pass.cookie, path, body);
     expect(first.status).toBe(200);
-    expect(await itemsOf(held.tabId)).toEqual([
-      expect.objectContaining({ state: "ready", awayAt: null }),
-    ]);
+    expect(await itemsOf(held.tabId)).toEqual([expect.objectContaining({ state: "ready" })]);
     const revision = await revisionOf(f.v, held.partyId);
     expect(await send(f.app, f.pass.cookie, path, body)).toEqual(first);
     expect(await revisionOf(f.v, held.partyId)).toBe(revision);

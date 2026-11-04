@@ -1138,7 +1138,7 @@ describe("readCurrentOrders (spec §4)", () => {
       await inTx((tx) =>
         tx
           .update(ticketItems)
-          .set({ state, readyAt, awayAt: "2026-10-20T18:01:00.000Z" })
+          .set({ state, readyAt })
           .where(eq(ticketItems.workingOrderLineId, sent.lineIds[0]!)),
       );
 

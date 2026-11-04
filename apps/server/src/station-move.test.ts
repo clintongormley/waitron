@@ -2176,14 +2176,8 @@ describe("moveDishesToStation", () => {
     expect(await snapshot(tabId, item.id)).toEqual(before);
   });
 
-  it("A773 no dispatch state: moves queued legacy-Away work without changing its billed line", async () => {
+  it("A773 no dispatch state: moves queued work without changing its billed line", async () => {
     const { tabId, item } = await burger();
-    await inTx(venue, (tx) =>
-      tx
-        .update(ticketItems)
-        .set({ awayAt: new Date().toISOString() })
-        .where(eq(ticketItems.id, item.id)),
-    );
     const before = await inTx(venue, (tx) =>
       tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, item.workingOrderLineId)),
     );

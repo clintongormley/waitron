@@ -7,7 +7,12 @@
  * `esc()` has no bold, so ASCII markers stand in for emphasis.
  */
 import { esc, prepareText, wrapText, type EscSetting } from "@waitron/printing";
-import { partyTablesName, stringToThousandths, thousandthsToDecimal } from "@waitron/shared";
+import {
+  conjunctionList,
+  partyTablesName,
+  stringToThousandths,
+  thousandthsToDecimal,
+} from "@waitron/shared";
 import type { TicketGrouping } from "@waitron/shared";
 import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
 import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
@@ -34,6 +39,10 @@ export interface KitchenTicketItem {
   group?: number;
   groupId?: string;
   groupLabel?: string;
+  /** The dish's own course, named on its group's heading. */
+  course?: { name: string; order: number };
+  /** The stations holding its group's dishes for the pass. */
+  goesWith?: readonly string[];
   /** Printed as sold, never merged or split. */
   printedAsSold?: boolean;
   /** The period the dish was agreed to be sent after. */
@@ -93,6 +102,8 @@ function entryKey(item: KitchenTicketItem): string {
     item.group ?? null,
     item.groupId ?? null,
     item.groupLabel ?? null,
+    item.course?.name ?? null,
+    item.goesWith ?? [],
     item.modifiers ?? [],
     item.crossRefs ?? [],
     item.afterPeriod ?? null,
@@ -262,18 +273,46 @@ function onlyGroupOf(items: readonly KitchenTicketItem[]): KitchenTicketItem | u
     : undefined;
 }
 
+/** The distinct courses of `items`, in course order then name, upper-cased for the heading. */
+function headingCourses(items: readonly KitchenTicketItem[], locale: string): string[] {
+  const courses = new Map<string, number>();
+  for (const { course } of items) if (course !== undefined) courses.set(course.name, course.order);
+  const language = ticketLanguage(locale);
+  return [...courses]
+    .sort(([a, x], [b, y]) => x - y || a.localeCompare(b))
+    .map(([name]) => name.toLocaleUpperCase(language));
+}
+
+/** `GROUP n`, then the origin tables when `item` has them, then the courses of `under`. */
 function emitGroup(
   b: ReturnType<typeof esc>,
   item: KitchenTicketItem,
+  under: readonly KitchenTicketItem[],
   columns: number,
   locale: string,
 ): void {
   const label = item.groupLabel === undefined ? "" : ` · ${item.groupLabel}`;
+  const courses = headingCourses(under, locale);
+  const named = courses.length === 0 ? "" : ` · ${courses.join(", ")}`;
   for (const line of wrapText(
-    prepareText(`${kitchenTicketWords(locale).group} ${item.group}${label}`),
+    prepareText(`${kitchenTicketWords(locale).group} ${item.group}${label}${named}`),
     columns,
   ))
     b.line(line);
+}
+
+/** "Goes with {stations}" under a heading, naming the stations its dishes go out with. */
+function emitCue(
+  b: ReturnType<typeof esc>,
+  under: readonly KitchenTicketItem[],
+  columns: number,
+  locale: string,
+): void {
+  const stations = [...new Set(under.flatMap((item) => item.goesWith ?? []))];
+  if (stations.length === 0) return;
+  const list = conjunctionList(stations, locale);
+  const words = kitchenTicketWords(locale).goesWith.replace("{stations}", () => list);
+  for (const line of wrapText(prepareText(words), columns)) b.line(line);
 }
 
 function emitLateMark(
@@ -300,14 +339,18 @@ function emitGrouped(
   current: KitchenTicketItem | undefined,
   locale: string,
   lateMarks: boolean,
+  cues = false,
 ): void {
   let mark: string | undefined;
-  for (const item of items) {
+  for (const [index, item] of items.entries()) {
     if (
       item.group !== undefined &&
       (current === undefined || groupKey(item) !== groupKey(current))
     ) {
-      emitGroup(b, item, columns, locale);
+      const end = items.findIndex((next, at) => at > index && groupKey(next) !== groupKey(item));
+      const run = items.slice(index, end === -1 ? undefined : end);
+      emitGroup(b, item, run, columns, locale);
+      if (cues) emitCue(b, run, columns, locale);
       mark = undefined;
     }
     current = item;
@@ -353,7 +396,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
     ticket.scope === "station" ? [ticket.items] : ticket.stations.map((station) => station.items);
   const onlyGroup = onlyGroupOf(lists.flat());
   const emitList = (items: readonly KitchenTicketItem[]): void =>
-    emitGrouped(b, items, columns, onlyGroup, ticket.locale, true);
+    emitGrouped(b, items, columns, onlyGroup, ticket.locale, true, true);
 
   emitAllergyHeading(b, lists.flat(), columns, ticket.locale);
   if (ticket.reprintedAt !== undefined)
@@ -377,7 +420,10 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
   if (ticket.from !== undefined)
     text(`${kitchenTicketWords(ticket.from.locale).fromStation} ${ticket.from.stationName}`);
   emitKitchenNote(b, ticket.kitchenNote, columns);
-  if (onlyGroup !== undefined) emitGroup(b, onlyGroup, columns, ticket.locale);
+  if (onlyGroup !== undefined) {
+    emitGroup(b, onlyGroup, lists.flat(), columns, ticket.locale);
+    emitCue(b, lists.flat(), columns, ticket.locale);
+  }
 
   if (ticket.scope === "station") emitList(ticket.items);
   else {
@@ -520,7 +566,7 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): 
   text(slip.orderNumber);
   b.line(hhmm(new Date(slip.at)));
   emitKitchenNote(b, slip.kitchenNote, columns);
-  if (slip.item.group !== undefined) emitGroup(b, slip.item, columns, slip.locale);
+  if (slip.item.group !== undefined) emitGroup(b, slip.item, [slip.item], columns, slip.locale);
   const sign = slip.kind !== "HOLD CHANGED" ? "" : slip.direction === "added" ? "+" : "-";
   const item =
     slip.kind === "ALLERGY CHANGED" || slip.kind === "ALLERGY REMOVED"
@@ -566,7 +612,8 @@ export function formatKitchenNoteChangeSlip(
   const text = (s: string): void => {
     for (const line of wrapText(prepareText(s), columns)) b.line(line);
   };
-  const onlyGroup = onlyGroupOf(slip.stations.flatMap((station) => station.items));
+  const allItems = slip.stations.flatMap((station) => station.items);
+  const onlyGroup = onlyGroupOf(allItems);
 
   text(`*** ${kitchenNoteChangeHeading(slip.orderNoteChange, slip.locale)} ***`);
   text(slip.stations.map((station) => station.stationName).join(" · "));
@@ -574,7 +621,7 @@ export function formatKitchenNoteChangeSlip(
   text(slip.orderNumber);
   b.line(hhmm(new Date(slip.at)));
   emitKitchenNoteChange(b, slip.orderNoteChange, slip.locale, columns);
-  if (onlyGroup !== undefined) emitGroup(b, onlyGroup, columns, slip.locale);
+  if (onlyGroup !== undefined) emitGroup(b, onlyGroup, allItems, columns, slip.locale);
   for (const station of slip.stations) {
     if (slip.stations.length > 1) text(station.stationName);
     emitGrouped(b, station.items, columns, onlyGroup, slip.locale, false);
@@ -642,7 +689,7 @@ export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array
   emitGrouped(b, slip.items, columns, onlyGroupOf(slip.items), slip.locale, false);
   if (slip.held.length > 0) b.line(words.hold);
   for (const { group, items } of slip.held) {
-    emitGroup(b, { ...items[0]!, group }, columns, slip.locale);
+    emitGroup(b, { ...items[0]!, group }, items, columns, slip.locale);
     for (const item of items) emitItem(b, item, columns, slip.locale);
   }
 

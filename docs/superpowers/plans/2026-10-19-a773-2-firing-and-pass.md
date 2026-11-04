@@ -400,6 +400,8 @@ available writable pass screen covering both. A monitor or profile forbidden to 
 
 ### Task 11: Course headings, coordination cues and print boundary
 
+2026-11-04: Tasks 11 and 12 were built as A773-2 PR D from [its own plan](2026-11-04-a773-2d-tickets-and-retirement.md), which departs from them where its "Departures from the master plan" table says; `fire_control` is left to A1301 S28 (that plan's D113).
+
 **Files:** Server `kitchen-print.ts`, `kitchen-ticket.ts`, `order-groups.ts` held corrections; till station queue/expo presentation as needed; `kitchen-print.test.ts`, `kitchen-print.shared-printers.test.ts`,
 `kitchen-print.concurrency.test.ts`, `kitchen-ticket.test.ts`; kitchen-service guides.
 

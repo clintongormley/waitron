@@ -604,11 +604,10 @@ describe("served by quantity (§12 item 5)", () => {
       .select({
         state: ticketItems.state,
         readyAt: ticketItems.readyAt,
-        awayAt: ticketItems.awayAt,
       })
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderLineId, s.croq.id));
-    expect(after).toEqual({ state: "queued", readyAt: null, awayAt: null });
+    expect(after).toEqual({ state: "queued", readyAt: null });
   });
 
   it("serves a dish's extras in step with it, and unserves them with it", async () => {

@@ -7,7 +7,6 @@ import {
   devices,
   kitchenStations,
   deviceProfiles,
-  passItemMarks,
   printJobs,
   printers,
   stationPrinters,
@@ -639,41 +638,12 @@ describe("passScreensDark", () => {
     expect(await read(f)).toEqual([]);
   });
 
-  it("A773 no dispatch state: a legacy Away stamp does not silence a dark monitor", async () => {
-    const f = await passFixture();
-    const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
-    await suite.db
-      .update(ticketItems)
-      .set({ awayAt: "2026-10-02T18:00:00.000Z" })
-      .where(eq(ticketItems.workingOrderId, orderId));
-    const monitor = await passDevice(f, "pass_monitor");
-    expect(await read(f)).toEqual([
-      { deviceId: monitor, deviceName: "pass_monitor", kind: "pass_monitor", lastSeenAt: dark },
-    ]);
-  });
-
-  it("A773 no dispatch state: legacy Done marks do not silence a dark pass, but full serving does", async () => {
+  it("A773 no dispatch state: a dark pass is listed while its waiting dish is unserved, and not once it is fully served", async () => {
     const f = await passFixture();
     const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     const pass = await passDevice(f, "pass", { label: "Pass" });
-    const other = await passDevice(f, "pass", { label: "Other", lastSeenAt: at.toISOString() });
-    const [item] = await suite.db
-      .select({ id: ticketItems.id })
-      .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, orderId));
-    await suite.db.insert(passItemMarks).values({
-      deviceId: other,
-      ticketItemId: item!.id,
-      doneAt: "2026-10-02T18:00:00.000Z",
-    });
+    await passDevice(f, "pass", { label: "Other", lastSeenAt: at.toISOString() });
     expect((await read(f)).map((row) => row.deviceId)).toEqual([pass]);
-    await suite.db.insert(passItemMarks).values({
-      deviceId: pass,
-      ticketItemId: item!.id,
-      doneAt: "2026-10-02T18:00:00.000Z",
-    });
-    expect((await read(f)).map((row) => row.deviceId)).toEqual([pass]);
-    await suite.db.delete(passItemMarks);
     await suite.db.execute(
       sql`update working_order_lines set served_quantity = 1000, served_at = '2026-10-02T18:00:00.000Z' where working_order_id = ${orderId}`,
     );
@@ -688,7 +658,7 @@ describe("passScreensDark", () => {
       const deviceId = await passDevice(f, kind);
       await suite.db
         .update(ticketItems)
-        .set({ state: "ready", awayAt: "2026-10-02T18:00:00.000Z" })
+        .set({ state: "ready" })
         .where(eq(ticketItems.workingOrderId, orderId));
       await suite.db
         .update(workingOrderLines)

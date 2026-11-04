@@ -147,6 +147,7 @@ import {
   decimalToCents,
   decimalToThousandths,
   compareLabels,
+  compareStationNames,
   divideDecimal,
   locationId as brandLocationId,
   partyDisplayName,
@@ -7864,6 +7865,9 @@ export interface QueueGroup {
   numberPartyId: string;
   numberPartyLabel?: string;
   state: "held" | "fired";
+  /** On a station's queue only: the names of the stations of the group's dishes for the pass, until
+   * each is served; each name once, in the stations list's order. */
+  goesWith?: readonly string[];
 }
 
 export interface StationQueueItem {
@@ -8231,6 +8235,16 @@ export async function stationHasWork(tx: Transaction, stationId: string): Promis
   return item !== undefined;
 }
 
+/** A station's own view of `group`: the pass board reads {@link queueGroup} without the cue. */
+function stationQueueGroup(
+  group: QueueGroup | undefined,
+  passStations: ReadonlyMap<string, readonly string[]>,
+): QueueGroup | undefined {
+  if (group === undefined) return undefined;
+  const goesWith = passStations.get(group.id);
+  return goesWith === undefined ? group : { ...group, goesWith };
+}
+
 /** Each of `stationIds`' {@link listStationQueue}, read together. */
 export async function listStationQueues(
   tx: Transaction,
@@ -8297,6 +8311,9 @@ export async function listStationQueues(
     tx,
     rows.flatMap((row) => (row.groupPartyId === null ? [] : [row.groupPartyId])),
   );
+  const passStations = await passStationsByGroup(tx, [
+    ...new Set(rows.flatMap((row) => (row.groupId === null ? [] : [row.groupId]))),
+  ]);
   const lastMoves = await readStationQueueMoves(
     tx,
     rows.map((row) => row.workingOrderLineId),
@@ -8426,7 +8443,7 @@ export async function listStationQueues(
         row.courseId === null
           ? null
           : { id: row.courseId, name: row.courseName!, displayOrder: row.courseDisplayOrder! },
-      ...optional("group", queueGroup(row, numberLabels)),
+      ...optional("group", stationQueueGroup(queueGroup(row, numberLabels), passStations)),
       phase: kitchenPhase(row),
       requestedAt: row.requestedAt,
       firedAt: row.firedAt,
@@ -8490,6 +8507,48 @@ export function liveKitchenDish(): SQL | undefined {
       )`,
     ),
   );
+}
+
+/**
+ * The names of the stations holding a live dish of each of `groupIds`, across every bill, that the
+ * pass controls or that is not yet asked for at a station that waits for the pass now; ordered as the
+ * stations list is, a name two stations share appearing once. A group with none is absent.
+ */
+export async function passStationsByGroup(
+  tx: Transaction,
+  groupIds: readonly string[],
+): Promise<ReadonlyMap<string, readonly string[]>> {
+  if (groupIds.length === 0) return new Map();
+  const rows = await tx
+    .selectDistinct({
+      groupId: workingOrderLines.groupId,
+      stationId: kitchenStations.id,
+      name: kitchenStations.name,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
+    .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .innerJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
+    .where(
+      and(
+        inArray(workingOrderLines.groupId, [...groupIds]),
+        liveKitchenDish(),
+        or(
+          eq(ticketItems.passControlled, true),
+          and(heldItem(), eq(kitchenStations.waitsForPass, true)),
+        ),
+      ),
+    );
+  rows.sort(
+    (a, b) => compareStationNames(a.name, b.name) || a.stationId.localeCompare(b.stationId),
+  );
+  const names = new Map<string, string[]>();
+  for (const row of rows) {
+    const list = names.get(row.groupId!) ?? [];
+    if (!list.includes(row.name)) list.push(row.name);
+    names.set(row.groupId!, list);
+  }
+  return names;
 }
 
 /** The stored facts the closed-station test reads, beside the row. */

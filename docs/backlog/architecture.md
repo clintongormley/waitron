@@ -1077,7 +1077,9 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
     second read goes with `holiday_geographies.location_id` (S8, #2405). Until the schema slices
     drop the columns, the configuration import sets every column whose foreign key points at
     `locations` to the importing venue's row (`venueLocationId`); the export no longer carries
-    `fire_control`, whose column A773-2 removes (S17, #2415). Two raw
+    `fire_control`, whose column goes with `locations` in S28 rather than in A773-2, since dropping
+    it alone rebuilds `locations` (S17, #2415; A773-2 PR D plan D113). S28 also deletes the tests
+    that still set it, listed in D113 and in [kitchen.md](kitchen.md). Two raw
     `insert into working_orders` statements (`working-order.test.ts`'s `seedForeignNodeOrder`,
     `station-order-migration.test.ts`): the schema slice that drops `working_orders.location_id`
     changes them (F5, #2403). A bucket restore reads the venue from the downloaded copy before any

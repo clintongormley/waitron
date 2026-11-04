@@ -467,7 +467,9 @@ reads today.)
 **One group, several stations.** When the waiter fires a group, each station's part follows that
 station's own setting. A station that does not wait for the pass starts at once. Its ticket and
 screen say "Goes with kitchen food" when the same group has lines at a station that waits for the
-pass (pictures 7, 8). **A group reads ready only when every station's part of it is ready.**
+pass (pictures 7, 8). (2026-11-04: the owner withdrew these words; the cue names the stations, see
+[PR D plan, Revision 5](../plans/2026-11-04-a773-2d-tickets-and-retirement.md#revision-5-2026-11-04-the-owner-withdraws-goes-with-kitchen-food).)
+**A group reads ready only when every station's part of it is ready.**
 Letting a station wait automatically for another station's part is left for later (section 11).
 
 **Station screens lose every Fire button** (for groups and for courses). They keep Waiting →
@@ -553,6 +555,8 @@ These are requirements; the plan picks the shapes.
   cleared (section 5).
 - **Courses gain `held_until_fired`; stations gain `waits_for_pass`; `locations.fire_control` goes.**
   We are before go-live, so nothing is carried forward (CLAUDE.md §3).
+  2026-11-04: A773-2 PR D left `locations.fire_control` to A1301 S28, which drops the whole
+  `locations` table (PR D plan, D113).
 
 ## 10. Edge cases
 

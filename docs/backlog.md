@@ -85,17 +85,8 @@ Ranked by the owner on 2026-10-16, for the time they are away (17 October to 2 N
 is its own brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 Everything not listed here needs more spec work first.
 
-1. **A773-2 — firing and the pass** (_The till, devices and table service_). Implement the
-   [reviewed plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) for the remaining
-   kitchen and pass work, following A773-1's Sent and New order panel. PR B is cut into four
-   ([slice plan](superpowers/plans/2026-11-01-a773-2b-requested-release.md)), and its B4 into two
-   ([B4 plan](superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)). PR B is complete: B4a put
-   the pass on the new board (#2425) and B4b gave the station and the pass their held cards and
-   column choices, the waiter's "at the pass" and a pass's choice to show other stations' dishes.
-   PR C ([plan](superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) is complete. Next is PR D (ticket
-   headings, "Goes with kitchen food" and removing the retired fields).
-   **A803 — bills and tables** follows A773-1 (owner, 2026-10-18); its pass and station-setting
-   slices wait for A773-2.
+1. **A803 — bills and tables** (_The till, devices and table service_) follows A773-1 (owner,
+   2026-10-18); its pass and station-setting slices no longer wait for A773-2.
 2. **A646 — a Modules page where the administrator switches optional modules on and sets them up**
    (_Modules, data and code health_). Its revised design awaits agreement.
 3. **A664 — archive or delete a venue's old data once it no longer has to be kept** (_Data
@@ -2466,12 +2457,30 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (`packages/ui/src/reorder-table.ts`) also reach shadow roots attached while it holds.
   [Decision](backlog/till.md#decisions-and-deliberate-limits)
 
-- **A773-2. Firing and the pass.** The [reviewed implementation
-  plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) leaves PR D: ticket presentation
-  and physical schema/configuration retirement. PR B (B4a #2425, then B4b #2440; [B4
-  plan](superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)) and PR C
-  ([plan](superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) are complete. Next: PR D, ticket headings, "Goes with kitchen food" and removing
-  `away_at`, `pass_item_marks` and `fire_control`. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
+- **Should a counter order say "Goes with {stations}"? (question for the owner, left open by
+  A773-2 PR D, its plan's D120).** A counter order has no groups, so a Bar drink on a counter order
+  whose Grill burger waits for the pass prints no "Goes with Grill", and its station card shows
+  none. The cue is worked out per group; a counter order would need its own rule.
+
+- **Delete the tests and fixtures that still set `fireControl` with A1301 S28 (left open by A773-2
+  PR D, its plan's D113).** Nothing reads the setting; tests still pass it to the till's setup
+  answer or write the `fire_control` column, and they pass.
+  [Detail](backlog/till.md#delete-the-tests-and-fixtures-that-still-set-firecontrol-with-a1301-s28)
+
+- **Two till fixtures still pass the dropped `awayAt` field (left open by A773-2 PR D).** Nothing
+  reads it: `apps/till/src/screens/till-table-order-screen.test.ts:2406` and
+  `apps/till/src/screens/till-table-order-screen.current-orders.test-helpers.ts:69`.
+
+- **On 80 mm paper a wrapped "Goes with {stations}" line can leave one station name alone on the
+  next line (left open by A773-2 PR D's look).** On a shared printer's reprint that line can look
+  like an empty station section.
+
+- **On a printer shared by two stations the "Goes with {stations}" line prints once under the
+  group heading, above the waiting station's own section too (left open by A773-2 PR D's look).**
+  Grill's dishes then sit under "Goes with Grill".
+
+- **An English "Goes with" list of three stations gets a serial comma (left open by A773-2 PR D's
+  look).** "Grill, Fryer, and Pastry"; Spanish has none («Grill, Fryer y Pastry»).
 
 - **The pass board and the station board still carry copies of each other's code (left open by
   A773-2 B4a's finish review).** Two copies remain: the width watcher that switches between columns
@@ -2579,7 +2588,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Later, after A773: a station waits for another station's part of a group (owner,
   2026-10-16).** For example, the bar pours the dessert wine when the kitchen marks the tarta ready,
   rather than when the waiter fires the group. A773 starts both parts together and marks the bar's
-  part "Goes with kitchen food". Try it once a venue has run with that.
+  part with the "Goes with {stations}" cue, naming the tarta's station. Try it once a venue has run
+  with that.
   [Spec §5](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#5-firing-and-the-pass)
 
 - **Custom item on the Counter (A738 residual; undecided).** The dashed + Custom item tile and its
@@ -3144,7 +3154,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).** Counter
   custom items (A738 residual) and the payment window (A739) remain. What is left of A797: slices
-  10–11, and 12b after A773-2: [build
+  10–11 and 12b: [build
   plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md).
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)

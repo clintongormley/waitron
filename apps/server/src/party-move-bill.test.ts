@@ -170,7 +170,6 @@ async function ticketsOf(billId: string) {
         lineId: ticketItems.workingOrderLineId,
         state: ticketItems.state,
         firedAt: ticketItems.firedAt,
-        awayAt: ticketItems.awayAt,
       })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
@@ -791,12 +790,6 @@ describe("kitchen groups when a bill leaves its party", () => {
     });
     const readyArgs = await args();
     await inTx(v, (tx) => bumpGroupReady(tx, v.cfg, ana.partyId, vino!.groupId!, readyArgs));
-    await inTx(v, (tx) =>
-      tx
-        .update(ticketItems)
-        .set({ awayAt: "2026-10-20T12:01:00.000Z" })
-        .where(eq(ticketItems.workingOrderId, second)),
-    );
     const servedArgs = await args();
     await inTx(v, (tx) =>
       markServed(tx, v.cfg, ana.partyId, [{ lineId: vino!.id, quantity: "1" }], servedArgs),
@@ -806,7 +799,7 @@ describe("kitchen groups when a bill leaves its party", () => {
     expect(linesBefore[0]!.groupId).not.toBeNull();
     expect(linesBefore[0]!.servedQuantity).toBe(1000);
     expect(ticketsBefore).toEqual([
-      { lineId: vino!.id, state: "ready", firedAt: expect.any(String), awayAt: expect.any(String) },
+      { lineId: vino!.id, state: "ready", firedAt: expect.any(String) },
     ]);
 
     await move(second, { tableId: luisTable });
