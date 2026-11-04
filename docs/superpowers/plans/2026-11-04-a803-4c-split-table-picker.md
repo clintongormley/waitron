@@ -171,6 +171,7 @@ and below is already changed. "Ran" means this revision ran it, with the receipt
 | Finding | Answer | Where | Evidence checked for this revision |
 | --- | --- | --- | --- |
 | I1 a staying dish whose ticket predates a join is not told when the only table on that ticket leaves. D6 compared with the party's table names just before the split, which is not what the ticket printed: seat at Mesa 201, send Burger, join Mesa 202, split off Mesa 201, and the cook hears nothing | **Applied**: the rule told to the owner is the one built, per dish. No table change. Print jobs cannot serve as the record, so what a paper named is worked out from `party_tables` and `kitchen_notices`, with the limits D6 lists | D6, Question 3, Task 4, Task 17b | **Ran (R15):** the two probes went red with no notice and no slip before the fix; the old comparison put back turned 12 cases red, these among them. Print jobs: a dish at a station with no printer has no job, and a reprint adds a job naming later tables |
+| I1 of that fix's review (`~/waitron-campaign-c/a803-4c-reviews/task-4-fix.md`): a dish of a party combined into another could go untold, because every table on its list still at the table counted as on its ticket | **Applied**, on the driver's ruling: for a combined party's dish, prefer an occasional extra slip to a missed one, since a missed slip can send a plate to the wrong guests and an extra costs a line of paper. It now answers only the earliest table on its list still at the table | D6, Task 17b, Task 18 | **Ran (R15):** the cases went red with no notice and no slip before the change; each control is named under Task 17b |
 
 ## Owner answers so far (2026-11-04, questions.md ~22:13 and ~22:15)
 
@@ -498,14 +499,14 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   - **Each whole bill:** `enqueueMovedSlipsFor` over its entry, by today's rule (`kitchenToBeTold`).
   - **The dishes that left each loose source:** `enqueueMovedSlipsOnto(tx, cfg, newBill, sources)`, so
     `movedItems` keeps only ticket items of that source now on the new bill (`kitchen-print.ts`,
-    `movedItems`), one slip per source, because each names the order number it was sent under, with one
+    `movedItems`), one slip per source per station, because each names the order number it was sent under, with one
     read of the new bill's places, ticket items, kitchen notes and printing settings across all of them.
     A dish waiting for the pass is outside `before` as today (A1327, not absorbed).
   - **Everything else in the map** (staying bills, what stays on a loose source, the family's paid bills,
     counter orders delivered to the party's tables): `enqueueMovedSlipsForNamesGone(tx, cfg, rest,
     namesOnPaper)` in `kitchen-print.ts`, decided **per dish**, never per bill: a dish is told only when
     the order's places had a name and no name on the dish's paper is still one of the order's places. One
-    slip per order stays, naming only those dishes. So plain T7 + T8 → T7 tells a dish sent after the join
+    slip per order per station stays, naming only those dishes. So plain T7 + T8 → T7 tells a dish sent after the join
     nothing, a dish sent before it is told, and "García birthday" ending prints From García birthday, To
     Counter 6. The slip's From is the party's names just before the split, as every MOVED slip's is.
 
@@ -523,19 +524,46 @@ Changing from B to A later removes one call in `splitTable` and changes those th
       which came first; the cost is a missed slip, only for a join in the same millisecond as the send. Times
       are compared as instants (`Date.parse`), not as text, so no spelling rule is leaned on.
     - **A party combined away:** `closePartyTables` deletes a closed party's rows and keeps only
-      `parties.table_names`, the label of every table it ever held. So up to its `closed_at` it answers all
-      of those; after that the party it joined answers.
+      `parties.table_names`, the label of every table it ever held, in the order it joined them. So up to
+      its `closed_at` it answers only the earliest of those still at the table, or nothing if none is, and
+      never the tables of the party it joined; after that the party it joined answers. The list cannot say
+      which tables a paper named, so this leans towards telling (the driver's ruling, Revision 3).
     - **Which names:** of the tables held just before the split, those on that list, each by its shown
       name then, so a group's name is one name. An order with no party or no table keeps its places' names,
       which is how a delivered counter order keeps its table's name.
 
-    Limits, each a stated choice and none a table change. A reprint is not read, so a dish reprinted after a
-    join can get a slip it did not need. A combined-away party's own later join counts as on the paper, so
-    a dish sent before that join can miss a slip. A box clock set back between the send and the join can
-    misjudge either way. Two dishes alike on one bill share a notice, so a slip for one counts for both. A
-    dish with no group goes by the bill's present party, which a combined party's dish can get wrong. The
-    only path seen making one is `addTabRound`, used by test fixtures (`rg` finds no caller outside tests);
-    that is a search, not a proof that none exists.
+    Limits, each a stated choice and none a table change. "Ran" names a run through the send and split
+    functions, not the routes; the receipts are R15's and the review's.
+
+    - **A reprint is not read:** a dish reprinted after a join can get a slip it did not need. An extra slip.
+      The review ran it.
+    - **A combined party's ticket named both tables and the earlier leaves:** a slip prints though the later
+      table stays. An extra slip, and a departure from "only" in Question 3's rule, as the reprint is. Ran:
+      "an accepted extra slip: …". The later table leaving prints nothing (ran).
+    - **A combined party's own later join:** a table it joined after the paper printed counts only when every
+      table before it on the list has gone. Ran: Burger's ticket says Mesa 510, Mesa 511 joins, the party is
+      combined away; Mesa 510 leaving tells it, Mesa 511 leaving does not.
+    - **A table a combined party let go before the send:** when that table is later on the list than the
+      ticket's, the ticket's table answers. Ran: Mesa 550 + 551, 551 let go, Burger's ticket says Mesa 550, both parties
+      combined into a third, 550 leaves: told. When it is **earlier** on the list and came back through
+      another party, it answers for the paper, which is a **missed slip**. Ran as a throwaway probe: Mesa 601
+      + 600, 601 let go, ticket says Mesa 600, both combined into a third, 600 leaves: no notice, no slip. 601
+      leaving instead prints an extra slip. An open party is not affected, since it keeps its `left_at`.
+    - **A dish told at one station, then rerouted:** its new station's ticket and its old MOVED notice are not
+      read, so a later split prints an extra slip at the new station. Ran: Burger told `Mesa 542`, rerouted
+      to Bar, Mesa 543 joins and leaves: a MOVED slip at Bar, none at Grill, though Bar's ticket says Mesa 542.
+    - **A party passed by the floor:** `passGuests` (`apps/server/src/floor-today-parts.ts:127`) joins each table
+      a millisecond ahead of the clock. By reading the code, a notice written before that time names nothing,
+      so a later split prints an extra slip. Ran, calling `passGuests` directly: 1 of 40 runs in the review's probe, 2 of 40 in
+      this revision's, the other runs printing none.
+    - **A box clock set back between the send and the join** can misjudge either way. The review ran both.
+    - **Two dishes alike on one bill share a notice,** so a slip for one counts for both, and the cost is a
+      **missed slip**. Ran: Burger's only ticket says Mesa 431, a second Burger told `Mesa 431, 432` moves onto
+      its bill, 431 leaves: no notice, no slip. Kept because ignoring a shared notice would, by reading the
+      code, tell those dishes again on every later split; that was not run.
+    - **A dish with no group** goes by the bill's present party, which a combined party's dish can get wrong.
+      The only path seen making one is `addTabRound`, used by test fixtures (`rg` finds no caller outside
+      tests); that is a search, not a proof that none exists.
 
   That map has to be read for the third group, so 4c does not drop the read of staying bills. R9 ran the
   first form of the rule over today's one-bill command; R15 ran this one. `withMovedSlips` stays for the
@@ -1494,10 +1522,14 @@ Waits for Question 2. Built on its default; the PR cannot land until it is answe
   - Telling every dish of a bill when one is gone → "one bill holding a dish from before a join…" and three more.
   - The last MOVED notice not read → "is not told again when a later table leaves and the slip's table stays", and "a slip for one dish says nothing of another dish on the bill".
   - A notice matched by bill and station alone → "a slip for one dish says nothing of another dish on the bill".
+  - A combined party answering every table on its list still here, the first form of the rule, its fall-through kept → "the only table on the ticket leaves, and a table that joined after the send stays: told", "an accepted extra slip: …", "a table let go before the send comes back through another party…", "none of its tables answers to a name on its list any more…" and "told once, the dish goes by the slip…".
+  - Only the first table on the list, with the fall-through to the party it joined → "its first table left before the send, the ticket's table leaves…", "control: its first table left before the send…", "its first table left after the send and before the combine…" and "none of its tables answers…".
+  - Only the first table on the list, without the fall-through → "control: its first table left before the send…".
+  - The earliest still here, with the fall-through → "none of its tables answers…".
   - `joined_at` compared with `<` → "a table that joined in the same millisecond the dish was sent counts as on its ticket".
   - `left_at` not read → "a table that had left before the dish was sent and came back after is not on its ticket".
   - The bill's party in place of the group's `number_party_id` → "the table of the party that took the guests leaves: only its dish is told".
-  - A closed party answering for all time → "a dish its combined-away party held and fired after the combine goes by the tables at that firing".
+  - A closed party answering for all time → "a dish its combined-away party held and fired after the combine goes by the tables at that firing" and "told once, the dish goes by the slip…".
   - HOLD paper's time before the fire ticket's → "a held dish fired after the join is not told, its fire ticket naming the other table".
   - `readNamesOnPaper` read at the end, after the tables have left → "a staying dish whose paper's every name has gone is told…" and nine more, across `move-merge.test.ts` and `today-names.test.ts`, rows 6 and 7 among them.
   - Row 8 with nothing sent, in `today-names.test.ts` → row 8's own case, run with the whole file.
@@ -1511,11 +1543,12 @@ Waits for Question 2. Built on its default; the PR cannot land until it is answe
 ## Task 18: backlog, record pass, PR (about 30 calls)
 
 - [ ] `docs/backlog.md`: delete A590 and `docs/backlog/till.md`'s A590 detail (its check passed, Task 13), its decision left where a comment cites it (`rg A590`). A803's entry and detail (`docs/backlog.md:2050`, `docs/backlog/till.md:2996`): 4c has landed; pre-bills remain, through A446. A1327's and A1333's texts gain finding 14's sentence.
-- [ ] New short entries, each only if still true: Join and Move guests from the order screen drop the room revision (finding 11); A773 §6's take-over rows are built for Split a table only and not for joins and moves (finding 7); a LOOK finding left open. A1192 is already in the backlog (`docs/backlog.md:1900`): a split's slips are one more place it shows, and it gets no new entry.
+- [ ] New short entries, each only if still true: Join and Move guests from the order screen drop the room revision (finding 11); A773 §6's take-over rows are built for Split a table only and not for joins and moves (finding 7); a LOOK finding left open. A1192 is already in the backlog (`docs/backlog.md:1900`): a split's slips are one more place it shows, and it gets no new entry. An index on `kitchen_notices.working_order_id`, once the A1308 hold ends (the hold bars adding it now; R15 has the measurement).
 - [ ] A650's decision in `docs/backlog/till.md:2023-2034` is kept and gains one dated sentence: "2026-11-04, A803 4c: Split a table no longer tells bills that stay, by spec §3.7, except where a name on their paper has gone", worded to Question 3's answer. Moves to `## Decisions and deliberate limits` if not already there; never deleted.
 - [ ] Dated one-line pointers, never rewrites: spec §3.7 "Bill numbers"; `2026-11-01-a803-4-portion-picker.md` Cut 4c: "built from `2026-11-04-a803-4c-split-table-picker.md`, whose findings correct this outline"; `2026-10-14-a650-moved-slips-design.md` §0 ruling 1 and its rows 8, 9 and 18: the same sentence as above.
 - [ ] **Record pass.** Append "## Build record (4c)" to this plan: what was built versus planned, departures with reasons, line numbers that moved, the control table.
 - [ ] PR body in plain English: what the waiter and the kitchen see; no venue reset, no schema change; "Changed test checks" (every row), "Moved till-app cases" and "Deleted checks"; "For the owner": Questions 1 and 2 hold landing until answered, and the lane lands it after that; Question 3's default, naming the two rulings; and, in plain words, that the route now issues an invoice for a bill it leaves fully paid, by the function Move dishes calls, no fiscal function changed, and that **one split can issue more than one invoice in one transaction when loose picks finish several part-paid bills**, naming the two cases that pin it in `split-table.fiscal.test.ts`: "two loose sources left paid make two invoices, in bill-number order, the second chained on the first" and "a refusal at the second invoice leaves no sale and no record, and takes no number". Say also that the bill the old `billId` request names now gets a zone check too, where before only the party did. Say also that a bill someone else's order reaches stays ticked and holds Split (D21), naming Task 12f's title. Then `/finish-branch` with this plan named.
+  - "For the owner" also says: when a combined party's ticket named both tables and the earlier leaves, the extra slip departs from "only" in Question 3's rule, as the reprint limit does.
 - [ ] Ledger `Status: in progress` until landed.
 
 ## Task list and sizes
@@ -1689,7 +1722,19 @@ empty after each. Free memory read 74% before the browser run.
   reaching the screen, `["held","held"]` (D5; Task 2 case 7b runs it), `Bill 1 · Paid ✓` (D17; Task 12b's now-paid case
   is near it), and that the panel closes on a bill switch (`:1960`; Task 12c's case relies on it).
 
-- **R15, what a dish's paper printed (Revision 3).** At `4b9a803ded`. What a failing case prints: no notice and no slip. RED at `cec3526094`, `pnpm exec vitest run src/move-merge.test.ts -t 'a staying dish is told by what its own paper printed'`: the first probe `expected [] to deeply equal [ { …(4) } ]`, no notice. Control in the other direction: "control: a dish sent after the join is not told" passed at the same run, and passes after the fix. Print jobs, a throwaway case that sent Burger (a printing station) and Flan (a station with no printer) at Mesa 901, then joined Mesa 902 and reprinted: Burger `queued ["Mesa 901"]`, then a second job `queued ["Mesa 901, 902"]`; Flan no job at either point. Marking the jobs failed left both payloads readable. `closePartyTables` deleting a merged party's rows was found by a run: the combined case printed an empty held list until `parties.table_names` was read. One read across loose sources, a counter added by hand and removed, in "two sources give one slip each", which also makes one `split` first: at `cec3526094` three calls each of `readTicketItemsOn` and `readMovedSlipPrinting`; after, two. Limit: the controls under Task 17b are the only proof of each branch, and the D6 limits are read, not run.
+- **R15, what a dish's paper printed (Revision 3).** At `4b9a803ded`. What a failing case prints: no notice and no slip. RED at `cec3526094`, `pnpm exec vitest run src/move-merge.test.ts -t 'a staying dish is told by what its own paper printed'`: the first probe `expected [] to deeply equal [ { …(4) } ]`, no notice. Control in the other direction: "control: a dish sent after the join is not told" passed at the same run, and passes after the fix. Print jobs, a throwaway case that sent Burger (a printing station) and Flan (a station with no printer) at Mesa 901, then joined Mesa 902 and reprinted: Burger `queued ["Mesa 901"]`, then a second job `queued ["Mesa 901, 902"]`; Flan no job at either point. Marking the jobs failed left both payloads readable. `closePartyTables` deleting a merged party's rows was found by a run: the combined case printed an empty held list until `parties.table_names` was read. One read across loose sources, a counter added by hand and removed, in "two sources give one slip each", which also makes one `split` first: at `cec3526094` three calls each of `readTicketItemsOn` and `readMovedSlipPrinting`; after, two. Limit: the controls under Task 17b are the only proof of each branch. The D6 limits were read, not run, at this revision; the review of the fix ran them, and D6 now says which ran where.
+
+  **A combined party's dish (fix round, at `d2876f06e5`).** What a failing case prints: no notice and no slip. RED with the new cases before the change, `pnpm exec vitest run src/move-merge.test.ts -t 'a staying dish is told by what its own paper printed'`: `5 failed | 20 passed`, each `expected [] to deeply equal [ { …(4) } ]` or, for "told once", `expected [] to have a length of 1`. After: all pass. The move sweep stays green under the first form and the new one alike, so only these cases pin the choice; the controls are under Task 17b.
+
+  **What the new read of `kitchen_notices` costs (from the review of the fix).** On a throwaway database through the real migrations and `node:sqlite`, 20 sent dishes on one bill, median of 7 runs (a whole split of 5), this Mac with memory 74% free and the operating system's cache warm. `explain query plan` prints `SCAN kitchen_notices`.
+
+  | Rows | The notices read | Whole `splitTable` |
+  | --- | --- | --- |
+  | 0 | 0.05 ms | 6.51 ms |
+  | 200,000 | 9.29 ms | 14.88 ms |
+  | 1,000,000 | 48.15 ms | 55.00 ms |
+
+  Limits: the box, which is slower than this Mac, and a cold disk were not measured. A split holds the one write turn, so a sale's write waits behind it, by about 8 ms at 200,000 rows, once per split with sent work (read from `packages/store/src/write-queue.ts`, not measured on a sale). The index is the backlog line in Task 18, because the A1308 hold bars adding it now.
 
 ### Could not be established at planning
 

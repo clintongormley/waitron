@@ -1583,8 +1583,8 @@ export async function enqueueMovedSlips(
 }
 
 /**
- * {@link enqueueMovedSlips} for several `sources` now on one order, one slip per source, reading
- * the order and what the slips print with once.
+ * {@link enqueueMovedSlips} for several `sources` now on one order, one slip per source per
+ * station, reading the order and what the slips print with once.
  */
 export async function enqueueMovedSlipsOnto(
   tx: Transaction,
