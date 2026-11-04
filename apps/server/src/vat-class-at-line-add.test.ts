@@ -161,15 +161,15 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
         unitPrice,
         vatClass: "reduced",
       });
-    const cana = await product("Caña", "2.50");
+    const beer = await product("Caña", "2.50");
     const burger = await product("Hamburguesa", "10.00");
-    const queso = await product("Queso", "3.00");
-    const cafe = await product("Café", "1.50");
-    const pan = await product("Pan", "1.00");
+    const cheese = await product("Queso", "3.00");
+    const coffee = await product("Café", "1.50");
+    const bread = await product("Pan", "1.00");
     // Created with no VAT class of its own, so it reads its parent's.
-    const [doble] = await setProductVariants(
+    const [doubleCoffeeVariant] = await setProductVariants(
       tx,
-      cafe.id,
+      coffee.id,
       [
         {
           name: "Doble",
@@ -191,19 +191,19 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
         minPicks: 0,
         maxPicks: 2,
         active: true,
-        items: [{ productId: queso.id, maxQuantity: 1, preselected: false, price: "0.75" }],
+        items: [{ productId: cheese.id, maxQuantity: 1, preselected: false, price: "0.75" }],
       },
       LOCALE,
     );
     await writeProductModifiers(tx, burger.id, [{ kind: "extras", id: extras.id }]);
     await assignCatalogueToVenue(tx, menu.id);
     return {
-      cana: cana.id,
+      beer: beer.id,
       burger: burger.id,
-      queso: queso.id,
-      cafe: cafe.id,
-      doble: doble!.id,
-      pan: pan.id,
+      cheese: cheese.id,
+      coffee: coffee.id,
+      doubleCoffeeVariant: doubleCoffeeVariant!.id,
+      bread: bread.id,
       extrasListId: extras.id,
     };
   });
@@ -275,7 +275,7 @@ const rates = async (workingOrderId: string) =>
   (await filed(workingOrderId)).lines.map((line) => line.vatRate);
 
 // A 2.50 gross split at 10%: base = gross × 100 ÷ 110, tax the difference.
-const CANA_AT_10 = [{ rate: "10.00", base: "2.27", tax: "0.23" }];
+const BEER_AT_10_PERCENT = [{ rate: "10.00", base: "2.27", tax: "0.23" }];
 
 async function openTableTab(
   v: Venue,
@@ -343,26 +343,26 @@ function cardDeps(provider: PaymentProvider): IntegratedPayDeps {
 describe("a product's VAT class changed with no new publish: the sale files the class its line was added at", () => {
   it("walk-up: files at the rate of the published class", async () => {
     const v = await setupVenue();
-    await setVat(v.products.cana, "general");
+    await setVat(v.products.beer, "general");
     const id = randomUUID();
 
     await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: id,
       zoneId: v.counter.zoneId,
-      lines: one(v, v.products.cana),
+      lines: one(v, v.products.beer),
       tender: { method: "cash", amount: "2.50" },
     });
 
-    expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
+    expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
     expect(await rates(id)).toEqual([1000]);
   });
 
   it("held order paid on POST /api/sales: files 10% at the same gross, and a reprint and a replay after a further change leave the sale and the stored line as filed", async () => {
     const v = await setupVenue();
-    const id = await park(v, one(v, v.products.cana));
+    const id = await park(v, one(v, v.products.beer));
     const storedAtAdd = await stored(id);
     expect(storedAtAdd[0]!.vatClass).toBe("reduced");
-    await setVat(v.products.cana, "general");
+    await setVat(v.products.beer, "general");
 
     const ticket = await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
@@ -371,12 +371,12 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     });
 
     const sale = await filed(id);
-    expect(sale).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
+    expect(sale).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
     expect(await rates(id)).toEqual([1000]);
-    expect(ticket).toMatchObject({ total: "2.50", vatBreakdown: CANA_AT_10 });
+    expect(ticket).toMatchObject({ total: "2.50", vatBreakdown: BEER_AT_10_PERCENT });
     expect(await stored(id)).toEqual(storedAtAdd);
 
-    await setVat(v.products.cana, "super_reduced");
+    await setVat(v.products.beer, "super_reduced");
     await reprintSale(deps(), v.cfg, id);
     await printSaleReceipt(deps(), v.cfg, id, false);
     const replay = await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
@@ -388,14 +388,14 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     expect(replay.lines).toEqual(ticket.lines);
     expect(replay.vatBreakdown).toEqual(ticket.vatBreakdown);
     const rebuilt = await withTransaction(suite.db, (tx) => priceStoredOrder(tx, id));
-    expect(rateLines(rebuilt, "2026-09-27").vatBreakdown).toEqual(CANA_AT_10);
+    expect(rateLines(rebuilt, "2026-09-27").vatBreakdown).toEqual(BEER_AT_10_PERCENT);
     expect(await filed(id)).toEqual(sale);
     expect(await stored(id)).toEqual(storedAtAdd);
   });
 
   it("a tab: a dish line keeps its published class, and an extras line keeps the PICKED product's published class, not the dish's", async () => {
     const v = await setupVenue();
-    await setVat(v.products.queso, "general");
+    await setVat(v.products.cheese, "general");
     await republish(v);
     const tabId = await openTableTab(v, [
       {
@@ -404,14 +404,14 @@ describe("a product's VAT class changed with no new publish: the sale files the 
         extras: [
           {
             listId: v.products.extrasListId,
-            picks: [{ productId: v.products.queso, quantity: 1 }],
+            picks: [{ productId: v.products.cheese, quantity: 1 }],
           },
         ],
       },
-      { menuItemId: v.tables.offerFor(v.products.cana), quantity: "1" },
+      { menuItemId: v.tables.offerFor(v.products.beer), quantity: "1" },
     ]);
-    await setVat(v.products.queso, "super_reduced");
-    await setVat(v.products.cana, "general");
+    await setVat(v.products.cheese, "super_reduced");
+    await setVat(v.products.beer, "general");
 
     await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id: tabId,
@@ -422,8 +422,8 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     const sale = await filed(tabId);
     expect(sale.lines.map((line) => [line.productId, line.vatRate, line.lineGross])).toEqual([
       [v.products.burger, 1000, 1000],
-      [v.products.queso, 2100, 75],
-      [v.products.cana, 1000, 250],
+      [v.products.cheese, 2100, 75],
+      [v.products.beer, 1000, 250],
     ]);
     expect(sale.total).toBe(1325);
   });
@@ -432,12 +432,12 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     const v = await setupVenue();
     const id = await park(v, [
       {
-        menuItemId: v.counter.offerFor(v.products.cafe),
-        variantId: v.products.doble,
+        menuItemId: v.counter.offerFor(v.products.coffee),
+        variantId: v.products.doubleCoffeeVariant,
         quantity: "1",
       },
     ]);
-    await setVat(v.products.cafe, "general");
+    await setVat(v.products.coffee, "general");
 
     await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
@@ -447,25 +447,25 @@ describe("a product's VAT class changed with no new publish: the sale files the 
 
     const sale = await filed(id);
     expect(sale.lines.map((line) => [line.productId, line.vatRate])).toEqual([
-      [v.products.doble, 1000],
+      [v.products.doubleCoffeeVariant, 1000],
     ]);
     expect(sale.total).toBe(220);
   });
 
   it("card (P1): files at the stored class's rate, even when the class changes again during the charge, and the receipt and a replay match the sale", async () => {
     const v = await setupVenue();
-    const id = await park(v, one(v, v.products.cana));
-    await setVat(v.products.cana, "general");
+    const id = await park(v, one(v, v.products.beer));
+    await setVat(v.products.beer, "general");
 
     const out = await payWorkingOrderIntegrated(
-      cardDeps(stubProvider(() => setVat(v.products.cana, "super_reduced"))),
+      cardDeps(stubProvider(() => setVat(v.products.beer, "super_reduced"))),
       v.cfg,
       { id, lines: [] },
     );
 
     expect(out.outcome).toBe("captured");
     const sale = await filed(id);
-    expect(sale).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
+    expect(sale).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
     expect(sale.lines.map((line) => line.vatRate)).toEqual([1000]);
     const ticket = out.outcome === "captured" ? out.ticket : undefined;
     expect(ticket?.vatBreakdown).toEqual(sale.vatBreakdown);
@@ -483,7 +483,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     const v = await setupVenue();
     const id = randomUUID();
     await withTransaction(suite.db, async (tx) => {
-      await createOpenOrder(tx, v.cfg, id, one(v, v.products.cana), null, {
+      await createOpenOrder(tx, v.cfg, id, one(v, v.products.beer), null, {
         zoneId: v.counter.zoneId,
       });
       await insertCapturedPayment(tx, {
@@ -497,7 +497,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
         externalRef: `pi_lost_${randomUUID()}`,
       });
     });
-    await setVat(v.products.cana, "general");
+    await setVat(v.products.beer, "general");
 
     const out = await payWorkingOrderIntegrated(
       cardDeps(stubProvider(() => Promise.reject(new Error("recovery must not charge")))),
@@ -507,7 +507,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
 
     expect(out.outcome).toBe("captured");
     const sale = await filed(id);
-    expect(sale).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
+    expect(sale).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
     expect(sale.lines.map((line) => line.vatRate)).toEqual([1000]);
     const [tender] = await suite.db
       .select({ amount: tenders.amount, tip: tenders.tipAmount })
@@ -518,8 +518,8 @@ describe("a product's VAT class changed with no new publish: the sale files the 
 
   it("an explicitly issued unpaid bill keeps 10% when collected after a VAT change without re-pricing; a second issued bill retains its parked VAT too", async () => {
     const v = await setupVenue("ticket_then_pay");
-    const before = await park(v, one(v, v.products.cana));
-    const after = await park(v, one(v, v.products.cana));
+    const before = await park(v, one(v, v.products.beer));
+    const after = await park(v, one(v, v.products.beer));
     await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, before, OPERATOR);
     await issueOrderInvoice(
       { ...deps(), admission: testTradingAdmission() },
@@ -529,7 +529,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     );
     const placed = await filed(before);
     const storedAtPlacing = await stored(before);
-    await setVat(v.products.cana, "general");
+    await setVat(v.products.beer, "general");
 
     const prepared: string[] = [];
     const spy = await sessionPrepareSpy(prepared);
@@ -551,21 +551,21 @@ describe("a product's VAT class changed with no new publish: the sale files the 
       OPERATOR,
     );
 
-    expect(placed).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
+    expect(placed).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
     expect(await filed(before)).toEqual(placed);
     expect(await stored(before)).toEqual(storedAtPlacing);
-    expect(ticket.vatBreakdown).toEqual(CANA_AT_10);
+    expect(ticket.vatBreakdown).toEqual(BEER_AT_10_PERCENT);
     expect(prepared.filter((s) => /"products"/.test(s))).toEqual([]);
     expect(prepared.filter((s) => /^update "working_order_lines"/.test(s))).toEqual([]);
-    expect(await filed(after)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
+    expect(await filed(after)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
     expect(await rates(after)).toEqual([1000]);
   });
 
   it("ticket-then-pay: an order placed at 10% and changed before collect files 10% at collect, and a replay rebuilds the same receipt", async () => {
     const v = await setupVenue("ticket_then_pay");
-    const id = await park(v, one(v, v.products.cana));
+    const id = await park(v, one(v, v.products.beer));
     await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
-    await setVat(v.products.cana, "general");
+    await setVat(v.products.beer, "general");
 
     const ticket = await collectOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
@@ -573,7 +573,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
       tender: { method: "cash", amount: "2.50" },
     });
 
-    expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
+    expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
     expect(await rates(id)).toEqual([1000]);
     expect((await stored(id)).map((line) => line.vatClass)).toEqual(["reduced"]);
     const replay = await collectOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
@@ -582,14 +582,14 @@ describe("a product's VAT class changed with no new publish: the sale files the 
       tender: { method: "cash", amount: "2.50" },
     });
     expect(replay.lines).toEqual(ticket.lines);
-    expect(replay.vatBreakdown).toEqual(CANA_AT_10);
+    expect(replay.vatBreakdown).toEqual(BEER_AT_10_PERCENT);
   });
 
   it("ticket-then-pay by card: a placed order collected on the reader after the change files 10%", async () => {
     const v = await setupVenue("ticket_then_pay");
-    const id = await park(v, one(v, v.products.cana));
+    const id = await park(v, one(v, v.products.beer));
     await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
-    await setVat(v.products.cana, "general");
+    await setVat(v.products.beer, "general");
 
     const out = await payWorkingOrderIntegrated(
       cardDeps(stubProvider(() => Promise.resolve())),
@@ -598,16 +598,16 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     );
 
     expect(out.outcome).toBe("captured");
-    expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
+    expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
     expect(await rates(id)).toEqual([1000]);
   });
 
   it("issuing a stored order writes nothing onto its lines", async () => {
     const v = await setupVenue();
-    const id = await park(v, [...one(v, v.products.cana), ...one(v, v.products.pan)]);
+    const id = await park(v, [...one(v, v.products.beer), ...one(v, v.products.bread)]);
     const before = await stored(id);
-    await setVat(v.products.cana, "general");
-    await setVat(v.products.pan, "general");
+    await setVat(v.products.beer, "general");
+    await setVat(v.products.bread, "general");
 
     await withTransaction(suite.db, async (tx) => {
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
@@ -629,7 +629,7 @@ describe("an edit prices only what it adds", () => {
   it("an extras pick added to a stored line by an edit takes the class the published version froze", async () => {
     const v = await setupVenue();
     const id = await park(v, one(v, v.products.burger));
-    await setVat(v.products.queso, "general");
+    await setVat(v.products.cheese, "general");
     await republish(v);
     const [dish] = await suite.db
       .select({ id: workingOrderLines.id })
@@ -646,7 +646,7 @@ describe("an edit prices only what it adds", () => {
           extras: [
             {
               listId: v.products.extrasListId,
-              picks: [{ productId: v.products.queso, quantity: 1 }],
+              picks: [{ productId: v.products.cheese, quantity: 1 }],
             },
           ],
         },
@@ -661,15 +661,15 @@ describe("an edit prices only what it adds", () => {
 
     expect((await stored(id)).map((line) => [line.productId, line.vatClass])).toEqual([
       [v.products.burger, "reduced"],
-      [v.products.queso, "general"],
+      [v.products.cheese, "general"],
     ]);
     expect(await rates(id)).toEqual([1000, 2100]);
   });
 
   it("raising the quantity of a line the kitchen does not have keeps the class it locked with its price, after a new publish; a line the same edit adds takes the new class", async () => {
     const v = await setupVenue();
-    const id = await park(v, one(v, v.products.cana));
-    await setVat(v.products.cana, "general");
+    const id = await park(v, one(v, v.products.beer));
+    await setVat(v.products.beer, "general");
     await republish(v);
     const [kept] = await suite.db
       .select({ id: workingOrderLines.id })
@@ -681,10 +681,10 @@ describe("an edit prices only what it adds", () => {
       lines: [
         {
           workingOrderLineId: kept!.id,
-          menuItemId: v.counter.offerFor(v.products.cana),
+          menuItemId: v.counter.offerFor(v.products.beer),
           quantity: "2",
         },
-        ...one(v, v.products.cana),
+        ...one(v, v.products.beer),
       ],
       revision,
     });
@@ -706,8 +706,8 @@ describe("an edit prices only what it adds", () => {
 describe("a new version published with the new class", () => {
   it("a held order: a line added before the publish keeps 10%, and one added after it takes 21%", async () => {
     const v = await setupVenue();
-    const id = await park(v, one(v, v.products.cana));
-    await setVat(v.products.cana, "general");
+    const id = await park(v, one(v, v.products.beer));
+    await setVat(v.products.beer, "general");
     await republish(v);
     const [kept] = await suite.db
       .select({ id: workingOrderLines.id })
@@ -719,10 +719,10 @@ describe("a new version published with the new class", () => {
       lines: [
         {
           workingOrderLineId: kept!.id,
-          menuItemId: v.counter.offerFor(v.products.cana),
+          menuItemId: v.counter.offerFor(v.products.beer),
           quantity: "1",
         },
-        ...one(v, v.products.cana),
+        ...one(v, v.products.beer),
       ],
       revision,
     });
@@ -739,13 +739,13 @@ describe("a new version published with the new class", () => {
   it("a tab: a round rung before the publish keeps 10%, and one rung after it takes 21%", async () => {
     const v = await setupVenue();
     const tabId = await openTableTab(v, [
-      { menuItemId: v.tables.offerFor(v.products.cana), quantity: "1" },
+      { menuItemId: v.tables.offerFor(v.products.beer), quantity: "1" },
     ]);
-    await setVat(v.products.cana, "general");
+    await setVat(v.products.beer, "general");
     await republish(v);
     await withTransaction(suite.db, (tx) =>
       addTabRound(tx, v.cfg, tabId, [
-        { menuItemId: v.tables.offerFor(v.products.cana), quantity: "1" },
+        { menuItemId: v.tables.offerFor(v.products.beer), quantity: "1" },
       ]),
     );
 
