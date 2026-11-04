@@ -4710,6 +4710,15 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   nothing tells the person. The Prices tab's `menus.change_not_saved` shows its message at
   screen level. Left open by A397.
 
+- **Setting `open` on a `wt-dialog` while it is off the page makes `showModal` throw**, and the
+  dialog stays closed with `open` true after being put back. Ran at e3ec7efd36 on #2444's branch;
+  whether it predates that branch was not run. Left open by A397.
+
+- **When a dialog under another is put back, the dialog above loses focus for a moment, and a form
+  that reacts to losing focus can misbehave.** Tried on two fields at e3ec7efd36 on #2444's branch:
+  allergen editing disappeared and a course name saved. Other forms were not tried, and whether it
+  predates that branch was not run. Left open by A397.
+
 - **Change legal name says nothing when its rename is refused after Back and Discard closed the
   dialog**; the Schedule window now says so on its panel. Left open by A397.
 
