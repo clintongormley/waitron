@@ -98,19 +98,27 @@ export async function readModulePreparationRevisions(options: {
 function bindingKey({ module, action, eventId, sourceId, targetNodeId }: OperationBinding): string {
   return JSON.stringify([module, action, eventId, sourceId, targetNodeId]);
 }
-/** `incoming`, then `own`, each revision once: an equal value under an equal binding is one. */
-function mergedRevisions(own: readonly Revision[], incoming: readonly Revision[]): Revision[] {
-  const seen = new Map<string, Revision[]>();
-  const merged: Revision[] = [];
-  for (const revision of [...incoming, ...own]) {
+/**
+ * The revisions of `incoming` that `own` lacks, each once, in `incoming`'s order. Revisions come
+ * off the wire with their keys sorted, so an equal value under an equal binding is the same one.
+ */
+function missingRevisions(own: readonly Revision[], incoming: readonly Revision[]): Revision[] {
+  const seen = new Map<string, unknown[]>();
+  const values = (revision: Revision) => {
     const key = bindingKey(revision.binding);
-    const same = seen.get(key) ?? [];
-    if (same.some((row) => isDeepStrictEqual(row.value, revision.value))) continue;
-    same.push(revision);
-    seen.set(key, same);
-    merged.push(revision);
+    const held = seen.get(key) ?? [];
+    seen.set(key, held);
+    return held;
+  };
+  for (const revision of own) values(revision).push(revision.value);
+  const missing: Revision[] = [];
+  for (const revision of incoming) {
+    const held = values(revision);
+    if (held.some((value) => isDeepStrictEqual(value, revision.value))) continue;
+    held.push(revision.value);
+    missing.push(revision);
   }
-  return merged;
+  return missing;
 }
 /**
  * Whether this box's file could take `incoming`: a file over its limit makes every later module
@@ -121,8 +129,25 @@ export async function modulePreparationMergeFits(
   incoming: readonly { binding: OperationBinding; value: unknown }[],
 ): Promise<boolean> {
   const own = await readStateFile(options.stateDir);
-  const merged: File = { version: 1, revisions: mergedRevisions(own.revisions, incoming) };
+  const merged: File = {
+    version: 1,
+    revisions: [...missingRevisions(own.revisions, incoming), ...own.revisions],
+  };
   return Buffer.byteLength(JSON.stringify(merged)) <= LIMIT;
+}
+/**
+ * Puts the revisions this box lacks ahead of its own, so its own latest for a module stays the
+ * latest, and writes nothing when it lacks none.
+ */
+export async function mergeModulePreparationRevisions(
+  options: { stateDir: string },
+  incoming: readonly { binding: OperationBinding; value: unknown }[],
+): Promise<void> {
+  const own = await readStateFile(options.stateDir);
+  const missing = missingRevisions(own.revisions, incoming);
+  if (missing.length === 0) return;
+  const merged: File = { version: 1, revisions: [...missing, ...own.revisions] };
+  await writeDurableHostJson(join(options.stateDir, FILE_NAME), merged, LIMIT);
 }
 export function createModulePreparationState(options: Options) {
   return {

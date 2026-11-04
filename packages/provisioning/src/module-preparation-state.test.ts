@@ -8,6 +8,7 @@ import type { AppError } from "@waitron/shared";
 import type { OperationBinding } from "@waitron/module";
 import {
   createModulePreparationState,
+  mergeModulePreparationRevisions,
   modulePreparationMergeFits,
   readModulePreparationHistory,
   readModulePreparationRevisions,
@@ -516,5 +517,148 @@ describe("modulePreparationMergeFits", () => {
     await expect(
       modulePreparationMergeFits({ stateDir: options.stateDir }, []),
     ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  });
+});
+
+describe("mergeModulePreparationRevisions", () => {
+  const LIMIT = 1024 * 1024;
+  const FILE = "module-preparation-state.json";
+  const revision = (eventId: string, value: unknown = { name: eventId }) => ({
+    binding: { ...binding, eventId },
+    value,
+  });
+  const [m1, m2, shared] = [revision("m1"), revision("m2"), revision("shared")];
+  /** Indented on purpose: a rewrite of the same revisions would not keep these bytes. */
+  const place = (stateDir: string, revisions: unknown[]) =>
+    fs.writeFile(join(stateDir, FILE), JSON.stringify({ version: 1, revisions }, null, 2));
+  const events = async (stateDir: string) =>
+    (await readModulePreparationRevisions({ stateDir })).map((row) => row.binding.eventId);
+
+  it("writes the old box's revisions first, so this box's own stays the latest", async () => {
+    const { options, store } = await fixture();
+    await store.withState(binding, (s) => s.replace({ mine: true }));
+    const stateDir = options.stateDir;
+    await mergeModulePreparationRevisions({ stateDir }, [m1, m2]);
+    expect(await events(stateDir)).toEqual(["m1", "m2", "event1"]);
+    const seen = await store.withState(binding, async (s) => ({
+      value: s.value,
+      history: s.history,
+    }));
+    expect(seen.value).toEqual({ mine: true });
+    expect(seen.history).toEqual([{ name: "m1" }, { name: "m2" }, { mine: true }]);
+  });
+
+  it("gives a box with no file the old box's revisions, in their order", async () => {
+    const { options } = await fixture();
+    await mergeModulePreparationRevisions({ stateDir: options.stateDir }, [m2, m1]);
+    expect(await events(options.stateDir)).toEqual(["m2", "m1"]);
+  });
+
+  it("creates no file when there is nothing to merge", async () => {
+    const { options, path } = await fixture();
+    await mergeModulePreparationRevisions({ stateDir: options.stateDir }, []);
+    await expect(fs.stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("a second run with the same revisions leaves the file's bytes as they were", async () => {
+    const { options, path } = await fixture();
+    await place(options.stateDir, [m2]);
+    await mergeModulePreparationRevisions({ stateDir: options.stateDir }, [m1]);
+    const after = await fs.readFile(path);
+    await mergeModulePreparationRevisions({ stateDir: options.stateDir }, [m1]);
+    expect(await fs.readFile(path)).toEqual(after);
+  });
+
+  it("does not touch this box's file when it already holds every revision", async () => {
+    const { options, path } = await fixture();
+    await place(options.stateDir, [m1, m2]);
+    const before = await fs.readFile(path, "utf8");
+    await mergeModulePreparationRevisions({ stateDir: options.stateDir }, [m2]);
+    expect(await fs.readFile(path, "utf8")).toBe(before);
+  });
+
+  it("keeps this box's own list as it stands when a revision is on both boxes", async () => {
+    const { options, store } = await fixture();
+    const own = { ...binding, eventId: "shared" };
+    await place(options.stateDir, [m2, shared, m2]);
+    await mergeModulePreparationRevisions({ stateDir: options.stateDir }, [m1, shared]);
+    expect(await events(options.stateDir)).toEqual(["m1", "m2", "shared", "m2"]);
+    expect(await store.withState(own, async (s) => s.value)).toEqual({ name: "m2" });
+  });
+
+  it("knows a revision the wire returned with its keys in another order", async () => {
+    const { options, path } = await fixture();
+    const { module, action, eventId, sourceId, targetNodeId } = binding;
+    await place(options.stateDir, [{ binding, value: { a: 1, b: { c: 2, d: 3 } } }]);
+    const before = await fs.readFile(path, "utf8");
+    await mergeModulePreparationRevisions({ stateDir: options.stateDir }, [
+      {
+        binding: { targetNodeId, sourceId, module, eventId, action },
+        value: { b: { d: 3, c: 2 }, a: 1 },
+      },
+    ]);
+    expect(await fs.readFile(path, "utf8")).toBe(before);
+  });
+
+  it.each([
+    ["another value", { binding: m1.binding, value: { name: "other" } }],
+    ["another binding", { binding: { ...m1.binding, action: "other" }, value: m1.value }],
+  ])("keeps a revision that differs only by %s", async (_label, other) => {
+    const { options } = await fixture();
+    await place(options.stateDir, [m1]);
+    await mergeModulePreparationRevisions({ stateDir: options.stateDir }, [other]);
+    expect(await readModulePreparationRevisions({ stateDir: options.stateDir })).toEqual([
+      other,
+      m1,
+    ]);
+  });
+
+  it("writes a revision the old box listed twice once", async () => {
+    const { options } = await fixture();
+    await mergeModulePreparationRevisions({ stateDir: options.stateDir }, [m1, m1]);
+    expect(await events(options.stateDir)).toEqual(["m1"]);
+  });
+
+  it("refuses a damaged file of its own and leaves it there", async () => {
+    const { options, path } = await fixture();
+    await fs.writeFile(path, "{not json");
+    await expect(
+      mergeModulePreparationRevisions({ stateDir: options.stateDir }, [m1]),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+    expect(await fs.readFile(path, "utf8")).toBe("{not json");
+  });
+
+  it("agrees with the size check at the limit, and refusing leaves this box's file alone", async () => {
+    const { options, path } = await fixture();
+    const stateDir = options.stateDir;
+    await place(stateDir, [m2]);
+    const before = await fs.readFile(path, "utf8");
+    const bytes = (text: string) =>
+      Buffer.byteLength(JSON.stringify({ version: 1, revisions: [revision("m1", { text }), m2] }));
+    const exact = revision("m1", { text: "x".repeat(LIMIT - bytes("")) });
+    const over = revision("m1", { text: "x".repeat(LIMIT - bytes("") + 1) });
+
+    expect(await modulePreparationMergeFits({ stateDir }, [over])).toBe(false);
+    await expect(mergeModulePreparationRevisions({ stateDir }, [over])).rejects.toMatchObject({
+      code: "setup.attempt_invalid",
+    });
+    expect(await fs.readFile(path, "utf8")).toBe(before);
+
+    expect(await modulePreparationMergeFits({ stateDir }, [exact])).toBe(true);
+    await mergeModulePreparationRevisions({ stateDir }, [exact]);
+    expect((await fs.stat(path)).size).toBe(LIMIT);
+    expect(await events(stateDir)).toEqual(["m1", "m2"]);
+  });
+
+  it("counts this box's own repeats in the size check, because the merge keeps them", async () => {
+    const { options } = await fixture();
+    const stateDir = options.stateDir;
+    const third = revision("third", { text: "x".repeat(LIMIT / 3) });
+    await place(stateDir, [third, third]);
+    const another = revision("another", { text: "y".repeat(LIMIT / 3) });
+    expect(await modulePreparationMergeFits({ stateDir }, [another])).toBe(false);
+    await expect(mergeModulePreparationRevisions({ stateDir }, [another])).rejects.toMatchObject({
+      code: "setup.attempt_invalid",
+    });
   });
 });

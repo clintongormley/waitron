@@ -23,6 +23,7 @@ export type { InitialModuleInput, VenueApplyDeps, VenueResult } from "./venue-ap
 export { FISCAL_TERRITORIES, resolveFiscalModules } from "./fiscal-modules.js";
 export {
   readModulePreparationHistory,
+  mergeModulePreparationRevisions,
   modulePreparationMergeFits,
   readModulePreparationRevisions,
 } from "./module-preparation-state.js";

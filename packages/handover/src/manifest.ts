@@ -151,7 +151,7 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     where: "state",
     class: "transferred",
     treatment:
-      "the indicator carries M1's retained selections, which are not in the copy; M2 merges them into its own file before the copy is placed, so it never reuses a minute name M1 selected",
+      "the indicator carries M1's retained selections, which are not in the copy; M2 merges them into its own file before the copy is placed, because a minute name M1 selected and never activated still counts as used",
   },
   {
     item: "module-evidence/<module>/<source>.json",

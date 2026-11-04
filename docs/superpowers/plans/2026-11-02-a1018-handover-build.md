@@ -548,7 +548,7 @@ modules' non-database state (`apps/server/src/backup-sources.ts:50-62`).
 | `tls/ca.*`, `tls/server.*`, `tls/venue-ca.*` | state | destination-owned | M2 keeps its own; the venue authority reached it at joining |
 | `backup.env` | state | transferred, compared | the indicator carries its digest; a difference waits `handover.backup_settings_differ` |
 | `modules.json` | state | transferred, compared | as `backup.env`; M2 refuses a module set that differs |
-| `module-preparation-state.json` | state | transferred | it holds module operation history, including the minute selections. Slice 4's probe (`apps/server/src/handover-minute-history.test.ts`, cases 2 and 2c) measured that the copy does not carry M1's retained minute selections, and that placing the file as `module-evidence/` the restore way does not reach promotion; a name is reused only when the spare's checked clock reads an abandoned selection's minute: the selection was made in the promotion's own minute (an abandoned conflict-switch, for example), or the box and the machine confirming its clock are wrong by the same amount (which an earlier setup attempt's minute needs). Task 5.7 merges M1's retained selections into M2's own preparation file before activation (case 2b shows that stops the reuse). Owner question open |
+| `module-preparation-state.json` | state | transferred | it holds module operation history, including the minute selections. Slice 4's probe (`apps/server/src/handover-minute-history.test.ts`, cases 2 and 2c) measured that the copy does not carry M1's retained minute selections, and that placing the file as `module-evidence/` the restore way does not reach promotion; a name is reused only when the spare's checked clock reads an abandoned selection's minute: the selection was made in the promotion's own minute (an abandoned conflict-switch, for example), or the box and the machine confirming its clock are wrong by the same amount (which an earlier setup attempt's minute needs). The signed indicator carries M1's retained selections, and Task 5.7 merges them into M2's own preparation file before the copy is placed (case 2b shows that stops the reuse). The owner decided on 2026-11-04 that a name selected and never activated counts as used |
 | Litestream's `.venue.db-litestream/` | venue folder | rebuildable | beside `venue.db` in the venue folder (default `<state>/venue`, `WAITRON_VENUE_DIR` overrides); never copied; the new primary opens a new generation |
 
 ### Crash windows: what a restart or a lost answer does at each step
@@ -2015,8 +2015,8 @@ except that Tasks 4.4 and 4.5's interface lines were amended in place.
   selected and never activated when its clock reads that name's minute (case 2), and that placing
   M1's history as `module-evidence/` the restore way does not stop it (case 2c), so Step 3's
   fallback is not built. The manifest's `module-preparation-state.json` row is `transferred`, and
-  Task 5.7 is to merge M1's retained selections into M2's own preparation file (case 2b). Whether such
-  a name counts as used is an open owner question.
+  Task 5.7 is to merge M1's retained selections, carried in the signed indicator, into M2's own
+  preparation file (case 2b). The owner decided on 2026-11-04 that such a name counts as used.
 - **The signed peer query is bound to neither a route nor a time window (Slice 4's Ruling R10).**
   One envelope M2 signed was accepted by `peer-status` and twice by `final-copy`; Task 5.4's note
   says its status reads must not sign the same shape.
@@ -2696,7 +2696,7 @@ acceptance for another indicator refuses `handover.indicator_mismatch`.
 
 #### Task 5.7: M2 places the accepted copy
 
-Slice 4 probe (2026-11-03): placing the file as module-evidence does not reach promotion; merge M1's retained selections into M2's own module-preparation-state.json before activation (handover-minute-history.test.ts case 2b) — owner question open.
+Slice 4 probe (2026-11-03): placing the file as module-evidence does not reach promotion; merge M1's retained selections into M2's own module-preparation-state.json before the copy is placed (handover-minute-history.test.ts case 2b). The owner decided on 2026-11-04 that a name selected and never activated counts as used.
 
 **Files:** Create `apps/server/src/handover-place-copy.ts`; modify `boot.ts` (before the store
 opens, as `runStagedRestore` does, `apps/server/src/restore-request.ts:344-642`, place
@@ -3905,7 +3905,8 @@ the joint specification and Cloud's half.
   touches fiscal UI code.
 - **Whether M2 sees every minute name M1 used from the copy alone**: no (Task 4.5's probe, case 2),
   and the restore path's placement does not stop the reuse (case 2c); Task 5.7 is to merge M1's
-  retained selections into M2's preparation file (case 2b). Owner question open.
+  retained selections into M2's preparation file (case 2b). The owner decided on 2026-11-04 that
+  such a name counts as used.
 - **What M2's certificate card shows after activation** is found by Task 5.10; if it shows no
   certificate, a FISCAL follow-up maps it.
 - **A return to a box other than the one the old box handed to** (M2 handed over to M3 before M1

@@ -3,7 +3,7 @@
 // M1's later name, where a reused name prints `selected` with that name and an avoided one prints
 // `waiting`.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -17,7 +17,10 @@ import {
 import { setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
-import { createFirstSetupCoordinator } from "@waitron/provisioning";
+import {
+  createFirstSetupCoordinator,
+  mergeModulePreparationRevisions,
+} from "@waitron/provisioning";
 import {
   withOperationAuthority,
   withPreparedModuleOperations,
@@ -78,7 +81,6 @@ const joinBinding: OperationBinding = {
 };
 const binding: OperationBinding = { ...joinBinding, action: "promote", eventId: "promotion" };
 const context = { oldNodeNeutralised: true, noParallelRecovery: true };
-const SPARE_FILE = "module-preparation-state.json";
 let root: string;
 let key: { name: string; secret: string };
 
@@ -314,8 +316,7 @@ it("control: one minute after both of M1's names the spare selects a fresh name"
   expect([await firstName(), encodeMinuteIdentity(later)]).not.toContain(selected.identity);
 });
 
-// Pins today's behaviour, not a wanted one: the manifest's module-preparation-state.json row
-// rests on it.
+// Pins today's behaviour, not a wanted one.
 it("a name M1 selected and never activated is not in the copy, and the spare without M1's file reuses it", async () => {
   const s = spareService();
   await admit(s);
@@ -336,12 +337,7 @@ it("with M1's selections in the spare's own preparation file, the spare waits pa
   await admit(s);
   const abandoned = await selectOnM1("abandoned", false);
   m1Revisions.push(abandoned.revision);
-  const path = join(root, "state", SPARE_FILE);
-  const own = JSON.parse(await readFile(path, "utf8")) as { revisions: unknown[] };
-  await writeFile(
-    path,
-    JSON.stringify({ version: 1, revisions: [...m1Revisions, ...own.revisions] }),
-  );
+  await mergeModulePreparationRevisions({ stateDir: join(root, "state") }, m1Revisions);
   const minute = minuteOf(abandoned.identity);
   vi.setSystemTime(minute);
   expect(await spareSelects(s)).toEqual(
@@ -349,8 +345,24 @@ it("with M1's selections in the spare's own preparation file, the spare waits pa
   );
 });
 
-// Pins today's behaviour, not a wanted one: the manifest's module-preparation-state.json row
-// rests on it.
+it("one minute past M1's name, the spare holding M1's selections selects another and promotes under it", async () => {
+  const s = spareService();
+  await admit(s);
+  const abandoned = await selectOnM1("abandoned", false);
+  m1Revisions.push(abandoned.revision);
+  await mergeModulePreparationRevisions({ stateDir: join(root, "state") }, m1Revisions);
+  vi.setSystemTime(minuteOf(abandoned.identity) + 60_000);
+  const selected = await spareSelects(s);
+  expect(selected).toMatchObject({ status: "selected" });
+  expect(selected.identity).not.toBe(abandoned.identity);
+  await sparePromotes(s, selected.input);
+  const sif = await suite.db.select().from(registroSif);
+  expect(sif.find((row) => row.nodeId === standby.nodeId)?.numeroInstalacion).toBe(
+    selected.identity,
+  );
+});
+
+// Pins today's behaviour, not a wanted one.
 it("M1's history placed as the restore path places it (module-evidence) is not read by the promotion: the name is reused", async () => {
   const s = spareService();
   await admit(s);
