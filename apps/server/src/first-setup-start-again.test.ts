@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   access,
   lstat,
@@ -17,6 +17,7 @@ import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import { DatabaseSync } from "node:sqlite";
 import { Hono } from "hono";
+import { AppError } from "@waitron/shared";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { openVenueDatabase } from "@waitron/db";
@@ -31,7 +32,6 @@ import {
   writeStartAgainConfirmation,
   firstSetupFrozenDigest,
   assertOtherFirstSetupAllowed,
-  createFirstSetupBackupWorkspace,
   type FirstSetupChange,
   type StartAgainSummary,
 } from "@waitron/provisioning";
@@ -61,15 +61,14 @@ import { createSetupOperationStore } from "./setup-operation.js";
 import { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { mountSetup } from "./setup-api.js";
 import { createRecoveryEntryRunner } from "./recovery-entry.js";
-import { createFirstSetupBackupRecovery } from "./first-setup-backup-recovery.js";
 import { readSetupDatabase } from "./first-setup-database-holdings.js";
-import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
 
 vi.mock("@waitron/provisioning", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/provisioning")>();
   return {
     ...actual,
     writeStartAgainMarker: vi.fn(actual.writeStartAgainMarker),
+    writeStartAgainConfirmation: vi.fn(actual.writeStartAgainConfirmation),
   };
 });
 vi.mock("./first-setup-database-holdings.js", async (importOriginal) => {
@@ -709,8 +708,8 @@ it("the Start again route takes the confirmation only in its exact shape", async
   expect(await readdir(join(f.stateDir, CONFIRMATIONS))).toHaveLength(1);
 });
 
-it("the Start again route takes a shown backup recovery only in its exact shape", async () => {
-  const { f, name, actions, ids, request } = await missingDatabase();
+it("the Start again route refuses a shown summary carrying recovery as setup.request_invalid 400", async () => {
+  const { f, actions, ids, request } = await missingDatabase();
   const app = routes(f, actions);
   const recovery = {
     startedAt: "2026-10-16T11:40:00.000Z",
@@ -719,8 +718,9 @@ it("the Start again route takes a shown backup recovery only in its exact shape"
     failed: false,
     cloud: false,
   };
-  const send = (value: unknown) =>
-    sendStartAgain(app, {
+  const before = await attemptFiles(f);
+  for (const value of [recovery, null, { ...recovery, extra: 1 }]) {
+    const refused = await sendStartAgain(app, {
       ...ids,
       register: request.register,
       confirmMissingDatabase: {
@@ -728,38 +728,23 @@ it("the Start again route takes a shown backup recovery only in its exact shape"
         shown: { reached: "named", recovery: value },
       },
     });
-  for (const malformed of [
-    null,
-    { ...recovery, extra: 1 },
-    { ...recovery, startedAt: undefined },
-    { ...recovery, startedAt: "yesterday" },
-    { ...recovery, lastActiveAt: 5 },
-    { ...recovery, lastActiveSource: "disk" },
-    { ...recovery, lastName: name },
-    { ...recovery, failed: "false" },
-    { ...recovery, cloud: 0 },
-  ]) {
-    const refused = await send(malformed);
-    expect(await refused.json(), JSON.stringify(malformed)).toEqual({
+    expect(refused.status, JSON.stringify(value)).toBe(400);
+    expect(await refused.json(), JSON.stringify(value)).toEqual({
       error: { code: "setup.request_invalid", params: { field: "body" } },
     });
   }
-  // A well-formed recovery reaches the action, which finds none here.
-  for (const shown of [recovery]) {
-    const passed = await send(shown);
-    expect(passed.status).toBe(409);
-    expect(await passed.json()).toEqual({ error: { code: "setup.attempt_conflict", params: {} } });
-  }
+  expect(await attemptFiles(f)).toEqual(before);
   await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
-it("the Start again route takes confirmRecoveryDiscard only in its exact shape, with a shown recovery", async () => {
+it("the Start again route refuses a body carrying confirmRecoveryDiscard as setup.request_invalid 400, and nothing changes", async () => {
   const { f, actions, ids, request } = await missingDatabase();
   const reached: unknown[] = [];
   const app = routes(f, {
     ...actions,
     startAgainFirstSetup: async (body) => {
-      reached.push(body.confirmRecoveryDiscard);
+      reached.push(body);
+      return actions.startAgainFirstSetup(body);
     },
   });
   const recovery = {
@@ -770,33 +755,70 @@ it("the Start again route takes confirmRecoveryDiscard only in its exact shape, 
     cloud: false,
   };
   const shown = { reached: "named", recovery };
-  const send = (confirmRecoveryDiscard: unknown) =>
-    sendStartAgain(app, { ...ids, register: request.register, confirmRecoveryDiscard });
-  for (const malformed of [
-    null,
-    {},
-    { shown, extra: 1 },
-    { nothingFiledOrSold: true, shown },
-    { shown: { reached: "named" } },
-    { shown: { ...shown, extra: 1 } },
-    { shown: { ...shown, recovery: { ...recovery, extra: 1 } } },
-    { shown: { ...shown, recovery: { ...recovery, cloud: 0 } } },
-    { shown: { ...shown, recoveryRecordDamaged: false } },
-    { shown: { ...shown, reached: "complete" } },
+  const confirmMissingDatabase = { nothingFiledOrSold: true, shown: { reached: "named" } };
+  const before = await attemptFiles(f);
+  for (const body of [
+    { confirmRecoveryDiscard: { shown } },
+    { confirmRecoveryDiscard: { shown: { reached: "named" } } },
+    { confirmMissingDatabase, confirmRecoveryDiscard: { shown } },
   ]) {
-    const refused = await send(malformed);
-    expect(await refused.json(), JSON.stringify(malformed)).toEqual({
+    const refused = await sendStartAgain(app, { ...ids, register: request.register, ...body });
+    expect(refused.status, JSON.stringify(body)).toBe(400);
+    expect(await refused.json(), JSON.stringify(body)).toEqual({
       error: { code: "setup.request_invalid", params: { field: "body" } },
     });
   }
   expect(reached).toEqual([]);
-  const damaged = { ...shown, recoveryRecordDamaged: true };
-  for (const value of [shown, damaged]) {
-    const passed = await send({ shown: value });
-    expect(passed.status, await passed.clone().text()).toBe(200);
-  }
-  expect(reached).toEqual([{ shown }, { shown: damaged }]);
+  expect(await attemptFiles(f)).toEqual(before);
+  await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 });
+
+it("with the database missing, a confirmation record that cannot be written deletes nothing and writes no marker", async () => {
+  const { f, actions, request } = await missingDatabase();
+  vi.mocked(writeStartAgainConfirmation).mockClear();
+  vi.mocked(writeStartAgainConfirmation).mockRejectedValueOnce(
+    new AppError("setup.attempt_invalid", {}),
+  );
+  const before = await folderTrees(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      ...request,
+      confirmMissingDatabase: { nothingFiledOrSold: true, shown: { reached: "named" } },
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  expect(vi.mocked(writeStartAgainConfirmation)).toHaveBeenCalledTimes(1);
+  expect(await folderTrees(f)).toEqual(before);
+  await access(join(f.stateDir, "first-setup.json"));
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+});
+
+it.each([
+  ["damaged", "{damaged"],
+  ["intact", JSON.stringify({ version: 1, modules: {}, history: [] })],
+] as const)(
+  "with the database present and empty, a %s public fiscal record refuses the summary and Start again setup.not_ready, and nothing is written",
+  async (_label, bytes) => {
+    const { f, actions } = await abandonedAttempt();
+    await writeFile(join(f.stateDir, "module-operation-public.json"), bytes);
+    const current = await f.host.resolution.inspectFirstSetupResolution();
+    expect(current.database).toBe("no-venue-rows");
+    const ids = {
+      inspectionId: current.inspectionId,
+      revision: current.revision!,
+      ownerGeneration: current.ownerGeneration!,
+    };
+    const before = await folderTrees(f);
+    await expect(actions.startAgainSummary(ids)).rejects.toMatchObject({
+      code: "setup.not_ready",
+    });
+    await expect(actions.startAgainFirstSetup(ids)).rejects.toMatchObject({
+      code: "setup.not_ready",
+    });
+    expect(await folderTrees(f)).toEqual(before);
+    expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+  },
+);
 
 function recoveryRecord(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
   return join(f.stateDir, "first-fiscal-documents", `${f.module}.recovery.json`);
@@ -1664,27 +1686,6 @@ async function pendingDeletion() {
   return base;
 }
 
-function backupRepair(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
-  const service = createFirstSetupBackupRecovery({
-    stateDir: f.stateDir,
-    venueDir: f.venueDir,
-    host: f.host,
-    workspace: createFirstSetupBackupWorkspace({ stateDir: f.stateDir, venueDir: f.venueDir }),
-    modules: ALL_MODULES,
-    environment: "production",
-    sources: {} as never,
-    log: () => {},
-  });
-  const app = new Hono();
-  mountFirstSetupBackupApi(app, service, () => {});
-  return { service, app };
-}
-const repairProof = {
-  observation: { inspectionId: "inspection", revision: 1, ownerGeneration: 1 },
-  nodeRecoverySecret: "node-recovery-secret",
-  context: { oldBoxGone: true, soleRecovery: true },
-};
-const BACKUP = "https://box.test/setup-api/first-setup/resolution/backup";
 const incomplete = { code: "setup.start_again_incomplete" };
 
 type Pending = Awaited<ReturnType<typeof pendingDeletion>>;
@@ -1803,43 +1804,6 @@ it.each<[string, (p: Pending) => Promise<void>]>([
       ).rejects.toMatchObject(incomplete);
     },
   ],
-  [
-    "A731's repair open",
-    async ({ f }) => {
-      const { service } = backupRepair(f);
-      try {
-        await expect(
-          service.open(
-            {
-              ...repairProof,
-              source: {
-                kind: "archive",
-                artifact: new Uint8Array([1]),
-                recoveryKey: "key",
-                environment: "production",
-              },
-            },
-            { onBox: true },
-          ),
-        ).rejects.toMatchObject(incomplete);
-      } finally {
-        await service.dispose();
-      }
-    },
-  ],
-  [
-    "A731's resume",
-    async ({ f }) => {
-      const { service } = backupRepair(f);
-      try {
-        await expect(
-          service.resume({ ...repairProof, recoveryId: randomUUID() }, { onBox: true }),
-        ).rejects.toMatchObject(incomplete);
-      } finally {
-        await service.dispose();
-      }
-    },
-  ],
 ])(
   "while a deletion is pending, %s is refused setup.start_again_incomplete and the marked files are unchanged",
   async (_name, act) => {
@@ -1849,29 +1813,6 @@ it.each<[string, (p: Pending) => Promise<void>]>([
     expect(await folderTrees(pending.f)).toEqual(before);
   },
 );
-
-it("A731's repair open while a deletion is pending answers 409", async () => {
-  const { f } = await pendingDeletion();
-  const { service, app } = backupRepair(f);
-  try {
-    const form = new FormData();
-    form.set(
-      "request",
-      JSON.stringify({
-        ...repairProof,
-        source: { kind: "archive", recoveryKey: "key", environment: "production" },
-      }),
-    );
-    form.set("artifact", new Blob([Uint8Array.from([1, 2, 3])]), "backup.wbk");
-    const response = await app.request(`${BACKUP}/open`, { method: "POST", body: form }, tls());
-    expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({
-      error: { code: "setup.start_again_incomplete", params: {} },
-    });
-  } finally {
-    await service.dispose();
-  }
-});
 
 it.each([
   ["restore staging", restoreStaging],

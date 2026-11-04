@@ -35,11 +35,10 @@ async function invoiceRecords(f: Awaited<ReturnType<typeof heldSetup>>) {
   }
 }
 
-it("holds records beside a stopped recovery, with the attempt at committed and no invoice", async () => {
+it("holds records, with the attempt at committed and no invoice", async () => {
   const f = await heldSetup();
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
   expect(inspected).toMatchObject({ database: "occupied", emptyDatabase: false });
-  expect((await f.service.liveness())?.state).toBe("stopped");
   expect((await f.host.store.read())?.status).toBe("committed");
   expect(f.installationName).toMatch(/^[0-9A-Z]{5}$/);
   expect(await invoiceRecords(f)).toBe(0);
@@ -58,7 +57,6 @@ it("holds records beside a stopped recovery, with the attempt at committed and n
 it("invoices: 1 leaves one invoice record, counted through the module's seat", async () => {
   const f = await heldSetup({ invoices: 1 });
   expect(await invoiceRecords(f)).toBe(1);
-  expect((await f.service.liveness())?.state).toBe("stopped");
 });
 
 it("status complete and saved trading settings are reached through real steps", async () => {
@@ -67,7 +65,6 @@ it("status complete and saved trading settings are reached through real steps", 
   expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toContain(
     "WAITRON_NODE_ID=",
   );
-  expect((await f.service.liveness())?.state).toBe("stopped");
 });
 
 it("status committed with saved trading settings: publication wrote them, then failed", async () => {
@@ -76,18 +73,6 @@ it("status committed with saved trading settings: publication wrote them, then f
   expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toContain(
     "WAITRON_NODE_ID=",
   );
-  expect((await f.service.liveness())?.state).toBe("stopped");
-});
-
-it("recovery: false leaves the held database with no recovery beside it", async () => {
-  const f = await heldSetup({ recovery: false });
-  expect(f.service).toBeUndefined();
-  expect(await f.host.resolution.inspectFirstSetupResolution()).toMatchObject({
-    database: "occupied",
-    emptyDatabase: false,
-  });
-  expect((await f.host.store.read())?.status).toBe("committed");
-  expect(await f.workspace.read()).toEqual([]);
 });
 
 it("pendingWal leaves a committed row in venue.db-wal", async () => {
@@ -123,7 +108,7 @@ it("pendingWal leaves a committed row in venue.db-wal", async () => {
 
 // The two cases below run in order: a row the first writes must not reach the second's database.
 it("a row written into one test's held database stays in that test's own copy", async () => {
-  const f = await heldSetup({ recovery: false });
+  const f = await heldSetup();
   const venue = new DatabaseSync(join(f.roots.venueDir, "venue.db"));
   try {
     venue
@@ -136,7 +121,7 @@ it("a row written into one test's held database stays in that test's own copy", 
 });
 
 it("the next test's held database is migrated and holds none of the previous test's rows", async () => {
-  const f = await heldSetup({ recovery: false });
+  const f = await heldSetup();
   const venue = new DatabaseSync(join(f.roots.venueDir, "venue.db"), { readOnly: true });
   try {
     expect(venue.prepare("select count(*) as n from adjustment_settings").get()).toEqual({ n: 0 });

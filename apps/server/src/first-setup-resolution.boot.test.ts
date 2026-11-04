@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { IncomingHttpHeaders } from "node:http";
 import { request as httpsRequest } from "node:https";
-import { afterEach, beforeAll, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Hono } from "hono";
 import * as entry from "./node-entry.js";
 import { FRESH } from "./recovery-state.js";
@@ -363,7 +363,8 @@ beforeAll(() => {
   });
 });
 
-type Box = "archive" | "interrupted" | "unfinishable" | "unlisted";
+type Box =
+  "archive" | "interrupted" | "old-recovery" | "old-tombstone" | "unfinishable" | "unlisted";
 
 /** A box with healthy TLS, so a real recovery listener serves the page rather than connection repair. */
 async function startingBox(box: Box) {
@@ -385,8 +386,19 @@ async function startingBox(box: Box) {
     await writeFile(join(venueDir, "first-setup-retirement.json"), '{"version":1}');
     return { root, ...roots };
   }
+  const oldRecovery = join(stateDir, "first-setup-resolutions", "backup-recovery");
+  if (box === "old-tombstone") {
+    await mkdir(join(oldRecovery, "44444444-4444-4444-8444-444444444444"), { recursive: true });
+    await writeFile(join(oldRecovery, "current.json"), "{}");
+    return { root, ...roots };
+  }
   await writeFile(join(stateDir, "first-setup.json"), '{"synthetic":"attempt"}');
   await writeFile(join(venueDir, "first-setup-claim.json"), '{"synthetic":"claim"}');
+  if (box === "old-recovery") {
+    await mkdir(oldRecovery, { recursive: true });
+    await writeFile(join(oldRecovery, "current.json"), "{}");
+    return { root, ...roots };
+  }
   await writeStartAgainMarker(
     roots,
     await startAgainMarkerFor(roots, {
@@ -531,6 +543,20 @@ it.each(MODES)(
     await gone(join(f.stateDir, "recovery.json"));
   },
 );
+
+describe.each(["old-recovery", "old-tombstone"] as const)("%s", (box) => {
+  it.each(MODES)(
+    "a box holding the repair page's old recovery folder serves the reinstall page, in every entry mode (%s)",
+    async (mode) => {
+      const f = await startingBox(box);
+      const started = await startIn(mode, f);
+      await expectRefusedPage(started.port, "setup.workspace_unsupported");
+      expect(started.startServer).not.toHaveBeenCalled();
+      expect(started.writes).not.toHaveBeenCalled();
+      await gone(join(f.stateDir, "recovery.json"));
+    },
+  );
+});
 
 it.each(MODES)(
   "the start finishes an interrupted Start again before serving setup (%s)",

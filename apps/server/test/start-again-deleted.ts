@@ -96,13 +96,11 @@ export async function heldConfirmationRecords(stateDir: string) {
   );
 }
 
-/** Sends Start again, and checks the refusal changed nothing: files, journal, records. */
+/** Sends Start again, and checks the refusal changed nothing: files, marker, records. */
 export async function expectStartAgainRefused(f: Held, send: () => Promise<void>, refusal: object) {
   const before = await snapshot(f);
-  const last = (await f.workspace.readChain()).at(-1);
   await expect(send()).rejects.toMatchObject(refusal);
   expect(await snapshot(f)).toEqual(before);
-  expect((await f.workspace.readChain()).at(-1)).toEqual(last);
   expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
   await expect(access(join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR))).rejects.toMatchObject(
     { code: "ENOENT" },
@@ -110,7 +108,7 @@ export async function expectStartAgainRefused(f: Held, send: () => Promise<void>
 }
 
 export const LEFT_STATE =
-  /^(first-setup-start-again-confirmations\/(\w|[-.])*|first-setup-resolutions\/|first-setup-resolutions\/backup-recovery\/(current\.json)?|first-setup-resolutions\/backup-recovery\/[^/]+\/(\d{6}\.json|target\/|target\/(venue|state)\/|target\/(venue|state)\/((venue|migrations|recovery)\.lock(-journal)?|venue\.holder\.json))?)$/;
+  /^(first-setup-start-again-confirmations\/(\w|[-.])*|first-setup-resolutions\/)$/;
 
 export const noConfirmations = (f: Held) =>
   expect(access(join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR))).rejects.toMatchObject({

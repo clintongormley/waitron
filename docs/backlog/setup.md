@@ -410,34 +410,13 @@ full-disk texts are outside them, for the owner:
 - the managers' full-disk email (`apps/server/src/i18n/box-emails.ts`) says "ask whoever installed
   the box", the never-send-the-person-elsewhere class.
 
-## A start from a selected backup recovery cleans the recovery's own logs, not the box's
-
-At a selected backup recovery, `runEntry` (`apps/server/src/node-entry.ts`) cleans
-`<recovery target's state>/logs` below the free-space floor, while the server it boots keeps the
-box's configured `WAITRON_LOG_DIR` (`/var/lib/waitron/logs` on a box, `deploy/Dockerfile`), so the
-box's rotated logs and crash reports are not deleted to make room (probe in A1127 slice 2's Task 9a2
-review, `~/waitron-campaign/a1127-measure/slice2-task9a2-review.md`). The repair page therefore
-promises nothing about restarting at that stage. The line came with #2043 (40eed0cde), which gives no
-reason for the folder; believed to keep the recovery's originals untouched, as the repair stage does.
-Fix: also clean the configured log folder when it is outside both configured folders, as the repair
-stage does, and let the page promise it.
-
-## A resume can use the room the spare file gave
-
-After the repair host deletes the spare beside a stopped recovery, a resume of that recovery could
-use the freed room: the server's `open` accepts its id (`apps/server/src/first-setup-backup-recovery.ts`, `open`); and a
-release on a plain read while an idle, unsealed setup session can still continue lets that session
-use the room too. Also: a recovery that fails before its `placement-started` record counts as running
-for up to its 5-minute lease, so the repair host releases nothing until the lease lapses. All read,
-not run (A1127's design, "Accepted limits", and the Task 5a/5b review).
-
 ## The spare file's size is measured on HFS+ and Linux tmpfs only
 
 A1127 measured the room a lock, the emptying and the Start-again flow need on a 32 MiB HFS+ image,
 and CI runs the real-disk cases on Linux tmpfs mounts of 32 MiB (48 MiB for `start-from-spare.e2e.test.ts`). Not measured: ext4 (the box's likely
 filesystem: 4 KiB blocks, its journal, root-reserved blocks), copy-on-write filesystems with
 snapshots or compression (btrfs, zfs), and whether the `logs` volume shares the state folder's disk
-on every box, which the repair-stage log clean-up assumes when it deletes logs to make room. Detail:
+on every box. Detail:
 A1127's design, "Open, not measured".
 
 ## The repair page draws a Start-again error twice
@@ -461,28 +440,6 @@ Codex review (run, not only read), not changed there.
 not match `/disk/i`, and the page prints a stack trace holding the checkout's path, so the cases fail
 in any worktree whose path contains "disk" (A1127's own worktree, `…-full-disk-spare-file`). They pass
 in a copy at another path and on `main`.
-
-## A discarded recovery whose files cannot be deleted brings the repair page back after each Start again
-
-- **A discarded recovery whose files cannot be deleted brings the repair page back after each Start
-  again.** Each press answers "Deletion interrupted" and restarts the box. A1098 lets the
-  person keep or move aside files the box did not create after a cut-off Start again; a file the
-  box created that cannot be deleted stays a manual loop. Left open by A1042.
-  [Detail](setup.md#a-discarded-recovery-whose-files-cannot-be-deleted-brings-the-repair-page-back-after-each-start-again)
-
-Left open by A1042. When a file in a discarded recovery cannot be deleted, each Start again answers
-"Deletion interrupted. Reload the page to continue." (A1042's run below saw the earlier words,
-"Start again has not finished…") and restarts the box. The next start logs
-`setup.recovery_cleanup_refused`, leaves the files, and brings the repair page back, so the person
-can only press Start again again. Run by A1042's U7d review with the restored database made
-undeletable (`chflags uchg`), through the real route and the next start: each press restarted the
-box once, each start restarted it zero times, and nothing kept was deleted.
-
-A1098 built, for a Start again a cut stopped whose next start finds files the box did not create,
-a choice on the recovery page, behind the administrator password: keep everything and stop, or
-move the found files aside into `first-setup-set-aside/` and finish Start again
-(`apps/server/src/recovery-start-again.ts`). A file the box created that cannot be deleted, such
-as this restored database, is not a found file, so it stays a manual loop.
 
 ## A1142: a cut-off Start again beside found files the Move cannot handle gets only the explanation
 
@@ -603,31 +560,6 @@ finishing, the connection closing, or a connection already over. For the Retry t
 run; pressing Retry again would ask for the restart again. Wanted: the Retry uses the same
 once-only restart, with a test that closes the connection before the answer is written.
 
-## A1131: Start again beside a recovery record that cannot be read, with the setup database missing
-
-- **A1131: Start again beside a recovery record that cannot be read, with the setup database
-  missing.** Only Reconnect is enabled today. The revised A1131bc design removes the case: a restore
-  writes straight into the usual folders and never makes a recovery folder, and its slice 4 deletes the
-  old recovery-folder code (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`).
-  [Detail](setup.md#a1131-start-again-beside-a-recovery-record-that-cannot-be-read-with-the-setup-database-missing)
-
-Left open by A1042 (#2101), point 3 of its owner questions; the other point (a stopped recovery
-beside a setup database that holds records) was built by A1131 part 1. The box refuses both a new
-recovery and Start again; only Reconnect is enabled, and Reconnect re-reads the same unreadable
-record.
-
-Owner, 2026-10-26 ~16:00: "Start again shouldn't be disabled. We explain the situation and what
-could be lost, and then leave the choice to the user." Waits for the owner: an unreadable record may
-belong to a recovery the box has been trading from (A1131 question, 2026-10-28). The owner's answer
-(2026-10-28 ~08:10) replaced the options: once a recovery is selected, and before anything writes to
-the restored database, it moves to the standard database path, so a damaged recovery record can no
-longer hide the venue the box trades from. Designed 2026-10-28 together with A1131c (a restore
-replaces the failed setup): `docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`.
-The owner sent that design back (2026-10-28 ~15:25); the revision of 2026-10-29 wipes the failed setup
-first and then uses the fresh-box restore, which writes into the usual folders and makes no recovery
-folder, so this case cannot arise on a box set up after it. Its slice 4 deletes the old recovery-folder
-code, and a box that still has one is reinstalled (the pre-live rule, CLAUDE.md §3).
-
 ## On a full disk, Start again's summary may need room for a copy of the setup database
 
 Start again no longer goes through the password step (A1131bc slice 2). Its summary reads the setup
@@ -635,35 +567,12 @@ database in place, and copies it to a scratch folder only when a `-journal` file
 holding pages, sits beside it (`readSetupDatabase`, `apps/server/src/first-setup-database-holdings.ts`;
 read, not run on a full disk). Continue's password step still keeps a whole copy, encoded as text
 (`captureFirstSetupOriginals`, `packages/provisioning/src/first-setup-resolution-inspection.ts`). On
-a full disk either copy has only the box's spare file (8 MiB) to use, and the box gives the spare up
-before a Start-again step only when a stopped recovery is to be discarded
-(`releaseSpareBeforeStartAgain`, `apps/server/src/spare-space.ts`). So beside a held setup database
-with no recovery, which this slice newly offers, the summary and Start again answer 507
+a full disk either copy has only the box's spare file (8 MiB) to use, and no step of the repair
+page gives the spare up. So beside a held setup database, which this slice newly offers, the summary and Start again answer 507
 `storage.disk_full` on a full disk and delete nothing (`apps/server/src/start-again-full-disk.e2e.test.ts`,
-the held case with no recovery). Wanted: give the spare up for every Start again the page offers,
+the held case). Wanted: give the spare up for every Start again the page offers,
 measure the largest setup database an unfinished setup can leave, and either keep a copy within the
 spare or say on the full-disk page what to do.
-
-## A stale signed-in setup tab's activation request is not refused while a Waitron Cloud recovery waits
-
-Left open by A1042. While a backup recovery is running, a Waitron Cloud wait included, the box
-refuses the repair page's writes and `/setup-api/first-setup/resume`, `abandon` and `recover`
-(`firstSetupOwnerWriteFence`, `apps/server/src/setup-first-fiscal-api.ts`). `/setup-api/provision`
-is not on that list and does not check the recovery (`apps/server/src/setup-api.ts`), so a tab that
-signed in before the recovery started could still send activation while a Waitron Cloud recovery
-waits for approval. Read, not run.
-
-## A recovery that Start again recorded as discarded can still be resumed after a power cut
-
-Left open by A1042. Start again writes its confirmation record before the recovery's `abandoned`
-record (`apps/server/src/first-setup-resolution.ts`, `startAgainFirstSetup`). A cut between the two
-leaves the journal at `prepared` or later. After the restart, a hand-made `open` or `resume` for
-that recovery can take it to `selected` beside a confirmation record that says it was discarded:
-neither reads the confirmation records (`apps/server/src/first-setup-backup-recovery.ts`; read, not
-run). No page offers this. Follow-up: `open` and `resume` refuse a recovery that a confirmation
-record says was discarded. At this commit the record's `shown.recovery` holds the recovery's start
-time, last activity and where that time was read from, whether it failed and whether it came from Waitron Cloud, not its id
-(`packages/provisioning/src/first-setup-start-again-confirmation.ts`, `StartAgainRecoveryShown`).
 
 ## A Waitron Cloud recovery whose download takes more than 30 seconds may be refused its series name
 
@@ -676,17 +585,18 @@ the only second clock was the browser's reading. Held 29 seconds, the commit fin
 seconds, it was refused `sif.allocation_invalid` with reason `second_clock_missing`. The same run on
 main at 21d01dfac gave the same result. A Cloud download may run for up to 14 minutes
 (`apps/server/src/cloud-recovery.ts:121`). Not measured: whether a real box takes a fresh internet
-reading when it places the recovery. Next step: measure that on a box.
+reading when it places the recovery. (2026-11-04, A1131bc slice 4: that measurement held the old
+recovery from backup's commit step, which is deleted with the rest of that recovery; the fresh-box
+Cloud restore that Recover from backup now uses has not been measured the same way.) Next step: hold
+the fresh-box Cloud restore's download past 30 seconds in `apps/server/test/hour-recovery-host.ts`
+and see whether the series name is refused; then measure a real box.
 
 ## A1223. A stored series pick that turns out taken
 
 From A1207. An attempt whose chosen name is found taken before it finishes is refused
 (`minute_in_use`), and the person is not offered a way on. Start a new attempt by itself, and word
 the refusal where it shows at activation (the setup app's general message with the code,
-`apps/setup/src/setup-app.ts:2001-2008`). The setup-from-backup restore reuses its stored attempt
-when reopened (`apps/server/src/first-setup-backup-recovery.ts:893-899`), so a reload does not start
-one; `docs/operations/hour-recovery.md` said it did, which I believe predates A1207 (#1990,
-`3ba85c7a6`).
+`apps/setup/src/setup-app.ts:2001-2008`).
 
 ## A1224. Delete the time floors the series choice no longer reads
 
@@ -737,35 +647,6 @@ after a reload during the box's wait (read, not run: `#select(true)` in `first-h
   confirm that deleting this setup is safe…" for it beside the "Set up secure connection" link.
   Wanted: words saying a secure connection is needed. Left open by A1131bc slice 2 (plan, D13, N5).
 
-## A developer note still counts four requests in the Start-again flow
-
-- **A developer note still counts four requests in the Start-again flow.**
-  `docs/developers/conventions-data.md` ("The repair host before the four requests of the
-  Start-again flow") is still true of the spare release, which covers the four `START_AGAIN_ROUTES`
-  (`apps/server/src/setup-first-fiscal-api.ts`), but since A1131bc slice 2 Start again's flow uses
-  three of them: `/recover` is Continue's alone. Reword it. Left open by A1131bc slice 2 (plan, N4).
-  The same wording stands at `START_AGAIN_ROUTES`' comment (`apps/server/src/setup-first-fiscal-api.ts`)
-  and `releaseSpareBeforeStartAgain`'s comment (`apps/server/src/spare-space.ts`).
-
-## A1131c: Recover from backup first wipes the failed setup, and Start again's page drops the item counts
-
-- **A1131c: Recover from backup first wipes the failed setup, and Start again's page drops the item
-  counts** (owner, 2026-10-28). Both buttons on the repair page run one wipe, with no password: the
-  setup's files are deleted (2026-10-29, A1206: the never-reuse note step is retired), and Recover from
-  backup then uses the restore a new box already has. The refusals for an invoice or a never-deleted
-  record, saved trading settings and a finished setup stay. Designed with A1131 below
-  (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`). Approved by the
-  owner on 2026-10-29, both questions answered A: anyone who can open the repair page may delete a
-  failed setup, and a setup whose database cannot be read may be deleted. Being built in the spec's
-  four slices. Slice 1 (Start again's words without counts) landed as #2230. Slice 2 (one wipe with
-  no password, plan `docs/superpowers/plans/2026-10-29-a1131bc-slice2-one-wipe-no-password.md`)
-  takes the counts off the wire, offers Start again beside a held setup database with or without a
-  stopped recovery, and deletes a setup database it cannot fully read. Slice 3 (plan
-  `docs/superpowers/plans/2026-10-31-a1131bc-slice3-recover-is-wipe.md`) makes Recover from backup run the same
-  deletion, after which Reconnect opens "Join or recover an existing restaurant" and the new-box
-  restore; Start again now lands on "Set up this Waitron server". Slice 4 (deleting the old
-  recovery code, including the old routes' `open`) is still to come.
-
 ## No Recover from backup when the setup's own record cannot be read or needs repair
 
 - **No Recover from backup when the setup's own record cannot be read or needs repair.** Since
@@ -780,7 +661,7 @@ after a reload during the box's wait (read, not run: `#select(true)` in `first-h
 
 - **The bucket and Waitron Cloud restores have not been run after Start again's deletion.** A1131bc
   slice 3's server tests run the backup-file restore after the deletion (with the setup database
-  missing, and beside a stopped recovery); the bucket and Cloud routes were not run on that path.
+  missing, and with a held setup database: `first-setup-start-again-held-wipe.test.ts`); the bucket and Cloud routes were not run on that path.
   Left open by A1131bc slice 3 (plan, N5).
 
 ## "The saved setup cannot be read. Contact support."
@@ -789,8 +670,14 @@ after a reload during the box's wait (read, not run: `#select(true)` in `first-h
   `apps/setup/src/i18n/strings/shell.ts`) sends the person to somebody else, against the refusal rule
   in `CLAUDE.md` §3. Wanted: say what happened and what each choice does. The words date from C42
   (#837, 2026-09-29). Noticed while planning A1131bc slice 3, not changed there.
-  Between A1131bc slice 4's two pull requests, the page also draws these words for a summary
-  that still names an old recovery from backup.
+
+## `restoreFromArtifact` has no production caller
+
+- **`restoreFromArtifact` has no production caller.** Since A1131bc slice 4 deleted the repair
+  page's old recovery from backup, only tests and the test helper `apps/server/src/testing/staged-hour-restore.ts` call it
+  (`apps/server/src/restore.ts`; `git grep -n -w restoreFromArtifact -- apps packages`), to place an
+  archive. Decide whether those tests should
+  place archives through `runStagedRestore` instead, then delete it. Left open by A1131bc slice 4.
 
 ## Decisions and deliberate limits
 
@@ -862,7 +749,8 @@ minute, a sale is then refused by the clock-behind stop, and a confirmation list
   Recover from backup first wipes the failed setup, then restores.** (2026-10-29, A1206: the
   never-reuse note is retired, so the wipe adds nothing first.) (2026-10-30, A1131bc slice 2: Start
   again's half is built; Recover from backup's is slices 3–4.) (2026-10-31, A1131bc slice 3: Recover
-  from backup's half is built; slice 4 deletes the old recovery code.) Someone who only
+  from backup's half is built; slice 4 deletes the old recovery code.) (2026-11-04, A1131bc slice 4:
+  the old recovery code is deleted.) Someone who only
   opens a backup to look has still chosen to discard the setup. Wiping a failed setup needs no proof
   beyond reaching the repair page ("If you have access to the box you can reinstall it"); restoring
   needs the backup's own secrets. The design applies the same rule to Start again, which runs the same
@@ -872,7 +760,7 @@ minute, a sale is then refused by the clock-behind stop, and a confirmation list
   slice 1: the confirmation no longer counts what is there; it says what Start again deletes and
   that no invoice was sent.) (2026-10-30, A1131bc slice 2: offered without a stopped recovery and
   without a password.) (2026-11-04, A1131bc slice 4: the setup page no longer reads, shows or
-  discards an old recovery from backup.)
+  discards an old recovery from backup, and the old recovery code is deleted.)
 - **Built with it, to respect the owner's fiscal stop (A1131 part 1; awaiting the owner's
   confirmation in the PR):** Start again does not go ahead when the database holds an invoice or another
   row Waitron never deletes (said to be a fault), when the setup saved its trading settings, or
@@ -892,7 +780,8 @@ accepted that cost so that someone still filling in the recovery form at minute 
 recovery stopped. Without renewals or steps, the session still ends after 15 minutes
 (`apps/server/src/first-setup-backup-lease.test.ts`). (2026-11-04, A1131bc slice 4: the setup page no
 longer reads, shows, renews or discards an old recovery from backup, and
-`first-setup-backup-session.ts` is deleted.)
+`first-setup-backup-session.ts` is deleted.) (2026-11-04, A1131bc slice 4: that page, its session
+and `first-setup-backup-lease.test.ts` are deleted; nothing renews a recovery session any more.)
 
 (2026-10-29: superseded by A1206 above — the note is retired; Q1's confirmation records and Q4's
 reset rule for them remain.)
@@ -937,7 +826,8 @@ password and the discard confirmation, and only for an empty, never-activated at
 a database that holds records goes too, unless it holds a row Waitron never deletes, the setup saved
 its trading settings, or it finished.) (2026-10-30, A1131bc slice 2: offered without a stopped
 recovery and without a password.) (2026-11-04, A1131bc slice 4: the setup page no longer reads,
-shows or discards an old recovery from backup.)
+shows or discards an old recovery from backup.) (2026-11-04, A1131bc slice 4: no box makes such a
+recovery any more; one whose state folder still holds its folder shows the reinstall page.)
 
 **DECIDED (owner, 2026-10-17): setup, and the demo, start only for a country that has a country
 pack.** A country without one is not offered at all, so no venue is set up against settings no pack

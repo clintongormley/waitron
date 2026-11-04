@@ -265,9 +265,7 @@ function repairErrorKey(error: unknown): StringKey | undefined {
   if (code === "storage.disk_full")
     return params?.restartDeletesLogs === true
       ? "shell.first_setup.disk_full"
-      : params?.restartDeletesLogs === false
-        ? "shell.first_setup.disk_full_restart_frees_nothing"
-        : "shell.first_setup.disk_full_restart_unknown";
+      : "shell.first_setup.disk_full_restart_unknown";
   return code === undefined ? undefined : FIRST_SETUP_ERROR_MESSAGES[code];
 }
 

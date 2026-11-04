@@ -52,7 +52,6 @@ export const RECOVERY_PAGE_WORDS: Readonly<
       uncountedStatus: (level: string) => string;
       refusedAtStartStatus: (level: string) => string;
       freeSpace: (amount: string) => string;
-      discardedCopy: (amount: string) => string;
       unknownSpace: string;
       missingTriggers: (names: string) => string;
       changedTriggers: (names: string) => string;
@@ -76,8 +75,6 @@ export const RECOVERY_PAGE_WORDS: Readonly<
     refusedAtStartStatus: (level) =>
       `Level: ${level}. This start was refused before it began, and was not counted.`,
     freeSpace: (amount) => `Free space on the box's disk: ${amount}.`,
-    discardedCopy: (amount) =>
-      `This disk also still holds ${amount} left by a recovery from backup that Start again discarded. The box removes it as it starts, but it needs a little free space to do that safely, and has none.`,
     unknownSpace: "unknown",
     missingTriggers: (names) => `Missing triggers: ${names}`,
     changedTriggers: (names) => `Changed triggers: ${names}`,
@@ -100,8 +97,6 @@ export const RECOVERY_PAGE_WORDS: Readonly<
     refusedAtStartStatus: (level) =>
       `Nivel: ${level}. Este arranque se rechazó antes de empezar y no se ha contado.`,
     freeSpace: (amount) => `Espacio libre en el disco del equipo: ${amount}.`,
-    discardedCopy: (amount) =>
-      `Este disco también guarda todavía ${amount} de una recuperación desde copia de seguridad que «Empezar de nuevo» descartó. El equipo la quita al arrancar, pero necesita un poco de espacio libre para hacerlo con seguridad, y no lo tiene.`,
     unknownSpace: "desconocido",
     missingTriggers: (names) => `Disparadores que faltan: ${names}`,
     changedTriggers: (names) => `Disparadores cambiados: ${names}`,

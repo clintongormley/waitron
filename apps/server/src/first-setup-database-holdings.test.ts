@@ -95,7 +95,7 @@ it("keeps a failed read as the reason when the private copy then cannot be remov
 });
 
 it("passes on a module seat's error code, never its reason", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   const modules = withHoldings(held, async () => {
     throw new AppError("setup.attempt_invalid", {}, { reason: "a value read from the database" });
   });
@@ -153,7 +153,7 @@ it.each([
 });
 
 it("reads through a private copy, read-write, when a leftover -journal sits beside the database", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   const path = join(held.roots.venueDir, "venue.db");
   // A journal left by a writer that stopped mid-transaction: it must be rolled back to be read.
   const aside = await mkdtemp(join(tmpdir(), "held-setup-journal-"));

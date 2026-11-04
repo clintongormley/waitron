@@ -121,7 +121,6 @@ it("a first-setup request on a box whose earlier Waitron's selection appears aft
     });
   } finally {
     socket.destroy();
-    await entry.dispose();
   }
 });
 it("raw boot refuses an unfinishable deletion with setup.start_again_incomplete", async () => {

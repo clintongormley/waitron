@@ -1,6 +1,5 @@
 import {
   holdingsRead,
-  summary,
   expectRefused,
   keptRecordsLogReason,
   notReady,
@@ -15,21 +14,6 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "vitest";
 import { damagePages } from "../test/damaged-database.js";
-
-it("a legitimate held setup database beside a stopped recovery answers the summary", async () => {
-  const f = await heldSetup();
-  const shown = await summary(f);
-  expect(shown).toEqual({
-    reached: "fiscal-finished",
-    recovery: {
-      startedAt: expect.any(String),
-      lastActiveAt: expect.any(String),
-      lastActiveSource: expect.any(String),
-      failed: false,
-      cloud: false,
-    },
-  });
-});
 
 it("a held setup database with an invoice record refuses the summary kept-records, and nothing changes", async () => {
   await expectRefused(await heldSetup({ invoices: 1 }), {
@@ -106,7 +90,7 @@ function nodeHoldings(f: Pick<Held, "roots">) {
 }
 
 it("in the held state, Start again deletes a node.db holding the node set's tables and the attempt's recovery-key check and signing key", async () => {
-  const f = await heldSetup({ recovery: false });
+  const f = await heldSetup();
   expect(nodeHoldings(f)).toEqual({
     __drizzle_migrations_node: 2,
     node_handover_events: 0,
@@ -124,7 +108,7 @@ it("in the held state, Start again deletes a node.db holding the node set's tabl
 });
 
 it("in the held state, a node.db whose recovery-key check names another node refuses Start again setup.not_ready, and nothing changes", async () => {
-  const f = await heldSetup({ recovery: false });
+  const f = await heldSetup();
   const node = new DatabaseSync(join(f.roots.venueDir, "node.db"));
   node.exec(`update node_recovery_key set node_id = '${crypto.randomUUID()}'`);
   node.close();
@@ -153,16 +137,16 @@ it("in the held state, a node.db holding a mirror link refuses Start again setup
 });
 
 it.each([
-  ["saved trading settings", "trading-settings", { recovery: false, tradingSettings: true }, true],
-  ["a complete attempt", "setup-finished", { recovery: false, status: "complete" }, false],
-  ["an invoice record", "kept-records", { recovery: false, invoices: 1 }, true],
+  ["saved trading settings", "trading-settings", { tradingSettings: true }, true],
+  ["a complete attempt", "setup-finished", { status: "complete" }, false],
+  ["an invoice record", "kept-records", { invoices: 1 }, true],
 ] as const)(
-  "%s with no recovery started refuses the summary and Start again setup.start_again_refused %s, and nothing changes",
+  "%s refuses the summary and Start again setup.start_again_refused %s, and nothing changes",
   async (_label, cause, options, signIn) => {
     const f = await heldSetup(options);
     const refusal = { code: "setup.start_again_refused", params: { cause } };
     await expectRefused(f, refusal, { signIn });
-    await expectStartAgainRefused(f, await handMade(f, signIn, false), refusal);
+    await expectStartAgainRefused(f, await handMade(f, signIn), refusal);
   },
 );
 
@@ -180,7 +164,7 @@ it.each([
     { code: "setup.start_again_refused", params: { cause: "trading-settings" } },
   ],
 ] as const)(
-  "a database read as %s beside a stopped recovery (%o) is refused as %o, and nothing changes",
+  "a database read as %s (%o) is refused as %o, and nothing changes",
   async (database, options, refusal) => {
     const f = await heldSetup(options);
     const inspect = f.host.resolution.inspectFirstSetupResolution;

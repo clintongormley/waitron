@@ -38,12 +38,6 @@ function setup() {
         void _pointId;
       },
     ),
-    reconcileRestored: async (
-      _binding: { requestId: string; pointId: string },
-      checkCommitted: () => Promise<void>,
-    ) => {
-      await checkCommitted();
-    },
     markRestored: vi.fn(async () => {}),
     reportRestored: vi.fn(async () => {}),
   };

@@ -12,21 +12,8 @@ const watch = vi.hoisted(() => ({
   seen: [] as boolean[],
   spare: [] as unknown[],
   spareFile: "",
-  backupEntry: null as unknown,
   room: [] as { leftover: boolean; spare: boolean; deps: unknown }[],
 }));
-
-vi.mock("./first-setup-backup-entry.js", async (importOriginal) => {
-  const original = await importOriginal<typeof import("./first-setup-backup-entry.js")>();
-  return {
-    ...original,
-    resolveFirstSetupBackupEntry: vi.fn(
-      async (...args: Parameters<typeof original.resolveFirstSetupBackupEntry>) =>
-        (watch.backupEntry as Awaited<ReturnType<typeof original.resolveFirstSetupBackupEntry>>) ??
-        original.resolveFirstSetupBackupEntry(...args),
-    ),
-  };
-});
 
 vi.mock("./start-backup-room.js", () => ({
   deleteOldBackupsAtStart: vi.fn(async (deps: unknown) => {
@@ -58,7 +45,6 @@ afterEach(async () => {
   watch.spare = [];
   watch.leftover = "";
   watch.spareFile = "";
-  watch.backupEntry = null;
   watch.room = [];
   await Promise.all(dirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
@@ -254,23 +240,3 @@ it("the backup step's spare size defaults to the spare file's", async () => {
     }),
   ]);
 });
-
-it.each(["repair", "selected"] as const)(
-  "a start with a %s backup recovery deletes no old backups",
-  async (kind) => {
-    const roots = await roomDirs();
-    const target = await roomDirs();
-    watch.backupEntry =
-      kind === "repair"
-        ? { kind, roots: { stateDir: roots.stateDir, venueDir: roots.venueDir } }
-        : {
-            kind,
-            roots: { stateDir: target.stateDir, venueDir: target.venueDir },
-            run: <T>(body: () => Promise<T>) => body(),
-          };
-
-    await runEntry(roomEntryDeps(roots)).catch(() => {});
-
-    expect(watch.room).toEqual([]);
-  },
-);

@@ -39,10 +39,6 @@ const CO_NAMERS: Readonly<Record<string, string>> = {
   "apps/server/src/backup-verification.ts":
     "places a backup in a scratch folder and removes that folder",
   "apps/server/src/cloud-snapshot-archive.ts": "removes its own staging folder",
-  "apps/server/src/first-setup-backup-recovery.ts":
-    "copies backups into scratch folders it removes; places one into the target only through restoreFromArtifact, whose restore.ts deletes that target's note",
-  "apps/server/src/first-setup-backup-source.ts":
-    "copies a backup into a scratch folder it removes",
   "apps/server/src/first-setup-database-holdings.ts":
     "reads the live database; removes only its scratch folder",
   "apps/server/src/handover-capture.ts":
@@ -62,8 +58,6 @@ const CO_NAMERS: Readonly<Record<string, string>> = {
   "apps/server/src/testing/stream-loop-scenario.ts": "test harness: scratch folders it removes",
   "apps/server/src/testing/stream-pause-scenario.ts":
     "test harness: copies migration folders into its scratch box and only opens its venue.db",
-  "packages/provisioning/src/first-setup-backup-workspace.ts":
-    "lists venue.db by name; renames and unlinks its own records",
   "packages/stream/src/restore.ts": "removes its own configuration file",
   "packages/stream/src/supervisor.ts": "removes its pid file and venue.db's Litestream folder",
 };

@@ -8,7 +8,8 @@ import {
 } from "../test/start-again-held-fixture.js";
 import {
   snapshot,
-  heldConfirmationRecords as confirmations,
+  noConfirmations,
+  expectStartAgainDeleted,
   expectStartAgainRefused,
   LEFT_STATE,
 } from "../test/start-again-deleted.js";
@@ -29,42 +30,16 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 
-it("in the held state, Start again confirming the summary deletes the setup, and keeps whose setup it was", async () => {
-  const f = await heldSetup();
-  const startAgain = await askStartAgain(f);
-  await expect(startAgain.run()).resolves.toBeUndefined();
-  const left = await snapshot(f);
-  expect(Object.keys(left.venue).filter((name) => !LEFT_VENUE.test(name))).toEqual([]);
-  expect(Object.keys(left.state).filter((name) => !LEFT_STATE.test(name))).toEqual([]);
-  const records = await confirmations(f.roots.stateDir);
-  expect(records).toHaveLength(1);
-  expect(records[0]).toMatchObject({
-    database: "present",
-    shown: startAgain.shown,
-    setupAdministrator: { displayName: expect.any(String), email: expect.any(String) },
-    signedIn: false,
-  });
-  expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
-});
-
 it("in the held state, a damaged recovery-key record: the summary shows it, and Start again sent as the page sends it, acknowledging it, deletes the setup", async () => {
   const f = await heldSetup();
   await damageRecoveryRecord(f);
   const startAgain = await askStartAgain(f);
   expect(startAgain.shown).toMatchObject({ recoveryRecordDamaged: true });
-  await expect(
-    startAgain.run({
-      confirmRecoveryDiscard: { shown: startAgain.shown },
-      recoveryRecordDamagedShown: true,
-    }),
-  ).resolves.toBeUndefined();
+  await expect(startAgain.run({ recoveryRecordDamagedShown: true })).resolves.toBeUndefined();
   const left = await snapshot(f);
   expect(Object.keys(left.venue).filter((name) => !LEFT_VENUE.test(name))).toEqual([]);
   expect(Object.keys(left.state).filter((name) => !LEFT_STATE.test(name))).toEqual([]);
-  const records = await confirmations(f.roots.stateDir);
-  expect(records).toHaveLength(1);
-  expect(records[0]).toMatchObject({ database: "present", shown: startAgain.shown });
-  expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
+  await noConfirmations(f);
 });
 
 it.each([
@@ -79,11 +54,7 @@ it.each([
     expect(startAgain.shown.recoveryRecordDamaged).toBe(damaged ? true : undefined);
     await expectStartAgainRefused(
       f,
-      () =>
-        startAgain.run({
-          confirmRecoveryDiscard: { shown: startAgain.shown },
-          ...(flag && { recoveryRecordDamagedShown: true as const }),
-        }),
+      () => startAgain.run({ ...(flag && { recoveryRecordDamagedShown: true as const }) }),
       { code: "setup.attempt_conflict" },
     );
   },
@@ -106,13 +77,10 @@ it("a setup database that is not empty but holds no rows (a view only) is not th
     emptyDatabase: false,
   });
   await expectRefused(f, { code: "setup.not_ready" });
-  const { shown } = before;
   const { ids } = await f.signIn();
-  await expectStartAgainRefused(
-    f,
-    () => before.actions.startAgainFirstSetup({ ...ids, confirmRecoveryDiscard: { shown } }),
-    { code: "setup.not_ready" },
-  );
+  await expectStartAgainRefused(f, () => before.actions.startAgainFirstSetup(ids), {
+    code: "setup.not_ready",
+  });
 });
 
 it("a setup database whose -wal holds no rows stays refused setup.not_ready when its main file alone still holds one, and nothing changes", async () => {
@@ -154,13 +122,10 @@ it("a setup database whose -wal holds no rows stays refused setup.not_ready when
     emptyDatabase: false,
   });
   await expectRefused(f, { code: "setup.not_ready" });
-  const { shown } = before;
   const { ids } = await f.signIn();
-  await expectStartAgainRefused(
-    f,
-    () => before.actions.startAgainFirstSetup({ ...ids, confirmRecoveryDiscard: { shown } }),
-    { code: "setup.not_ready" },
-  );
+  await expectStartAgainRefused(f, () => before.actions.startAgainFirstSetup(ids), {
+    code: "setup.not_ready",
+  });
 });
 
 it("in the held state, an invoice record refuses Start again kept-records even when the fiscal module lists its invoice table, and every other append-only table, as deletable, and nothing changes", async () => {
@@ -207,7 +172,6 @@ it("in the held state, a request carrying confirmMissingDatabase is refused setu
     f,
     () =>
       startAgain.run({
-        confirmRecoveryDiscard: { shown: startAgain.shown },
         confirmMissingDatabase: { nothingFiledOrSold: true, shown: startAgain.shown },
       }),
     { code: "setup.attempt_conflict" },
@@ -221,14 +185,13 @@ it("in the held state, a request answering no-current-master is refused setup.no
     f,
     () =>
       startAgain.run({
-        confirmRecoveryDiscard: { shown: startAgain.shown },
         register: { kind: "no-current-master", confirmed: true },
       }),
     { code: "setup.not_ready" },
   );
 });
 
-it("in the held state, the Start again route passes the shown summary on, so confirming it over HTTPS starts again", async () => {
+it("in the held state, the Start again route starts again over HTTPS with only the inspection ids", async () => {
   const f = await heldSetup();
   const startAgain = await askStartAgain(f);
   const app = new Hono();
@@ -244,10 +207,7 @@ it("in the held state, the Start again route passes the shown summary on, so con
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          ...startAgain.ids,
-          confirmRecoveryDiscard: { shown: startAgain.shown },
-        }),
+        body: JSON.stringify(startAgain.ids),
       },
       { incoming: { socket } },
     );
@@ -256,7 +216,8 @@ it("in the held state, the Start again route passes the shown summary on, so con
   } finally {
     socket.destroy();
   }
-  expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
+  await expectStartAgainDeleted(f.roots);
+  await noConfirmations(f);
 });
 
 it("in the held state, the Start again route answers a refusal HTTP 409 with its cause, and nothing changes", async () => {
@@ -265,19 +226,7 @@ it("in the held state, the Start again route answers a refusal HTTP 409 with its
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
     host: f.host,
-    ...(f.service === undefined ? {} : { backupRecovery: f.service }),
   });
-  // The summary is refused here, so this is the one a page would last have shown.
-  const shown = {
-    reached: "fiscal-finished",
-    recovery: {
-      startedAt: "2026-10-24T13:50:12.000Z",
-      lastActiveAt: "2026-10-24T13:51:12.000Z",
-      lastActiveSource: "memory",
-      failed: false,
-      cloud: false,
-    },
-  };
   const app = new Hono();
   mountFirstSetupResolutionApi(app, f.host, () => {}, {
     startAgain: actions.startAgainFirstSetup,
@@ -292,10 +241,7 @@ it("in the held state, the Start again route answers a refusal HTTP 409 with its
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          ...ids,
-          confirmRecoveryDiscard: { shown },
-        }),
+        body: JSON.stringify(ids),
       },
       { incoming: { socket } },
     );

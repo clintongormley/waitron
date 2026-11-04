@@ -11,7 +11,7 @@ import { appendOnlyTriggers } from "@waitron/store";
 import { readSetupDatabase } from "./first-setup-database-holdings.js";
 
 it("sums records and accepted filings over every module with a holdings seat", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   const stub = {
     name: "stub-holdings",
     provisioning: {
@@ -23,7 +23,7 @@ it("sums records and accepted filings over every module with a holdings seat", a
 });
 
 it("adds a holdings seat's records to the next module's", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   const stub = {
     name: "stub-holdings",
     provisioning: {
@@ -35,7 +35,7 @@ it("adds a holdings seat's records to the next module's", async () => {
 });
 
 it("does not count Litestream's own tables", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   write(held, [
     "create table _litestream_seq (id integer primary key, seq integer)",
     "insert into _litestream_seq values (1, 1)",
@@ -46,7 +46,7 @@ it("does not count Litestream's own tables", async () => {
 });
 
 it("keeps a row in a manifest append-only table whose triggers are gone", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   write(held, [
     ...appendOnlyTriggers(["adjustment_refunds"]).map(({ name }) => `drop trigger "${name}"`),
     ADJUSTMENT_REFUND,
@@ -66,7 +66,7 @@ it("reads an empty migrated database as holding no rows", async () => {
 });
 
 it("keeps a row in an append-only table of a manifest module that is not enabled", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   write(held, [ADJUSTMENT_REFUND]);
   const modules = held.host.modules!.filter((module) => module.name !== "adjustments");
   expect(modules).toHaveLength(held.host.modules!.length - 1);
@@ -75,7 +75,7 @@ it("keeps a row in an append-only table of a manifest module that is not enabled
 });
 
 it("keeps a row in a table that carries the append-only triggers but is in no manifest set", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   write(held, [
     "create table stray_ledger (id integer primary key)",
     ...appendOnlyTriggers(["stray_ledger"]).map(({ definition }) => `create trigger ${definition}`),

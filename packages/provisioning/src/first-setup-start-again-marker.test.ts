@@ -802,22 +802,6 @@ it("a state folder inside an earlier Waitron's workspace is refused as unsupport
   await expect(assertStartAgainAllowedOnDisk(roots)).rejects.toMatchObject(unsupported);
 });
 
-it("folders inside a backup recovery's target are refused", async () => {
-  const base = await stateDir();
-  const target = join(
-    base,
-    "state",
-    "first-setup-resolutions",
-    "backup-recovery",
-    randomUUID(),
-    "target",
-  );
-  const roots = { stateDir: join(target, "state"), venueDir: join(target, "venue") };
-  await mkdir(roots.venueDir, { recursive: true });
-  await mkdir(roots.stateDir, { recursive: true });
-  await expect(assertStartAgainAllowedOnDisk(roots)).rejects.toMatchObject(notReady);
-});
-
 it("a folder whose entries cannot be checked is refused, not read as absent", async () => {
   const roots = await startableFolders();
   await fs.chmod(roots.venueDir, 0o600);

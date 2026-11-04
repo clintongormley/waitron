@@ -305,19 +305,15 @@ Never edit rows in the database to repair it.
 #### When the page names `storage.disk_full`
 
 The box's disk is full, so Waitron cannot save anything. Before it opens its database, every start,
-whatever the free space, except one that finds a backup recovery's journal at its repair stage or
-unreadable, deletes the database copy and encrypted copy a backup run that was cut off
+whatever the free space, deletes the database copy and encrypted copy a backup run that was cut off
 left in `backup-staging` in the state folder, found by the names a backup run gives them. It keeps
 them while another process, such as a running server, holds the database folder. When the start
 cannot find that out, as on a disk with no room left for the note it writes while it holds the
 folder, it keeps them while that folder's holder note shows a heartbeat less than 30 seconds old.
 In the same step it deletes `restore-staging/staged-recovery` in the state folder, where the setup
-wizard keeps a backup uploaded for checking. On a box where a backup recovery from the setup
-repair page has selected its own folders, the start does this in those folders instead.
+wizard keeps a backup uploaded for checking.
 
-Every start also deletes, when the state folder or the database's folder has under 256 MiB free
-(a start at a backup recovery's repair stage only when the `logs` folder, followed through links, is
-inside neither the state folder nor the database's folder):
+Every start also deletes, when the state folder or the database's folder has under 256 MiB free:
 
 - rotated log files except the newest (`waitron.log.2` and later; `waitron.log` and `waitron.log.1`
   stay);
@@ -332,9 +328,7 @@ points at alone.
 If that frees enough, the box starts as usual. If the start still cannot write, the page appears at
 once, without counting the start, and says "The box has deleted the temporary copies, old logs and
 crash reports it can make again, and the disk is still full." It says that sales and the database
-are not touched, that Waitron cannot free more space by itself, and what reinstalling costs. While a
-recovery that Start again discarded still holds its copy, it also names that copy's size; the
-ordinary recovery page shows the same line when the failure it recorded is `storage.disk_full`. Below the
+are not touched, that Waitron cannot free more space by itself, and what reinstalling costs. Below the
 status line it shows the free space on the box's disk, read again each time you load the page. A start that fails later because the disk filled is named `storage.disk_full`
 as well, and deletes the same files before it records the failure.
 
@@ -347,16 +341,12 @@ checks, among them that it was written for the `venue.db` still in place. It del
 backups in local backup folders on the database's disk: never the newest in a folder, one taken at
 or before the moment the current installation began, or one in a bucket. It deletes toward 256 MiB
 free or, when that is out of reach, toward the spare plus 16 MiB (24 MiB), and deletes none when
-even that is out of reach. It never does this at a backup recovery's repair or selected stage. Once
+even that is out of reach. Once
 the server is running it raises the same alert a backup run raises.
 
-The box also keeps an 8 MiB spare file, `spare-space`, in the state folder. It is not venue data, and a
-backup recovery's check of the box's files leaves it out. Within the server, three steps delete it:
-a start, after the clean-up above and before it reads the setup state, when the state folder or the database's folder has under 8 MiB free,
-or under 16 MiB after a start that failed on a full disk (never at a recovery's repair stage); a
-start that finds a backup recovery Start again discarded, under 16 MiB free, just before it deletes
-that recovery's copy; and the setup repair page, under 16 MiB free, before the steps of Start again
-beside a stopped or discarded recovery. `waitron.sh reset` deletes it too. The room lets the box
+The box also keeps an 8 MiB spare file, `spare-space`, in the state folder. It is not venue data. Within the server, only a start deletes it:
+after the clean-up above and before it reads the setup state, when the state folder or the database's folder has under 8 MiB free,
+or under 16 MiB after a start that failed on a full disk. `waitron.sh reset` deletes it too. The room lets the box
 take the database's locks and start normally instead of serving the full-disk page.
 
 Deleting the spare writes a small marker beside it, `spare-space.released`. While the marker exists
@@ -423,7 +413,7 @@ Both forms wipe every volume in the table above. Plain `reset` keeps four things
   spare left on this box, together with their working copies `venue-ca.crt.tmp` and
   `venue-ca.key.tmp`, which a join stopped while writing them can leave.
 - `first-setup-start-again-confirmations/`, one small record for each Start again confirmed while
-  the venue database was missing or partly unreadable, or that discarded a stopped backup recovery:
+  the venue database was missing or partly unreadable:
   whose setup it was, that it was confirmed on the repair page with nobody signed in, when, and the
   summary the page confirmed.
 - `first-setup-start-again-choices/`, one small record for each Keep or Move choice someone made

@@ -535,7 +535,7 @@ Message: `shell.not_ready`. Fix: [setup-readiness](#setup-readiness).
 
 Wording: `apps/setup/src/i18n/strings/shell.ts:23`, `apps/setup/src/i18n/strings/shell.ts:164`.
 
-State: The setup shell maps setup.not_ready to this message (setup-app.ts:214, :220, :353 and :1528). The code also means a Cloud recovery dependency is absent (first-setup-backup-source.ts:40), a required reset callback is absent (setup-api.ts:1053), or a recovery artifact/directory fails a size/type/count check (first-setup-resolution-inspection.ts:161 and :196). None of those conditions changes merely by waiting. Bug-only: no, persistent dependency/file conditions are explicit.
+State: The setup shell maps setup.not_ready to this message (setup-app.ts:214, :220, :353 and :1528). The code also means a required reset callback is absent (setup-api.ts:1053), or a recovery artifact/directory fails a size/type/count check (first-setup-resolution-inspection.ts:161 and :196). None of those conditions changes merely by waiting. Bug-only: no, persistent dependency/file conditions are explicit.
 
 Route: Missing: distinguish temporary preparation from unsupported/unavailable recovery and retained-file refusal. Offer a supported source or administrator recovery route. A1042 (#2101, landed 2026-10-26) changed some of these paths; recheck them against main.
 
@@ -718,10 +718,10 @@ whenever a public fiscal record (`state/module-operation-public.json`) or an une
 fiscal-documents file exists, damaged or intact (`firstSetupUnusedAssignment` in
 `apps/server/src/first-setup-unused-assignment.ts` and `noOtherHistory` in
 `apps/server/src/first-setup-resolution.ts`, both from #1752). Since A1206 (2026-10-29) the summary
-beside a stopped recovery makes the same check and refuses `setup.not_ready` too
-(`apps/server/src/first-setup-start-again-backup-discard.test.ts`, "with the database present and
-empty, a %s public fiscal record beside a stopped recovery refuses the summary and Start again
-setup.not_ready, and nothing is written"). Wanted: decide with the owner whether such a file should
+makes the same check and refuses `setup.not_ready` too
+(`apps/server/src/first-setup-start-again.test.ts`, "with the database present and empty, a %s
+public fiscal record refuses the summary and Start again setup.not_ready, and nothing is
+written", ported in A1131bc slice 4). Wanted: decide with the owner whether such a file should
 still block Start again on this path.
 
 ### setup-environment

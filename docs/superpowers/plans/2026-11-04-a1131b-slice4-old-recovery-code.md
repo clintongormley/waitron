@@ -1101,7 +1101,8 @@ its replacement; line numbers are on `03a1198150`.
     backup recovery's),".
   - `:1190-1193` delete "; while a discarded recovery's copy is still there, one more line names its
     size (`discardedCopyBytes`, `apps/server/src/discarded-copy.ts`); the ordinary recovery page shows
-    the same line when the failure it recorded is `storage.disk_full`".
+    the same line when the failure it recorded is `storage.disk_full`"
+    (done early, with the pointer guard fix).
   - `:1300-1301` delete "A backup recovery's check of the box's files skips `first-setup-set-aside`
     in each root (`originals`, `packages/provisioning/src/first-setup-backup-workspace.ts`)."
 - **`docs/developers/testing-guide.md:1463-1477`** — "runs the repair page's Start-again flow beside
@@ -1333,6 +1334,9 @@ with the repair page's old recovery.
 | same | 50 | discard key dropped; "one record, database present" → "no record"; journal assertion deleted | a present database writes no record without a discard (`first-setup-resolution.ts:470`) | B1 |
 | same | the `it.each` "in the held state, %s, is refused setup.attempt_conflict…" (70-91), 92, 118, 203, 217 | discard key dropped from the send | refusals unchanged | B1 |
 | same | 231 | retitled "…the Start again route starts again over HTTPS with only the inspection ids"; body loses the discard; journal assertion deleted | no summary is sent for a held present database | B1 |
+| same | 166, 179, 187, 195 (kept-records twice, trading-settings, setup-finished) | `handMade` sends only the inspection ids, no discard key; refusal kept | found red in B1: with no recovery a discard key is refused `setup.attempt_conflict` before the cause | B1 |
+| same | "the Start again route answers a refusal HTTP 409 with its cause" (262) | body loses the discard key and its hand-made summary; 409 and cause kept | found red in B1, same reason | B1 |
+| `apps/server/src/first-setup-start-again-held.test.ts` | it.each "%s with no recovery started refuses…" (155); it.each "a database read as %s beside a stopped recovery (%o)…" (172) | retitled without the recovery; assertions kept | the titles named a recovery the fixture no longer builds | B1 |
 | `apps/server/src/first-setup-start-again-held-damaged.test.ts` | 80, 109; the `it.each` "finishing a recovery abandoned over %s database…" (124) | deleted | old path (124 needs `abandonUnemptied` and the default recovery) | B1 |
 | `apps/server/src/first-setup-start-again-held-wipe.test.ts` | 154 | deleted | old path | B1 |
 | `apps/server/src/start-again-full-disk.e2e.test.ts` | 252 | deleted | the release it tested is deleted | B1 |
@@ -1349,6 +1353,7 @@ with the repair page's old recovery.
 | same | 103, 117, 130, 141, 150, 274; the spy helper (88-98) and the old-entry import and mock (14, 20) | deleted | emptying and the repair host's release | B4 |
 | same | the helper's `dispose` (186) and every kept case's `repair.dispose()` / `entry.dispose()` | removed | the repair app has no `dispose` (D16) | B4 |
 | `apps/server/src/first-setup-entry.test.ts` | `entry.dispose()` at 502, 658, 705 | removed; cases kept | D16 | B4 |
+| `apps/server/src/first-setup-workspace.test.ts` | "a first-setup request on a box whose earlier Waitron's selection appears after the start answers 409 setup.workspace_unsupported" (its `entry.dispose()` in `finally`) | removed; 409 and code kept | found red in B4 (typecheck): the repair app has no `dispose` (D16) | B4 |
 | `apps/server/src/node-entry.test.ts` | 2348 | "did not move" → "folders below a linked folder" (explicit symlinked parent) | D5, red first on every system | B3 |
 | same | describe 2437 (2 cases) | deleted | the discarded-copy line | B4 |
 | `apps/server/src/node-entry.full-disk-order.test.ts` | it.each repair/selected (258) | deleted | no stages | B3 |
@@ -1368,10 +1373,21 @@ with the repair page's old recovery.
 | `packages/provisioning/src/first-setup-start-again-marker.test.ts` | 805 | deleted | `insideBackupRepairTarget` | B6 |
 | `packages/provisioning/src/first-setup-start-again-confirmation.test.ts` | 255, 296 | deleted | `recovery` and `present` | B6 |
 | same | 305 | retitled; refusal kept | `present` is refused outright now | B6 |
+| same | the `it.each` "a shown recovery with %s is refused setup.attempt_invalid and writes nothing" | deleted | found in B6: `recovery` leaves the record, so a `recovery` key is dropped like any extra key ("keeps only D3a's keys when handed extra ones") | B6 |
+| same | "a shown.held key is not stored in the record" | setup is the base record (database missing, no recovery) instead of `present` with a recovery; assertion kept | found red in B6: `present` is now refused | B6 |
+| same | the "beside a stopped recovery" row of the `it.each` "a record with the database unreadable keeps what the page showed, %s" | deleted | found in B6: old path | B6 |
+| same | the two `present` rows of the `it.each` "a record with the database %s is refused setup.attempt_invalid and writes nothing" | deleted | found in B6: `present` is refused whatever `shown` holds, so the rows only repeated the retitled 305 case | B6 |
+| same | the row "a database other than missing, present or unreadable" of "refuses %s and writes nothing" | relabelled "a database other than missing or unreadable"; assertion kept | found in B6: `present` is no longer a valid value | B6 |
+| `apps/server/src/first-setup-start-again-held-wipe.test.ts` | "a held setup database, wiped, then the fresh-box restore writes into the usual folders" and "a missing setup database, wiped, then the fresh-box restore writes into the usual folders" | the `resolveFirstSetupBackupWorkspace(...).kind === "absent"` line deleted from each | found in B6 (typecheck): the function is deleted; the line before it, `first-setup-resolutions` absent in both folders, already covers the folder that function read | B6 |
 | `packages/provisioning/src/first-setup-workspace.test.ts` | it.each (27-47) | two rows added; new pass case for `first-setup-resolutions/<id>/` | the refusal (D2) and its negative control | B7 |
 | `apps/server/src/first-setup-resolution.boot.test.ts` | new "a box holding the repair page's old recovery folder serves the reinstall page…" for an old recovery and for a kept tombstone | added, red first | design decision; D4's trading box | B7 |
 | `scripts/spare-space.test.ts` | allowed lists, pattern, comment and synthetic rows | narrowed (B4 for `first-setup-entry.ts` and `releaseSpareBeforeStartAgain`, B6 for the workspace) | allowed files deleted or no longer releasing | B4, B6 |
 | `scripts/backup-room-note.test.ts`, `scripts/start-again-records-writers.test.ts` | rows for deleted files | deleted | files deleted | B5, B6 |
+| `apps/setup/src/setup-app-resolution.test.ts` | "a Start again refused storage.disk_full where a restart deletes no logs says restarting frees no space, in %s"; "with the database present, a summary read refused storage.disk_full keeps the server's word on restarting" | deleted; the shell removed-keys loop gains `shell.first_setup.disk_full_restart_frees_nothing` | review fix: the server no longer sends `restartDeletesLogs: false`, so the message and its key are deleted and the wire type narrowed to `true` | review |
+| `apps/server/src/setup-first-fiscal-api.disk-full.test.ts` | the `describe.each([true, false])` "where restarting the box deletes logs: %s" › "the %s answer's 507 carries restartDeletesLogs" | the `false` rows deleted; the `true` rows retitled "the %s answer's 507 carries restartDeletesLogs where restarting the box deletes logs"; "the %s step's own storage.disk_full refusal carries the field too" stubs `true` instead of `false`, assertion kept | review fix: as above | review |
+| `packages/server-kit/src/error-boundary.test.ts` | "an AppError storage.disk_full keeps its own params" | carries `restartDeletesLogs: true` instead of `false`, assertion kept | review fix: the narrowed type no longer admits `false` | review |
+| `apps/server/src/first-setup-entry.spare.test.ts` | "the repair app's answer to whether the next start deletes old logs says it does below the floor, whatever the log folder" | became an `it.each` "…says it does below the floor, with the log folder %s", rows "inside the state folder" and "outside both the state and venue folders"; assertion kept | review fix: the title claimed any log folder while only the default one was tried | review |
+| `apps/server/src/cloud-recovery.test.ts` | "holds the client exclusion until a held call completes" | its "`startAgain()` rejects" assertion replaced: the request count is now checked after the other three calls and again after `startAgain()` | review fix: `startAgain()` rejects without the exclusion too (after sending two requests), so only the count after it shows the exclusion held it | review |
 
 An implementer who finds another red case applies the global rule (delete if old path, convert if
 its subject survives), adds a row here in the same commit, and names it in the commit message.

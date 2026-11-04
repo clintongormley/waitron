@@ -288,44 +288,6 @@ describe("boot's full-disk stop wiring", () => {
     }
   });
 
-  it("the spare's folder is WAITRON_SPARE_SPACE_DIR when it is set", async () => {
-    beforeServerStarts();
-    const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-disk-full-wiring-"));
-    const spareDir = await mkdtemp(join(tmpdir(), "waitron-boot-disk-full-wiring-spare-"));
-    let server: StartedServer | undefined;
-    try {
-      const { env } = await startEnv(scratch);
-      await writeFile(join(spareDir, SPARE_SPACE_RELEASED_FILE), "");
-      const withSpare = { ...env, WAITRON_SPARE_SPACE_DIR: spareDir };
-      server = await startServer(withSpare, withSpare, { spareBytes: 4096 });
-      expect(seen.noted).toHaveLength(1);
-      expect(seen.noted[0]!.notedAfter).toBe(true);
-    } finally {
-      await server?.close();
-      await rm(scratch, { recursive: true, force: true });
-      await rm(spareDir, { recursive: true, force: true });
-    }
-  });
-
-  it("with WAITRON_SPARE_SPACE_DIR set, a marker in the state folder notes nothing", async () => {
-    beforeServerStarts();
-    const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-disk-full-wiring-"));
-    const spareDir = await mkdtemp(join(tmpdir(), "waitron-boot-disk-full-wiring-spare-"));
-    let server: StartedServer | undefined;
-    try {
-      const { env } = await startEnv(scratch);
-      await writeFile(join(scratch, SPARE_SPACE_RELEASED_FILE), "");
-      const withSpare = { ...env, WAITRON_SPARE_SPACE_DIR: spareDir };
-      server = await startServer(withSpare, withSpare, { spareBytes: 4096 });
-      expect(seen.noted).toHaveLength(1);
-      expect(seen.noted[0]!.notedAfter).toBe(false);
-    } finally {
-      await server?.close();
-      await rm(scratch, { recursive: true, force: true });
-      await rm(spareDir, { recursive: true, force: true });
-    }
-  });
-
   describe("the running box writes a released spare back", () => {
     const SPARE = 4096;
     /** A free-space stub for the watch and its room check, recording each folder it is asked about. */
@@ -343,14 +305,12 @@ describe("boot's full-disk stop wiring", () => {
     async function booted(
       free: number,
       withMarker: boolean,
-      options: { spareDir?: string; intervalMs?: number } = {},
+      options: { intervalMs?: number } = {},
     ) {
       beforeServerStarts();
       const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-disk-full-wiring-"));
-      const { env: base, venueDir } = await startEnv(scratch);
-      const env = options.spareDir ? { ...base, WAITRON_SPARE_SPACE_DIR: options.spareDir } : base;
-      const markerDir = options.spareDir ?? scratch;
-      if (withMarker) await writeFile(join(markerDir, SPARE_SPACE_RELEASED_FILE), "");
+      const { env, venueDir } = await startEnv(scratch);
+      if (withMarker) await writeFile(join(scratch, SPARE_SPACE_RELEASED_FILE), "");
       const stub = stubbed(free);
       const server = await startServer(env, env, {
         spareBytes: SPARE,
@@ -358,25 +318,6 @@ describe("boot's full-disk stop wiring", () => {
       });
       return { scratch, venueDir, server, stub };
     }
-
-    it("with WAITRON_SPARE_SPACE_DIR set, the watch writes the spare back in that folder and deletes the marker there", async () => {
-      const spareDir = await mkdtemp(join(tmpdir(), "waitron-boot-disk-full-wiring-spare-"));
-      const { scratch, server } = await booted(SPARE + FULL_DISK_BYTES, true, { spareDir });
-      try {
-        await vi.waitFor(
-          async () => {
-            expect((await stat(join(spareDir, SPARE_SPACE_FILE))).size).toBe(SPARE);
-            expect(existsSync(join(spareDir, SPARE_SPACE_RELEASED_FILE))).toBe(false);
-          },
-          { timeout: 10_000 },
-        );
-        expect(existsSync(join(scratch, SPARE_SPACE_FILE))).toBe(false);
-      } finally {
-        await server.close();
-        await rm(scratch, { recursive: true, force: true });
-        await rm(spareDir, { recursive: true, force: true });
-      }
-    });
 
     it("Box status's Free writes a released spare back once there is room, before the watch's next reading", async () => {
       const { scratch, server, stub } = await booted(SPARE + FULL_DISK_BYTES - 1, true, {

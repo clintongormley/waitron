@@ -1,7 +1,7 @@
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
@@ -48,7 +48,7 @@ function appWith(options: {
   log?: Parameters<typeof mountFirstSetupResolutionApi>[2];
   onFreeRead?: () => void;
   inspect?: () => Promise<unknown>;
-  restartDeletesLogs?: () => Promise<boolean | undefined>;
+  restartDeletesLogs?: () => Promise<true | undefined>;
 }) {
   const refuse = async (): Promise<never> => {
     throw options.refusal;
@@ -125,30 +125,28 @@ const READS = {
   "GET /resolution": (app: Hono) => app.request(ROUTE, { method: "GET" }, tls()),
 };
 
-describe.each([true, false])("where restarting the box deletes logs: %s", (deletes) => {
-  it.each(Object.entries(READS))(
-    "the %s answer's 507 carries restartDeletesLogs",
-    async (_step, send) => {
-      const app = appWith({
-        free: NEARLY_FULL,
-        refusal: cannotOpen(),
-        database: "unknown",
-        restartDeletesLogs: async () => deletes,
-      });
-      expect(await refusal(await send(app))).toEqual({
-        status: 507,
-        error: { code: "storage.disk_full", params: { restartDeletesLogs: deletes } },
-      });
-    },
-  );
-});
+it.each(Object.entries(READS))(
+  "the %s answer's 507 carries restartDeletesLogs where restarting the box deletes logs",
+  async (_step, send) => {
+    const app = appWith({
+      free: NEARLY_FULL,
+      refusal: cannotOpen(),
+      database: "unknown",
+      restartDeletesLogs: async () => true,
+    });
+    expect(await refusal(await send(app))).toEqual({
+      status: 507,
+      error: { code: "storage.disk_full", params: { restartDeletesLogs: true } },
+    });
+  },
+);
 
 it.each(Object.entries(READS))(
   "the %s answer's 507 carries no field when the box cannot tell whether a restart deletes logs",
   async (_step, send) => {
     for (const restartDeletesLogs of [
       async () => undefined,
-      async (): Promise<boolean> => {
+      async (): Promise<true> => {
         throw new Error("the recovery's stage could not be read");
       },
     ]) {
@@ -212,11 +210,11 @@ it.each(Object.entries(STEPS))(
     const app = appWith({
       free: ROOM,
       refusal: new AppError("storage.disk_full", {}),
-      restartDeletesLogs: async () => false,
+      restartDeletesLogs: async () => true,
     });
     expect(await refusal(await send(app))).toEqual({
       status: 507,
-      error: { code: "storage.disk_full", params: { restartDeletesLogs: false } },
+      error: { code: "storage.disk_full", params: { restartDeletesLogs: true } },
     });
   },
 );

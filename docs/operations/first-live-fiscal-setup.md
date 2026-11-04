@@ -132,10 +132,10 @@ recovery-key record is damaged, the page also says "This setup's recovery-key re
 cannot be read." above what Start again deletes, and you can still choose **Cancel**.
 
 Before it deletes anything, the box writes a confirmation record
-(`first-setup-start-again-confirmations/`) when the venue database is missing, when part of it
-cannot be read, or when a stopped recovery is discarded. The record says whose setup it was, that it
-was confirmed on the repair page with nobody signed in, when, and the summary the page confirmed,
-with `database` set to `missing`, `present` or `unreadable`.
+(`first-setup-start-again-confirmations/`) when the venue database is missing or part of it
+cannot be read. The record says whose setup it was, that it was confirmed on the repair page with
+nobody signed in, when, and the summary the page confirmed, with `database` set to `missing` or
+`unreadable`.
 
 If a file cannot be deleted, or the disk fills part-way through, the page says "Deletion
 interrupted. Reload the page to continue.", the box restarts, and the next start tries the deletion

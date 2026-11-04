@@ -38,16 +38,11 @@ import { runStagedReset } from "./reset-request.js";
 import { freePorts } from "./testing/free-ports.js";
 import { holdVenueElsewhere } from "./testing/venue-held-elsewhere.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
-import { resolveFirstSetupBackupEntry } from "./first-setup-backup-entry.js";
 import { resumeStartAgainSetAside } from "@waitron/provisioning";
 
 vi.mock("@waitron/provisioning", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/provisioning")>();
   return { ...actual, resumeStartAgainSetAside: vi.fn(actual.resumeStartAgainSetAside) };
-});
-vi.mock("./first-setup-backup-entry.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./first-setup-backup-entry.js")>();
-  return { ...actual, resolveFirstSetupBackupEntry: vi.fn(actual.resolveFirstSetupBackupEntry) };
 });
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const dirs: string[] = [];
@@ -441,10 +436,8 @@ const gone = (path: string) => expect(stat(path)).rejects.toMatchObject({ code: 
 it("a box holding a pre-A1042 archive is refused setup.workspace_unsupported before A731's entry runs", async () => {
   const f = await fixture();
   await writeFile(join(f.venueDir, "first-setup-retirement.json"), '{"version":1}');
-  vi.mocked(resolveFirstSetupBackupEntry).mockClear();
   const entry = await resolveFirstSetupEntry(f, {});
   expect(entry).toMatchObject({ kind: "refused", code: "setup.workspace_unsupported" });
-  expect(resolveFirstSetupBackupEntry).not.toHaveBeenCalled();
 });
 
 it("an interrupted Start again is finished and setup is served", async () => {
@@ -459,7 +452,6 @@ it("an interrupted Start again is finished and setup is served", async () => {
 it("an unfinishable deletion is refused setup.start_again_incomplete and nothing is deleted", async () => {
   const f = await markedDeletion();
   await writeFile(join(f.stateDir, "first-setup.json"), '{"changed":"after the marker"}');
-  vi.mocked(resolveFirstSetupBackupEntry).mockClear();
   const entry = await resolveFirstSetupEntry(f, {});
   expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });
   if (entry.kind !== "refused") throw new Error("expected a refused start");
@@ -467,7 +459,6 @@ it("an unfinishable deletion is refused setup.start_again_incomplete and nothing
     code: "setup.start_again_incomplete",
     reason: "size or hash differs: state/first-setup.json",
   });
-  expect(resolveFirstSetupBackupEntry).not.toHaveBeenCalled();
   expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe(
     '{"changed":"after the marker"}',
   );
@@ -499,7 +490,6 @@ it("a finishable Start again while another connection holds the venue lock keeps
   try {
     const before = { state: await listing(f.stateDir), venue: await listing(f.venueDir) };
     const entry = await resolveFirstSetupEntry(f, {});
-    if (entry.kind === "resolution") await entry.dispose();
     expect(entry.kind).toBe("resolution");
     expect({ state: await listing(f.stateDir), venue: await listing(f.venueDir) }).toEqual(before);
   } finally {
@@ -585,14 +575,12 @@ const boxTree = async (f: { venueDir: string; stateDir: string }) => ({
 it("a venue.db placed after the marker is refused setup.start_again_files_found, with its survey and nothing changed", async () => {
   const f = await foundAfterMarker();
   const before = await boxTree(f);
-  vi.mocked(resolveFirstSetupBackupEntry).mockClear();
   const entry = await resolveFirstSetupEntry(f.roots, {});
   expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_files_found" });
   if (entry.kind !== "refused") throw new Error("expected a refused start");
   expect(entry.error).toMatchObject({ code: "setup.start_again_files_found" });
   expect(entry.error.reason).toMatch(/venue\.db/);
   expect(entry.survey).toEqual(f.survey);
-  expect(resolveFirstSetupBackupEntry).not.toHaveBeenCalled();
   expect(await boxTree(f)).toEqual(before);
 });
 
@@ -647,7 +635,6 @@ it("a move whose resume fails with an error that is not a refusal is refused set
   const f = await moveRecordedNothingMoved();
   const stem = dirname(f.folders.state);
   const before = await boxTree(f);
-  vi.mocked(resolveFirstSetupBackupEntry).mockClear();
   await chmod(stem, 0o000);
   let entry: Awaited<ReturnType<typeof resolveFirstSetupEntry>>;
   try {
@@ -655,14 +642,12 @@ it("a move whose resume fails with an error that is not a refusal is refused set
   } finally {
     await chmod(stem, 0o700);
   }
-  if (entry.kind === "resolution") await entry.dispose();
   expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_move_unfinished" });
   if (entry.kind !== "refused") throw new Error("expected a refused start");
   expect(entry.error.reason).toBe(
     `set-aside failed: EACCES state/${relative(await fs.realpath(f.stateDir), await fs.realpath(stem))}/state`,
   );
   expect(entry.survey).toBeUndefined();
-  expect(resolveFirstSetupBackupEntry).not.toHaveBeenCalled();
   expect(await boxTree(f)).toEqual(before);
 });
 
@@ -702,7 +687,6 @@ it("a move to resume while another connection holds the venue lock is refused se
   } finally {
     await holder.stop();
   }
-  if (entry.kind === "resolution") await entry.dispose();
   expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_move_unfinished" });
   if (entry.kind !== "refused") throw new Error("expected a refused start");
   expect(entry.error.reason).toBe("set-aside failed: provisioning.database_in_use");
