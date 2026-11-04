@@ -49,6 +49,7 @@ export interface PrepStation {
   printMovedSlips: boolean;
   ticketGrouping: TicketGrouping;
   printHeldWork: boolean;
+  waitsForPass: boolean;
   bumpMode: BumpMode;
   changesAfterSending: ChangesAfterSending;
   colour: StationColour;
@@ -143,6 +144,7 @@ export class PrepStationsApi {
           | "printMovedSlips"
           | "ticketGrouping"
           | "printHeldWork"
+          | "waitsForPass"
           | "bumpMode"
           | "changesAfterSending"
         > &

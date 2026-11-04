@@ -476,6 +476,7 @@ describe.each(["light", "dark"] as const)("A725 Add station popup (%s)", (theme)
           printMovedSlips: true,
           ticketGrouping: "combined",
           printHeldWork: false,
+          waitsForPass: false,
           bumpMode: "line",
           changesAfterSending: "held-or-waiting",
         }));

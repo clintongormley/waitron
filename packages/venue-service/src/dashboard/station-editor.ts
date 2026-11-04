@@ -46,6 +46,7 @@ export type StationEditorStation = {
   printMovedSlips: boolean;
   ticketGrouping: TicketGrouping;
   printHeldWork: boolean;
+  waitsForPass: boolean;
   bumpMode: BumpMode;
   changesAfterSending: ChangesAfterSending;
   printerIds: readonly string[];
@@ -64,6 +65,7 @@ export type StationEditorSave = {
   printMovedSlips?: boolean;
   ticketGrouping?: TicketGrouping;
   printHeldWork?: boolean;
+  waitsForPass?: boolean;
   bumpMode?: BumpMode;
   changesAfterSending?: ChangesAfterSending;
 } & Partial<StationTiming>;
@@ -93,6 +95,7 @@ type Draft = {
   printMovedSlips: boolean;
   ticketGrouping: TicketGrouping;
   printHeldWork: boolean;
+  waitsForPass: boolean;
   bumpMode: BumpMode;
   changesAfterSending: ChangesAfterSending;
 } & { [K in TimingField]: string };
@@ -128,6 +131,7 @@ const equal = (a: Draft, b: Draft) =>
   a.printMovedSlips === b.printMovedSlips &&
   a.ticketGrouping === b.ticketGrouping &&
   a.printHeldWork === b.printHeldWork &&
+  a.waitsForPass === b.waitsForPass &&
   a.bumpMode === b.bumpMode &&
   a.changesAfterSending === b.changesAfterSending &&
   sameSet(a.printerIds, b.printerIds) &&
@@ -338,6 +342,7 @@ export class StationEditor extends LitElement {
     printMovedSlips: true,
     ticketGrouping: "combined",
     printHeldWork: false,
+    waitsForPass: false,
     bumpMode: "line",
     changesAfterSending: "held-or-waiting",
     warmAfterMinutes: "",
@@ -397,6 +402,7 @@ export class StationEditor extends LitElement {
         printMovedSlips: station.printMovedSlips,
         ticketGrouping: station.ticketGrouping,
         printHeldWork: station.printHeldWork,
+        waitsForPass: station.waitsForPass,
         bumpMode: station.bumpMode,
         changesAfterSending: station.changesAfterSending,
         ...timingDraft(station),
@@ -476,6 +482,7 @@ export class StationEditor extends LitElement {
       | "printMovedSlips"
       | "ticketGrouping"
       | "printHeldWork"
+      | "waitsForPass"
       | "bumpMode"
       | "changesAfterSending",
   ) {
@@ -504,6 +511,7 @@ export class StationEditor extends LitElement {
         ? { ticketGrouping: draft.ticketGrouping }
         : {}),
       ...(draft.printHeldWork !== base.printHeldWork ? { printHeldWork: draft.printHeldWork } : {}),
+      ...(draft.waitsForPass !== base.waitsForPass ? { waitsForPass: draft.waitsForPass } : {}),
       ...(draft.bumpMode !== base.bumpMode ? { bumpMode: draft.bumpMode } : {}),
       ...(draft.changesAfterSending !== base.changesAfterSending
         ? { changesAfterSending: draft.changesAfterSending }
@@ -648,6 +656,17 @@ export class StationEditor extends LitElement {
               ? html`<p class="note">${t("prep.printers_need_active")}</p>`
               : nothing
           }
+          <wt-switch
+            name="waitsForPass"
+            label=${t("prep.waits_for_pass")}
+            .checked=${this.draft.waitsForPass}
+            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+              event.stopPropagation();
+              if (current())
+                this.changed({ ...this.draft, waitsForPass: event.detail.checked }, "waitsForPass");
+            }}
+          ></wt-switch>
+          <p class="note" data-test="waits-for-pass-hint">${t("prep.waits_for_pass_hint")}</p>
           <fieldset>
             <legend>${t("prep.late_flags")}</legend>
             <div class="timing-fields">

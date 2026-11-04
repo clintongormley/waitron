@@ -21,6 +21,7 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
     "colour popup",
     "moved slips print",
     "moved slips don't print",
+    "waits for the pass",
   ])("%s", async (state) => {
     setLocale("en");
     const el = (await mountThemed(
@@ -36,6 +37,7 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       printMovedSlips: state !== "moved slips don't print",
       ticketGrouping: state === "moved slips don't print" ? "separate" : "combined",
       printHeldWork: state === "moved slips don't print",
+      waitsForPass: state === "waits for the pass",
       bumpMode: "ticket",
       changesAfterSending: "held",
       printerIds: ["epson"],
@@ -130,6 +132,12 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
         )!.checked,
       ).toBe(!printing);
     }
+    if (state === "waits for the pass")
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+          "wt-switch[name=waitsForPass]",
+        )!.checked,
+      ).toBe(true);
     for (const name of [
       "warmAfterMinutes",
       "overdueAfterMinutes",

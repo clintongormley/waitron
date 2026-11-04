@@ -338,6 +338,8 @@ const en = {
   "prep.print_held_work": "Print held groups in advance",
   "prep.print_held_work_hint":
     "Prints a held group at once, marked HOLD, and again marked FIRE when it is fired.",
+  "prep.waits_for_pass": "Waits for the pass",
+  "prep.waits_for_pass_hint": "Its dishes wait at the pass until the pass fires them.",
   "prep.name_required": "Enter a name.",
   "prep.name_taken": "This name is already in use.",
   "prep.threshold_invalid": "Use whole minutes with waiting < overdue < forgotten.",
@@ -1248,6 +1250,8 @@ const es: Record<keyof typeof en, string> = {
   "prep.print_held_work": "Imprimir por adelantado los grupos en espera",
   "prep.print_held_work_hint":
     "Imprime un grupo en espera en el momento, marcado HOLD, y otra vez marcado FIRE al marcharlo.",
+  "prep.waits_for_pass": "Espera al pase",
+  "prep.waits_for_pass_hint": "Sus platos esperan en el pase hasta que el pase los marcha.",
   "prep.name_required": "Escribe un nombre.",
   "prep.name_taken": "Este nombre ya está en uso.",
   "prep.threshold_invalid": "Usa minutos enteros con esperando < con retraso < olvidado.",

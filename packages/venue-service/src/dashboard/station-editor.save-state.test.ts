@@ -9,7 +9,7 @@ afterEach(() => {
   setLocale("en");
 });
 
-async function mount(printerIds = ["epson"]) {
+async function mount(printerIds = ["epson"], waitsForPass = false) {
   setLocale("en");
   const el = (await mountHtml("<prep-station-editor></prep-station-editor>")) as StationEditor;
   el.station = {
@@ -21,6 +21,7 @@ async function mount(printerIds = ["epson"]) {
     printMovedSlips: true,
     ticketGrouping: "combined",
     printHeldWork: false,
+    waitsForPass,
     bumpMode: "line",
     changesAfterSending: "held-or-waiting",
     printerIds,
@@ -120,5 +121,19 @@ it("compares a timing as its number: 05 over a stored 5 stays quiet, abc wakes S
   await change(el, overdue, { value: "abc" });
   expect(await saveState(el)).toEqual(ready);
   await change(el, overdue, { value: "5" });
+  expect(await saveState(el)).toEqual(quiet);
+});
+
+it("A773 station policy: an unchanged pass waiting keeps Save quiet", async () => {
+  const el = await mount(["epson"], true);
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+      "wt-switch[name=waitsForPass]",
+    )!.checked,
+  ).toBe(true);
+  expect(await saveState(el)).toEqual(quiet);
+  await change(el, "wt-switch[name=waitsForPass]", { checked: false });
+  expect(await saveState(el)).toEqual(ready);
+  await change(el, "wt-switch[name=waitsForPass]", { checked: true });
   expect(await saveState(el)).toEqual(quiet);
 });

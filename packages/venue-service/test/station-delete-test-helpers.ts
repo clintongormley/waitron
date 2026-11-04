@@ -52,6 +52,7 @@ export const stationView: PrepStationsView = {
       printMovedSlips: true,
       ticketGrouping: "combined",
       printHeldWork: false,
+      waitsForPass: false,
       bumpMode: "line",
       changesAfterSending: "held-or-waiting",
     },

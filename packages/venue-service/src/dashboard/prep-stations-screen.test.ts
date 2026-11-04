@@ -76,6 +76,7 @@ const view: PrepStationsView = {
       printMovedSlips: true,
       ticketGrouping: "combined",
       printHeldWork: false,
+      waitsForPass: false,
       bumpMode: "line",
       changesAfterSending: "held-or-waiting",
     },
@@ -1273,6 +1274,32 @@ it("hands the station's printing choices to the editor and saves the station's",
     bumpMode: "line",
     changesAfterSending: "never",
   });
+});
+it("A773 station policy: hands the station's pass waiting to the editor and saves it", async () => {
+  setLocale("en");
+  const a = api({
+    load: vi.fn().mockResolvedValue({
+      ...view,
+      stations: [{ ...view.stations[0]!, waitsForPass: true }],
+    }),
+  });
+  const el = await mount(a);
+  el.shadowRoot!.querySelector("prep-station-table")!
+    .shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLElement>('[data-test="edit-bar"]')!
+    .click();
+  await settle(el);
+  const editor = el.shadowRoot!.querySelector("prep-station-editor")!;
+  await editor.updateComplete;
+  const waits = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+    "wt-switch[name=waitsForPass]",
+  )!;
+  expect(waits.checked).toBe(true);
+  waits.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: false } }));
+  await editor.updateComplete;
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
+  await settle(el);
+  expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { waitsForPass: false });
 });
 function fallbackView(): PrepStationsView {
   return {
