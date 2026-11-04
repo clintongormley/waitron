@@ -1994,4 +1994,50 @@ describe("A773 fire paper: group headings name their dishes' courses", () => {
       "",
     ]);
   });
+
+  it("A773 fire paper: every group run, the last included, names all its dishes' courses", () => {
+    const cheese = { name: "Cheese", order: 3 };
+    expect(
+      lines(
+        station([
+          { qty: 1, name: "Soup", group: 3, course: starters },
+          { qty: 1, name: "Steak", group: 3, course: mains },
+          { qty: 1, name: "Flan", group: 4, course: desserts },
+          { qty: 1, name: "Manchego", group: 4, course: cheese },
+        ]),
+      ).filter((line) => line.startsWith("GROUP")),
+    ).toEqual(["GROUP 3 · STARTERS, MAINS", "GROUP 4 · CHEESE, DESSERTS"]);
+  });
+
+  it("A773 fire paper: courses of equal order list by name", () => {
+    expect(
+      lines(
+        station([
+          { qty: 1, name: "Steak", group: 3, course: { name: "Mains", order: 0 } },
+          { qty: 1, name: "Soup", group: 3, course: { name: "Starters", order: 0 } },
+          { qty: 1, name: "Beer", group: 3, course: { name: "Drinks", order: 0 } },
+        ]),
+      )[4],
+    ).toBe("GROUP 3 · DRINKS, MAINS, STARTERS");
+  });
+
+  it("A773 fire paper: a kitchen-note slip's one heading names every station's courses", () => {
+    const note = printedLines(
+      formatKitchenNoteChangeSlip(
+        {
+          locale: "en-GB",
+          stations: [
+            { stationName: "Grill", items: [{ qty: 1, name: "Steak", group: 2, course: mains }] },
+            { stationName: "Bar", items: [{ qty: 2, name: "Beer", group: 2, course: drinks }] },
+          ],
+          tableLabel: "Table 4",
+          orderNumber: "A-17",
+          at: at.toISOString(),
+          orderNoteChange: { before: "Old", after: "New" },
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(note.filter((line) => line.startsWith("GROUP"))).toEqual(["GROUP 2 · MAINS, DRINKS"]);
+  });
 });
