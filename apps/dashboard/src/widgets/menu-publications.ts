@@ -608,11 +608,14 @@ export class MenuPublicationsPanel extends LitElement {
     opening: object,
     placed: number | null,
   ): Promise<void> {
+    const code = codeOf(error);
+    const rowOutOfDate =
+      code === "menu_publication.not_queued" || code === "menu_publication.not_found";
     if (opening !== this.#opening) {
+      if (rowOutOfDate && menuId !== this.menuId) void this.#refresh();
       this.#sayRefusedLate(menuId);
       return;
     }
-    const code = codeOf(error);
     const params = (error as { params?: Record<string, unknown> }).params ?? {};
     const refusal: ScheduleRefusal = { field: null, code, params, placed };
     if (code === "menu_publication.time_repeated") {
@@ -635,7 +638,7 @@ export class MenuPublicationsPanel extends LitElement {
     } else if (code === "management.request_invalid" && typeof params.field === "string") {
       const field = REQUEST_FIELDS[params.field] ?? null;
       refusal.field = field === "occurrence" && this.repeated === null ? null : field;
-    } else if (code === "menu_publication.not_queued" || code === "menu_publication.not_found") {
+    } else if (rowOutOfDate) {
       // The row being moved is out of date.
       void this.#refresh();
     }
