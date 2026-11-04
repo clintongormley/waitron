@@ -156,9 +156,12 @@ declared in `apps/server/` (`--within apps/server/`). It never removes a paramet
 whose contextual signature is a module-contract member (rule 4's guard). So it cannot touch the
 contract or its implementations, even though the server's program loads venue-service and
 bookings source through their package exports (`packages/venue-service/package.json`: `"." :
-"./src/index.ts"`). Two `apps/server` parameters fall under both runs:
+"./src/index.ts"`). Two `apps/server` parameters match both runs' seed rules:
 `apps/server/src/testing/session-device.ts:39` and `invoice-email-contact.test.ts:107`, both
-`_cfg: { locationId }`. Whichever sub-slice lands second finds them already gone.
+`_cfg: { locationId }`. No S18a task's `--only` list names their files, and neither has a
+reference for S18a's cascade to follow. So S18b removes them, together with `session-device.ts:67`,
+which only hands its `cfg` on to `:39`. If S18a lands first, S18a-7's first grep prints
+`session-device.ts:39,67`; those lines are S18b's.
 
 **Open pull request:** #2442 (lane A, `feat/a1018-s4-final-copy`, head `f8b36a6086`). Its files
 (`gh pr view 2442 --json files`) include `apps/server/src/boot.ts` and
@@ -286,8 +289,10 @@ folder (lane B builds S18). It is never committed, so:
    - Because seeds are dropped like this, **any subset of seeds leaves a tree that compiles**, and
      a seed left behind is picked up by a later run.
 2. **Cascade and leftovers, run together until nothing changes.**
-   - *Cascade:* any other parameter whose every reference is a removed argument, or sits inside
-     one, becomes a target. A non-last parameter of a function expression whose contextual
+   - *Cascade:* any other parameter that has at least one reference, and whose every reference is
+     a removed argument or sits inside one, becomes a target. Without the "at least one", an
+     unreferenced parameter would pass with nothing to check, and every `_cfg` in the program
+     would go. A non-last parameter of a function expression whose contextual
      signature is not a target is reported and left. Removing it would shift the arguments a
      caller passes through that signature.
    - *Leftovers:* delete a declaration whose every reference was removed, or sits inside a removed
@@ -382,7 +387,8 @@ any subset safe to run.
     `department-receipts`, `floor-plan-set-store`, `service-delete` and `service-delete-settings`.
     It also runs every seed left over from the earlier families.
   - All files are under `packages/venue-service/src/`; the counts are at the plan head and sum to
-    210. The 211th parameter, `testing/zone-menus.ts`'s, filters a column and is left.
+    210. The 211th parameter, `testing/zone-menus.ts:13` (`cfg: VenueScope`), is read at `:28` to
+    filter a column, so rule 1 leaves it. S18a-6 Step 2 retypes it before deleting `VenueScope`.
 
 ### Task S18a-1: Write the codemod and dry-run it
 
@@ -492,7 +498,10 @@ S2's files** are argument only, and each is named in the PR: `sale-operation-des
 
 - [ ] **Step 1:** Delete adjustments' "reads the venue's clock whatever location the module names"
   by title, before the next step rewrites its context.
-- [ ] **Step 2:** Delete `VenueScope` and every import of it that is left.
+- [ ] **Step 2:** Retype `packages/venue-service/src/testing/zone-menus.ts:13` from `VenueScope` to
+  `{ locationId: LocationId }`, and replace its `VenueScope` import (`:7`) with `LocationId`'s. It
+  reads `cfg.locationId` at `:28` to filter a column, so the schema slices remove it. Then delete
+  `VenueScope` and every import of it that is left.
 - [ ] **Step 3:** Run the codemod with
   `--drop-property DepartmentReceiptScope.locationId --drop-property ModuleRouteContext.cfg.locationId`.
   Delete `boot.ts:2675`.
@@ -525,7 +534,12 @@ S2's files** are argument only, and each is named in the PR: `sale-operation-des
   FILES=(packages/module/src/module.ts packages/shared/src/receipt-text.ts 'packages/venue-service/src/*.ts' packages/staffing/src/month.ts packages/staffing/src/paint.ts packages/staffing/src/rota.ts apps/server/src/zone-access.ts apps/server/src/receipt-guests.ts apps/server/src/department-receipt-draft.ts apps/server/src/sale-operation-description.ts apps/server/src/device-api.ts apps/server/src/setup-opening-hours.ts apps/server/src/invoice-email-contact.ts apps/server/src/station-move.ts apps/server/src/station-outputs-down.ts)
   git grep -n -E "$P" -- "${FILES[@]}" ':!*.test.ts'
   ```
-  - **The first grep may still print** a test helper's returned `cfg: { locationId }` property
+  - **The first grep may still print three things.**
+    - `packages/venue-service/src/testing/zone-menus.ts:13`, retyped in S18a-6 Step 2, which stays
+      for the schema slices.
+    - `apps/server/src/testing/session-device.ts:39,67`, if S18b has not landed: those lines are
+      S18b's.
+    - A test helper's returned `cfg: { locationId }` property
     (`packages/staffing/test/seed.ts:40` at the plan head). An unread property is not a type
     error, so the codemod cannot see it. Delete each one that no test reads any more (search the
     helper's callers for `.cfg`). One that is still read seeds a column, and stays. The same
@@ -739,7 +753,8 @@ Tests:
   ```
   The two files left out keep the old name on purpose:
   - `apps/server/src/logger.test.ts:145,405` uses `locationName` as an arbitrary key on neither
-    personal-data list ("leaves a key on neither list as it is"). It is not this field.
+    personal-data list (the case at `:404-406` is titled "leaves a key on neither list as it is").
+    It is not this field.
   - `packages/workforce/src/attendance-reads.test.ts:160` asserts
     `expect(prompt).not.toHaveProperty("locationName")`. Renaming it would make it check a
     different key, and stop it proving the old one stays gone.
@@ -995,7 +1010,9 @@ Test helpers:
   resolves to `@waitron/shared`'s `locationId` with its argument (`brandLocationId(x)` → `x`), and
   drops imports left unused.
   Then retype `packages/db/src/testing/seed.ts:58,71,88` as `string`: `seedNode`'s location, and
-  `seedKitchenStation`'s and `seedDevice`'s `locationId`. The schema slices delete those
+  `seedKitchenStation`'s and `seedDevice`'s `locationId`. Retype
+  `packages/venue-service/src/testing/zone-menus.ts:13`'s `{ locationId: LocationId }` (from
+  S18a-6) the same way. The schema slices delete those
   parameters (parent plan, "Carried to the schema plan").
 - [ ] **Step 3:** Delete `LocationId` and `locationId` from `packages/shared/src/ids.ts:11,52` and
   `index.ts:11,24`. `scripts/a1301-seed-codemod.mjs:35` names `"LocationId"` and `"locationId"`

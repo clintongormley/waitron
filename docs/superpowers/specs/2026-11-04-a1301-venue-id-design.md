@@ -55,9 +55,9 @@ Cloud's other calls already use the id Cloud assigned, `registration.venueId`
 `cloud-billing.ts:202,309`, `cloud-snapshot-worker.ts:171,256`. They do not change.
 
 Reading suggests the location id is not hashed into an invoice record or sent to AEAT. That claim
-was not run. Records are built, hashed and sent through `@waitron/verifactu`. Of the 26 files under
-`apps/` and `packages/` that import it, leaving out tests and test helpers, none names `locationId`,
-`venueId` or `localVenueId`. The grep for that:
+was not run. Records are built, hashed and sent through `@waitron/verifactu`. Leaving out tests,
+test helpers and `package.json` files, 26 files under `apps/` and `packages/` import it, and none
+names `locationId`, `venueId` or `localVenueId`. The grep for that:
 `git grep -n -w -E 'locationId|venueId|localVenueId' -- $(git grep -l '@waitron/verifactu' -- apps packages ':!*.test.ts' ':!**/package.json' ':!**/testing/**' ':!**/test/**')`
 prints nothing.
 
@@ -74,7 +74,7 @@ one additive migration; no venue is reset for it.
 
 - **Configuration transfer does not carry it.** Core transfers only the tables it lists in
   `CORE_CONFIGURATION_TRANSFER` (`packages/db/src/configuration-transfer.ts:62`),
-  and a module transfers only what it opts into (`packages/composition/src/composition.test.ts:156-160`).
+  and a module transfers only what it opts into (`packages/composition/src/composition.test.ts:156-161`).
   `cloud_venue` is added to neither list, because an importing venue keeps its own id.
 - **A1308.** If the owner approves A1308's rationalisation, `cloud_venue` folds into its settings
   rows. Its design already treats such an id as a plain field of `settings.venue`, carried by a
@@ -95,7 +95,7 @@ one additive migration; no venue is reset for it.
 - **A test box paired today.** Its saved `cloud-connection.json` is version 1 and holds
   `localVenueId`. Today's reader refuses any file it does not accept with `cloud.state_invalid`
   (`cloud-client.ts:188-221`). Status, refresh, revoke and start all read the file first
-  (`:559-588`), and the dashboard's words for that code, "Check this server's Cloud
+  (`:559-588`), and the dashboard's words for that code, "Check this server’s Cloud
   configuration" (`apps/dashboard/src/i18n/codes.ts:72-74`), offer no way out. A box operator has
   no terminal. **Recommended:** a version-1 file reads as "not connected", like a missing file;
   the owner connects again from the dashboard, and the new pairing overwrites the file. The
