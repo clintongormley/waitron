@@ -4701,12 +4701,11 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   `zone-edit-dialog.ts`.) Left open by A397.
 
 - **An open choice list or native popover inside a dialog closes when a dialog under it is put
-  back**, because the dialog above is shown again; the person opens it again. Measured in the dialog
-  above on Chromium: its field's value, selection and focus, an open `details`, and the scroll of its
-  body, an inner box and a textarea are kept. At e3ec7efd36 the list and popover stayed open. Left
-  open by A397.
+  back**; the person opens it again. Measured once on Chromium, with no case kept: in that dialog a
+  field's value, selection and focus, an open `details` and the scroll of an inner box and a textarea
+  are kept. At e3ec7efd36 the list and popover stayed open. Left open by A397.
 
-- **A Schedule or Change time write refused after the person has left that menu still says
+- **A Schedule or Change time write that fails after the person has left that menu still says
   nothing.** The panel says so only for the menu it is on; on another menu, or with the panel gone,
   nothing tells the person. The Prices tab's `menus.change_not_saved` shows its message at
   screen level. Left open by A397.

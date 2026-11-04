@@ -1863,7 +1863,7 @@ test("an open dialog put back with help on does not open on the help badge", asy
   expect(el.shadowRoot!.querySelector('slot[name="help"]')!.hasAttribute("inert")).toBe(false);
 });
 
-test("an open dialog put back leaves its opener as where focus goes on close", async () => {
+test("an open dialog put back with the page body focused leaves its opener as where focus goes on close", async () => {
   const el = (await mount(
     `<wt-dialog heading="Edit"><input aria-label="Name" /></wt-dialog>`,
   )) as WtDialog;
@@ -2140,7 +2140,7 @@ for (const [change, leaveField] of [
   });
 }
 
-test("a closed dialog that reopens takes opening focus and forgets the field it had", async () => {
+test("a closed dialog clears the field it had, and one reopened takes opening focus", async () => {
   const el = (await mount(
     `<wt-dialog heading="Edit"><input aria-label="First" /><input aria-label="Second" /></wt-dialog>`,
   )) as WtDialog;
@@ -2181,7 +2181,7 @@ test("moving a dialog while its close waits on a question keeps the question ans
   expect(parent.open).toBe(true);
 });
 
-test("what records opening order holds only dialogs that are open and on the page", async () => {
+test("what records opening order holds only dialogs shown on the page, and drops one the browser shut once its open update runs", async () => {
   const openDialogs = WtDialog["openDialogs"];
   const before = openDialogs.size;
   const el = (await mount(`<wt-dialog heading="Edit"><input /></wt-dialog>`)) as WtDialog;
@@ -2275,11 +2275,36 @@ test("with something outside focused as it is put back, closing hands focus to t
   expect(deepActiveElement()).toBe(outside);
 });
 
+test("what had focus as it was put back, removed before closing, leaves focus to the opener", async () => {
+  await mount("<div></div>");
+  const opened = document.createElement("button");
+  const outside = document.createElement("button");
+  const opener = document.createElement("button");
+  host.append(opened, outside, opener);
+  const el = document.createElement("wt-dialog");
+  el.innerHTML = `<input aria-label="Name" />`;
+  host.append(el);
+  await el.updateComplete;
+  el.opener = opener;
+  opened.focus();
+  el.open = true;
+  await el.updateComplete;
+  const putBack = takeOut(el);
+  outside.focus();
+  putBack();
+  await el.updateComplete;
+  outside.remove();
+  const closed = new Promise((resolve) => el.addEventListener("wt-close", resolve));
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  expect(deepActiveElement()).toBe(opener);
+});
+
 for (const [where, sibling] of [
   ["alone in its box", false],
   ["after another button in its box", true],
 ] as const) {
-  test(`with no opener, focus on closing after a put-back goes to the first thing near what had it at opening: a button ${where}`, async () => {
+  test(`with no opener and the page body focused as it is put back, focus on closing goes to the first thing near what had it at opening: a button ${where}`, async () => {
     await mount("<div></div>");
     const box = document.createElement("div");
     host.append(box);

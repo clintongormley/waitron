@@ -2167,16 +2167,16 @@ element inside another shadow root. That is the button that opened the dialog on
 still had focus then; a screen that opens a dialog after focus has moved on hands focus back itself
 if it wants it elsewhere.
 
-A dialog taken off the page and put back hands focus to what had it as it was put back, ahead of any
-`opener`, and not to what had it at opening.
+A dialog taken off the page and put back hands focus on close to what had it as it was put back, not
+to what had it at opening; while that can take focus, it goes ahead of any `opener`.
 
-In Chromium, when what had focus at opening was removed, disabled or hidden while the dialog was
-open, or nothing had focus at opening, or the page body had focus as the dialog was put back,
+In Chromium, when the element focus is handed back to (what had it at opening, or as the dialog was
+put back) was removed, disabled or hidden while the dialog was open, or was the page body,
 the browser leaves focus on the page body or inside the closed dialog. In that case `wt-dialog` (and `wt-modal`) moves it: to `opener`, an optional property
 a screen may set to the element focus should go to instead (usually the button that opened the
 dialog, or one standing in for it), when that is still on the page and takes focus (a host that
 passes focus into its own shadow root counts). Otherwise it walks outward from the element that had
-focus at opening, or from the dialog when that element is gone or the page body had focus. At each
+focus at opening, or from the dialog when that element is gone or the page body had focus at opening. At each
 enclosing element it tries every element inside it with tabindex 0 or above that is not disabled, in
 document order with a host's open shadow root before its own children, skipping the dialog; then the
 enclosing element itself, when its tabindex is 0 or above and it is not disabled. The first that
