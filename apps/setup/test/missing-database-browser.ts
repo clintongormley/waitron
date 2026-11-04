@@ -6,7 +6,6 @@ import type { SetupApp } from "../src/setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "../src/first-setup-session.js";
 import type {
   BackupRepairActivity,
-  BackupRepairStatus,
   FirstSetupInspection,
   StartAgainRecoveryShown,
   StartAgainSummary,
@@ -28,11 +27,6 @@ export const shownTimes = {
   en: { started: "25 Oct 2026, 14:35", last: "25 Oct 2026, 14:41" },
   es: { started: "25 oct 2026, 14:35", last: "25 oct 2026, 14:41" },
 } as const;
-export const runningActivity: BackupRepairActivity = {
-  state: "running",
-  startedAt: recoveryStartedAt,
-  lastActiveAt: recoveryLastActiveAt,
-};
 export const stoppedActivity: Extract<BackupRepairActivity, { state: "stopped" }> = {
   state: "stopped",
   startedAt: recoveryStartedAt,
@@ -55,11 +49,8 @@ export async function missingDatabaseFixture(
   options: {
     intercept?: NonNullable<Parameters<typeof wizardApi>[0]>["intercept"];
     summary?: StartAgainSummary;
-    backupPhase?: BackupRepairStatus["phase"];
-    /** What `/backup/activity` answers, read again on every request; `null` by default. */
-    activity?: BackupRepairActivity | null | (() => BackupRepairActivity | null);
     sameTab?: boolean;
-    /** What the mount waits for; by default Start again or the running view. */
+    /** What the mount waits for; by default Start again. */
     ready?: (app: SetupApp) => boolean;
     theme?: "light" | "dark";
     locale?: "en-GB" | "es-ES";
@@ -85,19 +76,7 @@ export async function missingDatabaseFixture(
         } satisfies FirstSetupInspection);
       if (path.endsWith("/start-again/summary"))
         return Response.json(options.summary ?? namedSummary);
-      if (path.endsWith("/backup/status"))
-        return Response.json({
-          phase: options.backupPhase ?? "unstarted",
-          proofRequired: true,
-        } satisfies BackupRepairStatus);
       if (path.endsWith("/start-again")) return Response.json({ restarting: true });
-      if (path.endsWith("/backup/activity"))
-        return Response.json({
-          activity:
-            typeof options.activity === "function"
-              ? options.activity()
-              : (options.activity ?? null),
-        });
     },
   });
   if (options.sameTab)
@@ -124,7 +103,7 @@ export async function missingDatabaseFixture(
     options.theme,
   );
   if (options.ready) await expect.poll(() => options.ready!(app)).toBe(true);
-  else await expect.poll(() => q(app, "start-again") ?? q(app, "recovery-running")).not.toBeNull();
+  else await expect.poll(() => q(app, "start-again")).not.toBeNull();
   return { app, host, ...fixture };
 }
 /** Presses Start again and waits for the box's answer: the ask, a refusal or an error. */

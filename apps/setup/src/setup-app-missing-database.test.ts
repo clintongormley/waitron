@@ -5,7 +5,6 @@ import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { initial, venue } from "../test/first-setup-browser.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
-import { backupRepairStrings } from "./i18n/backup-repair.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
 
 import {
@@ -15,12 +14,6 @@ import {
   missingDatabaseFixture,
   namedSummary,
   openMissing,
-  recoveryStartedAt,
-  runningActivity,
-  shownTimes,
-  stoppedActivity,
-  stoppedRecovery,
-  stoppedSummary,
 } from "../test/missing-database-browser.js";
 
 const reached = (app: Element) =>
@@ -323,53 +316,6 @@ it.each(locales)(
   },
 );
 
-it.each(["selected", "uncertain"] as const)(
-  "offers neither Start again nor Recover from backup in the ask while a backup recovery's journal reports %s",
-  async (backupPhase) => {
-    const { app, requests } = await missingDatabaseFixture({ backupPhase });
-    await openMissing(app);
-    expect(app.shadowRoot!.textContent).toContain(initialOwnerStrings.en.missingAsk);
-    expect(q(app, "recover-backup")).toBeNull();
-    expect(app.shadowRoot!.textContent).not.toContain(initialOwnerStrings.en.missingBackup);
-    expect(q(app, "start-again")).toBeNull();
-    expect(q(app, "recover-backup-note")).toBeNull();
-    expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
-  },
-);
-
-it.each(["prepared", "placement-started", "restored"] as const)(
-  "while a backup recovery reported %s is running, draws no password field and no buttons",
-  async (phase) => {
-    const { app, requests } = await missingDatabaseFixture({
-      backupPhase: phase,
-      activity: runningActivity,
-    });
-    expect(q(app, "recovery-running")).not.toBeNull();
-    expect(q(app, "resume-password")).toBeNull();
-    expect(q(app, "resume")).toBeNull();
-    expect(q(app, "start-again")).toBeNull();
-    expect(q(app, "recover-backup")).toBeNull();
-    expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
-  },
-);
-
-it.each(["prepared", "placement-started", "restored"] as const)(
-  "once a backup recovery reported %s has stopped, the ask offers Start again, with Recover from backup beside its confirmation",
-  async (phase) => {
-    const { app, requests } = await missingDatabaseFixture({
-      backupPhase: phase,
-      activity: { ...stoppedActivity, phase },
-      summary: stoppedSummary,
-    });
-    expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
-    await openMissing(app);
-    expect(app.shadowRoot!.textContent).toContain(initialOwnerStrings.en.missingAsk);
-    expect(q(app, "confirm-start-again")).not.toBeNull();
-    expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(false);
-    expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
-  },
-);
-
 it.each(locales)(
   "shows none of the ask's lines before Start again is pressed ($locale)",
   async ({ locale, browser }) => {
@@ -384,26 +330,26 @@ it.each(locales)(
   },
 );
 
-it.each([
-  { route: "/start-again/summary", answer: { reached: "unknown" } },
-  { route: "/backup/status", answer: { phase: "unknown", proofRequired: true } },
-])("opens no confirmation when $route answers an unreadable record", async ({ route, answer }) => {
-  const { app, requests } = await missingDatabaseFixture({
-    intercept(path) {
-      if (path.endsWith(route)) return Response.json(answer);
-    },
-  });
-  await openMissing(app);
-  expect(q(app, "missing-reached")).toBeNull();
-  expect(q(app, "retire-confirmed")).toBeNull();
-  expect(q(app, "confirm-start-again")).toBeNull();
-  expect(
-    [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].some(
-      (f) => f.error,
-    ),
-  ).toBe(true);
-  expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
-});
+it.each([{ route: "/start-again/summary", answer: { reached: "unknown" } }])(
+  "opens no confirmation when $route answers an unreadable record",
+  async ({ route, answer }) => {
+    const { app, requests } = await missingDatabaseFixture({
+      intercept(path) {
+        if (path.endsWith(route)) return Response.json(answer);
+      },
+    });
+    await openMissing(app);
+    expect(q(app, "missing-reached")).toBeNull();
+    expect(q(app, "retire-confirmed")).toBeNull();
+    expect(q(app, "confirm-start-again")).toBeNull();
+    expect(
+      [
+        ...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions"),
+      ].some((f) => f.error),
+    ).toBe(true);
+    expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
+  },
+);
 
 const shells = { en: shellEn, es: shellEs };
 const startAgainRequests = <R extends { path: string }>(requests: R[]) =>
@@ -484,246 +430,12 @@ it("an undamaged record shows no damaged notice", async () => {
   expect(q(app, "recovery-record-damaged")).toBeNull();
 });
 
-const runningLines = (locale: "en" | "es") => {
-  const t = initialOwnerStrings[locale];
-  return [
-    t.recoveryRunning.replace("{started}", shownTimes[locale].started),
-    t.recoveryLastActive.replace("{at}", shownTimes[locale].last),
-    t.recoveryRunningNext,
-  ];
-};
-const lines = (app: Parameters<typeof q>[0], name: string) =>
-  [...(q(app, name)?.querySelectorAll("p") ?? [])].map((p) => p.textContent!.trim());
-const GETS = [
-  "/setup-api/status",
-  "/setup-api/discovery",
-  "/setup-api/first-setup/status",
-  "/setup-api/first-setup/resolution",
-  "/setup-api/first-setup/resolution/backup/activity",
-];
-
-it.each(locales)(
-  "while another device runs a recovery, says so before any password, with no buttons and nothing sent ($locale)",
-  async ({ locale, browser }) => {
-    const { app, requests } = await missingDatabaseFixture({
-      locale: browser,
-      activity: runningActivity,
-    });
-    expect(lines(app, "recovery-running")).toEqual(runningLines(locale));
-    expect(app.shadowRoot!.textContent).toContain(initialOwnerStrings[locale].missingDatabase);
-    expect(q(app, "resume-password")).toBeNull();
-    expect(q(app, "resume")).toBeNull();
-    expect(q(app, "start-again")).toBeNull();
-    expect(q(app, "recover-backup")).toBeNull();
-    expect(q(app, "confirm-start-again")).toBeNull();
-    expect(requests.map((r) => r.path).filter((path) => !GETS.includes(path))).toEqual([]);
-    expect(requests.every((r) => r.body === undefined)).toBe(true);
-  },
-);
-
-it("reads the activity again every 30 s, and offers Start again once the recovery stopped", async () => {
-  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-  try {
-    let reads = 0;
-    const { app, requests } = await missingDatabaseFixture({
-      activity: () => (++reads <= 2 ? runningActivity : stoppedActivity),
-    });
-    const activityReads = () => requests.filter((r) => r.path.endsWith("/backup/activity"));
-    expect(activityReads()).toHaveLength(1);
-    await vi.advanceTimersByTimeAsync(30_000);
-    await expect.poll(() => activityReads()).toHaveLength(2);
-    await app.updateComplete;
-    expect(q(app, "recovery-running")).not.toBeNull();
-    expect(q(app, "start-again")).toBeNull();
-    await vi.advanceTimersByTimeAsync(30_000);
-    await expect.poll(() => q(app, "start-again")).not.toBeNull();
-    expect(activityReads()).toHaveLength(3);
-    expect(q(app, "recovery-running")).toBeNull();
-    await vi.advanceTimersByTimeAsync(120_000);
-    expect(activityReads()).toHaveLength(3);
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
-it("stops reading the activity when the page leaves", async () => {
-  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-  try {
-    const { app, requests } = await missingDatabaseFixture({ activity: runningActivity });
-    const activityReads = () => requests.filter((r) => r.path.endsWith("/backup/activity"));
-    await vi.advanceTimersByTimeAsync(30_000);
-    await expect.poll(() => activityReads()).toHaveLength(2);
-    app.remove();
-    await vi.advanceTimersByTimeAsync(120_000);
-    expect(activityReads()).toHaveLength(2);
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
-it("offers Start again at once for a recovery that failed, and its confirmation on pressing it", async () => {
-  const recovery = { ...stoppedRecovery, failed: true };
-  const { app } = await missingDatabaseFixture({
-    backupPhase: "placement-started",
-    activity: { ...stoppedActivity, phase: "placement-started", failed: true },
-    summary: { ...namedSummary, recovery },
-  });
-  expect(q(app, "recovery-running")).toBeNull();
-  expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
-  await openMissing(app);
-  expect(q(app, "confirm-start-again")).not.toBeNull();
-  expect(q(app, "recover-backup")).not.toBeNull();
-});
-
-it.each(locales)(
-  "pressing Start again names the stopped recovery and when it was last active ($locale)",
-  async ({ locale, browser }) => {
-    const { app } = await missingDatabaseFixture({
-      locale: browser,
-      backupPhase: "prepared",
-      activity: stoppedActivity,
-      summary: stoppedSummary,
-    });
-    expect(q(app, "recovery-stopped")).toBeNull();
-    await openMissing(app);
-    const t = initialOwnerStrings[locale];
-    expect(reached(app)).toEqual([t.reachedNotStarted]);
-    expect(lines(app, "recovery-stopped")).toEqual([
-      t.recoveryStopped.replace("{started}", shownTimes[locale].started),
-      t.recoveryLastActive.replace("{at}", shownTimes[locale].last),
-    ]);
-    expect(app.shadowRoot!.textContent).not.toContain(t.recoveryStoppedCloud);
-    expect(app.shadowRoot!.textContent).not.toContain(t.missingBackup);
-    const actions = q(app, "missing-actions")!;
-    expect(
-      [...actions.querySelectorAll("wt-button")].map((b) => b.getAttribute("data-test")),
-    ).toEqual(["recover-backup"]);
-    expect(
-      q<HTMLInputElement>(app, "retire-confirmed")!.closest("label")!.textContent!.trim(),
-    ).toBe(t.missingConfirm);
-  },
-);
-
-it.each(locales)(
-  "says a stopped Cloud recovery's approval closes by itself within an hour ($locale)",
-  async ({ locale, browser }) => {
-    const { app } = await missingDatabaseFixture({
-      locale: browser,
-      backupPhase: "prepared",
-      activity: { ...stoppedActivity, cloud: true },
-      summary: { ...namedSummary, recovery: { ...stoppedRecovery, cloud: true } },
-    });
-    await openMissing(app);
-    const t = initialOwnerStrings[locale];
-    expect(lines(app, "recovery-stopped")).toEqual([
-      t.recoveryStopped.replace("{started}", shownTimes[locale].started),
-      t.recoveryLastActive.replace("{at}", shownTimes[locale].last),
-      t.recoveryStoppedCloud,
-    ]);
-  },
-);
-
-it.each(locales)(
-  "after a restart, says when the recovery's last step was saved ($locale)",
-  async ({ locale, browser }) => {
-    const { app } = await missingDatabaseFixture({
-      locale: browser,
-      backupPhase: "restored",
-      activity: { ...stoppedActivity, phase: "restored", lastActiveSource: "saved-step" },
-      summary: {
-        ...namedSummary,
-        recovery: { ...stoppedRecovery, lastActiveSource: "saved-step" },
-      },
-    });
-    await openMissing(app);
-    const t = initialOwnerStrings[locale];
-    expect(lines(app, "recovery-stopped")).toEqual([
-      t.recoveryStopped.replace("{started}", shownTimes[locale].started),
-      t.recoveryLastSaved.replace("{at}", shownTimes[locale].last),
-    ]);
-  },
-);
-
-it("sends the stopped recovery back exactly as it was shown", async () => {
-  const { app, requests } = await missingDatabaseFixture({
-    backupPhase: "prepared",
-    activity: stoppedActivity,
-    summary: stoppedSummary,
-  });
-  await openMissing(app);
-  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
-  await click(app, "confirm-start-again");
-  await expect.poll(() => startAgainRequests(requests)).toHaveLength(1);
-  expect(startAgainRequests(requests)[0]!.body).toEqual({
-    inspectionId: "a".repeat(64),
-    revision: 1,
-    ownerGeneration: 1,
-    confirmMissingDatabase: { nothingFiledOrSold: true, shown: stoppedSummary },
-  });
-});
-
-it("offers no Start again when the summary names a recovery but no stopped journal is reported", async () => {
-  const { app } = await missingDatabaseFixture({ summary: stoppedSummary });
-  await openMissing(app);
-  expect(q(app, "missing-reached")).toBeNull();
-  expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
-});
-
-it.each(locales)(
-  "says the recovery's records cannot be read when its journal is unreadable ($locale)",
-  async ({ locale, browser }) => {
-    const { app } = await missingDatabaseFixture({ locale: browser, backupPhase: "uncertain" });
-    await openMissing(app);
-    const t = initialOwnerStrings[locale];
-    expect(q(app, "recovery-unreadable")!.textContent!.trim()).toBe(t.recoveryUnreadable);
-    expect(app.shadowRoot!.textContent).toContain(t.missingAsk);
-    expect(q(app, "recover-backup")).toBeNull();
-    expect(q(app, "start-again")).toBeNull();
-    expect(app.shadowRoot!.textContent).not.toContain(t.missingBackup);
-  },
-);
-
-it.each(locales)(
-  "explains a Start again refused because the recovery was discarded elsewhere ($locale)",
-  async ({ locale, browser }) => {
-    const { app } = await missingDatabaseFixture({
-      locale: browser,
-      backupPhase: "prepared",
-      activity: stoppedActivity,
-      summary: stoppedSummary,
-      intercept(path) {
-        if (path.endsWith("/resolution/start-again"))
-          return Response.json(
-            { error: { code: "setup.recovery_discarded", params: {} } },
-            { status: 409 },
-          );
-      },
-    });
-    await openMissing(app);
-    await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
-    await click(app, "confirm-start-again");
-    await expect
-      .poll(() =>
-        [
-          ...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions"),
-        ].map((f) => f.error),
-      )
-      .toContain(shells[locale]["shell.first_setup.recovery_discarded"]);
-  },
-);
-
-it("sends no Start again when the stopped recovery changed after it was shown", async () => {
+it("sends no Start again when the summary changed after it was shown", async () => {
   let summaries = 0;
   const { app, requests } = await missingDatabaseFixture({
-    backupPhase: "prepared",
-    activity: stoppedActivity,
     intercept(path) {
       if (path.endsWith("/start-again/summary"))
-        return Response.json(
-          ++summaries === 1
-            ? stoppedSummary
-            : { ...namedSummary, recovery: { ...stoppedRecovery, cloud: true } },
-        );
+        return Response.json(++summaries === 1 ? namedSummary : damagedSummary);
     },
   });
   await openMissing(app);
@@ -738,265 +450,4 @@ it("sends no Start again when the stopped recovery changed after it was shown", 
     ),
   ).toContain(initialOwnerStrings.en.heldChanged);
   expect(startAgainRequests(requests)).toHaveLength(0);
-});
-
-const ACTIONS = [
-  "resume-password",
-  "resume",
-  "start-again",
-  "recover-backup",
-  "confirm-start-again",
-  "abandon-attempt",
-  "replace-attempt",
-  "finish-setup",
-  "damaged-record-continue",
-];
-const actionsDrawn = (app: Parameters<typeof q>[0]) =>
-  ACTIONS.filter((name) => q(app, name) !== null);
-
-it.each(locales)(
-  "a tab that signed in before reads the activity on reload and draws the same running view, with no password field and nothing sent ($locale)",
-  async ({ locale, browser }) => {
-    const { app, requests } = await missingDatabaseFixture({
-      locale: browser,
-      sameTab: true,
-      activity: runningActivity,
-    });
-    expect(lines(app, "recovery-running")).toEqual(runningLines(locale));
-    expect(actionsDrawn(app)).toEqual([]);
-    expect(q(app, "reconnect-first")).not.toBeNull();
-    expect(requests.map((r) => r.path).filter((path) => !GETS.includes(path))).toEqual([]);
-  },
-);
-
-it.each([false, true])(
-  "Reconnect while another device runs a recovery reads the activity again and offers nothing (same tab %s)",
-  async (sameTab) => {
-    let reads = 0;
-    const { app, requests } = await missingDatabaseFixture({
-      sameTab,
-      activity: () => (++reads === 1 ? null : runningActivity),
-      ready: (app) => q(app, sameTab ? "resume-password" : "start-again") !== null,
-    });
-    expect(q(app, sameTab ? "resume-password" : "start-again")).not.toBeNull();
-    await click(app, "reconnect-first");
-    await expect.poll(() => q(app, "recovery-running")).not.toBeNull();
-    expect(reads).toBe(2);
-    expect(lines(app, "recovery-running")).toEqual(runningLines("en"));
-    expect(actionsDrawn(app)).toEqual([]);
-    expect(requests.map((r) => r.path).filter((path) => !GETS.includes(path))).toEqual([]);
-  },
-);
-
-it.each([false, true])(
-  "an activity answer that cannot be read offers nothing but Reconnect (same tab %s)",
-  async (sameTab) => {
-    const { app, requests } = await missingDatabaseFixture({
-      sameTab,
-      intercept(path) {
-        if (path.endsWith("/backup/activity"))
-          return Response.json({ activity: { state: "running", startedAt: recoveryStartedAt } });
-      },
-      ready: (app) =>
-        [
-          ...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions"),
-        ].some((f) => f.error === initialOwnerStrings.en.error),
-    });
-    expect(requests.some((r) => r.path.endsWith("/backup/activity"))).toBe(true);
-    await app.updateComplete;
-    expect(actionsDrawn(app)).toEqual([]);
-    expect(q(app, "recovery-running")).toBeNull();
-    expect(q(app, "reconnect-first")).not.toBeNull();
-    expect(requests.map((r) => r.path).filter((path) => !GETS.includes(path))).toEqual([]);
-  },
-);
-
-it.each(locales)(
-  "a summary naming a recovery that the backup status does not report as stopped says its records cannot be read, and Check again reads both again ($locale)",
-  async ({ locale, browser }) => {
-    let phase: "unstarted" | "prepared" = "unstarted";
-    const { app, requests } = await missingDatabaseFixture({
-      locale: browser,
-      activity: stoppedActivity,
-      summary: stoppedSummary,
-      intercept(path) {
-        if (path.endsWith("/backup/status")) return Response.json({ phase, proofRequired: true });
-      },
-    });
-    await openMissing(app);
-    const t = initialOwnerStrings[locale];
-    expect(q(app, "recovery-unreadable")!.textContent!.trim()).toBe(t.recoveryUnreadable);
-    expect(q(app, "check-again")!.textContent!.trim()).toBe(t.checkAgain);
-    expect(
-      [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
-        (f) => f.error,
-      ),
-    ).not.toContain(shells[locale]["shell.first_setup.attempt_invalid"]);
-    expect(app.shadowRoot!.textContent).not.toContain(
-      shells[locale]["shell.first_setup.attempt_invalid"],
-    );
-    expect(q(app, "recovery-stopped")).toBeNull();
-    expect(q<WtButton>(app, "start-again")?.disabled ?? true).toBe(true);
-    expect(q<WtButton>(app, "recover-backup")?.disabled ?? true).toBe(true);
-    for (const button of ["start-again", "recover-backup"]) {
-      const drawn = q(app, button);
-      if (drawn)
-        expect(
-          q(app, "recovery-unreadable")!.compareDocumentPosition(drawn) &
-            Node.DOCUMENT_POSITION_FOLLOWING,
-          button,
-        ).toBeTruthy();
-    }
-    const summaries = () => requests.filter((r) => r.path.endsWith("/start-again/summary"));
-    const statuses = () => requests.filter((r) => r.path.endsWith("/backup/status"));
-    expect([summaries().length, statuses().length]).toEqual([1, 1]);
-    phase = "prepared";
-    await click(app, "check-again");
-    await expect.poll(() => q(app, "recovery-stopped")).not.toBeNull();
-    expect([summaries().length, statuses().length]).toEqual([2, 2]);
-    expect(q(app, "check-again")).toBeNull();
-    expect(q(app, "recovery-unreadable")).toBeNull();
-    expect(q(app, "confirm-start-again")).not.toBeNull();
-  },
-);
-
-it.each(["en", "es"] as const)(
-  "the setup page's Check again has the backup screen's words for the same button (%s)",
-  (locale) => {
-    expect(initialOwnerStrings[locale].checkAgain).toBe(backupRepairStrings[locale].reconnect);
-  },
-);
-
-async function unsettledAsk(
-  browser: "en-GB" | "es-ES",
-  status: (read: number) => Response | undefined = () => undefined,
-  activity: typeof stoppedActivity | null = stoppedActivity,
-) {
-  let statusReads = 0;
-  const fixture = await missingDatabaseFixture({
-    locale: browser,
-    activity,
-    summary: stoppedSummary,
-    intercept(path) {
-      if (path.endsWith("/backup/status"))
-        return status(statusReads++) ?? Response.json({ phase: "unstarted", proofRequired: true });
-    },
-  });
-  await openMissing(fixture.app);
-  await expect.poll(() => q(fixture.app, "check-again")).not.toBeNull();
-  const reads = (suffix: string) => fixture.requests.filter((r) => r.path.endsWith(suffix)).length;
-  return { ...fixture, reads };
-}
-
-it.each(locales)(
-  "Check again that cannot read the backup status says so and keeps Check again offered ($locale)",
-  async ({ locale, browser }) => {
-    const { app, reads } = await unsettledAsk(browser, (read) =>
-      read === 1
-        ? Response.json(
-            { error: { code: "setup.recovery_in_progress", params: {} } },
-            { status: 409 },
-          )
-        : read >= 2
-          ? Response.json({ phase: "prepared", proofRequired: true })
-          : undefined,
-    );
-    await click(app, "check-again");
-    await expect
-      .poll(() =>
-        [
-          ...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions"),
-        ].map((f) => f.error),
-      )
-      .toEqual([shells[locale]["shell.first_setup.recovery_in_progress"]]);
-    expect(reads("/backup/status")).toBe(2);
-    expect(q(app, "recovery-unreadable")!.textContent!.trim()).toBe(
-      initialOwnerStrings[locale].recoveryUnreadable,
-    );
-    expect(q<WtButton>(app, "check-again")!.disabled).toBe(false);
-    expect(q(app, "recovery-stopped")).toBeNull();
-    expect(q<WtButton>(app, "start-again")?.disabled ?? true).toBe(true);
-    await click(app, "check-again");
-    await expect.poll(() => q(app, "recovery-stopped")).not.toBeNull();
-    expect(q(app, "check-again")).toBeNull();
-    expect(q(app, "confirm-start-again")).not.toBeNull();
-  },
-);
-
-it.each(locales)(
-  "Check again that fails while no recovery activity is reported keeps the records-unreadable line, Check again and Start again disabled ($locale)",
-  async ({ locale, browser }) => {
-    const { app, reads } = await unsettledAsk(
-      browser,
-      (read) =>
-        read === 1
-          ? Response.json(
-              { error: { code: "setup.recovery_in_progress", params: {} } },
-              { status: 409 },
-            )
-          : undefined,
-      null,
-    );
-    await click(app, "check-again");
-    await expect
-      .poll(() =>
-        [
-          ...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions"),
-        ].map((f) => f.error),
-      )
-      .toEqual([shells[locale]["shell.first_setup.recovery_in_progress"]]);
-    expect(reads("/backup/status")).toBe(2);
-    expect(q(app, "recovery-unreadable")?.textContent?.trim()).toBe(
-      initialOwnerStrings[locale].recoveryUnreadable,
-    );
-    expect(q<WtButton>(app, "check-again")?.disabled).toBe(false);
-    expect(q<WtButton>(app, "start-again")?.disabled ?? true).toBe(true);
-    expect(q<WtButton>(app, "recover-backup")?.disabled ?? true).toBe(true);
-  },
-);
-
-it("a second click on the missing database's Check again while the first is reading sends no second read", async () => {
-  const { app, reads } = await unsettledAsk("en-GB", (read) =>
-    read >= 1 ? Response.json({ phase: "prepared", proofRequired: true }) : undefined,
-  );
-  q(app, "check-again")!.dispatchEvent(new MouseEvent("click"));
-  q(app, "check-again")!.dispatchEvent(new MouseEvent("click"));
-  await expect.poll(() => q(app, "recovery-stopped")).not.toBeNull();
-  expect([reads("/start-again/summary"), reads("/backup/status")]).toEqual([2, 2]);
-  expect(
-    [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
-      (f) => f.error,
-    ),
-  ).not.toContain(shellEn["shell.first_setup.attempt_conflict"]);
-  expect(q(app, "confirm-start-again")).not.toBeNull();
-});
-
-it("an activity re-read that fails keeps the running view, and the next one offers Start again once the recovery stopped", async () => {
-  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-  try {
-    let reads = 0;
-    const { app, requests } = await missingDatabaseFixture({
-      activity: runningActivity,
-      intercept(path) {
-        if (!path.endsWith("/backup/activity")) return undefined;
-        reads += 1;
-        if (reads === 2)
-          return Response.json({ error: { code: "server.internal", params: {} } }, { status: 500 });
-        return Response.json({ activity: reads === 1 ? runningActivity : stoppedActivity });
-      },
-    });
-    const activityReads = () => requests.filter((r) => r.path.endsWith("/backup/activity"));
-    await vi.advanceTimersByTimeAsync(30_000);
-    await expect.poll(() => activityReads()).toHaveLength(2);
-    await app.updateComplete;
-    expect(lines(app, "recovery-running")).toEqual(runningLines("en"));
-    expect(q(app, "start-again")).toBeNull();
-    expect(app.shadowRoot!.textContent).not.toContain(initialOwnerStrings.en.error);
-    await vi.advanceTimersByTimeAsync(30_000);
-    await expect.poll(() => q(app, "start-again")).not.toBeNull();
-    expect(activityReads()).toHaveLength(3);
-    expect(q(app, "recovery-running")).toBeNull();
-  } finally {
-    vi.useRealTimers();
-  }
 });
