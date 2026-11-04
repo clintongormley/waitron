@@ -614,7 +614,7 @@ const footerMessage = (dialog: Dialog) =>
   dialog.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!.error;
 const occurrenceField = (dialog: Dialog) => dialog.querySelector('[name="occurrence"]');
 const lateWords = (code: string) =>
-  `Your last schedule change did not go through. ${codeMessage(code)}`;
+  `An earlier schedule change did not go through. ${codeMessage(code)}`;
 
 const REPEATED = {
   code: "menu_publication.time_repeated",
