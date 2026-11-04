@@ -2147,4 +2147,11 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
       "",
     ]);
   });
+
+  it("A773 fire paper: a station's name prints as written, whatever it holds", () => {
+    const printed = lines(
+      ticket([{ qty: 1, name: "Cava", group: 4, course: desserts, goesWith: ["Bar $& $$"] }]),
+    );
+    expect(printed.filter((text) => text.startsWith("Goes with"))).toEqual(["Goes with Bar $& $$"]);
+  });
 });

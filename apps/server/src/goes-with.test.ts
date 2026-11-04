@@ -13,7 +13,14 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
-import { createCourse, createStation, setProductCourse } from "./kitchen.js";
+import {
+  createCourse,
+  createStation,
+  listStations,
+  setProductCourse,
+  updateStation,
+} from "./kitchen.js";
+import { deleteStation } from "./station-delete.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { fireGroup } from "./order-groups.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
@@ -57,7 +64,7 @@ afterEach(() => {
 const words = kitchenTicketWords("es");
 const cue = (stations: string) => words.goesWith.replace("{stations}", () => stations);
 const CUE = cue("Grill");
-const startsCue = (text: string) => text.startsWith(cue(""));
+const startsCue = (text: string) => text.startsWith(cue("").trimEnd());
 
 interface Kitchen {
   v: PartyVenue;
@@ -200,6 +207,12 @@ async function releaseAtPass(k: Kitchen, groupId: string): Promise<void> {
       expectedContext: card.releaseContext,
     });
   });
+}
+
+/** Each queue item's group at `stationId`, keyed by the item's group id. */
+async function queueGroups(k: Kitchen, stationId: string) {
+  const queue = await inTx(k.v, (tx) => listStationQueue(tx, stationId));
+  return new Map(queue.flatMap((bill) => bill.items).map((item) => [item.group!.id, item.group!]));
 }
 
 describe("A773 fire paper: Goes with the stations holding dishes for the pass", () => {
@@ -468,14 +481,6 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
 });
 
 describe("A773 fire paper: the cue on the station card", () => {
-  /** Each queue item's group at `stationId`, keyed by the item's group id. */
-  async function queueGroups(k: Kitchen, stationId: string) {
-    const queue = await inTx(k.v, (tx) => listStationQueue(tx, stationId));
-    return new Map(
-      queue.flatMap((bill) => bill.items).map((item) => [item.group!.id, item.group!]),
-    );
-  }
-
   it("A773 fire paper: a station's queue names the stations holding its group's dishes for the pass", async () => {
     const k = await kitchen(true);
     const [desserts, drinks] = await place(k, [
@@ -519,5 +524,62 @@ describe("A773 fire paper: the cue on the station card", () => {
     });
     expect(JSON.stringify(board.toFire)).toContain(desserts!);
     expect(JSON.stringify(board)).not.toContain("goesWith");
+  });
+});
+
+describe("A773 fire paper: the station names in the cue", () => {
+  it("A773 fire paper: the cue orders its stations as the stations list does", async () => {
+    const k = await kitchen(true);
+    await withPastry(k);
+    await inTx(k.v, (tx) => updateStation(tx, k.v.cfg, k.grill, { name: "asador" }));
+    const listed = (await inTx(k.v, (tx) => listStations(tx, k.v.cfg)))
+      .map((station) => station.name)
+      .filter((name) => name === "asador" || name === "Pastry");
+    expect(listed).toEqual(["asador", "Pastry"]);
+
+    const [desserts] = await place(k, [{ names: ["Tarta", "Vino", "Flan"], release: "hold" }]);
+    await fire(k, desserts!);
+
+    expect(await inTx(k.v, (tx) => passStationsByGroup(tx, [desserts!]))).toEqual(
+      new Map([[desserts!, listed]]),
+    );
+    expect((await queueGroups(k, k.bar)).get(desserts!)?.goesWith).toEqual(listed);
+    const bar = await papers(k, k.barPrinter);
+    expect(bar).toHaveLength(1);
+    expect(fromHeading(bar[0]!).slice(0, 2)).toEqual([
+      `${words.group} 1 · DESSERTS`,
+      cue("asador y Pastry"),
+    ]);
+  });
+
+  it("A773 fire paper: two stations sharing a name are named once, on paper and on the card", async () => {
+    const k = await kitchen(true);
+    const pastry = await withPastry(k);
+    const [desserts] = await place(k, [{ names: ["Tarta", "Vino", "Flan"], release: "hold" }]);
+    await fire(k, desserts!);
+    await releaseAtPass(k, desserts!);
+    await inTx(k.v, async (tx) => {
+      await tx
+        .update(ticketItems)
+        .set({ state: "ready", readyAt: new Date().toISOString() })
+        .where(eq(ticketItems.stationId, pastry));
+      await deleteStation(tx, k.v.cfg, pastry);
+      await updateStation(tx, k.v.cfg, k.grill, { name: "Pastry" });
+    });
+    const named = await inTx(k.v, (tx) =>
+      tx
+        .select({ id: kitchenStations.id })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.name, "Pastry")),
+    );
+    expect(named).toHaveLength(2);
+
+    expect(await inTx(k.v, (tx) => passStationsByGroup(tx, [desserts!]))).toEqual(
+      new Map([[desserts!, ["Pastry"]]]),
+    );
+    expect((await queueGroups(k, k.bar)).get(desserts!)?.goesWith).toEqual(["Pastry"]);
+    await inTx(k.v, (tx) => reprintOrderTickets(tx, k.v.cfg, k.tabId));
+    const reprint = (await papers(k, k.barPrinter)).at(-1)!;
+    expect(reprint.filter(startsCue)).toEqual([cue("Pastry")]);
   });
 });

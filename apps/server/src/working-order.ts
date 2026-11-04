@@ -147,6 +147,7 @@ import {
   decimalToCents,
   decimalToThousandths,
   compareLabels,
+  compareStationNames,
   divideDecimal,
   locationId as brandLocationId,
   partyDisplayName,
@@ -8510,7 +8511,7 @@ export function liveKitchenDish(): SQL | undefined {
 /**
  * The names of the stations holding a live dish of each of `groupIds`, across every bill, that the
  * pass controls or that is not yet asked for at a station that waits for the pass now; ordered as the
- * stations list is. A group with none is absent.
+ * stations list is, a name two stations share appearing once. A group with none is absent.
  */
 export async function passStationsByGroup(
   tx: Transaction,
@@ -8536,12 +8537,14 @@ export async function passStationsByGroup(
           and(heldItem(), eq(kitchenStations.waitsForPass, true)),
         ),
       ),
-    )
-    .orderBy(kitchenStations.name, kitchenStations.id);
+    );
+  rows.sort(
+    (a, b) => compareStationNames(a.name, b.name) || a.stationId.localeCompare(b.stationId),
+  );
   const names = new Map<string, string[]>();
   for (const row of rows) {
     const list = names.get(row.groupId!) ?? [];
-    list.push(row.name);
+    if (!list.includes(row.name)) list.push(row.name);
     names.set(row.groupId!, list);
   }
   return names;
