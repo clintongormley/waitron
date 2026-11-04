@@ -878,7 +878,12 @@ describe("A803 waiting copy: Move this bill", () => {
     expect(result.billId).toBe(a.billId);
     expect(result.partyId).not.toBeNull();
     expect(result.partyId).not.toBe(a.partyId);
+    const burger = await lineOf(a.billId, "Burger");
     const flan = await lineOf(a.billId, "Flan");
+    expect((await groupsOf(result.partyId!)).map((group) => [group.id, group.state])).toEqual([
+      [burger.groupId, "fired"],
+      [flan.groupId, "held"],
+    ]);
     expect(flan.groupId).not.toBe(source);
     expect(await groupRow(flan.groupId!)).toMatchObject({
       partyId: result.partyId,

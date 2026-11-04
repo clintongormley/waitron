@@ -4788,10 +4788,12 @@ describe("source-backed draft foundations", () => {
       );
 
       const partyId = result.partyId!;
-      const [copy] = await db
+      const heldGroups = await db
         .select()
         .from(orderGroups)
         .where(and(eq(orderGroups.partyId, partyId), eq(orderGroups.state, "held")));
+      expect(heldGroups).toHaveLength(1);
+      const [copy] = heldGroups;
       expect(copy).toMatchObject({ partyId, state: "held", firedAt: null });
       expect(copy!.id).not.toBe(moving.groupId);
       const lines = await db
