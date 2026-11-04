@@ -1393,6 +1393,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This box restarted before the handover took effect, so that handover was cancelled and this box keeps selling. Start a new handover to try again.",
     es: "Este equipo se ha reiniciado antes de que el traspaso surtiera efecto, así que ese traspaso se ha cancelado y este equipo sigue vendiendo. Empieza un traspaso nuevo para volver a intentarlo.",
   },
+  "handover.superseded_during_start": {
+    en: "This box no longer runs the venue, because another box took over or the venue's list of boxes changed, so this handover did not go ahead. Nothing is needed on this box.",
+    es: "Este equipo ya no lleva el local, porque otro equipo ha pasado a llevarlo o ha cambiado la lista de equipos del local, así que este traspaso no ha seguido adelante. No hace falta hacer nada en este equipo.",
+  },
   "handover.membership_changed": {
     en: "The venue's details or its list of boxes changed after this handover was started, so it was cancelled and this box keeps selling. Start a new handover to try again.",
     es: "Los datos del local o su lista de equipos han cambiado después de empezar este traspaso, así que se ha cancelado y este equipo sigue vendiendo. Empieza un traspaso nuevo para volver a intentarlo.",

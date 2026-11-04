@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { nodes, readNodeMembership, withNodeTransaction, writeNodeMembership } from "@waitron/db";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
@@ -23,6 +23,7 @@ import {
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import type { PeerOperationStatus, PeerStatusBody } from "./peer-status-api.js";
 import {
+  closeSupersededOperation,
   readActivatedFrom,
   recordSupersededAtStart,
   repairAtStart,
@@ -221,6 +222,73 @@ describe("the repairs before the start check", () => {
     await repairAtStart({ node: suite.node, nodeId: b.nodeId });
     expect((await readHandoverOperation(suite.node, b.nodeId, OP))?.state).toBe("prepared");
     expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
+  });
+
+  it("the restricted start's repair closes a source left at prepared, under the code for what happened", async () => {
+    const b = await box(suite);
+    await insertOperation(suite, b.nodeId, { role: "source", state: "prepared" });
+    await closeSupersededOperation({ node: suite.node, nodeId: b.nodeId }, () => undefined);
+    expect((await readHandoverOperation(suite.node, b.nodeId, OP))?.state).toBe("abandoned");
+    const [event] = await suite.node.select().from(nodeHandoverEvents);
+    expect(event!.detail).toEqual({ code: "handover.superseded_during_start", params: {} });
+  });
+
+  it("the restricted start's repair leaves a source that stepped down alone", async () => {
+    const b = await box(suite);
+    await insertOperation(suite, b.nodeId, { role: "source", state: "source_stepped_down" });
+    const logged: string[] = [];
+    await closeSupersededOperation({ node: suite.node, nodeId: b.nodeId }, (_level, message) => {
+      logged.push(message);
+    });
+    expect((await readHandoverOperation(suite.node, b.nodeId, OP))?.state).toBe(
+      "source_stepped_down",
+    );
+    expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
+    expect(logged).toEqual([]);
+  });
+
+  it("the restricted start's repair leaves a destination at prepared alone", async () => {
+    const b = await box(suite);
+    await insertOperation(suite, b.nodeId, { role: "destination", state: "prepared" });
+    await closeSupersededOperation({ node: suite.node, nodeId: b.nodeId }, () => undefined);
+    expect((await readHandoverOperation(suite.node, b.nodeId, OP))?.state).toBe("prepared");
+    expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
+  });
+
+  it("the restricted start's repair logs a failed write and carries on, and a later start closes it", async () => {
+    const b = await box(suite);
+    await insertOperation(suite, b.nodeId, { role: "source", state: "prepared" });
+    suite.node.run(
+      sql`create trigger refuse_event before insert on node_handover_events
+          begin select raise(abort, 'the write fails here'); end`,
+    );
+    const logged: [string, string][] = [];
+    try {
+      await closeSupersededOperation({ node: suite.node, nodeId: b.nodeId }, (level, message) => {
+        logged.push([level, message]);
+      });
+    } finally {
+      suite.node.run(sql`drop trigger refuse_event`);
+    }
+    expect(logged).toEqual([["error", "handover.superseded_close_failed"]]);
+    expect((await readHandoverOperation(suite.node, b.nodeId, OP))?.state).toBe("prepared");
+
+    await closeSupersededOperation({ node: suite.node, nodeId: b.nodeId }, () => undefined);
+    expect((await readHandoverOperation(suite.node, b.nodeId, OP))?.state).toBe("abandoned");
+  });
+
+  it("the restricted start's repair logs a failed read and carries on", async () => {
+    const b = await box(suite);
+    suite.node.run(sql`alter table node_handover_operations rename to hidden_operations`);
+    const logged: string[] = [];
+    try {
+      await closeSupersededOperation({ node: suite.node, nodeId: b.nodeId }, (_level, message) => {
+        logged.push(message);
+      });
+    } finally {
+      suite.node.run(sql`alter table hidden_operations rename to node_handover_operations`);
+    }
+    expect(logged).toEqual(["handover.superseded_close_failed"]);
   });
 
   it("leaves a box with no operation alone", async () => {

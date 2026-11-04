@@ -511,6 +511,50 @@ describe("a stepdown", () => {
     expect(r.calls.filter((name) => name === "streamHost")).toHaveLength(1);
   });
 
+  describe("a chart that names no main box got there first, and wrote no restriction", () => {
+    const chartAlone = (self: Context) => ({
+      kind: "superseded" as const,
+      successorNodeId: null,
+      membershipTerm: 4,
+      self,
+    });
+
+    it("a call for a binding is refused, because nothing stepped down for it", async () => {
+      await begin();
+      let self: Context | undefined;
+      const r = rig(suite.node);
+      r.app.post("/chart", async (c) => {
+        self = c;
+        return c.json(await stepDown(r.deps, chartAlone(c)));
+      });
+      await r.app.request("/chart", { method: "POST" });
+
+      await expect(
+        stepDown(r.deps, { binding: BINDING, kind: "handed-over", self: self! }),
+      ).rejects.toMatchObject({ code: "handover.superseded_during_start" });
+
+      expect((await readHandoverOperation(suite.node, SOURCE, OP))?.state).toBe("prepared");
+      expect(await readHandoverRestriction(suite.node, SOURCE)).toBeNull();
+      await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
+    });
+
+    it("a repeat of that chart's own call still answers replayed", async () => {
+      let self: Context | undefined;
+      const r = rig(suite.node);
+      r.app.post("/chart", async (c) => {
+        self = c;
+        return c.json(await stepDown(r.deps, chartAlone(c)));
+      });
+      await r.app.request("/chart", { method: "POST" });
+
+      expect(await stepDown(r.deps, chartAlone(self!))).toEqual({
+        restarting: true,
+        replayed: true,
+      });
+      await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
+    });
+  });
+
   it("a second call for another binding is refused and changes nothing", async () => {
     await begin();
     let self: Context | undefined;

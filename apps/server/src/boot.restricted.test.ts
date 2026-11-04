@@ -3,9 +3,10 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  nodes,
   readNodeMembership,
   stampDeployment,
   withNodeTransaction,
@@ -25,6 +26,7 @@ import {
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
+  readHandoverEvent,
   readHandoverOperation,
   readHandoverRestriction,
   recordHandoverRestrictionTx,
@@ -498,25 +500,28 @@ describe("a full start's stepdown, through its test seam", () => {
       if (spare !== undefined) await new Promise((done) => spare!.close(done));
       spare = undefined;
       suite.node.run(sql`drop trigger if exists refuse_restriction`);
+      suite.node.run(sql`drop trigger if exists refuse_abandoned`);
     });
 
     /** Answers the query and the offer as a spare does, under the key the chart endorses. */
-    async function listenAsSpare(): Promise<void> {
+    async function listenAsSpare(duringOffer?: () => Promise<void>): Promise<void> {
       spare = createServer((request, response) => {
         let text = "";
         request.on("data", (chunk: Buffer) => (text += chunk.toString()));
-        request.on("end", () => {
+        request.on("end", async () => {
           const { body } = JSON.parse(text) as {
             body: {
               nonce?: string;
               binding?: { operationId: string; sourceNodeId: string };
             };
           };
+          if (body.binding !== undefined) await duringOffer?.();
+          const held = await readNodeMembership(suite.db);
           const answer: CanonicalValue =
             body.binding === undefined
               ? {
                   nonce: body.nonce!,
-                  heldMembership: null,
+                  heldMembership: held as unknown as CanonicalValue,
                   restriction: null,
                   openOperation: null,
                   requestedOperation: null,
@@ -575,7 +580,25 @@ describe("a full start's stepdown, through its test seam", () => {
       }
     };
 
-    const startOnce = async (restart: () => void, beforeStart?: () => void) => {
+    /** The row a spare has once it finished joining: its key signs a chart, and a start asks it. */
+    const addSpareRow = async (nodeId: string): Promise<void> => {
+      const [own] = await suite.db
+        .select({ locationId: nodes.locationId })
+        .from(nodes)
+        .where(eq(nodes.id, nodeId));
+      await suite.db.insert(nodes).values({
+        id: SPARE.nodeId,
+        locationId: own!.locationId,
+        name: "Spare",
+        publicKey: SPARE.publicKey,
+      });
+    };
+
+    const startOnce = async (
+      restart: () => void,
+      beforeStart?: () => void,
+      options: { joined?: boolean } = {},
+    ) => {
       let cookie = "";
       const started = await boot(suite, {
         restricted: false,
@@ -586,18 +609,245 @@ describe("a full start's stepdown, through its test seam", () => {
           await stampDeployment(suite.db, "preproduction");
           beforeStart?.();
         },
-        beforeListening: holdChartNamingSpare,
+        beforeListening: async (nodeId, privateKey) => {
+          await holdChartNamingSpare(nodeId, privateKey);
+          if (options.joined === true) await addSpareRow(nodeId);
+        },
       });
       return { ...started, cookie };
     };
 
-    const startAgain = async (env: Record<string, string>): Promise<number> => {
+    const startAgain = async (
+      env: Record<string, string>,
+      whileStopped?: () => void | Promise<void>,
+    ): Promise<number> => {
       await server!.close();
+      await whileStopped?.();
       beforeServerStarts();
       server = await startServer(env, env);
       await awaitListening(httpPort());
       return httpPort();
     };
+
+    /** A term-2 chart, signed by the spare, handed to the box through its own route. */
+    const handChart = async (
+      port: number,
+      chartNodes: MembershipDocumentBody["nodes"],
+    ): Promise<void> => {
+      const body: MembershipDocumentBody = { term: 2, nodes: chartNodes };
+      const document = {
+        body,
+        signerNodeId: SPARE.nodeId,
+        signature: signDocumentBody(body, SPARE.privateKey),
+        endorsements: (await readNodeMembership(suite.db))!.endorsements,
+      };
+      expect(
+        await overTls(port, "/api/node/membership", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ document }),
+        }),
+      ).toEqual({ status: 200, body: { accepted: true } });
+    };
+
+    /** A start whose spare hands it `chartNodes` while the offer is waiting for an answer. */
+    const startHandedChartDuringOffer = async (
+      restart: () => void,
+      chartNodes: (nodeId: string) => MembershipDocumentBody["nodes"],
+    ) => {
+      let port = 0;
+      let nodeId = "";
+      await listenAsSpare(() => handChart(port, chartNodes(nodeId)));
+      const started = await startOnce(restart, undefined, { joined: true });
+      port = started.port;
+      nodeId = started.venue.cfg.nodeId;
+      return { ...started, nodeId };
+    };
+
+    const replacedBySpare =
+      () =>
+      (nodeId: string): MembershipDocumentBody["nodes"] => [
+        { nodeId, contactUrl: "https://box.example", standing: "evicted" },
+        { nodeId: SPARE.nodeId, contactUrl: spareUrl, standing: "serving-primary" },
+      ];
+
+    const refuseAbandonedEvent = () => {
+      suite.node.run(
+        sql`create trigger refuse_abandoned before insert on node_handover_events
+            when new.kind = 'abandoned'
+            begin select raise(abort, 'the write fails here'); end`,
+      );
+    };
+
+    const SUPERSEDED = {
+      status: 409,
+      body: { error: { code: "handover.superseded_during_start" } },
+    };
+
+    it("a newer chart during the offer refuses the start, and the restricted start closes the operation", async () => {
+      const restart = vi.fn();
+      const { port, nodeId, env, cookie } = await startHandedChartDuringOffer(
+        restart,
+        replacedBySpare(),
+      );
+
+      expect(
+        await overTls(port, "/management-api/handover", handoverRequest(cookie)),
+      ).toMatchObject(SUPERSEDED);
+      await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+      expect((await readHandoverOperation(suite.node, nodeId, OP))?.state).toBe("prepared");
+
+      const restrictedPort = await startAgain(env);
+
+      expect((await readHandoverOperation(suite.node, nodeId, OP))?.state).toBe("abandoned");
+      expect((await readHandoverEvent(suite.node, nodeId, OP, "abandoned"))?.detail).toEqual({
+        code: "handover.superseded_during_start",
+        params: {},
+      });
+      expect(await readHandoverRestriction(suite.node, nodeId)).toMatchObject({
+        operationId: null,
+        kind: "superseded",
+        successorNodeId: SPARE.nodeId,
+      });
+      expect(await overTls(restrictedPort, "/api/node")).toMatchObject({
+        status: 200,
+        body: { acceptingSales: false },
+      });
+      const read = await overTls(restrictedPort, `/api/node/handover/${OP}`);
+      expect(read).toMatchObject({
+        status: 200,
+        body: { body: { operationId: OP, state: "abandoned" } },
+      });
+      expect((read.body as { body: object }).body).not.toHaveProperty("handoverPage");
+      const nonce = "s".repeat(20);
+      expect(
+        await overTls(restrictedPort, "/api/node/peer-status", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(
+            signEnvelope("query", { nonce, atMs: 1, operationId: OP }, MAIN_BOX),
+          ),
+        }),
+      ).toMatchObject({
+        status: 200,
+        body: { body: { nonce, openOperation: null, requestedOperation: { state: "abandoned" } } },
+      });
+    }, 90_000);
+
+    it("a restricted start whose closing write fails still comes up, and a later one closes the operation", async () => {
+      const restart = vi.fn();
+      const { port, nodeId, env, cookie } = await startHandedChartDuringOffer(
+        restart,
+        replacedBySpare(),
+      );
+      await overTls(port, "/management-api/handover", handoverRequest(cookie));
+      await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+
+      const refusedPort = await startAgain(env, refuseAbandonedEvent);
+
+      expect(await overTls(refusedPort, "/api/node")).toMatchObject({
+        status: 200,
+        body: { acceptingSales: false },
+      });
+      expect(await overTls(refusedPort, `/api/node/handover/${OP}`)).toMatchObject({
+        status: 200,
+        body: { body: { state: "prepared" } },
+      });
+
+      const nextPort = await startAgain(env, () => {
+        suite.node.run(sql`drop trigger refuse_abandoned`);
+      });
+
+      expect((await readHandoverOperation(suite.node, nodeId, OP))?.state).toBe("abandoned");
+      expect(await overTls(nextPort, `/api/node/handover/${OP}`)).toMatchObject({
+        status: 200,
+        body: { body: { state: "abandoned" } },
+      });
+    }, 120_000);
+
+    it("a newer chart naming no main box during the offer is refused, never answered with the page", async () => {
+      const restart = vi.fn();
+      const { port, nodeId, env, cookie } = await startHandedChartDuringOffer(restart, (id) => [
+        { nodeId: id, contactUrl: "https://box.example", standing: "sell-only" },
+        { nodeId: SPARE.nodeId, contactUrl: spareUrl, standing: "serving-secondary" },
+      ]);
+
+      expect(
+        await overTls(port, "/management-api/handover", handoverRequest(cookie)),
+      ).toMatchObject(SUPERSEDED);
+      await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+      expect((await readHandoverOperation(suite.node, nodeId, OP))?.state).toBe("prepared");
+      expect(await readHandoverRestriction(suite.node, nodeId)).toBeNull();
+
+      const nextPort = await startAgain(env);
+
+      expect(await overTls(nextPort, "/api/node")).toMatchObject({
+        status: 200,
+        body: { acceptingSales: false },
+      });
+      expect(await overTls(nextPort, `/api/node/handover/${OP}`)).toMatchObject({
+        status: 200,
+        body: { body: { state: "abandoned" } },
+      });
+      expect(
+        await overTls(nextPort, "/management-api/handover", handoverRequest(cookie)),
+      ).toMatchObject({ status: 403, body: { error: { code: "node.read_only" } } });
+    }, 90_000);
+
+    it("a stepdown whose write fails, with a joined spare: the next start sells once it answers, and waits while it is silent", async () => {
+      await listenAsSpare();
+      const restart = vi.fn();
+      const { port, venue, env, cookie } = await startOnce(restart, () => {
+        suite.node.run(
+          sql`create trigger refuse_restriction before insert on node_handover_restriction
+              begin select raise(abort, 'the write fails here'); end`,
+        );
+      });
+      const nodeId = venue.cfg.nodeId;
+      await overTls(port, "/management-api/handover", handoverRequest(cookie));
+      await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+
+      const nextPort = await startAgain(env, async () => {
+        suite.node.run(sql`drop trigger refuse_restriction`);
+        await addSpareRow(nodeId);
+      });
+
+      expect((await readHandoverOperation(suite.node, nodeId, OP))?.state).toBe("abandoned");
+      expect(await overTls(nextPort, "/api/node")).toMatchObject({
+        status: 200,
+        body: { acceptingSales: true },
+      });
+      const nonce = "j".repeat(20);
+      expect(
+        await overTls(nextPort, "/api/node/peer-status", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(signEnvelope("query", { nonce, atMs: 1, operationId: OP }, SPARE)),
+        }),
+      ).toMatchObject({
+        status: 200,
+        body: { body: { nonce, requestedOperation: { state: "abandoned" } } },
+      });
+
+      await new Promise((done) => spare!.close(done));
+      spare = undefined;
+      const silentPort = await startAgain(env);
+
+      expect(await overTls(silentPort, "/api/node")).toMatchObject({
+        status: 200,
+        body: { acceptingSales: false },
+      });
+      expect(
+        await overTls(silentPort, "/api/node/peer-status", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(signEnvelope("query", { nonce, atMs: 1, operationId: OP }, SPARE)),
+        }),
+      ).toMatchObject({
+        status: 200,
+        body: { body: { nonce, requestedOperation: { state: "abandoned" } } },
+      });
+    }, 120_000);
 
     it("answers the page and restarts, and the restricted start answers a retry from its own row", async () => {
       await listenAsSpare();

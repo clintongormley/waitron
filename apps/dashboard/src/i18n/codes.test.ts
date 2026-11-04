@@ -840,9 +840,24 @@ it("has a sentence in both languages for each handover refusal", () => {
     "handover.request_invalid",
     "handover.step_out_of_order",
     "handover.promotion_running",
+    "handover.superseded_during_start",
   ]) {
     expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
     expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
   }
+});
+
+it("words a handover a newer list of boxes stopped as what happened, not as a fault", () => {
+  expect(codeMessage("handover.superseded_during_start", "en")).toBe(
+    "This box no longer runs the venue, because another box took over or the venue's list of boxes changed, so this handover did not go ahead. Nothing is needed on this box.",
+  );
+  expect(codeMessage("handover.superseded_during_start", "es")).toBe(
+    "Este equipo ya no lleva el local, porque otro equipo ha pasado a llevarlo o ha cambiado la lista de equipos del local, así que este traspaso no ha seguido adelante. No hace falta hacer nada en este equipo.",
+  );
+});
+
+it("keeps the fault wording for a true restriction conflict", () => {
+  expect(codeMessage("handover.restriction_conflict", "en")).toContain("fault in Waitron");
+  expect(codeMessage("handover.restriction_conflict", "es")).toContain("fallo de Waitron");
 });

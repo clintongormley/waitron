@@ -13,8 +13,15 @@ import {
   type CanonicalValue,
   type SignedMembershipDocument,
 } from "@waitron/membership";
-import { readHandoverEvent, readHandoverOperation, type HandoverOperation } from "@waitron/node-db";
 import {
+  readHandoverEvent,
+  readHandoverOperation,
+  readHandoverRestriction,
+  readOpenHandoverOperation,
+  type HandoverOperation,
+} from "@waitron/node-db";
+import {
+  codeOf,
   createErrorBoundary,
   readRawJsonBody,
   requireManagementSession,
@@ -82,6 +89,7 @@ const STATUS = {
   "handover.destination_unreachable": 409,
   "handover.restarted_before_stepdown": 409,
   "handover.membership_changed": 409,
+  "handover.superseded_during_start": 409,
   "handover.restriction_conflict": 409,
   "handover.step_out_of_order": 409,
   "server.internal": 500,
@@ -233,6 +241,27 @@ export function mountHandoverSourceStartApi(
     throw new AppError(refusal.code, refusal.params as never);
   };
 
+  const stepDownFor = async (c: Context, binding: HandoverBinding): Promise<void> => {
+    try {
+      await deps.stepDownAfterOffer(c, binding);
+    } catch (error) {
+      // An open gate means nothing was stopped. Once it has closed the box is restarting, perhaps
+      // already stepped down, so `abandoned` could be false.
+      if (!deps.gate.isClosed()) {
+        await abandonHandover(deps, binding.operationId, refusalOf(error));
+        throw error;
+      }
+      // A restriction naming no operation came from a newer chart, which is no fault in Waitron.
+      if (
+        codeOf(error) === "handover.restriction_conflict" &&
+        (await readHandoverRestriction(deps.node, deps.nodeId))?.operationId === null
+      ) {
+        throw new AppError("handover.superseded_during_start", {});
+      }
+      throw error;
+    }
+  };
+
   const offerThenStepDown = async (
     c: Context,
     binding: HandoverBinding,
@@ -241,15 +270,7 @@ export function mountHandoverSourceStartApi(
   ): Promise<{ handoverPage: string }> => {
     const refused = await answerToOffer(binding, contactUrl, envelope);
     if (refused !== null) return abandon(binding.operationId, refused);
-    try {
-      await deps.stepDownAfterOffer(c, binding);
-    } catch (error) {
-      // An open gate means nothing was stopped. Once it has closed the box is restarting, perhaps
-      // already stepped down, so `abandoned` could be false.
-      if (deps.gate.isClosed()) throw error;
-      await abandonHandover(deps, binding.operationId, refusalOf(error));
-      throw error;
-    }
+    await stepDownFor(c, binding);
     return { handoverPage: handoverPageAt(contactUrl, binding.operationId) };
   };
 
@@ -275,6 +296,13 @@ export function mountHandoverSourceStartApi(
     }
     if (stored.state !== "prepared") {
       return { handoverPage: await handoverPageOf(deps, stored) };
+    }
+    if (deps.gate.isClosed()) {
+      // A stepped-down box records nothing and offers nothing: only the stepdown already under way
+      // can say how this one ended.
+      await stepDownFor(c, stored.binding as unknown as HandoverBinding);
+      // A fault in Waitron: a stepdown for this operation moves it past `prepared` in its one write.
+      throw new Error(`a stepdown replay succeeded for handover ${operationId} still at prepared`);
     }
     const held = await readNodeMembership(deps.db);
     if (held === null || servingPrimaryNodeId(held) !== deps.nodeId) {
@@ -341,6 +369,15 @@ export function mountHandoverSourceStartApi(
       binding: binding as unknown as CanonicalValue,
       authorisedBy: personId,
     });
+    if (deps.gate.isClosed()) {
+      // A stepped-down box records nothing and offers nothing. With no operation of its own open,
+      // only a newer chart can have closed the gate.
+      const open = await readOpenHandoverOperation(deps.node, deps.nodeId);
+      if (open !== null) {
+        throw new AppError("handover.operation_in_progress", { operationId: open.operationId });
+      }
+      throw new AppError("handover.superseded_during_start", {});
+    }
     await beginHandoverFromOffer(deps, binding, "source", envelope);
     return offerThenStepDown(c, binding, contactUrl, JSON.stringify(envelope));
   };

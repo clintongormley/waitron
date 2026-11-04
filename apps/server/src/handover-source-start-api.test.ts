@@ -59,7 +59,7 @@ import { stepDown } from "./handover-stepdown.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
-import { repairAtStart } from "./start-peer-check.js";
+import { closeSupersededOperation, repairAtStart } from "./start-peer-check.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 
@@ -1178,32 +1178,54 @@ describe("with the real stepdown", () => {
     slowWork = Promise.resolve();
   });
 
-  /** A route behind the gate, and a way to hold a request just past it. */
-  function realBox(changeBinding: (binding: HandoverBinding) => HandoverBinding = (b) => b): Hono {
+  const stepDownDeps = () => ({
+    node: mainBox.node as NodeDatabase,
+    nodeId: self,
+    gate,
+    duties,
+    close,
+    restart,
+    log: () => undefined,
+  });
+
+  /** The stepdown a newer chart causes, which goes through `/api/node/membership` on a real box. */
+  const chartStepsDown = (successorNodeId: string | null = OTHER_BOX) =>
+    stepDown(stepDownDeps(), {
+      kind: "superseded",
+      successorNodeId,
+      membershipTerm: 4,
+      self: {} as Context,
+    });
+
+  /** Routes behind the gate, and a way to hold a request just past it. */
+  function behindTheGate(built: Hono): void {
     const box = { db: mainBox.db, node: mainBox.node as NodeDatabase, ring: RING, nodeId: self };
+    built.use(ROUTE, async (_c, next) => {
+      const hold = holdNextStart;
+      holdNextStart = null;
+      if (hold !== null) await hold;
+      await next();
+    });
+    built.post("/slow", async (c) => {
+      await slowWork;
+      return c.json({ done: true });
+    });
+    mountHandoverStatusApi(built, box, () => undefined);
+    mountPeerStatusApi(built, box, () => undefined);
+  }
+
+  function realBox(changeBinding: (binding: HandoverBinding) => HandoverBinding = (b) => b): Hono {
     return mount(
       {
         stepDownAfterOffer: async (c, binding) => {
-          await stepDown(
-            { node: box.node, nodeId: self, gate, duties, close, restart, log: () => undefined },
-            { binding: changeBinding(binding), kind: "handed-over", self: c },
-          );
+          await stepDown(stepDownDeps(), {
+            binding: changeBinding(binding),
+            kind: "handed-over",
+            self: c,
+          });
         },
       },
-      (built) => {
-        built.use(ROUTE, async (_c, next) => {
-          const hold = holdNextStart;
-          holdNextStart = null;
-          if (hold !== null) await hold;
-          await next();
-        });
-        built.post("/slow", async (c) => {
-          await slowWork;
-          return c.json({ done: true });
-        });
-        mountHandoverStatusApi(built, box, () => undefined);
-        mountPeerStatusApi(built, box, () => undefined);
-      },
+      behindTheGate,
     );
   }
 
@@ -1366,6 +1388,36 @@ describe("with the real stepdown", () => {
 
       expect(stateOf()).toBe("prepared");
       await expectStillOpen(box);
+
+      exchanged = [];
+      expect(await start({}, box)).toEqual(refusal(409, "handover.restriction_conflict"));
+      expect(exchanged).toEqual([OFFER_PATH]);
+      expect(stateOf()).toBe("abandoned");
+      await expectStillOpen(box);
+    });
+
+    it("a retry after a refusal that could not be recorded offers again, and can step down", async () => {
+      const box = realBox();
+      mainBox.node.run(sql`alter table node_handover_restriction rename to hidden_restriction`);
+      mainBox.node.run(
+        sql`create trigger refuse_event before insert on node_handover_events
+            when new.kind = 'abandoned'
+            begin select raise(abort, 'the record fails here'); end`,
+      );
+      try {
+        expect(await start({}, box)).toEqual(INTERNAL);
+      } finally {
+        mainBox.node.run(sql`drop trigger refuse_event`);
+        mainBox.node.run(sql`alter table hidden_restriction rename to node_handover_restriction`);
+      }
+      expect(stateOf()).toBe("prepared");
+      await expectStillOpen(box);
+
+      exchanged = [];
+      expect(await start({}, box)).toEqual({ status: 200, body: SPARE_PAGE });
+      expect(exchanged).toEqual([OFFER_PATH]);
+      expect(stateOf()).toBe("source_stepped_down");
+      await expectRestartedOnce();
     });
   });
 
@@ -1463,21 +1515,85 @@ describe("with the real stepdown", () => {
   });
 
   describe("another stepdown that got there first", () => {
-    it("a first check refused behind a closed gate records nothing further", async () => {
-      const stepDownDeps = {
-        node: mainBox.node as NodeDatabase,
-        nodeId: self,
-        gate,
-        duties,
-        close,
-        restart,
-        log: () => undefined,
-      };
+    it("a newer chart during the offer: refused for what happened, and the next restricted start closes the operation", async () => {
       exchange = offerAnswers(async (path, init) => {
-        await stepDown(stepDownDeps, {
+        await chartStepsDown();
+        return toSpare(path, init);
+      });
+      const box = realBox();
+
+      expect(await start({}, box)).toEqual(refusal(409, "handover.superseded_during_start"));
+
+      expect(stateOf()).toBe("prepared");
+      expect(eventKinds()).toEqual(["offer"]);
+      expect(await readHandoverRestriction(mainBox.node, self)).toMatchObject({
+        kind: "superseded",
+      });
+      await expectRestartedOnce();
+
+      await closeSupersededOperation({ node: mainBox.node, nodeId: self }, () => undefined);
+
+      expect(stateOf()).toBe("abandoned");
+      expect(events()[1]!.detail).toEqual({
+        code: "handover.superseded_during_start",
+        params: {},
+      });
+      expect((await statusRead(box)).state).toBe("abandoned");
+    });
+
+    it("a newer chart that names no main box: refused, never answered with the page", async () => {
+      exchange = offerAnswers(async (path, init) => {
+        await chartStepsDown(null);
+        return toSpare(path, init);
+      });
+
+      expect(await start({}, realBox())).toEqual(refusal(409, "handover.superseded_during_start"));
+
+      expect(stateOf()).toBe("prepared");
+      expect(eventKinds()).toEqual(["offer"]);
+      expect(await readHandoverRestriction(mainBox.node, self)).toBeNull();
+      await expectRestartedOnce();
+    });
+
+    it("a newer chart during the first query: records nothing and offers nothing", async () => {
+      exchange = queryAnswers(async (path, init) => {
+        await chartStepsDown();
+        return toSpare(path, init);
+      });
+
+      expect(await start({}, realBox())).toEqual(refusal(409, "handover.superseded_during_start"));
+
+      expect(operations()).toEqual([]);
+      expect(exchanged).toEqual([QUERY_PATH]);
+      expect(operations(spareBox)).toEqual([]);
+      await expectRestartedOnce();
+    });
+
+    it("a different refusal behind that closed gate keeps its own answer", async () => {
+      exchange = offerAnswers(async (path, init) => {
+        await chartStepsDown();
+        return toSpare(path, init);
+      });
+      const changedTerm = (binding: HandoverBinding): HandoverBinding => ({
+        ...binding,
+        membership: { ...binding.membership, term: binding.membership.term + 1 },
+      });
+
+      expect(await start({}, realBox(changedTerm))).toEqual(
+        refusal(409, "handover.operation_conflict", { operationId: OP }),
+      );
+
+      expect(stateOf()).toBe("prepared");
+      expect(eventKinds()).toEqual(["offer"]);
+      await expectRestartedOnce();
+    });
+
+    it("a restriction under another operation is the fault its words say, behind a closed gate too", async () => {
+      exchange = offerAnswers(async (path, init) => {
+        const binding = operations()[0]!.binding as unknown as HandoverBinding;
+        await stepDown(stepDownDeps(), {
+          binding: { ...binding, operationId: NEXT_OP },
           kind: "superseded",
-          successorNodeId: OTHER_BOX,
-          membershipTerm: 4,
           self: {} as Context,
         });
         return toSpare(path, init);
@@ -1487,9 +1603,6 @@ describe("with the real stepdown", () => {
 
       expect(stateOf()).toBe("prepared");
       expect(eventKinds()).toEqual(["offer"]);
-      expect(await readHandoverRestriction(mainBox.node, self)).toMatchObject({
-        kind: "superseded",
-      });
       await expectRestartedOnce();
     });
   });
@@ -1561,10 +1674,49 @@ describe("with the real stepdown", () => {
         expect(answers).toEqual({ first: INTERNAL, second: INTERNAL });
         expect(stateOf()).toBe("prepared");
         expect(eventKinds()).toEqual(["offer"]);
+        expect(exchanged).toEqual([]);
         await expectRestartedOnce();
       } finally {
         allowRestrictionWrites();
       }
+    });
+
+    it("after a newer chart stepped it down: the same operation records nothing and offers nothing", async () => {
+      exchange = offerAnswers(async (path, init) => {
+        await holdChart(
+          chartNodes({ selfStanding: "evicted", standing: "serving-primary" }),
+          [mainBox.db],
+          4,
+        );
+        await chartStepsDown(spare);
+        return toSpare(path, init);
+      });
+
+      const answers = await secondAfterFirst(realBox());
+
+      const superseded = refusal(409, "handover.superseded_during_start");
+      expect(answers).toEqual({ first: superseded, second: superseded });
+      expect(stateOf()).toBe("prepared");
+      expect(eventKinds()).toEqual(["offer"]);
+      expect(exchanged).toEqual([]);
+      await expectRestartedOnce();
+    });
+
+    it("a `prepared` operation whose stepdown replay reports success is a fault, not the page", async () => {
+      const seam = vi.fn<HandoverSourceStartDeps["stepDownAfterOffer"]>(async (c) => {
+        if (!gate.isClosed()) {
+          gate.close({ allowed: () => false, self: c });
+          throw new Error("the first stepdown failed");
+        }
+      });
+      const box = mount({ stepDownAfterOffer: seam }, behindTheGate);
+
+      const answers = await secondAfterFirst(box);
+
+      expect(answers).toEqual({ first: INTERNAL, second: INTERNAL });
+      expect(seam).toHaveBeenCalledTimes(2);
+      expect(stateOf()).toBe("prepared");
+      expect(exchanged).toEqual([]);
     });
 
     it("after a stepdown: another operation is refused and records nothing", async () => {

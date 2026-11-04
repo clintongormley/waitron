@@ -212,6 +212,11 @@ declare module "@waitron/shared" {
     /** A start request repeats a handover this box closed at a restart, before it stepped down. */
     "handover.restarted_before_stepdown": Record<string, never>;
     /**
+     * A newer chart stepped this box down while a handover was starting, so the handover did not
+     * go ahead. Also the refusal stored when the restricted start closes that handover.
+     */
+    "handover.superseded_during_start": Record<string, never>;
+    /**
      * A start request repeats a handover whose taxpayer, environment, chart term or chart digest
      * differ from this box's own now, so this box closed it rather than offer it again.
      */

@@ -69,6 +69,7 @@ import {
 import { finishPromotedRole } from "./promoted-role.js";
 import {
   recordSupersededAtStart,
+  closeSupersededOperation,
   repairAtStart,
   runStartPeerCheck,
   type StartPeerCheckOutcome,
@@ -1759,8 +1760,10 @@ async function bootServer(
       },
     });
   };
-  if ((await readHandoverRestriction(store.node, config.node.nodeId)) !== null)
+  if ((await readHandoverRestriction(store.node, config.node.nodeId)) !== null) {
+    await closeSupersededOperation({ node: store.node, nodeId: config.node.nodeId }, log);
     return restrictedStart();
+  }
   // Both deployment axes from ONE read of the row, so the initial holder pair is never torn: two
   // separate reads could straddle a concurrent promotion and yield an impossible `(mirror, primary)`.
   const initialAxes = await readNodeMode(store.node, config.node.nodeId);
