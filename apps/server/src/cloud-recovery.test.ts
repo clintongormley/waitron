@@ -603,3 +603,41 @@ describe("Cloud selected-copy preview", () => {
     ).toBeUndefined();
   });
 });
+
+describe("Cloud recovery client exclusion", () => {
+  it("holds the client exclusion until a held call completes", async () => {
+    const f = await fixture();
+    const client = createCloudRecoveryClient(f.options);
+    await expect(client.start()).rejects.toThrow("Cloud recovery is unavailable");
+    const { requestId } = await client.status();
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const pending = client.preview(async () => {
+      entered();
+      await barrier;
+      return "held";
+    }, point.id);
+    try {
+      await started;
+      const callsWhileHeld = f.calls.length;
+      await expect(client.preview(async () => "second", point.id)).rejects.toThrow(
+        "Cloud recovery is unavailable",
+      );
+      await expect(client.binding()).rejects.toThrow("Cloud recovery is unavailable");
+      await expect(client.status()).rejects.toThrow("Cloud recovery is unavailable");
+      await expect(client.startAgain()).rejects.toThrow("Cloud recovery is unavailable");
+      expect(f.calls.length).toBe(callsWhileHeld);
+    } finally {
+      release();
+    }
+    expect(await pending).toBe("held");
+    expect(await client.binding()).toEqual({ requestId, pointId: point.id });
+    expect((await client.status()).state).toBe("approved");
+  });
+});
