@@ -103,7 +103,6 @@ if (savedEnv !== undefined) {
     boxSecrets = parseEnvFile(await readFile(join(root, "secrets.env"), "utf8"));
     await writeTradingEnv(root, {
       nodeId: result.nodeId,
-      locationId: result.locationId,
       environment: "preproduction",
       developmentMode: true,
       onboardingIntent: "demo",

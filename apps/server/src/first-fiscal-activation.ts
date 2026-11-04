@@ -287,7 +287,6 @@ export async function publishCheckedFirstFiscal(
       persistTrading: (result, current) =>
         deps.persistTrading!({
           nodeId: result.nodeId,
-          locationId: result.locationId,
           environment: current.frozen.environment,
           ...(deps.devMode === true ? { developmentMode: true } : {}),
           onboardingIntent: "live",

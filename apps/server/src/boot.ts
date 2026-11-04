@@ -3377,7 +3377,6 @@ async function bootServer(
         persistTradingEnv: async () => {
           const next: TradingConfig = {
             nodeId: tradingContext.nodeId,
-            locationId: tradingContext.locationId,
             environment: config.environment,
             accountKey: accountKey.toString("base64"),
           };
