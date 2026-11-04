@@ -370,7 +370,7 @@ const en = {
   "prep.pass_gap_no_zone":
     "Nothing fires dishes from {stations} that have no service zone: only a pass screen on every service zone covers them. Set one up under {devices}.",
   "prep.pass_gap_every_zone":
-    "Nothing fires dishes from {stations} in any zone: no pass screen covers them. Set one up under {devices}.",
+    "No pass screen covers {stations} in any zone. Set one up under {devices}.",
   "prep.pass_gap_error": "Which pass screens cover these stations could not be checked.",
   "prep.save_error": "The change could not be saved.",
   "prep.fix_fields": "Correct the highlighted fields to continue.",
@@ -1289,7 +1289,7 @@ const es: Record<keyof typeof en, string> = {
   "prep.pass_gap_no_zone":
     "Nadie marcha los platos de {stations} sin zona de servicio: solo los cubre una pantalla de pase con todas las zonas de servicio. Configura una en {devices}.",
   "prep.pass_gap_every_zone":
-    "Nadie marcha los platos de {stations} en ninguna zona: ninguna pantalla de pase los cubre. Configura una en {devices}.",
+    "Ninguna pantalla de pase cubre {stations} en ninguna zona. Configura una en {devices}.",
   "prep.pass_gap_error": "No se pudo comprobar qué pantallas de pase cubren estas estaciones.",
   "prep.save_error": "No se pudo guardar el cambio.",
   "prep.fix_fields": "Corrige los campos marcados para continuar.",

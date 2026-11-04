@@ -410,11 +410,11 @@ Puedes guardar una estación que espera al pase aunque ninguna pantalla de pase 
 alguna la cubra, **Estaciones de preparación** lo dice encima de sus pestañas, zona por zona, por
 ejemplo: **Nadie marcha los platos de Parrilla en Terraza: ninguna pantalla de pase los cubre allí.
 Configura una en Dispositivos.** Si el local tiene más de una zona, una estación que ninguna
-pantalla de pase cubre en ninguna de ellas recibe una sola línea: **Nadie marcha los platos de
-Parrilla en ninguna zona: ninguna pantalla de pase los cubre. Configura una en Dispositivos.**
-También nombra una estación con platos que ya esperan al pase sin nada que los marche, aunque la
-estación ya no espere. El aviso vuelve a comprobarlo cuando cambian las estaciones, las zonas, los
-dispositivos o los perfiles, y cada minuto.
+pantalla de pase cubre en ninguna de ellas recibe una sola línea: **Ninguna pantalla de pase
+cubre Parrilla en ninguna zona. Configura una en Dispositivos.** También nombra una estación con
+platos que ya esperan al pase sin nada que los marche, aunque la estación ya no espere. El aviso
+vuelve a comprobarlo cuando cambian las estaciones, las zonas, los dispositivos o los perfiles, y
+cada minuto.
 
 ## Eliminar una estación de preparación {#delete-prep-station}
 

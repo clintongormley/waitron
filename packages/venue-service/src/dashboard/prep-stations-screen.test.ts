@@ -5716,7 +5716,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     );
     await settle(el);
     expect(lines(el)).toEqual([
-      "Nothing fires dishes from Grill in any zone: no pass screen covers them. Set one up under Devices.",
+      "No pass screen covers Grill in any zone. Set one up under Devices.",
       "Nothing fires dishes from Cold in Terrace: no pass screen covers them there. Set one up under Devices.",
       "Nothing fires dishes from Grill that have no service zone: only a pass screen on every service zone covers them. Set one up under Devices.",
     ]);
@@ -5746,7 +5746,7 @@ describe("A773 station policy: the pass coverage warning", () => {
       await settle(el);
       expect(lines(el)).toEqual([
         locale === "en"
-          ? "Nothing fires dishes from Grill and Cold in any zone: no pass screen covers them. Set one up under Devices."
+          ? "No pass screen covers Grill and Cold in any zone. Set one up under Devices."
           : filled("es", "prep.pass_gap_every_zone", { stations: "Grill y Cold" }),
       ]);
     },
@@ -5786,7 +5786,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     );
     await settle(el);
     expect(lines(el)).toEqual([
-      "Nothing fires dishes from Grill in any zone: no pass screen covers them. Set one up under Devices.",
+      "No pass screen covers Grill in any zone. Set one up under Devices.",
     ]);
   });
 
@@ -5823,7 +5823,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     );
     await settle(el);
     expect(lines(el)).toEqual([
-      "Nothing fires dishes from Grill in any zone: no pass screen covers them. Set one up under Devices.",
+      "No pass screen covers Grill in any zone. Set one up under Devices.",
       "Nothing fires dishes from Grill in Terrace: no pass screen covers them there. Set one up under Devices.",
     ]);
   });
@@ -5843,7 +5843,7 @@ describe("A773 station policy: the pass coverage warning", () => {
     );
     await settle(el);
     expect(lines(el)).toEqual([
-      "Nothing fires dishes from {devices} {zone} in any zone: no pass screen covers them. Set one up under Devices.",
+      "No pass screen covers {devices} {zone} in any zone. Set one up under Devices.",
     ]);
     expect(warning(el)!.querySelectorAll("a")).toHaveLength(1);
   });
