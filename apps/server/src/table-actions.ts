@@ -6,6 +6,7 @@ import {
   readPartyBillIds,
   relocateBillEditor,
   requireRelocatableBillEditors,
+  requireSplitEditors,
 } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { leaveMergesRestoring, mergeMembers } from "./floor-today-merges.js";
@@ -320,7 +321,7 @@ export async function splitTable(
   const { wholeBillIds } = selection;
   if (selection.loose.length > 0 || new Set(wholeBillIds).size !== wholeBillIds.length)
     throw new AppError("management.request_invalid", { field: "selection" });
-  await requireRelocatableBillEditors(tx, wholeBillIds, options.operatorId, options.expectedEdits);
+  await requireSplitEditors(tx, wholeBillIds, [], options.operatorId, options.expectedEdits);
   for (const billId of wholeBillIds) await refuseUnsplittableBill(tx, partyId, billId);
   const leaving: { billId: string; firers: ReadonlyMap<string, Firer> }[] = [];
   const heldLineIds: string[] = [];

@@ -11,7 +11,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { readBillEditState } from "./bill-editing.js";
+import { readBillEditState, requireSplitEditors } from "./bill-editing.js";
 import {
   saveDraft,
   readDrafts,
@@ -331,6 +331,165 @@ describe("split a table carries only its moved bill editor", () => {
     const from = await setup();
     const saved = await save(from.partyId, from.billId);
     await refused(() => split(from, [blank(from.billId)]), "draft.out_of_date", stale(saved.edit));
+  });
+});
+
+describe("A803 split: editors", () => {
+  const actor = randomUUID();
+  async function bills() {
+    const { partyId, tabId } = await party();
+    const billId = await otherBill(partyId);
+    const [low, high] = [tabId, billId].sort() as [string, string];
+    return { partyId, low, high };
+  }
+  function check(
+    whole: string[],
+    loose: string[],
+    expected: BillEditExpected[],
+    operatorId: string = actor,
+  ) {
+    return inTx(venue, (tx) => requireSplitEditors(tx, whole, loose, operatorId, expected));
+  }
+
+  it("lets a sole foreign editor on a whole bill through", async () => {
+    const { partyId, low } = await bills();
+    const { edit } = await save(partyId, low, venue.adminId);
+    await expect(check([low], [], [edit])).resolves.toEqual([edit]);
+  });
+
+  it("names both of two different editors on whole bills, sorted by id", async () => {
+    const { partyId, low, high } = await bills();
+    const lowEdit = (await save(partyId, low, venue.adminId)).edit;
+    const highEdit = (await save(partyId, high, venue.operatorId)).edit;
+    await refused(
+      () => check([high, low], [], [lowEdit, highEdit]),
+      "draft.taken_over",
+      conflict(lowEdit, [lowEdit, highEdit]),
+    );
+  });
+
+  it("does not count the actor's own whole bill as a second editor's conflict", async () => {
+    const { partyId, low, high } = await bills();
+    const mine = (await save(partyId, low, venue.operatorId)).edit;
+    const theirs = (await save(partyId, high, venue.adminId)).edit;
+    await refused(
+      () => check([low, high], [], [mine, theirs], venue.operatorId),
+      "draft.taken_over",
+      conflict(theirs),
+    );
+  });
+
+  it("refuses a foreign editor on a loose source over a blank whole bill", async () => {
+    const { partyId, low, high } = await bills();
+    const { edit } = await save(partyId, low, venue.adminId);
+    await refused(
+      () => check([high], [low], [edit, blank(high)]),
+      "draft.taken_over",
+      conflict(edit),
+    );
+  });
+
+  it("refuses a foreign editor on a loose source with no whole bill at all", async () => {
+    const { partyId, low } = await bills();
+    const { edit } = await save(partyId, low, venue.adminId);
+    await refused(() => check([], [low], [edit]), "draft.taken_over", conflict(edit));
+  });
+
+  it("refuses a foreign editor on a loose source over the actor's own whole bill", async () => {
+    const { partyId, low, high } = await bills();
+    const theirs = (await save(partyId, low, venue.adminId)).edit;
+    const mine = (await save(partyId, high, venue.operatorId)).edit;
+    await refused(
+      () => check([high], [low], [theirs, mine], venue.operatorId),
+      "draft.taken_over",
+      conflict(theirs),
+    );
+  });
+
+  it("answers a loose source and a whole bill of two editors in one refusal, sorted by id", async () => {
+    const { partyId, low, high } = await bills();
+    const lowEdit = (await save(partyId, low, venue.adminId)).edit;
+    const highEdit = (await save(partyId, high, venue.operatorId)).edit;
+    const both = conflict(lowEdit, [lowEdit, highEdit]);
+    await refused(() => check([high], [low], [lowEdit, highEdit]), "draft.taken_over", both);
+    await refused(() => check([low], [high], [lowEdit, highEdit]), "draft.taken_over", both);
+  });
+
+  it("passes the actor's own draft on a whole bill and on a loose source", async () => {
+    const { partyId, low, high } = await bills();
+    const lowEdit = (await save(partyId, low)).edit;
+    const highEdit = (await save(partyId, high)).edit;
+    const expected = [lowEdit, highEdit];
+    const op = venue.operatorId;
+    await expect(check([low], [], [lowEdit], op)).resolves.toEqual([lowEdit]);
+    await expect(check([], [low], [lowEdit], op)).resolves.toEqual([lowEdit]);
+    await expect(check([high], [low], expected, op)).resolves.toEqual(expected);
+  });
+
+  it("keeps a sole foreign whole bill passing beside the actor's own loose source", async () => {
+    const { partyId, low, high } = await bills();
+    const theirs = (await save(partyId, low, venue.adminId)).edit;
+    const mine = (await save(partyId, high, venue.operatorId)).edit;
+    await expect(check([low], [high], [theirs, mine], venue.operatorId)).resolves.toEqual([
+      theirs,
+      mine,
+    ]);
+  });
+
+  it("does not read a staying bill's foreign editor", async () => {
+    const { partyId, low, high } = await bills();
+    await save(partyId, low, venue.adminId);
+    await expect(check([high], [], [blank(high)], venue.operatorId)).resolves.toEqual([
+      { ...blank(high), editorId: null, editorName: null },
+    ]);
+    await expect(check([], [high], [blank(high)], venue.operatorId)).resolves.toEqual([
+      { ...blank(high), editorId: null, editorName: null },
+    ]);
+  });
+
+  it("requires the expected list to be exactly the whole and loose ids", async () => {
+    const { low, high } = await bills();
+    const invalid = { field: "expectedEdits" };
+    const code = "management.request_invalid";
+    await refused(() => check([low], [high], [blank(low)]), code, invalid);
+    await refused(() => check([low], [high], [blank(high)]), code, invalid);
+    await refused(() => check([low], [], [blank(low), blank(high)]), code, invalid);
+    await refused(() => check([], [], [blank(low)]), code, invalid);
+  });
+
+  it("refuses an unsorted expected list, naming the entry out of order", async () => {
+    const { low, high } = await bills();
+    await refused(
+      () => check([low], [high], [blank(high), blank(low)]),
+      "management.request_invalid",
+      { field: "expectedEdits.1.billId" },
+    );
+  });
+
+  it("refuses a changed editor version, on a whole bill and on a loose source", async () => {
+    const { partyId, low, high } = await bills();
+    const { edit } = await save(partyId, low);
+    const older = { ...edit, editorVersion: edit.editorVersion - 1 };
+    const op = venue.operatorId;
+    await refused(() => check([low], [], [older], op), "draft.out_of_date", stale(edit));
+    await refused(() => check([], [low], [older], op), "draft.out_of_date", stale(edit));
+    await refused(
+      () => check([high], [low], [older, blank(high)], op),
+      "draft.out_of_date",
+      stale(edit),
+    );
+  });
+
+  it("reports a conflict before a changed editor version", async () => {
+    const { partyId, low, high } = await bills();
+    const mine = (await save(partyId, low, venue.operatorId)).edit;
+    const theirs = (await save(partyId, high, venue.adminId)).edit;
+    const older = { ...mine, editorVersion: mine.editorVersion - 1 };
+    await refused(
+      () => check([low], [high], [older, theirs], venue.operatorId),
+      "draft.taken_over",
+      conflict(theirs),
+    );
   });
 });
 
