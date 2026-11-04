@@ -25,8 +25,7 @@ import "./errors.js";
 
 const TICK_MS = 5000;
 
-// A compare that fails may need a person to fix a setting, the one thing that can change a kept
-// file's answer.
+// A compare that fails may need a person to fix a setting.
 const COMPARE_RETRY_MS = 60_000;
 
 /** The refusals another copy of the same file could cure: every other waits on the same file. */

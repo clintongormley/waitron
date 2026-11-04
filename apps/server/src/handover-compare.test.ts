@@ -87,6 +87,16 @@ vi.mock("node:worker_threads", async (importOriginal) => {
   return { ...real, Worker: CountedWorker };
 });
 
+const fileReads = vi.hoisted(() => ({ paths: [] as string[] }));
+vi.mock("node:fs", async (importOriginal) => {
+  const real = await importOriginal<typeof import("node:fs")>();
+  const createReadStream = (...args: Parameters<typeof real.createReadStream>) => {
+    fileReads.paths.push(String(args[0]));
+    return real.createReadStream(...args);
+  };
+  return { ...real, createReadStream };
+});
+
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x7).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -606,15 +616,70 @@ describe("compareFinalCopy", () => {
     const LATE = (r: Awaited<ReturnType<typeof rig>>) =>
       `update persons set display_name = 'Late' where id = '${r.authorisedBy}'`;
 
-    it("its bytes are not read again, and a new file's are", async () => {
+    const FORGED_AMOUNT = (r: Awaited<ReturnType<typeof rig>>) =>
+      `update registros_facturacion set importe_total = printf('%.2f', importe_total + 1) where ${FIRST_CHAIN(r.m1)}`;
+
+    it("a change after it passed is found before the next answer, and a new file's bytes are read", async () => {
       const r = await rig();
       const found: CopyFileChecks = {};
       expect(await r.compareRow(r.indicator, {}, found)).toEqual({ ok: true });
       alter(r.path, LATE(r));
-      // The cost the ruling states: a change after the file passed is not found in this run.
-      expect(await r.compareRow(r.indicator, {}, found)).toEqual({ ok: true });
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual(refused("handover.copy_mismatch"));
       // Control: the same file with nothing remembered is read, and refused.
       expect(await r.compareRow(r.indicator, {}, {})).toEqual(refused("handover.copy_mismatch"));
+    });
+
+    it("a forged amount at the same size, after a try refused on settings, is refused", async () => {
+      const r = await rig();
+      const found: CopyFileChecks = {};
+      await writeFile(join(r.m2State, "backup.env"), SETTINGS);
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual(
+        refused("handover.backup_settings_differ"),
+      );
+      expect(found).toEqual({ bytesAndIntegrity: true, moduleChecks: null });
+      const before = (await stat(r.path)).size;
+      alter(r.path, FORGED_AMOUNT(r));
+      expect((await stat(r.path)).size).toBe(before);
+      await rm(join(r.m2State, "backup.env"));
+      // Failing case: `{ ok: true }`, accepting a fiscal record the old box never wrote.
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual(refused("handover.copy_mismatch"));
+      expect(found).toEqual({});
+    });
+
+    it("control: unaltered, it is accepted on the second try, reading its bytes once more", async () => {
+      const r = await rig();
+      const found: CopyFileChecks = {};
+      await writeFile(join(r.m2State, "backup.env"), SETTINGS);
+      fileReads.paths.length = 0;
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual(
+        refused("handover.backup_settings_differ"),
+      );
+      expect(fileReads.paths).toEqual([r.path]);
+      await rm(join(r.m2State, "backup.env"));
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual({ ok: true });
+      expect(fileReads.paths).toEqual([r.path, r.path]);
+      expect(found).toEqual({ bytesAndIntegrity: true, moduleChecks: null });
+    });
+
+    it("a try refused on settings does not read its bytes, whatever they now hold", async () => {
+      const r = await rig();
+      const found: CopyFileChecks = {};
+      await writeFile(join(r.m2State, "backup.env"), SETTINGS);
+      await r.compareRow(r.indicator, {}, found);
+      alter(r.path, FORGED_AMOUNT(r));
+      fileReads.paths.length = 0;
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual(
+        refused("handover.backup_settings_differ"),
+      );
+      // Failing case: one read of the file per try, however long the wait for a person lasts.
+      expect(fileReads.paths).toEqual([]);
+    });
+
+    it("a first try that passes reads its bytes once", async () => {
+      const r = await rig();
+      fileReads.paths.length = 0;
+      expect(await r.compareRow(r.indicator, {}, {})).toEqual({ ok: true });
+      expect(fileReads.paths).toEqual([r.path]);
     });
 
     it("its integrity check runs once, on a thread of its own", async () => {
@@ -683,6 +748,9 @@ describe("compareFinalCopy", () => {
       const bytes = await readFile(r.path);
       await writeFile(r.path, bytes.subarray(0, bytes.length - 4096));
       expect(await r.compareRow(r.indicator, {}, found)).toEqual(refused("handover.copy_mismatch"));
+      expect(found).toEqual({});
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual(refused("handover.copy_mismatch"));
+      found.bytesAndIntegrity = true;
       await rm(r.path);
       expect(await r.compareRow(r.indicator, {}, found)).toEqual(refused("handover.copy_mismatch"));
     });
@@ -1147,6 +1215,40 @@ describe("the spare's duty runs the real comparison", () => {
     // Failing case: one thread per compare, each reading the whole file.
     expect(integrityThreads.paths).toEqual([r.path]);
     expect(r.copyReads()).toBe(1);
+  }, 60_000);
+
+  it("a kept file changed at the same size is thrown away and fetched again", async () => {
+    const r = await dutyRig();
+    await writeFile(join(r.m2State, "backup.env"), SETTINGS);
+    let tries = 0;
+    const compare = vi.fn(
+      async (
+        operation: HandoverOperation,
+        indicator: unknown,
+        path: string,
+        options: CompareOptions,
+      ) => {
+        tries += 1;
+        if (tries === 2) {
+          alter(
+            path,
+            `update registros_facturacion set importe_total = printf('%.2f', importe_total + 1) where ${FIRST_CHAIN(r.m1)}`,
+          );
+          await rm(join(r.m2State, "backup.env"));
+        }
+        return compareFinalCopy(r.deps, operation, indicator, path, options);
+      },
+    );
+    await r.start({ compare, compareRetryMs: 30 });
+    await vi.waitFor(() => expect(tries).toBeGreaterThanOrEqual(3), { timeout: 15_000 });
+    await vi.waitFor(async () => expect((await r.row()).waitingReason).toBeNull(), {
+      timeout: 15_000,
+    });
+    // Failing case: two tries, one read, and the forged file kept as accepted.
+    expect(await compare.mock.results[1]!.value).toEqual(refused("handover.copy_mismatch"));
+    expect(await compare.mock.results.at(-1)!.value).toEqual({ ok: true });
+    expect(r.copyReads()).toBe(2);
+    expect(sha256Hex(await readFile(r.path))).toBe(r.indicator.body.snapshot.sha256);
   }, 60_000);
 
   it("a file fetched again is checked again from nothing", async () => {

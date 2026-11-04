@@ -46,8 +46,7 @@ type Refusal = Extract<CompareOutcome, { ok: false }>;
 
 /**
  * What one received file, with its one indicator, has already answered. Whoever holds the file
- * holds this beside it for as long as it keeps the file: nothing writes the file, so only what the
- * spare's own files say can change between tries.
+ * holds this beside it for as long as it keeps the file.
  */
 export interface CopyFileChecks {
   bytesAndIntegrity?: true;
@@ -64,6 +63,12 @@ const refuse = (reason: ErrorCode, detail: CanonicalValue = {}): Refusal => ({
   reason,
   detail,
 });
+
+function fileDiffers(found: CopyFileChecks): Refusal {
+  delete found.bytesAndIntegrity;
+  delete found.moduleChecks;
+  return refuse("handover.copy_mismatch");
+}
 
 /** A throw carrying `code` is `reason`'s refusal; anything else is a fault and stays a throw. */
 function refusalOr(error: unknown, code: ErrorCode, reason: ErrorCode = code): Refusal {
@@ -99,8 +104,9 @@ export async function compareFinalCopy(
   if (bindingFingerprint(body.binding) !== operation.fingerprint) {
     return refuse("handover.indicator_mismatch", { field: "binding" });
   }
-  if (found.bytesAndIntegrity === true) {
-    if (!(await stillSameSize(copyPath, body))) return refuse("handover.copy_mismatch");
+  const remembered = found.bytesAndIntegrity === true;
+  if (remembered) {
+    if (!(await stillSameSize(copyPath, body))) return fileDiffers(found);
   } else {
     if (!(await holdsDescribedBytes(copyPath, body))) return refuse("handover.copy_mismatch");
     if (!(await isCopyIntact(copyPath, signal === undefined ? {} : { signal }))) {
@@ -110,20 +116,25 @@ export async function compareFinalCopy(
   }
 
   const copy = await openBackupQuery(copyPath);
+  let answer: CompareOutcome;
   try {
-    return (
-      (await aheadOfThisImage(copy.query, deps.migrationsRoot)) ??
+    answer = (await aheadOfThisImage(copy.query, deps.migrationsRoot)) ??
       modulesDiffer(body, deps.modules) ??
       (await behindThisImage(copy.query, deps.modules, deps.migrationsRoot)) ??
       (await rememberedModuleChecks(found, deps.modules, copy.query)) ??
       (await settingsRefused(deps, body)) ??
       (await summaryRefused(deps.modules, copy.query, body)) ??
       (await destinationRefused(deps, copy.query)) ??
-      (await authoriserRefused(deps, operation.operationId, copy.query)) ?? { ok: true }
-    );
+      (await authoriserRefused(deps, operation.operationId, copy.query)) ?? { ok: true };
   } finally {
     await copy.close();
   }
+  // What this try did not check again was answered by the file as it then was. Only at the end, so
+  // a wait on a setting reads the file no more often.
+  if (answer.ok && remembered && !(await holdsDescribedBytes(copyPath, body))) {
+    return fileDiffers(found);
+  }
+  return answer;
 }
 
 async function holdsDescribedBytes(path: string, body: FinalStateIndicator): Promise<boolean> {
