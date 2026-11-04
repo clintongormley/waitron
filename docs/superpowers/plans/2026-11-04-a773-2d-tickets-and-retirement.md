@@ -566,6 +566,47 @@ for a joining dish". A heading change in any other case or file found by Task 1b
 | server tests with `awayAt` (Tasks 7a, 7b): `current-orders` 1, `department-transfer-api` 4, `device-levers` 4, `kitchen-allergy.notices` 1, `kitchen-print` 1, `management-api.station-disable` 1, `order-groups` 6, `order-kitchen-note.corrections` 2, `party-move-bill` 3, `rest-of-order` 1, `served` 2, `split-off-extras.groups` 3, `split-off-extras.release` 2, `station-delete` 1, `station-move` 1, `station-queue-rest` 1, `table-signals.service-lifetime` 1, `tables` 1, `till-api.groups` 3, `till-api.station-today` 2, `working-order-reads.sqlite` 1, `working-order` 13 | as counted | (a) or (b) per hit; a combined `.set({ state, awayAt })` keeps `state`; a helper option `away` (e.g. `rest-of-order.test.ts:154`, `station-queue-rest.test.ts:160`, `station-delete.test.ts:110`) and the fixtures that pass it go |
 | `apps/server/src/till-api.courses.test.ts:674,696,731` | 3 | `:674`, `:696` stay (c); `:731` `expect(before.items.every((item) => item.awayAt === null)).toBe(true)` is deleted under (a) in Task 7b: `before.items` is `tx.select().from(ticketItems)` (`:720-728`), a database row, not an API answer; without the column it fails to typecheck (`TS2339`, the reviewer's E3 typecheck) and at run time `undefined === null` is false |
 
+**Per-case record (Task 11, 2026-11-04).** Checked against `git diff 69534cec83 -- '*.test.ts' '*.test.mjs'`
+at `0f732c51de`: every removed or changed assertion line in the branch is a heading pin above (34
+cases in `order-groups.test.ts`, 3 in `party-arriving-dishes.test.ts`, each edit only inserting
+` · <COURSE>`, plus the two negatives), a row of the table above, or one of the cases below. The
+branch's own new cases (Tasks 1a–3, R1, R2) add assertions and remove none that are on `main`.
+
+| File › case | Rule | What changed |
+| --- | --- | --- |
+| `pass-board` › "legacy Done marks stay device-specific but never hide food from either pass" | (d), Task 6 | deleted |
+| `pass-board` › "A773 no dispatch state: splitting keeps the source mark …" | (a), Task 6 | the mark insert and its two `marks` assertions go; renamed "… splitting a dish keeps both its kitchen items on the pass" |
+| `pass-board` › "a pass monitor keeps both of a bill's dishes after a legacy Away stamp" | (d), Task 7a | deleted (the table above expected (a)); its check that the counter bill's card shows both dishes under every station is held by "a pass screen leaves out a group card holding no dish it shows, and shows a bill's card whole" |
+| `pass-board` › "refuses Done and Undo for an id that names no dish without writing marks" | (a) | the marks read goes; "without writing marks" leaves the title |
+| `pass-board` › "lists its scoped dishes independently of legacy Done and Away stamps" | (a) | the mark insert, the `toEqual(before)` after it and the stamp write go; renamed "lists its scoped dishes" |
+| `device-api.pass` › the waiter-authority case, the Done/Undo refusals, "retires malformed Done …", the monitor and till-monitor cases | (a) | the marks insert and every `select … from(passItemMarks)` assertion go; "… marks" leaves four titles |
+| `pass-lifetime` › "keeps the %s read identical after legacy Away and Done stamps" | (a) | the stamp and mark writes and the `marks` key of both reads go; renamed "… across reads, with no Away fields" |
+| `pass-lifetime` › "keeps a ready paid dish on both boards despite legacy Away and device Done marks" | (d), Task 7a | deleted; "removes unserved ready food when the paid party finishes" holds the paid dish on both boards |
+| `management-api.station-disable` › "Delete impact follows remaining preparation work: %s" | (d), Task 7a | the `"away"` row and its refusal expectation go; the other rows unchanged |
+| `order-kitchen-note.corrections` › "corrects only remaining service work: %s" | (d), Task 7a | the `"away"` row and its notice expectation go; the expectation becomes the other rows' `[]` |
+| `station-delete` › "preparation predicate: %s" | (d), Task 7b | the `"legacy away queued"` row goes |
+| `station-delete` › "requires a closing choice for ready legacy-Away food" | (a) | the `away` flag goes; renamed "… for a ready dish" |
+| `station-outputs-down` › "A773 no dispatch state: a legacy Away stamp does not silence a dark monitor" | (d), Task 7b | deleted |
+| `station-outputs-down` › "… legacy Done marks do not silence a dark pass, but full serving does" | (a) | the two mark inserts, the `toEqual([pass])` between them and the delete go; one `toEqual([pass])` before serving stays; renamed "… a dark pass is listed while its waiting dish is unserved, and not once it is fully served" |
+| `till-api.station-today` › "counts remaining service work regardless of dispatch: %s" | (d), Task 7b | the `"away"` row goes; its expectation becomes the other rows' `0` |
+| `till-api.station-today` › "sending at closure moves only queued unserved work: %s" | (d) then restored, `fa1765f8e2` | the `"away"` row becomes a `"queued"` row expecting the same station-field change the away row did, so the moving branch of the check still runs |
+| `till-api.courses` › "retired course Away cannot dispatch or rewrite %s work on repeated requests" (`:731`) | (a), Task 7b | deleted, as the table above says |
+| `watchers.leave` › "leaves a table bill paid at the till on the station queue and pass until collection" | (a) | as the table above says |
+| `working-order` › "refuses an AWAY (ready + dispatched) line …" | (a) | the stamp write and `expect(away.awayAt).not.toBeNull()` go; renamed "refuses a ready line …" |
+| `working-order` › two pass-board cases, `bumpCourseReady` cases | (a), (b) | stamp writes and `awayAt === null` / `toBeNull()` checks go; "legacy Away …" leaves two titles |
+| `working-order-reads.sqlite`, `party-move-bill`, `served`, `till-api.groups`, `split-off-extras.groups`, `split-off-extras.release`, `device-levers`, `department-transfer-api:607` | (a), (b) | stamp writes go; `awayAt` keys leave selects and expected objects; no other value changes |
+
+Rule (c) hits that remain, each asserting that an API answer has no `awayAt`:
+`till-api.courses.test.ts:674` and `:696` ("the Ready route still bumps fired food, while retired
+Away leaves it ready"), `department-transfer-api.test.ts:1107` ("keeps ready work outstanding …"),
+`pass-lifetime.test.ts:71`, `working-order.test.ts:6171` and `:6221`. Other remaining hits of
+`awayAt|away_at|passItemMarks|pass_item_marks` outside migrations: the till's payload keys in
+`till-table-order-screen.current-orders.test-helpers.ts:69` and `till-table-order-screen.test.ts:2406`
+(finding 2: payload keys the server no longer sends; they name no column); the Madrid baseline's `REMOVED_TABLES` entry and `away_at`
+filter (`seed.madrid-baseline.test.ts:36,168`); the hash-pinned `madrid-before-move.*.json` capture
+and its manifest (finding 13); and the two new "no table / no column" cases in
+`packages/db/src/schema/ticket-items.test.ts:190,197`.
+
 ## Guard suites (the final task runs each; earlier tasks run the ones they name)
 
 - **S** (Tasks 8, 9, 11): `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/migrations-match-schema.test.ts scripts/classification-complete.test.ts scripts/append-only-migration-sets.test.ts scripts/module-graph-honesty.test.ts scripts/id-columns-are-references.test.ts scripts/two-file-foreign-keys.test.ts scripts/journal-monotonic.test.ts scripts/migration-upgrade.test.ts scripts/apply-migrations-callers.test.ts`,
