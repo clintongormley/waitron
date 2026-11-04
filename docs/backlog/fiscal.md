@@ -50,7 +50,16 @@ cost (V2347-24). Asked as
 [S10](../compliance/asesor-questions.md#the-shortened-list-2026-10-09); decide before going live.
 Fiscal: the owner lands it.
 
-## A446. When the pre-bill is built, each printed pre-bill is stored as printed and linked to the invoice that follows
+## A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows
+
+**Owner, 2026-11-04: build it now to the strict reading, without waiting for S2.** Today a table
+cannot get a printed bill before paying: "bill requested" only marks the floor plan. If S2 says a
+precuenta does not count, the stored copies are merely unnecessary. S1 (when the invoice must be
+issued) could still change this, so read its answer before landing if it has arrived. The design is
+A803 §3.9. It lists a pre-bill's dishes by order line id, not portion id: A1308 makes the line the
+dish's identity (owner, 2026-11-04), so a pre-bill built first needs no rework. Those ids take no
+foreign key, because a cancelled dish's line is deleted. Printing it never fires held food and never
+marks a line sent (Q21).
 
 AEAT's FAQ calls a system without that link «susceptible de sanción»,
 and the pre-bill carries no tax QR code. Whether a precuenta counts is asked as [S2](../compliance/asesor-questions.md#the-shortened-list-2026-10-09).

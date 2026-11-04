@@ -150,6 +150,8 @@ Boards 08–10.
 
 ### 3.9 "La cuenta": the pre-bill
 
+2026-11-04 pointer: the owner chose to build this now without waiting for S2 (backlog A446), and A1308 makes the order line the dish's identity, replacing the portion row.
+
 Subject to the asesor (S2, `docs/compliance/asesor-questions.md`); backlog A446 holds the storage
 rule.
 

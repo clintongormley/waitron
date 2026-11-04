@@ -261,7 +261,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A445. A free item on a bill with mixed VAT rates should take a share of the price paid.** Fiscal: the owner lands it.
   [Detail](backlog/fiscal.md#a445-a-free-item-on-a-bill-with-mixed-vat-rates-should-take-a-share-of-the-price-paid).
 
-- **A446. When the pre-bill is built, each printed pre-bill is stored as printed and linked to the invoice that follows.**
+- **A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows — OPEN, build it now to the strict reading, without waiting for S2 (owner, 2026-11-04).** Needs a build plan from A803 §3.9.
   [Detail](backlog/fiscal.md#a446-when-the-pre-bill-is-built-each-printed-pre-bill-is-stored-as-printed-and-linked-to-the-invoice-that-follows).
 
 - **A447. A guest's part-payment taken before the table is fully served may need its own advance-payment invoice.** No change until answered.
@@ -2025,7 +2025,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design; A773-1 has landed. Remaining slices: 4b, waiting dishes that
   leave with their own copy of the course; 4c, Split a table through the same picker, with A590;
-  pre-bills after asesor S2 (A446).
+  pre-bills through A446, which no longer waits for asesor S2.
   [Detail](backlog/till.md#a803-bills-and-tables-one-portion-per-order-line-one-bill-switcher-one-picker)
 
 - **A1191. Pay items lists one row per portion (left open by A803 slice 1, D15).** "12 ×
