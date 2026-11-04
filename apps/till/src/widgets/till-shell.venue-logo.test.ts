@@ -412,45 +412,62 @@ describe("the bar refits when the logo changes", () => {
     });
   });
 
-  it("while a logo only it fits keeps failing, the bar asks for it once every 60 s", async () => {
-    await atViewport(1280, async () => {
-      const el = await narrowLogoBar();
-      const address = "/no-such-narrow-logo.png";
-      const requests = () =>
-        performance.getEntriesByName(new URL(address, location.href).href).length;
-      // vi.waitFor advances faked timers on each check, which would bring a retry forward.
-      const requestsReach = async (count: number) => {
-        for (let i = 0; i < 300 && requests() < count; i++) await frame();
-        expect(requests()).toBe(count);
-      };
-      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-      try {
-        let failed = nextLogoError(el);
-        applyVenueTheme(withLogo(address, null, "broken"));
-        await failed;
-        await settle(el);
-        await requestsReach(1);
-        for (const attempt of [2, 3]) {
-          expect(steps(el)).toBeGreaterThan(0);
-          expect(logoOf(el)).toBeNull();
-          await vi.advanceTimersByTimeAsync(59_000);
-          await settle(el);
-          expect(requests()).toBe(attempt - 1);
-          expect(logoOf(el)).toBeNull();
-          failed = nextLogoError(el);
-          await vi.advanceTimersByTimeAsync(1_001);
+  it.each([250, 1])(
+    "while a logo only it fits keeps failing, the bar asks for it once every 60 s (%i timing slots)",
+    async (timingSlots) => {
+      await atViewport(1280, async () => {
+        const el = await narrowLogoBar();
+        const address = "/no-such-narrow-logo.png";
+        performance.clearResourceTimings();
+        performance.setResourceTimingBufferSize(timingSlots);
+        let requestCount = 0;
+        const observer = new PerformanceObserver((list) => {
+          requestCount += list.getEntriesByName(new URL(address, location.href).href).length;
+        });
+        observer.observe({ type: "resource" });
+        // Observe delivery: the retained resource-timing buffer can fill before a retry.
+        const requests = () => requestCount;
+        // vi.waitFor advances faked timers on each check, which would bring a retry forward.
+        const requestsReach = async (count: number) => {
+          for (let i = 0; i < 300 && requests() < count; i++) await frame();
+          expect(requests()).toBe(count);
+        };
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          let failed = nextLogoError(el);
+          applyVenueTheme(withLogo(address, null, "broken"));
           await failed;
           await settle(el);
-          await requestsReach(attempt);
+          await requestsReach(1);
+          for (const attempt of [2, 3]) {
+            expect(steps(el)).toBeGreaterThan(0);
+            expect(logoOf(el)).toBeNull();
+            await vi.advanceTimersByTimeAsync(59_000);
+            await settle(el);
+            expect(requests()).toBe(attempt - 1);
+            expect(logoOf(el)).toBeNull();
+            failed = nextLogoError(el);
+            await vi.advanceTimersByTimeAsync(1_001);
+            await failed;
+            await settle(el);
+            await requestsReach(attempt);
+          }
+          expect(steps(el)).toBeGreaterThan(0);
+          expect(logoOf(el)).toBeNull();
+          expect(wraps(el)).toBe(false);
+          if (timingSlots === 1) {
+            expect(performance.getEntriesByName(new URL(address, location.href).href)).toHaveLength(
+              1,
+            );
+          }
+        } finally {
+          observer.disconnect();
+          performance.setResourceTimingBufferSize(250);
+          vi.useRealTimers();
         }
-        expect(steps(el)).toBeGreaterThan(0);
-        expect(logoOf(el)).toBeNull();
-        expect(wraps(el)).toBe(false);
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-  });
+      });
+    },
+  );
 
   it("a bar off the page keeps no timer for a failed logo it hides, and starts one on its return", async () => {
     await atViewport(1280, async () => {
