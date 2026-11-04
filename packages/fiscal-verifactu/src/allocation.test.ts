@@ -14,6 +14,7 @@ import {
   type Database,
   type Transaction,
   type VenueDatabase,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
@@ -927,7 +928,7 @@ describe("activation over retained fiscal rows", () => {
       }),
     );
     await seedSoldRegistro(suite.db, {
-      locationId: node.locationId,
+      locationId: await venueLocationId(suite.db),
       nodeId: node.nodeId,
       sifId: old.id,
       nif: candidate.taxpayerNif,

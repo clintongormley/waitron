@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { venueLocationId, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -234,7 +234,7 @@ describe("demo seed end-to-end", () => {
         .from(zoneServicePolicies)
         .where(
           and(
-            eq(zoneServicePolicies.locationId, venue.locationId),
+            eq(zoneServicePolicies.locationId, await venueLocationId(tx)),
             eq(zoneServicePolicies.isCounterDefault, true),
           ),
         );

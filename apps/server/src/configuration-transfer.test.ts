@@ -83,6 +83,7 @@ import {
   products,
   sales,
   tenantReceipts,
+  venueLocationId,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -545,13 +546,14 @@ describe("configuration transfer database path", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
+    const sourceVenueId = await venueLocationId(suite.db);
     const [agent] = await suite.db
       .insert(printAgents)
-      .values({ locationId: source.locationId, name: "Back office", tokenHash: "hash" })
+      .values({ locationId: sourceVenueId, name: "Back office", tokenHash: "hash" })
       .returning({ id: printAgents.id });
     await suite.db.insert(pagePrinters).values({
       id: "55555555-aaaa-aaaa-aaaa-555555555555",
-      locationId: source.locationId,
+      locationId: sourceVenueId,
       name: "Invoice office",
       host: "192.0.2.20",
       port: 8631,
@@ -577,14 +579,15 @@ describe("configuration transfer database path", () => {
     );
     expect(transferred.tables.page_printers).toHaveLength(1);
     expect(transferred.reconnect).toContain("page_printers");
-    const target = await applyVenue(planVenue(venue("B87654323"), ALL_MODULES), {
+    await applyVenue(planVenue(venue("B87654323"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
+    const targetVenueId = await venueLocationId(targetSuite.db);
     const [imported] = await targetSuite.db.select().from(pagePrinters);
     expect(imported).toMatchObject({
-      locationId: target.locationId,
+      locationId: targetVenueId,
       name: "Invoice office",
       host: "192.0.2.20",
       port: 8631,
@@ -607,11 +610,12 @@ describe("configuration transfer database path", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
+    const venueId = await venueLocationId(suite.db);
     const sourcePagePrinterId = "56565656-aaaa-aaaa-aaaa-565656565656";
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(pagePrinters).values({
         id: sourcePagePrinterId,
-        locationId: source.locationId,
+        locationId: venueId,
         name: "Office A4",
         host: "192.0.2.40",
         port: 631,
@@ -681,6 +685,7 @@ describe("configuration transfer database path", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
+    const venueId = await venueLocationId(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const uploaded = await uploadImage(
         tx,
@@ -752,7 +757,7 @@ describe("configuration transfer database path", () => {
       });
       await tx.insert(shiftTemplates).values({
         id: "88888888-aaaa-aaaa-aaaa-888888888888",
-        locationId: source.locationId,
+        locationId: venueId,
         label: "Evening",
         weekday: 1,
         startsMinute: 1020,
@@ -760,7 +765,7 @@ describe("configuration transfer database path", () => {
       });
       await tx.insert(convenioConfig).values({
         id: "99999999-aaaa-aaaa-aaaa-999999999999",
-        locationId: source.locationId,
+        locationId: venueId,
       });
       // Raw because `@waitron/payments` does not export `paymentPolicy`, so the two `$defaultFn`
       // timestamps are supplied here.
@@ -787,7 +792,7 @@ describe("configuration transfer database path", () => {
       await tx.insert(diningTables).values({
         zoneId: practiceZone.id,
         id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-        locationId: source.locationId,
+        locationId: venueId,
         label: "T1",
       });
       await tx.insert(floorTodayTables).values({ tableId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" });
@@ -803,7 +808,7 @@ describe("configuration transfer database path", () => {
       });
       await tx.insert(bookings).values({
         id: "dddddddd-bbbb-bbbb-bbbb-dddddddddddd",
-        locationId: source.locationId,
+        locationId: venueId,
         bookingDate: "2026-09-10",
         bookingTime: "20:00",
         partySize: 2,
@@ -813,7 +818,7 @@ describe("configuration transfer database path", () => {
       });
       await tx.insert(printAgents).values({
         id: "44444444-aaaa-aaaa-aaaa-444444444444",
-        locationId: source.locationId,
+        locationId: venueId,
         name: "Kitchen agent",
         tokenHash: "source-agent-token",
         active: true,
@@ -821,7 +826,7 @@ describe("configuration transfer database path", () => {
       });
       await tx.insert(printers).values({
         id: "55555555-aaaa-aaaa-aaaa-555555555555",
-        locationId: source.locationId,
+        locationId: venueId,
         name: "Kitchen printer",
         transport: "usb",
         localKey: "B120300001",
@@ -1885,7 +1890,8 @@ it("transfers staff roles, who holds them and a painted season week under new id
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const scope = { locationId: brandLocationId(source.locationId) };
+  const sourceVenueId = await venueLocationId(suite.db);
+  const scope = { locationId: brandLocationId(sourceVenueId) };
   const original = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, { name: "Staffed room" });
     const [season] = await tx
@@ -1930,11 +1936,12 @@ it("transfers staff roles, who holds them and a painted season week under new id
     versions,
   );
   expect(transferred.tables.staffing_blocks).toHaveLength(4);
-  const target = await applyVenue(planVenue(venue("B42086431"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B42086431"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
+  const targetVenueId = await venueLocationId(targetSuite.db);
   const roles = await targetSuite.db.execute(sql`
     select r.location_id, r.name, r.colour, r.position, p.display_name as holder
     from staff_roles r
@@ -1943,13 +1950,13 @@ it("transfers staff roles, who holds them and a painted season week under new id
     order by r.position`);
   expect(roles.rows).toEqual([
     {
-      location_id: target.locationId,
+      location_id: targetVenueId,
       name: "Waiter",
       colour: "blue",
       position: 0,
       holder: "Holder",
     },
-    { location_id: target.locationId, name: "Runner", colour: "green", position: 1, holder: null },
+    { location_id: targetVenueId, name: "Runner", colour: "green", position: 1, holder: null },
   ]);
   const week = await targetSuite.db.execute(sql`
     select d.id as day_id, d.department_id, d.season_id, h.person_id, b.staff_role_id,
@@ -1969,7 +1976,7 @@ it("transfers staff roles, who holds them and a painted season week under new id
     person_id: role === "Waiter" ? expect.any(String) : null,
     staff_role_id: expect.any(String),
     department: "Staffed room",
-    season_location: target.locationId,
+    season_location: targetVenueId,
     weekday,
     station_id: null,
     special_day_date_id: null,
@@ -1994,7 +2001,8 @@ it("transfers a station's painted season day and a special day's painted date un
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const scope = { locationId: brandLocationId(source.locationId) };
+  const sourceVenueId = await venueLocationId(suite.db);
+  const scope = { locationId: brandLocationId(sourceVenueId) };
   const original = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, { name: "Terrace" });
     const [station] = await tx
@@ -2041,11 +2049,12 @@ it("transfers a station's painted season day and a special day's painted date un
     versions,
   );
   expect(transferred.tables.staffing_days).toHaveLength(2);
-  const target = await applyVenue(planVenue(venue("B53197428"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B53197428"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
+  const targetVenueId = await venueLocationId(targetSuite.db);
   const days = await targetSuite.db.execute(sql`
     select d.id as day_id, d.department_id, d.station_id, d.season_id, d.special_day_date_id,
       b.staff_role_id, dep.name as department, st.name as station, st.location_id as station_location,
@@ -2070,8 +2079,8 @@ it("transfers a station's painted season day and a special day's painted date un
       staff_role_id: expect.any(String),
       department: null,
       station: "Staffed grill",
-      station_location: target.locationId,
-      season_location: target.locationId,
+      station_location: targetVenueId,
+      season_location: targetVenueId,
       weekday: 2,
       date: null,
       special_day: null,
@@ -2095,7 +2104,7 @@ it("transfers a station's painted season day and a special day's painted date un
       weekday: null,
       date: "2027-08-03",
       special_day: "Feast day",
-      date_location: target.locationId,
+      date_location: targetVenueId,
       role: "Cook",
       headcount: 4,
       starts_at: "19:00",
@@ -2202,9 +2211,10 @@ it("transfers a station's rest of the order switch", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values({
-      locationId: source.locationId,
+      locationId: venueId,
       name: "Pass",
       showsRestOfOrder: true,
     }),
@@ -2237,11 +2247,12 @@ it("transfers each station's MOVED slips choice, print, don't print, or never se
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
-      { locationId: source.locationId, name: "Moved print", printMovedSlips: true },
-      { locationId: source.locationId, name: "Moved quiet", printMovedSlips: false },
-      { locationId: source.locationId, name: "Moved unset", printMovedSlips: null },
+      { locationId: venueId, name: "Moved print", printMovedSlips: true },
+      { locationId: venueId, name: "Moved quiet", printMovedSlips: false },
+      { locationId: venueId, name: "Moved unset", printMovedSlips: null },
     ]),
   );
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -2274,9 +2285,10 @@ it("transfers a station's colour", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values({
-      locationId: source.locationId,
+      locationId: venueId,
       name: "Cocktail bar",
       colour: "teal",
     }),
@@ -2309,16 +2321,17 @@ it("transfers each station's ticket grouping and held printing", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
       {
-        locationId: source.locationId,
+        locationId: venueId,
         name: "Grill",
         ticketGrouping: "separate",
         printHeldWork: true,
       },
       {
-        locationId: source.locationId,
+        locationId: venueId,
         name: "Cold",
         ticketGrouping: "combined",
         printHeldWork: false,
@@ -2403,10 +2416,11 @@ it("transfers each station's bump mode", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
-      { locationId: source.locationId, name: "Grill", bumpMode: "ticket" },
-      { locationId: source.locationId, name: "Cold", bumpMode: "line" },
+      { locationId: venueId, name: "Grill", bumpMode: "ticket" },
+      { locationId: venueId, name: "Cold", bumpMode: "line" },
     ]),
   );
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -2444,10 +2458,11 @@ it("transfers each station's ready warning time", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
-      { locationId: source.locationId, name: "Grill", readyWarningAfterMinutes: 6 },
-      { locationId: source.locationId, name: "Cold" },
+      { locationId: venueId, name: "Grill", readyWarningAfterMinutes: 6 },
+      { locationId: venueId, name: "Cold" },
     ]),
   );
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -2490,8 +2505,9 @@ it.each(["ticket", "line"] as const)(
       db: suite.db,
       modules: ALL_MODULES,
     });
+    const sourceVenueId = await venueLocationId(suite.db);
     await suite.db.execute(
-      sql`update locations set bump_mode = 'ticket' where id = ${source.locationId}`,
+      sql`update locations set bump_mode = 'ticket' where id = ${sourceVenueId}`,
     );
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
@@ -2505,20 +2521,21 @@ it.each(["ticket", "line"] as const)(
       versions,
     );
     expect(transferred.venue).not.toHaveProperty("bumpMode");
-    const target = await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+    await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: async (tx, result) => {
+      beforeCommit: async (tx) => {
         await tx.execute(
-          sql`update locations set bump_mode = ${targetMode} where id = ${result.locationId}`,
+          sql`update locations set bump_mode = ${targetMode} where id = ${await venueLocationId(tx)}`,
         );
         await importConfigurationTables(tx, transferred, ALL_MODULES, versions);
       },
     });
+    const targetVenueId = await venueLocationId(targetSuite.db);
     expect(
       (
         await targetSuite.db.execute(
-          sql`select bump_mode as "bumpMode" from locations where id = ${target.locationId}`,
+          sql`select bump_mode as "bumpMode" from locations where id = ${targetVenueId}`,
         )
       ).rows,
     ).toEqual([{ bumpMode: targetMode }]);
@@ -2569,10 +2586,11 @@ it("transfers each station's changes after sending", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
-      { locationId: source.locationId, name: "Grill", changesAfterSending: "never" },
-      { locationId: source.locationId, name: "Cold", changesAfterSending: "held" },
+      { locationId: venueId, name: "Grill", changesAfterSending: "never" },
+      { locationId: venueId, name: "Cold", changesAfterSending: "held" },
     ]),
   );
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -2652,10 +2670,11 @@ it("A773 station policy: transfers each station's pass waiting", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
-      { locationId: source.locationId, name: "Grill", waitsForPass: true },
-      { locationId: source.locationId, name: "Cold", waitsForPass: false },
+      { locationId: venueId, name: "Grill", waitsForPass: true },
+      { locationId: venueId, name: "Cold", waitsForPass: false },
     ]),
   );
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -2693,10 +2712,11 @@ it("A773 station policy: a copy without waits_for_pass imports every station not
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
-      { locationId: source.locationId, name: "Grill", waitsForPass: true },
-      { locationId: source.locationId, name: "Cold", waitsForPass: false },
+      { locationId: venueId, name: "Grill", waitsForPass: true },
+      { locationId: venueId, name: "Cold", waitsForPass: false },
     ]),
   );
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -2761,11 +2781,12 @@ it("A725 allocates omitted imported colours after reserving explicit colours lat
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(kitchenStations).values([
-      { locationId: source.locationId, name: "Desserts", colour: "orange", warmAfterMinutes: 7 },
-      { locationId: source.locationId, name: "Pastry", colour: "amber" },
-      { locationId: source.locationId, name: "Bar", colour: "blue" },
+      { locationId: venueId, name: "Desserts", colour: "orange", warmAfterMinutes: 7 },
+      { locationId: venueId, name: "Pastry", colour: "amber" },
+      { locationId: venueId, name: "Bar", colour: "blue" },
     ]);
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -3145,18 +3166,19 @@ it("transfers a printer on two stations in configuration export", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const stations = await tx
       .insert(kitchenStations)
       .values([
-        { locationId: source.locationId, name: "Grill" },
-        { locationId: source.locationId, name: "Fryer" },
+        { locationId: venueId, name: "Grill" },
+        { locationId: venueId, name: "Fryer" },
       ])
       .returning({ id: kitchenStations.id });
     const [printer] = await tx
       .insert(printers)
       .values({
-        locationId: source.locationId,
+        locationId: venueId,
         name: "Pass printer",
         transport: "network_tcp",
         host: "10.0.0.8",
@@ -3208,9 +3230,10 @@ it("transfers a printer's pick-up set and refuses a drawer role in the uploaded 
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(printers).values({
-      locationId: source.locationId,
+      locationId: venueId,
       name: "Slip pickup",
       transport: "network_tcp",
       host: "10.0.0.90",
@@ -3259,12 +3282,13 @@ it("transfers a device profile's receipt and payment-slip printer lists, in orde
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const added = await tx
       .insert(printers)
       .values(
         ["Bar printer", "Back printer", "Slip printer"].map((name, index) => ({
-          locationId: source.locationId,
+          locationId: venueId,
           name,
           transport: "network_tcp" as const,
           host: `10.0.1.${index + 1}`,
@@ -3325,16 +3349,17 @@ it("leaves a table's clearing state behind", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(diningTables).values({
       zoneId: (
         await tx
           .insert(floorZones)
-          .values({ locationId: source.locationId, name: "Clearing tables" })
+          .values({ locationId: venueId, name: "Clearing tables" })
           .returning({ id: floorZones.id })
       )[0]!.id,
       id: "eeeeeeee-bbbb-bbbb-bbbb-eeeeeeeeeeee",
-      locationId: source.locationId,
+      locationId: venueId,
       label: "T9",
     });
     await tx.insert(floorTodayTables).values({ tableId: "eeeeeeee-bbbb-bbbb-bbbb-eeeeeeeeeeee" });
@@ -3576,9 +3601,10 @@ it("leaves out a print agent's setup page address and port, so the import links 
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(printAgents).values({
-      locationId: source.locationId,
+      locationId: venueId,
       name: "Bar agent",
       tokenHash: "source-agent-token",
       setupUrl: "http://192.168.10.40:9310",
@@ -3786,8 +3812,9 @@ async function shortNamedBundle(taxId: string) {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   const cfg: TradingContext = {
-    locationId: locationId(source.locationId),
+    locationId: locationId(venueId),
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
@@ -4345,11 +4372,12 @@ it("leaves behind a retired profile that no row uses, and the bundle still impor
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   const [retired] = await suite.db
     .insert(deviceProfiles)
     .values({ name: "Old till", formFactor: "till" })
     .returning({ id: deviceProfiles.id });
-  await retireProfile(source.locationId, retired!.id);
+  await retireProfile(venueId, retired!.id);
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -4373,11 +4401,12 @@ it("leaves a retired profile's printer lists behind with it, while a live profil
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   const original = await withTransaction(suite.db, async (tx) => {
     const [printer] = await tx
       .insert(printers)
       .values({
-        locationId: source.locationId,
+        locationId: venueId,
         name: "Bar printer",
         transport: "network_tcp",
         host: "10.0.2.1",
@@ -4399,7 +4428,7 @@ it("leaves a retired profile's printer lists behind with it, while a live profil
     }
     return { live: live!.id, retired: retired!.id };
   });
-  await retireProfile(source.locationId, original.retired);
+  await retireProfile(venueId, original.retired);
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -4435,6 +4464,7 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   const original = await withTransaction(suite.db, async (tx) => {
     const restaurant = await createDepartment(tx, {
       name: "Restaurant",
@@ -4474,7 +4504,7 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
     }
     return { live: live!.id, retired: retired!.id };
   });
-  await retireProfile(source.locationId, original.retired);
+  await retireProfile(venueId, original.retired);
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -4528,6 +4558,7 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   const original = await withTransaction(suite.db, async (tx) => {
     const restaurant = await createDepartment(tx, {
       name: "Restaurant",
@@ -4539,7 +4570,7 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
     });
     const [grill] = await tx
       .insert(kitchenStations)
-      .values({ locationId: source.locationId, name: "Grill" })
+      .values({ locationId: venueId, name: "Grill" })
       .returning({ id: kitchenStations.id });
     const [till, wall, retired] = await tx
       .insert(deviceProfiles)
@@ -4561,7 +4592,7 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
     });
     return { till: till!.id, wall: wall!.id, retired: retired!.id };
   });
-  await retireProfile(source.locationId, original.retired);
+  await retireProfile(venueId, original.retired);
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -4662,6 +4693,7 @@ it("transfers a profile's admitted roles and person exceptions, leaving a retire
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   const original = await withTransaction(suite.db, async (tx) => {
     const [admin] = await tx
       .select({ id: persons.id })
@@ -4689,7 +4721,7 @@ it("transfers a profile's admitted roles and person exceptions, leaving a retire
     }
     return { admin: admin!.id, mia: mia!.id, live: live!.id, retired: retired!.id };
   });
-  await retireProfile(source.locationId, original.retired);
+  await retireProfile(venueId, original.retired);
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -4976,10 +5008,11 @@ it("carries each station's own late flags to the importing venue", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   const [station] = await suite.db
     .insert(kitchenStations)
     .values({
-      locationId: source.locationId,
+      locationId: venueId,
       name: "Timing export",
       warmAfterMinutes: 6,
       overdueAfterMinutes: 12,
@@ -5026,8 +5059,9 @@ it.each([
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await suite.db.insert(kitchenStations).values({
-    locationId: source.locationId,
+    locationId: venueId,
     name: "Invalid imported timing",
     warmAfterMinutes: 3,
   });
@@ -5073,9 +5107,10 @@ it("refuses an imported ready warning of 0 before writing anything", async () =>
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await suite.db
     .insert(kitchenStations)
-    .values({ locationId: source.locationId, name: "Invalid imported ready warning" });
+    .values({ locationId: venueId, name: "Invalid imported ready warning" });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -5118,8 +5153,9 @@ it("imports a station row with no ready warning as 3", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await suite.db.insert(kitchenStations).values({
-    locationId: source.locationId,
+    locationId: venueId,
     name: "Older file station",
     readyWarningAfterMinutes: 8,
   });
@@ -5167,9 +5203,10 @@ it("refuses an imported minute that is not a whole number", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await suite.db
     .insert(kitchenStations)
-    .values({ locationId: source.locationId, name: "Fractional imported timing" });
+    .values({ locationId: venueId, name: "Fractional imported timing" });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -5213,10 +5250,11 @@ describe("venue detail edits and configuration boundaries", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
+    const venueId = await venueLocationId(suite.db);
     await suite.db
       .update(locations)
       .set({ dayCutover: "04:30:00" })
-      .where(eq(locations.id, source.locationId));
+      .where(eq(locations.id, venueId));
     const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx));
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
@@ -5391,6 +5429,7 @@ it("A725 transfers station and department choices", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const sourceVenueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, {
       name: "Receipt department",
@@ -5436,12 +5475,13 @@ it("A725 transfers station and department choices", async () => {
     encodeConfigurationBundle(exported, "a strong passphrase"),
     "a strong passphrase",
   );
-  const target = await applyVenue(planVenue(venue("B13572477"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B13572477"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: async (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
-  expect(target.locationId).not.toBe(source.locationId);
+  const targetVenueId = await venueLocationId(targetSuite.db);
+  expect(targetVenueId).not.toBe(sourceVenueId);
   const modes = await targetSuite.db.execute(sql`
     select z.name, p.receipt_print_mode as department_mode, q.receipt_print_mode as zone_mode
     from floor_zones z join zone_service_policies s on s.zone_id=z.id
@@ -5557,7 +5597,8 @@ it("exports and imports all seven cell classes into another venue, remapping eve
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const scope = { locationId: brandLocationId(source.locationId) };
+  const sourceVenueId = await venueLocationId(suite.db);
+  const scope = { locationId: brandLocationId(sourceVenueId) };
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, {
       name: "Routes dining room",
@@ -5606,7 +5647,7 @@ it("exports and imports all seven cell classes into another venue, remapping eve
     await setRoutingCell(tx, { row: noCategoryRow, zoneId: null }, { kind: "no_preparation" });
     await setRoutingCell(tx, { row: noCategoryRow, zoneId: terrace.id }, atStation(bar!.id));
     return [
-      source.locationId,
+      sourceVenueId,
       department.id,
       terrace.id,
       lounge.id,
@@ -5631,11 +5672,12 @@ it("exports and imports all seven cell classes into another venue, remapping eve
     "a strong passphrase",
   );
   expect(decoded.tables.routing_cells).toHaveLength(7);
-  const target = await applyVenue(planVenue(venue("B24681360"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B24681360"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: async (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
+  const targetVenueId = await venueLocationId(targetSuite.db);
   const idOf = async (table: string, name: string) => {
     const result = await targetSuite.db.execute<{ id: string }>(
       sql`select id from ${sql.identifier(table)} where name = ${name}`,
@@ -5651,12 +5693,12 @@ it("exports and imports all seven cell classes into another venue, remapping eve
   const product = await idOf("products", "Routes mojito");
   for (const id of [terrace, lounge, bar, griddle, category, product])
     expect(sourceIds).not.toContain(id);
-  expect(sourceIds).not.toContain(target.locationId);
+  expect(sourceIds).not.toContain(targetVenueId);
   const cells = await targetSuite.db.execute<Record<string, unknown>>(sql`
     select location_id, category_id, product_id, zone_id, station_id, no_preparation, no_category
     from routing_cells`);
   const cell = (values: Record<string, unknown>) => ({
-    location_id: target.locationId,
+    location_id: targetVenueId,
     category_id: null,
     product_id: null,
     zone_id: null,
@@ -5684,7 +5726,8 @@ it("carries a cell's period choices with their cell, including a period whose me
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const scope = { locationId: brandLocationId(source.locationId) };
+  const venueId = await venueLocationId(suite.db);
+  const scope = { locationId: brandLocationId(venueId) };
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, {
       name: "Periods dining room",
@@ -5888,16 +5931,17 @@ describe("special days in a configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
+    const venueId = await venueLocationId(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const [department] = await tx
         .insert(departments)
-        .values({ locationId: source.locationId, name: "Deli", tradingName: "Deli" })
+        .values({ locationId: venueId, name: "Deli", tradingName: "Deli" })
         .returning({ id: departments.id });
       await tx.insert(departmentSalePolicies).values({ departmentId: department!.id });
       await tx.insert(kitchenStations).values([
-        { locationId: source.locationId, name: "Bar" },
-        { locationId: source.locationId, name: "Pass" },
-        { locationId: source.locationId, name: "Grill" },
+        { locationId: venueId, name: "Bar" },
+        { locationId: venueId, name: "Pass" },
+        { locationId: venueId, name: "Grill" },
       ]);
     });
     const { cfg, stations } = await named(suite.db, source);
@@ -5991,8 +6035,9 @@ describe("special days in a configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
+    const venueId = await venueLocationId(suite.db);
     await withTransaction(suite.db, (tx) =>
-      tx.insert(kitchenStations).values({ locationId: source.locationId, name: "Pass" }),
+      tx.insert(kitchenStations).values({ locationId: venueId, name: "Pass" }),
     );
     const { cfg, stations } = await named(suite.db, source);
     const pass = { kind: "station" as const, id: stations.get("Pass")! };
@@ -6178,7 +6223,7 @@ describe("public holidays in a configuration transfer", () => {
   }
 
   it("carries holiday areas and named holidays under fresh ids without retired local entries", async () => {
-    const { source, versions, transferred } = await preparedWithHolidays("B45001122");
+    const { versions, transferred } = await preparedWithHolidays("B45001122");
     expect(transferred.tables.holiday_geographies).toHaveLength(2);
     expect(transferred.tables.local_holidays).toBeUndefined();
     for (const row of transferred.tables.holiday_geographies!)
@@ -6202,6 +6247,7 @@ describe("public holidays in a configuration transfer", () => {
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
+    const targetVenueId = await venueLocationId(targetSuite.db);
 
     const expected = await holidaysByCity(suite.db);
     expect(expected.geographies).toEqual([
@@ -6231,9 +6277,9 @@ describe("public holidays in a configuration transfer", () => {
     for (const row of imported.rows) {
       expect(sourceIds.has(row.id)).toBe(false);
       expect(row.id).toMatch(UUID);
-      expect(row.owner).toBe(target.locationId);
+      expect(row.owner).toBe(targetVenueId);
     }
-    expect(target.locationId).not.toBe(source.locationId);
+    expect(targetVenueId).not.toBe(await venueLocationId(suite.db));
 
     const read = () =>
       withTransaction(targetSuite.db, async (tx) => ({
@@ -6267,7 +6313,7 @@ describe("public holidays in a configuration transfer", () => {
     expect(special.rows).toEqual([
       {
         id: expect.any(String),
-        location_id: target.locationId,
+        location_id: targetVenueId,
         name: "Three Kings",
         close_whole_venue: 1,
       },
@@ -6492,7 +6538,8 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const scope = { locationId: brandLocationId(source.locationId) };
+  const sourceVenueId = await venueLocationId(suite.db);
+  const scope = { locationId: brandLocationId(sourceVenueId) };
   const original = await withTransaction(suite.db, async (tx) => {
     await tx
       .update(locations)
@@ -6556,11 +6603,12 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     encodeConfigurationBundle(bundle, "a strong passphrase"),
     "a strong passphrase",
   );
-  const target = await applyVenue(planVenue(venue("B24681368"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B24681368"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
+  const targetVenueId = await venueLocationId(targetSuite.db);
   const seasonsHolding = await targetSuite.db.execute(sql`
     select count(distinct t.season_id) as seasons
     from department_day_ranges x join department_days t on t.id=x.day_id
@@ -6581,7 +6629,7 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
       department_id: expect.any(String),
       customer_id: expect.any(String),
       staff_id: expect.any(String),
-      location_id: target.locationId,
+      location_id: targetVenueId,
       name: "Night transfer",
       colour: "blue",
       customer: "Period customer",
@@ -6596,7 +6644,7 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
       department_id: expect.any(String),
       customer_id: expect.any(String),
       staff_id: expect.any(String),
-      location_id: target.locationId,
+      location_id: targetVenueId,
       name: "Night transfer",
       colour: "blue",
       customer: "Period customer",
@@ -6626,6 +6674,7 @@ it("transfers order start policies under new department and zone ids", async () 
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const sourceVenueId = await venueLocationId(suite.db);
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, {
       name: "Order start department",
@@ -6670,12 +6719,13 @@ it("transfers order start policies under new department and zone ids", async () 
     encodeConfigurationBundle(exported, "a strong passphrase"),
     "a strong passphrase",
   );
-  const target = await applyVenue(planVenue(venue("B13572479"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B13572479"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
-  expect(target.locationId).not.toBe(source.locationId);
+  const targetVenueId = await venueLocationId(targetSuite.db);
+  expect(targetVenueId).not.toBe(sourceVenueId);
   const imported = await targetSuite.db.execute<{
     department_id: string;
     zone_id: string;
@@ -6768,16 +6818,14 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
   );
   expect(exported.tables.department_receipts).toHaveLength(2);
   expect(exported.tables).not.toHaveProperty("tenant_receipts");
-  const target = await applyVenue(planVenue(venue("B13572477"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B13572477"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, exported, ALL_MODULES, versions),
   });
+  const venueId = await venueLocationId(targetSuite.db);
   const imported = await withTransaction(targetSuite.db, async (tx) => {
-    const rows = await tx
-      .select()
-      .from(departments)
-      .where(eq(departments.locationId, target.locationId));
+    const rows = await tx.select().from(departments).where(eq(departments.locationId, venueId));
     const idFor = (name: string) => rows.find((row) => row.name === name)!.id;
     const global = await getReceipt(tx);
     const empty = await readDepartmentReceipt(tx, cfg, idFor("Empty receipt"));
@@ -6816,26 +6864,27 @@ describe("a deleted printer in a configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
+    const venueId = await venueLocationId(suite.db);
     const ids = await withTransaction(suite.db, async (tx) => {
       const [live, disabled, old] = await tx
         .insert(printers)
         .values([
           {
-            locationId: source.locationId,
+            locationId: venueId,
             name: "Live bar",
             transport: "cloud_poll" as const,
             pollId: "poll-live",
             pollTokenHash: "live-poll-hash",
           },
           {
-            locationId: source.locationId,
+            locationId: venueId,
             name: "Disabled bar",
             transport: "network_tcp" as const,
             host: "10.0.3.2",
             active: false,
           },
           {
-            locationId: source.locationId,
+            locationId: venueId,
             name: "Old kitchen",
             transport: "cloud_poll" as const,
             pollId: "poll-old",
@@ -6846,7 +6895,7 @@ describe("a deleted printer in a configuration transfer", () => {
         .returning({ id: printers.id });
       const [station] = await tx
         .insert(kitchenStations)
-        .values({ locationId: source.locationId, name: "Grill" })
+        .values({ locationId: venueId, name: "Grill" })
         .returning({ id: kitchenStations.id });
       const [profile] = await tx
         .insert(deviceProfiles)
@@ -6868,12 +6917,12 @@ describe("a deleted printer in a configuration transfer", () => {
         profile: profile!.id,
       };
     });
-    const { deviceId } = await seedDevice(suite.db, { locationId: source.locationId });
+    const { deviceId } = await seedDevice(suite.db, { locationId: venueId });
     await suite.db.insert(printerHolders).values({ printerId: ids.old, deviceId });
     await suite.db.insert(printJobs).values([
-      { locationId: source.locationId, printerId: ids.old, payload: new Uint8Array([1]) },
+      { locationId: venueId, printerId: ids.old, payload: new Uint8Array([1]) },
       {
-        locationId: source.locationId,
+        locationId: venueId,
         printerId: ids.live,
         payload: new Uint8Array([2]),
         status: "done",
@@ -6930,11 +6979,12 @@ describe("a deleted printer in a configuration transfer", () => {
       expect(transferred.tables).not.toHaveProperty(table);
     expect(transferred.reconnect).toContain("printers");
 
-    const target = await applyVenue(planVenue(venue("B30303032"), ALL_MODULES), {
+    await applyVenue(planVenue(venue("B30303032"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
+    const venueId = await venueLocationId(targetSuite.db);
     const imported = await targetSuite.db
       .select({
         id: printers.id,
@@ -6950,7 +7000,7 @@ describe("a deleted printer in a configuration transfer", () => {
       {
         id: expect.any(String),
         name: "Disabled bar",
-        locationId: target.locationId,
+        locationId: venueId,
         active: false,
         deletedAt: null,
         pollTokenHash: null,
@@ -6958,7 +7008,7 @@ describe("a deleted printer in a configuration transfer", () => {
       {
         id: expect.any(String),
         name: "Live bar",
-        locationId: target.locationId,
+        locationId: venueId,
         active: false,
         deletedAt: null,
         pollTokenHash: null,
@@ -7061,11 +7111,12 @@ describe("a deleted printer in a configuration transfer", () => {
 });
 
 it("refuses an absent leaveBehindWhenFalse column before exporting", async () => {
-  const source = await applyVenue(planVenue(venue("B55558888"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B55558888"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  expect(source.locationId).toBeDefined();
+  const venueId = await venueLocationId(suite.db);
+  expect(venueId).toBeDefined();
   const module = {
     name: "probe",
     configurationTransfer: {
@@ -7215,8 +7266,9 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const sourceVenueId = await venueLocationId(suite.db);
   const cfg: TradingContext = {
-    locationId: locationId(source.locationId),
+    locationId: locationId(sourceVenueId),
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
@@ -7317,11 +7369,12 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     expect(JSON.stringify(transferred.tables[table])).not.toContain(ids.old);
   expect(JSON.stringify(transferred.tables.zone_sale_policies)).not.toContain(ids.oldZone);
   expect(transferred.tables.dining_tables!.map((row) => row.id)).toEqual([ids.table]);
-  const target = await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
+  const targetVenueId = await venueLocationId(targetSuite.db);
   const rows = await targetSuite.db.execute<{
     department: string;
     zone: string;
@@ -7340,7 +7393,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     sql`select f.zone_id, t.id table_id from floor_plans f join floor_plan_tables p on p.zone_id=f.zone_id join dining_tables t on t.plan_table_id=p.id where f.zone_id=${imported.zone}`,
   );
   expect(links.rows).toEqual([{ zone_id: imported.zone, table_id: imported.table_id }]);
-  expect(target.locationId).not.toBe(source.locationId);
+  expect(targetVenueId).not.toBe(sourceVenueId);
 });
 
 it("carries Long table's parts, naming the imported tables", async () => {
@@ -7348,8 +7401,9 @@ it("carries Long table's parts, naming the imported tables", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   const cfg: TradingContext = {
-    locationId: locationId(source.locationId),
+    locationId: locationId(venueId),
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
@@ -7432,8 +7486,9 @@ it("carries a kept size, naming the imported table", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   const cfg: TradingContext = {
-    locationId: locationId(source.locationId),
+    locationId: locationId(venueId),
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
@@ -7496,6 +7551,7 @@ describe("dated business-day configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
+    const venueId = await venueLocationId(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const department = await createDepartment(tx, {
         name: "Clock service",
@@ -7519,12 +7575,10 @@ describe("dated business-day configuration transfer", () => {
       );
     });
     await suite.db.insert(locationDayCutoverChanges).values([
-      { locationId: source.locationId, effectiveBusinessDay: "2026-11-04", dayCutover: "03:00:00" },
-      { locationId: source.locationId, effectiveBusinessDay: "2026-11-10", dayCutover: "07:00:00" },
+      { locationId: venueId, effectiveBusinessDay: "2026-11-04", dayCutover: "03:00:00" },
+      { locationId: venueId, effectiveBusinessDay: "2026-11-10", dayCutover: "07:00:00" },
     ]);
-    await suite.db
-      .insert(locationBusinessDaySettings)
-      .values({ locationId: source.locationId, revision: 4 });
+    await suite.db.insert(locationBusinessDaySettings).values({ locationId: venueId, revision: 4 });
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
       ALL_MODULES,
@@ -7579,23 +7633,22 @@ describe("dated business-day configuration transfer", () => {
     expect(await targetSuite.db.select().from(locationBusinessDaySettings)).toEqual([]);
     expect(await suite.db.select().from(locationDayCutoverChanges)).toHaveLength(2);
     expect(await suite.db.select().from(locationBusinessDaySettings)).toEqual([
-      { locationId: source.locationId, revision: 4 },
+      { locationId: venueId, revision: 4 },
     ]);
   });
 
   it("keeps dated target history when the prepared venue is applied", async () => {
-    const target = await applyVenue(planVenue(venue("B77112233"), ALL_MODULES), {
+    await applyVenue(planVenue(venue("B77112233"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
+    const venueId = await venueLocationId(suite.db);
     await suite.db.insert(locationDayCutoverChanges).values({
-      locationId: target.locationId,
+      locationId: venueId,
       effectiveBusinessDay: "2026-11-04",
       dayCutover: "03:00:00",
     });
-    await suite.db
-      .insert(locationBusinessDaySettings)
-      .values({ locationId: target.locationId, revision: 1 });
+    await suite.db.insert(locationBusinessDaySettings).values({ locationId: venueId, revision: 1 });
     const rows = await suite.db.select().from(locationDayCutoverChanges);
     const model = await withTransaction(suite.db, (tx) =>
       readVenueDetails(tx, new Date("2026-11-05T12:00:00Z")),
@@ -7610,7 +7663,7 @@ describe("dated business-day configuration transfer", () => {
     ).toEqual(model);
     expect(await suite.db.select().from(locationDayCutoverChanges)).toEqual(rows);
     expect(await suite.db.select().from(locationBusinessDaySettings)).toEqual([
-      { locationId: target.locationId, revision: 1 },
+      { locationId: venueId, revision: 1 },
     ]);
   });
 
@@ -7619,8 +7672,9 @@ describe("dated business-day configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
+    const venueId = await venueLocationId(suite.db);
     await suite.db.insert(locationDayCutoverChanges).values({
-      locationId: source.locationId,
+      locationId: venueId,
       effectiveBusinessDay: "2026-11-04",
       dayCutover: "07:00:00",
     });
@@ -7671,7 +7725,8 @@ describe("seasons in a configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const scope = { locationId: brandLocationId(source.locationId) };
+    const venueId = await venueLocationId(suite.db);
+    const scope = { locationId: brandLocationId(venueId) };
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(seasons)
@@ -7824,7 +7879,8 @@ describe("special days in a configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const scope = { locationId: brandLocationId(source.locationId) };
+    const venueId = await venueLocationId(suite.db);
+    const scope = { locationId: brandLocationId(venueId) };
     await withTransaction(suite.db, async (tx) => {
       const department = await createDepartment(tx, {
         name: "Fiesta restaurant",
@@ -7872,18 +7928,19 @@ describe("special days in a configuration transfer", () => {
   }
 
   it("arrives by value under the importing venue, and the imported venue serves and closes by it", async () => {
-    const { source, versions, bundle } = await fiestaVenue("B35792474");
+    const { versions, bundle } = await fiestaVenue("B35792474");
     const decoded = decodeConfigurationBundle(
       encodeConfigurationBundle(bundle, "a strong passphrase"),
       "a strong passphrase",
     );
-    const target = await applyVenue(planVenue(venue("B35792475"), ALL_MODULES), {
+    await applyVenue(planVenue(venue("B35792475"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
     });
+    const targetVenueId = await venueLocationId(targetSuite.db);
 
-    const exported = await fiestaRows(suite.db, source.locationId);
+    const exported = await fiestaRows(suite.db, await venueLocationId(suite.db));
     expect(exported).toEqual({
       paint: [
         {
@@ -7927,9 +7984,9 @@ describe("special days in a configuration transfer", () => {
         },
       ],
     });
-    expect(await fiestaRows(targetSuite.db, target.locationId)).toEqual(exported);
+    expect(await fiestaRows(targetSuite.db, targetVenueId)).toEqual(exported);
 
-    const targetScope = { locationId: brandLocationId(target.locationId) };
+    const targetScope = { locationId: brandLocationId(targetVenueId) };
     const [department] = await targetSuite.db
       .select({ id: departments.id })
       .from(departments)
@@ -7941,7 +7998,7 @@ describe("special days in a configuration transfer", () => {
       );
     const zone = await targetSuite.db.execute<{ id: string }>(
       sql`select z.id from floor_zones z join zone_service_policies p on p.zone_id=z.id
-        where z.name='Fiesta terrace' and p.location_id=${target.locationId}`,
+        where z.name='Fiesta terrace' and p.location_id=${targetVenueId}`,
     );
     const answers = await withTransaction(targetSuite.db, async (tx) => ({
       fiesta: await VENUE_SERVICE.resolveDepartmentService(tx, department!.id, FIESTA_EVENING),
@@ -8077,6 +8134,7 @@ describe("A773 pass display policy", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
+    const venueId = await venueLocationId(suite.db);
     const deviceId = await withTransaction(suite.db, async (tx) => {
       const [profile] = await tx
         .insert(deviceProfiles)
@@ -8087,7 +8145,7 @@ describe("A773 pass display policy", () => {
         pass_monitor: { stationIds: null, zoneIds: null },
       });
       const { deviceId } = await seedDevice(tx, {
-        locationId: source.locationId,
+        locationId: venueId,
         profileId: profile!.id,
       });
       await VENUE_SERVICE.setDeviceKitchenScreens(tx, {

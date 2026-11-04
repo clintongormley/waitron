@@ -1,5 +1,5 @@
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
-import { openVenueDatabase } from "@waitron/db";
+import { openVenueDatabase, venueLocationId } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -51,7 +51,7 @@ export async function provisionTestVenue(venueDir: string, taxId: string): Promi
       nodeId: venue.nodeId,
       seriesId: venue.seriesIds[0]!,
       rectificativeSeriesId: venue.seriesIds[2]!,
-      locationId: venue.locationId,
+      locationId: await venueLocationId(store.venue),
     };
   } finally {
     await store.close();

@@ -4,7 +4,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
-import { locations, nodes, tenants, withTransaction } from "@waitron/db";
+import { locations, nodes, tenants, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { hashPassword, loginManager, loginManagerById, type TotpKeyRing } from "@waitron/identity";
@@ -134,7 +134,7 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
 
     const standardSeriesId = venue.seriesIds[0]!;
     const { deviceId } = await seedDevice(suite.db, {
-      locationId: brandLocationId(venue.locationId),
+      locationId: brandLocationId(await venueLocationId(suite.db)),
     });
 
     const { saleId, fiscal } = await withTransaction(suite.db, async (tx) => {
@@ -311,11 +311,10 @@ describe("direct action country zone preflight", () => {
     "refuses saved %j before reuse conversion without repairing it",
     async (timeZone) => {
       const actions = planVenue(request(), []);
-      const venue = await applyDirectVenue(actions, { db: suite.db, modules: [] });
+      await applyDirectVenue(actions, { db: suite.db, modules: [] });
+      const venueId = await venueLocationId(suite.db);
       await withTransaction(suite.db, async (tx) => {
-        await tx.execute(
-          sql`update locations set time_zone = ${timeZone} where id = ${venue.locationId}`,
-        );
+        await tx.execute(sql`update locations set time_zone = ${timeZone} where id = ${venueId}`);
       });
       const before = (await suite.db.execute(sql`select * from locations`)).rows;
       const refusal = await applyDirectVenue(actions, { db: suite.db, modules: [] }).catch(
@@ -348,13 +347,14 @@ it("rechecks saved zone inside the transaction after outside preparation", async
     operations: {
       prepare: async (operation, run) => {
         preparations++;
-        const installed = await applyDirectVenue(planVenue(request(), []), {
+        await applyDirectVenue(planVenue(request(), []), {
           db: suite.db,
           modules: [],
         });
+        const venueId = await venueLocationId(suite.db);
         await withTransaction(suite.db, async (tx) => {
           await tx.execute(
-            sql`update locations set time_zone = 'Invalid/Zone' where id = ${installed.locationId}`,
+            sql`update locations set time_zone = 'Invalid/Zone' where id = ${venueId}`,
           );
         });
         return run(operation);
@@ -389,11 +389,10 @@ it.each(["Europe/London", "US/Eastern"])(
   "does not treat the valid saved zone %s as repair eligibility",
   async (timeZone) => {
     const actions = planVenue(request(), []);
-    const installed = await applyDirectVenue(actions, { db: suite.db, modules: [] });
+    await applyDirectVenue(actions, { db: suite.db, modules: [] });
+    const venueId = await venueLocationId(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      await tx.execute(
-        sql`update locations set time_zone = ${timeZone} where id = ${installed.locationId}`,
-      );
+      await tx.execute(sql`update locations set time_zone = ${timeZone} where id = ${venueId}`);
     });
     await expect(applyDirectVenue(actions, { db: suite.db, modules: [] })).rejects.toMatchObject({
       code: "provisioning.second_venue",

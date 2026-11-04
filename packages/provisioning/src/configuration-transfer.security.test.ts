@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { withTransaction } from "@waitron/db";
+import { venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -59,10 +59,11 @@ function seed() {
 
 it("exports the current business-day cutover without retaining an obsolete setting", async () => {
   const target = await seed();
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.execute(sql`insert into location_day_cutover_changes
       (location_id, effective_business_day, day_cutover)
-      values (${target.locationId}, '2026-10-16', '04:30:00')`),
+      values (${venueId}, '2026-10-16', '04:30:00')`),
   );
   const bundle = await buildConfigurationBundle(suite.db, target, [], now, {});
   expect(bundle.venue.dayCutover).toBe("04:30:00");
@@ -72,10 +73,11 @@ it("exports the current business-day cutover without retaining an obsolete setti
 
 it("refuses export while a future cutover change would be lost", async () => {
   const target = await seed();
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.execute(sql`insert into location_day_cutover_changes
       (location_id, effective_business_day, day_cutover)
-      values (${target.locationId}, '2026-10-17', '04:30:00')`),
+      values (${venueId}, '2026-10-17', '04:30:00')`),
   );
   await expect(buildConfigurationBundle(suite.db, target, [], now, {})).rejects.toMatchObject(
     invalid("businessDayStart"),
@@ -108,8 +110,9 @@ it("refuses an export whose requested node does not belong to the stored venue",
 
 it("refuses a receipt-language list containing a non-string stored value", async () => {
   const target = await seed();
+  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
-    tx.execute(sql`update locations set invoice_locales = '[1]' where id = ${target.locationId}`),
+    tx.execute(sql`update locations set invoice_locales = '[1]' where id = ${venueId}`),
   );
   await expect(buildConfigurationBundle(suite.db, target, [], now, {})).rejects.toMatchObject(
     invalid("venue"),
@@ -246,7 +249,8 @@ it("omits the source operator's dependent rows while preserving another person's
 });
 
 it("imports printers disabled with fresh agent credentials and no page-printer agent binding", async () => {
-  const target = await seed();
+  await seed();
+  const venueId = await venueLocationId(suite.db);
   const bundle = configurationBundle();
   bundle.modules = { "synthetic-transfer": 1 };
   bundle.tables = {
@@ -301,20 +305,18 @@ it("imports printers disabled with fresh agent credentials and no page-printer a
   ).toEqual([
     {
       id: expect.any(String),
-      location_id: target.locationId,
+      location_id: venueId,
       token_hash: expect.stringMatching(/^disabled-import:/),
       active: 0,
     },
   ]);
   expect(
     (await suite.db.execute(sql`select name, location_id, active from printers`)).rows,
-  ).toEqual([{ name: "Receipt printer", location_id: target.locationId, active: 0 }]);
+  ).toEqual([{ name: "Receipt printer", location_id: venueId, active: 0 }]);
   expect(
     (await suite.db.execute(sql`select name, location_id, active, agent_id from page_printers`))
       .rows,
-  ).toEqual([
-    { name: "Office printer", location_id: target.locationId, active: 0, agent_id: null },
-  ]);
+  ).toEqual([{ name: "Office printer", location_id: venueId, active: 0, agent_id: null }]);
   expect((await suite.db.execute(sql`pragma foreign_key_check`)).rows).toEqual([]);
 });
 

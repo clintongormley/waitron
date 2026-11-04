@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { withTransaction } from "@waitron/db";
+import { venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules } from "@waitron/module";
@@ -34,6 +34,7 @@ async function fixture() {
   ).rows[0]!;
   return {
     target,
+    venueId: await venueLocationId(suite.db),
     initialOperations: {
       nodeId: target.nodeId,
       administratorId: admin.id,
@@ -62,7 +63,7 @@ it("recovers the existing location, node and all three series without allocating
       ALL_MODULES,
     ),
   ).toEqual({
-    locationId: f.target.locationId,
+    locationId: f.venueId,
     nodeId: f.target.nodeId,
     seriesIds: f.target.seriesIds,
     seeded: [],
@@ -72,7 +73,7 @@ it("recovers the existing location, node and all three series without allocating
   );
   const defaulted = { ...venue, fullSeriesCode: undefined };
   expect(await recoverProvisionedVenue(suite.db, { venue: defaulted }, ALL_MODULES)).toEqual({
-    locationId: f.target.locationId,
+    locationId: f.venueId,
     nodeId: f.target.nodeId,
     seriesIds: f.target.seriesIds,
     seeded: [],

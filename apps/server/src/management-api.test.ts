@@ -16,6 +16,7 @@ import {
   printers,
   products,
   stationPrinters,
+  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -179,7 +180,7 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
 function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: brandLocationId(venueId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -237,6 +238,7 @@ async function login(app: Hono, email: string): Promise<string> {
 
 let app: Hono;
 let venue: VenueResult;
+let venueId: string;
 let managerCookie: string;
 let staffCookie: string;
 let supervisorCookie: string;
@@ -246,6 +248,7 @@ const json = { "content-type": "application/json" };
 beforeAll(async () => {
   const setup = await setupTenant();
   venue = setup.venue;
+  venueId = await venueLocationId(suite.db);
   testDepartmentId = (
     await withTransaction(suite.db, (tx) =>
       createDepartment(tx, {
@@ -874,7 +877,7 @@ describe("/management-api/tables", () => {
         tx
           .insert(floorZones)
           .values({
-            locationId: venue.locationId,
+            locationId: venueId,
             name: unique("Unassigned disabled"),
             active: false,
           })
@@ -1169,7 +1172,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
     const original = await suite.db
       .select({ id: kitchenStations.id, colour: kitchenStations.colour })
       .from(kitchenStations)
-      .where(eq(kitchenStations.locationId, venue.locationId));
+      .where(eq(kitchenStations.locationId, venueId));
     onTestFinished(() =>
       withTransaction(suite.db, async (tx) => {
         for (const row of original)
@@ -1183,7 +1186,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       tx
         .update(kitchenStations)
         .set({ colour: "red" })
-        .where(eq(kitchenStations.locationId, venue.locationId)),
+        .where(eq(kitchenStations.locationId, venueId)),
     );
     const id = await createStation(unique("No colour"));
     expect((await listStations()).find((station) => station.id === id)).toMatchObject({
@@ -2190,10 +2193,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
   });
 
   it("the retired venue bump mode routes answer 404 and change no location row", async () => {
-    const before = await suite.db
-      .select()
-      .from(locations)
-      .where(eq(locations.id, venue.locationId));
+    const before = await suite.db.select().from(locations).where(eq(locations.id, venueId));
     const read = await req("/bump-mode", { method: "GET" }, managerCookie);
     expect(read.status).toBe(404);
     const write = await req(
@@ -2202,9 +2202,9 @@ describe("/management-api/stations (KDS-1 config)", () => {
       managerCookie,
     );
     expect(write.status).toBe(404);
-    expect(
-      await suite.db.select().from(locations).where(eq(locations.id, venue.locationId)),
-    ).toEqual(before);
+    expect(await suite.db.select().from(locations).where(eq(locations.id, venueId))).toEqual(
+      before,
+    );
   });
 
   it("lets a manager read both station output lists", async () => {
@@ -2263,7 +2263,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       const [row] = await suite.db
         .insert(printers)
         .values({
-          locationId: venue.locationId,
+          locationId: venueId,
           name: unique("Ticket printer"),
           transport: "network_tcp",
           host: "10.0.0.20",
@@ -2514,10 +2514,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
 
 describe("/management-api/courses + product course + fire-control (KDS-2 config)", () => {
   it("A773 waiter authority: fire-control is retired without changing stored settings", async () => {
-    const before = await suite.db
-      .select()
-      .from(locations)
-      .where(eq(locations.id, venue.locationId));
+    const before = await suite.db.select().from(locations).where(eq(locations.id, venueId));
     for (const cookie of [managerCookie, supervisorCookie, staffCookie, undefined]) {
       const read = await req("/fire-control", { method: "GET" }, cookie);
       expect(read.status).toBe(404);
@@ -2528,9 +2525,9 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
           cookie,
         );
         expect(write.status).toBe(404);
-        expect(
-          await suite.db.select().from(locations).where(eq(locations.id, venue.locationId)),
-        ).toEqual(before);
+        expect(await suite.db.select().from(locations).where(eq(locations.id, venueId))).toEqual(
+          before,
+        );
       }
     }
   });
@@ -3022,19 +3019,13 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
   it.each(["waiter", "kitchen", "expo"])(
     "retired fire-control routes leave the stored %s value and the venue row unchanged",
     async (mode) => {
-      const [original] = await suite.db
-        .select()
-        .from(locations)
-        .where(eq(locations.id, venue.locationId));
+      const [original] = await suite.db.select().from(locations).where(eq(locations.id, venueId));
       try {
         await suite.db
           .update(locations)
           .set({ fireControl: mode as "waiter" | "kitchen" | "expo" })
-          .where(eq(locations.id, venue.locationId));
-        const [before] = await suite.db
-          .select()
-          .from(locations)
-          .where(eq(locations.id, venue.locationId));
+          .where(eq(locations.id, venueId));
+        const [before] = await suite.db.select().from(locations).where(eq(locations.id, venueId));
         const initial = await req("/fire-control", { method: "GET" }, managerCookie);
         expect(initial.status).toBe(404);
         for (const next of ["waiter", "kitchen", "expo", "banana"]) {
@@ -3044,17 +3035,14 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
             managerCookie,
           );
           expect(set.status).toBe(404);
-          const [after] = await suite.db
-            .select()
-            .from(locations)
-            .where(eq(locations.id, venue.locationId));
+          const [after] = await suite.db.select().from(locations).where(eq(locations.id, venueId));
           expect(after).toEqual(before);
         }
       } finally {
         await suite.db
           .update(locations)
           .set({ fireControl: original!.fireControl })
-          .where(eq(locations.id, venue.locationId));
+          .where(eq(locations.id, venueId));
       }
     },
   );
@@ -3553,7 +3541,7 @@ describe("retired table writes", () => {
     );
     const rows = () =>
       suite.db.all(sql`
-      select * from dining_tables where location_id = ${venue.locationId} order by id`);
+      select * from dining_tables where location_id = ${venueId} order by id`);
     const before = rows();
     const response = await req(
       path.replace(":id", id),

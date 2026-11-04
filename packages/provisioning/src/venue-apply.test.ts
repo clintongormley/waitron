@@ -9,6 +9,7 @@ import {
   deviceProfiles,
   locationDayCutoverChanges,
   locationBusinessDaySettings,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { STARTER_ZONE_NAMES } from "@waitron/venue-service";
@@ -48,14 +49,15 @@ function request(taxId = "B12345678"): VenueRequest {
 }
 
 it("A725 fresh provisioning starts with one red default kitchen", async () => {
-  const created = await applyVenue(planVenue(request("B10000007"), ALL_MODULES), {
+  await applyVenue(planVenue(request("B10000007"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   expect(
     (
       await suite.db.execute(sql`
-    select name, colour, is_default from kitchen_stations where location_id = ${created.locationId}
+    select name, colour, is_default from kitchen_stations where location_id = ${venueId}
   `)
     ).rows,
   ).toEqual([{ name: STARTER_STATION_NAMES.Kitchen.es, colour: "red", is_default: 1 }]);
@@ -64,14 +66,15 @@ it("A725 fresh provisioning starts with one red default kitchen", async () => {
 it("an English venue's default kitchen station is named in English", async () => {
   const english = request("B10000015");
   english.invoiceLocales = ["en-GB"];
-  const created = await applyVenue(planVenue(english, ALL_MODULES), {
+  await applyVenue(planVenue(english, ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   expect(
     (
       await suite.db.execute(sql`
-    select name, is_default from kitchen_stations where location_id = ${created.locationId}
+    select name, is_default from kitchen_stations where location_id = ${venueId}
   `)
     ).rows,
   ).toEqual([{ name: "Kitchen", is_default: 1 }]);
@@ -79,7 +82,8 @@ it("an English venue's default kitchen station is named in English", async () =>
 
 it("a new venue's first station starts at the default late flags and keeps a station's edit when the plan is retried", async () => {
   const plan = planVenue(request("B10000007"), ALL_MODULES);
-  const first = await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
+  await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
+  const venueId = await venueLocationId(suite.db);
   const stations = () =>
     suite.db.execute<{
       name: string;
@@ -87,7 +91,7 @@ it("a new venue's first station starts at the default late flags and keeps a sta
       overdue_after_minutes: number;
       forgotten_after_minutes: number;
     }>(sql`select name, warm_after_minutes, overdue_after_minutes, forgotten_after_minutes
-      from kitchen_stations where location_id = ${first.locationId}`);
+      from kitchen_stations where location_id = ${venueId}`);
   expect((await stations()).rows).toEqual([
     {
       name: STARTER_STATION_NAMES.Kitchen.es,
@@ -156,6 +160,7 @@ describe("applyVenue: the one taxpayer row", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
+    const venueId = await venueLocationId(suite.db);
     const shortCutover = request("B10000005");
     shortCutover.dayCutover = "06:00";
     const retry = applyVenue(planVenue(shortCutover, ALL_MODULES), {
@@ -164,7 +169,7 @@ describe("applyVenue: the one taxpayer row", () => {
     });
 
     await expect(retry).resolves.toMatchObject({
-      locationId: first.locationId,
+      locationId: venueId,
       nodeId: first.nodeId,
       seriesIds: first.seriesIds,
     });
@@ -175,20 +180,19 @@ describe("applyVenue: the one taxpayer row", () => {
   });
 
   it("reuses a venue whose stored day cutover has no seconds", async () => {
-    const first = await applyVenue(planVenue(request("B10000006"), ALL_MODULES), {
+    await applyVenue(planVenue(request("B10000006"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    await suite.db.execute(
-      sql`update locations set day_cutover = '06:00' where id = ${first.locationId}`,
-    );
+    const venueId = await venueLocationId(suite.db);
+    await suite.db.execute(sql`update locations set day_cutover = '06:00' where id = ${venueId}`);
 
     await expect(
       applyVenue(planVenue(request("B10000006"), ALL_MODULES), {
         db: suite.db,
         modules: ALL_MODULES,
       }),
-    ).resolves.toMatchObject({ locationId: first.locationId });
+    ).resolves.toMatchObject({ locationId: venueId });
   });
 
   it("refuses a re-run whose tax id differs, by name", async () => {
@@ -215,6 +219,7 @@ describe("applyVenue", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
+    const venueId = await venueLocationId(suite.db);
 
     const counts = await suite.db.execute<{
       tenants: number;
@@ -233,11 +238,11 @@ describe("applyVenue", () => {
         (select count(*) from invoice_series where node_id = ${result.nodeId}) as series,
         (select count(*) from registro_sif where node_id = ${result.nodeId} and revocado_en is null) as sif,
         (select count(*) from kitchen_stations
-           where location_id = ${result.locationId} and is_default and active) as default_stations,
+           where location_id = ${venueId} and is_default and active) as default_stations,
         (select count(*) from departments
-           where location_id = ${result.locationId} and is_default and active) as default_departments,
+           where location_id = ${venueId} and is_default and active) as default_departments,
         (select count(*) from zone_service_policies
-           where location_id = ${result.locationId} and is_counter_default) as counter_zones`);
+           where location_id = ${venueId} and is_counter_default) as counter_zones`);
     expect(counts.rows[0]).toEqual({
       tenants: 1,
       nodes: 1,
@@ -486,6 +491,7 @@ describe("applyVenue", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
+    const venueId = await venueLocationId(suite.db);
     const second = await applyVenue(planVenue(request("B99999999"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -494,7 +500,7 @@ describe("applyVenue", () => {
     const tenants = await suite.db.execute<{ n: number }>(sql`
       select count(*) as n from tenants where country = 'ES' and tax_id = 'B99999999'`);
     expect(tenants.rows[0]?.n).toBe(1);
-    expect(second.locationId).toBe(first.locationId);
+    expect(second.locationId).toBe(venueId);
     expect(second.nodeId).toBe(first.nodeId);
     const venueRows = await suite.db.execute<{
       locations: number;
@@ -913,13 +919,12 @@ it("reuses the current dated start without clearing the location timeline", asyn
     db: suite.db,
     modules: ALL_MODULES,
   });
+  const venueId = await venueLocationId(suite.db);
   await suite.db.insert(locationDayCutoverChanges).values([
-    { locationId: first.locationId, effectiveBusinessDay: "2000-01-01", dayCutover: "07:00:00" },
-    { locationId: first.locationId, effectiveBusinessDay: "2099-01-01", dayCutover: "03:00:00" },
+    { locationId: venueId, effectiveBusinessDay: "2000-01-01", dayCutover: "07:00:00" },
+    { locationId: venueId, effectiveBusinessDay: "2099-01-01", dayCutover: "03:00:00" },
   ]);
-  await suite.db
-    .insert(locationBusinessDaySettings)
-    .values({ locationId: first.locationId, revision: 3 });
+  await suite.db.insert(locationBusinessDaySettings).values({ locationId: venueId, revision: 3 });
   const current = request("B10000008");
   current.dayCutover = "07:00";
   await expect(
@@ -927,10 +932,10 @@ it("reuses the current dated start without clearing the location timeline", asyn
       db: suite.db,
       modules: ALL_MODULES,
     }),
-  ).resolves.toMatchObject({ locationId: first.locationId, nodeId: first.nodeId });
+  ).resolves.toMatchObject({ locationId: venueId, nodeId: first.nodeId });
   expect(await suite.db.select().from(locationDayCutoverChanges)).toHaveLength(2);
   expect(await suite.db.select().from(locationBusinessDaySettings)).toEqual([
-    { locationId: first.locationId, revision: 3 },
+    { locationId: venueId, revision: 3 },
   ]);
   await expect(
     applyVenue(planVenue(original, ALL_MODULES), { db: suite.db, modules: ALL_MODULES }),
