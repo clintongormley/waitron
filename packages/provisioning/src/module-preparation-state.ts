@@ -27,8 +27,7 @@ type Options = GrantChecks & {
 };
 const FILE_NAME = "module-preparation-state.json";
 const LIMIT = 1024 * 1024;
-/** The box must still write its own selection after the old box has given up filing. */
-const MERGE_ROOM = 64 * 1024;
+const MERGE_ROOM_FLOOR = 8 * 1024;
 function invalid(): never {
   throw new AppError("setup.attempt_invalid", {});
 }
@@ -129,16 +128,26 @@ function mergedFile(own: File, incoming: readonly Revision[]): File {
     revisions: [...missingRevisions(own.revisions, incoming), ...own.revisions],
   };
 }
+function largestRevisionBytes(revisions: readonly Revision[]): number {
+  return revisions.reduce(
+    (largest, revision) => Math.max(largest, Buffer.byteLength(JSON.stringify(revision))),
+    0,
+  );
+}
 /**
- * Whether this box's file could take `incoming` and keep `MERGE_ROOM` free: a file over its limit
- * makes every later module operation refuse `setup.attempt_invalid`.
+ * Whether this box's file could take `incoming` and still take the wait and the selection the box
+ * writes after the old box has given up filing: a file over its limit makes every later module
+ * operation refuse `setup.attempt_invalid`.
  */
 export async function modulePreparationMergeFits(
   options: { stateDir: string },
   incoming: readonly { binding: OperationBinding; value: unknown }[],
 ): Promise<boolean> {
-  const merged = mergedFile(await readStateFile(options.stateDir), incoming);
-  return Buffer.byteLength(JSON.stringify(merged)) <= LIMIT - MERGE_ROOM;
+  const own = await readStateFile(options.stateDir);
+  // Computed because each revision repeats all earlier entries, so the need grows with the file.
+  const room =
+    2 * (largestRevisionBytes(incoming) + largestRevisionBytes(own.revisions)) + MERGE_ROOM_FLOOR;
+  return Buffer.byteLength(JSON.stringify(mergedFile(own, incoming))) <= LIMIT - room;
 }
 /**
  * Writes nothing when this box lacks none of `incoming`. The caller must hold the venue lock: this

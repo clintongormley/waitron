@@ -891,31 +891,35 @@ describe("compareFinalCopy", () => {
 
     it("each box's selections fit but together they do not, so they are refused", async () => {
       const r = await rig();
-      const half = "x".repeat(LIMIT / 2 + 1);
+      const sizeable = "x".repeat(200 * 1024);
       await writeFile(
         join(r.m2State, "module-preparation-state.json"),
-        JSON.stringify({ version: 1, revisions: [revisionOf(half, "own")] }),
+        JSON.stringify({ version: 1, revisions: [revisionOf(sizeable, "own")] }),
       );
-      const envelope = r.resigned((body) => revisions(body, [revisionOf(half, "theirs")]));
+      const envelope = r.resigned((body) => revisions(body, [revisionOf(sizeable, "theirs")]));
       expect(await r.compareRow(envelope)).toEqual(refused("handover.preparation_state_too_large"));
     });
 
-    it("selections that fit the file but leave under 64 KiB of it free are refused", async () => {
+    it("selections that fit the file but leave too little room for two revisions as large are refused", async () => {
       const r = await rig();
-      const envelope = r.resigned((body) =>
-        revisions(body, [revisionOf("x".repeat(LIMIT - 64 * 1024))]),
-      );
+      const envelope = r.resigned((body) => revisions(body, [revisionOf("x".repeat(LIMIT / 2))]));
       expect(await r.compareRow(envelope)).toEqual(refused("handover.preparation_state_too_large"));
+    });
+
+    it("control: selections that leave that room are not refused", async () => {
+      const r = await rig();
+      const envelope = r.resigned((body) => revisions(body, [revisionOf("x".repeat(300 * 1024))]));
+      expect(await r.compareRow(envelope)).toEqual({ ok: true });
     });
 
     it("control: a selection both boxes hold is counted once", async () => {
       const r = await rig();
-      const half = "x".repeat(LIMIT / 2 + 1);
+      const sizeable = "x".repeat(200 * 1024);
       await writeFile(
         join(r.m2State, "module-preparation-state.json"),
-        JSON.stringify({ version: 1, revisions: [revisionOf(half)] }),
+        JSON.stringify({ version: 1, revisions: [revisionOf(sizeable)] }),
       );
-      const envelope = r.resigned((body) => revisions(body, [revisionOf(half)]));
+      const envelope = r.resigned((body) => revisions(body, [revisionOf(sizeable)]));
       expect(await r.compareRow(envelope)).toEqual({ ok: true });
     });
   });

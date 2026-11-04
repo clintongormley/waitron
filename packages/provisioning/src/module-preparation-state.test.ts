@@ -429,18 +429,25 @@ describe("a damaged file names itself in the log", () => {
   });
 });
 
+const LIMIT = 1024 * 1024;
+const fileBytes = (revisions: unknown[]) =>
+  Buffer.byteLength(JSON.stringify({ version: 1, revisions }));
+const largestBytes = (revisions: unknown[]) =>
+  Math.max(0, ...revisions.map((revision) => Buffer.byteLength(JSON.stringify(revision))));
+/** What a merge asks of the file: its bytes, room for two revisions sized from each list, and 8 KiB. */
+const bytesNeeded = (incoming: unknown[], own: unknown[]) =>
+  fileBytes([...incoming, ...own]) + 2 * (largestBytes(incoming) + largestBytes(own)) + 8 * 1024;
+/** Text under a binding of its own that brings `bytesNeeded` to the limit once listed in `incoming`. */
+const textToLimit = (incoming: unknown[], own: unknown[], revisionOf: (text: string) => unknown) =>
+  "x".repeat(LIMIT - bytesNeeded([...incoming, revisionOf("")], own));
+
 describe("modulePreparationMergeFits", () => {
-  const LIMIT = 1024 * 1024;
-  const ROOM = 64 * 1024;
-  const fileBytes = (revisions: unknown[]) =>
-    Buffer.byteLength(JSON.stringify({ version: 1, revisions }));
+  // Small enough that one list's revision and its room fit, and two lists' do not.
+  const SIZEABLE = 200 * 1024;
   const stored = (over: Partial<OperationBinding>, text: string) => ({
     binding: { ...binding, ...over },
     value: { text },
   });
-  /** Padding that brings a file holding `revisions` plus one more with `text: ""` to `total` bytes. */
-  const paddingFor = (total: number, revisions: unknown[], last: ReturnType<typeof stored>) =>
-    "x".repeat(total - fileBytes([...revisions, last]));
 
   it("takes revisions into a box with no file", async () => {
     const { options } = await fixture();
@@ -450,66 +457,94 @@ describe("modulePreparationMergeFits", () => {
     expect(await fits([stored({}, "a")])).toBe(true);
   });
 
-  it("keeps 64 KiB below the file's limit: the margin's last byte fits, and the next does not", async () => {
-    const { options } = await fixture();
-    const empty = stored({}, "");
-    const atMargin = paddingFor(LIMIT - ROOM, [], empty);
-    const sized = (text: string) => stored({}, text);
-    expect(fileBytes([sized(atMargin)])).toBe(LIMIT - ROOM);
-    const fits = (text: string) =>
-      modulePreparationMergeFits({ stateDir: options.stateDir }, [sized(text)]);
-    expect(await fits(atMargin.slice(1))).toBe(true);
-    expect(await fits(atMargin)).toBe(true);
-    expect(await fits(`${atMargin}x`)).toBe(false);
+  it("keeps room for two revisions sized from the largest on each list, plus 8 KiB: its last byte fits, and the next does not", async () => {
+    const { options, path } = await fixture();
+    const own = [
+      stored({ eventId: "own-small" }, "a"),
+      stored({ eventId: "own-large" }, "b".repeat(40_000)),
+      stored({ eventId: "own-last" }, "c"),
+    ];
+    await fs.writeFile(path, JSON.stringify({ version: 1, revisions: own }));
+    const list = [
+      stored({ eventId: "theirs-small" }, "d"),
+      stored({ eventId: "theirs-large" }, "e".repeat(60_000)),
+      ...Array.from({ length: 14 }, (_, index) =>
+        stored({ eventId: `theirs-${index}` }, "f".repeat(50_000)),
+      ),
+    ];
+    const last = (text: string) => stored({ eventId: "theirs-exact" }, text);
+    const text = textToLimit(list, own, last);
+    const fits = (exact: string) =>
+      modulePreparationMergeFits({ stateDir: options.stateDir }, [...list, last(exact)]);
+    expect(bytesNeeded([...list, last(text)], own)).toBe(LIMIT);
+    expect(await fits(text)).toBe(true);
+    expect(await fits(`${text}x`)).toBe(false);
   });
 
-  it("a file already inside the margin does not fit, even with nothing to merge", async () => {
+  it("with no file of its own, keeps room sized from the old box's list alone", async () => {
+    const { options } = await fixture();
+    const list = Array.from({ length: 18 }, (_, index) =>
+      stored({ eventId: `theirs-${index}` }, "g".repeat(50_000)),
+    );
+    const last = (text: string) => stored({ eventId: "theirs-exact" }, text);
+    const text = textToLimit(list, [], last);
+    expect(bytesNeeded([...list, last(text)], [])).toBe(LIMIT);
+    const fits = (exact: string) =>
+      modulePreparationMergeFits({ stateDir: options.stateDir }, [...list, last(exact)]);
+    expect(await fits(text)).toBe(true);
+    expect(await fits(`${text}x`)).toBe(false);
+  });
+
+  it("a file already too full to keep that room does not fit, even with nothing to merge", async () => {
     const { options, path } = await fixture();
+    const large = stored({ eventId: "large" }, "x".repeat(300_000));
+    const last = (text: string) => stored({ eventId: "exact" }, text);
     const write = (text: string) =>
-      fs.writeFile(path, JSON.stringify({ version: 1, revisions: [stored({}, text)] }));
-    const atMargin = paddingFor(LIMIT - ROOM, [], stored({}, ""));
-    await write(atMargin);
+      fs.writeFile(path, JSON.stringify({ version: 1, revisions: [large, last(text)] }));
+    const atLimit = "x".repeat(LIMIT - bytesNeeded([], [large, last("")]));
+    expect(bytesNeeded([], [large, last(atLimit)])).toBe(LIMIT);
+    await write(atLimit);
     expect(await modulePreparationMergeFits({ stateDir: options.stateDir }, [])).toBe(true);
-    await write(`${atMargin}x`);
+    await write(`${atLimit}x`);
     expect(await modulePreparationMergeFits({ stateDir: options.stateDir }, [])).toBe(false);
   });
 
   it("counts this box's own revisions with the incoming ones", async () => {
     const { options } = await fixture();
-    const half = "x".repeat(LIMIT / 2 + 1);
+    const sizeable = "x".repeat(SIZEABLE);
     await createModulePreparationState(options).withState(binding, (s) =>
-      s.replace({ text: half }),
+      s.replace({ text: sizeable }),
     );
     expect(
       await modulePreparationMergeFits({ stateDir: options.stateDir }, [
-        stored({ eventId: "another" }, half),
+        stored({ eventId: "another" }, sizeable),
       ]),
     ).toBe(false);
   });
 
   it("counts once a revision both boxes hold, whatever order its value's keys are in", async () => {
     const { options } = await fixture();
-    const half = "x".repeat(LIMIT / 2 + 1);
+    const sizeable = "x".repeat(SIZEABLE);
     await createModulePreparationState(options).withState(binding, (s) =>
-      s.replace({ text: half, other: 1 }),
+      s.replace({ text: sizeable, other: 1 }),
     );
     expect(
       await modulePreparationMergeFits({ stateDir: options.stateDir }, [
-        { binding, value: { other: 1, text: half } },
+        { binding, value: { other: 1, text: sizeable } },
       ]),
     ).toBe(true);
   });
 
   it.each([
-    ["another value", { binding, value: { text: "y".repeat(LIMIT / 2 + 1) } }],
+    ["another value", { binding, value: { text: "y".repeat(SIZEABLE) } }],
     [
       "another binding",
-      { binding: { ...binding, action: "other" }, value: { text: "x".repeat(LIMIT / 2 + 1) } },
+      { binding: { ...binding, action: "other" }, value: { text: "x".repeat(SIZEABLE) } },
     ],
   ])("the same revision but for %s counts as its own", async (_label, revision) => {
     const { options } = await fixture();
     await createModulePreparationState(options).withState(binding, (s) =>
-      s.replace({ text: "x".repeat(LIMIT / 2 + 1) }),
+      s.replace({ text: "x".repeat(SIZEABLE) }),
     );
     expect(await modulePreparationMergeFits({ stateDir: options.stateDir }, [revision])).toBe(
       false,
@@ -518,8 +553,8 @@ describe("modulePreparationMergeFits", () => {
 
   it("a revision listed twice in one list counts once", async () => {
     const { options } = await fixture();
-    const half = stored({}, "x".repeat(LIMIT / 2 + 1));
-    expect(await modulePreparationMergeFits({ stateDir: options.stateDir }, [half, half])).toBe(
+    const once = stored({}, "x".repeat(300 * 1024));
+    expect(await modulePreparationMergeFits({ stateDir: options.stateDir }, [once, once])).toBe(
       true,
     );
   });
@@ -534,8 +569,6 @@ describe("modulePreparationMergeFits", () => {
 });
 
 describe("mergeModulePreparationRevisions", () => {
-  const LIMIT = 1024 * 1024;
-  const ROOM = 64 * 1024;
   const FILE = "module-preparation-state.json";
   const revision = (eventId: string, value: unknown = { name: eventId }) => ({
     binding: { ...binding, eventId },
@@ -648,18 +681,25 @@ describe("mergeModulePreparationRevisions", () => {
     return "x".repeat(total - bytes(""));
   };
 
-  it("counts the bytes the size check counts: a merge at the margin writes exactly that size", async () => {
+  it("counts the bytes the size check counts: a merge of the most it takes writes exactly those bytes", async () => {
     const { options, path } = await fixture();
     const stateDir = options.stateDir;
     await place(stateDir, [m2]);
-    const atMargin = textFilling(LIMIT - ROOM);
-    const beyond = revision("m1", { text: `${atMargin}x` });
-    expect(await modulePreparationMergeFits({ stateDir }, [beyond])).toBe(false);
-    const exact = revision("m1", { text: atMargin });
-    expect(await modulePreparationMergeFits({ stateDir }, [exact])).toBe(true);
-    await mergeModulePreparationRevisions({ stateDir }, [exact]);
-    expect((await fs.stat(path)).size).toBe(LIMIT - ROOM);
-    expect(await events(stateDir)).toEqual(["m1", "m2"]);
+    const list = Array.from({ length: 18 }, (_, index) =>
+      revision(`m1-${index}`, { text: "x".repeat(50_000) }),
+    );
+    const last = (text: string) => revision("exact", { text });
+    const atLimit = textToLimit(list, [m2], last);
+    const bytes = fileBytes([...list, last(atLimit), m2]);
+    expect(bytes + 2 * (largestBytes(list) + largestBytes([m2])) + 8 * 1024).toBe(LIMIT);
+    expect(await modulePreparationMergeFits({ stateDir }, [...list, last(`${atLimit}x`)])).toBe(
+      false,
+    );
+    const exact = [...list, last(atLimit)];
+    expect(await modulePreparationMergeFits({ stateDir }, exact)).toBe(true);
+    await mergeModulePreparationRevisions({ stateDir }, exact);
+    expect((await fs.stat(path)).size).toBe(bytes);
+    expect((await events(stateDir)).slice(-2)).toEqual(["exact", "m2"]);
   });
 
   it("writes up to the file's own limit, past the size check's margin, and refusing leaves this box's file alone", async () => {
@@ -676,6 +716,17 @@ describe("mergeModulePreparationRevisions", () => {
     await mergeModulePreparationRevisions({ stateDir }, [revision("m1", { text: atLimit })]);
     expect((await fs.stat(path)).size).toBe(LIMIT);
     expect(await events(stateDir)).toEqual(["m1", "m2"]);
+  });
+
+  it("counts this box's own repeats towards the room, while the merge would still be under the file's limit", async () => {
+    const { options } = await fixture();
+    const stateDir = options.stateDir;
+    const own = revision("own", { text: "x".repeat(150 * 1024) });
+    await place(stateDir, [own, own]);
+    const another = revision("another", { text: "y".repeat(150 * 1024) });
+    expect(await modulePreparationMergeFits({ stateDir }, [another])).toBe(false);
+    await mergeModulePreparationRevisions({ stateDir }, [another]);
+    expect(await events(stateDir)).toEqual(["another", "own", "own"]);
   });
 
   it("counts this box's own repeats in the size check, because the merge keeps them", async () => {
