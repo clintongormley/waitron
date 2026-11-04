@@ -492,3 +492,11 @@ export { KITCHEN_SCREEN_KINDS } from "./schema/venue-service/kitchen-screens.js"
 export { ZONE_PAINT_KINDS } from "./schema/venue-service/seasons.js";
 export { SERVICE_STEP_STARTS } from "./schema/venue-service/service-steps.js";
 export type { ServiceStepStart } from "./schema/venue-service/service-steps.js";
+
+export * from "./schema/document-delivery-requests.js";
+
+export * from "./schema/device-invoice-save-operations.js";
+
+export * from "./schema/device-invoice-revisions.js";
+
+export * from "./schema/document-page-jobs.js";
