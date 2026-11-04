@@ -1057,7 +1057,10 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   - **S18:** the contract's node location ids remain for S18 (S3, #2387). The attendance
     recorder keeps an unread optional `locationId` for S18 (S13, #2397). Left for S18 by S11
     (#2411): the unread `_cfg` in `kitchen.ts`, `dead-ends.ts` and `kitchen-allergy.ts`. The
-    node's id remains for S18f (S16, #2402).
+    node's id remains for S18f (S16, #2402). In `department-receipts.ts`,
+    `readDepartmentLogoRasters` and `writeDepartmentReceipt` still take an unread `_cfg` (it
+    carries only the receipt languages, so this is not location work); dropping it touches the two
+    module-contract members, the one server caller and their test call sites.
   - **The schema slices S20–S28:** the schema changes remain for S20–S28 (S3, #2387). Until the
     schema slices drop `print_jobs.location_id`, `enqueuePrintJob` takes the venue id as an
     optional `venueId`, so a sale, a kitchen send or a payment's slips read it once, and the demo
