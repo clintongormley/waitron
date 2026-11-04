@@ -1,18 +1,19 @@
 import { createReadStream, existsSync } from "node:fs";
-import { copyFile, open, rm } from "node:fs/promises";
+import { chmod, copyFile, open, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { lockVenueDatabase } from "@waitron/db";
 import { parseIndicator, type RetainedRevision } from "@waitron/handover";
 import { mergeModulePreparationRevisions } from "@waitron/provisioning";
 import { AppError, isAppError } from "@waitron/shared";
-import { NODE_FILE, VENUE_FILE } from "@waitron/store";
+import { NODE_FILE, SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
+import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
 import { errnoOf } from "./errno.js";
 import { acceptedCopyPath } from "./handover-acceptance.js";
 import { digestBytes, FINAL_STATE_EVENT } from "./handover-capture.js";
 import type { Logger } from "./logger.js";
-import { restoreDatabase, type PlacementFs } from "./restore.js";
+import { INCOMING_SUFFIX, VENUE_FILE_MODE } from "./restore.js";
 import "./errors.js";
 
 /** The `node_handover_events.kind` recording that the accepted copy is the live database. */
@@ -29,6 +30,15 @@ export type PlacementAtStart =
   | { readonly kind: "copy_placed_owed"; readonly operationId: string; readonly swapped: boolean };
 
 const NOTHING: PlacementAtStart = { kind: "nothing" };
+
+/** The file steps of placing, which tests replace to fail or kill one. */
+export interface PlacementSteps {
+  readonly copyFile: (from: string, to: string) => Promise<void>;
+  readonly chmod: (path: string, mode: number) => Promise<void>;
+  readonly rm: (path: string, options: { recursive?: boolean; force: boolean }) => Promise<void>;
+  readonly rename: (from: string, to: string) => Promise<void>;
+  readonly reachDisk: (path: string) => Promise<void>;
+}
 
 interface AwaitingPlacement {
   readonly operationId: string;
@@ -110,6 +120,32 @@ async function mergeSelections(
 }
 
 /**
+ * The old file goes in one rename, so `venue.db` is there at every moment. The set-aside folder
+ * `restoreDatabase` uses leaves a moment with none, and a start that finds that refuses
+ * `restore.database_set_aside`, or takes the box to first setup's repair page, before this function
+ * can run again.
+ */
+async function swapIn(steps: PlacementSteps, accepted: string, venueDir: string): Promise<void> {
+  const live = join(venueDir, VENUE_FILE);
+  const incoming = `${live}${INCOMING_SUFFIX}`;
+  try {
+    await steps.copyFile(accepted, incoming);
+    await steps.chmod(incoming, VENUE_FILE_MODE);
+    await steps.reachDisk(incoming);
+    await steps.rm(litestreamMetaDir(live), { recursive: true, force: true });
+    // The real open replays an old -wal into the main file beside it, so it goes first, and its
+    // removal goes to the disk ahead of the rename.
+    for (const suffix of SIDE_FILE_SUFFIXES) {
+      await steps.rm(`${live}${suffix}`, { force: true });
+    }
+    await steps.reachDisk(venueDir);
+    await steps.rename(incoming, live);
+  } finally {
+    await rm(incoming, { force: true });
+  }
+}
+
+/**
  * Places the copy this spare accepted as its live `venue.db` once the old box has given up filing.
  * `node.db` is never changed: the caller records `copy_placed` at its first node handle, and only
  * then removes `accepted.db`, which until then is what a repeat of this places from. A live file
@@ -122,10 +158,11 @@ export async function placeAcceptedCopyAtStart(args: {
   nodeId: string;
   log: Logger;
   /** Tests inject failures here; production passes nothing. */
-  fs?: PlacementFs;
+  fs?: Partial<PlacementSteps>;
   merge?: typeof mergeModulePreparationRevisions;
 }): Promise<PlacementAtStart> {
   const { venueDir, stateDir, nodeId, log, fs, merge = mergeModulePreparationRevisions } = args;
+  const steps: PlacementSteps = { copyFile, chmod, rm, rename, reachDisk, ...fs };
   const nodePath = join(venueDir, NODE_FILE);
   // Before the lock, whose hold makes the folder: a box with no node.db may not have one yet.
   if (!existsSync(nodePath)) return NOTHING;
@@ -143,6 +180,8 @@ export async function placeAcceptedCopyAtStart(args: {
     );
     const { sha256 } = indicator.snapshot;
     if ((await digestOf(join(venueDir, VENUE_FILE))) === sha256) {
+      // A crashed run may have renamed and not flushed, and `copy_placed` is recorded next.
+      await steps.reachDisk(venueDir);
       return { kind: "copy_placed_owed", operationId, swapped: false };
     }
 
@@ -162,23 +201,9 @@ export async function placeAcceptedCopyAtStart(args: {
         .flatMap((row) => row.revisions!),
     );
     await deleteBackupRoomNote(stateDir);
-    // `restoreDatabase` moves its source away, and `accepted.db` must outlive a crash in the swap.
-    const temporary = `${accepted}.placing`;
-    try {
-      await (fs?.copyFile ?? copyFile)(accepted, temporary);
-      await reachDisk(temporary);
-      await restoreDatabase({
-        databasePath: temporary,
-        venueDir,
-        stateDir,
-        log,
-        ...(fs === undefined ? {} : { fs }),
-      });
-      // `copy_placed` is recorded next: it must never reach the disk ahead of the swap it reports.
-      await reachDisk(venueDir);
-    } finally {
-      await rm(temporary, { force: true });
-    }
+    await swapIn(steps, accepted, venueDir);
+    // `copy_placed` is recorded next: it must never reach the disk ahead of the swap it reports.
+    await steps.reachDisk(venueDir);
     log("info", "handover.place_copy.placed", { operationId });
     return { kind: "copy_placed_owed", operationId, swapped: true };
   } finally {

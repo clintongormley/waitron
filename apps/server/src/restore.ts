@@ -99,10 +99,10 @@ const TRADING_ENV_FILE = "trading.env";
 const REPLACED_SUFFIX = ".replaced";
 const IDENTITY_KEYS = ["WAITRON_NODE_ID"] as const;
 /** Where the incoming database sits while it is still incoming — same directory, so the rename is atomic. */
-const INCOMING_SUFFIX = ".incoming";
+export const INCOMING_SUFFIX = ".incoming";
 const ASIDE_PREFIX = `.${VENUE_FILE}-replaced-`;
 /** The venue file holds the whole database, the same protected content the artifact carried. */
-const VENUE_FILE_MODE = 0o600;
+export const VENUE_FILE_MODE = 0o600;
 
 /** `RestoreDeps` has no seam for {@link restoreDatabase}: a fake would hide the two failures named
  * in its own comment. */

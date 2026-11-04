@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -11,22 +12,31 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { copyFile, rename, rm, rmdir } from "node:fs/promises";
+import { chmod, copyFile, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, openVenueDatabase, withNodeTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  lockVenueDatabase,
+  openVenueDatabase,
+  withNodeTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { signIndicator, type HandoverBinding, type NodeLocalItem } from "@waitron/handover";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { appendHandoverEventTx, NODE_MIGRATIONS, setNodeModeTx } from "@waitron/node-db";
 import { acceptedCopyPath } from "./handover-acceptance.js";
 import { FINAL_STATE_EVENT } from "./handover-capture.js";
-import { COPY_PLACED_EVENT, placeAcceptedCopyAtStart } from "./handover-place-copy.js";
+import {
+  COPY_PLACED_EVENT,
+  placeAcceptedCopyAtStart,
+  type PlacementSteps,
+} from "./handover-place-copy.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
-import type { PlacementFs } from "./restore.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const SOURCE = "11111111-1111-4111-8111-111111111111";
@@ -79,6 +89,52 @@ function sqliteFile(path: string, table: string): void {
   raw.exec(`create table ${table}(a); vacuum into '${path}'`);
   raw.close();
   rmSync(`${path}.source`);
+}
+
+/**
+ * Real frames in `<path>-wal`, as a killed process leaves them: the writer's close would checkpoint
+ * them away, so the files are taken while it is open and put back after.
+ */
+function realOldWal(path: string, write: string): void {
+  const kept = scratch();
+  const writer = new DatabaseSync(path);
+  writer.exec(`pragma journal_mode = wal; pragma wal_autocheckpoint = 0; ${write}`);
+  for (const suffix of ["", "-wal", "-shm"]) {
+    copyFileSync(`${path}${suffix}`, join(kept, `db${suffix}`));
+  }
+  writer.close();
+  for (const suffix of ["", "-wal", "-shm"]) {
+    copyFileSync(join(kept, `db${suffix}`), `${path}${suffix}`);
+  }
+}
+
+function tableNames(databasePath: string): string[] {
+  const reader = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    const rows = reader.prepare("select name from sqlite_master order by name").all();
+    return rows.map((row) => (row as { name: string }).name);
+  } finally {
+    reader.close();
+  }
+}
+
+const KILL_CHILD = fileURLToPath(new URL("./testing/place-copy-kill-child.ts", import.meta.url));
+
+function killedPlacing(
+  args: { venueDir: string; stateDir: string },
+  at: string,
+): Promise<{ signal: NodeJS.Signals | null; output: string }> {
+  const child = spawn(
+    process.execPath,
+    ["--import", import.meta.resolve("tsx"), KILL_CHILD, args.venueDir, args.stateDir, NODE, at],
+    { stdio: ["ignore", "pipe", "pipe"] },
+  );
+  let output = "";
+  child.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()));
+  child.stderr.on("data", (chunk: Buffer) => (output += chunk.toString()));
+  return new Promise((resolve) => {
+    child.once("close", (_code, signal) => resolve({ signal, output }));
+  });
 }
 
 interface Logged {
@@ -175,7 +231,7 @@ describe("placeAcceptedCopyAtStart", () => {
       venueDir,
       stateDir,
       accepted,
-      temporary: `${accepted}.placing`,
+      incoming: `${live}.incoming`,
       live,
       nodePath,
       logged,
@@ -190,35 +246,6 @@ describe("placeAcceptedCopyAtStart", () => {
           logged.push({ level, message, detail });
         },
       } as Parameters<typeof placeAcceptedCopyAtStart>[0],
-    };
-  }
-
-  /**
-   * Every filesystem call from the `crashAt`th rename on fails, as if the power went: what is on the
-   * disk stays as that rename left it, with no putting back.
-   */
-  function crashingFs(crashAt: number): PlacementFs {
-    let renames = 0;
-    let crashed = false;
-    const power = () => new Error("the power went");
-    return {
-      copyFile,
-      rename: async (from, to) => {
-        renames += 1;
-        if (crashed || renames >= crashAt) {
-          crashed = true;
-          throw power();
-        }
-        await rename(from, to);
-      },
-      rm: async (path, options) => {
-        if (crashed) throw power();
-        await rm(path, options);
-      },
-      rmdir: async (path) => {
-        if (crashed) throw power();
-        await rmdir(path);
-      },
     };
   }
 
@@ -249,6 +276,7 @@ describe("placeAcceptedCopyAtStart", () => {
 
       expect(sha(b.accepted)).toBe(before);
       expect(readdirSync(join(b.stateDir, "handover", OP))).toEqual(["accepted.db"]);
+      expect(existsSync(b.incoming)).toBe(false);
     });
 
     it("an open in between changes the digest, so it places again from the kept file; once copy_placed is recorded it never places again", async () => {
@@ -303,42 +331,243 @@ describe("placeAcceptedCopyAtStart", () => {
       expect(await placeAcceptedCopyAtStart(b.args)).toEqual({ kind: "nothing" });
     });
 
-    it.each([
-      ["before the copy reaches the incoming name", 1],
-      ["before the old database moves aside", 2],
-      ["with the old main file aside and its side files not", 3],
-      ["with the old main file and one side file aside", 4],
-      ["with every old file aside, one rename short of placed", 5],
-    ])("a reboot mid-swap, %s, places from the kept accepted.db", async (_name, crashAt) => {
+    it("a partial incoming file a crash left behind is replaced, not placed", async () => {
       const b = await box();
-      const kept = sha(b.accepted);
-
-      await expect(
-        placeAcceptedCopyAtStart({ ...b.args, fs: crashingFs(crashAt) }),
-      ).rejects.toBeDefined();
-      // Failing case, the temporary left behind: a second full copy of the venue stays on the disk.
-      expect(existsSync(b.temporary)).toBe(false);
-      if (crashAt >= 3) expect(existsSync(b.live)).toBe(false);
-      else expect(sha(b.live)).not.toBe(kept);
-
-      const reboot = await placeAcceptedCopyAtStart(b.args);
-
-      expect(reboot).toEqual({ kind: "copy_placed_owed", operationId: OP, swapped: true });
-      expect(sha(b.live)).toBe(kept);
-      expect(sha(b.accepted)).toBe(kept);
-      expect(existsSync(`${b.live}-wal`)).toBe(false);
-      expect(existsSync(`${b.live}-shm`)).toBe(false);
-      expect(existsSync(`${b.live}.incoming`)).toBe(false);
-    });
-
-    it("a partial temporary file a crash left behind is replaced, not placed", async () => {
-      const b = await box();
-      writeFileSync(b.temporary, "half a copy");
+      writeFileSync(b.incoming, "half a copy");
 
       await placeAcceptedCopyAtStart(b.args);
 
       expect(sha(b.live)).toBe(sha(b.accepted));
-      expect(existsSync(b.temporary)).toBe(false);
+      expect(existsSync(b.incoming)).toBe(false);
+    });
+
+    it("the placed file is the venue file's owner-only mode, whatever accepted.db's is", async () => {
+      const b = await box();
+      chmodSync(b.accepted, 0o644);
+
+      await placeAcceptedCopyAtStart(b.args);
+
+      // Failing case, no chmod: 420, the copy keeping accepted.db's mode.
+      expect(statSync(b.live).mode & 0o777).toBe(0o600);
+    });
+
+    it("a failed rename stays that failure: the old venue.db is still there and the incoming file is gone", async () => {
+      const b = await box();
+      const old = sha(b.live);
+      const refused = Object.assign(new Error("refused"), { code: "EIO" });
+
+      await expect(
+        placeAcceptedCopyAtStart({ ...b.args, fs: { rename: () => Promise.reject(refused) } }),
+      ).rejects.toBe(refused);
+
+      expect(sha(b.live)).toBe(old);
+      expect(existsSync(b.incoming)).toBe(false);
+    });
+  });
+
+  describe("a real kill at each file step of the swap", () => {
+    async function killedBox(step: string) {
+      const b = await box();
+      realOldWal(
+        b.live,
+        "create table old_mirror_row_in_wal(a); insert into old_mirror_row_in_wal values (1)",
+      );
+      (await lockVenueDatabase(b.venueDir)).release();
+      const before = {
+        old: sha(b.live),
+        kept: sha(b.accepted),
+        node: sha(b.nodePath),
+        lock: statSync(join(b.venueDir, "venue.lock")).ino,
+      };
+
+      const died = await killedPlacing(b, step);
+
+      // Failing case, a step the child never reached: `null`, and the case proves nothing.
+      expect(died.signal, died.output).toBe("SIGKILL");
+      return { b, before };
+    }
+
+    function expectPlacedForGood(
+      b: Awaited<ReturnType<typeof box>>,
+      before: { kept: string },
+    ): void {
+      expect(sha(b.live)).toBe(before.kept);
+      expect(sha(b.accepted)).toBe(before.kept);
+      expect(existsSync(`${b.live}-wal`)).toBe(false);
+      expect(existsSync(`${b.live}-shm`)).toBe(false);
+      expect(existsSync(b.incoming)).toBe(false);
+      expect(existsSync(b.litestream)).toBe(false);
+    }
+
+    it.each([
+      ["while copying to the incoming name", "copy", false],
+      ["before the incoming file's mode is set", "chmod", false],
+      ["before the incoming file is flushed", "flush-incoming", false],
+      ["before Litestream's folder is removed", "litestream", false],
+      ["before the old -wal is removed", "wal", false],
+      ["before the old -shm is removed", "shm", false],
+      ["before the removals are flushed", "flush-before-rename", false],
+      ["before the rename onto venue.db", "rename", false],
+      ["before the rename is flushed", "flush-after-rename", true],
+      ["after answering", "answered", true],
+    ])("%s: venue.db is there, and the next start places once", async (_name, step, placed) => {
+      const { b, before } = await killedBox(step);
+
+      // Failing case, a swap that sets the old file aside first, at "rename": false, and a real
+      // start refuses that before this function can run again.
+      expect(existsSync(b.live)).toBe(true);
+      expect(sha(b.live)).toBe(placed ? before.kept : before.old);
+      expect(sha(b.nodePath)).toBe(before.node);
+      expect(statSync(join(b.venueDir, "venue.lock")).ino).toBe(before.lock);
+      expect(sha(b.accepted)).toBe(before.kept);
+
+      const next = await placeAcceptedCopyAtStart(b.args);
+
+      expect(next).toEqual({ kind: "copy_placed_owed", operationId: OP, swapped: !placed });
+      expectPlacedForGood(b, before);
+
+      const opened = await openVenueDatabase(b.venueDir);
+      await opened.close();
+      expect(tableNames(b.live)).toContain("placed");
+      expect(tableNames(b.live)).not.toContain("old_mirror_row_in_wal");
+    });
+
+    it.each(["wal", "shm", "rename"])(
+      "killed before %s, with the database opened before the next start places, as production's ahead check does",
+      async (step) => {
+        const { b, before } = await killedBox(step);
+        const opened = await openVenueDatabase(b.venueDir);
+        await opened.close();
+
+        const next = await placeAcceptedCopyAtStart(b.args);
+
+        expect(next).toEqual({ kind: "copy_placed_owed", operationId: OP, swapped: true });
+        expectPlacedForGood(b, before);
+      },
+    );
+  });
+
+  describe("an old -wal beside a new venue.db", () => {
+    const NEW_DATABASE = "create table t(a); insert into t values ('new'); create table placed(a)";
+
+    function folderWithNewDatabase(): string {
+      const folder = join(scratch(), "venue");
+      mkdirSync(folder);
+      const source = new DatabaseSync(join(folder, "source.db"));
+      source.exec(`${NEW_DATABASE}; vacuum into '${join(folder, "venue.db")}'`);
+      source.close();
+      rmSync(join(folder, "source.db"));
+      return folder;
+    }
+
+    function oldWalBeside(folder: string, write: string): void {
+      const old = join(scratch(), "old.db");
+      const source = new DatabaseSync(`${old}.source`);
+      source.exec(`create table t(a); insert into t values ('old'); vacuum into '${old}'`);
+      source.close();
+      realOldWal(old, write);
+      copyFileSync(`${old}-wal`, join(folder, "venue.db-wal"));
+    }
+
+    it("no -wal: the real open shows the new file's own tables", async () => {
+      const folder = folderWithNewDatabase();
+
+      const opened = await openVenueDatabase(folder);
+      await opened.close();
+
+      expect(tableNames(join(folder, "venue.db"))).toEqual(["placed", "t"]);
+    });
+
+    it("the real open replays its frames: a schema change replaces the new file's tables, with no error", async () => {
+      const folder = folderWithNewDatabase();
+      oldWalBeside(folder, "create table old_mirror(a)");
+
+      const opened = await openVenueDatabase(folder);
+      await opened.close();
+
+      expect(tableNames(join(folder, "venue.db"))).toEqual(["old_mirror", "t"]);
+    });
+
+    it("the real open replays its frames: a row change leaves a file that does not open", async () => {
+      const folder = folderWithNewDatabase();
+      oldWalBeside(folder, "insert into t values ('old row')");
+
+      await expect(openVenueDatabase(folder)).rejects.toThrow(/malformed/);
+    });
+
+    it("placing removes it first, so the placed database opens as the accepted copy", async () => {
+      const b = await box();
+      realOldWal(
+        b.live,
+        "create table old_mirror_row_in_wal(a); insert into old_mirror_row_in_wal values (1)",
+      );
+
+      await placeAcceptedCopyAtStart(b.args);
+      const opened = await openVenueDatabase(b.venueDir);
+      await opened.close();
+
+      // Failing case, without the removal: `old_mirror_row_in_wal` in the list and no `placed`.
+      expect(tableNames(b.live)).toContain("placed");
+      expect(tableNames(b.live)).not.toContain("old_mirror_row_in_wal");
+    });
+  });
+
+  describe("the order of the file steps", () => {
+    function recordingSteps(seen: string[]): Partial<PlacementSteps> {
+      return {
+        copyFile: async (from, to) => {
+          seen.push(`copy to ${basename(to)}`);
+          await copyFile(from, to);
+        },
+        chmod: async (path, mode) => {
+          seen.push(`chmod ${basename(path)}`);
+          await chmod(path, mode);
+        },
+        reachDisk: async (path) => {
+          seen.push(`flush ${basename(path)}`);
+        },
+        rm: async (path, options) => {
+          seen.push(`remove ${basename(path)}`);
+          await rm(path, options);
+        },
+        rename: async (from, to) => {
+          seen.push(`rename ${basename(from)} to ${basename(to)}`);
+          await rename(from, to);
+        },
+      };
+    }
+
+    it("on a swap: the file is flushed before anything old goes, the removals before the rename, the rename before the answer", async () => {
+      const b = await box();
+      const seen: string[] = [];
+
+      await placeAcceptedCopyAtStart({ ...b.args, fs: recordingSteps(seen) });
+
+      // Records the calls; no power cut was run to see what they keep.
+      expect(seen).toEqual([
+        "copy to venue.db.incoming",
+        "chmod venue.db.incoming",
+        "flush venue.db.incoming",
+        "remove .venue.db-litestream",
+        "remove venue.db-wal",
+        "remove venue.db-shm",
+        "flush venue",
+        "rename venue.db.incoming to venue.db",
+        "flush venue",
+      ]);
+    });
+
+    it("with the file already equal: the folder is flushed before the answer, and nothing else happens", async () => {
+      const b = await box();
+      await placeAcceptedCopyAtStart(b.args);
+      const seen: string[] = [];
+
+      const answer = await placeAcceptedCopyAtStart({ ...b.args, fs: recordingSteps(seen) });
+
+      expect(answer).toMatchObject({ swapped: false });
+      // Failing case, no flush on this path: `[]`, and `copy_placed` could outrun a rename the
+      // crashed run had not flushed.
+      expect(seen).toEqual(["flush venue"]);
     });
   });
 
@@ -352,19 +581,22 @@ describe("placeAcceptedCopyAtStart", () => {
         placeAcceptedCopyAtStart({
           ...b.args,
           fs: {
-            rename,
-            rm,
-            rmdir,
-            copyFile: () => Promise.reject(noSpace),
+            copyFile: (_from, to) => {
+              writeFileSync(to, "half a copy");
+              return Promise.reject(noSpace);
+            },
           },
         }),
       ).rejects.toBe(noSpace);
 
-      // Failing case, without the deletion here: the note is still there, `true` is printed, and
-      // `restoreDatabase` was never reached to delete it.
+      // Failing case, without the deletion here: the note is still there, and `true` is printed.
       expect(existsSync(b.note)).toBe(false);
       expect(sha(b.live)).toBe(old);
-      expect(existsSync(b.temporary)).toBe(false);
+      expect(existsSync(b.incoming)).toBe(false);
+      // A copy that fails leaves the old database whole: its side files and Litestream's folder stay.
+      expect(existsSync(`${b.live}-wal`)).toBe(true);
+      expect(existsSync(`${b.live}-shm`)).toBe(true);
+      expect(existsSync(b.litestream)).toBe(true);
     });
 
     it("Litestream's folder and the old side files are removed", async () => {
