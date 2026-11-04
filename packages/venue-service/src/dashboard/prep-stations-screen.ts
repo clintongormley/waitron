@@ -158,6 +158,9 @@ export class PrepStationsScreen extends LitElement {
       .warning {
         color: var(--wt-color-warning);
       }
+      .warning a {
+        color: var(--wt-color-primary-text);
+      }
     `,
   ];
   @property({ attribute: false }) api!: PrepStationsApi;
@@ -387,9 +390,9 @@ export class PrepStationsScreen extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     this.requestUpdate();
-    void this.#load();
+    void this.#load({ coverage: true });
     if (!this.api.liveData) {
-      this.#routingTimer = setInterval(() => void this.#load(), 60_000);
+      this.#routingTimer = setInterval(() => void this.#load({ coverage: true }), 60_000);
     }
   }
   override disconnectedCallback() {
@@ -470,8 +473,9 @@ export class PrepStationsScreen extends LitElement {
       })}
     </section>`;
   }
-  async #load() {
-    void this.#loadPassCoverage();
+  /** `coverage` only for a change that can alter the pass coverage's answer (D104's tables). */
+  async #load({ coverage = false } = {}) {
+    if (coverage) void this.#loadPassCoverage();
     try {
       let initial = !this.#loaded;
       this.#loaded = true;
@@ -791,7 +795,7 @@ export class PrepStationsScreen extends LitElement {
         this.#stationGone(edit.station.id);
         this.stationEditBusy = false;
         this.#showError(t("prep.station_not_found"));
-        void this.#load();
+        void this.#load({ coverage: true });
         return;
       }
       this.stationEditRefusal = refusalOf(error);
@@ -807,7 +811,7 @@ export class PrepStationsScreen extends LitElement {
     // never sent this save and cannot answer saved(); that one closes unless the person has
     // changed it since.
     if (shown === sender ? shown.saved() : shown?.dirty === false) this.stationEdit = undefined;
-    await this.#load();
+    await this.#load({ coverage: true });
   }
   #stationEditor() {
     const edit = this.stationEdit;
@@ -957,7 +961,7 @@ export class PrepStationsScreen extends LitElement {
           ?.closeAfter("saved");
         this.editor = undefined;
       }
-      await this.#load();
+      await this.#load({ coverage: true });
     } catch (e) {
       if (!this.isConnected || identity !== this.#stationIdentity) return;
       const refusal = refusalOf(e);
@@ -1083,7 +1087,7 @@ export class PrepStationsScreen extends LitElement {
       if (codeOf(error) === "station.not_found") {
         this.#stationGone(id);
         this.#showError(t("prep.station_not_found"));
-        void this.#load();
+        void this.#load({ coverage: true });
       } else {
         this.stationAction = {
           ...this.stationAction,
@@ -1101,7 +1105,7 @@ export class PrepStationsScreen extends LitElement {
     }
     if (!this.isConnected || identity !== this.#stationActionIdentity) return;
     this.#stationGone(id);
-    await this.#load();
+    await this.#load({ coverage: true });
   }
   #field(field: keyof StationInput, label: string, type = "number") {
     const identity = this.#stationIdentity;

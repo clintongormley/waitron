@@ -1000,3 +1000,21 @@ rejected.
   per-column heading wrap is backlog A1318.
 - **Task 5 M1:** the switch's hint line is not linked as the switch's `description`; the editor's
   other two switches share the gap. Backlog A1319.
+
+## Revision 5 (2026-11-04, Task 7 review)
+
+- **I1:** the warning's Devices link reads `--wt-color-primary-text` (`.warning a`), as the stations
+  table's Devices link does through `::part(devices-link)`; a case in each theme compares its
+  computed colour with an element painted with the token.
+- **I2:** a case shows gaps, then fails the next read through a `devices` change and expects only
+  the failure line; it goes red when the coverage controller's error callback does nothing.
+- **I3:** case 6 now sends a `ticket_items` change alone and checks no read follows, then `devices`
+  as the positive control, and re-checks each "once" after the screen settles; it goes red when the
+  screen also watches `ticket_items`.
+- **m1:** a case with a station and zone named with `{devices}` and `{zone}` expects the plain
+  sentence and one link; it goes red when the names are filled in before the split.
+- **m2:** `#load` reads coverage only when asked: on connect, the 60-second reload without live data,
+  and the station add, edit, delete and not-found paths. A routing cell save and Make default (both
+  places) no longer read it (`setDefaultStation` writes only `is_default`, which the coverage read
+  never selects); cases count the reads for each, and for station add and delete.
+- **m3:** `routing-grid.unsaved.test.ts`'s stub answers `readPassCoverage` with `[]`.
