@@ -15,6 +15,7 @@ import { readBillEditState, requireSplitEditors } from "./bill-editing.js";
 import {
   saveDraft,
   readDrafts,
+  takeOverDraft,
   type BillEditExpected,
   type BillEditState,
 } from "./order-drafts.js";
@@ -368,7 +369,7 @@ describe("A803 split: editors", () => {
     );
   });
 
-  it("does not count the actor's own whole bill as a second editor's conflict", async () => {
+  it("refuses a foreign whole bill beside the actor's own, naming only the foreign one", async () => {
     const { partyId, low, high } = await bills();
     const mine = (await save(partyId, low, venue.operatorId)).edit;
     const theirs = (await save(partyId, high, venue.adminId)).edit;
@@ -377,6 +378,48 @@ describe("A803 split: editors", () => {
       "draft.taken_over",
       conflict(theirs),
     );
+  });
+
+  it("does not count an empty whole bill as an editor beside the actor's own bill", async () => {
+    const { partyId, low, high } = await bills();
+    const { edit } = await save(partyId, low, venue.operatorId);
+    await expect(check([low, high], [], [edit, blank(high)], venue.operatorId)).resolves.toEqual([
+      edit,
+      { ...blank(high), editorId: null, editorName: null },
+    ]);
+  });
+
+  it("does not count an empty whole bill as an editor beside a colleague's bill", async () => {
+    const { partyId, low, high } = await bills();
+    const { edit } = await save(partyId, low, venue.adminId);
+    await expect(check([low, high], [], [edit, blank(high)])).resolves.toEqual([
+      edit,
+      { ...blank(high), editorId: null, editorName: null },
+    ]);
+  });
+
+  it("names one colleague's whole bill and loose source, and passes once the loose one is taken over", async () => {
+    const { partyId, low, high } = await bills();
+    const wholeEdit = (await save(partyId, low, venue.adminId)).edit;
+    const looseEdit = (await save(partyId, high, venue.adminId)).edit;
+    const op = venue.operatorId;
+    await refused(
+      () => check([low], [high], [wholeEdit, looseEdit], op),
+      "draft.taken_over",
+      conflict(wholeEdit, [wholeEdit, looseEdit]),
+    );
+
+    await inTx(venue, (tx) =>
+      takeOverDraft(tx, venue.cfg, partyId, looseEdit.draftId!, op, {
+        revision: looseEdit.draftRevision!,
+        expectedEdit: looseEdit,
+        submissionId: randomUUID(),
+      }),
+    );
+
+    const taken = await inTx(venue, (tx) => readBillEditState(tx, high));
+    expect(taken.editorId).toBe(op);
+    await expect(check([low], [high], [wholeEdit, taken], op)).resolves.toEqual([wholeEdit, taken]);
   });
 
   it("refuses a foreign editor on a loose source over a blank whole bill", async () => {

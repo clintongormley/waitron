@@ -446,10 +446,10 @@ Changing from B to A later removes one call in `splitTable` and changes those th
 
 - **D4 Editors.** New `requireSplitEditors(tx, wholeIds, looseSourceIds, operatorId, expected)` in
   `bill-editing.ts`. It reads the union, requires `expected` to be exactly the union, sorted, and
-  compares each state (`requireExpectedState`). Conflicts are every loose source with a foreign editor,
-  plus, when the whole bills have two or more different editors, every whole bill not owned by the
-  actor. All of them go in one `draft.taken_over` with `conflicts`, sorted by bill id (A773 §6), so the
-  till can show every row at once rather than one refusal per bill. A staying bill is not in the set.
+  compares each state (`requireExpectedState`). The conflicts are every bill in the set not owned by
+  the actor; refused when a loose source has a foreign editor or the whole bills have two or more
+  different editors. All of them go in one `draft.taken_over` with `conflicts`, sorted by bill id
+  (A773 §6). A staying bill is not in the set.
   The new bill has no draft and no editor row.
 
   **The till is stricter than the server, by decision, not by question.** Spec §3.7 case 2 (owner,
@@ -848,8 +848,9 @@ prints" that slip, and spec §3.7, four days later, ended it.
 | 28 | `till-app-parties.test.ts:2540`, `:2542` "shows %s in its own words" | detail shape only (as 18b). The banner assertion is unchanged: their party holds one table (`:110`), so there is no panel to reopen. `:2541` likewise, the table not being held. Their two-table twins, at the foot, are new in Task 12d | 14a |
 | 29 | `till-app-parties.test.ts:11820-11834` "refuses to move a bill whose editing observation is missing" | detail shape only (as 18b). The banner assertion is unchanged: no `prompt`, so it composes at Send as today (D20) | 14a |
 
-`testing/table-action-fixture.ts`'s `splitTable` accepts `billId | null | SplitSelection` and answers
-`{ partyId, billIds, billId: billIds[0] }`, so the other test files that call it through the fixture (`rg -n 'splitTable\('
+`testing/table-action-fixture.ts`'s `splitTable` accepts `billId | null | SplitSelection`. It answers
+`{ partyId, billId: billIds[0] }`, and adds `billIds` only for a selection, because 7 existing cases pin the
+old shape. So the other test files that call it through the fixture (`rg -n 'splitTable\('
 apps/server/src -g '*.test.ts'`) need no edit. `observedTableActionBody` reads `selection` as well. A
 fixture, not an assertion.
 
@@ -993,7 +994,7 @@ The new signature (D1) with `loose` required to be empty until Task 3b (`managem
   4. A loose source of Ana and a whole bill of Luis: one refusal with both in `conflicts` (the till shows every row at once).
   5. The actor's own draft on either: passes.
   6. A staying bill with a foreign editor is not in the set and refuses nothing.
-  7. `expected` missing one id, holding an extra, or unsorted: `management.request_invalid { field: "expectedEdits" }` (`parseBillEditExpecteds`, `readExpectedBillEdits`).
+  7. `expected` missing one id or holding an extra: `management.request_invalid { field: "expectedEdits" }` (`readExpectedBillEdits`). Unsorted: `management.request_invalid { field: "expectedEdits.1.billId" }` (`parseBillEditExpecteds`).
   8. A changed editor version: `draft.out_of_date`, conflicts checked first as `requireRelocatableBillEditors` does.
 - [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/bill-editing.bill-moves.test.ts -t 'A803 split: editors'`: `requireSplitEditors is not a function`.
 - [ ] **Implement.** D4. `splitTable` calls it in place of `requireRelocatableBillEditors`.

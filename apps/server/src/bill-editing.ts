@@ -163,7 +163,7 @@ export async function requireRelocatableBillEditors(
 /**
  * A whole bill relocates, so one foreign editor across the whole bills may keep it; a loose source
  * gives up dishes, so its editor must be the actor (A773 §6). A refusal names every foreign bill in
- * the set, so the till can draw every take-over row at once.
+ * the set, as A773 §6 defines the list.
  */
 export async function requireSplitEditors(
   tx: Transaction,
