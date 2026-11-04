@@ -102,7 +102,7 @@ export async function offeredAuthoriser(
   return (JSON.parse(offer.envelope) as { body: { authorisedBy: string } }).body.authorisedBy;
 }
 
-function isOperationsBinding(raw: unknown, operation: HandoverOperation): boolean {
+export function isOperationsBinding(raw: unknown, operation: HandoverOperation): boolean {
   try {
     return bindingFingerprint(parseBinding(raw)) === operation.fingerprint;
   } catch {

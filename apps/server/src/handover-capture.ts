@@ -132,7 +132,7 @@ async function captureOnce(deps: CaptureDeps, operationId: string): Promise<Fina
 }
 
 /** The operation's binding, once this box's restriction shows it handed over for it. */
-async function steppedDownBinding(
+export async function steppedDownBinding(
   deps: CaptureDeps,
   operationId: string,
 ): Promise<HandoverBinding> {
@@ -160,7 +160,7 @@ async function steppedDownBinding(
   return binding;
 }
 
-async function readFinalState(
+export async function readFinalState(
   node: NodeDatabase | NodeTransaction,
   nodeId: string,
   operationId: string,

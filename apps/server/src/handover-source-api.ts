@@ -3,17 +3,34 @@ import { mkdir, open, readdir, rename, rm, type FileHandle } from "node:fs/promi
 import { basename, dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import type { Context, Hono } from "hono";
-import type { FinalStateIndicator } from "@waitron/handover";
-import { readHandoverOperation } from "@waitron/node-db";
-import { createErrorBoundary } from "@waitron/server-kit";
+import { withNodeTransaction, type NodeDatabase, type NodeTransaction } from "@waitron/db";
+import {
+  envelopeDigest,
+  verifyEnvelope,
+  type FinalStateIndicator,
+  type HandoverBinding,
+} from "@waitron/handover";
+import type { CanonicalValue } from "@waitron/membership";
+import { readHandoverEvent, readHandoverOperation, type HandoverOperation } from "@waitron/node-db";
+import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import {
+  isOperationsBinding,
+  offeredAuthoriser,
+  type RelinquishmentBody,
+} from "./handover-acceptance.js";
+import {
   CAPTURE_REFUSAL_STATUS,
+  FINAL_STATE_EVENT,
   captureFinalCopy,
   digestBytes,
   finalCopyPath,
+  readFinalState,
+  steppedDownBinding,
   type CaptureDeps,
 } from "./handover-capture.js";
+import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
+import { advanceHandoverTx } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { verifiedPeerQuery, type PeerQueryPurpose } from "./peer-status-api.js";
 import "./errors.js";
@@ -24,6 +41,7 @@ const STATUS = {
   "handover.request_invalid": 400,
   "handover.operation_unknown": 404,
   "handover.final_copy_changed": 409,
+  "handover.indicator_mismatch": 409,
   "handover.summary_failed": 500,
 } as const;
 
@@ -143,11 +161,110 @@ async function retake(
   }
 }
 
+/** The operation and its binding, when `raw` is an acceptance its destination signed for it. */
+async function acceptanceOf(
+  deps: CaptureDeps,
+  operationId: string,
+  raw: unknown,
+): Promise<{ operation: HandoverOperation; binding: HandoverBinding; indicatorDigest: string }> {
+  const verdict = verifyEnvelope<unknown>(
+    raw,
+    "acceptance",
+    await peerKeyOf({ ...deps, db: deps.venue }),
+  );
+  if (!verdict.valid) {
+    if (verdict.reason === "malformed" || verdict.reason === "wrong_purpose") {
+      throw new AppError("handover.request_invalid", { field: "envelope" });
+    }
+    throw new AppError("handover.peer_unknown", {});
+  }
+  const operation = await readHandoverOperation(deps.node, deps.nodeId, operationId);
+  if (operation === null) throw new AppError("handover.operation_unknown", { operationId });
+  if (verdict.signerNodeId !== operation.destinationNodeId) {
+    throw new AppError("handover.peer_unknown", {});
+  }
+  const binding = await steppedDownBinding(deps, operationId);
+  const { body } = verdict;
+  const fields = (typeof body === "object" && body !== null ? body : {}) as {
+    binding?: unknown;
+    indicatorDigest?: unknown;
+  };
+  if (typeof fields.indicatorDigest !== "string") {
+    throw new AppError("handover.request_invalid", { field: "body" });
+  }
+  if (!isOperationsBinding(fields.binding, operation)) {
+    throw new AppError("handover.indicator_mismatch", { field: "binding" });
+  }
+  return { operation, binding, indicatorDigest: fields.indicatorDigest };
+}
+
+/**
+ * The stored relinquishment for an acceptance of this box's stored indicator, recording it the
+ * first time. It is answered as the text stored, so every repeat, across restarts, is the same
+ * bytes, and a repeat needs no write.
+ */
+async function relinquishFiling(
+  deps: CaptureDeps,
+  operationId: string,
+  raw: unknown,
+): Promise<string> {
+  const { operation, binding, indicatorDigest } = await acceptanceOf(deps, operationId, raw);
+  const indicator = await readFinalState(deps.node, deps.nodeId, operationId);
+  if (indicator === null) {
+    throw new AppError("handover.indicator_mismatch", { field: FINAL_STATE_EVENT });
+  }
+  const held = envelopeDigest(indicator);
+  if (indicatorDigest !== held) {
+    throw new AppError("handover.indicator_mismatch", { field: "indicatorDigest" });
+  }
+  const stored = await readRelinquishment(deps, operationId);
+  if (stored !== null) return stored;
+  const relinquishment = await signAsThisBox(deps, "relinquishment", {
+    binding: binding as unknown as CanonicalValue,
+    indicatorDigest: held,
+    acceptanceDigest: envelopeDigest(raw as Parameters<typeof envelopeDigest>[0]),
+    filingAssignedTo: operation.destinationNodeId,
+    authorisedBy: await offeredAuthoriser(deps, operationId),
+  } satisfies RelinquishmentBody);
+  return withNodeTransaction(deps.node, async (tx) => {
+    // Checked again inside the write: another post may have recorded one since the read above.
+    const recorded = await readRelinquishment({ node: tx, nodeId: deps.nodeId }, operationId);
+    if (recorded !== null) return recorded;
+    const row = await readHandoverOperation(tx, deps.nodeId, operationId);
+    if (row?.state !== "source_stepped_down") {
+      throw new AppError("handover.not_stepped_down", { operationId });
+    }
+    await advanceHandoverTx(
+      tx,
+      deps.nodeId,
+      operationId,
+      "filing_relinquished",
+      {},
+      relinquishment,
+    );
+    // Read back so the first answer is the stored text too.
+    return (await readRelinquishment({ node: tx, nodeId: deps.nodeId }, operationId))!;
+  });
+}
+
+async function readRelinquishment(
+  deps: { node: NodeDatabase | NodeTransaction; nodeId: string },
+  operationId: string,
+): Promise<string | null> {
+  const row = await readHandoverEvent(deps.node, deps.nodeId, operationId, "filing_relinquished");
+  if (row === null) return null;
+  // A fault in Waitron: this file's writer always stores the envelope with the event.
+  if (row.envelope === null) throw new Error(`the relinquishment of ${operationId} is empty`);
+  return row.envelope;
+}
+
 /**
  * `POST /api/node/handover/:operationId/indicator` and `…/final-copy` — the box this stepped-down
  * box handed over to fetches the signed final-state indicator and the venue.db copy it describes.
- * Mounted only in the restricted start: before the restart the old process can still write
- * venue.db, so a copy taken then could describe a file that later changes.
+ * `…/acceptance` — that box hands back its signed acceptance of the copy, and this box gives up
+ * filing to it. Mounted only in the restricted start: before the restart the old process can still
+ * write venue.db, so a copy taken then could describe a file that later changes. Nothing here
+ * lifts the restriction.
  */
 export function mountHandoverSourceApi(app: Hono, deps: CaptureDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "handover-source.failed");
@@ -171,6 +288,14 @@ export function mountHandoverSourceApi(app: Hono, deps: CaptureDeps, log: Logger
         "content-type": "application/octet-stream",
         "content-length": String(snapshot.bytes),
       });
+    }),
+  );
+
+  app.post("/api/node/handover/:operationId/acceptance", (c) =>
+    run(c, log, async () => {
+      const raw = await readRawJsonBody<unknown>(c);
+      const text = await relinquishFiling(deps, c.req.param("operationId"), raw);
+      return c.body(text, 200, { "content-type": "application/json" });
     }),
   );
 }
