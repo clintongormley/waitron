@@ -139,6 +139,8 @@ one-for-one replacement of a core table. All four are classified `state`, as the
 | `location_business_day_settings(location_id, revision)` | `business_day_settings(id = 1, revision)` | kept a table of its own so the live subscriptions that depend on it keep the same table dependencies and do not wake on every venue-details save |
 | `location_day_cutover_changes(location_id, effective_business_day, day_cutover)` | `day_cutover_changes(effective_business_day` primary key`, day_cutover)` | same checks |
 
+2026-11-04, on the `fire_control` row above: A773-2 PR D landed first but left `fire_control` to S28: dropping it alone rebuilds `locations`, which the upgrade guard refuses (PR D plan D113). S28's `DROP TABLE` takes it; S28 also deletes the tests that still set it (listed in D113).
+
 `nodes.location_id` and every other `location_id` column are deleted with nothing in their place
 (§4). The `locations` table itself keeps its columns from S23 until S28 drops the whole table: it is read
 only for its id, by `venueLocationId`, and still written at setup; cutting it to its id in S23 would mean an extra rebuild of a table 37 others point at (§4).
@@ -776,6 +778,7 @@ left.
    order and invoice code S11 and S2 also touch. The review checks the plan's file lists against open
    PRs at the plan's head.
 9. **`fire_control` and A773-2.** Whichever lands second drops its removal step.
+   2026-11-04: A773-2 PR D landed first but left `fire_control` to S28: dropping it alone rebuilds `locations`, which the upgrade guard refuses (PR D plan D113). S28's `DROP TABLE` takes it; S28 also deletes the tests that still set it (listed in D113).
 10. **Spanish wording found by eye.** Spanish says "local" for both the premises and "local network",
     and a bracket class or `.` in `git grep` misses "ubicación" (§5). The review checks S19 searched with
     plain words, from the English keys.

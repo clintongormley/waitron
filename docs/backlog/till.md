@@ -2554,8 +2554,10 @@ The [A773-1 plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and
 Sent/New order and bill ownership behavior. Physical dragging and partial-serving trials remain
 separate backlog entries. A803 owns its pass/station presentation tail.
 
-Next: PR D (master plan Tasks 11–12): ticket headings, the "Goes with {stations}" cue, and removing
-`away_at`, `pass_item_marks` and `fire_control`.
+Next: PR D (master plan Tasks 11–12): ticket headings and the "Goes with {stations}" cue. On PR D's
+branch, core migration `0205_retire_pass_item_marks` drops `pass_item_marks` and
+`0206_retire_away_at` drops `ticket_items.away_at`; `fire_control` goes with `locations` in A1301
+S28 (PR D plan D113).
 
 What A797 leaves for the pass (slices 9 and 9b): `apps/till/src/state/kitchen-columns.ts` is the
 Columns store to reuse, and a key missing from a stored layout returns to its default place, not

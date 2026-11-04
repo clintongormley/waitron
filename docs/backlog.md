@@ -2470,8 +2470,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) leaves PR D: ticket presentation
   and physical schema/configuration retirement. PR B (B4a #2425, then B4b #2440; [B4
   plan](superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)) and PR C
-  ([plan](superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) are complete. Next: PR D, ticket headings, the "Goes with {stations}" cue and removing
-  `away_at`, `pass_item_marks` and `fire_control`. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
+  ([plan](superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) are complete. Next: PR D, ticket headings and the "Goes with {stations}" cue; on
+  its branch, migration `0205` drops `pass_item_marks` and `0206` drops `ticket_items.away_at`, and
+  `fire_control` goes with `locations` in A1301 S28. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **The pass board and the station board still carry copies of each other's code (left open by
   A773-2 B4a's finish review).** Two copies remain: the width watcher that switches between columns

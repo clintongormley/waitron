@@ -288,7 +288,10 @@ were drawn on is [here](https://claude.ai/artifact/GKV4JTKfn1hpbxxoskbpBT) (owne
 
 See [A773's spec §7](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#7-settings--changes-to-a756).
 Built by A756 PRs 1–8 (plan `docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md`);
-"Waits for the pass" and `locations.fire_control`'s removal belong to A773-2.
+"Waits for the pass" belongs to A773-2. `locations.fire_control` is read by nothing and goes with
+the `locations` table in A1301 S28, not A773-2: dropping the column alone rebuilds `locations`,
+which the upgrade guard refuses (A773-2 PR D plan D113). S28 also deletes the tests that still set
+it, in `packages/db/src/schema/kitchen-courses.test.ts`, `apps/server/src/order-groups.test.ts`, `management-api.test.ts`, `till-api.test.ts` and `configuration-import.test.ts`, and `packages/provisioning/src/configuration-transfer.boundaries.test.ts`.
 
 ### Add station sets a station's name, colour, printers and late flags only (A756 PRs 6–8)
 

@@ -371,6 +371,8 @@ carries `fire_control`. The backlog says A773-2 removes that column (`docs/backl
 `locations` column. `bumpMode` in `kitchen.ts` and `working-order.ts` reads `kitchen_stations`,
 not `locations`.)
 
+2026-11-04: A773-2 PR D left `fire_control` to A1301 S28, its plan D113.
+
 **The venue's stable id: an open A1301 point this table does not settle.** (added 2026-11-03
 against main 68732329c1.) `settings.venue` has no id, and the `locations` row's id goes with the
 table. But two things are keyed by that id today. Boot passes `tradingContext.locationId` as

@@ -25,9 +25,8 @@ export const DEFAULT_TIME_ZONE = "Europe/Madrid";
 export const bumpMode = enumType(["line", "ticket"]);
 
 /**
- * The per-venue FIRE CONTROL mode: which surface offers the fire action per held course — the
- * tab-ordering screen (`waiter`, default), the station display (`kitchen`), or the expediter/pass
- * display (`expo`). Governs ONLY which UI shows the affordance.
+ * Read by nothing. Dropping this column alone rebuilds `locations`, so A1301 S28's drop of
+ * `locations` removes it.
  */
 export const fireControlMode = enumType(["waiter", "kitchen", "expo"]);
 

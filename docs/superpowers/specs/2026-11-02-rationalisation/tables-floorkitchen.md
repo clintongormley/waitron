@@ -333,6 +333,8 @@ this table's schema; the removal of `away_at` and `pass_item_marks` is still pla
 refresh's base as #2440 (`af9a7d568c`); it adds `show_non_pass_stations` to the devices area's two
 kitchen-screen tables and changes nothing here.)
 
+2026-11-04: A773-2 PR D drops `away_at` and `pass_item_marks`, migrations `0205_retire_pass_item_marks` and `0206_retire_away_at`.
+
 ### 1.16 `ticket_item_moves` (kept — typed history)
 
 Unchanged; read back by product code to find the latest mover (`station-move.ts`,
@@ -467,6 +469,8 @@ A773-2 PRs B2–B4a added no reader or writer, and PR B4b, landed after this ref
 entry in `apps/server/src/personal-data-actions.coverage.test.ts:57`, and needs a `REMOVED_TABLES`
 entry in `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts`, which accepts it because the
 capture's manifest counts 0 rows for the table in every phase.)
+
+2026-11-04: A773-2 PR D drops `away_at` and `pass_item_marks`, migrations `0205_retire_pass_item_marks` and `0206_retire_away_at`.
 
 ## 5. Protections
 
