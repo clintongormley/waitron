@@ -413,13 +413,7 @@ it("an option label put back after a detached update still asks before Cancel di
   const label = form.shadowRoot!.querySelector("dashboard-option-label-form")!;
   await label.updateComplete;
   await reattachAfterDetachedUpdate(label);
-  // Put back on its own, the option window is no longer modal while the option list's window still
-  // is, and this form is drawn beside that window rather than inside it, so a typed edit does not
-  // reach the field. The edit is sent as the field's own change event.
-  label
-    .shadowRoot!.querySelector('[name="label-name"]')!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Child draft" } }));
-  await label.updateComplete;
+  await typeInLabel(label, "Child draft");
   expect(app.leave.coordinator.isDirty([label])).toBe(true);
   cancel(label);
   expect((await question(app)).open).toBe(true);
@@ -428,6 +422,20 @@ it("an option label put back after a detached update still asks before Cancel di
 
 function field(form: HTMLElement, name: string) {
   return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name="${name}"]`)!;
+}
+/** What a person does: focus the option window's own field and type through the keyboard. */
+async function typeInLabel(
+  label: HTMLElementTagNameMap["dashboard-option-label-form"],
+  value: string,
+) {
+  expect(isModal(label)).toBe(true);
+  const input = field(label, "label-name").shadowRoot!.querySelector("input")!;
+  input.focus();
+  expect(input.matches(":focus")).toBe(true);
+  await userEvent.clear(page.elementLocator(input));
+  if (value !== "") await userEvent.keyboard(value);
+  expect(input.value).toBe(value);
+  await label.updateComplete;
 }
 function saveOf(form: HTMLElement) {
   return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
@@ -489,10 +497,7 @@ for (const kind of ["extras", "options"] as const) {
           expect(app.leave.coordinator.isDirty()).toBe(true);
           expectSaveChanged(form);
           if (route === "cancel") cancel(form);
-          else {
-            field(form, "name").shadowRoot!.querySelector("input")!.focus();
-            await userEvent.keyboard("{Escape}");
-          }
+          else await userEvent.keyboard("{Escape}");
           const q = await question(app);
           expect(q.open).toBe(true);
           expect(app.cancelled).toBe(0);
@@ -573,14 +578,11 @@ async function openLabelForm(
   await label.updateComplete;
   return label;
 }
-// Put back on its own, the option window is no longer modal while the option list's window still
-// is, so an edit after that is sent as the field's own change event.
-async function changeLabelName(
-  label: HTMLElementTagNameMap["dashboard-option-label-form"],
-  value: string,
-) {
-  field(label, "label-name").dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
-  await label.updateComplete;
+function isModal(form: HTMLElement) {
+  return form
+    .shadowRoot!.querySelector("wt-modal")!
+    .shadowRoot!.querySelector("dialog")!
+    .matches(":modal");
 }
 for (const mode of ["edit", "create"] as const) {
   const openedName = mode === "edit" ? "Rare" : "";
@@ -615,7 +617,7 @@ for (const mode of ["edit", "create"] as const) {
       const label = await openLabelForm(form, mode);
       await edit(label, "label-name", "Child draft");
       await putBack(label, how);
-      await changeLabelName(label, "Later option");
+      await typeInLabel(label, "Later option");
       expect(app.leave.coordinator.isDirty([label])).toBe(true);
       saveOf(label).click();
       await expect.poll(() => label.open).toBe(false);
@@ -631,7 +633,7 @@ for (const mode of ["edit", "create"] as const) {
       const label = await openLabelForm(form, mode);
       await edit(label, "label-name", "Child draft");
       await putBack(label, how);
-      await changeLabelName(label, openedName);
+      await typeInLabel(label, openedName);
       expect(app.leave.coordinator.isDirty([label])).toBe(false);
       expectSaveQuiet(label);
     });
@@ -647,6 +649,11 @@ for (const mode of ["edit", "create"] as const) {
       expect(field(label, "label-name").value).toBe("Child draft");
       expect(app.leave.coordinator.isDirty([label])).toBe(true);
       expectSaveChanged(label);
+      expect(isModal(form)).toBe(true);
+      const parentInput = field(form, "name").shadowRoot!.querySelector("input")!;
+      parentInput.focus();
+      expect(parentInput.matches(":focus")).toBe(false);
+      await typeInLabel(label, "Child draft");
       cancel(label);
       const q = await question(app);
       expect(q.open).toBe(true);

@@ -196,7 +196,10 @@ export class WtDialog extends LitElement {
     super.connectedCallback();
     if (this.hasUpdated) this.observeBody();
     if (this.hasUpdated) this.syncMessageTabStop();
-    if (this.hasUpdated && this.open) this.watchContent();
+    if (this.hasUpdated && this.open) {
+      this.restoreModal();
+      this.watchContent();
+    }
   }
 
   override disconnectedCallback(): void {
@@ -277,21 +280,8 @@ export class WtDialog extends LitElement {
       if (this.open && !this.dialog.open) {
         const focused = deepActiveElement();
         this.returnTarget = focused === document.body ? null : focused;
-        // Before as well as after: the browser picks opening focus inside showModal(), and on the
-        // first render nothing has set a body that is always a tab stop yet.
-        this.syncBodyTabStop();
-        // The heading's help badge comes first in the tree, so without this the browser opens on it
-        // with help on rather than where it opens with help off.
-        const help = this.renderRoot.querySelector<HTMLSlotElement>('slot[name="help"]');
-        help?.toggleAttribute("inert", true);
-        this.dialog.showModal();
-        help?.removeAttribute("inert");
-        this.syncBodyTabStop();
+        this.showModalWithOpeningFocus();
         this.watchContent();
-        // An overflowing body is a tab stop ahead of its slotted fields, so opening focus lands on
-        // it; a body with something to focus hands it on.
-        if (this.shadowRoot!.activeElement === this.bodyEl && this.bodyTabStop === "overflow")
-          this.focusFirstContent();
       }
       // Also when the browser has already closed the dialog itself, as on Escape.
       if (!this.open) this.unwatchContent();
@@ -304,6 +294,32 @@ export class WtDialog extends LitElement {
     }
     this.syncBodyTabStop();
     this.syncMessageTabStop();
+  }
+
+  private showModalWithOpeningFocus(): void {
+    // Before as well as after: the browser picks opening focus inside showModal(), and on the
+    // first render nothing has set a body that is always a tab stop yet.
+    this.syncBodyTabStop();
+    // The heading's help badge comes first in the tree, so without this the browser opens on it
+    // with help on rather than where it opens with help off.
+    const help = this.renderRoot.querySelector<HTMLSlotElement>('slot[name="help"]');
+    help?.toggleAttribute("inert", true);
+    this.dialog.showModal();
+    help?.removeAttribute("inert");
+    this.syncBodyTabStop();
+    // An overflowing body is a tab stop ahead of its slotted fields, so opening focus lands on
+    // it; a body with something to focus hands it on.
+    if (this.shadowRoot!.activeElement === this.bodyEl && this.bodyTabStop === "overflow")
+      this.focusFirstContent();
+  }
+
+  /** Leaving the page takes a native dialog out of the top layer but leaves its `open` attribute,
+   * and put back like that it is not modal: everything in it is inert under any modal still open.
+   * Removing the attribute sends no `close`. */
+  private restoreModal(): void {
+    if (!this.dialog.open || this.dialog.matches(":modal")) return;
+    this.dialog.removeAttribute("open");
+    this.showModalWithOpeningFocus();
   }
 
   private onClose(): void {

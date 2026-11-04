@@ -323,10 +323,6 @@ it("a purchase keeps an edit made before it was taken out and put back, and stil
   expect(fieldValue(form, "supplier-name")).toBe("Changed supplier");
   expect(app.leave.coordinator.isDirty()).toBe(true);
   expect(await saveButton(form)).toEqual({ variant: "primary", disabled: false });
-  form
-    .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=supplier-name]")!
-    .shadowRoot!.querySelector("input")!
-    .focus();
   await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(form.open).toBe(true);
