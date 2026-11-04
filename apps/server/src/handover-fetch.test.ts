@@ -224,6 +224,7 @@ async function rig({ mode = "mirror" as "mirror" | "primary" } = {}) {
     stateDir,
     log,
     tickMs: TICK_MS,
+    accept: null,
   };
   async function start(overrides: Partial<DestinationDutyDeps> = {}) {
     const duty = await startHandoverDestinationDuty({ ...deps, ...overrides });

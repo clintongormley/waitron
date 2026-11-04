@@ -268,6 +268,11 @@ declare module "@waitron/shared" {
     /** The person who authorised the handover may not move the venue, according to the copy. */
     "handover.authoriser_not_permitted": Record<string, never>;
     /**
+     * The old box answered this box's acceptance with something other than a relinquishment of
+     * exactly what it accepted, so this box has not taken over filing and keeps asking.
+     */
+    "handover.relinquishment_invalid": Record<string, never>;
+    /**
      * A node booting as primary found, by reconciling with its cloud peer, a higher-term membership
      * document that fences it, so it boots read-only rather than sell beside the promoted primary
      * (two nodes filing under one NIF — CLAUDE.md §5). Logged, never thrown: a fenced boot is a

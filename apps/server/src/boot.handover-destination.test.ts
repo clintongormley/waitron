@@ -5,10 +5,16 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readTenant, stampDeployment, writeNodeMembership } from "@waitron/db";
+import { readTenant, stampDeployment, withNodeTransaction, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
-import { sha256Hex, signEnvelope, type HandoverBinding } from "@waitron/handover";
+import {
+  envelopeDigest,
+  sha256Hex,
+  signEnvelope,
+  type HandoverBinding,
+  type SignedHandoverEnvelope,
+} from "@waitron/handover";
 import {
   canonicalize,
   endorseKey,
@@ -19,10 +25,16 @@ import {
   type SignedMembershipDocument,
 } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { readHandoverOperation, setNodeMode, writeMirrorLink } from "@waitron/node-db";
+import {
+  appendHandoverEventTx,
+  readHandoverEvent,
+  readHandoverOperation,
+  setNodeMode,
+  writeMirrorLink,
+} from "@waitron/node-db";
 import type { StartedServer } from "./boot.js";
 import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
-import { beginHandover } from "./handover-store.js";
+import { advanceHandover, beginHandover } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -44,6 +56,7 @@ const KEY_ENV = {
 };
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const LATER_OP = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const AUTHORISER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
 const suite = useVenueDb({ migrations });
 
@@ -68,8 +81,9 @@ afterEach(async () => {
 async function startMainBox(
   self: () => string,
   state: string,
-): Promise<{ url: string; asked: string[] }> {
+): Promise<{ url: string; asked: string[]; posts: string[] }> {
   const asked: string[] = [];
+  const posts: string[] = [];
   mainBox = createServer((req, res) => {
     let raw = "";
     req.on("data", (chunk: Buffer) => (raw += chunk.toString()));
@@ -82,6 +96,30 @@ async function startMainBox(
       if (req.url!.endsWith("/final-copy")) {
         res.setHeader("content-length", "1");
         res.end("x");
+        return;
+      }
+      if (req.url!.endsWith("/acceptance")) {
+        const acceptance = JSON.parse(raw) as SignedHandoverEnvelope<{
+          binding: CanonicalValue;
+          indicatorDigest: string;
+        }>;
+        posts.push(raw);
+        res.setHeader("content-type", "application/json");
+        res.end(
+          JSON.stringify(
+            signEnvelope(
+              "relinquishment",
+              {
+                binding: acceptance.body.binding,
+                indicatorDigest: acceptance.body.indicatorDigest,
+                acceptanceDigest: envelopeDigest(acceptance),
+                filingAssignedTo: self(),
+                authorisedBy: AUTHORISER,
+              },
+              MAIN_BOX,
+            ),
+          ),
+        );
         return;
       }
       const { nonce, operationId } = (
@@ -107,10 +145,14 @@ async function startMainBox(
     });
   });
   await new Promise<void>((resolve) => mainBox!.listen(0, "127.0.0.1", resolve));
-  return { url: `http://127.0.0.1:${(mainBox.address() as AddressInfo).port}`, asked };
+  return { url: `http://127.0.0.1:${(mainBox.address() as AddressInfo).port}`, asked, posts };
 }
 
-async function boot(mode: "mirror" | "primary", mainBoxState = "abandoned") {
+async function boot(
+  mode: "mirror" | "primary",
+  mainBoxState = "abandoned",
+  beforeStart: (nodeId: string, ownKey: string) => Promise<void> = async () => {},
+) {
   beforeServerStarts();
   const venue = await setupVenue(suite.db);
   const nodeId = venue.cfg.nodeId;
@@ -118,7 +160,7 @@ async function boot(mode: "mirror" | "primary", mainBoxState = "abandoned") {
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, nodeId);
   const own = await readNodeIdentityKey(suite.node, ring, nodeId);
   await pinMainBoxKey(suite.node, nodeId, MAIN_BOX);
-  const { url, asked } = await startMainBox(() => nodeId, mainBoxState);
+  const { url, asked, posts } = await startMainBox(() => nodeId, mainBoxState);
   const body: MembershipDocumentBody = {
     term: 3,
     nodes: [
@@ -149,6 +191,7 @@ async function boot(mode: "mirror" | "primary", mainBoxState = "abandoned") {
     },
   });
   await beginHandover({ node: suite.node, nodeId }, binding(OP), "destination");
+  await beforeStart(nodeId, own);
   await setNodeMode({ venue: suite.db, node: suite.node }, nodeId, mode);
   await writeMirrorLink(suite.node, nodeId, {
     relayUrl: "http://127.0.0.1:1/",
@@ -189,7 +232,7 @@ async function boot(mode: "mirror" | "primary", mainBoxState = "abandoned") {
   server = await startServer(env, env, {
     peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
   });
-  return { nodeId, asked, binding };
+  return { nodeId, asked, posts, binding };
 }
 
 const operation = (nodeId: string, operationId: string) =>
@@ -240,6 +283,39 @@ describe("the spare's handover duty in a full start", () => {
       { timeout: 15_000 },
     );
     expect((await operation(nodeId, OP))?.state).toBe("prepared");
+  }, 120_000);
+
+  it("a real start at copy_accepted posts the stored acceptance and records filing_assumed", async () => {
+    const { nodeId, posts } = await boot("mirror", "source_stepped_down", async (id, ownKey) => {
+      const store = { node: suite.node, nodeId: id };
+      const row = (await readHandoverOperation(suite.node, id, OP))!;
+      await withNodeTransaction(suite.node, (tx) =>
+        appendHandoverEventTx(tx, {
+          nodeId: id,
+          operationId: OP,
+          kind: "offer",
+          detail: {},
+          envelope: canonicalize({ body: { authorisedBy: AUTHORISER } }),
+        }),
+      );
+      const acceptance = signEnvelope(
+        "acceptance",
+        {
+          binding: row.binding as CanonicalValue,
+          indicatorDigest: "d".repeat(64),
+          acceptedAtMs: 1,
+        },
+        { nodeId: id, privateKey: ownKey },
+      );
+      await advanceHandover(store, OP, "copy_accepted", {}, acceptance);
+    });
+    // Failing case, with the duty reading only `prepared`: nothing is posted and the row stays.
+    await vi.waitFor(
+      async () => expect((await operation(nodeId, OP))?.state).toBe("filing_assumed"),
+      { timeout: 15_000 },
+    );
+    const stored = await readHandoverEvent(suite.node, nodeId, OP, "copy_accepted");
+    expect(posts).toEqual([stored!.envelope]);
   }, 120_000);
 
   it("a box that is not a mirror leaves the same operation alone and asks nothing", async () => {

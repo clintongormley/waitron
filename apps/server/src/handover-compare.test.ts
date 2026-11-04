@@ -10,7 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { createServer, type Server, type RequestListener } from "node:http";
+import { createServer, type IncomingMessage, type RequestListener, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -19,7 +19,13 @@ import { getRequestListener } from "@hono/node-server";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { nodes, stampDeployment, withNodeTransaction, writeNodeMembership } from "@waitron/db";
+import {
+  nodes,
+  readNodeMembership,
+  stampDeployment,
+  withNodeTransaction,
+  writeNodeMembership,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import { appendToChain } from "@waitron/fiscal-verifactu/src/chain.js";
@@ -30,8 +36,10 @@ import {
   type SeededNode,
 } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import {
+  envelopeDigest,
   sha256Hex,
   signEnvelope,
+  verifyEnvelope,
   type FinalStateIndicator,
   type HandoverBinding,
   type SignedHandoverEnvelope,
@@ -46,6 +54,7 @@ import {
 import { imageMigrationHashes, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
 import {
+  readHandoverEvent,
   readHandoverOperation,
   readHandoverRestriction,
   recordHandoverRestrictionTx,
@@ -53,6 +62,7 @@ import {
   writeMirrorLink,
   type HandoverOperation,
 } from "@waitron/node-db";
+import { acceptedCopyPath, acceptFinalCopy } from "./handover-acceptance.js";
 import { captureFinalCopy, finalCopyPath, type CaptureDeps } from "./handover-capture.js";
 import {
   compareFinalCopy,
@@ -1079,6 +1089,12 @@ describe("compareFinalCopy", () => {
   });
 });
 
+interface PostSeen {
+  text: string;
+  state: string;
+  fileThere: boolean;
+}
+
 describe("the spare's duty runs the real comparison", () => {
   const log: Logger = () => {};
 
@@ -1086,6 +1102,21 @@ describe("the spare's duty runs the real comparison", () => {
     const r = await rig();
     const app = new Hono();
     const peer = { db: r.db, node: suite.node, ring: RING, nodeId: r.m1.nodeId };
+    const posted: PostSeen[] = [];
+    const seam: { answer: (text: string, drop: () => void) => Promise<Response> | Response } = {
+      answer: () => new Response("{}", { status: 503 }),
+    };
+    app.post("/api/node/handover/:operationId/acceptance", async (c) => {
+      const text = await c.req.text();
+      posted.push({
+        text,
+        state: (await readHandoverOperation(suite.node, r.m2.nodeId, OP))!.state,
+        fileThere: existsSync(acceptedCopyPath(r.m2State, OP)),
+      });
+      return seam.answer(text, () =>
+        (c.env as { incoming: IncomingMessage }).incoming.socket.destroy(),
+      );
+    });
     mountPeerStatusApi(app, peer, () => {});
     mountHandoverSourceApi(app, r.captureDeps, () => {});
     const requests: string[] = [];
@@ -1141,9 +1172,50 @@ describe("the spare's duty runs the real comparison", () => {
       closers.push(() => duty!.stop());
       return duty;
     };
+    /** As boot starts it, past accepting. The plain `start` stops short, for the checks before it. */
+    const startAccepting = (overrides: Partial<DestinationDutyDeps> = {}) =>
+      start({ ...overrides, accept: undefined });
     const m1Row = async () => (await readHandoverOperation(suite.node, r.m1.nodeId, OP))!;
     const copyReads = () => requests.filter((line) => line.endsWith("/final-copy")).length;
-    return { ...r, start, requests, m1Row, copyReads };
+    const stopped = (overrides: Partial<DestinationDutyDeps>) =>
+      start({ accept: null, ...overrides });
+    /** What M1 owes for `acceptanceText`, with `change` made and signed as M1, unless `by` says. */
+    const relinquishment = (
+      acceptanceText: string,
+      change: (body: Record<string, unknown>) => void = () => {},
+      by: { nodeId: string; privateKey: string } = r.signer,
+    ) => {
+      const body: Record<string, unknown> = {
+        binding: r.binding,
+        indicatorDigest: envelopeDigest(r.indicator),
+        acceptanceDigest: envelopeDigest(
+          JSON.parse(acceptanceText) as SignedHandoverEnvelope<unknown>,
+        ),
+        filingAssignedTo: r.m2.nodeId,
+        authorisedBy: r.authorisedBy,
+      };
+      change(body);
+      return signEnvelope("relinquishment", body as CanonicalValue, by);
+    };
+    const answerWith = (envelope: unknown) =>
+      new Response(JSON.stringify(envelope), {
+        headers: { "content-type": "application/json" },
+      });
+    const refusal = (code: string, status = 409) =>
+      new Response(JSON.stringify({ error: { code, params: {} } }), { status });
+    return {
+      ...r,
+      start: stopped,
+      startAccepting,
+      requests,
+      m1Row,
+      copyReads,
+      posted,
+      seam,
+      relinquishment,
+      answerWith,
+      refusal,
+    };
   }
 
   it("a copy differing by one late row is refused, M1 stays stepped down, and it is fetched again", async () => {
@@ -1276,4 +1348,327 @@ describe("the spare's duty runs the real comparison", () => {
     expect(seen[0]).not.toBe(seen[1]);
     expect(seen[0]).toEqual({});
   }, 60_000);
+
+  describe("accepting the copy and asking the old box to give up filing", () => {
+    const acceptedEvent = (r: { m2: SeededNode }) =>
+      readHandoverEvent(suite.node, r.m2.nodeId, OP, "copy_accepted");
+
+    it("control: an unaltered copy is kept as accepted, recorded, posted, and filing is assumed", async () => {
+      const r = await dutyRig();
+      const original = await readFile(finalCopyPath(r.m1State, OP));
+      let answered: unknown;
+      r.seam.answer = (text) => {
+        answered = r.relinquishment(text);
+        return r.answerWith(answered);
+      };
+      await r.startAccepting();
+      await vi.waitFor(async () => expect((await r.row()).state).toBe("filing_assumed"), {
+        timeout: 15_000,
+      });
+      // Failing case, on a duty with no acceptance step: the row stays at `prepared`.
+      expect((await r.row()).waitingReason).toBeNull();
+      expect(existsSync(r.path)).toBe(false);
+      expect(Buffer.compare(await readFile(acceptedCopyPath(r.m2State, OP)), original)).toBe(0);
+
+      const event = await acceptedEvent(r);
+      const stored = JSON.parse(event!.envelope!) as SignedHandoverEnvelope<{
+        binding: unknown;
+        indicatorDigest: string;
+        acceptedAtMs: number;
+      }>;
+      const verdict = verifyEnvelope(stored, "acceptance", (id) =>
+        id === r.m2.nodeId ? nodeSigningPublicKey(r.m2Key) : undefined,
+      );
+      expect(verdict.valid).toBe(true);
+      expect(stored.body.binding).toEqual(r.binding);
+      expect(stored.body.indicatorDigest).toBe(envelopeDigest(r.indicator));
+      expect(typeof stored.body.acceptedAtMs).toBe("number");
+      expect(r.posted.map((post) => post.text)).toEqual([event!.envelope]);
+
+      // The placing step at a later start reads the indicator, and M2's copy has no other record.
+      const indicatorEvent = await readHandoverEvent(suite.node, r.m2.nodeId, OP, "final_state");
+      expect(JSON.parse(indicatorEvent!.envelope!)).toEqual(r.indicator);
+
+      const assumed = await readHandoverEvent(suite.node, r.m2.nodeId, OP, "filing_assumed");
+      expect(JSON.parse(assumed!.envelope!)).toEqual(answered);
+    }, 60_000);
+
+    it("nothing is posted before copy_accepted and the file are on disk", async () => {
+      const r = await dutyRig();
+      r.seam.answer = (text) => r.answerWith(r.relinquishment(text));
+      await r.startAccepting();
+      await vi.waitFor(() => expect(r.posted.length).toBeGreaterThan(0), { timeout: 15_000 });
+      // Failing case, posting before the record: the first post reads `prepared`.
+      expect(r.posted[0]).toMatchObject({ state: "copy_accepted", fileThere: true });
+    }, 60_000);
+
+    it("a failure to accept posts nothing and keeps the file, and a later compare accepts it", async () => {
+      const r = await dutyRig();
+      r.seam.answer = (text) => r.answerWith(r.relinquishment(text));
+      let failing = true;
+      const accept = vi.fn<typeof acceptFinalCopy>(async (...args) => {
+        if (failing) throw new Error("the disk refused");
+        return acceptFinalCopy(...args);
+      });
+      await r.start({ accept, compareRetryMs: 30 });
+      await vi.waitFor(() => expect(accept.mock.calls.length).toBeGreaterThanOrEqual(2), {
+        timeout: 15_000,
+      });
+      expect(r.posted).toEqual([]);
+      expect((await r.row()).state).toBe("prepared");
+      expect(existsSync(r.path)).toBe(true);
+      expect(r.copyReads()).toBe(1);
+      failing = false;
+      await vi.waitFor(async () => expect((await r.row()).state).toBe("filing_assumed"), {
+        timeout: 15_000,
+      });
+    }, 60_000);
+
+    it("a file that cannot be moved into place records nothing", async () => {
+      const r = await dutyRig();
+      await mkdir(dirname(r.path), { recursive: true });
+      await copyFile(finalCopyPath(r.m1State, OP), r.path);
+      // A folder holding a file refuses the move onto it.
+      await mkdir(join(acceptedCopyPath(r.m2State, OP), "in-the-way"), { recursive: true });
+      const deps = { node: suite.node, ring: RING, nodeId: r.m2.nodeId, stateDir: r.m2State };
+      await expect(acceptFinalCopy(deps, await r.row(), r.indicator, r.path)).rejects.toThrow();
+      // Failing case, recording before the move: `copy_accepted` with no accepted file.
+      expect((await r.row()).state).toBe("prepared");
+      expect(await acceptedEvent(r)).toBeNull();
+      expect(await readHandoverEvent(suite.node, r.m2.nodeId, OP, "final_state")).toBeNull();
+    }, 60_000);
+
+    it("an operation closed while it compared is not accepted", async () => {
+      const r = await dutyRig();
+      const accept = vi.fn<typeof acceptFinalCopy>(async () => {});
+      await r.start({
+        accept,
+        compare: async () => {
+          await advanceHandover(r.m2Store, OP, "abandoned", {});
+          return { ok: true };
+        },
+      });
+      await vi.waitFor(async () => expect((await r.row()).state).toBe("abandoned"), {
+        timeout: 15_000,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Failing case: accept is told of a closed operation.
+      expect(accept).not.toHaveBeenCalled();
+    }, 60_000);
+
+    it("a lost answer posts the same bytes again, and the reason clears when one arrives", async () => {
+      const r = await dutyRig();
+      let lose = 2;
+      r.seam.answer = (text, drop) => {
+        if (lose > 0) {
+          lose -= 1;
+          drop();
+        }
+        return r.answerWith(r.relinquishment(text));
+      };
+      await r.startAccepting();
+      await vi.waitFor(async () => expect((await r.row()).state).toBe("filing_assumed"), {
+        timeout: 15_000,
+      });
+      expect(r.posted.length).toBe(3);
+      expect(new Set(r.posted.map((post) => post.text)).size).toBe(1);
+      expect((await r.row()).waitingReason).toBeNull();
+    }, 60_000);
+
+    it("restarted at copy_accepted, M2 posts the same acceptance again and records filing_assumed", async () => {
+      const r = await dutyRig();
+      const first = (await r.startAccepting())!;
+      await vi.waitFor(() => expect(r.posted.length).toBeGreaterThan(0), { timeout: 15_000 });
+      await first.stop();
+      const before = r.posted[0]!.text;
+      const reads = r.copyReads();
+
+      r.seam.answer = (text) => r.answerWith(r.relinquishment(text));
+      await r.startAccepting();
+      await vi.waitFor(async () => expect((await r.row()).state).toBe("filing_assumed"), {
+        timeout: 15_000,
+      });
+      // Failing case, signing a new one on each start: a later `acceptedAtMs` and signature.
+      expect(r.posted.at(-1)!.text).toBe(before);
+      expect(r.copyReads()).toBe(reads);
+      expect(existsSync(acceptedCopyPath(r.m2State, OP))).toBe(true);
+    }, 60_000);
+
+    it("at filing_assumed it posts nothing more, however often it is started", async () => {
+      const r = await dutyRig();
+      r.seam.answer = (text) => r.answerWith(r.relinquishment(text));
+      const duty = (await r.startAccepting())!;
+      await vi.waitFor(async () => expect((await r.row()).state).toBe("filing_assumed"), {
+        timeout: 15_000,
+      });
+      const posts = r.posted.length;
+      duty.wake();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await r.startAccepting();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(r.posted.length).toBe(posts);
+    }, 60_000);
+
+    it.each([
+      ["handover.not_stepped_down", "handover.not_stepped_down"],
+      ["handover.operation_unknown", "handover.operation_unknown"],
+      ["handover.peer_unknown", "handover.peer_unknown"],
+      ["handover.indicator_mismatch", "handover.indicator_mismatch"],
+      ["handover.summary_failed", "handover.source_unreachable"],
+      ["box.some_other_refusal", "handover.source_unreachable"],
+    ])(
+      "M1 answering %s waits on %s, writes it once, and keeps posting",
+      async (code, reason) => {
+        const r = await dutyRig();
+        const waits: unknown[] = [];
+        r.seam.answer = () => r.refusal(code);
+        await r.startAccepting({
+          log: (_level, event, detail) => {
+            if (event === "handover-destination.waiting") waits.push(detail);
+          },
+        });
+        await vi.waitFor(() => expect(r.posted.length).toBeGreaterThanOrEqual(3), {
+          timeout: 15_000,
+        });
+        expect((await r.row()).waitingReason).toBe(reason);
+        expect((await r.row()).state).toBe("copy_accepted");
+        expect(waits).toEqual([expect.objectContaining({ reason })]);
+
+        r.seam.answer = (text) => r.answerWith(r.relinquishment(text));
+        await vi.waitFor(async () => expect((await r.row()).state).toBe("filing_assumed"), {
+          timeout: 15_000,
+        });
+        expect((await r.row()).waitingReason).toBeNull();
+      },
+      60_000,
+    );
+
+    it("a box answering nothing waits as unreachable, then is asked again", async () => {
+      const r = await dutyRig();
+      let hang = true;
+      r.seam.answer = (text) =>
+        hang ? new Promise<Response>(() => {}) : r.answerWith(r.relinquishment(text));
+      await r.startAccepting({ acceptanceLimitMs: 100 });
+      await vi.waitFor(
+        async () => expect((await r.row()).waitingReason).toBe("handover.source_unreachable"),
+        { timeout: 15_000 },
+      );
+      hang = false;
+      await vi.waitFor(async () => expect((await r.row()).state).toBe("filing_assumed"), {
+        timeout: 15_000,
+      });
+    }, 60_000);
+
+    it("a stop ends a post under way, leaving the state as it was", async () => {
+      const r = await dutyRig();
+      r.seam.answer = () => new Promise<Response>(() => {});
+      const duty = (await r.startAccepting())!;
+      await vi.waitFor(() => expect(r.posted.length).toBe(1), { timeout: 15_000 });
+      const stopping = performance.now();
+      await duty.stop();
+      // Failing case, with the stop not reaching the request: it waits out the 30-second limit.
+      expect(performance.now() - stopping).toBeLessThan(5000);
+      const row = await r.row();
+      expect(row.state).toBe("copy_accepted");
+      expect(row.waitingReason).toBeNull();
+    }, 60_000);
+
+    it("with nowhere to post to it waits as unreachable and posts nothing", async () => {
+      const r = await dutyRig();
+      const first = (await r.startAccepting())!;
+      await vi.waitFor(() => expect(r.posted.length).toBeGreaterThan(0), { timeout: 15_000 });
+      await first.stop();
+      const posts = r.posted.length;
+      const held = await readNodeMembership(r.db);
+      const body: MembershipDocumentBody = {
+        ...held!.body,
+        nodes: held!.body.nodes.map((n) =>
+          n.nodeId === r.m1.nodeId ? { ...n, contactUrl: "http://box-1.example" } : n,
+        ),
+      };
+      await writeNodeMembership(r.db, {
+        ...held!,
+        body,
+        signature: signDocumentBody(body, r.m1Key),
+      });
+      await r.startAccepting();
+      await vi.waitFor(
+        async () => expect((await r.row()).waitingReason).toBe("handover.source_unreachable"),
+        { timeout: 15_000 },
+      );
+      expect(r.posted.length).toBe(posts);
+    }, 60_000);
+
+    it("every failed check of the answer waits at copy_accepted and keeps posting, and the true one is taken", async () => {
+      const r = await dutyRig();
+      const m2Signer = { nodeId: r.m2.nodeId, privateKey: r.m2Key };
+      const otherBinding = { ...r.binding, operationId: OTHER_OP };
+      const body = (text: string) => r.relinquishment(text).body as unknown as CanonicalValue;
+      const cases: [string, (text: string) => Response][] = [
+        ["not JSON", () => new Response("not json")],
+        ["no envelope", () => r.answerWith({ binding: r.binding })],
+        ["the wrong kind", (t) => r.answerWith(signEnvelope("acceptance", body(t), r.signer))],
+        ["signed by this box", (t) => r.answerWith(r.relinquishment(t, () => {}, m2Signer))],
+        [
+          "a changed body",
+          (t) => {
+            const envelope = r.relinquishment(t);
+            return r.answerWith({
+              ...envelope,
+              body: { ...(envelope.body as object), authorisedBy: "someone-else" },
+            });
+          },
+        ],
+        [
+          "a body that is no object",
+          () => r.answerWith(signEnvelope("relinquishment", null, r.signer)),
+        ],
+        ["no binding", (t) => r.answerWith(r.relinquishment(t, (b) => delete b.binding))],
+        [
+          "another operation's binding",
+          (t) => r.answerWith(r.relinquishment(t, (b) => (b.binding = otherBinding))),
+        ],
+        [
+          "another indicator",
+          (t) => r.answerWith(r.relinquishment(t, (b) => (b.indicatorDigest = "d".repeat(64)))),
+        ],
+        [
+          "another acceptance",
+          (t) => r.answerWith(r.relinquishment(t, (b) => (b.acceptanceDigest = "d".repeat(64)))),
+        ],
+        [
+          "filing assigned to another box",
+          (t) => r.answerWith(r.relinquishment(t, (b) => (b.filingAssignedTo = r.m1.nodeId))),
+        ],
+        [
+          "another person",
+          (t) => r.answerWith(r.relinquishment(t, (b) => (b.authorisedBy = "someone-else"))),
+        ],
+      ];
+      r.seam.answer = cases[0]![1];
+      await r.startAccepting();
+      for (const [name, answer] of cases) {
+        r.seam.answer = answer;
+        const posts = r.posted.length;
+        // Two more: the first may have been answered before this case's answer was in place.
+        await vi.waitFor(() => expect(r.posted.length).toBeGreaterThanOrEqual(posts + 2), {
+          timeout: 15_000,
+        });
+        await vi.waitFor(
+          async () =>
+            expect((await r.row()).waitingReason, name).toBe("handover.relinquishment_invalid"),
+          { timeout: 15_000 },
+        );
+        expect((await r.row()).state, name).toBe("copy_accepted");
+      }
+      expect(await readHandoverEvent(suite.node, r.m2.nodeId, OP, "filing_assumed")).toBeNull();
+      expect(new Set(r.posted.map((post) => post.text)).size).toBe(1);
+
+      r.seam.answer = (text) => r.answerWith(r.relinquishment(text));
+      await vi.waitFor(async () => expect((await r.row()).state).toBe("filing_assumed"), {
+        timeout: 15_000,
+      });
+      expect((await r.row()).waitingReason).toBeNull();
+    }, 120_000);
+  });
 });

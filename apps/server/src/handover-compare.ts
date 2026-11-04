@@ -13,10 +13,11 @@ import { personRole, roleHasPermission, type PersonRoleValue } from "@waitron/id
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
 import { imageMigrationHashes, manifestSets } from "@waitron/migrations";
 import { checkHandoverCopy, collectHandoverSummaries, type WaitronModule } from "@waitron/module";
-import { readHandoverEvent, type HandoverOperation } from "@waitron/node-db";
+import type { HandoverOperation } from "@waitron/node-db";
 import { modulePreparationMergeFits, quoteIdent, unknownHashes } from "@waitron/provisioning";
 import { isAppError, type ErrorCode } from "@waitron/shared";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
+import { offeredAuthoriser } from "./handover-acceptance.js";
 import { digestBytes } from "./handover-capture.js";
 import { isCopyIntact } from "./handover-integrity.js";
 import {
@@ -321,10 +322,7 @@ async function authoriserRefused(
   operationId: string,
   query: BackupQuery,
 ): Promise<Refusal | null> {
-  const offer = await readHandoverEvent(deps.node, deps.nodeId, operationId, "offer");
-  // A fault in Waitron: the offer route stores the offer in the transaction that begins the row.
-  if (offer?.envelope == null) throw new Error(`the offer of ${operationId} is not stored`);
-  const { authorisedBy } = (JSON.parse(offer.envelope) as { body: { authorisedBy: string } }).body;
+  const authorisedBy = await offeredAuthoriser(deps, operationId);
   if (await hasTable(query, "persons")) {
     for await (const row of query.rows("select role, status from persons where id = ?", [
       authorisedBy,

@@ -14,6 +14,11 @@ import {
 } from "@waitron/node-db";
 import type { ErrorCode } from "@waitron/shared";
 import { askPeerStatus, isOperationStatus } from "./boot-peer-check.js";
+import {
+  acceptFinalCopy,
+  readStoredAcceptance,
+  verifiedRelinquishment,
+} from "./handover-acceptance.js";
 import type { CompareOptions, CompareOutcome, CopyFileChecks } from "./handover-compare.js";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { advanceHandover, waitHandover } from "./handover-store.js";
@@ -50,6 +55,20 @@ const REFUSALS_WAITED_ON: ReadonlySet<string> = new Set<ErrorCode>([
   "handover.final_copy_changed",
 ]);
 
+/** What the old box may answer an acceptance with that names a reason to keep waiting. */
+const ACCEPTANCE_REFUSALS_WAITED_ON: ReadonlySet<string> = new Set<ErrorCode>([
+  "handover.not_stepped_down",
+  "handover.operation_unknown",
+  "handover.peer_unknown",
+  "handover.indicator_mismatch",
+]);
+
+// The old box writes one record and answers, so an answer this long in coming is not on its way.
+const ACCEPTANCE_LIMIT_MS = 30_000;
+
+// A relinquishment holds a binding and four short values.
+const MAX_RELINQUISHMENT_BYTES = 64 * 1024;
+
 export function receivedCopyPath(stateDir: string, operationId: string): string {
   return join(stateDir, "handover", operationId, "received.db");
 }
@@ -76,6 +95,12 @@ export interface DestinationDutyDeps {
     options: CompareOptions,
   ) => Promise<CompareOutcome>;
   compareRetryMs?: number;
+  /**
+   * Told of a file a compare passed. `acceptFinalCopy` unless named; `null` holds the file and goes
+   * no further, for a test of a step before this one.
+   */
+  accept?: typeof acceptFinalCopy | null;
+  acceptanceLimitMs?: number;
   /** A clock that only runs forward, for the limit on comparing again. */
   monotonicNow?: () => number;
   download?: typeof boxDownload;
@@ -134,10 +159,13 @@ async function discardCopy(path: string): Promise<void> {
   await rm(`${path}.partial`, { force: true });
 }
 
-function refusalReason(text: string): ErrorCode {
+function refusalReason(
+  text: string,
+  waitedOn: ReadonlySet<string> = REFUSALS_WAITED_ON,
+): ErrorCode {
   try {
     const code = (JSON.parse(text) as { error?: { code?: unknown } }).error?.code;
-    if (typeof code === "string" && REFUSALS_WAITED_ON.has(code)) return code as ErrorCode;
+    if (typeof code === "string" && waitedOn.has(code)) return code as ErrorCode;
   } catch {
     // Not a box's refusal, so it falls through to the same answer as any other.
   }
@@ -147,7 +175,9 @@ function refusalReason(text: string): ErrorCode {
 /**
  * The spare's one duty for a handover it was offered: it reads the old box's signed status, closes
  * when that box reports the operation abandoned, and otherwise fetches the indicator and the final
- * copy, one attempt at a time, until it holds them. Started only on a mirror: anywhere else `undefined`.
+ * copy, one attempt at a time, until it holds them. Once a copy is accepted it posts the stored
+ * acceptance until the old box's relinquishment passes its checks. Started only on a mirror:
+ * anywhere else `undefined`.
  */
 export async function startHandoverDestinationDuty(
   deps: DestinationDutyDeps,
@@ -173,6 +203,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
   const tickMs = deps.tickMs ?? TICK_MS;
   const download = deps.download ?? boxDownload;
   const compareRetryMs = deps.compareRetryMs ?? COMPARE_RETRY_MS;
+  const accept = deps.accept === undefined ? acceptFinalCopy : deps.accept;
   const monotonicNow = deps.monotonicNow ?? (() => performance.now());
   let woken = false;
   let rouse: () => void = () => {};
@@ -206,7 +237,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     const operation = await readOpenHandoverOperation(deps.node, deps.nodeId);
     return operation?.role === "destination" &&
       operation.scenario === "controlled" &&
-      operation.state === "prepared"
+      (operation.state === "prepared" || operation.state === "copy_accepted")
       ? operation
       : null;
   }
@@ -349,28 +380,80 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       }
       return waitOn(operation, outcome.reason, { detail: outcome.detail });
     }
-    copy.compared = true;
     const current = await stillWorkingOn(operation);
+    if (outcome !== undefined && accept !== null) {
+      if (current === null) return;
+      await accept(deps, current, copy.indicator, copy.path);
+      return;
+    }
+    copy.compared = true;
     if (current !== null && current.waitingReason !== null) {
       await waitHandover(deps, operation.operationId, null);
     }
   }
 
-  /** Whether this operation still has work a later tick must do. */
-  async function workOn(operation: HandoverOperation): Promise<boolean> {
+  /** Where the old box is and the certificate to trust it by, or `undefined` while it cannot be asked. */
+  async function sourceAddress(operation: HandoverOperation) {
     const link = await readMirrorLink(deps.node, deps.nodeId);
     const chart = await readNodeMembership(deps.db);
     const source = chart?.body.nodes.find((n) => n.nodeId === operation.sourceNodeId);
     const base = usableBase(source?.contactUrl);
-    if (link === null || source === undefined || base === undefined) {
+    return link === null || source === undefined || base === undefined
+      ? undefined
+      : { source, base, ca: link.boxCaPem };
+  }
+
+  async function postAcceptance(operation: HandoverOperation): Promise<void> {
+    const { operationId } = operation;
+    const address = await sourceAddress(operation);
+    if (address === undefined) {
+      return waitOn(operation, "handover.source_unreachable");
+    }
+    const acceptance = await readStoredAcceptance(deps, operationId);
+    let answer: { status: number; text: string };
+    try {
+      answer = await boxExchange(
+        new URL(`${address.base}/api/node/handover/${operationId}/acceptance`),
+        {
+          method: "POST",
+          trust: { ca: address.ca, rejectUnauthorized: true },
+          signal: AbortSignal.any([
+            signal,
+            AbortSignal.timeout(deps.acceptanceLimitMs ?? ACCEPTANCE_LIMIT_MS),
+          ]),
+          body: acceptance,
+        },
+        MAX_RELINQUISHMENT_BYTES,
+      );
+    } catch (error) {
+      if (signal.aborted) return;
+      deps.log("warn", "handover-destination.post_failed", { operationId, error: String(error) });
+      return waitOn(operation, "handover.source_unreachable");
+    }
+    if (answer.status !== 200) {
+      return waitOn(operation, refusalReason(answer.text, ACCEPTANCE_REFUSALS_WAITED_ON));
+    }
+    const relinquishment = await verifiedRelinquishment(deps, operation, acceptance, answer.text);
+    if (relinquishment === null) {
+      return waitOn(operation, "handover.relinquishment_invalid");
+    }
+    await advanceHandover(deps, operationId, "filing_assumed", {}, relinquishment);
+    deps.log("info", "handover-destination.filing_assumed", { operationId });
+  }
+
+  /** Whether this operation still has work a later tick must do. */
+  async function workOn(operation: HandoverOperation): Promise<boolean> {
+    const address = await sourceAddress(operation);
+    if (address === undefined) {
       await waitOn(operation, "handover.source_unreachable");
       return true;
     }
+    const { source, base, ca } = address;
     let silentBecause: string | undefined;
     const status = await askPeerStatus({
       sign: (body) => signAsThisBox(deps, "query", body),
       publicKeyOf: await peerKeyOf(deps),
-      authorityOf: () => link.boxCaPem,
+      authorityOf: () => ca,
       query: { operationId: operation.operationId, purpose: "status" },
       onSilent: (_nodeId, reason) => {
         silentBecause = reason;
@@ -411,14 +494,19 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
         return true;
       }
     }
-    await fetchCopy(operation, base, link.boxCaPem);
+    await fetchCopy(operation, base, ca);
     return true;
   }
 
   async function pass(): Promise<boolean> {
     await removeClosedFolders();
     const operation = await workToDo();
-    return operation === null ? false : workOn(operation);
+    if (operation === null) return false;
+    if (operation.state === "copy_accepted") {
+      await postAcceptance(operation);
+      return true;
+    }
+    return workOn(operation);
   }
 
   async function loop(): Promise<void> {
