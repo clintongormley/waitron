@@ -4,6 +4,7 @@ import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
+import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { registerIcons, applyTokens, type WtCombobox, type WtInput } from "@waitron/ui";
 import type { PrepStationsApi } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
@@ -101,6 +102,7 @@ function api(overrides: Partial<ScreenApi> = {}): ScreenApi {
   return {
     load,
     preview: vi.fn().mockResolvedValue([]),
+    readPassCoverage: vi.fn().mockResolvedValue([]),
     createStation: vi.fn(),
     updateStation: vi.fn(),
     getStationDeleteImpact: vi.fn(async (id: string) => ({
@@ -5575,5 +5577,202 @@ it("A725 Add station has no manual order field and sends no retired key", async 
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
     readyWarningAfterMinutes: 3,
+  });
+});
+
+describe("A773 station policy: the pass coverage warning", () => {
+  const gaps = [
+    { stationId: "grill", stationName: "Grill", zoneId: "terrace", zoneName: "Terrace" },
+    { stationId: "cold", stationName: "Cold", zoneId: "terrace", zoneName: "Terrace" },
+    { stationId: "grill", stationName: "Grill", zoneId: null, zoneName: null },
+  ];
+  const warning = (el: PrepStationsScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="pass-coverage"]');
+  const lines = (el: PrepStationsScreen) =>
+    [...(warning(el)?.querySelectorAll("p") ?? [])].map((p) =>
+      p.textContent?.replace(/\s+/g, " ").trim(),
+    );
+  const filled = (language: "en" | "es", key: string, values: Record<string, string>) =>
+    Object.entries({ ...values, devices: VENUE_SERVICE_STRINGS[language]["prep.devices"] }).reduce(
+      (text, [name, value]) => text.replace(`{${name}}`, value),
+      (VENUE_SERVICE_STRINGS[language] as Record<string, string>)[key]!,
+    );
+  const passCoverageCalls = (a: PrepStationsApi) =>
+    (a.readPassCoverage as ReturnType<typeof vi.fn>).mock.calls.length;
+
+  it.each(["stations", "routing"])(
+    "A773 station policy: draws one line per zone, above the tabs, on %s",
+    async (tab) => {
+      setLocale("en");
+      history.replaceState(null, "", `/manage/prep-stations/view/${tab}`);
+      const el = await mount(api({ readPassCoverage: vi.fn().mockResolvedValue(gaps) }));
+      await settle(el);
+      expect(lines(el)).toEqual([
+        "Nothing fires dishes from Grill and Cold in Terrace: no pass screen covers them there. Set one up under Devices.",
+        "Nothing fires dishes from Grill that have no service zone: only a pass screen on every service zone covers them. Set one up under Devices.",
+      ]);
+      const section = warning(el)!;
+      expect(section.getAttribute("role")).toBe("status");
+      expect(section.classList.contains("warning")).toBe(true);
+      for (const line of section.querySelectorAll("p")) {
+        const link = line.querySelector("a")!;
+        expect(link.textContent).toBe("Devices");
+        expect(link.getAttribute("href")).toBe("/manage/devices");
+      }
+      const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+      expect(section.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(
+        el.shadowRoot!.querySelector("h1")!.compareDocumentPosition(section) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    },
+  );
+
+  it("A773 station policy: draws no warning when every waiting station is covered", async () => {
+    const a = api();
+    const el = await mount(a);
+    await settle(el);
+    expect(a.readPassCoverage).toHaveBeenCalled();
+    expect(warning(el)).toBeNull();
+  });
+
+  it("A773 station policy: draws the warning in Spanish", async () => {
+    setLocale("es");
+    const el = await mount(api({ readPassCoverage: vi.fn().mockResolvedValue(gaps) }));
+    await settle(el);
+    expect(lines(el)).toEqual([
+      filled("es", "prep.pass_gap", { stations: "Grill y Cold", zone: "Terrace" }),
+      filled("es", "prep.pass_gap_no_zone", { stations: "Grill" }),
+    ]);
+    expect(lines(el)[0]).toContain("Grill y Cold");
+    expect(warning(el)!.querySelector("a")!.textContent).toBe("Dispositivos");
+  });
+
+  it("A773 station policy: a failed coverage read has its own line, which the routing read's failure and recovery leave alone", async () => {
+    setLocale("en");
+    const liveData = new LiveData();
+    const load = vi.fn().mockResolvedValue(view);
+    const readPassCoverage = vi.fn().mockRejectedValue({ code: "connection.failed" });
+    const a = api({ liveData, load, readPassCoverage });
+    const el = await mount(a);
+    await settle(el);
+    const failed = "Which pass screens cover these stations could not be checked.";
+    expect(lines(el)).toEqual([failed]);
+    expect(el.shadowRoot!.textContent).not.toContain("Prep stations could not be loaded.");
+    expect(stationRow(el, "bar")).not.toBeNull();
+
+    const loads = load.mock.calls.length;
+    load.mockRejectedValueOnce({ code: "connection.failed" });
+    liveData.invalidate([{ type: "routing_cells" }]);
+    await vi.waitFor(() =>
+      expect(q(el, '[role="alert"]')?.textContent).toContain("could not be loaded"),
+    );
+    expect(lines(el)).toEqual([failed]);
+    liveData.invalidate([{ type: "routing_cells" }]);
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(loads + 2));
+    await vi.waitFor(() => expect(q(el, '[role="alert"]')).toBeNull());
+    expect(lines(el)).toEqual([failed]);
+
+    readPassCoverage.mockResolvedValue(gaps.slice(2));
+    liveData.invalidate([{ type: "devices" }]);
+    await vi.waitFor(() =>
+      expect(lines(el)).toEqual([
+        "Nothing fires dishes from Grill that have no service zone: only a pass screen on every service zone covers them. Set one up under Devices.",
+      ]),
+    );
+  });
+
+  it("A773 station policy: reads the coverage again after a station save", async () => {
+    setLocale("en");
+    const a = api({ updateStation: vi.fn().mockResolvedValue(undefined) });
+    const el = await mount(a);
+    await settle(el);
+    q(el, '[data-test="edit-bar"]')!.click();
+    await settle(el);
+    const editor = el.shadowRoot!.querySelector("prep-station-editor")!;
+    await editor.updateComplete;
+    editor
+      .shadowRoot!.querySelector("wt-switch[name=waitsForPass]")!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
+    await editor.updateComplete;
+    const before = passCoverageCalls(a);
+    editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
+    await vi.waitFor(() => expect(a.updateStation).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(passCoverageCalls(a)).toBe(before + 1));
+  });
+
+  it("A773 station policy: watches the tables the coverage read's configured half reads", () => {
+    expect(QUERY_DEPENDENCIES["pass-coverage"]).toEqual([
+      // the waiting stations and the active zones
+      "kitchen_stations",
+      "floor_zones",
+      // the pass devices and their profiles' action and flag
+      "devices",
+      "device_profiles",
+      // readDevicesKitchenScreens
+      "device_kitchen_screens",
+      "device_kitchen_screen_stations",
+      "device_kitchen_screen_zones",
+      "device_kitchen_screen_removals",
+      "device_profile_kitchen_screens",
+      "device_profile_kitchen_screen_stations",
+      "device_profile_kitchen_screen_zones",
+      // readProfilesZones
+      "device_profile_service_access",
+      "device_profile_zones",
+      "zone_service_policies",
+      "departments",
+    ]);
+  });
+
+  it("A773 station policy: a change to what coverage reads re-reads it once, leaving an open editor's switch changed", async () => {
+    setLocale("en");
+    const liveData = new LiveData();
+    const observe = vi.spyOn(liveData, "observe");
+    const a = api({ liveData });
+    const el = await mount(a);
+    await settle(el);
+    const query = observe.mock.calls
+      .map(([query]) => query)
+      .find((query) => query.key === "venue-service:pass-coverage")!;
+    expect(query.refreshMs).toBe(60_000);
+    q(el, '[data-test="edit-bar"]')!.click();
+    await settle(el);
+    const editor = el.shadowRoot!.querySelector("prep-station-editor")!;
+    await editor.updateComplete;
+    const waits = () =>
+      editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+        "wt-switch[name=waitsForPass]",
+      )!;
+    waits().dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
+    await editor.updateComplete;
+    for (const type of ["zone_service_policies", "device_kitchen_screen_removals", "devices"]) {
+      const before = passCoverageCalls(a);
+      liveData.invalidate([{ type }]);
+      await vi.waitFor(() => expect(passCoverageCalls(a)).toBe(before + 1));
+      await settle(el);
+      expect(waits().checked, type).toBe(true);
+    }
+    const before = passCoverageCalls(a);
+    liveData.invalidate([{ type: "ticket_items" }]);
+    liveData.invalidate([{ type: "devices" }]);
+    await vi.waitFor(() => expect(passCoverageCalls(a)).toBeGreaterThan(before));
+    await settle(el);
+    expect(passCoverageCalls(a), "a ticket_items change reads nothing").toBe(before + 1);
+  });
+
+  it("A773 station policy: without live data, the minute reload reads the coverage again", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const a = api();
+      const el = await mount(a);
+      await settle(el);
+      const before = passCoverageCalls(a);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle(el);
+      expect(passCoverageCalls(a)).toBe(before + 1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

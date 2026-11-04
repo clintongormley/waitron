@@ -365,6 +365,11 @@ const en = {
   "prep.no_station": "No station",
   "prep.no_replacement": "No replacement",
   "prep.load_error": "Prep stations could not be loaded.",
+  "prep.pass_gap":
+    "Nothing fires dishes from {stations} in {zone}: no pass screen covers them there. Set one up under {devices}.",
+  "prep.pass_gap_no_zone":
+    "Nothing fires dishes from {stations} that have no service zone: only a pass screen on every service zone covers them. Set one up under {devices}.",
+  "prep.pass_gap_error": "Which pass screens cover these stations could not be checked.",
   "prep.save_error": "The change could not be saved.",
   "prep.fix_fields": "Correct the highlighted fields to continue.",
   "prep.station_disabled": "This station is disabled. Choose an active station.",
@@ -1277,6 +1282,11 @@ const es: Record<keyof typeof en, string> = {
   "prep.no_station": "Sin estación",
   "prep.no_replacement": "Sin sustituta",
   "prep.load_error": "No se pudieron cargar las estaciones de preparación.",
+  "prep.pass_gap":
+    "Nadie marcha los platos de {stations} en {zone}: ninguna pantalla de pase los cubre allí. Configura una en {devices}.",
+  "prep.pass_gap_no_zone":
+    "Nadie marcha los platos de {stations} sin zona de servicio: solo los cubre una pantalla de pase con todas las zonas de servicio. Configura una en {devices}.",
+  "prep.pass_gap_error": "No se pudo comprobar qué pantallas de pase cubren estas estaciones.",
   "prep.save_error": "No se pudo guardar el cambio.",
   "prep.fix_fields": "Corrige los campos marcados para continuar.",
   "prep.station_disabled": "Esta estación está deshabilitada. Elige una estación activa.",

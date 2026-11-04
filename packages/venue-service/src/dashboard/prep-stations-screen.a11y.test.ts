@@ -53,6 +53,7 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
     await mountThemed("<div></div>", theme);
     const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
     el.api = {
+      readPassCoverage: vi.fn().mockResolvedValue([]),
       preview: vi.fn().mockResolvedValue(
         state === "grid-dropped"
           ? []
@@ -266,6 +267,7 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
       },
     ];
     el.api = {
+      readPassCoverage: vi.fn().mockResolvedValue([]),
       load: vi.fn().mockResolvedValue({
         ...empty,
         stations,
@@ -417,7 +419,10 @@ describe.each(["light", "dark"] as const)(
       history.replaceState(null, "", "/manage/prep-stations/view/times/station/grill");
       const container = await mountThemed("<div></div>", theme);
       const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
-      el.api = { load: vi.fn().mockResolvedValue(empty) } as unknown as PrepStationsApi;
+      el.api = {
+        load: vi.fn().mockResolvedValue(empty),
+        readPassCoverage: vi.fn().mockResolvedValue([]),
+      } as unknown as PrepStationsApi;
       container.append(el);
       await expect.poll(() => el.shadowRoot!.querySelector("wt-tabs")?.value).toBe("stations");
       expect(el.shadowRoot!.querySelector("wt-tabs")!.items.map((item) => item.key)).toEqual([
@@ -485,6 +490,7 @@ describe.each(["light", "dark"] as const)("A725 Add station popup (%s)", (theme)
           .fn()
           .mockRejectedValue({ code: "management.request_invalid", params: { field: "colour" } });
         el.api = {
+          readPassCoverage: vi.fn().mockResolvedValue([]),
           load: vi.fn().mockResolvedValue({ ...empty, stations }),
           createStation,
         } as unknown as PrepStationsApi;
@@ -591,3 +597,26 @@ describe.each(["light", "dark"] as const)("A725 Add station popup (%s)", (theme)
     },
   );
 });
+
+describe.each(["light", "dark"] as const)(
+  "A773 station policy: the pass coverage warning accessibility (%s)",
+  (theme) => {
+    it.each(["en", "es"] as const)("shows the warning accessibly in %s", async (locale) => {
+      setLocale(locale);
+      const container = await mountThemed("<div></div>", theme);
+      const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
+      el.api = {
+        load: vi.fn().mockResolvedValue(empty),
+        readPassCoverage: vi.fn().mockResolvedValue([
+          { stationId: "grill", stationName: "Grill", zoneId: "terrace", zoneName: "Terrace" },
+          { stationId: "grill", stationName: "Grill", zoneId: null, zoneName: null },
+        ]),
+      } as unknown as PrepStationsApi;
+      container.append(el);
+      await expect
+        .poll(() => el.shadowRoot!.querySelectorAll('[data-test="pass-coverage"] p').length)
+        .toBe(2);
+      await expectNoA11yViolations(container);
+    });
+  },
+);

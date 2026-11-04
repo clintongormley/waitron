@@ -34,8 +34,10 @@ import {
 } from "../routing.js";
 import type { RoutingChange, RoutingMove, StationTimes } from "../routing-types.js";
 import { format } from "./hours-view.js";
+import { listOf } from "./painter-labels.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import type {
+  PassCoverageGap,
   PrepStation,
   PrepStationsApi,
   PrepStationsView,
@@ -224,6 +226,16 @@ export class PrepStationsScreen extends LitElement {
       if (this.#readErrorShown) this.#showError("");
     },
   );
+  @state() private passCoverage: PassCoverageGap[] = [];
+  @state() private passCoverageFailed = false;
+  /** Its own controller, so its failure never shows `prep.load_error` and the routing's recovery never clears it. */
+  readonly #coverageQueries = new QueryController(
+    this,
+    () => this.api.liveData,
+    () => {
+      this.passCoverageFailed = true;
+    },
+  );
   #cellScope?: DraftScope<string>;
   #cellScopeOwner?: object;
   /** A confirmed choice whose refresh is open: it keeps its committed scope until that settles. */
@@ -405,7 +417,61 @@ export class PrepStationsScreen extends LitElement {
     if (this.#routingTimer) clearInterval(this.#routingTimer);
     super.disconnectedCallback();
   }
+  async #loadPassCoverage() {
+    try {
+      await this.#coverageQueries.watch(
+        "pass-coverage",
+        {
+          key: "venue-service:pass-coverage",
+          dependencies: QUERY_DEPENDENCIES["pass-coverage"].map((type) => ({ type })),
+          refreshMs: 60_000,
+          read: () => this.api.readPassCoverage(),
+        },
+        (gaps) => {
+          this.passCoverage = gaps;
+          this.passCoverageFailed = false;
+        },
+      );
+    } catch {
+      this.passCoverageFailed = true;
+    }
+  }
+  #passCoverageWarning() {
+    if (this.passCoverageFailed)
+      return html`<section data-test="pass-coverage" class="warning" role="status">
+        <p>${t("prep.pass_gap_error")}</p>
+      </section>`;
+    if (this.passCoverage.length === 0) return nothing;
+    const zones = new Map<
+      string | null,
+      { zoneId: string | null; zoneName: string; stations: string[] }
+    >();
+    for (const gap of this.passCoverage) {
+      const zone = zones.get(gap.zoneId) ?? {
+        zoneId: gap.zoneId,
+        zoneName: gap.zoneName ?? "",
+        stations: [],
+      };
+      zone.stations.push(gap.stationName);
+      zones.set(gap.zoneId, zone);
+    }
+    return html`<section data-test="pass-coverage" class="warning" role="status">
+      ${[...zones.values()].map(({ zoneId, zoneName, stations }) => {
+        const values: Record<string, string> = { stations: listOf(stations), zone: zoneName };
+        // Split before filling, so a name holding "{devices}" stays text.
+        const [before = "", after = ""] = t(
+          zoneId === null ? "prep.pass_gap_no_zone" : "prep.pass_gap",
+        )
+          .split("{devices}")
+          .map((part) =>
+            part.replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole),
+          );
+        return html`<p>${before}<a href="/manage/devices">${t("prep.devices")}</a>${after}</p>`;
+      })}
+    </section>`;
+  }
   async #load() {
+    void this.#loadPassCoverage();
     try {
       let initial = !this.#loaded;
       this.#loaded = true;
@@ -1406,7 +1472,7 @@ export class PrepStationsScreen extends LitElement {
     return html`<div class="toolbar">
         <h1>${t("prep.title")}</h1>
       </div>
-      ${
+      ${this.#passCoverageWarning()}${
         view
           ? html`<wt-tabs
               label=${t("prep.title")}

@@ -99,6 +99,7 @@ async function mount(write?: Promise<void>, refreshFails = false, liveData?: Liv
   app = document.createElement("station-leave-test-app") as StationLeaveApp;
   app.api = {
     liveData,
+    readPassCoverage: async () => [],
     load: async () => {
       if (++reads > 1 && refreshFails) throw { code: "connection.failed" };
       return structuredClone(view);
