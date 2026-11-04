@@ -27,6 +27,8 @@ type Options = GrantChecks & {
 };
 const FILE_NAME = "module-preparation-state.json";
 const LIMIT = 1024 * 1024;
+/** The box must still write its own selection after the old box has given up filing. */
+const MERGE_ROOM = 64 * 1024;
 function invalid(): never {
   throw new AppError("setup.attempt_invalid", {});
 }
@@ -120,33 +122,35 @@ function missingRevisions(own: readonly Revision[], incoming: readonly Revision[
   }
   return missing;
 }
+/** What a merge writes: the revisions this box lacks, ahead of its own, so its own latest stays the latest. */
+function mergedFile(own: File, incoming: readonly Revision[]): File {
+  return {
+    version: 1,
+    revisions: [...missingRevisions(own.revisions, incoming), ...own.revisions],
+  };
+}
 /**
- * Whether this box's file could take `incoming`: a file over its limit makes every later module
- * operation refuse `setup.attempt_invalid`.
+ * Whether this box's file could take `incoming` and keep `MERGE_ROOM` free: a file over its limit
+ * makes every later module operation refuse `setup.attempt_invalid`.
  */
 export async function modulePreparationMergeFits(
   options: { stateDir: string },
   incoming: readonly { binding: OperationBinding; value: unknown }[],
 ): Promise<boolean> {
-  const own = await readStateFile(options.stateDir);
-  const merged: File = {
-    version: 1,
-    revisions: [...missingRevisions(own.revisions, incoming), ...own.revisions],
-  };
-  return Buffer.byteLength(JSON.stringify(merged)) <= LIMIT;
+  const merged = mergedFile(await readStateFile(options.stateDir), incoming);
+  return Buffer.byteLength(JSON.stringify(merged)) <= LIMIT - MERGE_ROOM;
 }
 /**
- * Puts the revisions this box lacks ahead of its own, so its own latest for a module stays the
- * latest, and writes nothing when it lacks none.
+ * Writes nothing when this box lacks none of `incoming`. The caller must hold the venue lock: this
+ * reads the file and then replaces it.
  */
 export async function mergeModulePreparationRevisions(
   options: { stateDir: string },
   incoming: readonly { binding: OperationBinding; value: unknown }[],
 ): Promise<void> {
   const own = await readStateFile(options.stateDir);
-  const missing = missingRevisions(own.revisions, incoming);
-  if (missing.length === 0) return;
-  const merged: File = { version: 1, revisions: [...missing, ...own.revisions] };
+  const merged = mergedFile(own, incoming);
+  if (merged.revisions.length === own.revisions.length) return;
   await writeDurableHostJson(join(options.stateDir, FILE_NAME), merged, LIMIT);
 }
 export function createModulePreparationState(options: Options) {

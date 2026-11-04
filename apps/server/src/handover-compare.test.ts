@@ -900,6 +900,14 @@ describe("compareFinalCopy", () => {
       expect(await r.compareRow(envelope)).toEqual(refused("handover.preparation_state_too_large"));
     });
 
+    it("selections that fit the file but leave under 64 KiB of it free are refused", async () => {
+      const r = await rig();
+      const envelope = r.resigned((body) =>
+        revisions(body, [revisionOf("x".repeat(LIMIT - 64 * 1024))]),
+      );
+      expect(await r.compareRow(envelope)).toEqual(refused("handover.preparation_state_too_large"));
+    });
+
     it("control: a selection both boxes hold is counted once", async () => {
       const r = await rig();
       const half = "x".repeat(LIMIT / 2 + 1);

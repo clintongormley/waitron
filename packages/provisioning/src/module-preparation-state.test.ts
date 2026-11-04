@@ -431,6 +431,7 @@ describe("a damaged file names itself in the log", () => {
 
 describe("modulePreparationMergeFits", () => {
   const LIMIT = 1024 * 1024;
+  const ROOM = 64 * 1024;
   const fileBytes = (revisions: unknown[]) =>
     Buffer.byteLength(JSON.stringify({ version: 1, revisions }));
   const stored = (over: Partial<OperationBinding>, text: string) => ({
@@ -449,16 +450,28 @@ describe("modulePreparationMergeFits", () => {
     expect(await fits([stored({}, "a")])).toBe(true);
   });
 
-  it("the file's own limit is the limit: its last byte fits, and the next does not", async () => {
+  it("keeps 64 KiB below the file's limit: the margin's last byte fits, and the next does not", async () => {
     const { options } = await fixture();
     const empty = stored({}, "");
-    const exact = stored({}, paddingFor(LIMIT, [], empty));
-    const over = stored({}, `${exact.value.text}x`);
-    expect(fileBytes([exact])).toBe(LIMIT);
-    const fits = (incoming: ReturnType<typeof stored>[]) =>
-      modulePreparationMergeFits({ stateDir: options.stateDir }, incoming);
-    expect(await fits([exact])).toBe(true);
-    expect(await fits([over])).toBe(false);
+    const atMargin = paddingFor(LIMIT - ROOM, [], empty);
+    const sized = (text: string) => stored({}, text);
+    expect(fileBytes([sized(atMargin)])).toBe(LIMIT - ROOM);
+    const fits = (text: string) =>
+      modulePreparationMergeFits({ stateDir: options.stateDir }, [sized(text)]);
+    expect(await fits(atMargin.slice(1))).toBe(true);
+    expect(await fits(atMargin)).toBe(true);
+    expect(await fits(`${atMargin}x`)).toBe(false);
+  });
+
+  it("a file already inside the margin does not fit, even with nothing to merge", async () => {
+    const { options, path } = await fixture();
+    const write = (text: string) =>
+      fs.writeFile(path, JSON.stringify({ version: 1, revisions: [stored({}, text)] }));
+    const atMargin = paddingFor(LIMIT - ROOM, [], stored({}, ""));
+    await write(atMargin);
+    expect(await modulePreparationMergeFits({ stateDir: options.stateDir }, [])).toBe(true);
+    await write(`${atMargin}x`);
+    expect(await modulePreparationMergeFits({ stateDir: options.stateDir }, [])).toBe(false);
   });
 
   it("counts this box's own revisions with the incoming ones", async () => {
@@ -522,6 +535,7 @@ describe("modulePreparationMergeFits", () => {
 
 describe("mergeModulePreparationRevisions", () => {
   const LIMIT = 1024 * 1024;
+  const ROOM = 64 * 1024;
   const FILE = "module-preparation-state.json";
   const revision = (eventId: string, value: unknown = { name: eventId }) => ({
     binding: { ...binding, eventId },
@@ -628,24 +642,38 @@ describe("mergeModulePreparationRevisions", () => {
     expect(await fs.readFile(path, "utf8")).toBe("{not json");
   });
 
-  it("agrees with the size check at the limit, and refusing leaves this box's file alone", async () => {
+  const textFilling = (total: number) => {
+    const bytes = (text: string) =>
+      Buffer.byteLength(JSON.stringify({ version: 1, revisions: [revision("m1", { text }), m2] }));
+    return "x".repeat(total - bytes(""));
+  };
+
+  it("counts the bytes the size check counts: a merge at the margin writes exactly that size", async () => {
+    const { options, path } = await fixture();
+    const stateDir = options.stateDir;
+    await place(stateDir, [m2]);
+    const atMargin = textFilling(LIMIT - ROOM);
+    const beyond = revision("m1", { text: `${atMargin}x` });
+    expect(await modulePreparationMergeFits({ stateDir }, [beyond])).toBe(false);
+    const exact = revision("m1", { text: atMargin });
+    expect(await modulePreparationMergeFits({ stateDir }, [exact])).toBe(true);
+    await mergeModulePreparationRevisions({ stateDir }, [exact]);
+    expect((await fs.stat(path)).size).toBe(LIMIT - ROOM);
+    expect(await events(stateDir)).toEqual(["m1", "m2"]);
+  });
+
+  it("writes up to the file's own limit, past the size check's margin, and refusing leaves this box's file alone", async () => {
     const { options, path } = await fixture();
     const stateDir = options.stateDir;
     await place(stateDir, [m2]);
     const before = await fs.readFile(path, "utf8");
-    const bytes = (text: string) =>
-      Buffer.byteLength(JSON.stringify({ version: 1, revisions: [revision("m1", { text }), m2] }));
-    const exact = revision("m1", { text: "x".repeat(LIMIT - bytes("")) });
-    const over = revision("m1", { text: "x".repeat(LIMIT - bytes("") + 1) });
-
-    expect(await modulePreparationMergeFits({ stateDir }, [over])).toBe(false);
-    await expect(mergeModulePreparationRevisions({ stateDir }, [over])).rejects.toMatchObject({
-      code: "setup.attempt_invalid",
-    });
+    const atLimit = textFilling(LIMIT);
+    await expect(
+      mergeModulePreparationRevisions({ stateDir }, [revision("m1", { text: `${atLimit}x` })]),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
     expect(await fs.readFile(path, "utf8")).toBe(before);
 
-    expect(await modulePreparationMergeFits({ stateDir }, [exact])).toBe(true);
-    await mergeModulePreparationRevisions({ stateDir }, [exact]);
+    await mergeModulePreparationRevisions({ stateDir }, [revision("m1", { text: atLimit })]);
     expect((await fs.stat(path)).size).toBe(LIMIT);
     expect(await events(stateDir)).toEqual(["m1", "m2"]);
   });

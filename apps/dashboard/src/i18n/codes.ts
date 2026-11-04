@@ -1450,8 +1450,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Los registros de la copia que ha recibido el equipo de reserva no superan su propia comprobación, así que no la ha aceptado. El equipo antiguo sigue detenido.",
   },
   "handover.preparation_state_too_large": {
-    en: "The two boxes' saved preparations would not fit in one file, so the spare did not accept this handover. The old box stays stopped.",
-    es: "Los preparativos guardados de los dos equipos no cabrían en un solo archivo, así que el equipo de reserva no ha aceptado este traspaso. El equipo antiguo sigue detenido.",
+    en: "The two boxes' saved preparations would leave their file too full for the spare to take over, so the spare did not accept this handover. The old box stays stopped.",
+    es: "Los preparativos guardados de los dos equipos dejarían su archivo demasiado lleno para que el equipo de reserva tome el relevo, así que no ha aceptado este traspaso. El equipo antiguo sigue detenido.",
   },
   "handover.summary_mismatch": {
     en: "The copy the spare received does not hold what the old box said it holds, so the spare did not accept it. The old box stays stopped.",

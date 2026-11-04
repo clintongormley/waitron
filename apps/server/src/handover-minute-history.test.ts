@@ -2,8 +2,8 @@
 // module-preparation-state.json? Each case but the control puts the spare's clock on the minute of
 // M1's later name, where a reused name prints `selected` with that name and an avoided one prints
 // `waiting`.
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtemp, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -20,6 +20,8 @@ import { ALL_MODULES } from "@waitron/composition";
 import {
   createFirstSetupCoordinator,
   mergeModulePreparationRevisions,
+  modulePreparationMergeFits,
+  readModulePreparationRevisions,
 } from "@waitron/provisioning";
 import {
   withOperationAuthority,
@@ -345,21 +347,90 @@ it("with M1's selections in the spare's own preparation file, the spare waits pa
   );
 });
 
-it("one minute past M1's name, the spare holding M1's selections selects another and promotes under it", async () => {
+it("holding M1's selections on two adjacent minutes, the spare waits past both, selects another and promotes under it", async () => {
   const s = spareService();
   await admit(s);
   const abandoned = await selectOnM1("abandoned", false);
-  m1Revisions.push(abandoned.revision);
+  const minute = minuteOf(abandoned.identity);
+  vi.setSystemTime(minute - 60_000);
+  const next = await selectOnM1("abandoned-next", false);
+  expect(minuteOf(next.identity)).toBe(minute + 60_000);
+  m1Revisions.push(abandoned.revision, next.revision);
   await mergeModulePreparationRevisions({ stateDir: join(root, "state") }, m1Revisions);
-  vi.setSystemTime(minuteOf(abandoned.identity) + 60_000);
+  vi.setSystemTime(minute);
+  expect(await spareSelects(s)).toEqual(
+    expect.objectContaining({ status: "waiting", targetMs: minute + 120_000 }),
+  );
+  vi.advanceTimersByTime(120_000);
   const selected = await spareSelects(s);
   expect(selected).toMatchObject({ status: "selected" });
-  expect(selected.identity).not.toBe(abandoned.identity);
   await sparePromotes(s, selected.input);
   const sif = await suite.db.select().from(registroSif);
   expect(sif.find((row) => row.nodeId === standby.nodeId)?.numeroInstalacion).toBe(
     selected.identity,
   );
+});
+
+describe("a merged file close to its limit", () => {
+  const LIMIT = 1024 * 1024;
+  const stateDir = () => join(root, "state");
+  /** M1's selections plus padding under a second module, so the merged file is `size` bytes. */
+  const paddedTo = async (size: number) => {
+    const own = await readModulePreparationRevisions({ stateDir: stateDir() });
+    const padding = (text: string) => ({
+      binding: { ...joinBinding, module: "padding", eventId: "padding" },
+      value: { text },
+    });
+    const bytes = Buffer.byteLength(
+      JSON.stringify({ version: 1, revisions: [...m1Revisions, padding(""), ...own] }),
+    );
+    return [...m1Revisions, padding("x".repeat(size - bytes))];
+  };
+  const mergeTo = async (size: number) => {
+    await mergeModulePreparationRevisions({ stateDir: stateDir() }, await paddedTo(size));
+    expect((await stat(join(stateDir(), "module-preparation-state.json"))).size).toBe(size);
+  };
+  /** The clock on M1's name, so `select` writes a wait and then an intent before promotion. */
+  const onAbandonedMinute = async () => {
+    const abandoned = await selectOnM1("abandoned", false);
+    m1Revisions.push(abandoned.revision);
+    const minute = minuteOf(abandoned.identity);
+    vi.setSystemTime(minute);
+    return minute;
+  };
+
+  it("padded to the largest size the check allows, with few selections of its own, the spare still waits, selects and promotes", async () => {
+    const s = spareService();
+    await admit(s);
+    const minute = await onAbandonedMinute();
+    const size = LIMIT - 64 * 1024;
+    expect(await modulePreparationMergeFits({ stateDir: stateDir() }, await paddedTo(size))).toBe(
+      true,
+    );
+    expect(
+      await modulePreparationMergeFits({ stateDir: stateDir() }, await paddedTo(size + 1)),
+    ).toBe(false);
+    await mergeTo(size);
+    expect(await spareSelects(s)).toEqual(
+      expect.objectContaining({ status: "waiting", targetMs: minute + 60_000 }),
+    );
+    vi.advanceTimersByTime(60_000);
+    const selected = await spareSelects(s);
+    expect(selected).toMatchObject({ status: "selected" });
+    await sparePromotes(s, selected.input);
+    const sif = await suite.db.select().from(registroSif);
+    expect(sif.find((row) => row.nodeId === standby.nodeId)?.numeroInstalacion).toBe(
+      selected.identity,
+    );
+  });
+
+  it("control: with 1000 bytes of the file left, the real select refuses", async () => {
+    const s = spareService();
+    await admit(s);
+    await onAbandonedMinute();
+    await mergeTo(LIMIT - 1000);
+    await expect(spareSelects(s)).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  });
 });
 
 // Pins today's behaviour, not a wanted one.
