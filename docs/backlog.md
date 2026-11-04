@@ -5826,8 +5826,8 @@ outstanding on code that exists.
   ambient administrator. A usable release also needs qualified account-copy freshness.
   [Design](superpowers/specs/2026-10-26-a1111-mirror-personal-sign-in-design.md)
 
-- **A947. Go-live on two local boxes.** The owner approved the revised design. Slices 3b onwards
-  are still open. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
+- **A947. Go-live on two local boxes.** The owner approved the revised design. Slice 3b's build
+  plan is written (eight pull requests; Q1 is the owner's); slices 3b onwards are still to build. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
 
 - **A1273: the shared key ring has no rotation path to the spare.** A spare gets the main box's
   ring only when it joins. For slices 3b and 3c.

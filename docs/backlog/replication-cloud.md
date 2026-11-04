@@ -660,7 +660,11 @@ The owner approved the second revision on 2026-10-22 at about 02:40; the amendme
 [#2371](https://github.com/clintongormley/waitron/pull/2371) on 2026-11-01: what a box remembers
 about itself is in its own `node.db`. The owner answered yes to both its questions on 2026-10-31:
 the box's role is saved a moment after the switch's fiscal save, and a spare checks the main box's
-certificate fingerprint before it receives the venue's keys. Slices 3b onwards are still open;
+certificate fingerprint before it receives the venue's keys. Slice 3b's build
+[plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) was written on 2026-11-04:
+eight pull requests, two of them fiscal and landed by the owner (3b-G, the start steps that decide
+whether a box files; 3b-F, letting a Veri*Factu venue add a spare, which waits on the owner's
+question Q1). Its build has not started. Slices 3c onwards are still open;
 A1273 to A1285, A1295 and A1296 are the loose ends slice 3a left.
 A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
 of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).
