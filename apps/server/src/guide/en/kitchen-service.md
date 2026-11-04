@@ -121,7 +121,8 @@ prep station also sets how identical dishes print on its tickets,
 whether it prints held groups in advance, and whether a dish already sent to it can be recalled or
 changed, under **Identical dishes on a kitchen ticket**, **Print held groups in advance** and
 **Changes after sending**: **Not allowed**, **While held**, or
-**While held or waiting**. A dish the kitchen has started is never recalled. A dish that went to no
+**While held or waiting**. It also sets whether its dishes wait for the pass to fire them, under
+**Waits for the pass**: see [Make a station wait for the pass](kitchen-service.md#station-waits). A dish the kitchen has started is never recalled. A dish that went to no
 station, with no extra that went to a station of its own, can be recalled whatever the stations
 allow.
 
@@ -201,7 +202,7 @@ passes since its dishes were sent, by their stations' late flags. A ready dish k
 columns counts the red cards (**2 overdue**). Each dish shows its state and station, such as
 **Preparing · Grill**; a held dish shows neither.
 
-A dish whose station waits for the pass is not cooked until the pass fires it. When the waiter
+A dish whose [station waits for the pass](kitchen-service.md#station-waits) is not cooked until the pass fires it. When the waiter
 [requests cooking](kitchen-service.md#request-cooking), its card moves to **To fire** and the dish
 says **Waiting for the pass · Grill**. Tap **Fire** on the card to send its dishes that wait for
 this pass to their stations; the card then moves to **In progress**. If the table changed since the
@@ -310,8 +311,8 @@ without a Fire button. On a station queue, held dishes stay dimmed and cannot be
 tapping them; on the pass, a card whose dishes are all held sits under **Held** at the bottom of
 **To fire**, or in **Held** if the pass shows that column. On the table's order screen, a dish says
 **at the pass** while it, or one of its extras, waits for the pass to fire it.
-Once released, a dish can move through preparation to Ready at its station. A dish whose station
-waits for the pass goes to the pass's **To fire** column instead: see
+Once released, a dish can move through preparation to Ready at its station. A dish whose [station
+waits for the pass](kitchen-service.md#station-waits) goes to the pass's **To fire** column instead: see
 [Work the pass](kitchen-service.md#pass-screen).
 While the box is out of disk space, moving a dish on is refused. The station says
 **Not saved: the box is out of disk space. Tell a manager.** and the dish stays where it was.
@@ -323,6 +324,34 @@ the table's allergy editor. At the station, acknowledge any corrections.
 A held group falls due a set number of minutes after the dishes fired before it have been
 served. Each department sets those minutes, or turns the reminder off, under **Courses and the
 kitchen** on its **Service** tab in the dashboard.
+
+## Make a station wait for the pass {#station-waits}
+
+To have the pass decide when a station's dishes are cooked, edit the station in **Prep stations**
+and switch on **Waits for the pass**, under **Printers**. The stations table shows **Yes** or **No**
+in its **Waits for the pass** column. When the waiter then requests cooking, the station's dishes go
+to the pass's **To fire** column, and the station's screen shows them as **Waiting for the pass**
+until the pass fires them. Switching it on or off changes only dishes requested afterwards; a dish
+already requested stays where it is. A configuration export carries the setting.
+
+Only a pass screen whose device can press **Fire** releases the dishes. For a station's dishes in a
+service zone, that takes both of these:
+
+- Under **Device profiles**, the device's profile offers a pass screen with the station and the zone
+  in its lists: **Pass screen** in **Kitchen screens its devices may run** on a kitchen display,
+  **Pass button** in **Screens it shows** on a till or handheld. It also has **Prepares orders** and
+  **Runs the pass** on in **What it can do**. On a till or handheld profile with a department, the
+  zone must also be one it serves, under **Where it serves**.
+- Under **Devices**, the device is enabled and its **Edit** window chooses the pass screen
+  (**Screen** on a kitchen display, **Pass screen shows** on a till or handheld), with the station
+  and the zone in its lists. A dish whose order has no service zone needs a pass screen on every
+  zone.
+
+You can save a station that waits even when no pass screen covers it. Until one does, **Prep
+stations** says so above its tabs, zone by zone, for example: **Nothing fires dishes from Grill in
+Terrace: no pass screen covers them there. Set one up under Devices.** It also names a station whose
+dishes are already waiting for the pass with nothing to fire them, even once the station no longer
+waits. The warning checks again when stations, devices or profiles change, and every minute.
 
 ## Delete a prep station {#delete-prep-station}
 

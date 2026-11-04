@@ -62,6 +62,7 @@ describe("the user guides", () => {
         "identical-dishes",
         "after-period",
         "request-cooking",
+        "station-waits",
         "delete-prep-station",
         "paper-language",
       ]);
