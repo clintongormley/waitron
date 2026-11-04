@@ -4,7 +4,8 @@ import { LitElement, html } from "lit";
 import { LiveData } from "@waitron/dashboard-kit";
 import { LeaveController } from "@waitron/ui";
 import type { DashboardApi, MenuPreview, MenuPublicationsAnswer } from "../api/client.js";
-import { setLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
+import { fill, setLocale, t } from "../i18n/t.js";
 import {
   cleanupWidgets,
   closeReportsDelivered,
@@ -400,10 +401,7 @@ for (const p of SCHEDULE_PATHS) {
         );
         if (route === "close")
           dialog.querySelector<HTMLElement>('[data-test="schedule-close"]')!.click();
-        else {
-          dialog.querySelector(`[name="${p.edited}"]`)!.shadowRoot!.querySelector("input")!.focus();
-          await userEvent.keyboard("{Escape}");
-        }
+        else await userEvent.keyboard("{Escape}");
         expect((await question(app)).open).toBe(true);
         expect(dialog.open).toBe(true);
         const closed = dialogClosed(dialog);
@@ -454,7 +452,9 @@ for (const p of SCHEDULE_PATHS) {
       expect(fieldValue(dialog, p.edited)).toBe(p.openedValue);
     });
     for (const { outcome, answered } of WRITE_ANSWERS) {
-      it(`${p.path}: a write ${outcome} ${answered} (put back ${how}) closes the window and sends nothing more`, async () => {
+      // answer() waits between the removal and the put-back, so this repeats "after a detached update".
+      if (answered === "while it is out" && how === "at once") continue;
+      it(`${p.path}: a write ${outcome} ${answered} (put back ${how}): the window it was sent from closes, and nothing more is sent`, async () => {
         const { app, panel, dialog } = await p.mountPath();
         app.api.liveData = new LiveData();
         let stored: MenuPublicationsAnswer = LISTED;
@@ -606,3 +606,263 @@ for (const p of SCHEDULE_PATHS) {
     expect(fieldValue(dialog, "time")).toBe(p.path === "Schedule" ? "" : "09:30");
   });
 }
+
+const lateRefusal = (panel: Panel) =>
+  panel.shadowRoot!.querySelector<HTMLElement>('[data-test="late-refusal"]');
+const lateText = (panel: Panel) => lateRefusal(panel)?.textContent?.trim();
+const footerMessage = (dialog: Dialog) =>
+  dialog.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!.error;
+const occurrenceField = (dialog: Dialog) => dialog.querySelector('[name="occurrence"]');
+const lateWords = (code: string) =>
+  `Your last schedule change did not go through. ${codeMessage(code)}`;
+
+const REPEATED = {
+  code: "menu_publication.time_repeated",
+  params: {
+    date: "2026-10-25",
+    time: "02:30",
+    occurrences: [{ offset: "+02:00" }, { offset: "+01:00" }],
+  },
+};
+const PAST = { code: "menu_publication.time_past", params: {} };
+const EVERY_REFUSAL = [
+  REPEATED,
+  PAST,
+  { code: "menu_publication.time_skipped", params: {} },
+  { code: "menu_publication.overtakes_queued", params: {} },
+  { code: "menu_publication.not_queued", params: {} },
+  { code: "menu_publication.not_found", params: {} },
+  { code: "menu.changed_since_preview", params: {} },
+  { code: "management.request_invalid", params: { field: "activatesAt.occurrence" } },
+];
+
+async function sentAndWaiting(p: (typeof SCHEDULE_PATHS)[number]) {
+  const { app, panel, dialog } = await p.mountPath();
+  const write = deferred();
+  p.writeOf(app).mockReturnValueOnce(write.promise as never);
+  await enter(dialog, p.edited, p.editedValue);
+  await enter(dialog, p.other, p.otherEdit);
+  submitAction(dialog).click();
+  await expect.poll(() => p.writeOf(app).mock.calls.length).toBe(1);
+  return { app, panel, dialog, write };
+}
+
+async function settled(panel: Panel) {
+  await closeReportsDelivered();
+  await panel.updateComplete;
+}
+
+for (const p of SCHEDULE_PATHS) {
+  for (const answered of ["while it is out", "after being put back"] as const) {
+    const refusals = answered === "after being put back" ? EVERY_REFUSAL : [REPEATED, PAST];
+    for (const refusal of refusals) {
+      it(`${p.path}: ${refusal.code} arriving ${answered} shows on the panel until a reopening`, async () => {
+        const { app, panel, dialog, write } = await sentAndWaiting(p);
+        const retries = vi.fn();
+        panel.addEventListener("wt-preview-retry", retries);
+        const parent = panel.parentNode!;
+        const next = panel.nextSibling;
+        panel.remove();
+        if (answered === "while it is out") {
+          write.reject(refusal);
+          await settled(panel);
+        }
+        parent.insertBefore(panel, next);
+        await settled(panel);
+        if (answered === "after being put back") {
+          expect(lateRefusal(panel)).toBeNull();
+          write.reject(refusal);
+          await settled(panel);
+        }
+        await expect.poll(() => lateText(panel)).toBe(lateWords(refusal.code));
+        expect(lateRefusal(panel)!.getAttribute("role")).toBe("alert");
+
+        await panel.updateComplete;
+        expect(dialog.open).toBe(false);
+        expect(submitAction(dialog).loading).toBe(false);
+        expect(footerMessage(dialog)).toBe("");
+        expect(fieldError(dialog, "time")).toBe("");
+        expect(occurrenceField(dialog)).toBeNull();
+        expect(app.leave.coordinator.isDirty()).toBe(false);
+        expect(retries).not.toHaveBeenCalled();
+        expect(p.writeOf(app)).toHaveBeenCalledTimes(1);
+
+        await putBack(panel, "at once");
+        expect(lateText(panel)).toBe(lateWords(refusal.code));
+
+        await vi.waitFor(() => expect(editionRow(panel)).not.toBeNull());
+        await p.reopen(panel);
+        await expectUnchangedOpen(app, panel, dialog);
+        expect(lateRefusal(panel)).toBeNull();
+        expect(occurrenceField(dialog)).toBeNull();
+        expect(fieldError(dialog, "time")).toBe("");
+        expect(footerMessage(dialog)).toBe("");
+        expect(p.writeOf(app)).toHaveBeenCalledTimes(1);
+      });
+    }
+  }
+
+  for (const refusal of [REPEATED, PAST]) {
+    it(`${p.path}: ${refusal.code} arriving once a fresh window is open leaves that window alone`, async () => {
+      const { app, panel, dialog, write } = await sentAndWaiting(p);
+      await putBack(panel, "at once");
+      await settled(panel);
+      await p.reopen(panel);
+      await expectUnchangedOpen(app, panel, dialog);
+      await enter(dialog, p.edited, p.editAfter);
+
+      write.reject(refusal);
+      await expect.poll(() => lateText(panel)).toBe(lateWords(refusal.code));
+
+      expect(dialog.open).toBe(true);
+      expect(fieldValue(dialog, p.edited)).toBe(p.editAfter);
+      expect(fieldError(dialog, "time")).toBe("");
+      expect(footerMessage(dialog)).toBe("");
+      expect(occurrenceField(dialog)).toBeNull();
+      expect(submitAction(dialog).loading).toBe(false);
+      expect(submitAction(dialog).disabled).toBe(false);
+      expect(app.leave.coordinator.isDirty()).toBe(true);
+      expect(p.writeOf(app)).toHaveBeenCalledTimes(1);
+    });
+
+    it(`${p.path}: ${refusal.code} arriving while a fresh window's own write is out leaves it busy`, async () => {
+      const { app, panel, dialog, write } = await sentAndWaiting(p);
+      await putBack(panel, "at once");
+      await settled(panel);
+      await p.reopen(panel);
+      await expectUnchangedOpen(app, panel, dialog);
+      const second = deferred();
+      p.writeOf(app).mockReturnValueOnce(second.promise as never);
+      await enter(dialog, p.edited, p.editedValue);
+      await enter(dialog, p.other, p.otherEdit);
+      submitAction(dialog).click();
+      await expect.poll(() => p.writeOf(app).mock.calls.length).toBe(2);
+
+      write.reject(refusal);
+      await expect.poll(() => lateText(panel)).toBe(lateWords(refusal.code));
+      await panel.updateComplete;
+      expect(submitAction(dialog).loading).toBe(true);
+      expect(occurrenceField(dialog)).toBeNull();
+      expect(fieldError(dialog, "time")).toBe("");
+
+      const closed = dialogClosed(dialog);
+      second.resolve({ versionId: "v", number: 2, activatesAt: "" });
+      await closed;
+      expect(p.writeOf(app)).toHaveBeenCalledTimes(2);
+    });
+  }
+
+  it(`${p.path}: a refusal for a menu the panel has moved away from shows nothing`, async () => {
+    const { panel, write } = await sentAndWaiting(p);
+    panel.remove();
+    panel.menuId = "menu-dinner";
+    await panel.updateComplete;
+    write.reject(PAST);
+    await settled(panel);
+    expect(lateRefusal(panel)).toBeNull();
+  });
+
+  it(`${p.path}: a refusal shown on the panel goes when the panel is put back on a different menu`, async () => {
+    const { app, panel, write } = await sentAndWaiting(p);
+    const parent = panel.parentNode!;
+    const next = panel.nextSibling;
+    panel.remove();
+    write.reject(PAST);
+    await settled(panel);
+    expect(lateRefusal(panel)).not.toBeNull();
+    panel.menuId = "menu-dinner";
+    parent.insertBefore(panel, next);
+    await settled(panel);
+    expect(lateRefusal(panel)).toBeNull();
+    expect(app.api.getMenuPublications).toHaveBeenLastCalledWith("menu-dinner");
+  });
+
+  it(`${p.path}: a refusal shown on the panel goes when the panel follows a different menu`, async () => {
+    const { panel, write } = await sentAndWaiting(p);
+    await putBack(panel, "at once");
+    write.reject(PAST);
+    await expect.poll(() => lateRefusal(panel)).not.toBeNull();
+    panel.menuId = "menu-dinner";
+    await settled(panel);
+    expect(lateRefusal(panel)).toBeNull();
+  });
+
+  it(`${p.path}: a refusal for the menu the panel has come back to shows`, async () => {
+    const { panel, write } = await sentAndWaiting(p);
+    panel.menuId = "menu-dinner";
+    await panel.updateComplete;
+    panel.menuId = "menu-lunch";
+    await panel.updateComplete;
+    write.reject(PAST);
+    await expect.poll(() => lateText(panel)).toBe(lateWords(PAST.code));
+  });
+
+  for (const answered of ["while it is out", "after being put back"] as const) {
+    it(`${p.path}: a write accepted ${answered} shows no refusal`, async () => {
+      const { app, panel, dialog, write } = await sentAndWaiting(p);
+      const parent = panel.parentNode!;
+      const next = panel.nextSibling;
+      panel.remove();
+      if (answered === "while it is out") {
+        write.resolve({ versionId: "v", number: 2, activatesAt: "" });
+        await settled(panel);
+      }
+      parent.insertBefore(panel, next);
+      await settled(panel);
+      if (answered === "after being put back") {
+        write.resolve({ versionId: "v", number: 2, activatesAt: "" });
+        await settled(panel);
+      }
+      expect(lateRefusal(panel)).toBeNull();
+      expect(dialog.open).toBe(false);
+      expect(p.writeOf(app)).toHaveBeenCalledTimes(1);
+    });
+  }
+
+  it(`${p.path}: a refusal of the window still open stays in that window`, async () => {
+    const { app, panel, dialog, write } = await sentAndWaiting(p);
+    write.reject(PAST);
+    await expect.poll(() => fieldError(dialog, "time")).toBe(codeMessage(PAST.code));
+    expect(lateRefusal(panel)).toBeNull();
+    expect(dialog.open).toBe(true);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+  });
+
+  it(`${p.path}: a repeated time refused in the window still open asks which one, in that window`, async () => {
+    const { panel, dialog, write } = await sentAndWaiting(p);
+    write.reject(REPEATED);
+    await expect.poll(() => occurrenceField(dialog)).not.toBeNull();
+    expect(lateRefusal(panel)).toBeNull();
+    expect(dialog.open).toBe(true);
+  });
+}
+
+it("a late overtake refusal names the version in the way, from a list read after it", async () => {
+  const { app, panel, write } = await sentAndWaiting(SCHEDULE_PATHS[0]);
+  await putBack(panel, "at once");
+  const reads = app.api.getMenuPublications.mock.calls.length;
+  write.reject({
+    code: "menu_publication.overtakes_queued",
+    params: { overtaken: [{ versionId: "v-lunch-1" }] },
+  });
+  await expect.poll(() => lateText(panel)).toContain("did not go through");
+  expect(lateText(panel)).toContain(
+    fill("menu_publications.in_the_way_earlier", {
+      number: "1",
+      time: "8 Oct 2026, 08:00",
+    }),
+  );
+  expect(app.api.getMenuPublications).toHaveBeenCalledTimes(reads + 1);
+});
+
+it("a late refusal on the panel follows the screen's language", async () => {
+  const { panel, write } = await sentAndWaiting(SCHEDULE_PATHS[0]);
+  await putBack(panel, "at once");
+  write.reject(PAST);
+  await expect.poll(() => lateText(panel)).toBe(lateWords(PAST.code));
+  setLocale("es");
+  await panel.updateComplete;
+  const spanish = fill("menu_publications.late_refusal", { reason: codeMessage(PAST.code) });
+  expect(spanish).not.toBe(lateWords(PAST.code));
+  await expect.poll(() => lateText(panel)).toBe(spanish);
+});

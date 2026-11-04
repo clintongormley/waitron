@@ -3222,6 +3222,7 @@ export const en = {
   "menu_publications.date_required": "Choose a date.",
   "menu_publications.time_required": "Choose a time.",
   "menu_publications.schedule_action": "Schedule",
+  "menu_publications.late_refusal": "Your last schedule change did not go through. {reason}",
   "menu_publications.time_skipped": "The clock skips {time} on {date}. Choose another time.",
   "menu_publications.time_repeated":
     "{time} happens twice on {date}, because the clocks go back. Choose which.",
@@ -7025,6 +7026,8 @@ export const es: Record<StringKey, string> = {
   "menu_publications.date_required": "Elige una fecha.",
   "menu_publications.time_required": "Elige una hora.",
   "menu_publications.schedule_action": "Programar",
+  "menu_publications.late_refusal":
+    "Tu último cambio de programación no se ha completado. {reason}",
   "menu_publications.time_skipped": "El reloj se salta las {time} el {date}. Elige otra hora.",
   "menu_publications.time_repeated":
     "Las {time} se repiten el {date}, porque se atrasa la hora. Elige cuál de las dos.",

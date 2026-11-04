@@ -220,6 +220,10 @@ export class MenuPublicationsPanel extends LitElement {
         display: block;
         margin-bottom: var(--wt-space-4);
       }
+      .late-refusal {
+        margin: 0;
+        color: var(--wt-color-danger);
+      }
     `,
   ];
 
@@ -251,6 +255,8 @@ export class MenuPublicationsPanel extends LitElement {
   @state() private repeated: RepeatedTime | null = null;
   @state() private attempted = false;
   @state() private scheduleRefusal: ScheduleRefusal | null = null;
+  /** A write refused once its window had gone: nothing else would tell the person it failed. */
+  @state() private lateRefusal: ScheduleRefusal | null = null;
 
   /** The menu whose editions are followed. */
   #watching: string | null = null;
@@ -293,7 +299,7 @@ export class MenuPublicationsPanel extends LitElement {
   }
 
   override disconnectedCallback(): void {
-    // That write may yet be accepted, so its window must not come back able to send it again.
+    // A write still out may yet be accepted, so its window must not come back able to send it again.
     if (this.scheduleBusy) this.scheduling = false;
     this.#opening = {};
     this.confirming = null;
@@ -321,6 +327,7 @@ export class MenuPublicationsPanel extends LitElement {
       this.scheduleBusy = false;
       this.#disposeDraft();
       this.scheduling = false;
+      if (this.menuId !== this.#followed) this.lateRefusal = null;
     }
     this.#followed = this.menuId;
     void this.#load();
@@ -447,6 +454,7 @@ export class MenuPublicationsPanel extends LitElement {
     this.repeated = null;
     this.attempted = false;
     this.scheduleRefusal = null;
+    this.lateRefusal = null;
     this.#disposeDraft();
     this.#baseline = this.#draft();
     this.#takeDraftScope();
@@ -627,7 +635,10 @@ export class MenuPublicationsPanel extends LitElement {
       // The row being moved is out of date.
       void this.#refresh();
     }
-    if (opening !== this.#opening) return;
+    if (opening !== this.#opening) {
+      if (menuId === this.menuId) this.lateRefusal = refusal;
+      return;
+    }
     this.scheduleRefusal = refusal;
     if (code === "menu.changed_since_preview")
       this.dispatchEvent(new CustomEvent("wt-preview-retry", { bubbles: true, composed: true }));
@@ -863,6 +874,13 @@ export class MenuPublicationsPanel extends LitElement {
               >
             </div>`
           : nothing
+      }
+      ${
+        this.lateRefusal === null
+          ? nothing
+          : html`<p class="late-refusal" role="alert" data-test="late-refusal">
+              ${fill("menu_publications.late_refusal", { reason: refusalMessage(this.lateRefusal) })}
+            </p>`
       }
       <wt-data-table
         data-test="editions"

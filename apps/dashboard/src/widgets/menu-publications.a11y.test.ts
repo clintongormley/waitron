@@ -216,6 +216,46 @@ describe.each(["light", "dark"] as const)("the schedule form (%s)", (theme) => {
   );
 });
 
+describe.each(["light", "dark"] as const)("a refusal arriving after its window (%s)", (theme) => {
+  it("renders accessibly", async () => {
+    setLocale("en");
+    const api = {
+      getMenuPublications: vi.fn().mockResolvedValue(LISTED),
+      scheduleMenuPublication: vi
+        .fn()
+        .mockRejectedValue({ code: "menu_publication.time_past", params: {} }),
+    } as unknown as DashboardApi;
+    const { el, host } = await mountWidget<MenuPublicationsPanel>(
+      "dashboard-menu-publications",
+      { api, menuId: "menu-lunch", menuName: "Lunch Menu", preview: PREVIEW },
+      theme,
+    );
+    await settle(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="schedule-open"]')!.click();
+    await settle(el);
+    const dialog = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+      '[data-test="schedule-dialog"]',
+    )!;
+    for (const [name, value] of [
+      ["date", "2026-10-08"],
+      ["time", "08:00"],
+    ] as const) {
+      const input = dialog.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name="${name}"]`)!;
+      await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), value);
+    }
+    dialog.querySelector<HTMLElement>('[data-test="schedule-submit"]')!.click();
+    // Taken out before the refusal's microtask runs, so the window it was sent from has gone.
+    const parent = el.parentNode!;
+    el.remove();
+    parent.append(el);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="late-refusal"]')).not.toBeNull(),
+    );
+    await settle(el);
+    await expectNoA11yViolations(host);
+  });
+});
+
 const MOVE_LISTED: MenuPublicationsAnswer = {
   ...LISTED,
   editions: [
