@@ -368,7 +368,9 @@ service zone, that takes both of these:
 
 You can save a station that waits even when no pass screen covers it. Until one does, **Prep
 stations** says so above its tabs, zone by zone, for example: **Nothing fires dishes from Grill in
-Terrace: no pass screen covers them there. Set one up under Devices.** It also names a station whose
+Terrace: no pass screen covers them there. Set one up under Devices.** A station no pass screen
+covers in any zone gets a single line: **Nothing fires dishes from Grill in any zone: no pass screen
+covers them. Set one up under Devices.** It also names a station whose
 dishes are already waiting for the pass with nothing to fire them, even once the station no longer
 waits. The warning checks again when stations, zones, devices or profiles change, and every
 minute.

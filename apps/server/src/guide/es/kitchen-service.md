@@ -409,7 +409,9 @@ platos de una estación en una zona de servicio, hacen falta las dos cosas:
 Puedes guardar una estación que espera al pase aunque ninguna pantalla de pase la cubra. Hasta que
 alguna la cubra, **Estaciones de preparación** lo dice encima de sus pestañas, zona por zona, por
 ejemplo: **Nadie marcha los platos de Parrilla en Terraza: ninguna pantalla de pase los cubre allí.
-Configura una en Dispositivos.** También nombra una estación con platos que ya esperan al pase sin
+Configura una en Dispositivos.** Una estación que ninguna pantalla de pase cubre en ninguna zona
+recibe una sola línea: **Nadie marcha los platos de Parrilla en ninguna zona: ninguna pantalla de
+pase los cubre. Configura una en Dispositivos.** También nombra una estación con platos que ya esperan al pase sin
 nada que los marche, aunque la estación ya no espere. El aviso vuelve a comprobarlo cuando cambian
 las estaciones, las zonas, los dispositivos o los perfiles, y cada minuto.
 
