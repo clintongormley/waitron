@@ -1024,3 +1024,17 @@ describe("a past day's range around a start change", () => {
       });
   });
 });
+
+it("carries the pack's English holiday label through the real month projection", async () => {
+  await venue();
+  const month = await readMonth("2026-01");
+  const day = month.days.find((day) => day.date === "2026-01-06")!;
+  expect(day.holidays).toContainEqual(
+    expect.objectContaining({
+      id: "shipped:BOE-A-2025-21667:0601",
+      date: "2026-01-06",
+      englishName: "Epiphany",
+    }),
+  );
+  expect(day.holidays[0]!.name).not.toBe("Epiphany");
+});

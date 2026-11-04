@@ -191,3 +191,26 @@ it.each(["en", "es"])("uses %s for month, week and day-box holiday names", (loca
     locale === "en" ? "English holiday" : "Official holiday",
   );
 });
+
+it.each([
+  ["en", "Official holiday", "English holiday"],
+  ["en", "English holiday", "English holiday"],
+  ["es", "Official holiday", "Official holiday"],
+  ["es", "English holiday", "Official holiday"],
+])("shows one holiday line in %s for a special day saved as %s", (locale, savedName, displayed) => {
+  setLocale(locale!);
+  const model = monthModel();
+  const day = model.days.find((day) => day.date === "2026-12-15")!;
+  day.holidays = [
+    {
+      id: "holiday",
+      date: day.date,
+      name: "Official holiday",
+      englishName: "English holiday",
+      scope: "national",
+      sourceId: "source",
+    },
+  ];
+  day.specialDay = { id: "special", name: savedName! };
+  expect(dayNameLines(day)).toEqual([{ name: displayed, kind: "holiday" }]);
+});

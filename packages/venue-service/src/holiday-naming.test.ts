@@ -94,3 +94,10 @@ it("uses the dashboard's English fallback for an unsupported display language", 
     holidayDateName([{ ...NATIONAL, englishName: "English holiday" }], TARGET, "", "fr-CA"),
   ).toBe("English holiday");
 });
+
+it.each(["", "   "])(
+  "keeps the official name when the English label is blank: %j",
+  (englishName) => {
+    expect(holidayDateName([{ ...NATIONAL, englishName }], TARGET, "", "en")).toBe(NATIONAL.name);
+  },
+);

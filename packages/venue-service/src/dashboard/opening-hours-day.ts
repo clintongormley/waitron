@@ -52,8 +52,12 @@ export interface DayNameLine {
 export function dayNameLines(day: Day): DayNameLine[] {
   const holiday = holidayDateName(day.holidays, day.date, "", currentLocale());
   const special = day.specialDay?.name ?? "";
+  const holidayNames = new Set([
+    holidayDateName(day.holidays, day.date, ""),
+    holidayDateName(day.holidays, day.date, "", "en"),
+  ]);
   return [
-    ...(special && special !== holiday ? [{ name: special, kind: "special" as const }] : []),
+    ...(special && !holidayNames.has(special) ? [{ name: special, kind: "special" as const }] : []),
     ...(holiday ? [{ name: holiday, kind: "holiday" as const }] : []),
   ];
 }

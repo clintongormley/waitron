@@ -66,7 +66,7 @@ export const GUIDE_FRAME_WORDS: { en: GuideWords; es: GuideWords & { missingTwin
       "backup-recovery": BACKUP_RECOVERY_GUIDE_TITLE.es,
       "time-zone": TIME_ZONE_GUIDE.es.name,
       servers: "Servidores",
-      "opening-hours": "Festivos en Horarios de apertura",
+      "opening-hours": "Festivos en Horario de apertura",
     },
     missingTwin: "Esta página aún no está en español. Se muestra en inglés.",
     notFoundTitle: "Página no encontrada",

@@ -5289,6 +5289,11 @@ text official only in Spain, Spanish-specific terms, and Spain-only printed text
 official languages (owner, 2026-10-20, A913). Every country pack must also provide English, and
 demo data belongs in its country's pack — neither is true yet (A965, A971, A972); a receipt in
 Spain prints in the venue's receipt language, never English; A963 and A965 fix what does not yet.
+_2026-11-04 (A971): the historical paragraph above predates the holiday and holiday-area English
+display fields in `country-es`. Their official names remain the annual-rule keys; the calendar
+and readiness screens select the display text by language. See `packages/country-es/src/holidays.test.ts`
+and `packages/venue-service/src/opening-hours-calendar.test.ts` for the data and read checks._
+
 Starter content (module seeds, core setup) is English in code and translated at setup; its words
 in other languages go in the writing package's `src/starter-content.ts`, which the guard skips by
 exact path (owner, 2026-10-20, A918); a test of a non-English screen reads its expected text from

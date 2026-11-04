@@ -1,4 +1,4 @@
-# Festivos en Horarios de apertura
+# Festivos en Horario de apertura
 
 ## Nombres de los festivos {#holiday-names}
 

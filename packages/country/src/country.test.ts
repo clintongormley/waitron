@@ -350,6 +350,34 @@ describe("holiday calendar", () => {
     ]);
   });
 
+  it.each([undefined, "", "   "])(
+    "does not let a later %s label erase a known English holiday name",
+    (later) => {
+      const first = {
+        key: "first",
+        date: "2030-04-01",
+        name: "Original holiday",
+        englishName: "Known English holiday",
+        scope: "national" as const,
+        regions: ["R1"],
+        sourceId: "XY-source",
+      };
+      const years = [
+        { year: 2030, dataVersion: "XY-2030.1", sourceIds: ["XY-source"], rows: [first] },
+        {
+          year: 2032,
+          dataVersion: "XY-2032.1",
+          sourceIds: ["XY-source"],
+          rows: [{ ...first, key: "later", date: "2032-04-01", englishName: later }],
+        },
+      ];
+      for (const ordered of [years, [...years].reverse()]) {
+        const read = createHolidayCalendar({ ...dataset, areas: [], years: ordered });
+        expect(read.englishNameFor("Original holiday")).toBe("Known English holiday");
+      }
+    },
+  );
+
   it("maps a province to its region and nothing else", () => {
     expect(calendar.regionForProvince("01")).toBe("R1");
     expect(calendar.regionForProvince("03")).toBe("R2");

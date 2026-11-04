@@ -1701,3 +1701,70 @@ it.each(["en", "es"])(
     ).toBe(locale === "en" ? "English holiday" : "Official holiday");
   },
 );
+
+it.each([
+  ["en", "Official holiday"],
+  ["es", "English holiday"],
+  ["en", "English holiday"],
+  ["es", "Official holiday"],
+])("offers the existing special day saved as %s / %s", async (locale, savedName) => {
+  setLocale(locale!);
+  const existing = storedDay({
+    id: "existing",
+    name: savedName!,
+    dates: [{ date: "2025-12-25", closedAllDay: false }],
+  });
+  const { painter, lists, writes } = await mount({
+    specialDayId: null,
+    date: "2026-12-25",
+    holidays: [{ ...holiday("2026-12-25", "Official holiday"), englishName: "English holiday" }],
+    days: { existing },
+  });
+  await Promise.all(lists);
+  await settle(painter);
+  const offer = part(painter, "offer");
+  expect(offer).not.toBeNull();
+  expect(offer!.textContent).toContain(savedName);
+  part(painter, "add-to")!.click();
+  await loaded(painter);
+  expect(painter.specialDayId).toBe("existing");
+  expect(
+    painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!
+      .value,
+  ).toBe(savedName);
+  expect(chips(painter)).toEqual(["2025-12-25", "2026-12-25"]);
+  expect(writes).toEqual([]);
+});
+
+it.each(["en", "es"])(
+  "prefers an exact %s saved name when both holiday names already exist",
+  async (locale) => {
+    setLocale(locale);
+    const name = locale === "en" ? "English holiday" : "Official holiday";
+    const alternate = locale === "en" ? "Official holiday" : "English holiday";
+    const days = {
+      preferred: storedDay({
+        id: "preferred",
+        name,
+        dates: [{ date: "2024-12-25", closedAllDay: false }],
+      }),
+      alternate: storedDay({
+        id: "alternate",
+        name: alternate,
+        dates: [{ date: "2025-12-25", closedAllDay: false }],
+      }),
+    };
+    const { painter, lists } = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      holidays: [{ ...holiday("2026-12-25", "Official holiday"), englishName: "English holiday" }],
+      days,
+    });
+    await Promise.all(lists);
+    await settle(painter);
+    expect(part(painter, "offer")!.textContent).toContain(name);
+    part(painter, "add-to")!.click();
+    await loaded(painter);
+    expect(painter.specialDayId).toBe("preferred");
+  },
+);

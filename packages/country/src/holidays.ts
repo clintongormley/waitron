@@ -178,9 +178,10 @@ function compareFacts(a: ShippedHolidayFact, b: ShippedHolidayFact): number {
 export function createHolidayCalendar(dataset: HolidayDataset): CountryHolidayCalendar {
   checkDataset(dataset);
   const regionByProvince = new Map(Object.entries(dataset.provinceRegions));
-  const englishNames = new Map(
-    dataset.years.flatMap((year) => year.rows.map((row) => [row.name, row.englishName] as const)),
-  );
+  const englishNames = new Map<string, string>();
+  for (const year of dataset.years)
+    for (const row of year.rows)
+      if (row.englishName?.trim()) englishNames.set(row.name, row.englishName);
   const yearByNumber = new Map(dataset.years.map((year) => [year.year, year]));
   const areasOf = (provinceCode: string) =>
     dataset.areas.filter(({ provinces }) => provinces.includes(provinceCode));

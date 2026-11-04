@@ -19,7 +19,9 @@ export function holidayDisplayName(
   language?: string,
 ): string {
   return language !== undefined && language.split("-")[0] !== "es"
-    ? (fact.englishName ?? fact.name)
+    ? fact.englishName?.trim()
+      ? fact.englishName
+      : fact.name
     : fact.name;
 }
 
