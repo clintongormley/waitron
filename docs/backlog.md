@@ -6552,8 +6552,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A1308. Rationalise the tables, background jobs, environment variables and files** (owner,
   2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
   [design](superpowers/specs/2026-11-02-rationalisation/README.md) is written, and the owner has
-  reviewed every file and answered every question (2026-11-04). **It waits for the owner's final
-  approval before any work starts.** 246 tables become 145, or 144 once A1323 removes
+  reviewed every file and answered every question (2026-11-04). **Approved by the owner, 2026-11-04.
+  Next: write the plans for slice 0 and A760's squash into eight sets.** 246 tables become 145, or 144 once A1323 removes
   `recovery_packs`; 111 environment variables become 51, or 55 until A951 lands.
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
 

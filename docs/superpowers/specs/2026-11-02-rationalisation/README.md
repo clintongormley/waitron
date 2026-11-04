@@ -1,7 +1,7 @@
 # Rationalising Waitron's tables, background jobs, environment variables and files — design
 
-**Status:** reviewed file by file by the owner, 4 November 2026. Their decisions are applied here and
-in every appendix, and §10 lists them. Nothing is built until the owner approves the whole.
+**Status:** approved by the owner, 4 November 2026, after a file-by-file review. Their decisions are
+applied here and in every appendix, and §10 lists them.
 Counts and cites were checked against `main` at `e0da0ad18a`. The appendices hold the evidence: each
 cites the code it rests on, and each says what it did not establish. The artifacts published on
 2 November still show the earlier proposal.
@@ -604,9 +604,9 @@ A803 §3.1 and §3.9 (the line is the dish's identity), timed around lane C. The
 | The till's default language | The venue's own language, with no Spanish default in general code |
 | Features (§8) | None of the others goes |
 
-### Applied as the design, for the owner's final look
+### Applied as the design
 
-Chosen on the recommendation; the owner has not ruled on each one.
+Chosen on the recommendation and accepted by the owner, 4 November 2026.
 
 - A1002 lands before the people slice.
 - The rota keeps warning about someone outside a role, and does not refuse them.
