@@ -1289,12 +1289,13 @@ in the sweep below are retired. The booking writer remains; the account below re
   venue-service `0022_retire_legacy_hours`.
 - **`locations.day_cutover`** keeps the initial business-day start, written by
   `normalizeDayCutover` during provisioning. Dated starts live in `location_day_cutover_changes`;
-  `readLocationClock` returns both, and the shared resolver selects each date's boundary. The
-  general venue-details PATCH refuses a changed start. Since 2026-10-18 (A788) a new start is not
-  scheduled for a chosen date: `writeBusinessDayStart` (`apps/server/src/business-day-start.ts`)
-  takes it from the next changeover, or from the one after when the new time has already passed
-  today (`planBusinessDayStart`, `apps/server/src/business-day-changeover.ts`; the cases under "a
-  Save takes the next changeover" and "the preview chooses the changeover itself" in
+  `readVenueClock` (`packages/db/src/venue.ts`) returns both, and the shared resolver selects each
+  date's boundary. The general venue-details PATCH refuses a changed start. Since 2026-10-18 (A788)
+  a new start is not scheduled for a chosen date: `writeBusinessDayStart`
+  (`apps/server/src/business-day-start.ts`) takes it from the next changeover, or from the one
+  after when the new time has already passed today (`planBusinessDayStart`,
+  `apps/server/src/business-day-changeover.ts`; the cases under "a Save takes the next changeover"
+  and "the preview chooses the changeover itself" in
   `apps/server/src/business-day-start.test.ts`). The PUT still carries the date its preview showed,
   and one that no longer matches is refused `venue.business_day_invalid`, reason
   `changeover_passed` ("replaces a waiting change up to its changeover, and after it the next Save
