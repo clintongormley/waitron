@@ -5066,6 +5066,13 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 ### The box: backups, upgrades and recovery
 
+- **A1329. Write the box's key files so a power cut cannot lose them — OPEN, small, ready to queue (owner, 2026-11-04).**
+  `secrets.env`, `backup.env` and the certificate files go through `writeFileAtomic`, which does not
+  flush to disk (`packages/provisioning/src/fs-atomic.ts`; `apps/server/src/box-secrets.ts`,
+  `backup-env-writer.ts`). Losing `secrets.env` makes every stored credential and backup unreadable.
+  `writeFileDurable` already exists; use it for these. Comes ahead of A1308's one write helper. Not
+  yet tested with a real power cut.
+
 - **A1323. One master key for the venue (owner, 2026-11-04; wanted, not designed).**
   The owner keeps one key, printed in the recovery pack, in place of the backup key and the server key; the box keeps only a check value and numbered backup keys calculated from it.
   Design it beside A1187 and A1188, which change the same restore steps. It changes the fiscal authority check, so the owner lands it.
