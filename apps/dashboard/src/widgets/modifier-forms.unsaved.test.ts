@@ -8,7 +8,9 @@ import { setLocale, t } from "../i18n/t.js";
 import {
   cleanupWidgets,
   closeReportsDelivered,
+  dialogClosed,
   mountWidget,
+  putBack,
   reattachAfterDetachedUpdate,
 } from "./test-helpers.js";
 import "./extra-list-form.js";
@@ -424,18 +426,6 @@ it("an option label put back after a detached update still asks before Cancel di
   expect(label.open).toBe(true);
 });
 
-type PutBack = "at once" | "after a detached update";
-type Reattachable = LitElement;
-async function putBack(form: Reattachable, how: PutBack) {
-  if (how === "after a detached update") await reattachAfterDetachedUpdate(form);
-  else {
-    const parent = form.parentNode!;
-    const next = form.nextSibling;
-    form.remove();
-    parent.insertBefore(form, next);
-    await form.updateComplete;
-  }
-}
 function field(form: HTMLElement, name: string) {
   return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name="${name}"]`)!;
 }
@@ -506,8 +496,10 @@ for (const kind of ["extras", "options"] as const) {
           const q = await question(app);
           expect(q.open).toBe(true);
           expect(app.cancelled).toBe(0);
+          const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
           q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
-          await expect.poll(() => app.cancelled).toBe(1);
+          await closed;
+          expect(app.cancelled).toBe(1);
           await form.updateComplete;
           expect(field(form, "name").value).toBe(openedName);
           expect(app.leave.coordinator.isDirty()).toBe(false);
@@ -542,8 +534,10 @@ for (const kind of ["extras", "options"] as const) {
         await edit(form, "name", "Saved name");
         expect(app.leave.coordinator.isDirty()).toBe(false);
         expectSaveQuiet(form);
+        const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
         cancel(form);
-        await expect.poll(() => app.cancelled).toBe(1);
+        await closed;
+        expect(app.cancelled).toBe(1);
         await reopen(app, form, opened);
         expect(field(form, "name").value).toBe(openedName);
         expect(app.leave.coordinator.isDirty()).toBe(false);
@@ -604,8 +598,10 @@ for (const mode of ["edit", "create"] as const) {
       const q = await question(app);
       expect(q.open).toBe(true);
       expect(label.open).toBe(true);
+      const closed = dialogClosed(label.shadowRoot!.querySelector("wt-modal")!);
       q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
-      await expect.poll(() => label.open).toBe(false);
+      await closed;
+      expect(label.open).toBe(false);
       await label.updateComplete;
       expect(app.leave.coordinator.isDirty()).toBe(false);
       const reopened = await openLabelForm(form, mode);
@@ -654,8 +650,10 @@ for (const mode of ["edit", "create"] as const) {
       cancel(label);
       const q = await question(app);
       expect(q.open).toBe(true);
+      const closed = dialogClosed(label.shadowRoot!.querySelector("wt-modal")!);
       q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
-      await expect.poll(() => label.open).toBe(false);
+      await closed;
+      expect(label.open).toBe(false);
       expect(app.leave.coordinator.isDirty()).toBe(true);
       await edit(form, "name", "Options");
       expect(app.leave.coordinator.isDirty()).toBe(false);
@@ -677,8 +675,10 @@ for (const mode of ["edit", "create"] as const) {
 it("a new option opened after editing another option starts unchanged", async () => {
   const { app, form } = await mount("options");
   const label = await openLabelForm(form, "edit");
+  const closed = dialogClosed(label.shadowRoot!.querySelector("wt-modal")!);
   cancel(label);
-  await expect.poll(() => label.open).toBe(false);
+  await closed;
+  expect(label.open).toBe(false);
   await label.updateComplete;
   const reopened = await openLabelForm(form, "create");
   expect(field(reopened, "label-name").value).toBe("");

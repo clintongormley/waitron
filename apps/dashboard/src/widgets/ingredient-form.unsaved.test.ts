@@ -4,7 +4,13 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import type { DashboardApi, Ingredient, IngredientInput } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget, reattachAfterDetachedUpdate } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  dialogClosed,
+  mountWidget,
+  putBack,
+  reattachAfterDetachedUpdate,
+} from "./test-helpers.js";
 import "./ingredient-form.js";
 import "../screens/recipe-screen.js";
 
@@ -395,17 +401,6 @@ it("an ingredient put back after a detached update still asks before Escape disc
   expect(form.open).toBe(true);
 });
 
-async function putBack(form: HTMLElementTagNameMap["dashboard-ingredient-form"], how: PutBack) {
-  if (how === "after a detached update") await reattachAfterDetachedUpdate(form);
-  else {
-    const parent = form.parentNode!;
-    const next = form.nextSibling;
-    form.remove();
-    parent.insertBefore(form, next);
-    await form.updateComplete;
-  }
-}
-type PutBack = "at once" | "after a detached update";
 function save(form: HTMLElementTagNameMap["dashboard-ingredient-form"]) {
   return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
 }
@@ -435,8 +430,10 @@ for (const mode of ["edit", "create"] as const) {
       await escape(form);
       expect((await question(app)).open).toBe(true);
       expect(form.open).toBe(true);
+      const closed = dialogClosed(form.shadowRoot!.querySelector("wt-dialog")!);
       await choose(app, "discard");
-      await expect.poll(() => form.open).toBe(false);
+      await closed;
+      expect(form.open).toBe(false);
       expect(form.shadowRoot!.querySelector("wt-input")!.value).toBe(openedName);
       expect(app.leave.coordinator.isDirty()).toBe(false);
       if (opened) form.ingredient = { ...opened, name: "Stored later" };

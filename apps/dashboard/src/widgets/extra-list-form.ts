@@ -704,7 +704,7 @@ export class ExtraListForm extends LitElement {
   }
 
   commitSaved(submitted: ExtraListInput): void {
-    this.#baseline = { value: submitted, invalid: {} };
+    this.#baseline = { value: structuredClone(submitted), invalid: {} };
     this.#scope?.commit(this.#baseline);
   }
   closeSaved(submitted: ExtraListInput): void {

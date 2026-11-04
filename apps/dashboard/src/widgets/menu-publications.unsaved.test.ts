@@ -9,7 +9,7 @@ import {
   closeReportsDelivered,
   dialogClosed,
   mountWidget,
-  reattachAfterDetachedUpdate,
+  putBack,
 } from "./test-helpers.js";
 import "./menu-publications.js";
 
@@ -252,17 +252,8 @@ it("a moved time cleared by success does not warn", async () => {
   expect(unload()).toBe(false);
 });
 
-type PutBack = "at once" | "after a detached update";
 type Panel = HTMLElementTagNameMap["dashboard-menu-publications"];
 type Dialog = HTMLElementTagNameMap["wt-dialog"];
-async function putBack(panel: Panel, how: PutBack): Promise<void> {
-  if (how === "after a detached update") return reattachAfterDetachedUpdate(panel);
-  const parent = panel.parentNode!;
-  const next = panel.nextSibling;
-  panel.remove();
-  parent.insertBefore(panel, next);
-  await panel.updateComplete;
-}
 const fieldValue = (dialog: Dialog, name: "date" | "time") =>
   dialog.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name="${name}"]`)!.value;
 const submitAction = (dialog: Dialog) =>

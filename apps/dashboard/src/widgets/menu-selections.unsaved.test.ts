@@ -7,7 +7,9 @@ import { t } from "../i18n/t.js";
 import {
   cleanupWidgets,
   closeReportsDelivered,
+  dialogClosed,
   mountWidget,
+  putBack,
   reattachAfterDetachedUpdate,
 } from "./test-helpers.js";
 import "./add-to-menus.js";
@@ -310,19 +312,7 @@ it("Section Add products put back after a detached update still asks before Canc
   expect(app.cancelled).toBe(0);
 });
 
-type PutBack = "at once" | "after a detached update";
 const PUT_BACK_WAYS = ["at once", "after a detached update"] as const;
-async function putBack(
-  form: HTMLElement & { updateComplete: Promise<unknown> },
-  how: PutBack,
-): Promise<void> {
-  if (how === "after a detached update") return reattachAfterDetachedUpdate(form);
-  const parent = form.parentNode!;
-  const next = form.nextSibling;
-  form.remove();
-  parent.insertBefore(form, next);
-  await form.updateComplete;
-}
 async function escapeFrom(input: HTMLElement) {
   input.focus();
   await userEvent.keyboard("{Escape}");
@@ -388,8 +378,10 @@ for (const how of PUT_BACK_WAYS) {
       const q = await question(app);
       expect(q.open).toBe(true);
       expect(app.cancelled).toBe(0);
+      const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
       q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-      await expect.poll(() => app.cancelled).toBe(1);
+      await closed;
+      expect(app.cancelled).toBe(1);
       expect(app.leave.coordinator.isDirty()).toBe(false);
       await reopenPlacement(app, form);
       expect(placement(form, "starter").checked).toBe(false);
@@ -435,8 +427,10 @@ for (const how of PUT_BACK_WAYS) {
     expect(app.leave.coordinator.isDirty()).toBe(true);
     cancel(form);
     const q = await question(app);
+    const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-    await expect.poll(() => app.cancelled).toBe(1);
+    await closed;
+    expect(app.cancelled).toBe(1);
     form.failures = [];
     await reopenPlacement(app, form);
     expect(placement(form, "starter").checked).toBe(false);
@@ -488,8 +482,10 @@ for (const how of PUT_BACK_WAYS) {
       const q = await sectionQuestion(app);
       expect(q.open).toBe(true);
       expect(app.cancelled).toBe(0);
+      const closed = dialogClosed(app.shadowRoot!.querySelector("wt-modal")!);
       q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-      await expect.poll(() => app.cancelled).toBe(1);
+      await closed;
+      expect(app.cancelled).toBe(1);
       await form.updateComplete;
       expect(product(form, "soup").checked).toBe(false);
       await expectSectionUnchanged(app, form);

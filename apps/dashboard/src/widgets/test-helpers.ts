@@ -142,6 +142,21 @@ export async function reattachAfterDetachedUpdate(
   await el.updateComplete;
 }
 
+type PutBack = "at once" | "after a detached update";
+
+/** Takes `el` out of the page and puts it back where it was, in the way `how` names. */
+export async function putBack(
+  el: HTMLElement & { updateComplete: Promise<unknown> },
+  how: PutBack,
+): Promise<void> {
+  if (how === "after a detached update") return reattachAfterDetachedUpdate(el);
+  const parent = el.parentNode!;
+  const next = el.nextSibling;
+  el.remove();
+  parent.insertBefore(el, next);
+  await el.updateComplete;
+}
+
 /**
  * Resolves once every `<dialog>` close already queued has been delivered. The browser reports a
  * close in a later task, which a zero-delay timer can run ahead of, so this closes a throwaway

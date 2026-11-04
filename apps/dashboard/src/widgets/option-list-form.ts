@@ -520,7 +520,7 @@ export class OptionListForm extends LitElement {
   }
 
   commitSaved(submitted: OptionListInput): void {
-    this.#baseline = submitted;
+    this.#baseline = structuredClone(submitted);
     this.#scope?.commit(submitted);
   }
   closeSaved(submitted: OptionListInput): void {
