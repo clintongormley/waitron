@@ -45,7 +45,7 @@ describe("A765 table names in order lists", () => {
       );
       const rows = await (status === "open"
         ? listHeldOrders({ db: venue.db }, venue.cfg)
-        : listCounterWaiting({ db: venue.db }, venue.cfg));
+        : listCounterWaiting({ db: venue.db }));
       const row = rows.find((order) => order.id === id)!;
       expect(row.label).toBe("Alex");
       expect(row).not.toHaveProperty("tableLabel");
@@ -126,7 +126,7 @@ describe("A765 table names in order lists", () => {
       const read = () =>
         status === "open"
           ? listHeldOrders({ db: venue.db }, venue.cfg)
-          : listCounterWaiting({ db: venue.db }, venue.cfg);
+          : listCounterWaiting({ db: venue.db });
       expect((await read()).find((row) => row.id === id)).toMatchObject({
         label: "Alex",
         tableLabel: `Today ${status}`,

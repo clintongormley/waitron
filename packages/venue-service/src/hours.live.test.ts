@@ -22,7 +22,6 @@ import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 import { saveHolidayArea } from "./holidays.js";
 import { QUERY_DEPENDENCIES } from "./dashboard/live-queries.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import type { VenueScope } from "./operations.js";
 import { departments } from "./schema/service.js";
 import { kitchenNotices } from "./schema/kitchen-notices.js";
 import { deleteSpecialDay, saveSpecialDay } from "./special-days.js";
@@ -82,7 +81,7 @@ it("refreshes Calendar and routing from special days, clock and daily station st
       ])
       .returning();
     return {
-      cfg: { locationId: locationId(venueId) } as VenueScope,
+      cfg: { locationId: locationId(venueId) },
       departmentId: department!.id,
       bar: barRow!.id,
       kitchen: kitchenRow!.id,
@@ -98,17 +97,17 @@ it("refreshes Calendar and routing from special days, clock and daily station st
   });
   let id = "";
   const created = await announced(async (tx) => {
-    id = (await saveSpecialDay(tx, cfg, null, party(["2030-10-15"]), at, 0)).id;
+    id = (await saveSpecialDay(tx, null, party(["2030-10-15"]), at, 0)).id;
   });
   const dayTables = ["special_days", "special_day_dates"];
   expect(reaches(created, calendar)).toEqual(dayTables);
   expect(reaches(created, routing)).toEqual(dayTables);
   const added = await announced((tx) =>
-    saveSpecialDay(tx, cfg, id, party(["2030-10-15", "2030-10-22"]), at, 0),
+    saveSpecialDay(tx, id, party(["2030-10-15", "2030-10-22"]), at, 0),
   );
   expect(reaches(added, calendar)).toEqual(["special_day_dates"]);
   expect(reaches(added, routing)).toEqual(["special_day_dates"]);
-  const removed = await announced((tx) => deleteSpecialDay(tx, cfg, id, at, 0));
+  const removed = await announced((tx) => deleteSpecialDay(tx, id, at, 0));
   expect(reaches(removed, calendar)).toEqual(dayTables);
   expect(reaches(removed, routing)).toEqual(dayTables);
 
@@ -126,7 +125,7 @@ it("refreshes Calendar and routing from special days, clock and daily station st
     tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, kitchen)),
   );
   expect(reaches(station, calendar)).toEqual([]);
-  const today = await announced((tx) => setStationToday(tx, cfg, bar, "closed", at));
+  const today = await announced((tx) => setStationToday(tx, bar, "closed", at));
   expect(reaches(today, calendar)).toEqual([]);
   expect(reaches(today, routing)).toEqual(["station_day_states"]);
   const order = await withTransaction(db, (tx) =>
@@ -168,7 +167,7 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
       city: "Vielha",
     });
     const venueId = await venueLocationId(tx);
-    return { locationId: locationId(venueId) } as VenueScope;
+    return { locationId: locationId(venueId) };
   });
   const calendar = QUERY_DEPENDENCIES["named-days"];
   const holidays = QUERY_DEPENDENCIES.holidays;
@@ -178,7 +177,6 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
   const named = await announced((tx) =>
     saveSpecialDay(
       tx,
-      cfg,
       null,
       { name: "Arán", repeatsYearly: false, dates: [{ date: "2026-06-17", closedAllDay: false }] },
       new Date("2026-01-01T12:00:00Z"),
@@ -187,7 +185,7 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
   );
   expect(both(named)).toEqual([["special_days", "special_day_dates"], []]);
   expect(reaches(named, operations)).toEqual(["special_days", "special_day_dates"]);
-  const area = await announced((tx) => saveHolidayArea(tx, cfg, { areaKey: "aran" }));
+  const area = await announced((tx) => saveHolidayArea(tx, { areaKey: "aran" }));
   expect(both(area)).toEqual([["holiday_geographies"], ["holiday_geographies"]]);
   expect(reaches(area, operations)).toEqual(["holiday_geographies"]);
   const moved = await announced((tx) =>
@@ -202,7 +200,7 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
 
 it("daily station status refreshes routing and special days refresh Opening hours", async () => {
   const at = new Date("2026-10-06T10:00:00Z");
-  const { cfg, bar, dateId } = await withTransaction(db, async (tx) => {
+  const { bar, dateId } = await withTransaction(db, async (tx) => {
     await seedVenue(tx, {
       name: `Retained ${randomUUID()}`,
       invoiceLocales: ["en-GB"],
@@ -220,21 +218,19 @@ it("daily station status refreshes routing and special days refresh Opening hour
       .returning();
     const date = await saveSpecialDay(
       tx,
-      cfg,
       null,
       { name: "Party", repeatsYearly: false, dates: [{ date: "2030-10-15", closedAllDay: false }] },
       at,
       0,
     );
-    return { cfg, bar: bar!.id, dateId: date.id };
+    return { bar: bar!.id, dateId: date.id };
   });
   const sources = [QUERY_DEPENDENCIES.routing, QUERY_DEPENDENCIES["opening-hours"]];
-  const station = await announced((tx) => setStationToday(tx, cfg, bar, "closed", at));
+  const station = await announced((tx) => setStationToday(tx, bar, "closed", at));
   expect(reaches(station, sources[0]!)).toEqual(["station_day_states"]);
   const named = await announced((tx) =>
     saveSpecialDay(
       tx,
-      cfg,
       dateId,
       {
         name: "Party renamed",

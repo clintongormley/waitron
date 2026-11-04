@@ -43,9 +43,9 @@ it("deletes through the real core seat when the optional bookings table was neve
     simplifiedInvoiceLimit: null,
   };
   const f = await withTransaction(suite.db, async (tx) => {
-    await createDepartment(tx, cfg, { name: "Keep", orderStart: "table" });
-    const department = await createDepartment(tx, cfg, { name: "Delete", orderStart: "table" });
-    const zone = await createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id });
+    await createDepartment(tx, { name: "Keep", orderStart: "table" });
+    const department = await createDepartment(tx, { name: "Delete", orderStart: "table" });
+    const zone = await createServiceZone(tx, { name: "Terrace", departmentId: department.id });
     const table = await createTable(tx, cfg, { label: "1", zoneId: zone.id });
     return { departmentId: department.id, zoneId: zone.id, tableId: table.id };
   });
@@ -59,16 +59,16 @@ it("deletes through the real core seat when the optional bookings table was neve
     enabledTableRemovals(ALL_MODULES.filter((module) => module.name !== "bookings")),
   ).floorDeletion;
   const zone = await withTransaction(suite.db, (tx) =>
-    readZoneDeleteImpact(tx, cfg, floor, f.zoneId, NOW),
+    readZoneDeleteImpact(tx, floor, f.zoneId, NOW),
   );
   expect(zone.target.id).toBe(f.zoneId);
   expect(zone.refusals).toEqual([]);
   const preview = await withTransaction(suite.db, (tx) =>
-    readDepartmentDeleteImpact(tx, cfg, floor, f.departmentId, NOW),
+    readDepartmentDeleteImpact(tx, floor, f.departmentId, NOW),
   );
   expect(preview.refusals).toEqual([]);
   const impact = await withTransaction(suite.db, (tx) =>
-    deleteDepartment(tx, cfg, floor, f.departmentId, NOW),
+    deleteDepartment(tx, floor, f.departmentId, NOW),
   );
   expect(impact.target.id).toBe(f.departmentId);
   expect(

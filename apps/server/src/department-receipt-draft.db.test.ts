@@ -76,7 +76,7 @@ async function fixture(
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: person!.id }),
   );
-  return { cfg, departmentId: department!.id, personId: person!.id, sessionId: session.token };
+  return { departmentId: department!.id, personId: person!.id, sessionId: session.token };
 }
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -84,7 +84,6 @@ async function check(f: Fixture, input: unknown) {
   return withTransaction(suite.db, (tx) =>
     checkedDepartmentReceiptWrite(
       tx,
-      f.cfg,
       f.departmentId,
       f.sessionId,
       input,
@@ -96,7 +95,6 @@ async function save(f: Fixture, input: unknown) {
   return withTransaction(suite.db, async (tx) => {
     const checked = await checkedDepartmentReceiptWrite(
       tx,
-      f.cfg,
       f.departmentId,
       f.sessionId,
       input,
@@ -127,7 +125,6 @@ describe("checked department receipt write", () => {
     });
     const checked = await check(f, input);
     expect(checked.scope).toEqual({
-      ...f.cfg,
       receiptLanguages: ["gl-ES", "es-ES", "ca-ES", "eu-ES"],
     });
     expect(checked.input).toEqual(input);
@@ -137,7 +134,7 @@ describe("checked department receipt write", () => {
       expect((await departmentReceiptLanguages(tx)).languages).toEqual(["gl-ES", "es-ES", "ca-ES"]);
       const printed = await VENUE_SERVICE.readPrintedDepartmentReceipt(
         tx,
-        { ...f.cfg, receiptLanguages: ["eu-ES", "gl-ES"] },
+        { receiptLanguages: ["eu-ES", "gl-ES"] },
         f.departmentId,
         "80mm",
       );

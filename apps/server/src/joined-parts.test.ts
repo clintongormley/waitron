@@ -424,7 +424,7 @@ describe("a layout that stands a joined table's tables", () => {
 
   it("reads 4+5 as come apart, and 4 and 5 in no joined table", async () => {
     const table = await underStandard();
-    const states = await inTx(v, (tx) => listTablesWithState(tx, v.cfg, [], NOW));
+    const states = await inTx(v, (tx) => listTablesWithState(tx, [], NOW));
     const of = (id: string) => states.find((s) => s.id === id)!.today;
     expect(of(table.t45).joined?.apart).toBe(true);
     expect(of(table.t4).inJoinedTable).toBeNull();

@@ -1074,7 +1074,7 @@ describe("A803 move dishes refuses, and changes nothing", () => {
   it("A803 move dishes refuses: a destination served another way is service_zone.mode_incompatible", async () => {
     const p = await party([dish("Caña")]);
     const [caña] = await dishIds(p.bill1);
-    await inTx(v, (tx) => VENUE_SERVICE.retargetOrderContext(tx, v.cfg, p.bill2, v.counter.zoneId));
+    await inTx(v, (tx) => VENUE_SERVICE.retargetOrderContext(tx, p.bill2, v.counter.zoneId));
     await refused(
       () => move(p.partyId, p.bill1, p.bill2, [caña!]),
       "service_zone.mode_incompatible",

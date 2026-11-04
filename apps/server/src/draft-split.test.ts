@@ -50,7 +50,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     extras = await inTx(venue, async (tx) => {
-      const { offers } = await VENUE_SERVICE.listZoneOffers(tx, venue.cfg, venue.zoneId);
+      const { offers } = await VENUE_SERVICE.listZoneOffers(tx, venue.zoneId);
       const mainOffer = offers.find((offer) => offer.id === venue.offerFor("Paella"))!;
       const sideOffer = offers.find((offer) => offer.id === venue.offerFor("Croquetas"))!;
       const list = await createExtraList(

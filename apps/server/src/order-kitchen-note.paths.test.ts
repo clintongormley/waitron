@@ -199,7 +199,7 @@ describe("whole-order kitchen note read projections", () => {
         await writeKitchenNote(tx, { workingOrderId: id }, 0, "Train at 14:30");
       });
       const read = status === "open" ? getHeldOrder : getPlacedCounterOrder;
-      const result = await read({ db: v.db }, v.cfg, id);
+      const result = await read({ db: v.db }, id);
       expect(result).toMatchObject({
         kitchenNote: {
           note: "Train at 14:30",
@@ -227,7 +227,7 @@ describe("whole-order kitchen note read projections", () => {
       await writeKitchenNote(tx, { partyId: seated.partyId }, 0, "Bring everything together");
     });
     for (const id of [seated.tabId, secondBill]) {
-      const result = await getHeldOrder({ db: v.db }, v.cfg, id);
+      const result = await getHeldOrder({ db: v.db }, id);
       expect(result).toMatchObject({
         kitchenNote: {
           note: "Bring everything together",
@@ -255,7 +255,7 @@ describe("whole-order kitchen note read projections", () => {
       await writeKitchenNote(tx, { partyId: target.partyId }, 0, "Surviving instruction");
       await tx.update(parties).set({ revision: 7 }).where(eq(parties.id, target.partyId));
     });
-    expect(await getHeldOrder({ db: v.db }, v.cfg, source.tabId)).toMatchObject({
+    expect(await getHeldOrder({ db: v.db }, source.tabId)).toMatchObject({
       kitchenNote: {
         note: "Surviving instruction",
         revision: 1,

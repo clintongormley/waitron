@@ -90,10 +90,10 @@ describe("device made-here stations", () => {
     await withTransaction(suite.db, async (tx) => {
       const bar = await createStation(tx, venue.cfg, { name: "Bar" });
       const downstairs = await createStation(tx, venue.cfg, { name: "Downstairs bar" });
-      await routeProductTo(tx, venue.cfg, venue.cafeId, bar.id);
+      await routeProductTo(tx, venue.cafeId, bar.id);
       const downstairsPrinter = await stationPrinter(tx, downstairs.id);
       const deviceId = await deviceAt(tx, bar.id);
-      await setStationToday(tx, venue.cfg, bar.id, "closed", new Date(), downstairs.id);
+      await setStationToday(tx, bar.id, "closed", new Date(), downstairs.id);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
       const lager = await rawLine(tx, orderId, venue.cafeId, 1);
@@ -114,7 +114,7 @@ describe("device made-here stations", () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const grill = await createStation(tx, venue.cfg, { name: "Grill" });
-      await routeProductTo(tx, venue.cfg, venue.aguaId, grill.id);
+      await routeProductTo(tx, venue.aguaId, grill.id);
       const barPrinter = await stationPrinter(tx, venue.defaultStationId);
       const grillPrinter = await stationPrinter(tx, grill.id);
       const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
@@ -228,7 +228,7 @@ describe("device made-here stations", () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const grill = await createStation(tx, venue.cfg, { name: "Grill" });
-      await routeProductTo(tx, venue.cfg, venue.aguaId, grill.id);
+      await routeProductTo(tx, venue.aguaId, grill.id);
       const barPrinter = await stationPrinter(tx, venue.defaultStationId);
       const grillPrinter = await stationPrinter(tx, grill.id);
       const deviceId = await deviceAt(tx, venue.defaultStationId);
@@ -264,7 +264,7 @@ describe("device made-here stations", () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const downstairs = await createStation(tx, venue.cfg, { name: "Downstairs bar" });
-      await routeProductTo(tx, venue.cfg, venue.cafeId, downstairs.id);
+      await routeProductTo(tx, venue.cafeId, downstairs.id);
       const printer = await stationPrinter(tx, downstairs.id);
       const deviceId = await deviceAt(tx, venue.defaultStationId);
       const orderId = randomUUID();
@@ -393,7 +393,7 @@ describe("device made-here stations", () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const grill = await createStation(tx, venue.cfg, { name: "Grill" });
-      await routeProductTo(tx, venue.cfg, venue.aguaId, grill.id);
+      await routeProductTo(tx, venue.aguaId, grill.id);
       const barPrinter = await stationPrinter(tx, venue.defaultStationId);
       const grillPrinter = await stationPrinter(tx, grill.id);
       const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
@@ -437,7 +437,7 @@ describe("device made-here stations", () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const grill = await createStation(tx, venue.cfg, { name: "Grill" });
-      await routeProductTo(tx, venue.cfg, venue.aguaId, grill.id);
+      await routeProductTo(tx, venue.aguaId, grill.id);
       const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
       const second = await createCourse(tx, venue.cfg, { name: "Second", displayOrder: 2 });
       const deviceId = await deviceAt(tx, venue.defaultStationId);

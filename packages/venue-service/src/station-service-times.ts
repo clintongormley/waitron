@@ -1,7 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { kitchenStations, readVenueClock, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import type { VenueScope } from "./operations.js";
 import type { LocalDate } from "./hours-types.js";
 import { addDays, isLocalDate } from "./hours-rules.js";
 import type { ServiceRange } from "./service-day.js";
@@ -19,7 +18,6 @@ export interface StationServiceTimes {
 
 export async function stationServiceTimes(
   tx: Transaction,
-  cfg: VenueScope,
   stationId: string,
   from: LocalDate,
   to: LocalDate,
@@ -39,7 +37,7 @@ export async function stationServiceTimes(
 
   const clock = await readVenueClock(tx);
   const dates = Array.from({ length: dayCount }, (_, index) => addDays(from, index));
-  const guides = await readPlannedServiceGuides(tx, cfg, [stationId], {
+  const guides = await readPlannedServiceGuides(tx, [stationId], {
     kind: "dates",
     dates,
     clock,

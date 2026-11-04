@@ -1,4 +1,3 @@
-import type { LocationId } from "./ids.js";
 export type ReceiptText = Readonly<Record<string, string>>;
 
 export interface DepartmentReceiptConfig {
@@ -123,7 +122,6 @@ export interface DepartmentReceiptDiagnostic {
   code: "receipt.read_failed";
 }
 export interface DepartmentReceiptScope {
-  locationId: LocationId;
   receiptLanguages: readonly string[];
   receiptDiagnostic?: (event: DepartmentReceiptDiagnostic) => void;
 }

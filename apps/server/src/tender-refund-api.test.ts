@@ -300,7 +300,7 @@ it("checks every original source zone for all four routes and admits them once a
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, venue.counterZone));
   await inTx(venue, (tx) =>
-    setProfileServiceAccess(tx, venue.cfg, profileId, {
+    setProfileServiceAccess(tx, profileId, {
       departmentId: policy!.departmentId,
       allowedZoneIds: [venue.zoneId],
       startingZoneId: venue.zoneId,
@@ -317,7 +317,7 @@ it("checks every original source zone for all four routes and admits them once a
   expect(await effects()).toEqual(before);
   expect(venue.card.lookupCalls).toHaveLength(0);
   await inTx(venue, (tx) =>
-    setProfileServiceAccess(tx, venue.cfg, profileId, {
+    setProfileServiceAccess(tx, profileId, {
       departmentId: policy!.departmentId,
       allowedZoneIds: [venue.zoneId, venue.counterZone],
       startingZoneId: venue.zoneId,

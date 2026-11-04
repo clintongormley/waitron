@@ -71,11 +71,11 @@ describe("Calendar without a station-hours page model", () => {
       return { bar: bar!.id, prep: prep!.id, kitchen: kitchen!.id };
     });
     const model = await withTransaction(suite.db, (tx) =>
-      readSpecialDaysModel(tx, f.cfg, "2026-10-09", "2026-10-09", at),
+      readSpecialDaysModel(tx, "2026-10-09", "2026-10-09", at),
     );
     for (const field of ["subjects", "week", "specialCells", "specialDates"])
       expect(model).not.toHaveProperty(field);
-    const routing = await withTransaction(suite.db, (tx) => routingModel(tx, f.cfg, at));
+    const routing = await withTransaction(suite.db, (tx) => routingModel(tx, at));
     expect(routing.stations).toEqual([
       { id: ids.bar, name: "Bar", active: true, colour: "red" },
       { id: ids.kitchen, name: "Kitchen", active: true, colour: "red" },
@@ -97,7 +97,7 @@ describe("Calendar without a station-hours page model", () => {
     const f = await fixture();
     const special = await festival(f);
     const model = await withTransaction(suite.db, (tx) =>
-      readSpecialDaysModel(tx, f.cfg, "2026-10-09", "2026-10-09", at),
+      readSpecialDaysModel(tx, "2026-10-09", "2026-10-09", at),
     );
     for (const field of ["subjects", "week", "specialCells", "specialDates"])
       expect(model).not.toHaveProperty(field);
@@ -127,7 +127,7 @@ it("keeps local department names in the Opening hours model without station colu
       .returning();
     return row!.id;
   });
-  const model = await withTransaction(suite.db, (tx) => readOpeningHoursModel(tx, f.cfg, at));
+  const model = await withTransaction(suite.db, (tx) => readOpeningHoursModel(tx, at));
   expect(model.departments.map(({ id, name }) => ({ id, name }))).toEqual([
     { id: f.department, name: "Dining" },
   ]);

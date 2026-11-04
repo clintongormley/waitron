@@ -9,11 +9,10 @@ import {
   stationPrinters,
   ticketItems,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { PRINTER_UNPAIRED } from "@waitron/printing";
 import { printJobInTrouble } from "./print-job-trouble.js";
-import { locationId as brandLocationId, compareStationNames } from "@waitron/shared";
+import { compareStationNames } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { firedPassDishes, passScopeOf, passSees } from "./pass-board.js";
 import type { TradingContext } from "./trading-context.js";
@@ -127,11 +126,7 @@ export async function stationsWithWaitingDishes(
 
 export async function stationScreensDark(tx: Transaction, now: Date): Promise<DarkScreen[]> {
   const darkBefore = new Date(now.getTime() - SCREEN_DARK_MS).toISOString();
-  const screens = await VENUE_SERVICE.readStationScreens(
-    tx,
-    { locationId: brandLocationId(await venueLocationId(tx)) },
-    { withSwitchedOff: true },
-  );
+  const screens = await VENUE_SERVICE.readStationScreens(tx, { withSwitchedOff: true });
   if (screens.length === 0) return [];
   const seen = new Map(
     (
@@ -206,7 +201,6 @@ export async function passScreensDark(
   if (silent.length === 0) return [];
   const screens = await VENUE_SERVICE.readDevicesKitchenScreens(
     tx,
-    cfg,
     silent.map((device) => device.id),
   );
   const passes = silent.flatMap((device) => {

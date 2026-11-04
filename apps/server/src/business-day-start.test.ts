@@ -61,13 +61,13 @@ async function authorRange(
   options: { name?: string; everySeason?: boolean } = {},
 ) {
   return inTx(async (tx) => {
-    const department = await createDepartment(tx, venue.cfg, {
+    const department = await createDepartment(tx, {
       name: options.name ?? "Late service",
       orderStart: "counter",
     });
     const menuId = (await tx.execute<{ id: string }>(sql`select id from catalogues limit 1`))
       .rows[0]!.id;
-    const period = await saveMenuPeriod(tx, venue.cfg, department.id, {
+    const period = await saveMenuPeriod(tx, department.id, {
       name: "Service",
       menuId,
       staffMenuIds: [],
@@ -80,7 +80,6 @@ async function authorRange(
     ).rows[0]!.id;
     await replaceMenuWeek(
       tx,
-      venue.cfg,
       department.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -103,7 +102,7 @@ describe("business-day start scheduling", () => {
     const before = await inTx((tx) => readVenueDetails(tx));
     const serviceAt = new Date("2026-11-03T02:30:00.000Z");
     const serviceBefore = await inTx((tx) =>
-      resolveDepartmentService(tx, venue.cfg, department.id, serviceAt),
+      resolveDepartmentService(tx, department.id, serviceAt),
     );
     expect(serviceBefore.open).toBe(true);
     const response = await request("PATCH", "", {
@@ -111,15 +110,12 @@ describe("business-day start scheduling", () => {
       changes: { dayCutover: "03:00" },
     });
     const answer = await response.json();
-    const after = await inTx((tx) =>
-      resolveDepartmentService(tx, venue.cfg, department.id, serviceAt),
-    );
+    const after = await inTx((tx) => resolveDepartmentService(tx, department.id, serviceAt));
     let resave: unknown = "accepted";
     try {
       await inTx((tx) =>
         replaceMenuWeek(
           tx,
-          venue.cfg,
           department.id,
           [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
             weekday,
@@ -1051,7 +1047,6 @@ describe("a Save takes the next changeover", () => {
         ).rows[0]!.id;
         await replaceMenuWeek(
           tx,
-          venue.cfg,
           departmentId,
           [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
           at,

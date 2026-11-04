@@ -1,7 +1,6 @@
 import { and, asc, eq, inArray, isNotNull, or } from "drizzle-orm";
 import { deviceProfiles, devices, floorZones, type Transaction } from "@waitron/db";
 import { createLabelComparator, type DeleteImpactItem, type DeleteTarget } from "@waitron/shared";
-import type { VenueScope } from "./operations.js";
 import {
   departments,
   departmentSalePolicies,
@@ -344,7 +343,6 @@ async function settings(
 
 export async function readServiceDeleteSettings(
   tx: Transaction,
-  _cfg: VenueScope,
   zoneIds: readonly string[],
   departmentId: string | null,
 ): Promise<DeleteImpactItem[]> {
@@ -353,7 +351,6 @@ export async function readServiceDeleteSettings(
 
 export async function clearServiceDeleteSettings(
   tx: Transaction,
-  _cfg: VenueScope,
   zoneIds: readonly string[],
   departmentId: string | null,
 ): Promise<void> {

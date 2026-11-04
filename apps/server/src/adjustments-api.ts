@@ -182,7 +182,7 @@ export function mountAdjustmentsApi(
           deps.db,
           async (tx) => {
             await requireEconomicWrite(tx, deps.cfg, deps.admission);
-            await checkZones(tx, deps.cfg, session, [{ partyId }]);
+            await checkZones(tx, session, [{ partyId }]);
             const applied = await discardDraft(
               tx,
               cfg,
@@ -245,7 +245,7 @@ export function mountAdjustmentsApi(
           deps.db,
           async (tx) => {
             await requireEconomicWrite(tx, deps.cfg, deps.admission);
-            await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+            await checkZones(tx, session, [{ orderId: id }]);
             const applied = await applyAdjustment(
               tx,
               cfg,
@@ -279,7 +279,7 @@ export function mountAdjustmentsApi(
       const id = requireBill(c.req.param("id"));
       const ask = parseAsk(id, personId, asObject(await readRawJsonBody<unknown>(c)));
       const preview = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        await checkZones(tx, session, [{ orderId: id }]);
         return previewAdjustment(tx, ask, deps.venueLocale);
       });
       return c.json(preview);

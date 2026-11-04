@@ -1,6 +1,6 @@
 // Side-effect only: keeps the `device.*` codes (errors.ts) reachable from the file that throws them.
 import "./errors.js";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { requireBodyUuid } from "@waitron/server-kit";
 import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
@@ -12,7 +12,6 @@ import {
   isUniqueViolation,
   nowIso,
   sameTarget,
-  venueLocationId,
 } from "@waitron/db";
 import type { ConstraintTarget, Transaction } from "@waitron/db";
 import {
@@ -33,7 +32,6 @@ import type {
 import { settleDevice } from "./device-equipment.js";
 import { KITCHEN_SCREEN_KINDS } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
-import type { TradingContext } from "./trading-context.js";
 
 /** A device's kind is DERIVED from its profile's form factor via `kindOfFormFactor`. */
 export type { DeviceKind };
@@ -321,12 +319,7 @@ export async function switchActiveProfile(
     throw new AppError("device_profile.not_admitted", {});
   await assertNoPaymentInProgress(tx, device.id);
   // Before the move is written: the narrowing reads the current profile as what the device had.
-  await VENUE_SERVICE.narrowDeviceKitchenScreens(
-    tx,
-    { locationId: brandLocationId(await venueLocationId(tx)) },
-    device.id,
-    input.profileId,
-  );
+  await VENUE_SERVICE.narrowDeviceKitchenScreens(tx, device.id, input.profileId);
   await updateDeviceSettings(tx, device, { label: device.label, profileId: input.profileId });
   await keepApprovedAfterSwitch(tx, device.id, device.deviceProfileId, input.profileId);
   await endSessionsNotAdmitted(tx, device.id, input.profileId);
@@ -443,7 +436,6 @@ export function parseProfileKitchenScreens(value: unknown): ProfileKitchenScreen
 
 export async function resolveDeviceKitchenScreens(
   tx: Transaction,
-  cfg: TradingContext,
   input: {
     profileId: string;
     kitchenScreens?: readonly DeviceKitchenScreen[];
@@ -457,7 +449,6 @@ export async function resolveDeviceKitchenScreens(
   const kitchenScreens = input.kitchenScreens ?? [];
   await VENUE_SERVICE.assertDeviceKitchenScreens(
     tx,
-    cfg,
     input.profileId,
     kitchenScreens,
     input.deviceId,

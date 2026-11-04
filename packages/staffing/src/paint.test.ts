@@ -162,7 +162,7 @@ describe("season staffing", () => {
         { area: grill(v), weekday: 0, blocks: [block(v.cook)] },
       ]),
     );
-    const read = await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId));
+    const read = await inTx((tx) => readSeasonStaffing(tx, v.seasonId));
     expect(read.areas).toEqual([
       { area: dept(v), name: "Dining room", weekdays: { ...emptyWeek(), 5: [early, late] } },
       { area: grill(v), name: "Grill", weekdays: { ...emptyWeek(), 0: [block(v.cook)] } },
@@ -193,9 +193,9 @@ describe("season staffing", () => {
       inTx((tx) => saveSeasonStaffing(tx, v.seasonId, [{ area: dept(v), weekday: 2, blocks }]));
     await save([block(v.waiter), block(v.cook)]);
     await save([block(v.cook, { headcount: 3 })]);
-    expect(
-      (await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId))).areas[0]!.weekdays[2],
-    ).toEqual([block(v.cook, { headcount: 3 })]);
+    expect((await inTx((tx) => readSeasonStaffing(tx, v.seasonId))).areas[0]!.weekdays[2]).toEqual([
+      block(v.cook, { headcount: 3 }),
+    ]);
     const days = () =>
       inTx((tx) =>
         tx.select().from(staffingDays).where(eq(staffingDays.departmentId, v.departmentId)),
@@ -218,7 +218,7 @@ describe("season staffing", () => {
   it("refuses an unknown season, an unknown staff role and an unknown area", async () => {
     const v = await venue();
     const ghostSeason = randomUUID();
-    expect(await refusal(inTx((tx) => readSeasonStaffing(tx, v.cfg, ghostSeason)))).toEqual({
+    expect(await refusal(inTx((tx) => readSeasonStaffing(tx, ghostSeason)))).toEqual({
       code: "season.not_found",
       params: { seasonId: ghostSeason },
     });
@@ -284,7 +284,7 @@ describe("season staffing", () => {
       }
     });
     await switchOff({ kind: "department", id: closed!.id }, false);
-    const { guides } = await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId));
+    const { guides } = await inTx((tx) => readSeasonStaffing(tx, v.seasonId));
     expect(guides).toEqual({
       [`department:${v.departmentId}`]: {
         ...emptyWeek(),
@@ -313,15 +313,13 @@ describe("season staffing", () => {
         .values({ locationId: v.cfg.locationId, name: "Winter", startsOn: "01-15", colour: "blue" })
         .returning({ id: seasons.id });
     });
-    const read = await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId));
+    const read = await inTx((tx) => readSeasonStaffing(tx, v.seasonId));
     expect(read.cutover).toBe("03:00");
     expect(read.seasons).toEqual([
       { id: winter!.id, name: "Winter", startsOn: "01-15", colour: "blue" },
       { id: v.seasonId, name: "Summer", startsOn: "06-01", colour: "grey" },
     ]);
-    expect((await inTx((tx) => readSeasonStaffing(tx, v.cfg, winter!.id))).seasons).toEqual(
-      read.seasons,
-    );
+    expect((await inTx((tx) => readSeasonStaffing(tx, winter!.id))).seasons).toEqual(read.seasons);
   });
 });
 
@@ -335,7 +333,7 @@ describe("special-day staffing", () => {
       ]),
     );
     const noGuide = { [v.aug14]: [], [v.aug15]: [] };
-    expect(await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId))).toEqual({
+    expect(await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId))).toEqual({
       cutover: "06:00",
       name: "Fiesta",
       guides: {
@@ -412,7 +410,7 @@ describe("special-day staffing", () => {
         .where(eq(specialDayDates.id, v.aug15));
       return period!.id;
     });
-    const { guides } = await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId));
+    const { guides } = await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId));
     expect(guides).toEqual({
       [`department:${v.departmentId}`]: {
         [v.aug14]: [
@@ -434,9 +432,7 @@ describe("special-day staffing", () => {
         .set({ dayCutover: "04:30:00" })
         .where(eq(locations.id, v.cfg.locationId)),
     );
-    expect((await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId))).cutover).toBe(
-      "04:30",
-    );
+    expect((await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId))).cutover).toBe("04:30");
   });
 
   it("guides a date by this special day's own hours when another special day repeats onto it", async () => {
@@ -471,7 +467,7 @@ describe("special-day staffing", () => {
       });
       return period!.id;
     });
-    const { guides } = await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId));
+    const { guides } = await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId));
     expect(guides[`department:${v.departmentId}`]![v.aug14]).toEqual([
       { ...serviceGuide(v, periodId), startsAt: "19:00", endsAt: "23:30" },
     ]);
@@ -484,7 +480,7 @@ describe("special-day staffing", () => {
         .session;
       const prepared = vi.spyOn(session, "prepareQuery");
       try {
-        await readSpecialDayStaffing(tx, v.cfg, v.specialDayId);
+        await readSpecialDayStaffing(tx, v.specialDayId);
         return prepared.mock.calls.flatMap((call) =>
           [...(call[0] as { sql: string }).sql.matchAll(/\bfrom "(\w+)"/g)].map(
             (match) => match[1]!,
@@ -548,7 +544,7 @@ describe("special-day staffing", () => {
   it("refuses an unknown special day, a date of another special day, and an unknown staff role", async () => {
     const v = await venue();
     const ghostDay = randomUUID();
-    expect(await refusal(inTx((tx) => readSpecialDayStaffing(tx, v.cfg, ghostDay)))).toEqual({
+    expect(await refusal(inTx((tx) => readSpecialDayStaffing(tx, ghostDay)))).toEqual({
       code: "special_day.not_found",
       params: { specialDayId: ghostDay },
     });
@@ -619,7 +615,7 @@ describe("resolveStaffing", () => {
       ]);
     });
     const resolved = await inTx((tx) =>
-      resolveStaffing(tx, v.cfg, ["2026-08-14", "2026-08-15", "2026-08-21", "2026-08-17"]),
+      resolveStaffing(tx, ["2026-08-14", "2026-08-15", "2026-08-21", "2026-08-17"]),
     );
     const plain = (day: string) => Object.fromEntries(resolved.get(day)!);
     expect([...resolved.keys()]).toEqual(["2026-08-14", "2026-08-15", "2026-08-21", "2026-08-17"]);
@@ -651,7 +647,7 @@ describe("resolveStaffing", () => {
       ]);
     });
     // 2027-08-15 is a Sunday: without the special day it would take the season's Sunday.
-    const resolved = await inTx((tx) => resolveStaffing(tx, v.cfg, ["2027-08-15"]));
+    const resolved = await inTx((tx) => resolveStaffing(tx, ["2027-08-15"]));
     expect(Object.fromEntries(resolved.get("2027-08-15")!)).toEqual({
       [`department:${v.departmentId}`]: fiesta,
     });
@@ -664,19 +660,19 @@ describe("resolveStaffing", () => {
       special: new Map([["2026-08-14", null]]),
     };
     await expect(
-      inTx((tx) => resolveStaffing(tx, v.cfg, ["2026-08-14", "2026-08-15"], { plan })),
+      inTx((tx) => resolveStaffing(tx, ["2026-08-14", "2026-08-15"], { plan })),
     ).rejects.toThrow("the day plan does not cover 2026-08-15");
     plan.special.delete("2026-08-14");
-    await expect(
-      inTx((tx) => resolveStaffing(tx, v.cfg, ["2026-08-14"], { plan })),
-    ).rejects.toThrow("the day plan does not cover 2026-08-14");
+    await expect(inTx((tx) => resolveStaffing(tx, ["2026-08-14"], { plan }))).rejects.toThrow(
+      "the day plan does not cover 2026-08-14",
+    );
   });
 
   it("returns empty days when there are no days or no season", async () => {
     const v = await venue();
-    expect(await inTx((tx) => resolveStaffing(tx, v.cfg, []))).toEqual(new Map());
+    expect(await inTx((tx) => resolveStaffing(tx, []))).toEqual(new Map());
     await inTx((tx) => tx.delete(seasons).where(eq(seasons.id, v.seasonId)));
-    expect(await inTx((tx) => resolveStaffing(tx, v.cfg, ["2026-08-17"]))).toEqual(
+    expect(await inTx((tx) => resolveStaffing(tx, ["2026-08-17"]))).toEqual(
       new Map([["2026-08-17", new Map()]]),
     );
   });
@@ -696,9 +692,9 @@ describe("switched-off areas", () => {
       const reads = () =>
         inTx(async (tx) => ({
           areas: (await listStaffingAreas(tx)).map((a) => a.area),
-          season: await readSeasonStaffing(tx, v.cfg, v.seasonId),
-          special: await readSpecialDayStaffing(tx, v.cfg, v.specialDayId),
-          resolved: await resolveStaffing(tx, v.cfg, ["2026-08-14", "2026-08-15"]),
+          season: await readSeasonStaffing(tx, v.seasonId),
+          special: await readSpecialDayStaffing(tx, v.specialDayId),
+          resolved: await resolveStaffing(tx, ["2026-08-14", "2026-08-15"]),
         }));
       const before = await reads();
       await switchOff(area, false);
@@ -742,9 +738,9 @@ describe("venue clock", () => {
         { area: dept(v), weekday: 4, blocks: [...ordered].reverse() },
       ]),
     );
-    expect(
-      (await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId))).areas[0]!.weekdays[4],
-    ).toEqual(ordered);
+    expect((await inTx((tx) => readSeasonStaffing(tx, v.seasonId))).areas[0]!.weekdays[4]).toEqual(
+      ordered,
+    );
   });
 
   it("orders blocks from the venue's changeover", async () => {
@@ -760,9 +756,10 @@ describe("venue clock", () => {
     await inTx((tx) =>
       saveSeasonStaffing(tx, v.seasonId, [{ area: dept(v), weekday: 1, blocks: [night, morning] }]),
     );
-    expect(
-      (await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId))).areas[0]!.weekdays[1],
-    ).toEqual([morning, night]);
+    expect((await inTx((tx) => readSeasonStaffing(tx, v.seasonId))).areas[0]!.weekdays[1]).toEqual([
+      morning,
+      night,
+    ]);
   });
 });
 
@@ -787,7 +784,7 @@ async function guideVenue() {
       .insert(floorZones)
       .values({ ...cfg, name: "Dining" })
       .returning();
-    await configureZone(tx, cfg, { zoneId: zone!.id, departmentId: v.departmentId });
+    await configureZone(tx, { zoneId: zone!.id, departmentId: v.departmentId });
     const [period] = await tx
       .insert(menuPeriods)
       .values({
@@ -810,7 +807,6 @@ async function guideVenue() {
     });
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "all" }, zoneId: zone!.id },
       { kind: "station", stationId: v.stationId },
     );
@@ -829,7 +825,7 @@ const lunchGuide = (v: Awaited<ReturnType<typeof guideVenue>>) => ({
 
 it("A724 returns period identity and station sending hours for the chosen season", async () => {
   const v = await guideVenue();
-  const read = await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId));
+  const read = await inTx((tx) => readSeasonStaffing(tx, v.seasonId));
   expect(read.guides[`department:${v.departmentId}`]![5]).toEqual([lunchGuide(v)]);
   expect(read.guides[`station:${v.stationId}`]![5]).toEqual([lunchGuide(v)]);
   expect(read.guides[`station:${v.passId}`]![5]).toEqual([]);
@@ -846,7 +842,7 @@ it("A724 returns dated station guides without removing staffing on a closed date
       .set({ closedAllDay: true })
       .where(eq(specialDayDates.id, v.aug15));
   });
-  const read = await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId));
+  const read = await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId));
   expect(read.guides[`department:${v.departmentId}`]![v.aug14]).toEqual([lunchGuide(v)]);
   expect(read.guides[`station:${v.stationId}`]![v.aug14]).toEqual([lunchGuide(v)]);
   expect(read.guides[`station:${v.stationId}`]![v.aug15]).toEqual([]);
@@ -893,7 +889,7 @@ it("A724 guides a station by the edited special day, including zone openings", a
       closedAllDay: true,
     });
   });
-  const read = await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId));
+  const read = await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId));
   expect(read.guides[`department:${v.departmentId}`]![v.aug14]).toEqual([lunchGuide(v)]);
   expect(read.guides[`station:${v.stationId}`]![v.aug14]).toEqual([
     { ...lunchGuide(v), startsAt: "13:00", endsAt: "14:00" },
@@ -912,8 +908,7 @@ it("A724 keeps the sending department identity of every station range", async ()
       .insert(floorZones)
       .values({ locationId: v.cfg.locationId, name: "Counter" })
       .returning();
-    const cfg = { locationId: locationId(v.cfg.locationId) };
-    await configureZone(tx, cfg, { zoneId: zone!.id, departmentId: department!.id });
+    await configureZone(tx, { zoneId: zone!.id, departmentId: department!.id });
     const [period] = await tx
       .insert(menuPeriods)
       .values({ departmentId: department!.id, menuId: v.menuId, name: "Evening", colour: "green" })
@@ -931,13 +926,12 @@ it("A724 keeps the sending department identity of every station range", async ()
     });
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "all" }, zoneId: zone!.id },
       { kind: "station", stationId: v.stationId },
     );
     return { periodId: period!.id, departmentId: department!.id };
   });
-  const read = await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId));
+  const read = await inTx((tx) => readSeasonStaffing(tx, v.seasonId));
   expect(read.guides[`station:${v.stationId}`]![5]).toEqual([
     lunchGuide(v),
     {
@@ -956,7 +950,7 @@ it("A724 returns empty guide maps for a special day with no dates", async () => 
   await inTx((tx) =>
     tx.delete(specialDayDates).where(eq(specialDayDates.specialDayId, v.specialDayId)),
   );
-  const read = await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId));
+  const read = await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId));
   expect(Object.values(read.guides)).toEqual([{}, {}, {}]);
   expect(read.areas.every((a) => a.dates.length === 0)).toBe(true);
 });
@@ -981,7 +975,7 @@ it("A724 adjacent periods with the same colour keep their own names and endpoint
     });
     return period!.id;
   });
-  const read = await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId));
+  const read = await inTx((tx) => readSeasonStaffing(tx, v.seasonId));
   expect(read.guides[`department:${v.departmentId}`]![5]).toEqual([
     lunchGuide(v),
     { ...lunchGuide(v), periodId: tea, periodName: "Tea", startsAt: "16:00", endsAt: "18:00" },
@@ -1021,7 +1015,7 @@ it("A724 a closed own date wins over a repeating open date with sending hours", 
       closedAllDay: false,
     });
   });
-  const read = await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId));
+  const read = await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId));
   expect(read.guides[`department:${v.departmentId}`]![v.aug15]).toEqual([]);
   expect(read.guides[`station:${v.stationId}`]![v.aug15]).toEqual([]);
 });

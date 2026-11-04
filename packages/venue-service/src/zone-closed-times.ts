@@ -7,7 +7,7 @@ import {
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { floorZones, readVenueClock, type Transaction } from "@waitron/db";
 import { AppError, type BusinessDayClock } from "@waitron/shared";
-import { resolveZoneContext, wireTime, type VenueScope } from "./operations.js";
+import { resolveZoneContext, wireTime } from "./operations.js";
 import { parseClosedRanges, type ClosedRange, rangeSpan, rangeSpanInDay } from "./service-day.js";
 import { momentAt, resolveZoneClosedDays, type ServiceDay } from "./day-resolver.js";
 import {
@@ -29,18 +29,16 @@ import "./errors.js";
  *  this write read. */
 export async function replaceZoneClosedWeek(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string,
   days: unknown,
   expectedClockRevision: number,
   at: Date = new Date(),
   options: { seasonId?: string; afterWrite?: (read: ServingRead) => Promise<void> } = {},
 ): Promise<void> {
-  const zone = await resolveZoneContext(tx, cfg, zoneId);
+  const zone = await resolveZoneContext(tx, zoneId);
   const clock = await readVenueClock(tx);
   const staged = await stageZoneClosedWeek(
     tx,
-    cfg,
     zoneId,
     days,
     inForceClock(clock, at),
@@ -48,7 +46,6 @@ export async function replaceZoneClosedWeek(
   );
   await assertBusinessDayScheduleWrite(
     tx,
-    cfg,
     staged.changed ? "time" : "metadata",
     expectedClockRevision,
   );
@@ -57,14 +54,13 @@ export async function replaceZoneClosedWeek(
     clock,
     departmentOf: new Map([[zone.zoneId, zone.departmentId]]),
   });
-  if (staged.changed) await assertWaitingChangeFits(tx, cfg, at, clock);
+  if (staged.changed) await assertWaitingChangeFits(tx, at, clock);
 }
 
 /** A zone's closed week checked and compared with what its seasons hold, written by `write`. The
  *  zone itself is the caller's to check. */
 export async function stageZoneClosedWeek(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string,
   days: unknown,
   clock: BusinessDayClock,
@@ -91,12 +87,12 @@ export async function stageZoneClosedWeek(
     );
     week.set(weekday, parsed[0]!);
   }
-  const targets = typeof season === "object" ? [season] : await targetSeasons(tx, cfg, season);
+  const targets = typeof season === "object" ? [season] : await targetSeasons(tx, season);
   const seasonWeek = [0, 1, 2, 3, 4, 5, 6].map((weekday) =>
     joinTouching(week.get(weekday)!, () => true),
   );
   const seasonsNow = (
-    seasonWeeks ?? (await readZoneSeasonWeeks(tx, cfg, [zoneId], clock.dayCutover))
+    seasonWeeks ?? (await readZoneSeasonWeeks(tx, [zoneId], clock.dayCutover))
   ).get(zoneId);
   const changed = targets.some((season) =>
     seasonWeek.some(
@@ -125,11 +121,7 @@ export async function stageZoneClosedWeek(
 }
 
 /** The venue's active zones that serve an active department. */
-export async function readServiceZones(
-  tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: VenueScope,
-) {
+export async function readServiceZones(tx: Transaction) {
   return tx
     .select({
       id: floorZones.id,
@@ -145,15 +137,13 @@ export async function readServiceZones(
 
 export async function readZoneClosedTimes(
   tx: Transaction,
-  cfg: VenueScope,
   cutover: string,
   venueSeasons?: readonly Season[],
 ) {
-  const zones = await readServiceZones(tx, cfg);
-  const seasonList = venueSeasons ?? (await readSeasons(tx, cfg));
+  const zones = await readServiceZones(tx);
+  const seasonList = venueSeasons ?? (await readSeasons(tx));
   const stored = await readZoneSeasonWeeks(
     tx,
-    cfg,
     zones.map((zone) => zone.id),
     cutover,
   );
@@ -209,7 +199,6 @@ export interface ZoneClosure {
  *  every zone named, or every service zone when none are. */
 export async function zoneClosureDays(
   tx: Transaction,
-  cfg: VenueScope,
   zoneIds: readonly string[] | undefined,
   at: Date,
   prepared?: ServiceDay,
@@ -221,7 +210,6 @@ export async function zoneClosureDays(
   const dayContext = serviceDayContext(clock, moment.businessDay);
   const closures = await resolveZoneClosedDays(
     tx,
-    cfg,
     zoneIds,
     [moment.businessDay],
     clock,
@@ -260,12 +248,11 @@ export type ZoneClosureDays = Awaited<ReturnType<typeof zoneClosureDays>>;
 
 export async function zoneClosureDay(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string,
   at: Date,
   prepared?: ServiceDay,
 ) {
-  const { zones, ...day } = await zoneClosureDays(tx, cfg, [zoneId], at, prepared);
+  const { zones, ...day } = await zoneClosureDays(tx, [zoneId], at, prepared);
   return {
     ...day,
     ranges: zones.get(zoneId)?.ranges ?? [],
@@ -286,20 +273,18 @@ export function closedZoneIdsIn(days: ZoneClosureDays): ReadonlySet<string> {
 
 export async function closedZoneIdsAt(
   tx: Transaction,
-  cfg: VenueScope,
   at: Date,
   zoneIds?: readonly string[],
 ): Promise<ReadonlySet<string>> {
   if (zoneIds?.length === 0) return new Set();
-  return closedZoneIdsIn(await zoneClosureDays(tx, cfg, zoneIds, at));
+  return closedZoneIdsIn(await zoneClosureDays(tx, zoneIds, at));
 }
 
 export async function assertZoneTakesNewOrders(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string,
   at: Date,
 ): Promise<void> {
-  if ((await closedZoneIdsAt(tx, cfg, at, [zoneId])).has(zoneId))
+  if ((await closedZoneIdsAt(tx, at, [zoneId])).has(zoneId))
     throw new AppError("service_zone.closed", { zoneId });
 }

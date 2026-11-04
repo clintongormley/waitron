@@ -788,9 +788,9 @@ it("device deletion reports and removes all saved profile zone selections, retai
   ).deviceId;
   const save = (deviceId: string) =>
     inTx(async (tx) => {
-      const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, venue.cfg, deviceId);
+      const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, deviceId);
       expect(current.startingZoneId).not.toBeNull();
-      await VENUE_SERVICE.setDeviceZoneSelection(tx, venue.cfg, deviceId, {
+      await VENUE_SERVICE.setDeviceZoneSelection(tx, deviceId, {
         ...current,
         startingZoneId: current.startingZoneId!,
       });

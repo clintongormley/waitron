@@ -209,7 +209,7 @@ describe("paper for a move to another station", () => {
           "Grill",
         );
         return {
-          notices: await listStationNotices(tx, cfg, bar.id),
+          notices: await listStationNotices(tx, bar.id),
           jobs: (await printJobsFor(tx)).filter((job) => !before.has(job.id)),
           barPrinter,
         };
@@ -450,7 +450,7 @@ async function makeProduct(
     unitPrice: "1.50",
     vatClass: "general",
   });
-  if (route.stationId !== undefined) await routeProductTo(tx, cfg, id, route.stationId);
+  if (route.stationId !== undefined) await routeProductTo(tx, id, route.stationId);
   if (route.courseId !== undefined) await setProductCourse(tx, cfg, id, route.courseId);
   return id;
 }
@@ -1034,7 +1034,7 @@ describe("every correction reaches the station as a notice, printer or not", () 
       );
       return {
         stationId: barStation.id,
-        notices: await listStationNotices(tx, cfg, barStation.id),
+        notices: await listStationNotices(tx, barStation.id),
         jobs: await printJobsFor(tx),
       };
     });
@@ -1075,7 +1075,7 @@ describe("every correction reaches the station as a notice, printer or not", () 
       );
       return {
         printerId,
-        notices: await listStationNotices(tx, cfg, kitchenStation.id),
+        notices: await listStationNotices(tx, kitchenStation.id),
         slips: (await printJobsFor(tx)).filter((job) => !before.has(job.id)),
       };
     });
@@ -1169,7 +1169,7 @@ describe("a dish sold by the piece prints no unit", () => {
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await routeProductTo(tx, cfg, id, kitchenStation.id);
+      await routeProductTo(tx, id, kitchenStation.id);
       return id;
     };
     return {
@@ -1740,7 +1740,7 @@ describe("dish extras on kitchen tickets", () => {
       };
       const orderId = party.tabId;
       await addTabRound(tx, cfg, orderId, [pick]);
-      await setStationToday(tx, cfg, stations.fryer, "closed", new Date());
+      await setStationToday(tx, stations.fryer, "closed", new Date());
       await addTabRound(tx, cfg, orderId, [pick]);
       const before = new Set((await printJobsFor(tx)).map((job) => job.id));
       await reprintOrderTickets(tx, cfg, orderId);
@@ -2158,7 +2158,7 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
     const { kitchen, bar, screen } = await inTx(v, async (tx) => {
       const station = async (name: string, dish: string, withPrinter: boolean) => {
         const { id } = await createStation(tx, v.cfg, { name });
-        await routeProductTo(tx, v.cfg, v.productId(dish), id);
+        await routeProductTo(tx, v.productId(dish), id);
         const printerId = withPrinter ? await makeSharedPrinter(tx, name, [id]) : null;
         return { id, printerId };
       };
@@ -2306,7 +2306,7 @@ async function ticketWithNames(frozen: {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await routeProductTo(tx, cfg, productId, station.id);
+    await routeProductTo(tx, productId, station.id);
     const orderId = randomUUID();
     const { lineRows } = await createOfferedOrder(tx, cfg, orderId, [line(productId)]);
     const parent = lineRows[0]!;
@@ -2752,7 +2752,7 @@ describe("A803 portion grouping", () => {
       unitPrice: "20.00",
       vatClass: "general",
     });
-    await routeProductTo(tx, cfg, octopus, fryer.id);
+    await routeProductTo(tx, octopus, fryer.id);
     const { listId, productIds } = await addExtras(
       tx,
       cfg,
@@ -3003,7 +3003,7 @@ describe("A803 portion grouping", () => {
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await routeProductTo(tx, cfg, bread, k.fryer);
+      await routeProductTo(tx, bread, k.fryer);
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
       await addPortionRound(
         tx,
@@ -3077,7 +3077,7 @@ describe("A803 portion grouping", () => {
           fire: true,
         });
         await enqueueCorrectionSlips(tx, cfg, k.tabId, await firedAt(tx, k.tabId, k.kitchen), kind);
-        const portions = await listStationNotices(tx, cfg, k.kitchen);
+        const portions = await listStationNotices(tx, k.kitchen);
         const chips = { menuItemId: k.offer(k.ids.chips), quantity: "1" };
         await addTabRound(tx, cfg, k.tabId, [chips]);
         await addTabRound(tx, cfg, k.tabId, [chips]);
@@ -3086,7 +3086,7 @@ describe("A803 portion grouping", () => {
         await enqueueCorrectionSlips(tx, cfg, k.tabId, unbound, kind);
         return {
           portions: portions.map(({ quantity }) => quantity),
-          unbound: (await listStationNotices(tx, cfg, k.fryer)).map(({ quantity }) => quantity),
+          unbound: (await listStationNotices(tx, k.fryer)).map(({ quantity }) => quantity),
         };
       });
 
@@ -3112,7 +3112,7 @@ describe("A803 portion grouping", () => {
       );
       const [first, second, noted] = await firedAt(tx, k.tabId, k.kitchen);
       const noticesAt = async (stationId: string) =>
-        (await listStationNotices(tx, cfg, stationId)).length;
+        (await listStationNotices(tx, stationId)).length;
       const during = async (items: CorrectionItem[]) => {
         const before = [await noticesAt(k.kitchen), await noticesAt(k.fryer)];
         await enqueueCorrectionSlips(tx, cfg, k.tabId, items, "RECALLED");
@@ -3147,7 +3147,7 @@ describe("A803 portion grouping", () => {
     const { cfg, catalogueId } = await setupVenue();
     const fryer = await asApp(cfg, async (tx) => {
       const k = await portionKitchen(tx, cfg, catalogueId);
-      await routeProductTo(tx, cfg, k.ids.cheese, k.fryer);
+      await routeProductTo(tx, k.ids.cheese, k.fryer);
       await addPortionRound(
         tx,
         cfg,
@@ -3172,7 +3172,7 @@ describe("A803 portion grouping", () => {
         })),
         "VOID",
       );
-      return (await listStationNotices(tx, cfg, k.fryer)).map(({ quantity }) => quantity);
+      return (await listStationNotices(tx, k.fryer)).map(({ quantity }) => quantity);
     });
 
     expect(fryer).toEqual([thousandthsToDecimal(4000)]);
@@ -3200,7 +3200,7 @@ describe("A803 portion grouping", () => {
         ],
         { kind: "HOLD CANCELLED" },
       );
-      return (await listStationNotices(tx, cfg, k.kitchen)).length;
+      return (await listStationNotices(tx, k.kitchen)).length;
     });
 
     expect(added).toBe(2);
@@ -3248,7 +3248,7 @@ describe("A803 portion grouping", () => {
         const cancelled = await jobsDuring(tx, () =>
           enqueueHoldCorrections(tx, cfg, k.tabId, oysters, { kind: "HOLD CANCELLED" }),
         );
-        const notices = await listStationNotices(tx, cfg, k.kitchen);
+        const notices = await listStationNotices(tx, k.kitchen);
         return { count: oysters.length, changed, cancelled, notices };
       });
 
@@ -3328,7 +3328,7 @@ describe("A773 fire paper: course headings", () => {
       const { id: grill } = await createStation(tx, v.cfg, { name: "Grill" });
       const mains = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 2 });
       for (const name of ["Burger", "Paella"]) {
-        await routeProductTo(tx, v.cfg, v.productId(name), grill);
+        await routeProductTo(tx, v.productId(name), grill);
         await setProductCourse(tx, v.cfg, v.productId(name), mains.id);
       }
       return { printerId: await makeSharedPrinter(tx, "Grill", [grill]) };
@@ -3395,7 +3395,7 @@ describe("A773 fire paper: course headings", () => {
     const { printerId, courseId } = await inTx(v, async (tx) => {
       const { id: grill } = await createStation(tx, v.cfg, { name: "Grill" });
       const mains = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 2 });
-      await routeProductTo(tx, v.cfg, v.productId("Burger"), grill);
+      await routeProductTo(tx, v.productId("Burger"), grill);
       await setProductCourse(tx, v.cfg, v.productId("Burger"), mains.id);
       await setStationPrinting(tx, { printHeldWork: true }, [grill]);
       return { printerId: await makeSharedPrinter(tx, "Grill", [grill]), courseId: mains.id };
@@ -3424,7 +3424,7 @@ describe("A773 fire paper: course headings", () => {
     expect(await newGrillHeadings(v, printerId, seen)).toEqual([`${word} 1 · MAIN COURSES`]);
 
     await inTx(v, async (tx) => {
-      await deleteCourse(tx, v.cfg, courseId);
+      await deleteCourse(tx, courseId);
       await reprintOrderTickets(tx, v.cfg, tabId);
     });
     const kept = await asApp(v.cfg, (tx) =>
@@ -3447,7 +3447,7 @@ describe("A773 fire paper: course headings", () => {
         ["Burger", mains],
         ["Paella", starters],
       ] as const) {
-        await routeProductTo(tx, v.cfg, v.productId(name), grill);
+        await routeProductTo(tx, v.productId(name), grill);
         await setProductCourse(tx, v.cfg, v.productId(name), course.id);
       }
       return makeSharedPrinter(tx, "Grill", [grill]);
@@ -3484,7 +3484,7 @@ describe("A773 fire paper: course headings", () => {
         ["Burger", mains],
         ["Flan", desserts],
       ] as const) {
-        await routeProductTo(tx, v.cfg, v.productId(name), grill);
+        await routeProductTo(tx, v.productId(name), grill);
         await setProductCourse(tx, v.cfg, v.productId(name), course.id);
       }
       return makeSharedPrinter(tx, "Grill", [grill]);

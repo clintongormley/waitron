@@ -782,7 +782,7 @@ describe("issuancePass", () => {
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
       prepared.mockClear();
 
-      const issued = await issuancePass(tx, v.cfg, five, pricedFive);
+      const issued = await issuancePass(tx, five, pricedFive);
 
       expect(prepared.mock.calls.filter(([query]) => /from "categories"/.test(query.sql))).toEqual(
         [],
@@ -848,7 +848,7 @@ describe("issuancePass", () => {
       .where(and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.lineNo, 3)));
 
     const issued = await withTransaction(suite.db, async (tx) =>
-      issuancePass(tx, v.cfg, id, await priceStoredOrderForIssuance(tx, id)),
+      issuancePass(tx, id, await priceStoredOrderForIssuance(tx, id)),
     );
 
     const negroni = { reporting: underAlcoholic(v) };
@@ -867,7 +867,7 @@ describe("issuancePass", () => {
     );
 
     const issued = await withTransaction(suite.db, async (tx) =>
-      issuancePass(tx, v.cfg, id, await priceStoredOrderForIssuance(tx, id)),
+      issuancePass(tx, id, await priceStoredOrderForIssuance(tx, id)),
     );
 
     expect(issued.lines.map((l) => [l.productId, l.menuId])).toEqual([[v.products.negroni, null]]);
@@ -880,10 +880,10 @@ describe("issuancePass", () => {
     await withTransaction(suite.db, async (tx) => {
       const { gross, identities }: GrossOrder = await priceStoredOrderForIssuance(tx, id);
       const doubled = { ...gross, lines: [...gross.lines, ...gross.lines] };
-      await expect(issuancePass(tx, v.cfg, id, { gross: doubled, identities })).rejects.toThrow(
+      await expect(issuancePass(tx, id, { gross: doubled, identities })).rejects.toThrow(
         /do not line up/,
       );
-      await expect(issuancePass(tx, v.cfg, id, { gross, identities: [] })).rejects.toThrow(
+      await expect(issuancePass(tx, id, { gross, identities: [] })).rejects.toThrow(
         /do not line up/,
       );
     });

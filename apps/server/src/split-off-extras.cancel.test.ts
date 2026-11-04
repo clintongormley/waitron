@@ -82,19 +82,15 @@ async function actionOutput(tx: Transaction, venue: Venue, act: () => Promise<vo
   const before = {
     grill: (await jobs(tx, venue.printers.grill)).length,
     fryer: (await jobs(tx, venue.printers.fryer)).length,
-    grillNotices: (await listStationNotices(tx, venue.cfg, venue.stations.grill)).length,
-    fryerNotices: (await listStationNotices(tx, venue.cfg, venue.stations.fryer)).length,
+    grillNotices: (await listStationNotices(tx, venue.stations.grill)).length,
+    fryerNotices: (await listStationNotices(tx, venue.stations.fryer)).length,
   };
   await act();
   return {
     grill: (await jobs(tx, venue.printers.grill)).slice(before.grill),
     fryer: (await jobs(tx, venue.printers.fryer)).slice(before.fryer),
-    grillNotices: (await listStationNotices(tx, venue.cfg, venue.stations.grill)).slice(
-      before.grillNotices,
-    ),
-    fryerNotices: (await listStationNotices(tx, venue.cfg, venue.stations.fryer)).slice(
-      before.fryerNotices,
-    ),
+    grillNotices: (await listStationNotices(tx, venue.stations.grill)).slice(before.grillNotices),
+    fryerNotices: (await listStationNotices(tx, venue.stations.fryer)).slice(before.fryerNotices),
   };
 }
 

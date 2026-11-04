@@ -20,7 +20,7 @@ import {
   staffPresentationName,
 } from "@waitron/catalogue";
 import { AppError, normaliseUuid, compareStationNames } from "@waitron/shared";
-import { liveDocumentsByZone, resolveZoneContext, type VenueScope } from "./operations.js";
+import { liveDocumentsByZone, resolveZoneContext } from "./operations.js";
 import {
   cellKey,
   changeReach,
@@ -183,7 +183,6 @@ async function storedLines(
  */
 async function validatePeriodLines(
   tx: Transaction,
-  cfg: VenueScope,
   cell: { address: CellAddress; departmentId: string | null },
   lines: readonly PeriodLine[],
 ): Promise<StoredLine[]> {
@@ -196,7 +195,7 @@ async function validatePeriodLines(
     seen.add(periodId);
     return { periodId, target: line.target };
   });
-  const periods = new Map((await readPeriods(tx, cfg, [...seen])).map((row) => [row.id, row]));
+  const periods = new Map((await readPeriods(tx, [...seen])).map((row) => [row.id, row]));
   const valid: StoredLine[] = [];
   for (const line of canonical) {
     const period = periods.get(line.periodId);
@@ -314,14 +313,12 @@ function cellAt({ row, zoneId }: CellAddress) {
 /** `periods` replaces the cell's period lines; omitted, the stored lines stay. */
 export async function setRoutingCell(
   tx: Transaction,
-  cfg: VenueScope,
   address: CellAddress,
   target: RouteTarget,
   periods?: readonly PeriodLine[],
 ): Promise<void> {
   const valid = await validateRoutingCell(tx, address, target);
-  const lines =
-    periods === undefined ? undefined : await validatePeriodLines(tx, cfg, valid, periods);
+  const lines = periods === undefined ? undefined : await validatePeriodLines(tx, valid, periods);
   const stored = storedTarget(valid.target!);
   const [updated] = await tx
     .update(routingCells)
@@ -358,11 +355,7 @@ export async function setRoutingCell(
     );
 }
 
-export async function clearRoutingCell(
-  tx: Transaction,
-  _cfg: VenueScope,
-  address: CellAddress,
-): Promise<void> {
+export async function clearRoutingCell(tx: Transaction, address: CellAddress): Promise<void> {
   const valid = await validateRoutingCell(tx, address, null);
   await tx.delete(routingCells).where(cellAt(valid.address));
 }
@@ -460,7 +453,6 @@ async function snapshot(tx: Transaction, scope: SnapshotScope = UNTIMED) {
 
 export async function loadRoutingRules(
   tx: Transaction,
-  _cfg: VenueScope,
   businessDay: string | null,
 ): Promise<RoutingRules> {
   return (await snapshot(tx, { businessDay })).rules;
@@ -468,16 +460,13 @@ export async function loadRoutingRules(
 
 export async function previewRoutingChange(
   tx: Transaction,
-  cfg: VenueScope,
   change: RoutingChange,
 ): Promise<RoutingMove[]> {
   const { rules } = await snapshot(tx);
   const valid = await validateRoutingCell(tx, change.address, change.target);
   const { address, target } = valid;
   const lines =
-    change.periods === undefined
-      ? undefined
-      : await validatePeriodLines(tx, cfg, valid, change.periods);
+    change.periods === undefined ? undefined : await validatePeriodLines(tx, valid, change.periods);
   const key = cellKey(address);
   const cells = rules.cells.filter((cell) => cellKey(cell) !== key);
   if (target !== null) cells.push({ ...address, target });
@@ -492,7 +481,7 @@ export async function previewRoutingChange(
   const zoneList = (zones.length ? zones : [{ id: null, name: null }]).filter((zone) =>
     reach.reachesZone(zone.id),
   );
-  const offers = await readExtraOffers(tx, cfg, productsToCheck, zoneList);
+  const offers = await readExtraOffers(tx, productsToCheck, zoneList);
   const compare = (
     before: RoutingRules,
     after: RoutingRules,
@@ -533,7 +522,7 @@ export async function previewRoutingChange(
     ...move,
     periodIds: null,
   }));
-  const timedPeriods = await periodsDeciding(tx, cfg, [rules, after], {
+  const timedPeriods = await periodsDeciding(tx, [rules, after], {
     productsToCheck,
     offers,
     zoneList,
@@ -578,7 +567,6 @@ export async function previewRoutingChange(
  */
 async function periodsDeciding(
   tx: Transaction,
-  cfg: VenueScope,
   states: readonly RoutingRules[],
   {
     productsToCheck,
@@ -609,7 +597,7 @@ async function periodsDeciding(
       compared.set(facts.productId, facts);
     }
   }
-  const periods = await readPeriods(tx, cfg);
+  const periods = await readPeriods(tx);
   const departmentOf = new Map(periods.map((period) => [period.id, period.departmentId]));
   const zoneDepartment = await zoneDepartments(tx);
   const named = new Set<string>();
@@ -635,7 +623,6 @@ async function periodsDeciding(
     moment === null ? clock.dayCutover : serviceDayContext(clock, moment.businessDay).dayCutover;
   const ordered = await inPeriodOrder(
     tx,
-    cfg,
     periods.filter((period) => named.has(period.id)),
     dayCutover,
   );
@@ -692,7 +679,6 @@ type ExtraOffers = Map<string, Map<string, Set<string | null>>>;
  */
 async function readExtraOffers(
   tx: Transaction,
-  cfg: VenueScope,
   dishes: readonly PreviewProduct[],
   zones: readonly { id: string | null }[],
 ): Promise<ExtraOffers> {
@@ -718,7 +704,7 @@ async function readExtraOffers(
   for (const [dishId, itemIds] of live)
     for (const itemId of itemIds) offer(dishId, itemId, everyZone);
   // A variant is never an offer of its own, and routes exactly as its parent, the offer's product.
-  for (const [zoneId, menus] of await liveDocumentsByZone(tx, cfg))
+  for (const [zoneId, menus] of await liveDocumentsByZone(tx))
     for (const served of menus.flatMap((menu) => documentOffers(menu.document)))
       for (const modifier of served.offeredModifiers)
         if (modifier.kind === "extras")
@@ -816,11 +802,10 @@ function storedUuid(id: string): string {
  */
 export async function routingAt(
   tx: Transaction,
-  cfg: VenueScope,
   at: Date,
   {
     runningPeriod = async (departmentId: string) =>
-      (await resolveDepartmentService(tx, cfg, departmentId, at)).periodId,
+      (await resolveDepartmentService(tx, departmentId, at)).periodId,
   }: { runningPeriod?: (departmentId: string) => Promise<string | null> } = {},
 ): Promise<MakerResolver> {
   const { moment } = await clockAt(tx, at);
@@ -833,7 +818,7 @@ export async function routingAt(
   const anyPeriodLines = (rules.cellPeriods?.size ?? 0) > 0;
   const enterZone = async (zoneId: string | null) => {
     if (zoneId === null) return;
-    const { departmentId } = await resolveZoneContext(tx, cfg, zoneId);
+    const { departmentId } = await resolveZoneContext(tx, zoneId);
     zoneDepartment.set(zoneId, departmentId);
     if (moment !== null && anyPeriodLines && !periods.has(departmentId))
       periods.set(departmentId, await runningPeriod(departmentId));
@@ -926,24 +911,22 @@ export async function routingAt(
 
 export async function resolveMakers(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string | null,
   productIds: readonly string[],
   at: Date,
 ): Promise<ReadonlyMap<string, MakerOutcome>> {
   if (productIds.length === 0) return new Map();
-  return (await routingAt(tx, cfg, at)).makers(zoneId, productIds);
+  return (await routingAt(tx, at)).makers(zoneId, productIds);
 }
 
 export async function resolveExtraMakers(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string | null,
   extras: readonly { key: string; productId: string; dishStationId: string | null }[],
   at: Date,
 ): Promise<ReadonlyMap<string, ExtraMakerOutcome>> {
   if (extras.length === 0) return new Map();
-  return (await routingAt(tx, cfg, at)).extraMakers(zoneId, extras);
+  return (await routingAt(tx, at)).extraMakers(zoneId, extras);
 }
 
 function stationTodayState(
@@ -962,7 +945,6 @@ function stationTodayState(
 
 export async function stationStates(
   tx: Transaction,
-  _cfg: VenueScope,
   at: Date,
 ): Promise<ReadonlyMap<string, StationTodayState>> {
   const { moment } = await clockAt(tx, at);
@@ -982,10 +964,7 @@ export async function stationStates(
   );
 }
 
-export async function describeMakers(
-  tx: Transaction,
-  cfg: VenueScope,
-): Promise<
+export async function describeMakers(tx: Transaction): Promise<
   ReadonlyMap<
     string,
     {
@@ -996,7 +975,7 @@ export async function describeMakers(
     }
   >
 > {
-  const rules = await loadRoutingRules(tx, cfg, null);
+  const rules = await loadRoutingRules(tx, null);
   // A zone no cell names routes every product as Every zone does.
   const zoned = new Set(rules.cells.map((cell) => cell.zoneId));
   const zones = (await activeZones(tx)).filter(({ id }) => zoned.has(id));
@@ -1038,11 +1017,7 @@ export async function describeMakers(
   return result;
 }
 
-export async function routingModel(
-  tx: Transaction,
-  cfg: VenueScope,
-  at: Date,
-): Promise<RoutingModel> {
+export async function routingModel(tx: Transaction, at: Date): Promise<RoutingModel> {
   const { clock, moment } = await clockAt(tx, at);
   const { rules, folders, stations } = await snapshot(tx, scopeAt(moment));
   const context = moment === null ? null : serviceDayContext(clock, moment.businessDay);
@@ -1058,7 +1033,7 @@ export async function routingModel(
     .where(and(eq(products.active, true), isNull(products.parentId)))
     .orderBy(asc(products.name), asc(products.id));
   const shown = new Set(gridProducts.map((product) => product.id));
-  const periods = await readRoutingPeriods(tx, cfg, cutover);
+  const periods = await readRoutingPeriods(tx, cutover);
   const periodOrder = new Map(periods.map((period, index) => [period.id, index]));
   const periodProducts = new Map(periods.map((period) => [period.id, period.productIds]));
   const active = (rules.cellPeriods?.size ?? 0) > 0 ? await activeProducts(tx) : [];

@@ -62,13 +62,13 @@ export function mountFloorPlanSetRoutes(
 
   app.get(BASE, (c) =>
     run(c, log, async () =>
-      c.json(await viewed(c, (tx) => readFloorPlanSetsModel(tx, ctx.cfg, ctx.core.floorPlanSets))),
+      c.json(await viewed(c, (tx) => readFloorPlanSetsModel(tx, ctx.core.floorPlanSets))),
     ),
   );
 
   app.get(`${BASE}/period-choices`, (c) =>
     run(c, log, async () =>
-      c.json(await viewed(c, (tx) => readPeriodFloorPlans(tx, ctx.cfg, ctx.core.floorPlanSets))),
+      c.json(await viewed(c, (tx) => readPeriodFloorPlans(tx, ctx.core.floorPlanSets))),
     ),
   );
 
@@ -76,7 +76,7 @@ export function mountFloorPlanSetRoutes(
     run(c, log, async () => {
       const setId = await configured(c, (tx, body) => {
         onlyKeys(body, ["departmentId", "name", "fromSetId"]);
-        return createFloorPlanSet(tx, ctx.cfg, ctx.core.floorPlanSets, {
+        return createFloorPlanSet(tx, ctx.core.floorPlanSets, {
           departmentId: requireBodyUuid(body.departmentId, "departmentId"),
           name: requireString(body.name, "name"),
           ...(body.fromSetId === undefined
@@ -90,7 +90,7 @@ export function mountFloorPlanSetRoutes(
 
   app.patch(`${BASE}/:setId`, (c) =>
     run(c, log, async () => {
-      await configured(c, (tx, body) => renameFloorPlanSet(tx, ctx.cfg, setParam(c), nameOf(body)));
+      await configured(c, (tx, body) => renameFloorPlanSet(tx, setParam(c), nameOf(body)));
       return c.body(null, 204);
     }),
   );
@@ -98,7 +98,7 @@ export function mountFloorPlanSetRoutes(
   app.post(`${BASE}/:setId/copy`, (c) =>
     run(c, log, async () => {
       const setId = await configured(c, (tx, body) =>
-        copyFloorPlanSet(tx, ctx.cfg, ctx.core.floorPlanSets, setParam(c), nameOf(body)),
+        copyFloorPlanSet(tx, ctx.core.floorPlanSets, setParam(c), nameOf(body)),
       );
       return c.json({ setId }, 201);
     }),
@@ -106,7 +106,7 @@ export function mountFloorPlanSetRoutes(
 
   app.post(`${BASE}/:setId/make-default`, (c) =>
     run(c, log, async () => {
-      await configured(c, (tx) => makeDefaultFloorPlanSet(tx, ctx.cfg, setParam(c)));
+      await configured(c, (tx) => makeDefaultFloorPlanSet(tx, setParam(c)));
       return c.body(null, 204);
     }),
   );
@@ -115,7 +115,7 @@ export function mountFloorPlanSetRoutes(
     run(c, log, async () =>
       c.json(
         await viewed(c, (tx) =>
-          readFloorPlanSetDeleteImpact(tx, ctx.cfg, ctx.core.floorPlanSets, setParam(c)),
+          readFloorPlanSetDeleteImpact(tx, ctx.core.floorPlanSets, setParam(c)),
         ),
       ),
     ),
@@ -127,7 +127,6 @@ export function mountFloorPlanSetRoutes(
         onlyKeys(body, ["replaceWith"]);
         return deleteFloorPlanSet(
           tx,
-          ctx.cfg,
           ctx.core.floorDeletion,
           setParam(c),
           requireNullableBodyUuid(body.replaceWith, "replaceWith"),

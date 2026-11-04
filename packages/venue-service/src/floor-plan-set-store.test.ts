@@ -31,8 +31,8 @@ async function venue(tx: Transaction) {
   });
   const placeId = await venueLocationId(tx);
   const cfg = { locationId: locationId(placeId) };
-  const restaurant = await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" });
-  const bar = await createDepartment(tx, cfg, { name: "Bar", orderStart: "table" });
+  const restaurant = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
+  const bar = await createDepartment(tx, { name: "Bar", orderStart: "table" });
   return { cfg, restaurant: restaurant.id, bar: bar.id };
 }
 
@@ -50,13 +50,13 @@ describe("a department's floor plan sets", () => {
       const { cfg, restaurant } = await venue(tx);
       const standard = await newSet(tx, cfg);
       const dinner = await newSet(tx, cfg);
-      await linkFloorPlanSet(tx, cfg, {
+      await linkFloorPlanSet(tx, {
         setId: standard,
         departmentId: restaurant,
         name: "Standard",
       });
-      await linkFloorPlanSet(tx, cfg, { setId: dinner, departmentId: restaurant, name: "Dinner" });
-      const sets = await readFloorPlanSets(tx, cfg, { departmentId: restaurant });
+      await linkFloorPlanSet(tx, { setId: dinner, departmentId: restaurant, name: "Dinner" });
+      const sets = await readFloorPlanSets(tx, { departmentId: restaurant });
       expect(sets.map(({ name, isDefault }) => ({ name, isDefault }))).toEqual([
         { name: "Standard", isDefault: true },
         { name: "Dinner", isDefault: false },
@@ -68,12 +68,12 @@ describe("a department's floor plan sets", () => {
     await withTransaction(suite.db, async (tx) => {
       const { cfg, restaurant } = await venue(tx);
       for (const name of ["Standard", "Dinner", "Brunch"])
-        await linkFloorPlanSet(tx, cfg, {
+        await linkFloorPlanSet(tx, {
           setId: await newSet(tx, cfg),
           departmentId: restaurant,
           name,
         });
-      const sets = await readFloorPlanSets(tx, cfg, { departmentId: restaurant });
+      const sets = await readFloorPlanSets(tx, { departmentId: restaurant });
       expect(sets.map(({ name, isDefault }) => ({ name, isDefault }))).toEqual([
         { name: "Standard", isDefault: true },
         { name: "Brunch", isDefault: false },
@@ -85,14 +85,14 @@ describe("a department's floor plan sets", () => {
   it("refuses a name the department already has", async () => {
     await withTransaction(suite.db, async (tx) => {
       const { cfg, restaurant } = await venue(tx);
-      await linkFloorPlanSet(tx, cfg, {
+      await linkFloorPlanSet(tx, {
         setId: await newSet(tx, cfg),
         departmentId: restaurant,
         name: "Dinner",
       });
       const again = await newSet(tx, cfg);
       await expect(
-        linkFloorPlanSet(tx, cfg, { setId: again, departmentId: restaurant, name: "Dinner" }),
+        linkFloorPlanSet(tx, { setId: again, departmentId: restaurant, name: "Dinner" }),
       ).rejects.toMatchObject({
         code: "floor_plan_set.name_taken",
         params: { departmentId: restaurant, name: "Dinner" },
@@ -105,9 +105,9 @@ describe("a department's floor plan sets", () => {
       const { cfg, restaurant, bar } = await venue(tx);
       const a = await newSet(tx, cfg);
       const b = await newSet(tx, cfg);
-      await linkFloorPlanSet(tx, cfg, { setId: a, departmentId: restaurant, name: "Standard" });
-      await linkFloorPlanSet(tx, cfg, { setId: b, departmentId: bar, name: "Standard" });
-      const sets = await readFloorPlanSets(tx, cfg, { setIds: [a, b] });
+      await linkFloorPlanSet(tx, { setId: a, departmentId: restaurant, name: "Standard" });
+      await linkFloorPlanSet(tx, { setId: b, departmentId: bar, name: "Standard" });
+      const sets = await readFloorPlanSets(tx, { setIds: [a, b] });
       expect(
         sets.map(({ setId, departmentId, isDefault }) => [setId, departmentId, isDefault]),
       ).toEqual(
@@ -123,20 +123,20 @@ describe("a department's floor plan sets", () => {
   it("lists a set with its department's zones", async () => {
     await withTransaction(suite.db, async (tx) => {
       const { cfg, restaurant, bar } = await venue(tx);
-      const terrace = await createServiceZone(tx, cfg, {
+      const terrace = await createServiceZone(tx, {
         name: "Terrace",
         departmentId: restaurant,
         displayOrder: 2,
       });
-      const dining = await createServiceZone(tx, cfg, {
+      const dining = await createServiceZone(tx, {
         name: "Dining room",
         departmentId: restaurant,
         displayOrder: 1,
       });
-      await createServiceZone(tx, cfg, { name: "Counter", departmentId: bar, displayOrder: 0 });
+      await createServiceZone(tx, { name: "Counter", departmentId: bar, displayOrder: 0 });
       const set = await newSet(tx, cfg);
-      await linkFloorPlanSet(tx, cfg, { setId: set, departmentId: restaurant, name: "Standard" });
-      const [summary] = await readFloorPlanSets(tx, cfg, { setIds: [set] });
+      await linkFloorPlanSet(tx, { setId: set, departmentId: restaurant, name: "Standard" });
+      const [summary] = await readFloorPlanSets(tx, { setIds: [set] });
       expect(summary).toEqual({
         setId: set,
         departmentId: restaurant,
@@ -152,13 +152,13 @@ describe("a department's floor plan sets", () => {
       const { cfg, restaurant, bar } = await venue(tx);
       const kept = await newSet(tx, cfg);
       const hidden = await newSet(tx, cfg);
-      await linkFloorPlanSet(tx, cfg, { setId: kept, departmentId: restaurant, name: "Standard" });
-      await linkFloorPlanSet(tx, cfg, { setId: hidden, departmentId: bar, name: "Standard" });
+      await linkFloorPlanSet(tx, { setId: kept, departmentId: restaurant, name: "Standard" });
+      await linkFloorPlanSet(tx, { setId: hidden, departmentId: bar, name: "Standard" });
       await tx.update(departments).set({ active: false }).where(eq(departments.id, bar));
-      expect((await readFloorPlanSets(tx, cfg)).map(({ setId }) => setId)).toEqual([kept]);
+      expect((await readFloorPlanSets(tx)).map(({ setId }) => setId)).toEqual([kept]);
       const another = await newSet(tx, cfg);
       await expect(
-        linkFloorPlanSet(tx, cfg, { setId: another, departmentId: bar, name: "Dinner" }),
+        linkFloorPlanSet(tx, { setId: another, departmentId: bar, name: "Dinner" }),
       ).rejects.toMatchObject({ code: "department.not_found", params: { departmentId: bar } });
     });
   });

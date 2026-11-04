@@ -46,7 +46,7 @@ beforeEach(async () => {
       zone: "counter",
       paidWhen: "ticket_then_pay",
     });
-    await setZoneSalePolicyOverride(tx, venue.cfg, offered.zoneId, "collectionNumber", "numbered");
+    await setZoneSalePolicyOverride(tx, offered.zoneId, "collectionNumber", "numbered");
     return offered;
   });
   orderId = randomUUID();

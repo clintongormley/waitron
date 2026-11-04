@@ -2,7 +2,6 @@ import { inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import type { GrossLines } from "@waitron/catalogue";
 import { VENUE_SERVICE } from "./modules.js";
-import type { TradingContext } from "./trading-context.js";
 import type { GrossOrder } from "./working-order.js";
 
 /**
@@ -18,7 +17,6 @@ import type { GrossOrder } from "./working-order.js";
  */
 export async function issuancePass(
   tx: Transaction,
-  cfg: TradingContext,
   workingOrderId: string,
   order: GrossOrder,
 ): Promise<GrossLines> {
@@ -30,7 +28,7 @@ export async function issuancePass(
   }
 
   const contextByLine = new Map(
-    (await VENUE_SERVICE.listLineContexts(tx, cfg, workingOrderId)).map((context) => [
+    (await VENUE_SERVICE.listLineContexts(tx, workingOrderId)).map((context) => [
       context.workingOrderLineId,
       context,
     ]),

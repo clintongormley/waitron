@@ -94,18 +94,16 @@ async function routed() {
     .values({ locationId, name: "Kitchen", isDefault: true })
     .returning({ id: kitchenStations.id });
   const made = await scoped(async (tx) => {
-    const seasons = await ensureDefaultSeasons(tx, cfg);
+    const seasons = await ensureDefaultSeasons(tx);
     const season = (name: StarterSeason) =>
       seasons.find((entry) => entry.name === starterSeasonName(name, "es"))!.id;
-    const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
-    ).id;
-    const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
+    const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
+    const deli = (await createDepartment(tx, { name: "Deli", orderStart: "counter" })).id;
     const menu = (await createCatalogue(tx, { name: "Menu" })).id;
     const { document } = await buildMenuDocument(tx, menu);
     await publishMenu(tx, menu, menuDocumentHash(document), "person-1");
     const period = async (departmentId: string, name: string) =>
-      (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId: menu, staffMenuIds: [] })).id;
+      (await saveMenuPeriod(tx, departmentId, { name, menuId: menu, staffMenuIds: [] })).id;
     const dinner = await period(restaurant, "Dinner");
     const lunch = await period(restaurant, "Lunch");
     const afternoon = await period(restaurant, "Afternoon");
@@ -115,7 +113,6 @@ async function routed() {
     for (const name of ["Summer", "Autumn"] as const)
       await replaceMenuWeek(
         tx,
-        cfg,
         restaurant,
         week([slot(lunch, "12:00", "16:00"), slot(dinner, "20:00", "23:00")]),
         new Date(),
@@ -126,7 +123,6 @@ async function routed() {
       (
         await saveSpecialDay(
           tx,
-          cfg,
           null,
           {
             name,
@@ -175,7 +171,7 @@ async function routed() {
     };
   });
   const app = new Hono();
-  VENUE_SERVICE_ROUTES.mount(app, { db, cfg, core: {} as ModuleRouteContext["core"] }, noopLog);
+  VENUE_SERVICE_ROUTES.mount(app, { db, cfg: {}, core: {} as ModuleRouteContext["core"] }, noopLog);
   const send = (method: "GET" | "POST", path: string, cookie: string, body?: unknown) =>
     app.request(`${BASE}${path}`, {
       method,

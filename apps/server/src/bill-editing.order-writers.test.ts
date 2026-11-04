@@ -48,7 +48,7 @@ async function sibling(p: Awaited<ReturnType<typeof fixture>>) {
       orderNumber: 2,
       partyId: p.partyId,
     });
-    await VENUE_SERVICE.recordOrderContext(tx, venue.cfg, order!.id, venue.zoneId);
+    await VENUE_SERVICE.recordOrderContext(tx, order!.id, venue.zoneId);
     return order!.id;
   });
   return { ...p, id };

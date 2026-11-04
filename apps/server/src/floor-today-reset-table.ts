@@ -151,7 +151,7 @@ export async function resetTable(
       name: null,
     })
     .where(eq(floorTodayTables.id, today.row.id));
-  await catchUpZone(tx, cfg, removals, today.zoneId, now);
+  await catchUpZone(tx, removals, today.zoneId, now);
 }
 
 // `compareLabels` reads "Table 01" and "Table 1" as equal, so the exact strings break the tie.

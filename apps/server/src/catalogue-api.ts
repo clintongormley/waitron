@@ -130,7 +130,7 @@ export interface CatalogueApiDeps {
   /** The content languages the venue must keep; none when absent. */
   contentLanguageRules?: ContentLanguageRules;
   db: Database;
-  /** Required by the course and made-at routes; `requireVenueCfg` throws without it. */
+  /** Required where a product's course is saved; `requireVenueCfg` throws without it. */
   venueCfg?: TradingContext;
   venueLocale?: string;
 }
@@ -1397,7 +1397,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const session = requireManagementSession(c);
       return c.json(
         await gated(c, session, async (tx) => {
-          const makers = await VENUE_SERVICE.describeMakers(tx, requireVenueCfg(deps));
+          const makers = await VENUE_SERVICE.describeMakers(tx);
           const stationIds = [
             ...new Set(
               [...makers.values()].flatMap(({ route, unavailableStationId }) =>
@@ -1621,7 +1621,7 @@ function requireVenueCfg(deps: CatalogueApiDeps): TradingContext {
   /* v8 ignore start -- boot always threads a venueCfg; only a harness that omits it AND calls a route
      that needs it reaches this, which no suite does — surfaced as a 500 by `run`. */
   if (deps.venueCfg === undefined) {
-    throw new Error("mountCatalogueApi: venueCfg is required by the course and made-at routes");
+    throw new Error("mountCatalogueApi: venueCfg is required to save a product's course");
   }
   /* v8 ignore stop */
   return deps.venueCfg;

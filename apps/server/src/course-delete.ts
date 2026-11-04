@@ -17,7 +17,6 @@ import {
   serviceSteps,
 } from "@waitron/venue-service";
 import { idsInUse, type Reference } from "./in-use.js";
-import type { TradingContext } from "./trading-context.js";
 
 /** Retention references; `in-use-references.test.ts` checks declared foreign keys only. */
 export const COURSE_REFERENCES: readonly Reference[] = [
@@ -34,7 +33,6 @@ export function coursesInUse(tx: Transaction, ids: readonly string[]): Promise<S
 
 async function courseDeleteRules(
   tx: Transaction,
-  cfg: TradingContext,
   id: string,
 ): Promise<{ impact: DeleteImpact; retained: boolean; settings: CourseDeleteSettings }> {
   const [target] = await tx
@@ -48,7 +46,7 @@ async function courseDeleteRules(
     .select({ count: count() })
     .from(products)
     .where(eq(products.courseId, id));
-  const settings = await readCourseDeleteSettings(tx, cfg, id);
+  const settings = await readCourseDeleteSettings(tx, id);
   return {
     retained,
     settings,
@@ -66,20 +64,12 @@ async function courseDeleteRules(
   };
 }
 
-export async function readCourseDeleteImpact(
-  tx: Transaction,
-  cfg: TradingContext,
-  id: string,
-): Promise<DeleteImpact> {
-  return (await courseDeleteRules(tx, cfg, id)).impact;
+export async function readCourseDeleteImpact(tx: Transaction, id: string): Promise<DeleteImpact> {
+  return (await courseDeleteRules(tx, id)).impact;
 }
 
-export async function deleteCourse(
-  tx: Transaction,
-  cfg: TradingContext,
-  id: string,
-): Promise<DeleteImpact> {
-  const { impact, retained, settings } = await courseDeleteRules(tx, cfg, id);
+export async function deleteCourse(tx: Transaction, id: string): Promise<DeleteImpact> {
+  const { impact, retained, settings } = await courseDeleteRules(tx, id);
   await tx.update(products).set({ courseId: null }).where(eq(products.courseId, id));
   await clearCourseDeleteSettings(tx, settings);
   if (retained) {

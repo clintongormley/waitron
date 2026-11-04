@@ -246,7 +246,7 @@ const zoneSettings = {
 async function settingsFixture() {
   const fx = await fixture();
   const department = await withTransaction(db, async (tx) => {
-    const department = await createDepartment(tx, fx, {
+    const department = await createDepartment(tx, {
       name: "Dining",
       orderStart: "table",
     });
@@ -254,7 +254,7 @@ async function settingsFixture() {
       .update(departmentSalePolicies)
       .set({ printTradingName: true, receiptPrintMode: "on_request" })
       .where(eq(departmentSalePolicies.departmentId, department.id));
-    await configureZone(tx, fx, {
+    await configureZone(tx, {
       zoneId: fx.zoneId,
       departmentId: department.id,
       orderStart: "table",
@@ -300,7 +300,7 @@ describe("whole service settings saves", () => {
   it("saves every department field and optional transfers in one PUT", async () => {
     const fx = await settingsFixture();
     const destination = await withTransaction(db, (tx) =>
-      createDepartment(tx, fx, {
+      createDepartment(tx, {
         name: "Bar",
         orderStart: "counter",
       }),
@@ -375,7 +375,7 @@ describe("whole service settings saves", () => {
   it("refuses a live name clash without writing any settings", async () => {
     const fx = await settingsFixture();
     const other = await withTransaction(db, (tx) =>
-      createDepartment(tx, fx, { name: "Taken", orderStart: "counter" }),
+      createDepartment(tx, { name: "Taken", orderStart: "counter" }),
     );
     await db.update(departments).set({ active: true }).where(eq(departments.id, other.id));
     const before = await settingsSnapshot(fx);
@@ -394,7 +394,7 @@ describe("whole service settings saves", () => {
   it("rolls back the department and sale policy when a transfer names itself", async () => {
     const fx = await settingsFixture();
     const other = await withTransaction(db, (tx) =>
-      createDepartment(tx, fx, { name: "Bar", orderStart: "counter" }),
+      createDepartment(tx, { name: "Bar", orderStart: "counter" }),
     );
     expect(
       (
@@ -746,7 +746,7 @@ describe("whole service settings saves", () => {
   it("changes only the department it saves", async () => {
     const fx = await settingsFixture();
     const other = await withTransaction(db, (tx) =>
-      createDepartment(tx, fx, { name: "Terrace", orderStart: "table" }),
+      createDepartment(tx, { name: "Terrace", orderStart: "table" }),
     );
     const saved = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
       ...departmentSettings,
@@ -963,8 +963,8 @@ describe("venue service management routes", () => {
   it("saves directional transfer settings only for a manager", async () => {
     const fx = await fixture();
     const { source, destination } = await withTransaction(db, async (tx) => ({
-      source: await createDepartment(tx, fx, { name: "Deli", orderStart: "table" }),
-      destination: await createDepartment(tx, fx, {
+      source: await createDepartment(tx, { name: "Deli", orderStart: "table" }),
+      destination: await createDepartment(tx, {
         name: "Restaurant",
         orderStart: "table",
       }),
@@ -1021,7 +1021,7 @@ describe("venue service management routes", () => {
   ])("refuses malformed transfer settings %j", async (body, field) => {
     const fx = await fixture();
     const source = await withTransaction(db, (tx) =>
-      createDepartment(tx, fx, { name: "Deli", orderStart: "table" }),
+      createDepartment(tx, { name: "Deli", orderStart: "table" }),
     );
     const path = `/management-api/venue-service/departments/${source.id}/transfers`;
     const response = await send(fx.app, "PUT", path, fx.managerCookie, body);
@@ -1071,7 +1071,7 @@ describe("venue service management routes", () => {
     async (defaultServiceMode) => {
       const fx = await fixture();
       const department = await withTransaction(db, (tx) =>
-        createDepartment(tx, fx, { name: "Dining", orderStart: "table" }),
+        createDepartment(tx, { name: "Dining", orderStart: "table" }),
       );
       const before = await (
         await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
@@ -1102,7 +1102,7 @@ describe("venue service management routes", () => {
   it("patches only the trading name without changing the department name or service settings", async () => {
     const fx = await fixture();
     const department = await withTransaction(db, (tx) =>
-      createDepartment(tx, fx, {
+      createDepartment(tx, {
         name: "Dining",
         tradingName: "Original receipt",
         orderStart: "table",
@@ -1134,9 +1134,9 @@ describe("venue service management routes", () => {
     async (orderStart) => {
       const fx = await fixture();
       const [source, target] = await withTransaction(db, async (tx) => {
-        const source = await createDepartment(tx, fx, { name: "Source", orderStart: "counter" });
-        const target = await createDepartment(tx, fx, { name: "Target", orderStart: "table" });
-        await configureZone(tx, fx, { zoneId: fx.zoneId, departmentId: source.id, orderStart });
+        const source = await createDepartment(tx, { name: "Source", orderStart: "counter" });
+        const target = await createDepartment(tx, { name: "Target", orderStart: "table" });
+        await configureZone(tx, { zoneId: fx.zoneId, departmentId: source.id, orderStart });
         await tx.run(
           sql`update zone_sale_policies set paid_when = 'ticket_then_pay', collection_number = 'numbered', receipt_print_mode = 'on_request' where zone_id = ${fx.zoneId}`,
         );
@@ -1171,10 +1171,10 @@ describe("venue service management routes", () => {
     async (serviceMode) => {
       const fx = await fixture();
       const department = await withTransaction(db, (tx) =>
-        createDepartment(tx, fx, { name: "Dining", orderStart: "table" }),
+        createDepartment(tx, { name: "Dining", orderStart: "table" }),
       );
       await withTransaction(db, (tx) =>
-        configureZone(tx, fx, {
+        configureZone(tx, {
           zoneId: fx.zoneId,
           departmentId: department.id,
           orderStart: "counter",
@@ -1203,10 +1203,10 @@ describe("venue service management routes", () => {
   it("refuses the retired invoice-first style without changing departments or zones", async () => {
     const fx = await fixture();
     const department = await withTransaction(db, (tx) =>
-      createDepartment(tx, fx, { name: "Dining", orderStart: "table" }),
+      createDepartment(tx, { name: "Dining", orderStart: "table" }),
     );
     await withTransaction(db, (tx) =>
-      configureZone(tx, fx, { zoneId: fx.zoneId, departmentId: department.id }),
+      configureZone(tx, { zoneId: fx.zoneId, departmentId: department.id }),
     );
     const before = await (
       await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
@@ -1283,7 +1283,7 @@ describe("venue service management routes", () => {
     async (displayOrder) => {
       const fx = await fixture();
       const department = await withTransaction(db, (tx) =>
-        createDepartment(tx, fx, { name: "Order department", orderStart: "counter" }),
+        createDepartment(tx, { name: "Order department", orderStart: "counter" }),
       );
       const response = await send(
         fx.app,
@@ -1322,7 +1322,7 @@ describe("venue service management routes", () => {
     async (active) => {
       const fx = await fixture();
       const department = await withTransaction(db, (tx) =>
-        createDepartment(tx, fx, { name: "Disabled department", orderStart: "counter" }),
+        createDepartment(tx, { name: "Disabled department", orderStart: "counter" }),
       );
       await withTransaction(db, async (tx) => {
         await tx
@@ -1461,22 +1461,14 @@ describe("venue service management routes", () => {
       })
       .returning({ id: floorZones.id });
     await withTransaction(db, async (tx) => {
-      await configureZone(
-        tx,
-        { locationId: fx.locationId },
-        {
-          zoneId: fx.zoneId,
-          departmentId: department.id,
-        },
-      );
-      await configureZone(
-        tx,
-        { locationId: fx.locationId },
-        {
-          zoneId: secondZone!.id,
-          departmentId: department.id,
-        },
-      );
+      await configureZone(tx, {
+        zoneId: fx.zoneId,
+        departmentId: department.id,
+      });
+      await configureZone(tx, {
+        zoneId: secondZone!.id,
+        departmentId: department.id,
+      });
       const tables = await tx
         .insert(diningTables)
         .values([
@@ -1641,16 +1633,8 @@ describe("venue service management routes", () => {
   it("persists department and zone collection settings and the department receipt-heading switch", async () => {
     const fx = await fixture();
     const department = await withTransaction(db, async (tx) => {
-      const row = await createDepartment(
-        tx,
-        { locationId: fx.locationId },
-        { name: "Restaurant", orderStart: "counter" },
-      );
-      await configureZone(
-        tx,
-        { locationId: fx.locationId },
-        { zoneId: fx.zoneId, departmentId: row.id },
-      );
+      const row = await createDepartment(tx, { name: "Restaurant", orderStart: "counter" });
+      await configureZone(tx, { zoneId: fx.zoneId, departmentId: row.id });
       return row;
     });
     const departmentPath = `/management-api/venue-service/departments/${department.id}/sale-policy`;
@@ -1737,16 +1721,8 @@ describe("venue service management routes", () => {
   it("writes order start through both policy routes and refuses unknown values", async () => {
     const fx = await fixture();
     const department = await withTransaction(db, async (tx) => {
-      const row = await createDepartment(
-        tx,
-        { locationId: fx.locationId },
-        { name: "Start route", orderStart: "counter" },
-      );
-      await configureZone(
-        tx,
-        { locationId: fx.locationId },
-        { zoneId: fx.zoneId, departmentId: row.id },
-      );
+      const row = await createDepartment(tx, { name: "Start route", orderStart: "counter" });
+      await configureZone(tx, { zoneId: fx.zoneId, departmentId: row.id });
       return row;
     });
     for (const [path, value] of [
@@ -1789,22 +1765,14 @@ describe("venue service management routes", () => {
     async (kind) => {
       const fx = await fixture();
       const department = await withTransaction(db, async (tx) => {
-        const row = await createDepartment(
-          tx,
-          { locationId: fx.locationId },
-          {
-            name: "Receipt boundary",
-            orderStart: "counter",
-          },
-        );
-        await configureZone(
-          tx,
-          { locationId: fx.locationId },
-          {
-            zoneId: fx.zoneId,
-            departmentId: row.id,
-          },
-        );
+        const row = await createDepartment(tx, {
+          name: "Receipt boundary",
+          orderStart: "counter",
+        });
+        await configureZone(tx, {
+          zoneId: fx.zoneId,
+          departmentId: row.id,
+        });
         return row;
       });
       const path =
@@ -1842,22 +1810,14 @@ describe("venue service management routes", () => {
   it("refuses an unknown zone policy field without clearing the receipt override", async () => {
     const fx = await fixture();
     const department = await withTransaction(db, async (tx) => {
-      const row = await createDepartment(
-        tx,
-        { locationId: fx.locationId },
-        {
-          name: "Restaurant",
-          orderStart: "counter",
-        },
-      );
-      await configureZone(
-        tx,
-        { locationId: fx.locationId },
-        {
-          zoneId: fx.zoneId,
-          departmentId: row.id,
-        },
-      );
+      const row = await createDepartment(tx, {
+        name: "Restaurant",
+        orderStart: "counter",
+      });
+      await configureZone(tx, {
+        zoneId: fx.zoneId,
+        departmentId: row.id,
+      });
       return row;
     });
     expect(department.id).toBeTruthy();
@@ -2059,7 +2019,7 @@ describe("venue service management routes", () => {
       const fx = await fixture();
       const [restaurant, events] = await twoDepartments(fx);
       await withTransaction(db, (tx) =>
-        configureZone(tx, fx, { zoneId: fx.zoneId, departmentId: restaurant }),
+        configureZone(tx, { zoneId: fx.zoneId, departmentId: restaurant }),
       );
       const path = `/management-api/venue-service/departments/${restaurant}`;
       expect((await send(fx.app, "DELETE", path, fx.managerCookie)).status).toBe(200);
@@ -2155,24 +2115,16 @@ describe("venue service management routes", () => {
   it("omits a deleted configured zone from management and new-order choices", async () => {
     const fx = await fixture();
     const department = await withTransaction(db, (tx) =>
-      createDepartment(
-        tx,
-        { locationId: fx.locationId },
-        {
-          name: "Restaurant",
-          orderStart: "table",
-        },
-      ),
+      createDepartment(tx, {
+        name: "Restaurant",
+        orderStart: "table",
+      }),
     );
     await withTransaction(db, (tx) =>
-      configureZone(
-        tx,
-        { locationId: fx.locationId },
-        {
-          zoneId: fx.zoneId,
-          departmentId: department.id,
-        },
-      ),
+      configureZone(tx, {
+        zoneId: fx.zoneId,
+        departmentId: department.id,
+      }),
     );
     await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, fx.zoneId));
 
@@ -2181,19 +2133,18 @@ describe("venue service management routes", () => {
     expect(
       ((await response.json()) as { zones: { id: string; active: boolean }[] }).zones,
     ).not.toContainEqual(expect.objectContaining({ id: fx.zoneId }));
-    expect(
-      await withTransaction(db, (tx) => listServiceZones(tx, { locationId: fx.locationId })),
-    ).not.toContainEqual(expect.objectContaining({ id: fx.zoneId }));
+    expect(await withTransaction(db, (tx) => listServiceZones(tx))).not.toContainEqual(
+      expect.objectContaining({ id: fx.zoneId }),
+    );
   });
 
   it("lists only the venue's live departments and zones for a manager", async () => {
     const fx = await fixture();
-    const scope = { locationId: fx.locationId };
     const department = await withTransaction(db, (tx) =>
-      createDepartment(tx, scope, { name: "Restaurant", orderStart: "table" }),
+      createDepartment(tx, { name: "Restaurant", orderStart: "table" }),
     );
     await withTransaction(db, (tx) =>
-      configureZone(tx, scope, { zoneId: fx.zoneId, departmentId: department.id }),
+      configureZone(tx, { zoneId: fx.zoneId, departmentId: department.id }),
     );
     await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, fx.zoneId));
     const path = "/management-api/venue-service/departments-and-zones";
@@ -2214,12 +2165,11 @@ describe("venue service management routes", () => {
 
   it("marks every listed zone active, which the device profile form filters on", async () => {
     const fx = await fixture();
-    const scope = { locationId: fx.locationId };
     const department = await withTransaction(db, (tx) =>
-      createDepartment(tx, scope, { name: "Deli", orderStart: "counter" }),
+      createDepartment(tx, { name: "Deli", orderStart: "counter" }),
     );
     await withTransaction(db, (tx) =>
-      configureZone(tx, scope, { zoneId: fx.zoneId, departmentId: department.id }),
+      configureZone(tx, { zoneId: fx.zoneId, departmentId: department.id }),
     );
     for (const path of [
       "/management-api/venue-service/departments-and-zones",
@@ -2522,16 +2472,8 @@ describe("routing cell route", () => {
 
   async function servedZone(fx: Fixture): Promise<void> {
     await withTransaction(db, async (tx) => {
-      const department = await createDepartment(
-        tx,
-        { locationId: fx.locationId },
-        { name: "Dining", orderStart: "table" },
-      );
-      await configureZone(
-        tx,
-        { locationId: fx.locationId },
-        { zoneId: fx.zoneId, departmentId: department.id },
-      );
+      const department = await createDepartment(tx, { name: "Dining", orderStart: "table" });
+      await configureZone(tx, { zoneId: fx.zoneId, departmentId: department.id });
     });
   }
 
@@ -3001,12 +2943,11 @@ describe("a routing cell's period choices on the routes", () => {
   const lunchFixture = async () => {
     const fx = await fixture();
     const { lunch, lager, downstairs, department } = await withTransaction(db, async (tx) => {
-      const cfg = { locationId: fx.locationId };
-      const dining = await createDepartment(tx, cfg, {
+      const dining = await createDepartment(tx, {
         name: "Dining",
         orderStart: "table",
       });
-      await configureZone(tx, cfg, { zoneId: fx.zoneId, departmentId: dining.id });
+      await configureZone(tx, { zoneId: fx.zoneId, departmentId: dining.id });
       const product = await createProduct(tx, {
         catalogueId: fx.menuId,
         name: "Lager",
@@ -3016,7 +2957,7 @@ describe("a routing cell's period choices on the routes", () => {
         vatClass: "general",
       });
       await addProductToMenu(tx, { menuId: fx.menuId, productId: product.id });
-      const period = await saveMenuPeriod(tx, cfg, dining.id, {
+      const period = await saveMenuPeriod(tx, dining.id, {
         name: "Lunch",
         menuId: fx.menuId,
         staffMenuIds: [],
@@ -3301,7 +3242,7 @@ describe("name-only department creation", () => {
   it("refuses to rename a deleted department through its existing full-body route", async () => {
     const fx = await fixture();
     const row = await withTransaction(db, (tx) =>
-      createDepartment(tx, fx, {
+      createDepartment(tx, {
         name: "Closed",
         tradingName: "Shop",
         orderStart: "counter",
@@ -3378,9 +3319,8 @@ it("the station planning route returns the configured period ranges for a non-de
   const f = await fixture();
   const expected = await withTransaction(db, async (tx) => {
     const cfg = { locationId: f.locationId };
-    const departmentId = (await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }))
-      .id;
-    await configureZone(tx, cfg, { zoneId: f.zoneId, departmentId });
+    const departmentId = (await createDepartment(tx, { name: "Dining", orderStart: "table" })).id;
+    await configureZone(tx, { zoneId: f.zoneId, departmentId });
     const product = await createProduct(tx, {
       catalogueId: f.menuId,
       name: randomUUID(),
@@ -3391,7 +3331,7 @@ it("the station planning route returns the configured period ranges for a non-de
     });
     await addProductToMenu(tx, { menuId: f.menuId, productId: product.id });
     const periodId = (
-      await saveMenuPeriod(tx, cfg, departmentId, {
+      await saveMenuPeriod(tx, departmentId, {
         name: "Lunch",
         menuId: f.menuId,
         staffMenuIds: [],
@@ -3401,7 +3341,6 @@ it("the station planning route returns the configured period ranges for a non-de
     const ranges = [{ periodId, startsAt: "12:00", endsAt: "16:00" }];
     await replaceMenuWeek(
       tx,
-      cfg,
       departmentId,
       Array.from({ length: 7 }, (_, weekday) => ({ weekday, slots: weekday === 1 ? ranges : [] })),
       new Date("2026-10-10T10:00:00Z"),
@@ -3413,7 +3352,6 @@ it("the station planning route returns the configured period ranges for a non-de
       .returning();
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "category", categoryId: f.categoryId }, zoneId: f.zoneId },
       { kind: "station", stationId: station!.id },
     );
@@ -3472,7 +3410,7 @@ it.each(["create", "rename"])("allows department route %s onto a deleted name", 
 it("saves combined department settings onto a deleted name", async () => {
   const fx = await settingsFixture();
   const old = await withTransaction(db, (tx) =>
-    createDepartment(tx, fx, { name: "Taken", orderStart: "counter" }),
+    createDepartment(tx, { name: "Taken", orderStart: "counter" }),
   );
   await db.update(departments).set({ active: false }).where(eq(departments.id, old.id));
   const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
@@ -3494,10 +3432,10 @@ describe("permanent department delete contracts", () => {
   it("delete returns a full recomputed impact and retires the old preview path", async () => {
     const fx = await fixture();
     await withTransaction(db, (tx) =>
-      createDepartment(tx, fx, { name: "Dining", orderStart: "table" }),
+      createDepartment(tx, { name: "Dining", orderStart: "table" }),
     );
     const department = await withTransaction(db, (tx) =>
-      createDepartment(tx, fx, { name: "Events", orderStart: "table" }),
+      createDepartment(tx, { name: "Events", orderStart: "table" }),
     );
     const path = `/management-api/venue-service/departments/${department.id}`;
     const expected = {
@@ -3534,7 +3472,7 @@ describe("permanent department delete contracts", () => {
   it("active presence refuses mixed renames without changing departments or zones", async () => {
     const fx = await fixture();
     const department = await withTransaction(db, (tx) =>
-      createDepartment(tx, fx, { name: "Dining", orderStart: "table" }),
+      createDepartment(tx, { name: "Dining", orderStart: "table" }),
     );
     const before = {
       departments: await db.select().from(departments),
@@ -3820,7 +3758,7 @@ describe("department description setup in the live model", () => {
     async (receipt) => {
       const fx = await fixture(true);
       const department = await withTransaction(db, (tx) =>
-        createDepartment(tx, fx, { name: "Dining" }),
+        createDepartment(tx, { name: "Dining" }),
       );
       if (receipt !== undefined)
         await db.execute(
@@ -3858,7 +3796,7 @@ describe("department description setup in the live model", () => {
     async (receipt) => {
       const fx = await fixture(true, "Seat default");
       const department = await withTransaction(db, (tx) =>
-        createDepartment(tx, fx, { name: "Dining" }),
+        createDepartment(tx, { name: "Dining" }),
       );
       if (receipt !== undefined)
         await db.execute(
@@ -3879,7 +3817,7 @@ describe("department description setup in the live model", () => {
     "a no-field or standalone route (%j) does not require a department description",
     async (required) => {
       const fx = await fixture(required);
-      await withTransaction(db, (tx) => createDepartment(tx, fx, { name: "No description" }));
+      await withTransaction(db, (tx) => createDepartment(tx, { name: "No description" }));
       expect(
         (
           await (
@@ -3897,9 +3835,8 @@ it("A724: the station planning route returns last orders at its period's own end
   const f = await fixture();
   const expected = await withTransaction(db, async (tx) => {
     const cfg = { locationId: f.locationId };
-    const departmentId = (await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }))
-      .id;
-    await configureZone(tx, cfg, { zoneId: f.zoneId, departmentId });
+    const departmentId = (await createDepartment(tx, { name: "Dining", orderStart: "table" })).id;
+    await configureZone(tx, { zoneId: f.zoneId, departmentId });
     const product = await createProduct(tx, {
       catalogueId: f.menuId,
       name: randomUUID(),
@@ -3910,7 +3847,7 @@ it("A724: the station planning route returns last orders at its period's own end
     });
     await addProductToMenu(tx, { menuId: f.menuId, productId: product.id });
     const periodId = (
-      await saveMenuPeriod(tx, cfg, departmentId, {
+      await saveMenuPeriod(tx, departmentId, {
         name: "Lunch",
         menuId: f.menuId,
         staffMenuIds: [],
@@ -3920,7 +3857,6 @@ it("A724: the station planning route returns last orders at its period's own end
     const ranges = [{ periodId, startsAt: "12:00", endsAt: "16:00" }];
     await replaceMenuWeek(
       tx,
-      cfg,
       departmentId,
       Array.from({ length: 7 }, (_, weekday) => ({ weekday, slots: weekday === 1 ? ranges : [] })),
       new Date("2026-10-10T10:00:00Z"),
@@ -3932,7 +3868,6 @@ it("A724: the station planning route returns last orders at its period's own end
       .returning();
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "category", categoryId: f.categoryId }, zoneId: f.zoneId },
       { kind: "station", stationId: station!.id },
     );

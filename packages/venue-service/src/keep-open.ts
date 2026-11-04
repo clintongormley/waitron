@@ -4,7 +4,7 @@ import type { KeepOpenSubject } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { departmentDay } from "./menu-timetable.js";
 import { readServiceDayPlan } from "./day-resolver.js";
-import { resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
+import { resolveZoneContext, storedTime } from "./operations.js";
 import { floorZones } from "@waitron/db";
 import {
   zoneClosureDay,
@@ -33,22 +33,21 @@ function clockTime(minute: number, cutover: string): string {
 
 export async function readKeepOpen(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string,
   at: Date,
 ): Promise<{ zone: KeepOpenSubject | null }> {
-  return { zone: await readZoneKeepOpen(tx, cfg, zoneId, at) };
+  return { zone: await readZoneKeepOpen(tx, zoneId, at) };
 }
 
-async function zoneContext(tx: Transaction, cfg: VenueScope, zoneId: string, at: Date) {
-  const { departmentId } = await resolveZoneContext(tx, cfg, zoneId);
-  const prepared = await readServiceDayPlan(tx, cfg, at);
-  const c = await zoneClosureDay(tx, cfg, zoneId, at, prepared);
+async function zoneContext(tx: Transaction, zoneId: string, at: Date) {
+  const { departmentId } = await resolveZoneContext(tx, zoneId);
+  const prepared = await readServiceDayPlan(tx, at);
+  const c = await zoneClosureDay(tx, zoneId, at, prepared);
   const closure =
     c.moment === null
       ? undefined
       : c.ranges.find((range) => rangeSpanInDay(range, c.dayContext).end > c.moment!.minute);
-  const day = await departmentDay(tx, cfg, departmentId, c.moment, c.clock, prepared.plan);
+  const day = await departmentDay(tx, departmentId, c.moment, c.clock, prepared.plan);
   const openRanges = day.ranges;
   const extended =
     c.moment === null || closure === undefined
@@ -82,11 +81,10 @@ function departmentCovers(
 
 export async function readZoneKeepOpen(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string,
   at: Date,
 ): Promise<KeepOpenSubject | null> {
-  const c = await zoneContext(tx, cfg, zoneId, at);
+  const c = await zoneContext(tx, zoneId, at);
   if (c.moment === null || c.closure === undefined) return null;
   const [zone] = await tx
     .select({ name: floorZones.name })
@@ -118,12 +116,11 @@ export async function readZoneKeepOpen(
 
 export async function keepZoneOpen(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string,
   input: { until: string | null },
   at: Date,
 ): Promise<void> {
-  const c = await zoneContext(tx, cfg, zoneId, at);
+  const c = await zoneContext(tx, zoneId, at);
   if (c.moment === null) throw new AppError("time_zone.unreadable", {});
   if (input.until !== null) {
     if (c.closure === undefined)

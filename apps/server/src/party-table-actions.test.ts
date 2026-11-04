@@ -391,7 +391,7 @@ describe("move guests", () => {
     await order(v, ana.tabId, "Burger");
     await order(v, luis.tabId, "Agua");
     // Stands in for the old tab move, which leaves one party's bills in two service modes.
-    await act((tx) => VENUE_SERVICE.retargetOrderContext(tx, v.cfg, luis.tabId, v.counter.zoneId));
+    await act((tx) => VENUE_SERVICE.retargetOrderContext(tx, luis.tabId, v.counter.zoneId));
 
     const moving = await opts(ana.partyId, luis.partyId);
     const result = await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));

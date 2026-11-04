@@ -59,9 +59,9 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
     dayCutover: "05:00",
     seed: async (tx, cfg) => {
       const effective = new Date("2026-10-05T10:00:00+02:00");
-      const restaurant = await createBareDepartment(tx, cfg, "Restaurant", effective);
+      const restaurant = await createBareDepartment(tx, "Restaurant", effective);
       const diningZone = (
-        await createServiceZone(tx, cfg, { name: "Dining room", departmentId: restaurant })
+        await createServiceZone(tx, { name: "Dining room", departmentId: restaurant })
       ).id;
       const menu = async (name: string) => (await createCatalogue(tx, { name })).id;
       const menus = {
@@ -134,7 +134,7 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
       await publishWorkingMenu(tx, menus.setLunch);
       const period = async (name: string, menuId: string) =>
         (
-          await saveMenuPeriod(tx, cfg, restaurant, {
+          await saveMenuPeriod(tx, restaurant, {
             name,
             menuId,
             staffMenuIds: [menus.drinks, menus.coffee],
@@ -144,7 +144,6 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
       const dinner = await period("Dinner", menus.brunch);
       await replaceMenuWeek(
         tx,
-        cfg,
         restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -358,7 +357,7 @@ describe("a dish whose period ended earlier today", () => {
       await updateProduct(tx, v.toastId, { ordering: "not_sold_separately" });
       // Only Brunch is published again, so Set lunch's live version still sells it on its own.
       await publishWorkingMenu(tx, v.menus.brunch);
-      await updateDepartment(tx, v.cfg, v.restaurant, { lateSendNeedsManager: true });
+      await updateDepartment(tx, v.restaurant, { lateSendNeedsManager: true });
     });
     await expect(open(v, [{ menuItemId: v.toast.brunch, quantity: "1" }])).rejects.toMatchObject({
       code: "product.not_sold_separately",
@@ -489,7 +488,7 @@ describe("a dish whose period ended earlier today", () => {
     at("14:05");
     const v = await mealVenue();
     await withTransaction(suite.db, (tx) =>
-      updateDepartment(tx, v.cfg, v.restaurant, { lateSendNeedsManager: true }),
+      updateDepartment(tx, v.restaurant, { lateSendNeedsManager: true }),
     );
     const { lateSend } = confirming([v.menus.setLunch]);
     await open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }], randomUUID(), lateSend);

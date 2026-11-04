@@ -159,7 +159,7 @@ const passOn = (
 /** The device's pass screen's To fire cards, read as its board reads them. */
 async function toFire(venue: AnyVenue, by: PassActor): Promise<PassCard[]> {
   return withTransaction(db, async (tx) => {
-    const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, by.deviceId)).find(
+    const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, by.deviceId)).find(
       (candidate) => candidate.kind === "pass",
     )!;
     return (await readScopedPassBoard(tx, venue.cfg, passScopeOf(screen))).toFire;
@@ -214,7 +214,7 @@ async function hotAndCold() {
   const venue = await setupSplitExtrasVenue();
   const placed = await withTransaction(db, async (tx) => {
     const cold = (await createStation(tx, venue.cfg, { name: "Cold" })).id;
-    await routeProductTo(tx, venue.cfg, venue.products.cheese, cold);
+    await routeProductTo(tx, venue.products.cheese, cold);
     await setStationsWaitForPass(tx, true, [venue.stations.grill, cold]);
     const group = (
       await placeGroups(tx, venue.cfg, venue.party.partyId, {
@@ -286,7 +286,7 @@ describe("A773 pass release: set and stamps", () => {
     vi.setSystemTime(new Date("2026-03-14T12:14:00.000Z"));
     await release(f.venue, every, askOf(card!));
     vi.setSystemTime(new Date("2026-03-14T12:16:00.000Z"));
-    const table = (await withTransaction(db, (tx) => listTablesWithState(tx, f.venue.cfg))).find(
+    const table = (await withTransaction(db, (tx) => listTablesWithState(tx))).find(
       (row) => row.id === f.venue.party.tableId,
     )!;
     expect(table.timingBand).toBe("forgotten");
@@ -517,9 +517,9 @@ describe("A773 pass release: set and stamps", () => {
     expect(released).toEqual([expect.objectContaining({ firedAt: LATER, queuedAt: LATER })]);
 
     const fresh = await withTransaction(db, async (tx) => {
-      const screen = (
-        await VENUE_SERVICE.readDeviceKitchenScreens(tx, f.venue.cfg, f.hot.deviceId)
-      ).find((candidate) => candidate.kind === "pass")!;
+      const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, f.hot.deviceId)).find(
+        (candidate) => candidate.kind === "pass",
+      )!;
       return passCardRelease(
         hotCard!.target,
         await readPassCardRows(tx, f.venue.cfg, hotCard!.target),
@@ -542,7 +542,7 @@ describe("A773 pass release: set and stamps", () => {
         f.venue.party.tabId,
         [f.burgerLine],
         undefined,
-        routingOnce(tx, f.venue.cfg, new Date("2026-03-14T12:10:00.000Z")),
+        routingOnce(tx, new Date("2026-03-14T12:10:00.000Z")),
       ),
     );
     expect(await rows([f.burger])).toEqual(released);
@@ -588,14 +588,14 @@ async function signedInTillPass(venue: Venue, name: string) {
 }
 
 /** Limits the profile's service to a department of its own, so the party's zone is not its. */
-async function serveElsewhere(venue: Venue, profileId: string): Promise<void> {
+async function serveElsewhere(profileId: string): Promise<void> {
   await withTransaction(db, async (tx) => {
-    const deli = await createDepartment(tx, venue.cfg, { name: "Deli", orderStart: "counter" });
-    const zone = await createServiceZone(tx, venue.cfg, {
+    const deli = await createDepartment(tx, { name: "Deli", orderStart: "counter" });
+    const zone = await createServiceZone(tx, {
       name: "Deli counter",
       departmentId: deli.id,
     });
-    await setProfileServiceAccess(tx, venue.cfg, profileId, {
+    await setProfileServiceAccess(tx, profileId, {
       departmentId: deli.id,
       allowedZoneIds: null,
       startingZoneId: zone.id,
@@ -616,7 +616,7 @@ describe("A773 pass release: authority", () => {
     const noFlag = await profiledPass(f.venue, "No flag", "kds", ["act-as-kds", "prepare-orders"]);
     const nobody = await profiledPass(f.venue, "Nobody", "till", ALL_PASS);
     const elsewhere = await signedInTillPass(f.venue, "Elsewhere");
-    await serveElsewhere(f.venue, elsewhere.profileId);
+    await serveElsewhere(elsewhere.profileId);
 
     await refusedWhole(
       release(f.venue, { deviceId: noPrepare.deviceId, personId: null }, ask),
@@ -645,12 +645,12 @@ describe("A773 pass release: authority", () => {
     const by: PassActor = { deviceId: narrowed.deviceId, personId: null };
     expect((await toFire(f.venue, by)).map((card) => card.target)).toContainEqual(hotCard!.target);
     await withTransaction(db, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, f.venue.cfg, narrowed.profileId, {
+      VENUE_SERVICE.setProfileKitchenScreens(tx, narrowed.profileId, {
         station: { stationIds: null, zoneIds: null },
       }),
     );
     const screens = await withTransaction(db, (tx) =>
-      VENUE_SERVICE.readDeviceKitchenScreens(tx, f.venue.cfg, narrowed.deviceId),
+      VENUE_SERVICE.readDeviceKitchenScreens(tx, narrowed.deviceId),
     );
     expect(screens.find((screen) => screen.kind === "pass")).toMatchObject({ available: false });
     await refusedWhole(release(f.venue, by, askOf(hotCard!)), "device.unauthorized", [
@@ -693,7 +693,7 @@ describe("A773 pass release: authority", () => {
     const [hotCard] = await toFire(f.venue, f.hot);
     const ask = askOf(hotCard!);
     const elsewhere = await signedInTillPass(f.venue, "Elsewhere");
-    await serveElsewhere(f.venue, elsewhere.profileId);
+    await serveElsewhere(elsewhere.profileId);
     const malformed = {
       ...ask,
       target: { kind: "group", partyId: f.venue.party.partyId, groupId: "x" },
@@ -997,7 +997,7 @@ describe("A773 pass release: paper", () => {
     const first = (
       await submit([{ who: ORIGINAL.who, allergens: ORIGINAL.allergens, note: "Separate pan" }])
     ).groups[0]!.id;
-    const notices = () => inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, v.cfg, stationId));
+    const notices = () => inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, stationId));
     const jobs = async () => (await printedAt(printerId)).length;
 
     const before = await jobs();
@@ -1055,7 +1055,7 @@ describe("A773 pass release: paper", () => {
     const every = await passOn(venue, "Every pass", null);
     const stale = await cardOf(venue, every, placed.groupId);
     await withTransaction(db, (tx) =>
-      setStationToday(tx, venue.cfg, venue.stations.grill, "closed", new Date(AT)),
+      setStationToday(tx, venue.stations.grill, "closed", new Date(AT)),
     );
     await refusedWhole(release(venue, every, askOf(stale)), "ticket.pass_context_changed", [
       placed.item,
@@ -1100,7 +1100,7 @@ describe("A773 pass release: paper", () => {
         venue.stations.grill,
         undefined,
         "leave",
-        (at) => setStationToday(tx, venue.cfg, venue.stations.grill, "closed", at),
+        (at) => setStationToday(tx, venue.stations.grill, "closed", at),
         { deviceId: venue.cfg.origin.deviceId, personId: null },
       ),
     );
@@ -1124,7 +1124,7 @@ describe("A773 pass release: paper", () => {
         .update(workingOrders)
         .set({ status: "settled", settledAt: AT })
         .where(eq(workingOrders.id, venue.party.tabId));
-      await setStationToday(tx, venue.cfg, venue.stations.bar, "closed", new Date(AT));
+      await setStationToday(tx, venue.stations.bar, "closed", new Date(AT));
       await moveDishesToStation(
         tx,
         venue.cfg,
@@ -1166,7 +1166,7 @@ describe("A773 pass release: paper", () => {
         .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
         .where(eq(workingOrderLines.productId, venue.products.chips));
       await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
-      await setStationToday(tx, venue.cfg, venue.stations.fryer, "closed", new Date(AT));
+      await setStationToday(tx, venue.stations.fryer, "closed", new Date(AT));
       await fireGroup(tx, venue.cfg, venue.party.partyId, group.id, {
         operatorId: OPERATOR,
         submissionId: randomUUID(),
@@ -1231,7 +1231,7 @@ describe("A773 pass release: paper", () => {
           })
         ).groups[0]!;
         if (waits) await setStationsWaitForPass(tx, true, [venue.stations.grill]);
-        await setStationToday(tx, venue.cfg, venue.stations.grill, "closed", new Date(AT));
+        await setStationToday(tx, venue.stations.grill, "closed", new Date(AT));
         await fireGroup(tx, venue.cfg, venue.party.partyId, group.id, {
           operatorId: OPERATOR,
           submissionId: randomUUID(),
@@ -1281,7 +1281,7 @@ describe("A773 pass release: paper", () => {
           })
         ).groups[0]!;
         if (waits) await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
-        await setStationToday(tx, venue.cfg, venue.stations.fryer, "closed", new Date(AT));
+        await setStationToday(tx, venue.stations.fryer, "closed", new Date(AT));
         await fireGroup(tx, venue.cfg, venue.party.partyId, group.id, {
           operatorId: OPERATOR,
           submissionId: randomUUID(),
@@ -1325,8 +1325,8 @@ describe("A773 pass release: paper", () => {
         })
       ).groups[0]!;
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
-      await setStationToday(tx, venue.cfg, venue.stations.grill, "closed", new Date(AT));
-      await setStationToday(tx, venue.cfg, venue.stations.fryer, "closed", new Date(AT));
+      await setStationToday(tx, venue.stations.grill, "closed", new Date(AT));
+      await setStationToday(tx, venue.stations.fryer, "closed", new Date(AT));
       const waitingReads = vi.spyOn(kitchenRelease, "passWaitingStations");
       try {
         await fireGroup(tx, venue.cfg, venue.party.partyId, group.id, {
@@ -1692,7 +1692,7 @@ describe("A773 pass release: races", () => {
     screen: {
       code: "ticket.pass_context_changed",
       narrow: (tx: Transaction, venue: Venue, profileId: string) =>
-        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+        VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
           pass: { stationIds: [venue.stations.fryer], zoneIds: null },
         }),
     },
@@ -1700,13 +1700,13 @@ describe("A773 pass release: races", () => {
      *  service zones to narrow). */
     zones: {
       code: "service_zone.not_allowed",
-      narrow: async (tx: Transaction, venue: Venue, profileId: string) => {
-        const deli = await createDepartment(tx, venue.cfg, { name: "Deli", orderStart: "counter" });
-        const zone = await createServiceZone(tx, venue.cfg, {
+      narrow: async (tx: Transaction, _venue: Venue, profileId: string) => {
+        const deli = await createDepartment(tx, { name: "Deli", orderStart: "counter" });
+        const zone = await createServiceZone(tx, {
           name: "Deli counter",
           departmentId: deli.id,
         });
-        await setProfileServiceAccess(tx, venue.cfg, profileId, {
+        await setProfileServiceAccess(tx, profileId, {
           departmentId: deli.id,
           allowedZoneIds: null,
           startingZoneId: zone.id,
@@ -1734,7 +1734,7 @@ describe("A773 pass release: races", () => {
         );
         const screen = (
           await withTransaction(db, (tx) =>
-            VENUE_SERVICE.readDeviceKitchenScreens(tx, f.venue.cfg, f.pass.by.deviceId),
+            VENUE_SERVICE.readDeviceKitchenScreens(tx, f.pass.by.deviceId),
           )
         ).find((candidate) => candidate.kind === "pass")!;
         expect(screen.available).toBe(true);
@@ -2003,9 +2003,9 @@ describe("A773 pass release: races", () => {
       pass: [noted],
     });
     const board = await withTransaction(db, async (tx) => {
-      const screen = (
-        await VENUE_SERVICE.readDeviceKitchenScreens(tx, f.venue.cfg, f.pass.by.deviceId)
-      ).find((candidate) => candidate.kind === "pass")!;
+      const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, f.pass.by.deviceId)).find(
+        (candidate) => candidate.kind === "pass",
+      )!;
       return readScopedPassBoard(tx, f.venue.cfg, passScopeOf(screen));
     });
     expect(board.toFire).toEqual([]);

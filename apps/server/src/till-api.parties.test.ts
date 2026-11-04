@@ -123,7 +123,7 @@ async function table(): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const { id } = await createTable(tx, cfg, {
       label: `Mesa ${randomUUID()}`,
-      zoneId: (await createZone(tx, cfg, { name: `Tables ${randomUUID()}` })).id,
+      zoneId: (await createZone(tx, { name: `Tables ${randomUUID()}` })).id,
     });
     return id;
   });

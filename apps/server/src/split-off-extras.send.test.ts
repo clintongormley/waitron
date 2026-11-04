@@ -396,11 +396,10 @@ describe("sending split-off extras", () => {
       const sides = await createCategory(tx, { name: "Sides" });
       await setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "category", categoryId: drinks.id }, zoneId: null },
         { kind: "no_preparation" },
       );
-      await routeCategoryTo(tx, cfg, sides.id, fryer.id);
+      await routeCategoryTo(tx, sides.id, fryer.id);
       const printer = await createPrinter(tx, {
         name: "Fryer printer",
         transport: "cloud_poll",
@@ -457,7 +456,6 @@ describe("sending split-off extras", () => {
       const drinks = await createCategory(tx, { name: "Drinks" });
       await setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "category", categoryId: drinks.id }, zoneId: null },
         { kind: "no_preparation" },
       );
@@ -527,11 +525,10 @@ describe("sending split-off extras", () => {
       const sides = await createCategory(tx, { name: "Sides" });
       await setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "category", categoryId: drinks.id }, zoneId: null },
         { kind: "no_preparation" },
       );
-      await routeCategoryTo(tx, cfg, sides.id, fryer.id);
+      await routeCategoryTo(tx, sides.id, fryer.id);
       const water = await createProduct(tx, {
         catalogueId,
         categoryId: drinks.id,
@@ -601,7 +598,7 @@ describe("sending split-off extras", () => {
       await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const fryer = await createStation(tx, cfg, { name: "Fryer" });
       const sides = await createCategory(tx, { name: "Sides" });
-      await routeCategoryTo(tx, cfg, sides.id, fryer.id);
+      await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
         catalogueId,
         categoryId: null,
@@ -651,8 +648,8 @@ describe("sending split-off extras", () => {
       const kitchen = await createStation(tx, cfg, { name: "Kitchen" });
       const burgers = await createCategory(tx, { name: "Burgers" });
       const sides = await createCategory(tx, { name: "Sides" });
-      await routeCategoryTo(tx, cfg, burgers.id, grill.id);
-      await routeCategoryTo(tx, cfg, sides.id, fryer.id);
+      await routeCategoryTo(tx, burgers.id, grill.id);
+      await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
         catalogueId,
         categoryId: burgers.id,
@@ -682,10 +679,10 @@ describe("sending split-off extras", () => {
             extras: [{ listId, picks: [{ productId: chips!, quantity: 1 }] }],
           },
         ]);
-      await setStationToday(tx, cfg, fryer.id, "closed", new Date());
+      await setStationToday(tx, fryer.id, "closed", new Date());
       const without = await order();
       expect((await recordsFor(tx, without)).map((row) => row.stationId)).toEqual([grill.id]);
-      await setStationToday(tx, cfg, fryer.id, "closed", new Date(), kitchen.id);
+      await setStationToday(tx, fryer.id, "closed", new Date(), kitchen.id);
       const withDestination = await order();
       expect((await recordsFor(tx, withDestination)).map((row) => row.stationId).sort()).toEqual(
         [grill.id, kitchen.id].sort(),
@@ -700,7 +697,7 @@ describe("sending split-off extras", () => {
       const fryer = await createStation(tx, cfg, { name: "Fryer" });
       const bar = await createStation(tx, cfg, { name: "Bar" });
       const sides = await createCategory(tx, { name: "Sides" });
-      await routeCategoryTo(tx, cfg, sides.id, fryer.id);
+      await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
         catalogueId,
         categoryId: null,
@@ -756,7 +753,7 @@ describe("sending split-off extras", () => {
       const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const fryer = await createStation(tx, cfg, { name: "Fryer" });
       const sides = await createCategory(tx, { name: "Sides" });
-      await routeCategoryTo(tx, cfg, sides.id, fryer.id);
+      await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
         catalogueId,
         categoryId: null,
@@ -805,8 +802,8 @@ describe("sending split-off extras", () => {
       const fryer = await createStation(tx, cfg, { name: "Fryer" });
       const burgers = await createCategory(tx, { name: "Burgers" });
       const sides = await createCategory(tx, { name: "Sides" });
-      await routeCategoryTo(tx, cfg, burgers.id, grill.id);
-      await routeCategoryTo(tx, cfg, sides.id, fryer.id);
+      await routeCategoryTo(tx, burgers.id, grill.id);
+      await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
         catalogueId,
         categoryId: burgers.id,
@@ -840,7 +837,7 @@ describe("sending split-off extras", () => {
         .update(kitchenStations)
         .set({ active: false })
         .where(eq(kitchenStations.isDefault, true));
-      await setStationToday(tx, cfg, grill.id, "closed", new Date());
+      await setStationToday(tx, grill.id, "closed", new Date());
       await expect(
         fireLines(tx, cfg, orderId, await unsentDishLines(tx, orderId)),
       ).rejects.toMatchObject({ code: "station.no_replacement" });
@@ -855,7 +852,7 @@ describe("sending split-off extras", () => {
     await withTransaction(db, async (tx) => {
       const fryer = await createStation(tx, venue.cfg, { name: "Fryer" });
       const sides = await createCategory(tx, { name: "Sides" });
-      await routeCategoryTo(tx, venue.cfg, sides.id, fryer.id);
+      await routeCategoryTo(tx, sides.id, fryer.id);
       const [burger] = await tx
         .select({ catalogueId: products.catalogueId })
         .from(products)
@@ -957,7 +954,7 @@ describe("sending split-off extras", () => {
       const grill = await createStation(tx, cfg, { name: "Grill", isDefault: true });
       const bar = await createStation(tx, cfg, { name: "Bar" });
       const sides = await createCategory(tx, { name: "Sides" });
-      await routeCategoryTo(tx, cfg, sides.id, bar.id);
+      await routeCategoryTo(tx, sides.id, bar.id);
       const burger = await createProduct(tx, {
         catalogueId,
         categoryId: null,

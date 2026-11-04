@@ -221,7 +221,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
         movedByPersonId: null,
       }),
     ]);
-    const notices = await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, bar));
+    const notices = await inTx(venue, (tx) => listStationNotices(tx, bar));
     expect(notices.at(-1)).toMatchObject({
       kind: "rerouted",
       reroutedTo: "Grill",
@@ -443,7 +443,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
 describe("GET /api/device/stations", () => {
   it("lists every active station with whether it is open today", async () => {
     const screen = await display(stationScreen(bar));
-    await inTx(venue, (tx) => setStationToday(tx, venue.cfg, grill, "closed", new Date()));
+    await inTx(venue, (tx) => setStationToday(tx, grill, "closed", new Date()));
     try {
       const answer = await send(app, screen.cookie, "GET", "/api/device/stations");
       expect(answer.status).toBe(200);
@@ -456,7 +456,7 @@ describe("GET /api/device/stations", () => {
       );
       expect(listed.map((station) => station.id)).not.toContain(off);
     } finally {
-      await inTx(venue, (tx) => setStationToday(tx, venue.cfg, grill, null, new Date()));
+      await inTx(venue, (tx) => setStationToday(tx, grill, null, new Date()));
     }
   });
 

@@ -43,7 +43,7 @@ beforeEach(async () => {
 });
 const query = (values: Record<string, string> = {}) => parseBillsQuery(new URLSearchParams(values));
 const list = (values: Record<string, string> = {}) =>
-  inTx(venue, (tx) => readFindBills(tx, venue.cfg, query(values)));
+  inTx(venue, (tx) => readFindBills(tx, query(values)));
 async function named(label: string, ...names: string[]) {
   const id = await parked(venue, ...(names.length ? names : ["Caña"]));
   await inTx(venue, (tx) =>
@@ -92,7 +92,7 @@ describe("Find Bills SQL paging", () => {
         operatorId: venue.operatorId,
       }),
     );
-    expect(await inTx(venue, (tx) => readFindBill(tx, venue.cfg, id))).toMatchObject({
+    expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({
       paid: "4.00",
       stillOwed: "6.00",
       state: "part-paid",
@@ -102,7 +102,7 @@ describe("Find Bills SQL paging", () => {
       await tx.insert(tenders).values({ saleId, method: "cash", amount: 1000, settledAt: at });
       await tx.insert(saleSettlements).values({ saleId, settledAt: at });
     });
-    expect(await inTx(venue, (tx) => readFindBill(tx, venue.cfg, id))).toMatchObject({
+    expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({
       paid: "10.00",
       stillOwed: "0.00",
     });
@@ -110,7 +110,7 @@ describe("Find Bills SQL paging", () => {
   it("a settled counter bill counts the applied tender without counting its tip as paid", async () => {
     const id = await parked(venue, "Croquetas");
     await contribute(id, "10.00", "2.00");
-    expect(await inTx(venue, (tx) => readFindBill(tx, venue.cfg, id))).toMatchObject({
+    expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({
       total: "10.00",
       paid: "10.00",
       stillOwed: "0.00",
@@ -151,7 +151,7 @@ describe("Find Bills SQL paging", () => {
         }
       ).session;
       const prepared = vi.spyOn(session, "prepareQuery");
-      const page = await readFindBills(tx, venue.cfg, query({ page: "1" }));
+      const page = await readFindBills(tx, query({ page: "1" }));
       expect(page.rows).toHaveLength(50);
       const statements = execute.mock.calls.map(([statement]) =>
         typeof statement === "string"
@@ -218,7 +218,7 @@ describe("Find Bills SQL paging", () => {
     });
     expect(handover.status).toBe(200);
     expect((await list()).rows.some((r) => r.workingOrderId === issued)).toBe(false);
-    await expect(inTx(venue, (tx) => readFindBill(tx, venue.cfg, issued))).rejects.toMatchObject({
+    await expect(inTx(venue, (tx) => readFindBill(tx, issued))).rejects.toMatchObject({
       code: "working_order.not_found",
     });
   });
@@ -256,7 +256,7 @@ describe("Find Bills SQL paging", () => {
   });
   it("reads issued debt and fresh selection independently of filters", async () => {
     const id = await placedIssuedBill(venue, "Caña");
-    const row = await inTx(venue, (tx) => readFindBill(tx, venue.cfg, id));
+    const row = await inTx(venue, (tx) => readFindBill(tx, id));
     expect(row).toMatchObject({
       total: "3.00",
       paid: "0.00",
@@ -269,9 +269,9 @@ describe("Find Bills SQL paging", () => {
     await inTx(venue, async (tx) =>
       expect(row.stillOwed).toBe((await readIssuedSales(tx, [id])).get(id)?.amountDue),
     );
-    await expect(
-      inTx(venue, (tx) => readFindBill(tx, venue.cfg, randomUUID())),
-    ).rejects.toMatchObject({ code: "working_order.not_found" });
+    await expect(inTx(venue, (tx) => readFindBill(tx, randomUUID()))).rejects.toMatchObject({
+      code: "working_order.not_found",
+    });
   });
   it("filters zone, any credited staff and state before counts, with no-zone allowed controls", async () => {
     const own = await parked(venue, "Caña", "Tarta");
@@ -323,17 +323,16 @@ describe("Find Bills SQL paging", () => {
         .sort(),
     ).toEqual([own, other].sort());
     await inTx(venue, async (tx) => {
-      const scope = (orderId: ReturnType<typeof sql>) =>
-        VENUE_SERVICE.orderInZones(venue.cfg, orderId, []);
-      expect(await readFindBills(tx, venue.cfg, query(), scope)).toMatchObject({
+      const scope = (orderId: ReturnType<typeof sql>) => VENUE_SERVICE.orderInZones(orderId, []);
+      expect(await readFindBills(tx, query(), scope)).toMatchObject({
         total: 1,
         openCount: 1,
         rows: [{ workingOrderId: unzoned, zoneId: null }],
       });
-      await expect(readFindBill(tx, venue.cfg, own, scope)).rejects.toMatchObject({
+      await expect(readFindBill(tx, own, scope)).rejects.toMatchObject({
         code: "working_order.not_found",
       });
-      expect((await readFindBill(tx, venue.cfg, unzoned, scope)).workingOrderId).toBe(unzoned);
+      expect((await readFindBill(tx, unzoned, scope)).workingOrderId).toBe(unzoned);
     });
   });
   it("retains missing-person credit, table names and exact row facts", async () => {
@@ -353,7 +352,7 @@ describe("Find Bills SQL paging", () => {
         .set({ creditedTo: missing })
         .where(eq(workingOrderLines.id, line!.id));
     });
-    const row = await inTx(venue, (tx) => readFindBill(tx, venue.cfg, party.tabId));
+    const row = await inTx(venue, (tx) => readFindBill(tx, party.tabId));
     expect(row).toMatchObject({
       workingOrderId: party.tabId,
       partyId: party.partyId,
@@ -388,7 +387,7 @@ describe("Find Bills SQL paging", () => {
     expect((await list({ q: "CAFÉ " })).rows.map((r) => r.workingOrderId)).toEqual([exact]);
     expect(await list({ q: "!!!" })).toMatchObject({ rows: [], total: 0, openCount: 3 });
     expect(await list({ q: "' OR 1=1 --" })).toMatchObject({ rows: [], total: 0 });
-    const row = await inTx(venue, (tx) => readFindBill(tx, venue.cfg, exact));
+    const row = await inTx(venue, (tx) => readFindBill(tx, exact));
     expect(
       (await list({ q: String(row.orderNumber) })).rows.map((r) => r.workingOrderId),
     ).toContain(exact);
@@ -477,7 +476,7 @@ describe("Find Bills SQL paging", () => {
         state: "pending",
       });
     });
-    const row = await inTx(venue, (tx) => readFindBill(tx, venue.cfg, id));
+    const row = await inTx(venue, (tx) => readFindBill(tx, id));
     expect(row).toMatchObject({
       total: "18.00",
       paid: "10.00",
@@ -505,9 +504,9 @@ describe("Find Bills SQL paging", () => {
     const party = await seatedWith(venue, "Tarta");
     await contribute(party.tabId, "18.00");
     expect((await list()).rows.map((row) => row.workingOrderId)).toEqual([counter]);
-    await expect(
-      inTx(venue, (tx) => readFindBill(tx, venue.cfg, party.tabId)),
-    ).rejects.toMatchObject({ code: "working_order.not_found" });
+    await expect(inTx(venue, (tx) => readFindBill(tx, party.tabId))).rejects.toMatchObject({
+      code: "working_order.not_found",
+    });
   });
   it("sorts each semantic column in both directions with stable ties", async () => {
     const first = await parkedBy(venue, venue.supervisorId, "Caña");
@@ -591,7 +590,7 @@ describe("Find Bills SQL paging", () => {
   it("keeps original issued totals but reads corrected debt and departed receipt identity", async () => {
     const id = await placedIssuedBill(venue, "Caña");
     await credit(venue, id, "1.00", "-1.21");
-    const row = await inTx(venue, (tx) => readFindBill(tx, venue.cfg, id));
+    const row = await inTx(venue, (tx) => readFindBill(tx, id));
     expect(row).toMatchObject({
       total: "3.00",
       paid: "0.00",
@@ -600,7 +599,7 @@ describe("Find Bills SQL paging", () => {
     });
     expect((await list({ q: row.invoiceNumber! })).rows.map((r) => r.workingOrderId)).toEqual([id]);
     const party = await departed(venue, "Tarta");
-    const debt = await inTx(venue, (tx) => readFindBill(tx, venue.cfg, party.tabId));
+    const debt = await inTx(venue, (tx) => readFindBill(tx, party.tabId));
     expect(debt).toMatchObject({
       partyId: party.partyId,
       collectionStatus: "left_without_paying",
@@ -624,9 +623,9 @@ describe("Find Bills SQL paging", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       vi.setSystemTime(new Date("2026-10-15T02:59:59.999Z"));
-      expect((await inTx(venue, (tx) => readFindBill(tx, venue.cfg, id))).earlierDay).toBe(false);
+      expect((await inTx(venue, (tx) => readFindBill(tx, id))).earlierDay).toBe(false);
       vi.setSystemTime(new Date("2026-10-15T03:00:00.000Z"));
-      expect((await inTx(venue, (tx) => readFindBill(tx, venue.cfg, id))).earlierDay).toBe(true);
+      expect((await inTx(venue, (tx) => readFindBill(tx, id))).earlierDay).toBe(true);
     } finally {
       vi.useRealTimers();
     }
@@ -635,7 +634,7 @@ describe("Find Bills SQL paging", () => {
   it("offers collection only while the legacy collector can take a positive debt", async () => {
     const cleared = await placedIssuedBill(venue, "Caña");
     await credit(venue, cleared, "2.48", "-3.00");
-    expect(await inTx(venue, (tx) => readFindBill(tx, venue.cfg, cleared))).toMatchObject({
+    expect(await inTx(venue, (tx) => readFindBill(tx, cleared))).toMatchObject({
       stillOwed: "0.00",
       collectionStatus: null,
     });
@@ -655,7 +654,7 @@ describe("Find Bills SQL paging", () => {
         ...venue.cfg.origin,
       }),
     );
-    expect(await inTx(venue, (tx) => readFindBill(tx, venue.cfg, pending))).toMatchObject({
+    expect(await inTx(venue, (tx) => readFindBill(tx, pending))).toMatchObject({
       stillOwed: "18.00",
       collectionStatus: null,
     });

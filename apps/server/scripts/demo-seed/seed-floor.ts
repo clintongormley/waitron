@@ -85,7 +85,7 @@ export async function seedFloor(
   await tx
     .insert(departmentSalePolicies)
     .values({ departmentId: deliDepartmentId, orderStart: "counter" });
-  await addStarterServiceSteps(tx, cfg, deliDepartmentId);
+  await addStarterServiceSteps(tx, deliDepartmentId);
 
   const zoneIds = new Map<string, string>();
   for (const zone of floor.zones) {
@@ -93,7 +93,7 @@ export async function seedFloor(
       zone.key === "bar"
         ? defaultPolicy.zone_id
         : (
-            await createServiceZone(tx, cfg, {
+            await createServiceZone(tx, {
               departmentId: defaultPolicy.department_id,
               name: plain(zone.name),
               displayOrder: zone.displayOrder,
@@ -113,7 +113,7 @@ export async function seedFloor(
     zoneIds.set(zone.key, zoneId);
   }
 
-  const upstairsBarZone = await createServiceZone(tx, cfg, {
+  const upstairsBarZone = await createServiceZone(tx, {
     departmentId: defaultPolicy.department_id,
     name: plain(floor.upstairsBarZone),
     displayOrder: 3,
@@ -161,14 +161,13 @@ export async function seedFloor(
     for (const category of barCategories) {
       await setRoutingCell(
         tx,
-        { locationId: brandLocationId(locationId) },
         { row: { kind: "category", categoryId: category.id }, zoneId: upstairsBarZone.id },
         { kind: "station", stationId: downstairsStationId },
       );
     }
   }
 
-  const deliCounterZone = await createServiceZone(tx, cfg, {
+  const deliCounterZone = await createServiceZone(tx, {
     departmentId: deliDepartmentId,
     name: plain(floor.deliCounterZone),
     displayOrder: 4,
@@ -186,43 +185,41 @@ export async function seedFloor(
       );
     const restaurant =
       existing ??
-      (await saveMenuPeriod(tx, cfg, restaurantId, {
+      (await saveMenuPeriod(tx, restaurantId, {
         name: plain(dataSet.menuPeriodName),
         menuId: menuIds.restaurant,
         staffMenuIds: [menuIds.lunch],
       }));
     if (existing !== undefined)
-      await updateMenuPeriod(tx, cfg, existing.id, {
+      await updateMenuPeriod(tx, existing.id, {
         name: plain(dataSet.menuPeriodName),
         menuId: menuIds.restaurant,
         staffMenuIds: [menuIds.lunch],
       });
-    const deli = await saveMenuPeriod(tx, cfg, deliDepartmentId, {
+    const deli = await saveMenuPeriod(tx, deliDepartmentId, {
       name: plain(dataSet.menuPeriodName),
       menuId: menuIds.deli,
       staffMenuIds: [],
     });
     await replaceMenuWeek(
       tx,
-      cfg,
       restaurantId,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
         slots: [{ periodId: restaurant.id, startsAt: "09:00", endsAt: "00:00" }],
       })),
       new Date(),
-      await readBusinessDayScheduleRevision(tx, cfg),
+      await readBusinessDayScheduleRevision(tx),
     );
     await replaceMenuWeek(
       tx,
-      cfg,
       deliDepartmentId,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
         slots: weekday === 0 ? [] : [{ periodId: deli.id, startsAt: "09:00", endsAt: "18:00" }],
       })),
       new Date(),
-      await readBusinessDayScheduleRevision(tx, cfg),
+      await readBusinessDayScheduleRevision(tx),
     );
   }
 
@@ -249,7 +246,7 @@ export async function seedFloor(
   for (const departmentId of [defaultPolicy.department_id, deliDepartmentId]) {
     setOf.set(
       departmentId,
-      await createFloorPlanSet(tx, cfg, floorPlanSetsFor(), { departmentId, name: setName }),
+      await createFloorPlanSet(tx, floorPlanSetsFor(), { departmentId, name: setName }),
     );
   }
   for (const [zoneKey, zoneId] of zoneIds) {

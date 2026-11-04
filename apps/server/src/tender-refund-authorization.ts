@@ -109,7 +109,6 @@ export async function withTenderRefundAuthorization<T>(
       const scope = await resolveTransactionScope(tx, cfg, saleId);
       await assertSubjectZones(
         tx,
-        cfg,
         device.deviceProfileId,
         scope.workingOrderIds.map((orderId) => ({ orderId })),
       );

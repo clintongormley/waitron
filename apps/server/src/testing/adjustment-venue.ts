@@ -429,7 +429,6 @@ export async function provisionAdjustmentVenue(
     const tables = await offerProducts(tx, cfg, { zone: "tables" });
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "product", productId: productIds.get("Coffee")! }, zoneId: null },
       { kind: "no_preparation" },
     );

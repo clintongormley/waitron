@@ -54,23 +54,20 @@ async function venue() {
     .returning({ id: floorZones.id });
   const barZone = zone!.id;
   return withTransaction(db, async (tx) => {
-    const seasonId = (await ensureDefaultSeasons(tx, cfg))[0]!.id;
-    const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
-    ).id;
-    const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
-    await configureZone(tx, cfg, { zoneId: barZone, departmentId: restaurant });
+    const seasonId = (await ensureDefaultSeasons(tx))[0]!.id;
+    const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
+    const deli = (await createDepartment(tx, { name: "Deli", orderStart: "counter" })).id;
+    await configureZone(tx, { zoneId: barZone, departmentId: restaurant });
     const menuId = (await createCatalogue(tx, { name: "Menu" })).id;
     for (const [departmentId, startsAt, endsAt] of [
       [restaurant, "09:00", "12:00"],
       [deli, "14:00", "18:00"],
     ] as const) {
       const periodId = (
-        await saveMenuPeriod(tx, cfg, departmentId, { name: "Day", menuId, staffMenuIds: [] })
+        await saveMenuPeriod(tx, departmentId, { name: "Day", menuId, staffMenuIds: [] })
       ).id;
       await replaceMenuWeek(
         tx,
-        cfg,
         departmentId,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -101,7 +98,6 @@ describe("assertSeasonClosuresInHours", () => {
     await withTransaction(db, (tx) =>
       assertSeasonClosuresInHours(
         tx,
-        v.cfg,
         v.seasonId,
         [
           {
@@ -122,7 +118,6 @@ describe("assertSeasonClosuresInHours", () => {
         withTransaction(db, (tx) =>
           assertSeasonClosuresInHours(
             tx,
-            v.cfg,
             v.seasonId,
             [
               {
@@ -159,13 +154,7 @@ describe("assertSeasonClosuresInHours", () => {
     expect(
       await refusal(() =>
         withTransaction(db, (tx) =>
-          assertSeasonClosuresInHours(
-            tx,
-            v.cfg,
-            v.seasonId,
-            [{ zoneId: v.barZone, field: "", days }],
-            at,
-          ),
+          assertSeasonClosuresInHours(tx, v.seasonId, [{ zoneId: v.barZone, field: "", days }], at),
         ),
       ),
     ).toEqual({
@@ -177,12 +166,11 @@ describe("assertSeasonClosuresInHours", () => {
   it("reads the hours of the department the zone serves now", async () => {
     const v = await venue();
     await withTransaction(db, (tx) =>
-      configureZone(tx, v.cfg, { zoneId: v.barZone, departmentId: v.deli }),
+      configureZone(tx, { zoneId: v.barZone, departmentId: v.deli }),
     );
     await withTransaction(db, (tx) =>
       assertSeasonClosuresInHours(
         tx,
-        v.cfg,
         v.seasonId,
         [
           {
@@ -199,7 +187,6 @@ describe("assertSeasonClosuresInHours", () => {
         withTransaction(db, (tx) =>
           assertSeasonClosuresInHours(
             tx,
-            v.cfg,
             v.seasonId,
             [
               {
@@ -224,13 +211,7 @@ describe("assertSeasonClosuresInHours", () => {
     expect(
       await refusal(() =>
         withTransaction(db, (tx) =>
-          assertSeasonClosuresInHours(
-            tx,
-            v.cfg,
-            v.seasonId,
-            [{ zoneId: v.barZone, field: "", days }],
-            at,
-          ),
+          assertSeasonClosuresInHours(tx, v.seasonId, [{ zoneId: v.barZone, field: "", days }], at),
         ),
       ),
     ).toEqual({
@@ -255,7 +236,7 @@ describe("assertSeasonClosuresInHours", () => {
         dayCutover: "03:00:00",
       });
       const periodId = (
-        await saveMenuPeriod(tx, v.cfg, v.restaurant, {
+        await saveMenuPeriod(tx, v.restaurant, {
           name: "Early morning",
           menuId: v.menuId,
           staffMenuIds: [],
@@ -263,7 +244,6 @@ describe("assertSeasonClosuresInHours", () => {
       ).id;
       await replaceMenuWeek(
         tx,
-        v.cfg,
         v.restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -278,7 +258,6 @@ describe("assertSeasonClosuresInHours", () => {
       withTransaction(db, (tx) =>
         assertSeasonClosuresInHours(
           tx,
-          v.cfg,
           v.seasonId,
           [{ zoneId: v.barZone, field: "", days: closedMonday([{ startsAt, endsAt }]) }],
           at,
@@ -299,7 +278,6 @@ describe("assertSeasonClosuresInHours", () => {
         withTransaction(db, (tx) =>
           assertSeasonClosuresInHours(
             tx,
-            v.cfg,
             v.seasonId,
             [{ zoneId, field: "", days: closedMonday([]) }],
             at,
@@ -319,7 +297,6 @@ describe("assertDatedClosuresInHours", () => {
         withTransaction(db, async (tx) =>
           assertDatedClosuresInHours(
             tx,
-            v.cfg,
             [
               {
                 zoneId,

@@ -974,7 +974,7 @@ export async function enqueueOrderKitchenNoteChange(
     byOrder.set(orderId, items);
   }
   for (const [orderId, items] of byOrder) {
-    await VENUE_SERVICE.recordKitchenNotices(tx, cfg, orderId, items.map(toNoticeItem), "changed", {
+    await VENUE_SERVICE.recordKitchenNotices(tx, orderId, items.map(toNoticeItem), "changed", {
       orderNoteChange: change,
     });
     await printCorrectionSlips(tx, cfg, orderId, items, {
@@ -1033,7 +1033,6 @@ export async function enqueueCorrectionSlips(
   const { notices, read } = await foldPortionNotices(tx, cfg, items);
   await VENUE_SERVICE.recordKitchenNotices(
     tx,
-    cfg,
     orderId,
     notices.map(toNoticeItem),
     kind === "VOID" ? "void" : "recalled",
@@ -1051,14 +1050,9 @@ export async function enqueueStationMoved(
 ): Promise<void> {
   if (items.length === 0) return;
   const { notices, read } = await foldPortionNotices(tx, cfg, items);
-  await VENUE_SERVICE.recordKitchenNotices(
-    tx,
-    cfg,
-    orderId,
-    notices.map(toNoticeItem),
-    "rerouted",
-    { reroutedTo: toStationName },
-  );
+  await VENUE_SERVICE.recordKitchenNotices(tx, orderId, notices.map(toNoticeItem), "rerouted", {
+    reroutedTo: toStationName,
+  });
   const fired = items.filter((item) => item.group === undefined);
   const held = items.filter((item) => item.group !== undefined);
   if (fired.length > 0)
@@ -1091,7 +1085,6 @@ export async function enqueueHoldCorrections(
   const { notices, read } = await foldPortionNotices(tx, cfg, items);
   await VENUE_SERVICE.recordKitchenNotices(
     tx,
-    cfg,
     orderId,
     notices.map(toNoticeItem),
     change.kind === "HOLD CANCELLED" ? "void" : "changed",
@@ -1184,7 +1177,7 @@ export async function enqueueExtraCancelled(
   cancelledExtra: string,
 ): Promise<void> {
   if ((await withoutMadeHere(tx, [item])).length === 0) return;
-  await VENUE_SERVICE.recordKitchenNotices(tx, cfg, orderId, [toNoticeItem(item)], "changed", {
+  await VENUE_SERVICE.recordKitchenNotices(tx, orderId, [toNoticeItem(item)], "changed", {
     cancelledExtra,
   });
   await printCorrectionSlips(tx, cfg, orderId, [item], {
@@ -1717,7 +1710,7 @@ async function notifyMoved(
   for (const { before, to, after, items } of told) {
     const texts = movedTexts(before.places, after.places, printing?.language ?? cfg.locale);
     // The station screen words the counter itself, in the screen's own language.
-    await VENUE_SERVICE.recordKitchenNotices(tx, cfg, to, items.map(toNoticeItem), "moved", {
+    await VENUE_SERVICE.recordKitchenNotices(tx, to, items.map(toNoticeItem), "moved", {
       movedTo: after.places.counter ? null : texts.toText,
       fromNumber: before.places.orderNumber,
     });

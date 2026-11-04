@@ -18,7 +18,6 @@ import { locationId } from "@waitron/shared";
 import { readHolidayFacts } from "./holidays.js";
 import { saveSpecialDay } from "./special-days.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import type { VenueScope } from "./operations.js";
 import { routingModel } from "./routing-store.js";
 import * as stationTimes from "./station-times.js";
 import { stationDayStates } from "./schema/station-times.js";
@@ -71,12 +70,7 @@ describe("station times", () => {
         timeZone: "Europe/Madrid",
         dayCutover: "06:00:00",
       });
-      const venueId = await venueLocationId(tx);
-      const model = await routingModel(
-        tx,
-        { locationId: locationId(venueId) },
-        new Date("2026-10-02T18:00:00Z"),
-      );
+      const model = await routingModel(tx, new Date("2026-10-02T18:00:00Z"));
       expect(model.stations).toEqual([]);
       expect(model.stationTimes).toEqual([]);
       expect(model.defaultStationId).toBeNull();
@@ -86,9 +80,9 @@ describe("station times", () => {
   it("keeps an active non-default station open", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      const row = (
-        await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))
-      ).stationTimes.find((s) => s.stationId === f.upstairs);
+      const row = (await routingModel(tx, new Date("2026-10-02T18:00:00Z"))).stationTimes.find(
+        (s) => s.stationId === f.upstairs,
+      );
       expect(row?.status).toEqual(openState);
     });
   });
@@ -96,9 +90,9 @@ describe("station times", () => {
   it("reports an open station without an hours field", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      const row = (
-        await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))
-      ).stationTimes.find((station) => station.stationId === f.upstairs);
+      const row = (await routingModel(tx, new Date("2026-10-02T18:00:00Z"))).stationTimes.find(
+        (station) => station.stationId === f.upstairs,
+      );
       expect(row).not.toHaveProperty("hours");
       expect(row).not.toHaveProperty("fallbackStationId");
       expect(row?.status).toEqual({ open: true, why: "open" });
@@ -109,7 +103,7 @@ describe("station times", () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
       const view = async () =>
-        (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).stationTimes;
+        (await routingModel(tx, new Date("2026-10-02T18:00:00Z"))).stationTimes;
       const ignored = async (id: string, active: boolean) => {
         expect((await view()).find((s) => s.stationId === id)).toMatchObject({
           closedSendsTo: f.kitchen,
@@ -126,14 +120,14 @@ describe("station times", () => {
   it("keeps a by-hand close until cutover and then reopens", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await setStationToday(tx, f.cfg, f.upstairs, "closed", new Date("2026-10-02T21:00:00Z"));
+      await setStationToday(tx, f.upstairs, "closed", new Date("2026-10-02T21:00:00Z"));
       expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-03T03:59:00Z"))).stationTimes.find(
+        (await routingModel(tx, new Date("2026-10-03T03:59:00Z"))).stationTimes.find(
           (s) => s.stationId === f.upstairs,
         )?.status,
       ).toEqual({ open: false, why: "closed_by_hand" });
       expect(
-        (await routingModel(tx, f.cfg, new Date("2026-10-03T04:00:00Z"))).stationTimes.find(
+        (await routingModel(tx, new Date("2026-10-03T04:00:00Z"))).stationTimes.find(
           (s) => s.stationId === f.upstairs,
         )?.status,
       ).toEqual({ open: true, why: "open" });
@@ -143,10 +137,10 @@ describe("station times", () => {
   it("clears earlier by-hand days when explicitly reopened", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await setStationToday(tx, f.cfg, f.upstairs, "closed", new Date("2026-10-02T21:00:00Z"));
-      await setStationToday(tx, f.cfg, f.upstairs, "open", new Date("2026-10-03T10:00:00Z"));
+      await setStationToday(tx, f.upstairs, "closed", new Date("2026-10-02T21:00:00Z"));
+      await setStationToday(tx, f.upstairs, "open", new Date("2026-10-03T10:00:00Z"));
       expect(await tx.select().from(stationDayStates)).toHaveLength(0);
-      await setStationToday(tx, f.cfg, f.upstairs, null, new Date("2026-10-03T10:00:00Z"));
+      await setStationToday(tx, f.upstairs, null, new Date("2026-10-03T10:00:00Z"));
       expect(await tx.select().from(stationDayStates)).toHaveLength(0);
     });
   });
@@ -159,19 +153,17 @@ describe("station times", () => {
         .set({ timeZone: "Mars/Base" })
         .where(eq(locations.id, f.cfg.locationId));
       await expect(
-        setStationToday(tx, f.cfg, f.upstairs, "closed", new Date("2026-10-02T18:00:00Z")),
+        setStationToday(tx, f.upstairs, "closed", new Date("2026-10-02T18:00:00Z")),
       ).rejects.toMatchObject({ code: "time_zone.unreadable" });
-      expect(await venueMoment(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).toBeNull();
-      expect((await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).clockReadable).toBe(
-        false,
-      );
+      expect(await venueMoment(tx, new Date("2026-10-02T18:00:00Z"))).toBeNull();
+      expect((await routingModel(tx, new Date("2026-10-02T18:00:00Z"))).clockReadable).toBe(false);
     });
   });
 
   it("shows the closed destination and the end of today's change", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      const model = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
+      const model = await routingModel(tx, new Date("2026-10-02T18:00:00Z"));
       expect(model.stationTimes.find((s) => s.stationId === f.upstairs)?.closedSendsTo).toBe(
         f.kitchen,
       );
@@ -179,11 +171,11 @@ describe("station times", () => {
         f.kitchen,
       );
       expect(model.todayEnds).toEqual({ timeOfDay: "06:00", tomorrow: true });
-      expect((await routingModel(tx, f.cfg, new Date("2026-10-02T23:30:00Z"))).todayEnds).toEqual({
+      expect((await routingModel(tx, new Date("2026-10-02T23:30:00Z"))).todayEnds).toEqual({
         timeOfDay: "06:00",
         tomorrow: false,
       });
-      expect((await routingModel(tx, f.cfg, new Date("2026-10-03T04:00:00Z"))).todayEnds).toEqual({
+      expect((await routingModel(tx, new Date("2026-10-03T04:00:00Z"))).todayEnds).toEqual({
         timeOfDay: "06:00",
         tomorrow: true,
       });
@@ -193,10 +185,9 @@ describe("station times", () => {
 
 const SAVED_AT = new Date("2026-10-01T10:00:00Z");
 
-async function saveDate(tx: Transaction, cfg: VenueScope, date: string, closedAllDay = false) {
+async function saveDate(tx: Transaction, date: string, closedAllDay = false) {
   return saveSpecialDay(
     tx,
-    cfg,
     null,
     { name: `Special ${date}`, repeatsYearly: false, dates: [{ date, closedAllDay }] },
     SAVED_AT,
@@ -204,8 +195,8 @@ async function saveDate(tx: Transaction, cfg: VenueScope, date: string, closedAl
   );
 }
 
-async function statusAt(tx: Transaction, cfg: VenueScope, id: string, instant: Date | string) {
-  return (await routingModel(tx, cfg, new Date(instant))).stationTimes.find(
+async function statusAt(tx: Transaction, id: string, instant: Date | string) {
+  return (await routingModel(tx, new Date(instant))).stationTimes.find(
     (row) => row.stationId === id,
   )?.status;
 }
@@ -218,59 +209,59 @@ describe("station status on special dates and calendar boundaries", () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
       const tuesdayHalfPastMidnight = "2026-10-05T22:30:00Z";
-      expect(await statusAt(tx, f.cfg, f.upstairs, tuesdayHalfPastMidnight)).toEqual(openState);
-      await saveDate(tx, f.cfg, "2026-10-06");
-      expect(await statusAt(tx, f.cfg, f.upstairs, tuesdayHalfPastMidnight)).toEqual(openState);
-      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-06T00:00:00Z")).toEqual(openState);
-      await saveDate(tx, f.cfg, "2026-10-05");
-      expect(await statusAt(tx, f.cfg, f.upstairs, tuesdayHalfPastMidnight)).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, tuesdayHalfPastMidnight)).toEqual(openState);
+      await saveDate(tx, "2026-10-06");
+      expect(await statusAt(tx, f.upstairs, tuesdayHalfPastMidnight)).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, "2026-10-06T00:00:00Z")).toEqual(openState);
+      await saveDate(tx, "2026-10-05");
+      expect(await statusAt(tx, f.upstairs, tuesdayHalfPastMidnight)).toEqual(openState);
     });
   });
 
   it("keeps active stations open across month and year boundaries", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await saveDate(tx, f.cfg, "2026-12-31");
-      await saveDate(tx, f.cfg, "2027-01-01");
-      await saveDate(tx, f.cfg, "2026-10-31");
+      await saveDate(tx, "2026-12-31");
+      await saveDate(tx, "2027-01-01");
+      await saveDate(tx, "2026-10-31");
       await tx
         .update(kitchenStations)
         .set({ active: true })
         .where(eq(kitchenStations.id, f.retired));
-      await saveDate(tx, f.cfg, "2026-10-11");
+      await saveDate(tx, "2026-10-11");
 
-      expect(await statusAt(tx, f.cfg, f.upstairs, "2027-01-01T01:30:00Z")).toEqual(openState);
-      expect(await statusAt(tx, f.cfg, f.upstairs, "2027-01-01T02:00:00Z")).toEqual(openState);
-      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-31T23:30:00Z")).toEqual(openState);
-      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-11-01T00:00:00Z")).toEqual({
+      expect(await statusAt(tx, f.upstairs, "2027-01-01T01:30:00Z")).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, "2027-01-01T02:00:00Z")).toEqual(openState);
+      expect(await statusAt(tx, f.downstairs, "2026-10-31T23:30:00Z")).toEqual(openState);
+      expect(await statusAt(tx, f.downstairs, "2026-11-01T00:00:00Z")).toEqual({
         open: true,
         why: "open",
       });
       // Monday 12 October at 01:00 and 02:00 in Madrid.
-      expect(await statusAt(tx, f.cfg, f.retired, "2026-10-11T23:00:00Z")).toEqual(openState);
-      expect(await statusAt(tx, f.cfg, f.retired, "2026-10-12T00:00:00Z")).toEqual(openState);
+      expect(await statusAt(tx, f.retired, "2026-10-11T23:00:00Z")).toEqual(openState);
+      expect(await statusAt(tx, f.retired, "2026-10-12T00:00:00Z")).toEqual(openState);
     });
   });
 
   it("keeps stations open throughout ordinary and special dates", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await saveDate(tx, f.cfg, "2026-10-08");
+      await saveDate(tx, "2026-10-08");
       // Tuesday 6 October from 00:00 to 23:59 in Madrid, then Wednesday.
-      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-05T22:00:00Z")).toEqual(openState);
-      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-06T21:59:00Z")).toEqual(openState);
-      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-06T22:00:00Z")).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, "2026-10-05T22:00:00Z")).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, "2026-10-06T21:59:00Z")).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, "2026-10-06T22:00:00Z")).toEqual(openState);
       // Thursday 8 October is a special day.
-      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-08T12:00:00Z")).toEqual(openState);
-      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-08T22:00:00Z")).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, "2026-10-08T12:00:00Z")).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, "2026-10-08T22:00:00Z")).toEqual(openState);
     });
   });
 
   it("keeps both active non-default stations open", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-06T10:00:00Z")).toEqual(openState);
-      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-06T10:00:00Z")).toEqual({
+      expect(await statusAt(tx, f.upstairs, "2026-10-06T10:00:00Z")).toEqual(openState);
+      expect(await statusAt(tx, f.downstairs, "2026-10-06T10:00:00Z")).toEqual({
         open: true,
         why: "open",
       });
@@ -280,38 +271,38 @@ describe("station status on special dates and calendar boundaries", () => {
   it("keeps a by-hand close until cutover and ignores an explicit open row", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await saveDate(tx, f.cfg, "2026-10-06");
+      await saveDate(tx, "2026-10-06");
       const afternoon = new Date("2026-10-06T13:00:00Z");
-      expect(await statusAt(tx, f.cfg, f.upstairs, afternoon)).toEqual(openState);
-      await setStationToday(tx, f.cfg, f.upstairs, "closed", afternoon);
-      expect(await statusAt(tx, f.cfg, f.upstairs, afternoon)).toEqual({
+      expect(await statusAt(tx, f.upstairs, afternoon)).toEqual(openState);
+      await setStationToday(tx, f.upstairs, "closed", afternoon);
+      expect(await statusAt(tx, f.upstairs, afternoon)).toEqual({
         open: false,
         why: "closed_by_hand",
       });
       // Wednesday 05:59 is still Tuesday's business day; 06:00 is the cutover.
-      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-07T03:59:00Z")).toEqual({
+      expect(await statusAt(tx, f.upstairs, "2026-10-07T03:59:00Z")).toEqual({
         open: false,
         why: "closed_by_hand",
       });
-      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-07T04:00:00Z")).toEqual({
+      expect(await statusAt(tx, f.upstairs, "2026-10-07T04:00:00Z")).toEqual({
         open: true,
         why: "open",
       });
 
-      await setStationToday(tx, f.cfg, f.downstairs, "open", afternoon);
-      expect(await statusAt(tx, f.cfg, f.downstairs, afternoon)).toEqual({
+      await setStationToday(tx, f.downstairs, "open", afternoon);
+      expect(await statusAt(tx, f.downstairs, afternoon)).toEqual({
         open: true,
         why: "open",
       });
-      await setStationToday(tx, f.cfg, f.downstairs, null, afternoon);
-      expect(await statusAt(tx, f.cfg, f.downstairs, afternoon)).toEqual(openState);
+      await setStationToday(tx, f.downstairs, null, afternoon);
+      expect(await statusAt(tx, f.downstairs, afternoon)).toEqual(openState);
     });
   });
 
   it("keeps the default station open through a closed day, and an inactive default unavailable", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await saveDate(tx, f.cfg, "2026-10-06", true);
+      await saveDate(tx, "2026-10-06", true);
       await tx
         .update(kitchenStations)
         .set({ isDefault: false })
@@ -320,25 +311,25 @@ describe("station status on special dates and calendar boundaries", () => {
         .update(kitchenStations)
         .set({ isDefault: true })
         .where(eq(kitchenStations.id, f.downstairs));
-      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-06T10:00:00Z")).toEqual({
+      expect(await statusAt(tx, f.downstairs, "2026-10-06T10:00:00Z")).toEqual({
         open: true,
         why: "default",
       });
-      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-06T10:00:00Z")).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, "2026-10-06T10:00:00Z")).toEqual(openState);
       await tx
         .update(kitchenStations)
         .set({ active: false })
         .where(eq(kitchenStations.id, f.downstairs));
-      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-06T10:00:00Z")).toBeUndefined();
+      expect(await statusAt(tx, f.downstairs, "2026-10-06T10:00:00Z")).toBeUndefined();
     });
   });
 
   it("makes an open station the default on a special date", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await saveDate(tx, f.cfg, "2026-10-06");
-      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-06T10:00:00Z")).toEqual(openState);
-      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-13T10:00:00Z")).toEqual(openState);
+      await saveDate(tx, "2026-10-06");
+      expect(await statusAt(tx, f.downstairs, "2026-10-06T10:00:00Z")).toEqual(openState);
+      expect(await statusAt(tx, f.downstairs, "2026-10-13T10:00:00Z")).toEqual(openState);
       await tx
         .update(kitchenStations)
         .set({ isDefault: false })
@@ -347,7 +338,7 @@ describe("station status on special dates and calendar boundaries", () => {
         .update(kitchenStations)
         .set({ isDefault: true })
         .where(eq(kitchenStations.id, f.downstairs));
-      expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-06T10:00:00Z")).toEqual({
+      expect(await statusAt(tx, f.downstairs, "2026-10-06T10:00:00Z")).toEqual({
         open: true,
         why: "default",
       });
@@ -357,12 +348,12 @@ describe("station status on special dates and calendar boundaries", () => {
   it("keeps active stations open while the venue clock cannot be read", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await saveDate(tx, f.cfg, "2026-10-06", true);
+      await saveDate(tx, "2026-10-06", true);
       await tx
         .update(locations)
         .set({ timeZone: "Mars/Base" })
         .where(eq(locations.id, f.cfg.locationId));
-      expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-06T10:00:00Z")).toEqual({
+      expect(await statusAt(tx, f.upstairs, "2026-10-06T10:00:00Z")).toEqual({
         open: true,
         why: "open",
       });
@@ -376,10 +367,10 @@ describe("station status on special dates and calendar boundaries", () => {
         const f = await fixture(tx);
         await tx.update(locations).set({ dayCutover }).where(eq(locations.id, f.cfg.locationId));
         const tuesdayHalfPastMidnight = "2026-10-05T22:30:00Z";
-        expect(await statusAt(tx, f.cfg, f.upstairs, tuesdayHalfPastMidnight)).toEqual(openState);
-        expect(await statusAt(tx, f.cfg, f.downstairs, tuesdayHalfPastMidnight)).toEqual(openState);
-        await saveDate(tx, f.cfg, "2026-10-05");
-        expect(await statusAt(tx, f.cfg, f.upstairs, tuesdayHalfPastMidnight)).toEqual(openState);
+        expect(await statusAt(tx, f.upstairs, tuesdayHalfPastMidnight)).toEqual(openState);
+        expect(await statusAt(tx, f.downstairs, tuesdayHalfPastMidnight)).toEqual(openState);
+        await saveDate(tx, "2026-10-05");
+        expect(await statusAt(tx, f.upstairs, tuesdayHalfPastMidnight)).toEqual(openState);
       });
     },
   );
@@ -395,26 +386,24 @@ describe("station status across clock changes", () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
       const before = new Date(forward.instant.getTime() - 30 * minute);
-      expect(await statusAt(tx, f.cfg, f.upstairs, before)).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, before)).toEqual(openState);
       expect(
-        (await routingModel(tx, f.cfg, before)).stationTimes.find(
-          (row) => row.stationId === f.upstairs,
-        ),
+        (await routingModel(tx, before)).stationTimes.find((row) => row.stationId === f.upstairs),
       ).not.toHaveProperty("nextTransition");
-      expect(await statusAt(tx, f.cfg, f.upstairs, forward.instant)).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, forward.instant)).toEqual(openState);
     });
   });
 
   it("keeps a station open immediately before and after skipped clock minutes", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      expect(
-        await statusAt(tx, f.cfg, f.upstairs, new Date(forward.instant.getTime() - minute)),
-      ).toEqual(openState);
-      expect(await statusAt(tx, f.cfg, f.upstairs, forward.instant)).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, new Date(forward.instant.getTime() - minute))).toEqual(
+        openState,
+      );
+      expect(await statusAt(tx, f.upstairs, forward.instant)).toEqual(openState);
       expect(
         (
-          await routingModel(tx, f.cfg, new Date(forward.instant.getTime() - 30 * minute))
+          await routingModel(tx, new Date(forward.instant.getTime() - 30 * minute))
         ).stationTimes.find((row) => row.stationId === f.upstairs),
       ).not.toHaveProperty("nextTransition");
     });
@@ -428,10 +417,10 @@ describe("station status across clock changes", () => {
       const first = (minutes: number) =>
         new Date(backward.instant.getTime() - repeat + minutes * minute);
       const second = (minutes: number) => new Date(backward.instant.getTime() + minutes * minute);
-      expect(await statusAt(tx, f.cfg, f.upstairs, first(15))).toEqual(openState);
-      expect(await statusAt(tx, f.cfg, f.upstairs, second(15))).toEqual(openState);
-      expect(await statusAt(tx, f.cfg, f.upstairs, first(45))).toEqual(openState);
-      expect(await statusAt(tx, f.cfg, f.upstairs, second(45))).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, first(15))).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, second(15))).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, first(45))).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, second(45))).toEqual(openState);
     });
   });
 });
@@ -472,17 +461,17 @@ describe("station times on a public holiday", () => {
   it("keeps station status the same on a Spanish national holiday and an ordinary Monday", async () => {
     await db.transaction(async (tx) => {
       const f = await sevilleVenue(tx);
-      expect(await readHolidayFacts(tx, f.cfg, HOLIDAY, HOLIDAY)).toEqual([
+      expect(await readHolidayFacts(tx, HOLIDAY, HOLIDAY)).toEqual([
         expect.objectContaining({ date: HOLIDAY, scope: "national" }),
       ]);
-      expect(await readHolidayFacts(tx, f.cfg, ORDINARY, ORDINARY)).toEqual([]);
+      expect(await readHolidayFacts(tx, ORDINARY, ORDINARY)).toEqual([]);
 
       const times = async (date: string, time: string) =>
-        (await routingModel(tx, f.cfg, new Date(`${date}T${time}:00Z`))).stationTimes;
+        (await routingModel(tx, new Date(`${date}T${time}:00Z`))).stationTimes;
       for (const time of TIMES)
         expect(await times(HOLIDAY, time)).toEqual(await times(ORDINARY, time));
-      expect(await statusAt(tx, f.cfg, f.upstairs, `${HOLIDAY}T18:00:00Z`)).toEqual(openState);
-      expect(await statusAt(tx, f.cfg, f.upstairs, `${HOLIDAY}T10:00:00Z`)).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, `${HOLIDAY}T18:00:00Z`)).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, `${HOLIDAY}T10:00:00Z`)).toEqual(openState);
       expect(
         (await times(HOLIDAY, "18:00")).find((row) => row.stationId === f.upstairs),
       ).not.toHaveProperty("specialDateRestricts");
@@ -492,9 +481,9 @@ describe("station times on a public holiday", () => {
   it("a special day on a public holiday does not close a prep station", async () => {
     await db.transaction(async (tx) => {
       const f = await sevilleVenue(tx);
-      await saveDate(tx, f.cfg, HOLIDAY);
-      expect(await statusAt(tx, f.cfg, f.upstairs, `${HOLIDAY}T18:00:00Z`)).toEqual(openState);
-      expect(await statusAt(tx, f.cfg, f.upstairs, `${ORDINARY}T18:00:00Z`)).toEqual(openState);
+      await saveDate(tx, HOLIDAY);
+      expect(await statusAt(tx, f.upstairs, `${HOLIDAY}T18:00:00Z`)).toEqual(openState);
+      expect(await statusAt(tx, f.upstairs, `${ORDINARY}T18:00:00Z`)).toEqual(openState);
     });
   });
 });
@@ -511,7 +500,7 @@ describe("station today controls", () => {
   it("closes with a destination and replaces the destination on a later close", async () => {
     const f = await db.transaction(fixture);
     await db.transaction((tx) =>
-      stationTimes.closeStationForToday(tx, f.cfg, f.upstairs, f.downstairs, at),
+      stationTimes.closeStationForToday(tx, f.upstairs, f.downstairs, at),
     );
     expect(await todayRows(f.upstairs)).toEqual([
       expect.objectContaining({
@@ -520,9 +509,7 @@ describe("station today controls", () => {
         sendsToStationId: f.downstairs,
       }),
     ]);
-    await db.transaction((tx) =>
-      stationTimes.closeStationForToday(tx, f.cfg, f.upstairs, f.kitchen, at),
-    );
+    await db.transaction((tx) => stationTimes.closeStationForToday(tx, f.upstairs, f.kitchen, at));
     expect(await todayRows(f.upstairs)).toEqual([
       expect.objectContaining({
         businessDay: "2026-10-02",
@@ -542,7 +529,7 @@ describe("station today controls", () => {
       const f = await db.transaction(fixture);
       const source = key === "missing" ? randomUUID() : f[key];
       await expect(
-        db.transaction((tx) => stationTimes.closeStationForToday(tx, f.cfg, source, source, at)),
+        db.transaction((tx) => stationTimes.closeStationForToday(tx, source, source, at)),
       ).rejects.toMatchObject({ code, params: { stationId: source } });
       expect(await todayRows(source)).toEqual([]);
     },
@@ -556,16 +543,14 @@ describe("station today controls", () => {
   ] as const)("refuses the %s destination and retains the previous close", async (key, reason) => {
     const f = await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await setStationToday(tx, f.cfg, f.upstairs, "closed", at);
-      await setStationToday(tx, f.cfg, f.downstairs, "closed", at);
+      await setStationToday(tx, f.upstairs, "closed", at);
+      await setStationToday(tx, f.downstairs, "closed", at);
       return f;
     });
     const destination = key === "missing" ? randomUUID() : f[key];
     const before = await todayRows(f.upstairs);
     await expect(
-      db.transaction((tx) =>
-        stationTimes.closeStationForToday(tx, f.cfg, f.upstairs, destination, at),
-      ),
+      db.transaction((tx) => stationTimes.closeStationForToday(tx, f.upstairs, destination, at)),
     ).rejects.toMatchObject({
       code: "station.destination_invalid",
       params: { stationId: f.upstairs, sendsToStationId: destination, reason },
@@ -579,7 +564,7 @@ describe("station today controls", () => {
       return f;
     });
     await db.transaction((tx) =>
-      stationTimes.closeStationForToday(tx, f.cfg, f.upstairs, f.downstairs, at),
+      stationTimes.closeStationForToday(tx, f.upstairs, f.downstairs, at),
     );
     expect(await todayRows(f.upstairs)).toEqual([
       {
@@ -590,7 +575,7 @@ describe("station today controls", () => {
         sendsToStationId: f.downstairs,
       },
     ]);
-    const model = await db.transaction((tx) => routingModel(tx, f.cfg, at));
+    const model = await db.transaction((tx) => routingModel(tx, at));
     expect(model.stationTimes.find((row) => row.stationId === f.upstairs)).toMatchObject({
       status: { open: false, why: "closed_by_hand" },
       today: "closed",
@@ -601,7 +586,7 @@ describe("station today controls", () => {
   it("A725 offers destinations by name, default among them, leaving out unusable destinations", async () => {
     const f = await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await setStationToday(tx, f.cfg, f.downstairs, "closed", at);
+      await setStationToday(tx, f.downstairs, "closed", at);
       await tx.insert(kitchenStations).values([
         { ...f.cfg, name: "barra", id: "00000000-0000-4000-8000-000000000003" },
         { ...f.cfg, name: "Ñandú", id: "00000000-0000-4000-8000-000000000001" },
@@ -610,7 +595,7 @@ describe("station today controls", () => {
       return f;
     });
     expect(
-      await db.transaction((tx) => stationTimes.stationDestinations(tx, f.cfg, f.upstairs, at)),
+      await db.transaction((tx) => stationTimes.stationDestinations(tx, f.upstairs, at)),
     ).toEqual([
       { id: "00000000-0000-4000-8000-000000000002", name: "Ásador", isDefault: false },
       { id: "00000000-0000-4000-8000-000000000003", name: "barra", isDefault: false },
@@ -622,18 +607,18 @@ describe("station today controls", () => {
   it("offers an active destination across cutover", async () => {
     const f = await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await setStationToday(tx, f.cfg, f.downstairs, "open", at);
+      await setStationToday(tx, f.downstairs, "open", at);
       return f;
     });
     expect(
-      await db.transaction((tx) => stationTimes.stationDestinations(tx, f.cfg, f.upstairs, at)),
+      await db.transaction((tx) => stationTimes.stationDestinations(tx, f.upstairs, at)),
     ).toEqual([
       { id: f.downstairs, name: "Downstairs bar", isDefault: false },
       { id: f.kitchen, name: "Kitchen", isDefault: true },
     ]);
     expect(
       await db.transaction((tx) =>
-        stationTimes.stationDestinations(tx, f.cfg, f.upstairs, new Date("2026-10-03T04:00:00Z")),
+        stationTimes.stationDestinations(tx, f.upstairs, new Date("2026-10-03T04:00:00Z")),
       ),
     ).toEqual([
       { id: f.downstairs, name: "Downstairs bar", isDefault: false },
@@ -644,14 +629,12 @@ describe("station today controls", () => {
   it("reopens by removing today's row and stays open later", async () => {
     const f = await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await setStationToday(tx, f.cfg, f.upstairs, "closed", at);
+      await setStationToday(tx, f.upstairs, "closed", at);
       return f;
     });
-    await db.transaction((tx) => stationTimes.openStationForToday(tx, f.cfg, f.upstairs, at));
+    await db.transaction((tx) => stationTimes.openStationForToday(tx, f.upstairs, at));
     expect(await todayRows(f.upstairs)).toEqual([]);
-    const model = await db.transaction((tx) =>
-      routingModel(tx, f.cfg, new Date("2026-10-02T19:00:00Z")),
-    );
+    const model = await db.transaction((tx) => routingModel(tx, new Date("2026-10-02T19:00:00Z")));
     expect(model.stationTimes.find((row) => row.stationId === f.upstairs)?.status).toEqual({
       open: true,
       why: "open",
@@ -664,11 +647,11 @@ describe("station today controls", () => {
       return f;
     });
     await db.transaction((tx) =>
-      stationTimes.closeStationForToday(tx, f.cfg, f.upstairs, f.downstairs, at),
+      stationTimes.closeStationForToday(tx, f.upstairs, f.downstairs, at),
     );
-    await db.transaction((tx) => stationTimes.openStationForToday(tx, f.cfg, f.upstairs, at));
+    await db.transaction((tx) => stationTimes.openStationForToday(tx, f.upstairs, at));
     expect(await todayRows(f.upstairs)).toEqual([]);
-    const model = await db.transaction((tx) => routingModel(tx, f.cfg, at));
+    const model = await db.transaction((tx) => routingModel(tx, at));
     expect(model.stationTimes.find((row) => row.stationId === f.upstairs)?.status).toEqual({
       open: true,
       why: "open",
@@ -682,15 +665,15 @@ describe("station today controls", () => {
     const f = await db.transaction(fixture);
     const source = key === "missing" ? randomUUID() : f[key];
     await expect(
-      db.transaction((tx) => stationTimes.openStationForToday(tx, f.cfg, source, at)),
+      db.transaction((tx) => stationTimes.openStationForToday(tx, source, at)),
     ).rejects.toMatchObject({ code, params: { stationId: source } });
     expect(await todayRows(source)).toEqual([]);
   });
 
   it("reopens by removing the by-hand close", async () => {
     const f = await db.transaction(fixture);
-    await db.transaction((tx) => setStationToday(tx, f.cfg, f.upstairs, "closed", at));
-    await db.transaction((tx) => stationTimes.openStationForToday(tx, f.cfg, f.upstairs, at));
+    await db.transaction((tx) => setStationToday(tx, f.upstairs, "closed", at));
+    await db.transaction((tx) => stationTimes.openStationForToday(tx, f.upstairs, at));
     expect(await todayRows(f.upstairs)).toEqual([]);
   });
 
@@ -699,7 +682,7 @@ describe("station today controls", () => {
     async (action) => {
       const f = await db.transaction(async (tx) => {
         const f = await fixture(tx);
-        await setStationToday(tx, f.cfg, f.upstairs, "closed", at);
+        await setStationToday(tx, f.upstairs, "closed", at);
         await tx
           .update(locations)
           .set({ timeZone: "Mars/Base" })
@@ -710,8 +693,8 @@ describe("station today controls", () => {
       await expect(
         db.transaction((tx) =>
           action === "close"
-            ? stationTimes.closeStationForToday(tx, f.cfg, f.upstairs, f.downstairs, at)
-            : stationTimes.openStationForToday(tx, f.cfg, f.upstairs, at),
+            ? stationTimes.closeStationForToday(tx, f.upstairs, f.downstairs, at)
+            : stationTimes.openStationForToday(tx, f.upstairs, at),
         ),
       ).rejects.toMatchObject({ code: "time_zone.unreadable" });
       expect(await todayRows(f.upstairs)).toEqual(before);
@@ -731,17 +714,17 @@ it("keeps today's station closure and actual expiry through the 26-hour tail", a
       effectiveBusinessDay: "2026-11-04",
       dayCutover: "07:00:00",
     });
-    await setStationToday(tx, f.cfg, f.upstairs, "closed", new Date("2026-11-03T12:00:00Z"));
+    await setStationToday(tx, f.upstairs, "closed", new Date("2026-11-03T12:00:00Z"));
     for (const time of ["2026-11-04T04:00:00Z", "2026-11-04T05:59:00Z"]) {
-      expect((await venueMoment(tx, f.cfg, new Date(time)))?.businessDay).toBe("2026-11-03");
-      const model = await routingModel(tx, f.cfg, new Date(time));
+      expect((await venueMoment(tx, new Date(time)))?.businessDay).toBe("2026-11-03");
+      const model = await routingModel(tx, new Date(time));
       expect(model.stationTimes.find((s) => s.stationId === f.upstairs)).toMatchObject({
         today: "closed",
         status: { open: false },
       });
       expect(model.todayEnds).toEqual({ timeOfDay: "07:00", tomorrow: false });
     }
-    const next = await routingModel(tx, f.cfg, new Date("2026-11-04T06:00:00Z"));
+    const next = await routingModel(tx, new Date("2026-11-04T06:00:00Z"));
     expect(next.stationTimes.find((s) => s.stationId === f.upstairs)).toMatchObject({
       today: null,
       status: { open: true },

@@ -41,7 +41,7 @@ beforeEach(async () => {
 const query = (values: Record<string, string> = {}) =>
   parseTransactionsQuery(new URLSearchParams({ preset: "any", ...values }));
 const list = (values: Record<string, string> = {}) =>
-  inTx(venue, (tx) => readFindTransactions(tx, venue.cfg, query(values)));
+  inTx(venue, (tx) => readFindTransactions(tx, query(values)));
 const AT = "2026-10-15T12:00:00.000Z";
 
 async function invoice(values: Partial<typeof sales.$inferInsert> = {}, settled = true) {
@@ -168,7 +168,7 @@ describe("Find Transactions SQL paging", () => {
     });
     expect(rows.some((r) => r.saleId === unsettledF2)).toBe(false);
     const bills = await inTx(venue, (tx) =>
-      readFindBills(tx, venue.cfg, parseBillsQuery(new URLSearchParams())),
+      readFindBills(tx, parseBillsQuery(new URLSearchParams())),
     );
     expect(bills.rows.some((r) => r.workingOrderId === unpaidOrder)).toBe(true);
   });
@@ -195,7 +195,7 @@ describe("Find Transactions SQL paging", () => {
     expect(await list({ q: "nobody" })).toMatchObject({ rows: [], total: 0, openCount: 1 });
     await inTx(venue, async (tx) => {
       const execute = vi.spyOn(tx, "execute");
-      const result = await readFindTransactions(tx, venue.cfg, query({ page: "1" }));
+      const result = await readFindTransactions(tx, query({ page: "1" }));
       expect(result.rows).toHaveLength(50);
       const statements = execute.mock.calls.map(([s]) =>
         typeof s === "string"
@@ -489,10 +489,8 @@ describe("Find Transactions SQL paging", () => {
     const correctedSubstitute = await invoice({ correctsSaleId: substitute, total: -121 });
     const unzoned = await invoice();
     const condition = (id: ReturnType<typeof sql>) =>
-      VENUE_SERVICE.orderInZones(venue.cfg, id, [venue.counterZone]);
-    const result = await inTx(venue, (tx) =>
-      readFindTransactions(tx, venue.cfg, query(), condition),
-    );
+      VENUE_SERVICE.orderInZones(id, [venue.counterZone]);
+    const result = await inTx(venue, (tx) => readFindTransactions(tx, query(), condition));
     expect(new Set(result.rows.map((r) => r.saleId))).toEqual(new Set([own, unzoned]));
     expect(result.total).toBe(2);
     expect(result.openCount).toBe(1);
@@ -505,9 +503,9 @@ describe("Find Transactions SQL paging", () => {
     expect(
       await inTx(venue, (tx) => resolveTransactionScope(tx, venue.cfg, correctedSubstitute)),
     ).toEqual({ workingOrderIds: [counter, party.tabId].sort() });
-    const empty = (id: ReturnType<typeof sql>) => VENUE_SERVICE.orderInZones(venue.cfg, id, []);
+    const empty = (id: ReturnType<typeof sql>) => VENUE_SERVICE.orderInZones(id, []);
     expect(
-      (await inTx(venue, (tx) => readFindTransactions(tx, venue.cfg, query(), empty))).rows.map(
+      (await inTx(venue, (tx) => readFindTransactions(tx, query(), empty))).rows.map(
         (r) => r.saleId,
       ),
     ).toEqual([unzoned]);
@@ -654,10 +652,8 @@ describe("completed post-invoice refund Transactions", () => {
     const a = await returned(own),
       b = await returned(denied);
     const condition = (id: ReturnType<typeof sql>) =>
-      VENUE_SERVICE.orderInZones(venue.cfg, id, [venue.counterZone]);
-    const result = await inTx(venue, (tx) =>
-      readFindTransactions(tx, venue.cfg, query(), condition),
-    );
+      VENUE_SERVICE.orderInZones(id, [venue.counterZone]);
+    const result = await inTx(venue, (tx) => readFindTransactions(tx, query(), condition));
     expect(result.rows.map((r) => r.transactionId)).toEqual([`refund:${a.id}`, `sale:${own}`]);
     expect(result.total).toBe(2);
     expect((await list({ type: "refund" })).rows.map((r) => r.refundId)).toContain(b.id);

@@ -977,7 +977,6 @@ describe("venue details preserve committed history", () => {
       for (const period of periods.rows)
         await replaceMenuWeek(
           tx,
-          venue.cfg,
           period.department_id,
           [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
             weekday,
@@ -1145,10 +1144,8 @@ describe("venue detail consumer reads", () => {
     const before = retained();
     const readCurrent = () =>
       withTransaction(suite.db, async (tx) => {
-        const states = await stationStates(tx, venue.cfg, at);
-        const annotations = await BOOKINGS_FLOOR_ANNOTATIONS.annotate(tx, venue.cfg, at, [
-          table!.id,
-        ]);
+        const states = await stationStates(tx, at);
+        const annotations = await BOOKINGS_FLOOR_ANNOTATIONS.annotate(tx, at, [table!.id]);
         return {
           open: stationIds.map((id) => states.get(id)!.open),
           annotation: annotations.get(table!.id),
@@ -1710,20 +1707,19 @@ describe("reviewed legacy geography and clock repairs", () => {
 it("refuses a changed cutover beside a placed period and rolls back other details", async () => {
   const initial = await read();
   await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(tx, venue.cfg, {
+    const department = await createDepartment(tx, {
       name: "Clock department",
       orderStart: "counter",
     });
     const menu = (await tx.execute<{ id: string }>(sql`select id from catalogues limit 1`)).rows[0]!
       .id;
-    const period = await saveMenuPeriod(tx, venue.cfg, department.id, {
+    const period = await saveMenuPeriod(tx, department.id, {
       name: "Lunch",
       menuId: menu,
       staffMenuIds: [],
     });
     await replaceMenuWeek(
       tx,
-      venue.cfg,
       department.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,

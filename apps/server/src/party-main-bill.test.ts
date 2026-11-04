@@ -304,7 +304,7 @@ describe("the party's name", () => {
     const named = await inTx(v, (tx) =>
       setPartyName(tx, { partyId, name: "  Ana ", expectedPartyRevision: revision }),
     );
-    const floor = await inTx(v, (tx) => listTablesWithState(tx, v.cfg));
+    const floor = await inTx(v, (tx) => listTablesWithState(tx));
 
     expect(named).toEqual({ revision: revision + 1, name: "Ana" });
     expect((await partyRow(v, partyId)).name).toBe("Ana");
@@ -316,7 +316,7 @@ describe("the party's name", () => {
     await inTx(v, (tx) =>
       setPartyName(tx, { partyId, name: "", expectedPartyRevision: revision + 1 }),
     );
-    const after = await inTx(v, (tx) => listTablesWithState(tx, v.cfg));
+    const after = await inTx(v, (tx) => listTablesWithState(tx));
     expect(after.find((t) => t.id === table12)!.party).toMatchObject({
       name: null,
       displayName: "Mesa 12",

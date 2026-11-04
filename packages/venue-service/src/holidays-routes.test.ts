@@ -10,7 +10,6 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -24,12 +23,10 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import type { HolidayGeography, HolidayRead, SpecialDaysModel } from "./holiday-types.js";
 import { readHolidays } from "./holidays.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import type { VenueScope } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 import { holidayGeographies } from "./schema/holidays.js";
@@ -76,7 +73,6 @@ interface Address {
 
 interface Fixture {
   app: Hono;
-  cfg: VenueScope;
   manager: string;
   supervisor: string;
   staff: string;
@@ -93,7 +89,6 @@ async function fixture(address: Address = {}): Promise<Fixture> {
       province: address.province === undefined ? "Sevilla" : address.province,
       city: address.city === undefined ? "Sevilla" : address.city,
     });
-    const venueId = await venueLocationId(tx);
     const person = async (role: "manager" | "supervisor" | "staff") => {
       const [row] = await tx
         .insert(persons)
@@ -102,7 +97,6 @@ async function fixture(address: Address = {}): Promise<Fixture> {
       return (await startManagementSession(tx, { personId: row!.id })).token;
     };
     return {
-      cfg: { locationId: locationId(venueId) },
       manager: await person("manager"),
       supervisor: await person("supervisor"),
       staff: await person("staff"),
@@ -114,11 +108,7 @@ async function fixture(address: Address = {}): Promise<Fixture> {
     .set({ lastSeenAt: "2000-01-01T00:00:00.000Z" })
     .where(eq(managementSessions.tokenHash, hashSessionToken(made.expired)));
   const app = new Hono();
-  VENUE_SERVICE_ROUTES.mount(
-    app,
-    { db, cfg: made.cfg, core: {} as ModuleRouteContext["core"] },
-    noopLog,
-  );
+  VENUE_SERVICE_ROUTES.mount(app, { db, cfg: {}, core: {} as ModuleRouteContext["core"] }, noopLog);
   const cookie = (token: string) => `${MANAGEMENT_COOKIE}=${token}`;
   return {
     ...made,
@@ -175,11 +165,10 @@ async function rows() {
   return { geographies, entries };
 }
 
-async function create(fx: Fixture, date: string, name: string) {
+async function create(date: string, name: string) {
   return direct((tx) =>
     saveSpecialDay(
       tx,
-      fx.cfg,
       null,
       { name, repeatsYearly: false, dates: [{ date, closedAllDay: false }] },
       new Date("2026-01-01T12:00:00Z"),
@@ -191,8 +180,8 @@ async function create(fx: Fixture, date: string, name: string) {
 describe("reading holidays", () => {
   it("returns the range's holiday read to anyone who may view the venue", async () => {
     const fx = await fixture();
-    await create(fx, "2026-10-20", "Autumn fair");
-    const expected = await direct((tx) => readHolidays(tx, fx.cfg, "2026-10-01", "2026-10-31"));
+    await create("2026-10-20", "Autumn fair");
+    const expected = await direct((tx) => readHolidays(tx, "2026-10-01", "2026-10-31"));
     const response = await send(
       fx,
       "GET",
@@ -257,8 +246,8 @@ describe("reading holidays", () => {
 describe("the Calendar and holidays", () => {
   it("reads holidays once and returns their coverage and sources with the days", async () => {
     const fx = await fixture();
-    await create(fx, "2026-10-13", "Fair");
-    const expected = await direct((tx) => readHolidays(tx, fx.cfg, "2026-10-11", "2026-10-13"));
+    await create("2026-10-13", "Fair");
+    const expected = await direct((tx) => readHolidays(tx, "2026-10-11", "2026-10-13"));
     const readSpy = vi.spyOn(getCountryPack("ES")!.holidayCalendar!, "read");
     onTestFinished(() => readSpy.mockRestore());
     const response = await send(

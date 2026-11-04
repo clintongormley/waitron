@@ -63,7 +63,6 @@ async function outcome(promise: Promise<unknown>): Promise<unknown> {
 }
 
 interface Venue {
-  cfg: { locationId: LocationId };
   restaurant: string;
   deli: string;
   /** Restaurant zones; `terrace` sits before `dining` by position although it was created later. */
@@ -90,23 +89,22 @@ async function seedProfile(): Promise<string> {
 
 /** Restaurant with two zones, Deli with one, and a till profile with nothing stored yet. */
 async function seedVenueWithZones(): Promise<Venue> {
-  const locationId = await seedLocation(`Venue ${randomUUID()}`);
-  const cfg = { locationId };
+  await seedLocation(`Venue ${randomUUID()}`);
   const ids = await scoped(async (tx) => {
-    const restaurant = await createDepartment(tx, cfg, {
+    const restaurant = await createDepartment(tx, {
       name: "Restaurant",
       orderStart: "table",
     });
-    const deli = await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" });
-    const dining = await createServiceZone(tx, cfg, {
+    const deli = await createDepartment(tx, { name: "Deli", orderStart: "counter" });
+    const dining = await createServiceZone(tx, {
       name: "Dining room",
       departmentId: restaurant.id,
     });
-    const terrace = await createServiceZone(tx, cfg, {
+    const terrace = await createServiceZone(tx, {
       name: "Terrace",
       departmentId: restaurant.id,
     });
-    const counter = await createServiceZone(tx, cfg, { name: "Counter", departmentId: deli.id });
+    const counter = await createServiceZone(tx, { name: "Counter", departmentId: deli.id });
     await tx.update(floorZones).set({ displayOrder: 2 }).where(eq(floorZones.id, dining.id));
     await tx.update(floorZones).set({ displayOrder: 1 }).where(eq(floorZones.id, terrace.id));
     return {
@@ -117,7 +115,7 @@ async function seedVenueWithZones(): Promise<Venue> {
       counter: counter.id,
     };
   });
-  return { cfg, ...ids, profile: await seedProfile() };
+  return { ...ids, profile: await seedProfile() };
 }
 
 function restaurantScope(
@@ -133,9 +131,8 @@ function restaurantScope(
 }
 
 const save = (venue: Venue, input: ProfileServiceAccessInput) =>
-  scoped((tx) => setProfileServiceAccess(tx, venue.cfg, venue.profile, input));
-const read = (venue: Venue) =>
-  scoped((tx) => readProfileServiceAccess(tx, venue.cfg, venue.profile));
+  scoped((tx) => setProfileServiceAccess(tx, venue.profile, input));
+const read = (venue: Venue) => scoped((tx) => readProfileServiceAccess(tx, venue.profile));
 
 /** No device holds the seeded profile, so `device_profile_form_factor_locked` lets it change. */
 async function makeSharedDisplay(venue: Venue): Promise<void> {
@@ -348,7 +345,7 @@ describe("a profile's service access", () => {
     const venue = await seedVenueWithZones();
     await save(venue, restaurantScope(venue));
     const patio = await scoped(async (tx) => {
-      const zone = await createServiceZone(tx, venue.cfg, {
+      const zone = await createServiceZone(tx, {
         name: "Patio",
         departmentId: venue.restaurant,
       });
@@ -380,16 +377,14 @@ describe("a profile's service access", () => {
   it("stops offering an allowed zone once it is moved to another department", async () => {
     const other = await seedVenueWithZones();
     await save(other, restaurantScope(other));
-    await scoped((tx) =>
-      configureZone(tx, other.cfg, { zoneId: other.terrace, departmentId: other.deli }),
-    );
+    await scoped((tx) => configureZone(tx, { zoneId: other.terrace, departmentId: other.deli }));
     await expect(read(other)).resolves.toMatchObject({ allowedZoneIds: [other.dining] });
   });
 
   it("starts in the first allowed zone by position once the starting zone is deactivated", async () => {
     const venue = await seedVenueWithZones();
     await scoped(async (tx) => {
-      const zone = await createServiceZone(tx, venue.cfg, {
+      const zone = await createServiceZone(tx, {
         name: "Patio",
         departmentId: venue.restaurant,
       });
@@ -512,8 +507,8 @@ describe("a profile's service access", () => {
 
 describe("a profile's stored scope", () => {
   const scopes = (ids: string[]) => scoped((tx) => readProfileServiceScopes(tx, ids));
-  const setScope = (venue: Venue, scope: Parameters<typeof setProfileServiceScope>[3]) =>
-    scoped((tx) => setProfileServiceScope(tx, venue.cfg, venue.profile, scope));
+  const setScope = (venue: Venue, scope: Parameters<typeof setProfileServiceScope>[2]) =>
+    scoped((tx) => setProfileServiceScope(tx, venue.profile, scope));
 
   it("reads every zone as null, a subset by position, and a profile with none as all null", async () => {
     const venue = await seedVenueWithZones();
@@ -706,7 +701,7 @@ describe("a profile's stored scope", () => {
 
 describe("a zone checked against a profile", () => {
   const check = (venue: Venue, zoneId: string) =>
-    outcome(scoped((tx) => assertProfileZone(tx, venue.cfg, venue.profile, zoneId)));
+    outcome(scoped((tx) => assertProfileZone(tx, venue.profile, zoneId)));
   const refused = (zoneId: string) => ({ code: "service_zone.not_allowed", params: { zoneId } });
 
   it("allows each zone of the profile and refuses another department's", async () => {
@@ -726,9 +721,7 @@ describe("a zone checked against a profile", () => {
   it("refuses a zone moved to another department or deactivated after the profile was saved", async () => {
     const venue = await seedVenueWithZones();
     await save(venue, restaurantScope(venue));
-    await scoped((tx) =>
-      configureZone(tx, venue.cfg, { zoneId: venue.terrace, departmentId: venue.deli }),
-    );
+    await scoped((tx) => configureZone(tx, { zoneId: venue.terrace, departmentId: venue.deli }));
     await expect(check(venue, venue.terrace)).resolves.toEqual(refused(venue.terrace));
     await scoped(async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${venue.dining}`),
@@ -760,7 +753,7 @@ describe("a new order's zone for a profile", () => {
   const start = (venue: Venue, input: { zoneId?: string } = {}) =>
     outcome(
       scoped(async (tx) => {
-        const context = await resolveNewOrderZone(tx, venue.cfg, {
+        const context = await resolveNewOrderZone(tx, {
           ...input,
           profileId: venue.profile,
         });
@@ -817,7 +810,7 @@ describe("A773 station policy: readProfilesZones", () => {
   it("A773 station policy: readProfilesZones answers each profile as readProfileZones does", async () => {
     const venue = await seedVenueWithZones();
     const access = (profileId: string, input: ProfileServiceAccessInput) =>
-      scoped((tx) => setProfileServiceAccess(tx, venue.cfg, profileId, input));
+      scoped((tx) => setProfileServiceAccess(tx, profileId, input));
     const display = await seedProfile();
     await access(display, restaurantScope(venue));
     await db
@@ -845,7 +838,7 @@ describe("A773 station policy: readProfilesZones", () => {
     const answers = await scoped((tx) => readProfilesZones(tx, [...profiles, unknown]));
     expect([...answers.keys()].sort()).toEqual([...profiles].sort());
     for (const profileId of profiles) {
-      const one = await scoped((tx) => readProfileZones(tx, venue.cfg, profileId));
+      const one = await scoped((tx) => readProfileZones(tx, profileId));
       expect(answers.get(profileId)).toEqual(one.allowedZoneIds);
     }
     expect(profiles.map((profileId) => answers.get(profileId))).toEqual([
@@ -861,7 +854,7 @@ describe("A773 station policy: readProfilesZones", () => {
   it("lists two or more zones in readProfileZones's order, by position before name", async () => {
     const venue = await seedVenueWithZones();
     const access = (profileId: string, input: ProfileServiceAccessInput) =>
-      scoped((tx) => setProfileServiceAccess(tx, venue.cfg, profileId, input));
+      scoped((tx) => setProfileServiceAccess(tx, profileId, input));
     const everyZone = await seedProfile();
     await access(everyZone, restaurantScope(venue));
     const listed = await seedProfile();
@@ -869,7 +862,7 @@ describe("A773 station policy: readProfilesZones", () => {
 
     const answers = await scoped((tx) => readProfilesZones(tx, [everyZone, listed]));
     for (const profileId of [everyZone, listed]) {
-      const one = await scoped((tx) => readProfileZones(tx, venue.cfg, profileId));
+      const one = await scoped((tx) => readProfileZones(tx, profileId));
       expect(answers.get(profileId)).toEqual(one.allowedZoneIds);
       expect(answers.get(profileId)).toEqual([venue.terrace, venue.dining]);
     }

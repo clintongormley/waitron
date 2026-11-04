@@ -1298,7 +1298,7 @@ export function mountManagementApi(
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return VENUE_SERVICE.readProfileKitchenScreens(tx, requireVenueCfg(deps));
+        return VENUE_SERVICE.readProfileKitchenScreens(tx);
       });
       return c.json({ profiles });
     }),
@@ -1352,21 +1352,11 @@ export function mountManagementApi(
           startingScreen: body.startingScreen,
           printerLists: { ...emptyPrinterLists(), ...lists },
         });
-        await VENUE_SERVICE.setProfileServiceScope(tx, requireVenueCfg(deps), created.id, scope);
+        await VENUE_SERVICE.setProfileServiceScope(tx, created.id, scope);
         if (sourceId !== undefined)
-          await VENUE_SERVICE.copyProfileKitchenScreens(
-            tx,
-            requireVenueCfg(deps),
-            sourceId,
-            created.id,
-          );
+          await VENUE_SERVICE.copyProfileKitchenScreens(tx, sourceId, created.id);
         else if (kitchenScreens !== undefined)
-          await VENUE_SERVICE.setProfileKitchenScreens(
-            tx,
-            requireVenueCfg(deps),
-            created.id,
-            kitchenScreens,
-          );
+          await VENUE_SERVICE.setProfileKitchenScreens(tx, created.id, kitchenScreens);
         await setProfileAdmission(tx, created.id, admission);
         return (await withProfileAccess(tx, [created]))[0];
       });
@@ -1405,16 +1395,11 @@ export function mountManagementApi(
           startingScreen: body.startingScreen,
           printerLists,
         });
-        await VENUE_SERVICE.setProfileServiceScope(tx, requireVenueCfg(deps), id, scope);
+        await VENUE_SERVICE.setProfileServiceScope(tx, id, scope);
         const narrowedDevices: NarrowedDevice[] =
           kitchenScreens === undefined
             ? []
-            : await VENUE_SERVICE.setProfileKitchenScreens(
-                tx,
-                requireVenueCfg(deps),
-                id,
-                kitchenScreens,
-              );
+            : await VENUE_SERVICE.setProfileKitchenScreens(tx, id, kitchenScreens);
         await setProfileAdmission(tx, id, admission);
         return { ...(await withProfileAccess(tx, [updated]))[0]!, narrowedDevices };
       });
@@ -1479,14 +1464,12 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireZoneId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
       return c.json(
         await withVenueAuth(deps, sessionId, async (tx) => {
           await requireLiveZone(tx, id);
           return readZoneDeleteImpact(
             tx,
-            cfg,
-            floorDeletionFor(cfg, deps.tableRemovals ?? []),
+            floorDeletionFor(deps.tableRemovals ?? []),
             id,
             new Date(),
           );
@@ -1499,19 +1482,12 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireZoneId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
       if ((await c.req.text()) !== "")
         throw new AppError("management.request_invalid", { field: "body" });
       return c.json(
         await withVenueAuth(deps, sessionId, async (tx) => {
           await requireLiveZone(tx, id);
-          return deleteZone(
-            tx,
-            cfg,
-            floorDeletionFor(cfg, deps.tableRemovals ?? []),
-            id,
-            new Date(),
-          );
+          return deleteZone(tx, floorDeletionFor(deps.tableRemovals ?? []), id, new Date());
         }),
       );
     }),
@@ -1737,10 +1713,7 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireStationId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
-      return c.json(
-        await withVenueAuth(deps, sessionId, (tx) => readStationDeleteImpact(tx, cfg, id)),
-      );
+      return c.json(await withVenueAuth(deps, sessionId, (tx) => readStationDeleteImpact(tx, id)));
     }),
   );
 
@@ -1748,10 +1721,9 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireStationId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
       if ((await c.req.text()) !== "")
         throw new AppError("management.request_invalid", { field: "body" });
-      return c.json(await withVenueAuth(deps, sessionId, (tx) => deleteStation(tx, cfg, id)));
+      return c.json(await withVenueAuth(deps, sessionId, (tx) => deleteStation(tx, id)));
     }),
   );
 
@@ -1839,10 +1811,7 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireCourseId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
-      return c.json(
-        await withVenueAuth(deps, sessionId, (tx) => readCourseDeleteImpact(tx, cfg, id)),
-      );
+      return c.json(await withVenueAuth(deps, sessionId, (tx) => readCourseDeleteImpact(tx, id)));
     }),
   );
 
@@ -1850,10 +1819,9 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireCourseId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
       if (c.req.query("disable") !== undefined)
         throw new AppError("management.request_invalid", { field: "disable" });
-      return c.json(await withVenueAuth(deps, sessionId, (tx) => deleteCourse(tx, cfg, id)));
+      return c.json(await withVenueAuth(deps, sessionId, (tx) => deleteCourse(tx, id)));
     }),
   );
 

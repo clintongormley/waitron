@@ -103,11 +103,11 @@ async function login(profileId: string) {
 
 async function ready() {
   const f = await withTransaction(suite.db, async (tx) => {
-    const a = await createDepartment(tx, v.cfg, {
+    const a = await createDepartment(tx, {
       name: randomUUID(),
       orderStart: "table",
     });
-    const b = await createDepartment(tx, v.cfg, {
+    const b = await createDepartment(tx, {
       name: randomUUID(),
       orderStart: "table",
     });
@@ -117,9 +117,9 @@ async function ready() {
         receipt: { operationDescription: "Restaurante" },
       })),
     );
-    const az = await createServiceZone(tx, v.cfg, { name: randomUUID(), departmentId: a.id });
-    const hidden = await createServiceZone(tx, v.cfg, { name: randomUUID(), departmentId: a.id });
-    const bz = await createServiceZone(tx, v.cfg, { name: randomUUID(), departmentId: b.id });
+    const az = await createServiceZone(tx, { name: randomUUID(), departmentId: a.id });
+    const hidden = await createServiceZone(tx, { name: randomUUID(), departmentId: a.id });
+    const bz = await createServiceZone(tx, { name: randomUUID(), departmentId: b.id });
     const profiles = [];
     for (const [departmentId, zoneId] of [
       [a.id, az.id],
@@ -130,18 +130,18 @@ async function ready() {
         .insert(deviceProfiles)
         .values({ name: randomUUID(), formFactor: "till", capabilities: [...CAPABILITY_FLAGS] })
         .returning();
-      await setProfileServiceScope(tx, v.cfg, p!.id, {
+      await setProfileServiceScope(tx, p!.id, {
         departmentId: departmentId!,
         allowedZoneIds: [zoneId!],
         startingZoneId: zoneId!,
       });
       profiles.push(p!.id);
     }
-    await setDepartmentTransferSettings(tx, v.cfg, a.id, {
+    await setDepartmentTransferSettings(tx, a.id, {
       receivingProfileId: null,
       destinationDepartmentIds: [b.id],
     });
-    await setDepartmentTransferSettings(tx, v.cfg, b.id, {
+    await setDepartmentTransferSettings(tx, b.id, {
       receivingProfileId: profiles[1]!,
       destinationDepartmentIds: [],
     });
@@ -149,7 +149,7 @@ async function ready() {
       source: "operator_script",
       orderNumber: ++nextOrderNumber,
     });
-    await recordOrderServiceContext(tx, v.cfg, tab!.id, az.id);
+    await recordOrderServiceContext(tx, tab!.id, az.id);
     return {
       a: a.id,
       b: b.id,
@@ -239,7 +239,7 @@ async function state(tab: string) {
       .select()
       .from(departmentTransferRequests)
       .where(eq(departmentTransferRequests.tabId, tab));
-    return { tab: row, requests, context: await getOrderServiceContext(tx, v.cfg, tab) };
+    return { tab: row, requests, context: await getOrderServiceContext(tx, tab) };
   });
 }
 
@@ -331,9 +331,7 @@ describe("department transfer till writes", () => {
   });
   it("refuses a source zone outside the sender profile", async () => {
     const f = await ready();
-    await withTransaction(suite.db, (tx) =>
-      retargetOrderServiceContext(tx, v.cfg, f.tab, f.hidden),
-    );
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.hidden));
     const result = await post(f.source.cookie, requestPath(f.tab), {
       destinationDepartmentId: f.b,
     });
@@ -552,9 +550,7 @@ describe("department transfer till writes", () => {
   it("refuses withdrawal outside the sender zone", async () => {
     const f = await ready();
     const id = await pending(f);
-    await withTransaction(suite.db, (tx) =>
-      retargetOrderServiceContext(tx, v.cfg, f.tab, f.hidden),
-    );
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.hidden));
     expect(await post(f.source.cookie, resolutionPath(id, "withdraw"))).toMatchObject({
       status: 403,
       body: { error: { code: "service_zone.not_allowed" } },
@@ -565,7 +561,7 @@ describe("department transfer till writes", () => {
   it("preserves issued fiscal rows, recorded line contexts and outstanding kitchen work", async () => {
     const f = await ready();
     f.tab = await counterOrder(v, "Burger");
-    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.az));
     const cfg = requestCfg(v.cfg, f.source);
     const invoice = await withTransaction(suite.db, async (tx) => {
       const priced = await priceForIssuance(tx, v.clock, v.backend, cfg, f.tab);
@@ -829,12 +825,12 @@ describe("departmentless transfer monitoring", () => {
       }
       expect(logged).toEqual([]);
       await withTransaction(suite.db, async (tx) => {
-        await setProfileServiceScope(tx, v.cfg, till.profileId, {
+        await setProfileServiceScope(tx, till.profileId, {
           departmentId: f.b,
           allowedZoneIds: [f.bz],
           startingZoneId: f.bz,
         });
-        await setDepartmentTransferSettings(tx, v.cfg, f.b, {
+        await setDepartmentTransferSettings(tx, f.b, {
           receivingProfileId: till.profileId,
           destinationDepartmentIds: [],
         });
@@ -907,7 +903,7 @@ describe("department transfer durable reads", () => {
   it("reads the latest placed tab and outstanding kitchen instructions without resolving it", async () => {
     const f = await ready();
     f.tab = await counterOrder(v, "Burger");
-    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.az));
     await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
       requestCfg(v.cfg, f.source),
@@ -1000,9 +996,7 @@ describe("department transfer durable reads", () => {
   it("refuses source reads outside its zone before acceptance", async () => {
     const f = await ready();
     await pending(f);
-    await withTransaction(suite.db, (tx) =>
-      retargetOrderServiceContext(tx, v.cfg, f.tab, f.hidden),
-    );
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.hidden));
     expect(await get(f.source.cookie, requestPath(f.tab))).toMatchObject({
       status: 403,
       body: { error: { code: "service_zone.not_allowed" } },
@@ -1058,7 +1052,7 @@ describe("department transfer read boundaries", () => {
     const f = await ready();
     const id = await pending(f);
     await withTransaction(suite.db, (tx) =>
-      setDepartmentTransferSettings(tx, v.cfg, f.b, {
+      setDepartmentTransferSettings(tx, f.b, {
         receivingProfileId: f.otherProfile,
         destinationDepartmentIds: [],
       }),
@@ -1079,7 +1073,7 @@ describe("department transfer read boundaries", () => {
   it("keeps ready work outstanding and excludes made-here work", async () => {
     const f = await ready();
     f.tab = await counterOrder(v, "Burger");
-    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.az));
     await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
       requestCfg(v.cfg, f.source),
@@ -1119,7 +1113,7 @@ describe("department transfer read boundaries", () => {
   it("carries a dish waiting for the pass with its request time and no fire time", async () => {
     const f = await ready();
     f.tab = await counterOrder(v, "Burger");
-    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.az));
     await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
       requestCfg(v.cfg, f.source),
@@ -1161,7 +1155,7 @@ describe("department transfer read boundaries", () => {
     async ({ active, served, held, included }) => {
       const f = await ready();
       f.tab = await counterOrder(v, "Burger");
-      await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+      await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.az));
       await suite.db
         .update(workingOrderLines)
         .set({ quantity: 2000 })
@@ -1510,9 +1504,7 @@ describe("department-wide sent transfer discovery", () => {
       source: "operator_script",
       orderNumber: ++nextOrderNumber,
     });
-    await withTransaction(suite.db, (tx) =>
-      recordOrderServiceContext(tx, v.cfg, secondTab!.id, f.az),
-    );
+    await withTransaction(suite.db, (tx) => recordOrderServiceContext(tx, secondTab!.id, f.az));
     const second = await pending({ ...f, tab: secondTab!.id });
     const unrelated = await ready();
     await pending(unrelated);
@@ -1707,7 +1699,7 @@ describe("department transfer tab lifecycle", () => {
   it("cancels a placed uninvoiced tab and withdraws its pending request", async () => {
     const f = await ready();
     f.tab = await counterOrder(v, "Agua");
-    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.az));
     await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
       requestCfg(v.cfg, f.source),
@@ -1784,7 +1776,7 @@ describe("department transfer tab lifecycle", () => {
     async (kind) => {
       const f = await ready();
       f.tab = await counterOrder(v, "Agua");
-      await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+      await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.az));
       const deps = {
         db: suite.db,
         backend: v.backend,
@@ -1838,7 +1830,7 @@ describe("department transfer tab lifecycle", () => {
     async (kind) => {
       const f = await ready();
       f.tab = await counterOrder(v, "Agua");
-      await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+      await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.az));
       const deps = { db: suite.db, backend: v.backend, clock: v.clock };
       if (kind === "issued")
         await withTransaction(suite.db, async (tx) => {
@@ -1935,7 +1927,7 @@ describe("human transfer identities", () => {
   it("names the recorded preparation station even after it is switched off", async () => {
     const f = await ready();
     f.tab = await counterOrder(v, "Burger");
-    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.az));
     await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
       requestCfg(v.cfg, f.source),
@@ -1978,7 +1970,7 @@ describe("human transfer identities", () => {
   /** Points `f.tab` at a new placed tab in the source zone: a held Burger and a ready Paella. */
   async function heldAndReady(f: Awaited<ReturnType<typeof ready>>) {
     f.tab = await counterOrder(v, "Burger", "Paella");
-    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.az));
     await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
       requestCfg(v.cfg, f.source),
@@ -2061,8 +2053,8 @@ describe("human transfer identities", () => {
       await post(f.desk.cookie, resolutionPath(id, "accept"), { revision: 0, zoneId: f.bz }),
     ).toMatchObject({ status: 200 });
     await withTransaction(suite.db, async (tx) => {
-      await configureZone(tx, v.cfg, { zoneId: f.bz, departmentId: f.a });
-      await setProfileServiceScope(tx, v.cfg, f.sourceProfile, {
+      await configureZone(tx, { zoneId: f.bz, departmentId: f.a });
+      await setProfileServiceScope(tx, f.sourceProfile, {
         departmentId: f.a,
         allowedZoneIds: [f.az, f.bz],
         startingZoneId: f.az,
@@ -2084,9 +2076,7 @@ describe("human transfer identities", () => {
     const id = await pending(f);
     const before = await get(f.source.cookie, "/api/department-transfers/sent");
     expect(rowOf(before.body, id)).toMatchObject({ counts: HELD_AND_READY });
-    await withTransaction(suite.db, (tx) =>
-      retargetOrderServiceContext(tx, v.cfg, f.tab, f.hidden),
-    );
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.hidden));
     const after = await get(f.source.cookie, "/api/department-transfers/sent");
     expect(after.status).toBe(200);
     const row = rowOf(after.body, id);

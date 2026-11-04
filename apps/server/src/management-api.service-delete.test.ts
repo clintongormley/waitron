@@ -113,8 +113,8 @@ beforeEach(async () => {
 });
 async function target() {
   return run(async (tx) => {
-    const department = await createDepartment(tx, v.cfg, { name: "Events", orderStart: "table" });
-    const zone = await createServiceZone(tx, v.cfg, {
+    const department = await createDepartment(tx, { name: "Events", orderStart: "table" });
+    const zone = await createServiceZone(tx, {
       name: "Garden",
       departmentId: department.id,
     });
@@ -361,7 +361,7 @@ it.each([
         .insert(deviceProfiles)
         .values({ name: "Only garden", formFactor: "till" })
         .returning();
-      await setProfileServiceScope(tx, v.cfg, profile!.id, {
+      await setProfileServiceScope(tx, profile!.id, {
         departmentId: f.departmentId,
         allowedZoneIds: [f.zoneId],
         startingZoneId: f.zoneId,
@@ -440,11 +440,11 @@ it.each([
 describe("stale floor identifiers", () => {
   async function floorTarget(deleted = true) {
     const f = await run(async (tx) => {
-      const department = await createDepartment(tx, v.cfg, {
+      const department = await createDepartment(tx, {
         name: randomUUID(),
         orderStart: "table",
       });
-      const zone = await createServiceZone(tx, v.cfg, {
+      const zone = await createServiceZone(tx, {
         name: randomUUID(),
         departmentId: department.id,
       });
@@ -529,7 +529,7 @@ describe("stale floor identifiers", () => {
         ),
     ],
     ["floor reset", "zone.not_found", (tx, f) => resetZone(tx, v.cfg, [], f.zoneId, now, "due")],
-    ["floor catch-up", "zone.not_found", (tx, f) => catchUpZone(tx, v.cfg, [], f.zoneId, now)],
+    ["floor catch-up", "zone.not_found", (tx, f) => catchUpZone(tx, [], f.zoneId, now)],
     ["table move", "table.not_found", (tx, f) => moveToday(tx, v.cfg, f.tableId, { x: 2, y: 2 })],
     ["table rotate", "table.not_found", (tx, f) => rotateToday(tx, v.cfg, f.tableId)],
     ["table take off", "table.not_found", (tx, f) => takeOffToday(tx, v.cfg, f.tableId)],

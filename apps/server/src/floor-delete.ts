@@ -28,7 +28,6 @@ import {
 import { foodOnItsWay } from "./delivery-release.js";
 import { deletePlans, removeSets } from "./floor-plan-sets.js";
 import { removeLiveTables, tableDeleteRefusals } from "./table-removal.js";
-import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 function sorted(targets: DeleteTarget[]): DeleteTarget[] {
@@ -88,7 +87,6 @@ async function inventory(tx: Transaction, zoneIds: readonly string[]) {
 }
 async function refusalsFor(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   tables: (typeof diningTables.$inferSelect)[],
   now: Date,
@@ -138,25 +136,22 @@ async function refusalsFor(
       });
     }
   }
-  refusals.push(...(await tableDeleteRefusals(tx, cfg, removals, ids, now)));
+  refusals.push(...(await tableDeleteRefusals(tx, removals, ids, now)));
   return refusals;
 }
-export function floorDeletionFor(
-  cfg: TradingContext,
-  removals: readonly TableRemoval[],
-): FloorDeletion {
+export function floorDeletionFor(removals: readonly TableRemoval[]): FloorDeletion {
   return {
     removeSets,
     async readImpact(tx, zoneIds, now) {
       const floor = await inventory(tx, zoneIds);
       return {
-        refusals: await refusalsFor(tx, cfg, removals, floor.tables, now),
+        refusals: await refusalsFor(tx, removals, floor.tables, now),
         removes: floor.removes,
       };
     },
     async clear(tx, zoneIds, now) {
       const floor = await inventory(tx, zoneIds);
-      const [refusal] = await refusalsFor(tx, cfg, removals, floor.tables, now);
+      const [refusal] = await refusalsFor(tx, removals, floor.tables, now);
       if (refusal)
         throw new AppError(refusal.code as ErrorCode, refusal.params as ErrorParams[ErrorCode]);
       await tx
@@ -173,7 +168,6 @@ export function floorDeletionFor(
       await tx.delete(floorResetTables).where(inArray(floorResetTables.zoneId, floor.ids));
       const kept = await removeLiveTables(
         tx,
-        cfg,
         removals,
         floor.tables.map((table) => table.id),
         now,

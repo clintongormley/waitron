@@ -244,12 +244,12 @@ describe("A773 station policy: pass coverage", () => {
     await waiting(venue, "grill");
     const pass = await passOn(venue, "Narrowed", null);
     await withTransaction(db, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, pass.profileId, {
+      VENUE_SERVICE.setProfileKitchenScreens(tx, pass.profileId, {
         station: { stationIds: null, zoneIds: null },
       }),
     );
     const screens = await withTransaction(db, (tx) =>
-      VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, pass.deviceId),
+      VENUE_SERVICE.readDeviceKitchenScreens(tx, pass.deviceId),
     );
     expect(screens.find((screen) => screen.kind === "pass")).toMatchObject({ available: false });
     expect(await coverage(venue)).toEqual(
@@ -330,7 +330,7 @@ describe("A773 station policy: pass coverage", () => {
   it("a deleted station is no gap, though deletion leaves it waiting", async () => {
     const venue = await setupSplitExtrasVenue();
     await waiting(venue, "grill", "fryer");
-    await withTransaction(db, (tx) => deleteStation(tx, venue.cfg, venue.stations.grill));
+    await withTransaction(db, (tx) => deleteStation(tx, venue.stations.grill));
     const [grill] = await db
       .select({ active: kitchenStations.active, waitsForPass: kitchenStations.waitsForPass })
       .from(kitchenStations)
@@ -625,7 +625,7 @@ async function tablesTillPass(venue: Venue, capabilities: CapabilityFlag[] = TIL
     "till",
   );
   await withTransaction(db, (tx) =>
-    setProfileServiceAccess(tx, venue.cfg, made.profileId, {
+    setProfileServiceAccess(tx, made.profileId, {
       departmentId: department,
       allowedZoneIds: [T],
       startingZoneId: T,
@@ -645,7 +645,7 @@ async function tablesTillPass(venue: Venue, capabilities: CapabilityFlag[] = TIL
 /** The device's pass screen's To fire cards, read as its board reads them. */
 async function toFire(venue: Venue, by: PassActor): Promise<PassCard[]> {
   return withTransaction(db, async (tx) => {
-    const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, by.deviceId)).find(
+    const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, by.deviceId)).find(
       (candidate) => candidate.kind === "pass",
     )!;
     return (await readScopedPassBoard(tx, venue.cfg, passScopeOf(screen))).toFire;

@@ -137,7 +137,7 @@ export function mountLineCancelApi(
         ?.map((id) => requireBodyUuid(id, "lineIds").toLowerCase());
       const answer = await withTransaction(deps.db, async (tx) => {
         const current = await admittedSession(tx, session);
-        await checkZones(tx, deps.cfg, current, [{ partyId }]);
+        await checkZones(tx, current, [{ partyId }]);
         const context = await readCancellationContext(tx, partyId, lineId, lineIds);
         const [bill] = await tx
           .select({ id: workingOrders.id, revision: workingOrders.revision })
@@ -212,7 +212,7 @@ export function mountLineCancelApi(
           async (tx) => {
             const current = await admittedSession(tx, session);
             const cfg = sendingCfg(requestCfg(deps.cfg, current), c, current.device);
-            await checkZones(tx, deps.cfg, current, [{ partyId }]);
+            await checkZones(tx, current, [{ partyId }]);
             const refund =
               ask.refundHandoff === true
                 ? await authorize(

@@ -41,7 +41,7 @@ export async function enrolDeviceForTest(
     if (input.stationId !== undefined)
       kitchenScreens.push({ kind: "station", stationIds: [input.stationId], zoneIds: null });
     if (input.kitchenScreen !== undefined) kitchenScreens.push(input.kitchenScreen);
-    for (const screen of kitchenScreens) await offerOnProfile(tx, cfg, input.profileId, screen);
+    for (const screen of kitchenScreens) await offerOnProfile(tx, input.profileId, screen);
     const made = await createJoinRequest(tx, cfg, { kind: "device", label: input.name });
     const accepted = await acceptDeviceJoinRequest(tx, cfg, made.joinId, {
       label: input.name,
@@ -56,7 +56,6 @@ export async function enrolDeviceForTest(
  *  own check still refuses that one. */
 export async function offerOnProfile(
   tx: Transaction,
-  cfg: TradingContext,
   profileId: string,
   screen: DeviceKitchenScreen,
 ): Promise<void> {
@@ -79,7 +78,7 @@ export async function offerOnProfile(
             .where(inArray(floorZones.id, [...screen.zoneIds]))
         ).map((row) => row.id);
   if (stationIds?.length === 0 || zoneIds?.length === 0) return;
-  await VENUE_SERVICE.addProfileKitchenScreen(tx, cfg, profileId, {
+  await VENUE_SERVICE.addProfileKitchenScreen(tx, profileId, {
     kind: screen.kind,
     stationIds,
     zoneIds,

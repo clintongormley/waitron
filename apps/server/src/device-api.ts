@@ -347,11 +347,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       const { approvedProfiles, kitchenScreens } = await withTransaction(deps.db, async (tx) => {
-        const kitchenScreens = await VENUE_SERVICE.readDeviceKitchenScreens(
-          tx,
-          deps.cfg,
-          device.deviceId,
-        );
+        const kitchenScreens = await VENUE_SERVICE.readDeviceKitchenScreens(tx, device.deviceId);
         const [active, ...alternatives] = await readApprovedProfiles(tx, device.deviceId);
         if (active === undefined) return { approvedProfiles: [], kitchenScreens };
         const personId = await signedInPersonOn(tx, c, device.deviceId);
@@ -391,7 +387,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           const device = await currentZoneDevice(tx, session);
-          return VENUE_SERVICE.readDeviceZoneSelection(tx, deps.cfg, device.deviceId);
+          return VENUE_SERVICE.readDeviceZoneSelection(tx, device.deviceId);
         }),
       );
     }),
@@ -409,7 +405,6 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
           await assertNoPaymentInProgress(tx, device.deviceId);
           return VENUE_SERVICE.setDeviceZoneSelection(
             tx,
-            deps.cfg,
             device.deviceId,
             body as DeviceZoneSelectionInput,
           );
@@ -562,7 +557,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       const { kind, value } = parseOwnKitchenScreenDisplay(await readJsonBody<unknown>(c));
       await withTransaction(deps.db, async (tx) => {
         const device = await assertDeviceStillProven(tx, proof);
-        await kitchenScreenOf(tx, c, deps.cfg, device, kind);
+        await kitchenScreenOf(tx, c, device, kind);
         await VENUE_SERVICE.setDeviceKitchenScreenDisplay(tx, device.deviceId, kind, value);
       });
       return c.body(null, 204);
@@ -574,7 +569,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       return c.json(
         await withTransaction(deps.db, async (tx) => {
-          const { screen } = await kitchenScreenOf(tx, c, deps.cfg, device, "pass");
+          const { screen } = await kitchenScreenOf(tx, c, device, "pass");
           const board = await readScopedPassBoard(tx, deps.cfg, passScopeOf(screen), {
             showNonPassStations: screen.showNonPassStations,
           });
@@ -589,7 +584,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       return c.json(
         await withTransaction(deps.db, async (tx) => {
-          const { screen } = await kitchenScreenOf(tx, c, deps.cfg, device, "pass_monitor");
+          const { screen } = await kitchenScreenOf(tx, c, device, "pass_monitor");
           const board = await readScopedPassBoard(tx, deps.cfg, passScopeOf(screen), {
             release: false,
             showNonPassStations: screen.showNonPassStations,
@@ -604,18 +599,17 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   app.get("/api/device/station-screen", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      const cfg = requestCfg(deps.cfg, device);
       const stations = await withTransaction(deps.db, async (tx) => {
-        const screen = await stationScreenOf(tx, c, deps.cfg, device);
+        const screen = await stationScreenOf(tx, c, device);
         const { slots, queues } = await stationScreenSlots(tx, screen);
         const live = [...queues.keys()];
         const now = new Date();
         // An Every screen can still hold ready dishes at a deleted station.
-        const states = await (await VENUE_SERVICE.routingAt(tx, cfg, now)).stations();
+        const states = await (await VENUE_SERVICE.routingAt(tx, now)).stations();
         const down = await stationPrintersDown(tx, now, live, {
           withSwitchedOff: true,
         });
-        const notices = await VENUE_SERVICE.listStationsNotices(tx, cfg, live);
+        const notices = await VENUE_SERVICE.listStationsNotices(tx, live);
         const shown = [];
         for (const { id, name, available, switchedOff } of slots) {
           if (!available && !switchedOff) {
@@ -656,10 +650,9 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   app.post("/api/device/kitchen-notices/:id/acknowledge", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      const cfg = requestCfg(deps.cfg, device);
       const id = c.req.param("id");
       await withTransaction(deps.db, async (tx) => {
-        const screen = await stationScreenOf(tx, c, deps.cfg, device);
+        const screen = await stationScreenOf(tx, c, device);
         assertProfileAction(device, "prepare-orders");
         if (!isUuid(id)) throw new AppError("kitchen_notice.not_found", { noticeId: id });
         const [notice] = await tx
@@ -668,7 +661,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
           .where(eq(kitchenNotices.id, id));
         if (notice === undefined || !(await worksStation(tx, screen, notice.stationId)))
           throw new AppError("kitchen_notice.not_found", { noticeId: id });
-        await VENUE_SERVICE.acknowledgeKitchenNotice(tx, cfg, id, { stationId: notice.stationId });
+        await VENUE_SERVICE.acknowledgeKitchenNotice(tx, id, { stationId: notice.stationId });
       });
       return c.body(null, 204);
     }),
@@ -690,7 +683,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       // "queued"/garbage/absent as `ticket.invalid_transition` before any enum reaches the column.
       const to = body.to as TicketState;
       await withTransaction(deps.db, async (tx) => {
-        const screen = await stationScreenOf(tx, c, deps.cfg, device);
+        const screen = await stationScreenOf(tx, c, device);
         // `advanceTicketItem` NEVER checks the station, so the station guard is the route's job.
         // An unknown item is left to the verb → `ticket.invalid_transition`.
         const [item] = await tx
@@ -715,7 +708,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       if (!isUuid(id)) throw new AppError("working_order.not_found", { workingOrderId: id });
       const request = stationMoveRequest(id, await readJsonBody<Record<string, unknown>>(c));
       const answer = await withTransaction(deps.db, async (tx) => {
-        const { screen, personId } = await kitchenScreenOf(tx, c, deps.cfg, device, "station");
+        const { screen, personId } = await kitchenScreenOf(tx, c, device, "station");
         return moveDishesToStation(
           tx,
           cfg,
@@ -741,7 +734,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       if (device.formFactor !== "kds") throw new AppError("device.unauthorized", {});
       return c.json(
         await withTransaction(deps.db, async (tx) => {
-          await stationScreenOf(tx, c, deps.cfg, device);
+          await stationScreenOf(tx, c, device);
           return listStationsToday(tx, deps.cfg);
         }),
       );
@@ -787,7 +780,6 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
             ),
             kitchenScreens: await VENUE_SERVICE.readDevicesKitchenScreens(
               tx,
-              deps.cfg,
               rows.map((row) => row.id),
             ),
           };
@@ -918,7 +910,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         const switching = profileId !== device.deviceProfileId;
         if (switching) await assertNoPaymentInProgress(tx, id);
         if (kitchenScreens !== undefined) {
-          await resolveDeviceKitchenScreens(tx, deps.cfg, {
+          await resolveDeviceKitchenScreens(tx, {
             profileId,
             kitchenScreens,
             deviceId: id,
@@ -926,13 +918,13 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         } else {
           await requireDeviceProfile(tx, profileId);
           if (switching) {
-            await VENUE_SERVICE.narrowDeviceKitchenScreens(tx, deps.cfg, id, profileId);
-            await VENUE_SERVICE.assertKitchenDisplayHasScreen(tx, deps.cfg, id, profileId);
+            await VENUE_SERVICE.narrowDeviceKitchenScreens(tx, id, profileId);
+            await VENUE_SERVICE.assertKitchenDisplayHasScreen(tx, id, profileId);
           }
         }
         const held = await updateDeviceSettings(tx, { id, ...device }, { label, profileId });
         if (kitchenScreens !== undefined) {
-          await VENUE_SERVICE.setDeviceKitchenScreens(tx, deps.cfg, {
+          await VENUE_SERVICE.setDeviceKitchenScreens(tx, {
             deviceId: id,
             profileId,
             screens: kitchenScreens,
@@ -1068,10 +1060,9 @@ function parseEquipmentChoice(
 async function stationScreenOf(
   tx: Transaction,
   c: Context,
-  cfg: Pick<TradingContext, "locationId">,
   device: DeviceBinding,
 ): Promise<ResolvedKitchenScreen> {
-  return (await kitchenScreenOf(tx, c, cfg, device, "station")).screen;
+  return (await kitchenScreenOf(tx, c, device, "station")).screen;
 }
 
 /** A pass board's answer: the board, the screen's stations and zones, and its display choice. */
@@ -1096,11 +1087,10 @@ function passBoardAnswer(board: PassBoard, screen: ResolvedKitchenScreen) {
 async function kitchenScreenOf(
   tx: Transaction,
   c: Context,
-  cfg: Pick<TradingContext, "locationId">,
   device: DeviceBinding,
   kind: KitchenScreenKind,
 ): Promise<{ screen: ResolvedKitchenScreen; personId: string | null }> {
-  const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, cfg, device.deviceId)).find(
+  const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, device.deviceId)).find(
     (candidate) => candidate.kind === kind,
   );
   if (screen?.available !== true) throw new AppError("device.unauthorized", {});

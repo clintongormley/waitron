@@ -57,8 +57,8 @@ const sets = () => floorPlanSetsFor();
 /** A department with zone Inside and sets Standard (its default) and Dinner. */
 async function department() {
   return inTx(v, async (tx) => {
-    const dept = await createDepartment(tx, v.cfg, { name: fresh("Dept"), orderStart: "table" });
-    const inside = await createServiceZone(tx, v.cfg, {
+    const dept = await createDepartment(tx, { name: fresh("Dept"), orderStart: "table" });
+    const inside = await createServiceZone(tx, {
       name: fresh("Inside"),
       departmentId: dept.id,
     });
@@ -70,7 +70,7 @@ async function department() {
 
 async function addSet(tx: Transaction, departmentId: string, name: string): Promise<string> {
   const setId = await sets().create(tx);
-  await linkFloorPlanSet(tx, v.cfg, { setId, departmentId, name });
+  await linkFloorPlanSet(tx, { setId, departmentId, name });
   return setId;
 }
 
@@ -168,7 +168,7 @@ describe("the floor plan sets port", () => {
     expect(dinner.tables.find((t) => t.id === ids.a)!.keptSize).toEqual({ width: 8, height: 8 });
 
     const bar = await inTx(v, (tx) =>
-      createServiceZone(tx, v.cfg, { name: fresh("Bar"), departmentId: d.departmentId }),
+      createServiceZone(tx, { name: fresh("Bar"), departmentId: d.departmentId }),
     );
     await save(d.dinner, bar.id, { revision: 0, tables: [] });
 
@@ -196,7 +196,7 @@ describe("the floor plan sets port", () => {
         zoneIds.push(
           (
             await inTx(v, (tx) =>
-              createServiceZone(tx, v.cfg, { name: fresh("Room"), departmentId: d.departmentId }),
+              createServiceZone(tx, { name: fresh("Room"), departmentId: d.departmentId }),
             )
           ).id,
         );
@@ -273,7 +273,7 @@ describe("the floor plan sets port", () => {
     });
     const empty = await inTx(v, (tx) => sets().create(tx));
     const other = await inTx(v, (tx) =>
-      createServiceZone(tx, v.cfg, { name: fresh("Bar"), departmentId: d.departmentId }),
+      createServiceZone(tx, { name: fresh("Bar"), departmentId: d.departmentId }),
     );
 
     const read = await inTx(v, (tx) =>
@@ -346,7 +346,7 @@ describe("the floor plan sets port", () => {
     });
     const empty = await inTx(v, (tx) => sets().create(tx));
     const other = await inTx(v, (tx) =>
-      createServiceZone(tx, v.cfg, { name: fresh("Bar"), departmentId: d.departmentId }),
+      createServiceZone(tx, { name: fresh("Bar"), departmentId: d.departmentId }),
     );
 
     const read = await inTx(v, (tx) =>
@@ -426,7 +426,7 @@ describe("the floor plan sets port", () => {
 
     await inTx(v, async (tx) => {
       await tx.delete(departmentFloorPlanSets).where(eq(departmentFloorPlanSets.setId, d.dinner));
-      await floorDeletionFor(v.cfg, NONE).removeSets(tx, [d.dinner]);
+      await floorDeletionFor(NONE).removeSets(tx, [d.dinner]);
     });
 
     const after = await inTx(v, async (tx) => ({
@@ -458,7 +458,7 @@ describe("the floor plan sets port", () => {
 
   it("removes nothing for no sets", async () => {
     const d = await department();
-    await inTx(v, (tx) => floorDeletionFor(v.cfg, NONE).removeSets(tx, []));
+    await inTx(v, (tx) => floorDeletionFor(NONE).removeSets(tx, []));
     const rows = await inTx(v, (tx) =>
       tx.select().from(floorPlanSets).where(eq(floorPlanSets.id, d.standard)),
     );

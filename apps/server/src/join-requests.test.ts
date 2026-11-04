@@ -48,7 +48,7 @@ import { authenticateAgent } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
-import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
+import { setupVenue } from "./testing/venue-fixtures.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { createStation } from "./kitchen.js";
 import type { TradingContext } from "./trading-context.js";
@@ -67,10 +67,8 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-const shownOn = (venue: Venue, deviceId: string) =>
-  withTransaction(suite.db, (tx) =>
-    VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, deviceId),
-  );
+const shownOn = (deviceId: string) =>
+  withTransaction(suite.db, (tx) => VENUE_SERVICE.readDeviceKitchenScreens(tx, deviceId));
 
 let profileCounter = 0;
 async function seedProfile(
@@ -737,7 +735,7 @@ describe("acceptDeviceJoinRequest", () => {
     // `devices` INSERT that reuses the request's id.
     const profileId = await seedProfile("kds");
     await withTransaction(suite.db, (tx) =>
-      offerOnProfile(tx, venue.cfg, profileId, stationScreen(venue.defaultStationId)),
+      offerOnProfile(tx, profileId, stationScreen(venue.defaultStationId)),
     );
     const made = await withTransaction(suite.db, async (tx) => {
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Racer" });
@@ -918,7 +916,7 @@ describe("a returning disabled device", () => {
     const till = await seedProfile("till");
     const kds = await seedProfile("kds");
     await withTransaction(suite.db, (tx) =>
-      offerOnProfile(tx, venue.cfg, kds, stationScreen(venue.defaultStationId)),
+      offerOnProfile(tx, kds, stationScreen(venue.defaultStationId)),
     );
     const deviceId = await disabledDevice(venue, till);
     const accepted = await comeBack(venue, deviceId, { label: "Pass", profileId: kds }).catch(
@@ -944,7 +942,7 @@ describe("a returning disabled device", () => {
       .from(devices)
       .where(eq(devices.id, deviceId));
     expect(row).toEqual({ active: true, label: "Pass" });
-    expect(await shownOn(venue, deviceId)).toMatchObject([
+    expect(await shownOn(deviceId)).toMatchObject([
       { kind: "station", stations: [{ id: venue.defaultStationId, available: true }] },
     ]);
   });
@@ -955,9 +953,7 @@ describe("a returning disabled device", () => {
     const station = await withTransaction(suite.db, (tx) =>
       createStation(tx, venue.cfg, { name: "Oven" }),
     );
-    await withTransaction(suite.db, (tx) =>
-      offerOnProfile(tx, venue.cfg, kds, stationScreen(station.id)),
-    );
+    await withTransaction(suite.db, (tx) => offerOnProfile(tx, kds, stationScreen(station.id)));
     const deviceId = await withTransaction(suite.db, async (tx) => {
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Oven" });
       await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
@@ -994,7 +990,7 @@ describe("a returning disabled device", () => {
       .from(devices)
       .where(eq(devices.id, deviceId));
     expect(row).toEqual({ active: false });
-    expect(await shownOn(venue, deviceId)).toMatchObject([
+    expect(await shownOn(deviceId)).toMatchObject([
       { kind: "station", stations: [], everyStation: false },
     ]);
   });
@@ -1097,14 +1093,12 @@ describe("a returning disabled device", () => {
       active: true,
     });
     const returning = await withTransaction(suite.db, (tx) =>
-      returningDevicesOf(tx, venue.cfg, [made.joinId]),
+      returningDevicesOf(tx, [made.joinId]),
     );
     expect([...returning.keys()]).toEqual([]);
     // The other direction: the same row disabled is marked.
     await suite.db.update(devices).set({ active: false }).where(eq(devices.id, made.joinId));
-    const disabled = await withTransaction(suite.db, (tx) =>
-      returningDevicesOf(tx, venue.cfg, [made.joinId]),
-    );
+    const disabled = await withTransaction(suite.db, (tx) => returningDevicesOf(tx, [made.joinId]));
     expect([...disabled.keys()]).toEqual([made.joinId]);
   });
 
@@ -1115,7 +1109,7 @@ describe("a returning disabled device", () => {
       createStation(tx, venue.cfg, { name: "Grill" }),
     );
     await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+      VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
         pass: { stationIds: null, zoneIds: null },
       }),
     );
@@ -1136,9 +1130,7 @@ describe("a returning disabled device", () => {
         returning: { deviceId, tokenHash: await storedHash(deviceId) },
       }),
     );
-    const returning = await withTransaction(suite.db, (tx) =>
-      returningDevicesOf(tx, venue.cfg, [deviceId]),
-    );
+    const returning = await withTransaction(suite.db, (tx) => returningDevicesOf(tx, [deviceId]));
     expect(returning.get(deviceId)?.kitchenScreens).toMatchObject([
       {
         kind: "pass",
@@ -1156,7 +1148,7 @@ describe("a returning disabled device", () => {
       }),
     );
     const shown = await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, deviceId),
+      VENUE_SERVICE.readDeviceKitchenScreens(tx, deviceId),
     );
     expect(shown[0]?.stations.map((slot) => slot.id)).toContain(grill.id);
   });
@@ -1168,7 +1160,7 @@ describe("a returning disabled device", () => {
       createStation(tx, venue.cfg, { name: "Grill" }),
     );
     await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+      VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
         pass: { stationIds: null, zoneIds: null },
       }),
     );
@@ -1198,7 +1190,7 @@ describe("a returning disabled device", () => {
     const single = vi.spyOn(VENUE_SERVICE, "readDeviceKitchenScreens");
     try {
       const returning = await withTransaction(suite.db, (tx) =>
-        returningDevicesOf(tx, venue.cfg, [kitchenDevice, grillDevice]),
+        returningDevicesOf(tx, [kitchenDevice, grillDevice]),
       );
       const stationsOf = (id: string) =>
         returning.get(id)?.kitchenScreens.map((screen) => screen.stations.map((slot) => slot.id));
@@ -1223,9 +1215,7 @@ describe("a returning disabled device", () => {
         returning: { deviceId, tokenHash: await storedHash(deviceId) },
       }),
     );
-    const live = await withTransaction(suite.db, (tx) =>
-      returningDevicesOf(tx, venue.cfg, [deviceId]),
-    );
+    const live = await withTransaction(suite.db, (tx) => returningDevicesOf(tx, [deviceId]));
     expect(live.get(deviceId)?.profileRetired).toBe(false);
 
     // Only a disabled device holds the profile, so deleting it retires the row.
@@ -1235,9 +1225,7 @@ describe("a returning disabled device", () => {
         id: profileId,
       }),
     );
-    const retired = await withTransaction(suite.db, (tx) =>
-      returningDevicesOf(tx, venue.cfg, [deviceId]),
-    );
+    const retired = await withTransaction(suite.db, (tx) => returningDevicesOf(tx, [deviceId]));
     expect(retired.get(deviceId)?.profileRetired).toBe(true);
   });
 
@@ -1472,7 +1460,7 @@ describe("a returning disabled device", () => {
     const disabledId = await disabledDevice(venue, profileId);
 
     const returning = await withTransaction(suite.db, (tx) =>
-      returningDevicesOf(tx, venue.cfg, [deletedId, disabledId]),
+      returningDevicesOf(tx, [deletedId, disabledId]),
     );
 
     expect([...returning.keys()]).toEqual([disabledId]);
@@ -1758,7 +1746,7 @@ describe("deleted zone joins", () => {
       zoneIds: [zone!.id],
     };
     await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, { pass: screen }),
+      VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, { pass: screen }),
     );
     const pending = await withTransaction(suite.db, (tx) =>
       createJoinRequest(tx, venue.cfg, { kind: "device", label: "Pending pass" }),
@@ -1788,13 +1776,13 @@ describe("deleted zone joins", () => {
       }),
     );
     const shown = await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, pending.joinId),
+      VENUE_SERVICE.readDeviceKitchenScreens(tx, pending.joinId),
     );
     expect(shown[0]?.zones).toEqual([]);
     expect(shown[0]?.stations.map((slot) => slot.id)).toEqual([venue.defaultStationId]);
     await expect(
       withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.assertPassScreenZone(tx, venue.cfg, pending.joinId, null),
+        VENUE_SERVICE.assertPassScreenZone(tx, pending.joinId, null),
       ),
     ).rejects.toMatchObject({ code: "kitchen_screen.zone_not_allowed", params: { zoneId: null } });
   });

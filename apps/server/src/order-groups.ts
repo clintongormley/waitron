@@ -425,7 +425,7 @@ export async function placeGroups(
     );
   }
   await beforeOutput?.(portionsOfLine);
-  const routing = routingOnce(tx, cfg, new Date());
+  const routing = routingOnce(tx, new Date());
   for (const [i, group] of groups.entries()) {
     const groupId = groupIds[i]!;
     const fire = group.release === "fire";
@@ -486,7 +486,7 @@ export async function fireGroup(
   firer: Firer = { personId: args.operatorId },
   attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
-  const routing = routingOnce(tx, cfg, new Date());
+  const routing = routingOnce(tx, new Date());
   if (args.allergy !== undefined) args = { ...args, allergy: normaliseAllergyPatch(args.allergy) };
   return runServiceCommand(
     tx,
@@ -537,7 +537,7 @@ export async function fireHeldLine(
   args: PartyFireArgs,
   attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
-  const routing = routingOnce(tx, cfg, new Date());
+  const routing = routingOnce(tx, new Date());
   if (args.allergy !== undefined) args = { ...args, allergy: normaliseAllergyPatch(args.allergy) };
   return runServiceCommand(
     tx,
@@ -809,7 +809,7 @@ export async function releaseHeldWorkOf(
     attendance === undefined
       ? undefined
       : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() };
-  const routing = routingOnce(tx, cfg, new Date());
+  const routing = routingOnce(tx, new Date());
   for (const group of held) {
     const active = await activeGroupLines(tx, group.id);
     if (active.length > 0) {
@@ -857,7 +857,7 @@ async function releaseGroup(
   groupId: string,
   firer: Firer,
   detail: Record<string, unknown>,
-  routing = routingOnce(tx, cfg, new Date()),
+  routing = routingOnce(tx, new Date()),
   attendance?: { recorder: AttendanceRecorder; at: string },
   active?: Awaited<ReturnType<typeof activeGroupLines>>,
 ): Promise<void> {
@@ -2622,7 +2622,7 @@ export async function groupArrivingDishes(
       else course.push(line);
     }
   }
-  const routing = immediate.length === 0 ? undefined : routingOnce(tx, cfg, new Date());
+  const routing = immediate.length === 0 ? undefined : routingOnce(tx, new Date());
   const firing = [
     // A copy added when a waiting dish was raised carries its parent's sent time, so its request
     // time dates it.

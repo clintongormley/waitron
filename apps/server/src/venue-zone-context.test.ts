@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId, type BusinessDayClock } from "@waitron/shared";
+import { type BusinessDayClock } from "@waitron/shared";
 import { CATALOGUE_MIGRATIONS, createCatalogue } from "@waitron/catalogue";
 import {
   VENUE_SERVICE_MIGRATIONS,
@@ -233,18 +233,16 @@ describe("retained clock candidate validation", () => {
       .update(locations)
       .set({ timeZone: "Europe/Madrid" })
       .where(eq(locations.id, scope.locationId));
-    const cfg = { locationId: locationId(scope.locationId) };
     await withTransaction(suite.db, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Test menu" });
-      const department = await createDepartment(tx, cfg, { name: "Dining", orderStart: "counter" });
-      const period = await saveMenuPeriod(tx, cfg, department.id, {
+      const department = await createDepartment(tx, { name: "Dining", orderStart: "counter" });
+      const period = await saveMenuPeriod(tx, department.id, {
         name: "Lunch",
         menuId: menu.id,
         staffMenuIds: [],
       });
       await replaceMenuWeek(
         tx,
-        cfg,
         department.id,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,

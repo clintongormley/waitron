@@ -107,7 +107,7 @@ const suite = useVenueDb({
     });
     productId = product.id;
     cfg = makeCfg(locationId, nodeId);
-    const zone = await withTransaction(db, (tx) => createZone(tx, cfg, { name: "Terraza" }));
+    const zone = await withTransaction(db, (tx) => createZone(tx, { name: "Terraza" }));
     seededZoneId = zone.id;
     const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
     menuItemId = offers.offerFor(productId);
@@ -116,7 +116,6 @@ const suite = useVenueDb({
     await withTransaction(db, (tx) =>
       setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "product", productId: product.breadId }, zoneId: null },
         { kind: "no_preparation" },
       ),

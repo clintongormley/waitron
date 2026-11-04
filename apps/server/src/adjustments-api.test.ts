@@ -188,7 +188,6 @@ describe("corrections through order actions on a station's printers", () => {
         .where(eq(products.name, "Cana"));
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: beer!.id }, zoneId: null },
         { kind: "station", stationId: bar.id },
       );
@@ -263,7 +262,7 @@ describe("corrections through order actions on a station's printers", () => {
         for (const [printerId, stationIds] of listed)
           for (const stationId of stationIds)
             await detachPrinterFromStation(tx, { stationId, printerId });
-        await clearRoutingCell(tx, venue.cfg, {
+        await clearRoutingCell(tx, {
           row: { kind: "product", productId: beerId },
           zoneId: null,
         });

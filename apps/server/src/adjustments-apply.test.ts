@@ -3817,14 +3817,12 @@ async function partyRevision(partyId: string): Promise<number> {
 }
 
 async function noticesAtStation() {
-  return (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, venue.stationId))).map(
-    (notice) => ({
-      kind: notice.kind,
-      lineName: notice.lineName,
-      quantity: notice.quantity,
-      wasStarted: notice.wasStarted,
-    }),
-  );
+  return (await inTx(venue, (tx) => listStationNotices(tx, venue.stationId))).map((notice) => ({
+    kind: notice.kind,
+    lineName: notice.lineName,
+    quantity: notice.quantity,
+    wasStarted: notice.wasStarted,
+  }));
 }
 
 async function printJobCount(): Promise<number> {

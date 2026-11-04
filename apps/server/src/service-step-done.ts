@@ -4,7 +4,6 @@ import { AppError } from "@waitron/shared";
 import { recordStepCompletions } from "@waitron/venue-service";
 import { stepsClearedByDone } from "./service-step-reckoning.js";
 import { readStepFacts } from "./service-step-signals.js";
-import type { TradingContext } from "./trading-context.js";
 import { assertSubjectZones } from "./zone-access.js";
 import "./errors.js";
 
@@ -19,7 +18,6 @@ import "./errors.js";
 export async function markServiceStepDone(
   tx: Transaction,
   args: {
-    cfg: TradingContext;
     deviceProfileId: string;
     partyId: string;
     stepId: string;
@@ -28,7 +26,7 @@ export async function markServiceStepDone(
     nowMs: number;
   },
 ): Promise<{ cleared: string[] }> {
-  const { cfg, deviceProfileId, partyId, stepId, dueAt, personId, nowMs } = args;
+  const { deviceProfileId, partyId, stepId, dueAt, personId, nowMs } = args;
   const [party] = await tx
     .select({ state: parties.state, openedAt: parties.openedAt })
     .from(parties)
@@ -46,7 +44,7 @@ export async function markServiceStepDone(
   const found = [...steps].find(([, entry]) => entry.rules.some((rule) => rule.id === stepId));
   if (found === undefined) throw new AppError("service_step.not_found", { stepId });
   const [tableId, table] = found;
-  await assertSubjectZones(tx, cfg, deviceProfileId, [{ tableId }]);
+  await assertSubjectZones(tx, deviceProfileId, [{ tableId }]);
   const cleared = stepsClearedByDone(table.rules, table.facts, { stepId, dueAt }, nowMs);
   if (cleared.length === 0) return { cleared: [] };
   const doneAt = new Date(nowMs).toISOString();

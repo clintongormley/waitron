@@ -85,13 +85,11 @@ async function routed() {
   const barZone = await zone("Bar");
   const counterZone = await zone("Deli counter");
   const made = await scoped(async (tx) => {
-    await ensureDefaultSeasons(tx, cfg);
-    const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
-    ).id;
-    const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
-    await configureZone(tx, cfg, { zoneId: barZone, departmentId: restaurant });
-    await configureZone(tx, cfg, { zoneId: counterZone, departmentId: deli });
+    await ensureDefaultSeasons(tx);
+    const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
+    const deli = (await createDepartment(tx, { name: "Deli", orderStart: "counter" })).id;
+    await configureZone(tx, { zoneId: barZone, departmentId: restaurant });
+    await configureZone(tx, { zoneId: counterZone, departmentId: deli });
     const menu = async (name: string) => {
       const id = (await createCatalogue(tx, { name: `${name} ${locationId}` })).id;
       const { document } = await buildMenuDocument(tx, id);
@@ -103,7 +101,7 @@ async function routed() {
     const coffeeMenu = await menu("Coffee");
     const takeawayMenu = await menu("Takeaway deli");
     const morningPeriod = (
-      await saveMenuPeriod(tx, cfg, restaurant, {
+      await saveMenuPeriod(tx, restaurant, {
         name: "Morning service",
         menuId: breakfastMenu,
         staffMenuIds: [],
@@ -112,7 +110,6 @@ async function routed() {
     const christmas = (
       await saveSpecialDay(
         tx,
-        cfg,
         null,
         {
           name: "Christmas",
@@ -146,7 +143,7 @@ async function routed() {
     };
   });
   const app = new Hono();
-  VENUE_SERVICE_ROUTES.mount(app, { db, cfg, core: {} as ModuleRouteContext["core"] }, noopLog);
+  VENUE_SERVICE_ROUTES.mount(app, { db, cfg: {}, core: {} as ModuleRouteContext["core"] }, noopLog);
   let season = "";
   const send = (
     method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
@@ -178,7 +175,7 @@ async function routed() {
             ),
           }),
     });
-  const model = () => scoped((tx) => readOpeningHoursModel(tx, cfg, new Date()));
+  const model = () => scoped((tx) => readOpeningHoursModel(tx, new Date()));
   season = (await model()).currentSeasonId!;
   return { ...made, cfg, barZone, counterZone, app, send, model, season };
 }
@@ -534,9 +531,7 @@ describe("the opening-hours period API", () => {
     expect(response.status).toBe(200);
     const model = (await response.json()) as OpeningHoursModel;
     expect(model).toEqual(
-      JSON.parse(
-        JSON.stringify(await scoped((tx) => readOpeningHoursModel(tx, r.cfg, new Date()))),
-      ),
+      JSON.parse(JSON.stringify(await scoped((tx) => readOpeningHoursModel(tx, new Date())))),
     );
     expect(model.departments.find((department) => department.id === r.restaurant)!.periods).toEqual(
       [
@@ -566,7 +561,7 @@ describe("the opening-hours period API", () => {
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
     const period = async () =>
-      (await scoped((tx) => readOpeningHoursModel(tx, r.cfg, new Date()))).departments
+      (await scoped((tx) => readOpeningHoursModel(tx, new Date()))).departments
         .find((department) => department.id === r.restaurant)!
         .periods.find((value) => value.id === id)!;
     expect(await period()).toEqual({
@@ -625,7 +620,7 @@ describe("the opening-hours period API", () => {
     });
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
-    const model = await scoped((tx) => readOpeningHoursModel(tx, r.cfg, new Date()));
+    const model = await scoped((tx) => readOpeningHoursModel(tx, new Date()));
     expect(
       model.departments
         .find((department) => department.id === r.restaurant)!
@@ -644,7 +639,7 @@ describe("the opening-hours period API", () => {
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
     const colour = async () =>
-      (await scoped((tx) => readOpeningHoursModel(tx, r.cfg, new Date()))).departments
+      (await scoped((tx) => readOpeningHoursModel(tx, new Date()))).departments
         .find((department) => department.id === r.restaurant)!
         .periods.find((value) => value.id === id)!.colour;
     expect(await colour()).toBe("indigo");
@@ -1324,7 +1319,7 @@ describe("a period's Floor plan field", () => {
           .insert(floorPlanSets)
           .values({ locationId: r.cfg.locationId })
           .returning({ id: floorPlanSets.id });
-        await linkFloorPlanSet(tx, r.cfg, { setId: row!.id, departmentId, name });
+        await linkFloorPlanSet(tx, { setId: row!.id, departmentId, name });
         return row!.id;
       });
     const standard = await set(r.restaurant, "Standard");

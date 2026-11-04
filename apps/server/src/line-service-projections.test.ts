@@ -49,7 +49,6 @@ useVenueDb({
       extraStationId = station.id;
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: venue.olivesId }, zoneId: null },
         { kind: "station", stationId: station.id },
       );
@@ -149,7 +148,7 @@ describe("charged cancellation read projections", () => {
       .select()
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, order.billId));
-    const lines = await inTx(venue, (tx) => readTabLines(tx, venue.cfg, order.billId));
+    const lines = await inTx(venue, (tx) => readTabLines(tx, order.billId));
     expect(lines).toMatchObject([
       {
         id: order.parent.id,
@@ -187,7 +186,7 @@ describe("charged cancellation read projections", () => {
     const row = current.groups.flatMap((group) => group.rows)[0]!;
     expect(row).not.toHaveProperty("cancelledQuantity");
     expect(row.extras[0]).not.toHaveProperty("cancelledQuantity");
-    const lines = await inTx(venue, (tx) => readTabLines(tx, venue.cfg, order.billId));
+    const lines = await inTx(venue, (tx) => readTabLines(tx, order.billId));
     for (const line of lines) expect(line).not.toHaveProperty("cancelledQuantity");
     expect((await inTx(venue, (tx) => listOrderGroups(tx, order.partyId))).groups).toMatchObject([
       { summary: "3 × Pizza", lineIds: [order.parent.id] },
@@ -378,8 +377,8 @@ describe("charged cancellation read projections", () => {
       ]);
     });
     const notices = await inTx(venue, async (tx) => {
-      const parentNotices = await listStationNotices(tx, venue.cfg, venue.stationId);
-      const extraNotices = await listStationNotices(tx, venue.cfg, extraStationId);
+      const parentNotices = await listStationNotices(tx, venue.stationId);
+      const extraNotices = await listStationNotices(tx, extraStationId);
       return [...parentNotices, ...extraNotices].filter(
         (notice) => notice.workingOrderId === order.billId,
       );

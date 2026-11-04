@@ -1,16 +1,15 @@
 import { readBusinessDayScheduleRevision } from "../business-day-schedule.js";
 import { and, asc, eq } from "drizzle-orm";
 import { catalogues, readVenueClock, type Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, type LocationId } from "@waitron/shared";
 import { replaceMenuWeek, saveMenuPeriod, updateMenuPeriod } from "../menu-timetable.js";
 import { menuPeriods, menuPeriodStaffMenus } from "../schema/menus.js";
-import type { VenueScope } from "../operations.js";
 import { zoneServicePolicies } from "../schema/service.js";
 import "../errors.js";
 
 export async function offerMenuThroughZone(
   tx: Transaction,
-  cfg: VenueScope,
+  cfg: { locationId: LocationId },
   zoneId: string,
   menuId: string,
   options: { displayOrder?: number; makeDefault?: boolean } = {},
@@ -36,7 +35,7 @@ export async function offerMenuThroughZone(
     .where(and(eq(menuPeriods.departmentId, policy.departmentId), eq(menuPeriods.name, "Always")));
   const period =
     stored ??
-    (await saveMenuPeriod(tx, cfg, policy.departmentId, {
+    (await saveMenuPeriod(tx, policy.departmentId, {
       name: "Always",
       menuId,
       staffMenuIds: [],
@@ -57,7 +56,7 @@ export async function offerMenuThroughZone(
       entries.push({ menuId: stored.menuId, displayOrder: 0 });
     if (menuId !== customer) entries.push({ menuId, displayOrder: options.displayOrder ?? 0 });
     entries.sort((a, b) => a.displayOrder - b.displayOrder || a.menuId.localeCompare(b.menuId));
-    await updateMenuPeriod(tx, cfg, period.id, {
+    await updateMenuPeriod(tx, period.id, {
       menuId: customer,
       staffMenuIds: entries.map((entry) => entry.menuId),
     });
@@ -76,7 +75,6 @@ export async function offerMenuThroughZone(
   const middle = `${String((Number(start.slice(0, 2)) + 12) % 24).padStart(2, "0")}:${start.slice(3, 5)}`;
   await replaceMenuWeek(
     tx,
-    cfg,
     policy.departmentId,
     [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
       weekday,
@@ -86,6 +84,6 @@ export async function offerMenuThroughZone(
       ],
     })),
     new Date(),
-    await readBusinessDayScheduleRevision(tx, cfg),
+    await readBusinessDayScheduleRevision(tx),
   );
 }

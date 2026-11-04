@@ -190,7 +190,7 @@ async function edit(p: Sent, allergy: AllergyPatch) {
   );
 }
 async function notices() {
-  return inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, v.cfg, stationId));
+  return inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, stationId));
 }
 function patch(p: Sent, overrides: Partial<AllergyGuestInput> = {}): AllergyPatch {
   return { party: { answer: "allergies", guests: [{ ...p.guest, ...overrides }] }, ticks: [] };
@@ -394,7 +394,7 @@ describe("A669 notices", () => {
         );
         await writeProductModifiers(tx, v.productId("Burger"), [{ kind: "extras", id: list.id }]);
         const station = await createStation(tx, v.cfg, { name: "Sides kitchen" });
-        await routeProductTo(tx, v.cfg, side.id, station.id);
+        await routeProductTo(tx, side.id, station.id);
         await republishMenus(tx);
         return { side, list, station };
       });
@@ -435,7 +435,7 @@ describe("A669 notices", () => {
       }
       await edit(p, patch(p, { note: "Fresh tools" }));
       const byStation = await inTx(v, (tx) =>
-        VENUE_SERVICE.listStationsNotices(tx, v.cfg, [stationId, extra.station.id]),
+        VENUE_SERVICE.listStationsNotices(tx, [stationId, extra.station.id]),
       );
       expect(
         byStation.get(stationId)!.map(({ quantity, allergyBlock }) => ({ quantity, allergyBlock })),
@@ -791,7 +791,7 @@ describe("A803 portions", () => {
     };
   }
   const shown = async (at = stationId) =>
-    (await inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, v.cfg, at))).map(
+    (await inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, at))).map(
       ({ kind, quantity, lineName }) => ({ kind, quantity, lineName }),
     );
 

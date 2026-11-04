@@ -28,7 +28,7 @@ let counterDepartmentId: string;
 beforeEach(async () => {
   venue = await setupPartyVenue(suite.db);
   const zone = await withTransaction(suite.db, (tx) =>
-    VENUE_SERVICE.resolveZoneContext(tx, venue.cfg, venue.counter.zoneId),
+    VENUE_SERVICE.resolveZoneContext(tx, venue.counter.zoneId),
   );
   counterDepartmentId = zone.departmentId;
   await suite.db
@@ -95,10 +95,10 @@ it("an empty order records the device profile's starting zone instead of the cou
     .from(devices)
     .where(eq(devices.id, venue.cfg.origin.deviceId));
   const zone = await withTransaction(suite.db, (tx) =>
-    VENUE_SERVICE.resolveZoneContext(tx, venue.cfg, venue.tables.zoneId),
+    VENUE_SERVICE.resolveZoneContext(tx, venue.tables.zoneId),
   );
   await withTransaction(suite.db, (tx) =>
-    setProfileServiceScope(tx, venue.cfg, device!.deviceProfileId, {
+    setProfileServiceScope(tx, device!.deviceProfileId, {
       departmentId: zone.departmentId,
       allowedZoneIds: null,
       startingZoneId: venue.tables.zoneId,
@@ -117,10 +117,10 @@ it("an explicit zone wins over the profile starting zone", async () => {
     .from(devices)
     .where(eq(devices.id, venue.cfg.origin.deviceId));
   const zone = await withTransaction(suite.db, (tx) =>
-    VENUE_SERVICE.resolveZoneContext(tx, venue.cfg, venue.tables.zoneId),
+    VENUE_SERVICE.resolveZoneContext(tx, venue.tables.zoneId),
   );
   await withTransaction(suite.db, (tx) =>
-    setProfileServiceScope(tx, venue.cfg, device!.deviceProfileId, {
+    setProfileServiceScope(tx, device!.deviceProfileId, {
       departmentId: zone.departmentId,
       allowedZoneIds: null,
       startingZoneId: venue.tables.zoneId,
@@ -219,7 +219,6 @@ it("a closed zone refuses new orders but still lets its existing bill split", as
   await withTransaction(suite.db, (tx) =>
     replaceZoneClosedWeek(
       tx,
-      venue.cfg,
       venue.counter.zoneId,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,

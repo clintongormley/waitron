@@ -7,7 +7,6 @@ import { invalid } from "./bill-allocation.js";
 import type { Logger } from "./logger.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
-import { requestCfg } from "./request-config.js";
 import { overridePinAttempts, parseOverrideField, type Run, type TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
 import { gateZones } from "./zone-access.js";
@@ -25,11 +24,8 @@ export function mountKeepOpenApi(
       const session = await requireSession(deps, c);
       const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
       await gateZones(deps, session, [{ zoneId }]);
-      const cfg = requestCfg(deps.cfg, session);
       return c.json(
-        await withTransaction(deps.db, (tx) =>
-          VENUE_SERVICE.readKeepOpen(tx, cfg, zoneId, new Date()),
-        ),
+        await withTransaction(deps.db, (tx) => VENUE_SERVICE.readKeepOpen(tx, zoneId, new Date())),
       );
     }),
   );
@@ -38,7 +34,6 @@ export function mountKeepOpenApi(
       const session = await requireSession(deps, c);
       const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
       await gateZones(deps, session, [{ zoneId }]);
-      const cfg = requestCfg(deps.cfg, session);
       const body = asObject(await readRawJsonBody<unknown>(c));
       if (body.until !== null && typeof body.until !== "string") throw invalid("until");
       const input = { until: body.until };
@@ -49,7 +44,7 @@ export function mountKeepOpenApi(
       await withPinCheckAhead(deps.db, toCheck, attempts, (checked) =>
         withTransaction(deps.db, async (tx) => {
           await authorize(tx, { ...authz, override: withCheck(override, checked) }, attempts);
-          await VENUE_SERVICE.keepZoneOpen(tx, cfg, zoneId, input, new Date());
+          await VENUE_SERVICE.keepZoneOpen(tx, zoneId, input, new Date());
         }),
       );
       return c.body(null, 204);

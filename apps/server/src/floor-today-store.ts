@@ -131,11 +131,11 @@ export async function resetZone(
   await requireZone(tx, cfg, zoneId);
   const day = await todayBusinessDay(tx, now);
   if (day === null) return null;
-  if (onto !== "due") return resetZoneOn(tx, cfg, removals, zoneId, day, now, onto);
-  const { states, rows } = await zoneLayoutsOn(tx, cfg, [zoneId], now, day);
+  if (onto !== "due") return resetZoneOn(tx, removals, zoneId, day, now, onto);
+  const { states, rows } = await zoneLayoutsOn(tx, [zoneId], now, day);
   const due = dueOnto(states.get(zoneId)!);
   if (due === null) return null;
-  return resetZoneFor(tx, cfg, removals, zoneId, day, now, due, rows.get(zoneId), {
+  return resetZoneFor(tx, removals, zoneId, day, now, due, rows.get(zoneId), {
     keepTakenOff: false,
   });
 }
@@ -143,7 +143,6 @@ export async function resetZone(
 /** `resetZone` onto `onto` on business day `day`, for a caller that has read the day. */
 export async function resetZoneOn(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   zoneId: string,
   day: string,
@@ -151,7 +150,7 @@ export async function resetZoneOn(
   onto: ResetOnto,
 ): Promise<number> {
   const layout = await planOf(tx, { setId: onto.setId, zoneId });
-  return resetZoneFor(tx, cfg, removals, zoneId, day, now, onto, layout, { keepTakenOff: false });
+  return resetZoneFor(tx, removals, zoneId, day, now, onto, layout, { keepTakenOff: false });
 }
 
 /**
@@ -161,14 +160,13 @@ export async function resetZoneOn(
  */
 export async function updateLayout(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   zoneId: string,
   day: string | null,
   now: Date,
   sent: { setId: string; layoutRevision: number },
 ): Promise<number> {
-  const { states, rows } = await zoneLayoutsOn(tx, cfg, [zoneId], now, day);
+  const { states, rows } = await zoneLayoutsOn(tx, [zoneId], now, day);
   const due = states.get(zoneId)!.due;
   if (
     day === null ||
@@ -180,7 +178,6 @@ export async function updateLayout(
   }
   return resetZoneFor(
     tx,
-    cfg,
     removals,
     zoneId,
     day,
@@ -203,7 +200,6 @@ interface ResetOptions {
 /** Answers the room's new revision. */
 async function resetZoneFor(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   zoneId: string,
   businessDay: string,
@@ -273,7 +269,7 @@ async function resetZoneFor(
       .returning({ id: floorResetTables.id, planTableId: floorResetTables.planTableId });
     await copyParts(tx, zoneId, written);
   }
-  await catchUpZone(tx, cfg, removals, zoneId, now, { inReset: true });
+  await catchUpZone(tx, removals, zoneId, now, { inReset: true });
   return revision;
 }
 
@@ -350,13 +346,12 @@ export interface CatchUp {
 /** Applies the zone's PENDING reset rows that can be applied now, repeating while a pass changes something. */
 export async function catchUpZone(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   zoneId: string,
   now: Date,
   options: CatchUp = { inReset: false },
 ): Promise<void> {
-  while (await catchUpPass(tx, cfg, removals, zoneId, now, options));
+  while (await catchUpPass(tx, removals, zoneId, now, options));
 }
 
 /**
@@ -366,7 +361,6 @@ export async function catchUpZone(
  */
 async function catchUpPass(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   zoneId: string,
   now: Date,
@@ -488,7 +482,6 @@ async function catchUpPass(
     (
       await refusedByAModule(
         tx,
-        cfg,
         removals,
         targets.flatMap(({ remove, tableId: id }) =>
           remove && id !== null && !held.has(id) && inZoneIds.has(id) ? [id] : [],
@@ -658,7 +651,7 @@ async function catchUpPass(
     }
   }
 
-  const kept = await removeLiveTables(tx, cfg, removals, plan.remove, now);
+  const kept = await removeLiveTables(tx, removals, plan.remove, now);
   // A table already hidden is skipped; a kept one was changed by its failed removal, so is not.
   for (const tableId of plan.hide) {
     if (withToday.has(tableId) || merged.has(tableId)) {
@@ -1014,18 +1007,18 @@ export async function ensureToday(
   const resets = (businessDay: string | null) => businessDay === null || businessDay < day;
   const resetting = zones.flatMap((z) => (resets(z.businessDay) ? [z.zoneId] : []));
   const catchingUp = zones.flatMap((z) => (resets(z.businessDay) ? [] : [z.zoneId]));
-  const layouts = await zoneLayoutsOn(tx, cfg, resetting, now, day);
+  const layouts = await zoneLayoutsOn(tx, resetting, now, day);
   const before = catchingUp.length === 0 ? null : await roomPrints(tx, cfg, catchingUp);
   for (const { zoneId, businessDay } of zones) {
     if (resets(businessDay)) {
       const layout = layouts.rows.get(zoneId);
       const onto = dueOnto(layouts.states.get(zoneId)!);
       if (layout !== undefined && onto !== null) {
-        await resetZoneFor(tx, cfg, removals, zoneId, day, now, onto, layout, {
+        await resetZoneFor(tx, removals, zoneId, day, now, onto, layout, {
           keepTakenOff: false,
         });
       }
-    } else await catchUpZone(tx, cfg, removals, zoneId, now);
+    } else await catchUpZone(tx, removals, zoneId, now);
   }
   if (before === null) return day;
   const after = await roomPrints(tx, cfg, catchingUp);

@@ -8,11 +8,9 @@ import type { HolidayAreaModel, SpecialDaysModel } from "./holiday-types.js";
 export type { SpecialDaysModel } from "./holiday-types.js";
 import { holidayCityKey } from "./holiday-rules.js";
 import type { LocalDate } from "./hours-types.js";
-import type { VenueScope } from "./operations.js";
 
 export async function readSpecialDaysModel(
   tx: Transaction,
-  cfg: VenueScope,
   from: LocalDate,
   to: LocalDate,
   at: Date,
@@ -20,9 +18,9 @@ export async function readSpecialDaysModel(
 ): Promise<SpecialDaysModel> {
   const clock = await readVenueClock(tx);
   const civilDate = venueLocalMoment(at, clock)?.civilDate ?? null;
-  const status = await readBusinessDayScheduleStatus(tx, cfg, clock, at);
-  const read = await readHolidays(tx, cfg, from, to);
-  const area = await readHolidayAreaModel(tx, cfg);
+  const status = await readBusinessDayScheduleStatus(tx, clock, at);
+  const read = await readHolidays(tx, from, to);
+  const area = await readHolidayAreaModel(tx);
   return {
     ...status,
     timeZone: clock.timeZone,
@@ -32,7 +30,7 @@ export async function readSpecialDaysModel(
         : cutoverForBusinessDay(clock, status.currentBusinessDay),
     civilDate,
     clockReadable: civilDate !== null,
-    days: await readCalendarDays(tx, cfg, from, to, holidays ?? (async () => read.facts)),
+    days: await readCalendarDays(tx, from, to, holidays ?? (async () => read.facts)),
     holidayCoverage: read.coverage,
     holidaySources: read.sources,
     area: holidayAreaSummary(area),

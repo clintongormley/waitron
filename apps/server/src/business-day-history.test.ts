@@ -88,12 +88,11 @@ const report = async (path: string) => {
 const SAVE_BEFORE_NOV_4_CHANGEOVER = new Date("2026-11-03T12:00:00.000Z");
 async function schedule(cutover: string) {
   await inTx(async (tx) => {
-    const model = await readOpeningHoursModel(tx, venue.cfg, new Date());
+    const model = await readOpeningHoursModel(tx, new Date());
     for (const department of model.departments) {
       const periodId = department.periods[0]?.id;
       await replaceMenuWeek(
         tx,
-        venue.cfg,
         department.id,
         Array.from({ length: 7 }, (_, weekday) => ({
           weekday,
@@ -479,7 +478,6 @@ it.each(["void", "tender", "payment", "refund", "notice"])(
         ).rows[0]!;
         await recordKitchenNotices(
           tx,
-          venue.cfg,
           bill,
           [
             {

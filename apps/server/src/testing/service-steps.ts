@@ -6,11 +6,9 @@ import {
   zoneServicePolicies,
   type ServiceStepInput,
 } from "@waitron/venue-service";
-import type { TradingContext } from "../trading-context.js";
 
 interface HasVenue {
   db: Database;
-  cfg: Pick<TradingContext, "locationId">;
 }
 
 export async function departmentOf(v: HasVenue, zoneId: string): Promise<string> {
@@ -30,7 +28,7 @@ export async function setSteps(
   steps: ServiceStepInput[],
 ): Promise<string[]> {
   return withTransaction(v.db, async (tx) => {
-    await saveServiceSteps(tx, v.cfg, departmentId, steps);
+    await saveServiceSteps(tx, departmentId, steps);
     const rows = await tx
       .select({ id: serviceSteps.id })
       .from(serviceSteps)

@@ -51,7 +51,7 @@ useVenueDb({
 
 beforeEach(async () => {
   await withTransaction(venue.db, (tx) =>
-    configureZone(tx, venue.cfg, { zoneId: venue.zoneId, departmentId }),
+    configureZone(tx, { zoneId: venue.zoneId, departmentId }),
   );
   await authored("Dining meals");
 });
@@ -182,14 +182,14 @@ it.each(["cash", "card"] as const)(
 it("a zone moved before capture selects the same current department for description and receipt header", async () => {
   const id = await open();
   const next = await withTransaction(venue.db, async (tx) => {
-    const department = await createDepartment(tx, venue.cfg, {
+    const department = await createDepartment(tx, {
       name: `Terrace ${randomUUID()}`,
       orderStart: "table",
     });
     await tx
       .insert(departmentReceipts)
       .values({ departmentId: department.id, receipt: { operationDescription: "Terrace drinks" } });
-    await configureZone(tx, venue.cfg, { zoneId: venue.zoneId, departmentId: department.id });
+    await configureZone(tx, { zoneId: venue.zoneId, departmentId: department.id });
     return department.id;
   });
   const result = await payIntegrated(
@@ -262,14 +262,14 @@ it("unpaid issuance files the department description and correction uses its ret
   expect(records(id)).toEqual([{ description: "Dining meals" }]);
   await authored("Corrected dining service");
   await withTransaction(venue.db, async (tx) => {
-    const next = await createDepartment(tx, venue.cfg, {
+    const next = await createDepartment(tx, {
       name: `Terrace ${randomUUID()}`,
       orderStart: "table",
     });
     await tx
       .insert(departmentReceipts)
       .values({ departmentId: next.id, receipt: { operationDescription: "Terrace drinks" } });
-    await configureZone(tx, venue.cfg, { zoneId: venue.zoneId, departmentId: next.id });
+    await configureZone(tx, { zoneId: venue.zoneId, departmentId: next.id });
   });
   const session = await withTransaction(venue.db, (tx) =>
     loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" }),

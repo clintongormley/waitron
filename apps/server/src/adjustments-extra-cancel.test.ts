@@ -110,7 +110,6 @@ useVenueDb({
       // Made at the bar with nothing to prepare: it never reaches a kitchen station.
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: toastie.id }, zoneId: null },
         { kind: "no_preparation" },
       );
@@ -240,7 +239,7 @@ async function jobsDuring(act: () => Promise<void>) {
 }
 
 async function notices() {
-  return inTx(venue, (tx) => listStationNotices(tx, venue.cfg, venue.stationId));
+  return inTx(venue, (tx) => listStationNotices(tx, venue.stationId));
 }
 
 /** The notices recorded while `act` ran. */
@@ -450,7 +449,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
         await expect(
           inTx(venue, async (tx) => {
             const jobsBefore = (await tx.select({ kind: printJobs.kind }).from(printJobs)).length;
-            const noticesBefore = (await listStationNotices(tx, venue.cfg, venue.stationId)).length;
+            const noticesBefore = (await listStationNotices(tx, venue.stationId)).length;
             await apply(tx, command);
             const written = (
               await tx
@@ -462,9 +461,9 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
             expect(printedLines(written[0]!.payload)).toContain(
               `  ${kitchenTicketWords("es").cancel} Gherkins`,
             );
-            expect(
-              (await listStationNotices(tx, venue.cfg, venue.stationId)).slice(noticesBefore),
-            ).toEqual([expect.objectContaining({ cancelledExtra: "Gherkins" })]);
+            expect((await listStationNotices(tx, venue.stationId)).slice(noticesBefore)).toEqual([
+              expect.objectContaining({ cancelledExtra: "Gherkins" }),
+            ]);
             throw new Error("a later step of the request fails");
           }),
         ).rejects.toThrow("a later step of the request fails");
@@ -606,7 +605,6 @@ describe("cancelling an extra of a held dish (B11g)", () => {
         await writeProductModifiers(tx, product.id, [{ kind: "extras", id: extras.listId }]);
         await setRoutingCell(
           tx,
-          venue.cfg,
           { row: { kind: "product", productId: product.id }, zoneId: null },
           { kind: "station", stationId },
         );
@@ -648,7 +646,7 @@ describe("cancelling an extra of a held dish (B11g)", () => {
       });
       const noticesOf = (stationId: string) =>
         inTx(venue, async (tx) =>
-          (await listStationNotices(tx, venue.cfg, stationId)).map((notice) => ({
+          (await listStationNotices(tx, stationId)).map((notice) => ({
             kind: notice.kind,
             lineName: notice.lineName,
             cancelledExtra: notice.cancelledExtra,

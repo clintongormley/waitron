@@ -1197,7 +1197,7 @@ describe("cross-till end-to-end", () => {
     );
 
     // CROSS-TILL RETRIEVE: till B rebuilds the basket from the parked order's pricing inputs.
-    const retrieved = await getHeldOrder({ db: suite.db }, tillB, orderId);
+    const retrieved = await getHeldOrder({ db: suite.db }, orderId);
     expect(retrieved.id).toBe(orderId);
     expect(retrieved.label).toBe("Mesa 7");
     expect(retrieved.lines.map((l) => l.productId)).toEqual([cafe.id, agua.id]);
@@ -1271,7 +1271,7 @@ describe("cross-till end-to-end", () => {
     });
 
     // Node B retrieves the foreign-node order and edits it like its own.
-    expect((await getHeldOrder({ db: suite.db }, nodeB, orderId)).id).toBe(orderId);
+    expect((await getHeldOrder({ db: suite.db }, orderId)).id).toBe(orderId);
     await expect(
       updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, nodeB, orderId, {
         revision: await revisionOf(orderId),
@@ -1280,7 +1280,7 @@ describe("cross-till end-to-end", () => {
     ).resolves.toBe(1);
 
     // The edit landed on the shared row: node A sees node B's rewritten basket (1 café → 2).
-    const afterEdit = await getHeldOrder({ db: suite.db }, nodeA, orderId);
+    const afterEdit = await getHeldOrder({ db: suite.db }, orderId);
     expect(afterEdit.lines.map(({ productId, quantity }) => [productId, quantity])).toEqual([
       [cafe.id, "1.000"],
       [cafe.id, "1.000"],
@@ -1288,7 +1288,7 @@ describe("cross-till end-to-end", () => {
 
     // Node B abandons it; the order flips terminal for the whole venue.
     await expect(abandonHeldOrder({ db: suite.db }, nodeB, orderId)).resolves.toBeUndefined();
-    await expect(getHeldOrder({ db: suite.db }, nodeA, orderId)).rejects.toMatchObject({
+    await expect(getHeldOrder({ db: suite.db }, orderId)).rejects.toMatchObject({
       code: "working_order.not_found",
       params: { workingOrderId: orderId },
     });
@@ -2924,7 +2924,6 @@ describe("markCollected (the counter handover)", () => {
     await withTransaction(suite.db, (tx) =>
       setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "product", productId: cafe.id }, zoneId: null },
         { kind: "no_preparation" },
       ),

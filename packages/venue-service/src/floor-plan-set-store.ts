@@ -8,7 +8,7 @@ import type {
   FloorPlanSetsModel,
   PeriodFloorPlans,
 } from "./floor-plan-set-types.js";
-import { listDepartments, type VenueScope } from "./operations.js";
+import { listDepartments } from "./operations.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { menuPeriods } from "./schema/menus.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
@@ -18,7 +18,6 @@ export type { FloorPlanSetsModel, PeriodFloorPlans };
 /** Gives a core floor plan set to a department under `name`; the department's first set is its default. */
 export async function linkFloorPlanSet(
   tx: Transaction,
-  _cfg: VenueScope,
   input: { setId: string; departmentId: string; name: string },
 ): Promise<void> {
   const [department] = await tx
@@ -56,7 +55,6 @@ async function insertLink(
 /** The sets of the venue's active departments, each department's default first, then by name. */
 export async function readFloorPlanSets(
   tx: Transaction,
-  _cfg: VenueScope,
   filter: { setIds?: readonly string[]; departmentId?: string } = {},
 ): Promise<FloorPlanSetSummary[]> {
   if (filter.setIds?.length === 0) return [];
@@ -123,10 +121,9 @@ async function departmentZones(
 /** The Floor plans page: every active department, its zones and its sets. */
 export async function readFloorPlanSetsModel(
   tx: Transaction,
-  cfg: VenueScope,
   core: FloorPlanSets,
 ): Promise<FloorPlanSetsModel> {
-  const departmentRows = await listDepartments(tx, cfg);
+  const departmentRows = await listDepartments(tx);
   const departmentIds = departmentRows.map((d) => d.id);
   const sets = await setRows(tx, {});
   const zones = await departmentZones(tx, departmentIds);
@@ -183,10 +180,9 @@ export async function readFloorPlanSetsModel(
 
 export async function readPeriodFloorPlans(
   tx: Transaction,
-  cfg: VenueScope,
   core: FloorPlanSets,
 ): Promise<PeriodFloorPlans> {
-  const departmentIds = (await listDepartments(tx, cfg)).map((d) => d.id);
+  const departmentIds = (await listDepartments(tx)).map((d) => d.id);
   const zones = await departmentZones(tx, departmentIds);
   if (zones.length === 0) return { departments: [] };
   const { tableCounts } = await core.readLayouts(
@@ -238,8 +234,8 @@ function setName(name: string): string {
   return trimmed;
 }
 
-async function ownedSet(tx: Transaction, cfg: VenueScope, setId: string) {
-  const [set] = await readFloorPlanSets(tx, cfg, { setIds: [setId] });
+async function ownedSet(tx: Transaction, setId: string) {
+  const [set] = await readFloorPlanSets(tx, { setIds: [setId] });
   if (set === undefined) throw new AppError("floor_plan_set.not_found", { setId });
   return set;
 }
@@ -251,7 +247,6 @@ async function ownedSet(tx: Transaction, cfg: VenueScope, setId: string) {
  */
 export async function createFloorPlanSet(
   tx: Transaction,
-  cfg: VenueScope,
   core: FloorPlanSets,
   input: { departmentId: string; name: string; fromSetId?: string },
 ): Promise<string> {
@@ -261,7 +256,7 @@ export async function createFloorPlanSet(
     .where(and(eq(departments.id, input.departmentId), eq(departments.active, true)));
   if (department === undefined)
     throw new AppError("floor_plan_set.invalid", { field: "departmentId" });
-  const held = await readFloorPlanSets(tx, cfg, { departmentId: input.departmentId });
+  const held = await readFloorPlanSets(tx, { departmentId: input.departmentId });
   if (
     held.length === 0
       ? input.fromSetId !== undefined
@@ -278,13 +273,12 @@ export async function createFloorPlanSet(
 /** Copies a set into a new set of its department under `name`. */
 export async function copyFloorPlanSet(
   tx: Transaction,
-  cfg: VenueScope,
   core: FloorPlanSets,
   setId: string,
   name: string,
 ): Promise<string> {
-  const set = await ownedSet(tx, cfg, setId);
-  return createFloorPlanSet(tx, cfg, core, {
+  const set = await ownedSet(tx, setId);
+  return createFloorPlanSet(tx, core, {
     departmentId: set.departmentId,
     name,
     fromSetId: setId,
@@ -293,13 +287,12 @@ export async function copyFloorPlanSet(
 
 export async function renameFloorPlanSet(
   tx: Transaction,
-  cfg: VenueScope,
   setId: string,
   name: string,
 ): Promise<void> {
-  const set = await ownedSet(tx, cfg, setId);
+  const set = await ownedSet(tx, setId);
   const trimmed = setName(name);
-  const held = await readFloorPlanSets(tx, cfg, { departmentId: set.departmentId });
+  const held = await readFloorPlanSets(tx, { departmentId: set.departmentId });
   if (held.some((other) => other.setId !== setId && other.name === trimmed))
     throw new AppError("floor_plan_set.name_taken", {
       departmentId: set.departmentId,
@@ -312,12 +305,8 @@ export async function renameFloorPlanSet(
 }
 
 /** The old default's flag is cleared first: the database holds one default per department. */
-export async function makeDefaultFloorPlanSet(
-  tx: Transaction,
-  cfg: VenueScope,
-  setId: string,
-): Promise<void> {
-  const set = await ownedSet(tx, cfg, setId);
+export async function makeDefaultFloorPlanSet(tx: Transaction, setId: string): Promise<void> {
+  const set = await ownedSet(tx, setId);
   if (set.isDefault) return;
   await tx
     .update(departmentFloorPlanSets)
@@ -332,11 +321,10 @@ export async function makeDefaultFloorPlanSet(
 /** What deleting a set changes: the periods that name it, and the zones whose today's map came from it. */
 export async function readFloorPlanSetDeleteImpact(
   tx: Transaction,
-  cfg: VenueScope,
   core: FloorPlanSets,
   setId: string,
 ): Promise<FloorPlanSetDeleteImpact> {
-  await ownedSet(tx, cfg, setId);
+  await ownedSet(tx, setId);
   const periods = await tx
     .select({ id: menuPeriods.id, name: menuPeriods.name })
     .from(menuPeriods)
@@ -364,16 +352,15 @@ export async function readFloorPlanSetDeleteImpact(
  */
 export async function deleteFloorPlanSet(
   tx: Transaction,
-  cfg: VenueScope,
   deletion: Pick<FloorDeletion, "removeSets">,
   setId: string,
   replaceWith: string | null,
 ): Promise<void> {
-  const set = await ownedSet(tx, cfg, setId);
+  const set = await ownedSet(tx, setId);
   if (set.isDefault) throw new AppError("floor_plan_set.is_default", { setId });
   let replacement: string | null = null;
   if (replaceWith !== null) {
-    const held = await readFloorPlanSets(tx, cfg, { departmentId: set.departmentId });
+    const held = await readFloorPlanSets(tx, { departmentId: set.departmentId });
     const chosen = held.find((other) => other.setId === replaceWith);
     if (replaceWith === setId || chosen === undefined)
       throw new AppError("floor_plan_set.invalid", { field: "replaceWith" });

@@ -47,7 +47,7 @@ useVenueDb({
       reports,
       {
         db,
-        cfg: { locationId: venue.cfg.locationId, contentDefaultLanguage: venue.venueLocale },
+        cfg: { contentDefaultLanguage: venue.venueLocale },
         core: {} as ModuleRouteContext["core"],
       },
       () => {},

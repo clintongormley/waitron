@@ -63,7 +63,7 @@ export async function offerProducts(
   const orderStart = options.orderStart ?? (zone === "tables" ? "table" : "counter");
   const zoneId = await resolveZone(tx, cfg, zone, orderStart);
   if (options.paidWhen !== undefined) {
-    await setZoneSalePolicyOverride(tx, cfg, zoneId, "paidWhen", options.paidWhen);
+    await setZoneSalePolicyOverride(tx, zoneId, "paidWhen", options.paidWhen);
   }
 
   const menuId = await ownMenu(tx);
@@ -117,7 +117,7 @@ async function resolveZone(
     .select({ departmentId: zoneServicePolicies.departmentId })
     .from(zoneServicePolicies)
     .where(eq(zoneServicePolicies.zoneId, zoneId));
-  const departmentId = policy?.departmentId ?? (await department(tx, cfg, orderStart));
+  const departmentId = policy?.departmentId ?? (await department(tx, orderStart));
   const [location] = await tx
     .select({ operationDescription: locations.operationDescription })
     .from(locations)
@@ -129,7 +129,7 @@ async function resolveZone(
       receipt: { operationDescription: location!.operationDescription },
     })
     .onConflictDoNothing({ target: departmentReceipts.departmentId });
-  await configureZone(tx, cfg, { zoneId, departmentId, orderStart });
+  await configureZone(tx, { zoneId, departmentId, orderStart });
   if (zone === "counter") {
     await tx
       .update(zoneServicePolicies)
@@ -150,14 +150,10 @@ async function floorZone(tx: Transaction, cfg: Cfg, name: string): Promise<strin
   return created!.id;
 }
 
-async function department(
-  tx: Transaction,
-  cfg: Cfg,
-  orderStart: "table" | "counter",
-): Promise<string> {
-  const active = (await listDepartments(tx, cfg)).find((row) => row.active);
+async function department(tx: Transaction, orderStart: "table" | "counter"): Promise<string> {
+  const active = (await listDepartments(tx)).find((row) => row.active);
   if (active !== undefined) return active.id;
-  return (await createDepartment(tx, cfg, { name: "Test department", orderStart })).id;
+  return (await createDepartment(tx, { name: "Test department", orderStart })).id;
 }
 
 /**
@@ -202,13 +198,11 @@ async function topLevelProducts(tx: Transaction): Promise<string[]> {
 /** Test-only: route one top-level product to a station in every zone; a later call replaces it. */
 export async function routeProductTo(
   tx: Transaction,
-  cfg: Cfg,
   productId: string,
   stationId: string,
 ): Promise<void> {
   await setRoutingCell(
     tx,
-    cfg,
     { row: { kind: "product", productId }, zoneId: null },
     { kind: "station", stationId },
   );
@@ -217,13 +211,11 @@ export async function routeProductTo(
 /** Test-only: route a category to a station in every zone. */
 export async function routeCategoryTo(
   tx: Transaction,
-  cfg: Cfg,
   categoryId: string,
   stationId: string,
 ): Promise<void> {
   await setRoutingCell(
     tx,
-    cfg,
     { row: { kind: "category", categoryId }, zoneId: null },
     { kind: "station", stationId },
   );

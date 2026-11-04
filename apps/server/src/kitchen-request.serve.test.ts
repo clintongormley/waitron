@@ -250,7 +250,7 @@ describe("A773 requested lifecycle: serving", () => {
         venue.party.tabId,
         [burger.id],
         undefined,
-        routingOnce(tx, venue.cfg, laterAt),
+        routingOnce(tx, laterAt),
       );
       expect(await item(tx, burger.itemId!)).toEqual(before);
       expect(await jobCount(tx)).toBe(jobsBefore);
@@ -263,7 +263,6 @@ describe("A773 requested lifecycle: serving", () => {
     await withTransaction(db, async (tx) => {
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "category", categoryId: venue.folders.bottled }, zoneId: null },
         { kind: "station", stationId: venue.stations.bar },
       );

@@ -73,15 +73,13 @@ async function routed() {
     .values({ locationId: cfg.locationId, name: "Room", displayOrder: 0 })
     .returning({ id: floorZones.id });
   const made = await scoped(async (tx) => {
-    const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
-    ).id;
-    await configureZone(tx, cfg, { zoneId: zone!.id, departmentId: restaurant });
+    const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
+    await configureZone(tx, { zoneId: zone!.id, departmentId: restaurant });
     const menuId = (await createCatalogue(tx, { name: `Dinner ${cfg.locationId}` })).id;
     const { document } = await buildMenuDocument(tx, menuId);
     await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
     const dinner = (
-      await saveMenuPeriod(tx, cfg, restaurant, { name: "Dinner", menuId, staffMenuIds: [] })
+      await saveMenuPeriod(tx, restaurant, { name: "Dinner", menuId, staffMenuIds: [] })
     ).id;
     const person = async (role: "manager" | "supervisor") => {
       const [row] = await tx
@@ -98,7 +96,7 @@ async function routed() {
     };
   });
   const app = new Hono();
-  VENUE_SERVICE_ROUTES.mount(app, { db, cfg, core: {} as ModuleRouteContext["core"] }, noopLog);
+  VENUE_SERVICE_ROUTES.mount(app, { db, cfg: {}, core: {} as ModuleRouteContext["core"] }, noopLog);
   const send = (
     method: "GET" | "POST" | "PUT" | "DELETE",
     path: string,
@@ -164,9 +162,8 @@ const expectedDetail = (r: Routed, id: string) => ({
   ],
 });
 
-const seeded = (r: Routed) =>
-  scoped((tx) => saveSpecialDay(tx, r.cfg, null, christmas(r), new Date(), 0));
-const stored = (r: Routed, id: string) => scoped((tx) => readSpecialDay(tx, r.cfg, id));
+const seeded = (r: Routed) => scoped((tx) => saveSpecialDay(tx, null, christmas(r), new Date(), 0));
+const stored = (id: string) => scoped((tx) => readSpecialDay(tx, id));
 const countDays = async (r: Routed) =>
   (await db.select().from(specialDays).where(eq(specialDays.locationId, r.cfg.locationId))).length;
 
@@ -190,7 +187,7 @@ describe("the special-day routes", () => {
     expect(response.status).toBe(201);
     const body = (await response.json()) as SpecialDayDetail;
     expect(body).toEqual(expectedDetail(r, body.id));
-    expect(await stored(r, body.id)).toEqual(body);
+    expect(await stored(body.id)).toEqual(body);
   });
 
   it("GET reads a special day for a venue viewer", async () => {
@@ -207,7 +204,6 @@ describe("the special-day routes", () => {
     const fair = await scoped((tx) =>
       saveSpecialDay(
         tx,
-        r.cfg,
         null,
         {
           name: "Annual fair",
@@ -263,7 +259,7 @@ describe("the special-day routes", () => {
       dates: [{ date: "2030-12-24", closedAllDay: false }],
     };
     expect(await response.json()).toEqual(expected);
-    expect(await stored(r, day.id)).toEqual(expected);
+    expect(await stored(day.id)).toEqual(expected);
   });
 
   it("DELETE removes a special day and answers 204", async () => {
@@ -289,7 +285,7 @@ describe("the special-day routes", () => {
       params: { field: "id" },
     });
     expect(await countDays(r)).toBe(1);
-    expect(await stored(r, day.id)).toEqual(day);
+    expect(await stored(day.id)).toEqual(day);
   });
 
   it("refuses a viewer every write, writing nothing", async () => {
@@ -303,7 +299,7 @@ describe("the special-day routes", () => {
     ])
       await refusedAs(response, 403, "authorization.not_permitted");
     expect(await countDays(r)).toBe(1);
-    expect(await stored(r, day.id)).toEqual(day);
+    expect(await stored(day.id)).toEqual(day);
   });
 
   it("answers special_day.not_found for an id it does not hold", async () => {
@@ -353,7 +349,7 @@ describe("the special-day routes", () => {
       await answers(await r.send("DELETE", `/${day.id}`, r.manager, revision), 409, error);
     }
     expect(await countDays(r)).toBe(1);
-    expect(await stored(r, day.id)).toEqual(day);
+    expect(await stored(day.id)).toEqual(day);
     await answers(
       await r.send("DELETE", `/${day.id}`, r.manager, { expectedClockRevision: 1 }),
       204,
@@ -376,7 +372,7 @@ describe("the special-day routes", () => {
     );
     await answers(await r.send("DELETE", `/${day.id}`, r.manager, {}), 409, error);
     expect(await countDays(r)).toBe(1);
-    expect(await stored(r, day.id)).toEqual(day);
+    expect(await stored(day.id)).toEqual(day);
   });
 
   it("answers special_day.date_taken with 409, naming the holder", async () => {
@@ -425,7 +421,7 @@ describe("the special-day routes", () => {
     const day = await seeded(r);
     await answers(await r.send("PUT", `/${day.id}`, r.manager, body), 400, error);
     expect(await countDays(r)).toBe(1);
-    expect(await stored(r, day.id)).toEqual(day);
+    expect(await stored(day.id)).toEqual(day);
   });
 
   it("measures against the department paint the same request sends", async () => {

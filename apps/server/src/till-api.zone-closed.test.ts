@@ -55,7 +55,6 @@ async function venue() {
       );
     await replaceMenuWeek(
       tx,
-      v.cfg,
       policy!.departmentId,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -66,7 +65,6 @@ async function venue() {
     );
     await replaceZoneClosedWeek(
       tx,
-      v.cfg,
       v.zoneId,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -466,11 +464,11 @@ describe("moving into closed zones", () => {
         .select()
         .from(zoneServicePolicies)
         .where(eq(zoneServicePolicies.zoneId, v.zoneId));
-      const zone = await createServiceZone(tx, v.cfg, {
+      const zone = await createServiceZone(tx, {
         name: "Dining room",
         departmentId: policy!.departmentId,
       });
-      await configureZone(tx, v.cfg, {
+      await configureZone(tx, {
         zoneId: zone.id,
         departmentId: policy!.departmentId,
         orderStart: "table",

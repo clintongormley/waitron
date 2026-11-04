@@ -322,22 +322,19 @@ async function resolveHttpOrderZone(
   requestedZoneId: string | undefined,
 ): Promise<string | undefined> {
   if (requestedZoneId !== undefined || lineCount === 0) return requestedZoneId;
-  return withTransaction(deps.db, (tx) =>
-    newOrderZoneIn(tx, deps, session, lineCount, requestedZoneId),
-  );
+  return withTransaction(deps.db, (tx) => newOrderZoneIn(tx, session, lineCount, requestedZoneId));
 }
 
 /** {@link resolveHttpOrderZone} for a route already inside its transaction. */
 async function newOrderZoneIn(
   tx: Transaction,
-  deps: TillApiDeps,
   session: { device: { deviceProfileId: string } },
   lineCount: number,
   requestedZoneId: string | undefined,
 ): Promise<string | undefined> {
   if (requestedZoneId !== undefined || lineCount === 0) return requestedZoneId;
   return (
-    await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
+    await VENUE_SERVICE.resolveNewOrderZone(tx, {
       profileId: session.device.deviceProfileId,
     })
   ).zoneId;
@@ -1191,7 +1188,7 @@ function mountCourseReady(app: Hono, deps: TillApiDeps, log: Logger): void {
       const courseId = c.req.param("courseId");
       if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
       await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId }]);
+        await checkZones(tx, session, [{ orderId }]);
         await bumpCourseReady(
           tx,
           cfg,
@@ -1555,11 +1552,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const result = await withTransaction(deps.db, async (tx) => {
         const device = await currentZoneDevice(tx, session);
-        const selection = await VENUE_SERVICE.readDeviceZoneSelection(
-          tx,
-          deps.cfg,
-          device.deviceId,
-        );
+        const selection = await VENUE_SERVICE.readDeviceZoneSelection(tx, device.deviceId);
         const counters = selection.zones.filter(
           (zone) =>
             zone.serviceMode !== "table_tab" &&
@@ -1573,22 +1566,22 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             throw new AppError("device_profile.no_service_zone", {
               profileId: device.deviceProfileId,
             });
-          context = await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId);
+          context = await VENUE_SERVICE.resolveZoneContext(tx, zoneId);
         } else {
-          context = await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
+          context = await VENUE_SERVICE.resolveNewOrderZone(tx, {
             profileId: device.deviceProfileId,
           });
         }
-        const salePolicy = await VENUE_SERVICE.resolveSalePolicy(tx, deps.cfg, context.zoneId);
+        const salePolicy = await VENUE_SERVICE.resolveSalePolicy(tx, context.zoneId);
         return {
           context: {
             ...context,
             receiptPrintMode: salePolicy.receiptPrintMode,
           },
-          zones: (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).filter((zone) =>
+          zones: (await VENUE_SERVICE.listServiceZones(tx)).filter((zone) =>
             counters.some((counter) => counter.id === zone.id),
           ),
-          ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, context.zoneId)),
+          ...(await VENUE_SERVICE.listZoneOffers(tx, context.zoneId)),
         };
       });
       return c.json(result);
@@ -1603,15 +1596,15 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
       const result = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ zoneId }]);
-        const context = await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId);
-        const salePolicy = await VENUE_SERVICE.resolveSalePolicy(tx, deps.cfg, zoneId);
+        await checkZones(tx, session, [{ zoneId }]);
+        const context = await VENUE_SERVICE.resolveZoneContext(tx, zoneId);
+        const salePolicy = await VENUE_SERVICE.resolveSalePolicy(tx, zoneId);
         return {
           context: {
             ...context,
             receiptPrintMode: salePolicy.receiptPrintMode,
           },
-          ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, zoneId)),
+          ...(await VENUE_SERVICE.listZoneOffers(tx, zoneId)),
         };
       });
       return c.json(result);
@@ -1625,20 +1618,19 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const asked = c.req.query("zoneId");
       const zoneId = asked === undefined ? undefined : requireUuidParam(asked, "ServiceZoneId");
       const { state, setupRead } = await withTransaction(deps.db, async (tx) => {
-        if (zoneId !== undefined) await checkZones(tx, deps.cfg, session, [{ zoneId }]);
+        if (zoneId !== undefined) await checkZones(tx, session, [{ zoneId }]);
         const zone =
           zoneId === undefined
             ? (
-                await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
+                await VENUE_SERVICE.resolveNewOrderZone(tx, {
                   profileId: device.deviceProfileId,
                 })
               ).zoneId
-            : (await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId)).zoneId;
+            : (await VENUE_SERVICE.resolveZoneContext(tx, zoneId)).zoneId;
         const at = new Date();
-        const menuState = await VENUE_SERVICE.menuState(tx, deps.cfg, zone, at);
+        const menuState = await VENUE_SERVICE.menuState(tx, zone, at);
         const defaultMenuId = await VENUE_SERVICE.resolveDefaultMenu(
           tx,
-          deps.cfg,
           zone,
           at,
           menuState.menus.map((menu) => menu.menuId),
@@ -1670,7 +1662,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(
           tx,
-          deps.cfg,
           session,
           named(
             body.zoneId !== undefined && { zoneId: body.zoneId },
@@ -1692,16 +1683,16 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
                   .where(eq(workingOrders.id, body.workingOrderId))
               )[0];
         const context =
-          order === undefined ? null : await VENUE_SERVICE.findOrderContext(tx, cfg, order.id);
+          order === undefined ? null : await VENUE_SERVICE.findOrderContext(tx, order.id);
         const zoneId =
           order === undefined
-            ? await newOrderZoneIn(tx, deps, session, body.lines.length, body.zoneId)
+            ? await newOrderZoneIn(tx, session, body.lines.length, body.zoneId)
             : context?.zoneId;
         const mode =
           context?.serviceMode ??
           (zoneId === undefined
             ? "prepay"
-            : (await VENUE_SERVICE.resolveZoneContext(tx, cfg, zoneId)).serviceMode);
+            : (await VENUE_SERVICE.resolveZoneContext(tx, zoneId)).serviceMode);
         const unsentCount =
           order === undefined ? body.lines.length : (await unsentDishLines(tx, order.id)).length;
         const sends =
@@ -1752,7 +1743,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           deadEnds: sends
             ? await findDeadEnds(
                 tx,
-                cfg,
                 zoneId ?? null,
                 active.map(({ line, key }, index) => ({
                   key,
@@ -1763,7 +1753,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
                 at,
               )
             : [],
-          stations: await availableStations(tx, cfg, at),
+          stations: await availableStations(tx, at),
         };
       });
       return c.json(answer);
@@ -1964,7 +1954,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       await gateZones(deps, session, [{ orderId: id }]);
-      const order = await getHeldOrder({ db: deps.db }, deps.cfg, id);
+      const order = await getHeldOrder({ db: deps.db }, id);
       return c.json(order);
     }),
   );
@@ -1974,7 +1964,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       await gateZones(deps, session, [{ orderId: id }]);
-      return c.json(await getPlacedCounterOrder({ db: deps.db }, deps.cfg, id));
+      return c.json(await getPlacedCounterOrder({ db: deps.db }, id));
     }),
   );
 
@@ -2227,7 +2217,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (!isUuid(id)) throw new AppError("station.not_found", { stationId: id });
       const queue = await withTransaction(deps.db, async (tx) => ({
         items: await listStationQueue(tx, id),
-        notices: await VENUE_SERVICE.listStationNotices(tx, deps.cfg, id),
+        notices: await VENUE_SERVICE.listStationNotices(tx, id),
         printersDown: (await stationPrintersDown(tx, new Date(), [id])).map(
           ({ printerId, printerName, since }) => ({ printerId, printerName, since }),
         ),
@@ -2238,12 +2228,11 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.post("/api/kitchen-notices/:id/acknowledge", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c, { action: "prepare-orders" });
-      const cfg = requestCfg(deps.cfg, session);
+      await requireSession(deps, c, { action: "prepare-orders" });
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("kitchen_notice.not_found", { noticeId: id });
       await withTransaction(deps.db, async (tx) => {
-        await VENUE_SERVICE.acknowledgeKitchenNotice(tx, cfg, id);
+        await VENUE_SERVICE.acknowledgeKitchenNotice(tx, id);
       });
       return c.body(null, 200);
     }),
@@ -2329,7 +2318,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/orders/counter-waiting", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
-      const waiting = await listCounterWaiting({ db: deps.db }, deps.cfg);
+      const waiting = await listCounterWaiting({ db: deps.db });
       return c.json(await visibleOrders(deps, session, waiting));
     }),
   );
@@ -2343,7 +2332,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<Record<string, unknown>>(c);
       const submissionId = body.submissionId === undefined ? undefined : submissionIdOf(body);
       await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        await checkZones(tx, session, [{ orderId: id }]);
         return handOverOrder(
           tx,
           cfg,
@@ -2365,7 +2354,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        await checkZones(tx, session, [{ orderId: id }]);
         await reprintOrderTickets(tx, cfg, id);
       });
       return c.body(null, 200);
@@ -2378,7 +2367,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const ticket = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        await checkZones(tx, session, [{ orderId: id }]);
         const [sale] = await tx
           .select({ id: sales.id })
           .from(sales)
@@ -2396,7 +2385,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const status = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        await checkZones(tx, session, [{ orderId: id }]);
         const [sale] = await tx
           .select({ id: sales.id, recipient: sales.counterpartyTaxId })
           .from(sales)
@@ -2418,7 +2407,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const status = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        await checkZones(tx, session, [{ orderId: id }]);
         const [sale] = await tx
           .select({ id: sales.id })
           .from(sales)
@@ -2438,7 +2427,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       await assertRequestDevice(deps, c, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const result = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        await checkZones(tx, session, [{ orderId: id }]);
         const [sale] = await tx
           .select({ id: sales.id, recipient: sales.counterpartyTaxId })
           .from(sales)
@@ -2479,10 +2468,10 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   /** The sale filed for working order `id`, once its zone is checked. */
   async function zonedSale(
     tx: Transaction,
-    session: Parameters<typeof checkZones>[2],
+    session: Parameters<typeof checkZones>[1],
     id: string,
   ): Promise<string> {
-    await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+    await checkZones(tx, session, [{ orderId: id }]);
     const [sale] = await tx
       .select({ id: sales.id })
       .from(sales)
@@ -2800,7 +2789,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const { device } = await requireSession(deps, c);
       const tables = await withTransaction(deps.db, async (tx) => {
-        const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
+        const scope = await readZoneScope(tx, device.deviceProfileId);
         return (await listTables(tx, deps.cfg, deps.clock.now().instant)).filter((table) =>
           inScope(scope, table.zoneId),
         );
@@ -2814,10 +2803,10 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const { device } = await requireSession(deps, c);
       const state = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
-        const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
-        return (
-          await listTablesWithState(tx, deps.cfg, deps.floorAnnotators ?? [], undefined, log)
-        ).filter((table) => inScope(scope, table.zoneId));
+        const scope = await readZoneScope(tx, device.deviceProfileId);
+        return (await listTablesWithState(tx, deps.floorAnnotators ?? [], undefined, log)).filter(
+          (table) => inScope(scope, table.zoneId),
+        );
       });
       return c.json(state);
     }),
@@ -2827,20 +2816,17 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const { device } = await requireSession(deps, c);
       const zones = await withTransaction(deps.db, async (tx) => {
-        const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
+        const scope = await readZoneScope(tx, device.deviceProfileId);
         const visible = (await listZones(tx, deps.cfg)).filter((zone) => inScope(scope, zone.id));
         const ids = visible.map((zone) => zone.id);
         if (ids.length === 0) return [];
         const at = deps.clock.now().instant;
         const modes = new Map(
-          (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).map((zone) => [
-            zone.id,
-            zone.serviceMode,
-          ]),
+          (await VENUE_SERVICE.listServiceZones(tx)).map((zone) => [zone.id, zone.serviceMode]),
         );
-        const day = await VENUE_SERVICE.readServiceDay(tx, deps.cfg, at);
-        const states = await VENUE_SERVICE.readZoneClosingStates(tx, deps.cfg, ids, at, day);
-        const layouts = await zoneLayouts(tx, deps.cfg, ids, at, day);
+        const day = await VENUE_SERVICE.readServiceDay(tx, at);
+        const states = await VENUE_SERVICE.readZoneClosingStates(tx, ids, at, day);
+        const layouts = await zoneLayouts(tx, ids, at, day);
         return visible.map((zone) => {
           const state = states.get(zone.id)!;
           const layout = layouts.get(zone.id)!;
@@ -2879,7 +2865,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const sendCfg = sendingCfg(cfg, c, session.device);
       const result = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
-        await checkZones(tx, deps.cfg, session, [
+        await checkZones(tx, session, [
           { tableId: id },
           ...withTableIds.map((tableId) => ({ tableId })),
         ]);
@@ -2963,7 +2949,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             throw new AppError("device_profile.not_admitted", {});
           const current = { ...session, device };
           await catchUpFloor(tx);
-          await checkZones(tx, deps.cfg, current, [
+          await checkZones(tx, current, [
             { partyId },
             ...(resolution.collect?.bills ?? []).map((bill) => ({ orderId: bill.billId })),
           ]);
@@ -3007,7 +2993,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
       await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ tableId: id }]);
+        await checkZones(tx, session, [{ tableId: id }]);
         return markTableCleared(tx, id);
       });
       return c.body(null, 204);
@@ -3024,7 +3010,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const { requested } = body;
       if (typeof requested !== "boolean") throw invalid("requested");
       const answer = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         return requestBill(tx, partyId, requested, args);
       });
       return c.json(answer);
@@ -3038,9 +3024,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const stepId = requireStepParam(c.req.param("stepId"));
       const dueAt = requireShownDueAt(asObject(await readRawJsonBody<unknown>(c)).dueAt);
       const answer = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         return markServiceStepDone(tx, {
-          cfg: deps.cfg,
           deviceProfileId: session.device.deviceProfileId,
           partyId,
           stepId,
@@ -3065,7 +3050,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       // The wire always carries a name; null or "" clears it.
       if (body.name === undefined) throw invalid("name");
       const named = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         return setPartyName(tx, { partyId, name: body.name, expectedPartyRevision });
       });
       return c.json(named);
@@ -3083,7 +3068,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       );
       const guestCount = requireGuestCountOrNull(body.guestCount);
       const counted = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         return setPartyGuests(tx, { partyId, guestCount, expectedPartyRevision });
       });
       return c.json(counted);
@@ -3109,7 +3094,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         const sendCfg = sendingCfg(cfg, c, session.device);
         const result = await withTransaction(deps.db, async (tx) => {
           await catchUpFloor(tx);
-          await checkZones(tx, deps.cfg, session, [{ partyId }, { tableId }]);
+          await checkZones(tx, session, [{ partyId }, { tableId }]);
           const heldBefore = await memberTables(tx, partyId);
           const check = sent === undefined ? undefined : { tableId, sent };
           return movingRooms(tx, deps.cfg, [...heldBefore, tableId], check, async () => {
@@ -3174,7 +3159,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const sendCfg = sendingCfg(cfg, c, session.device);
       const result = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         const held = [...(await memberTables(tx, partyId)), tableId.toLowerCase()];
         return movingRooms(tx, deps.cfg, held, undefined, () =>
           splitTable(
@@ -3211,7 +3196,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       );
       const created = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         return createPartyBill(tx, cfg, partyId, { expectedPartyRevision });
       });
       return c.json(created);
@@ -3223,7 +3208,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
       const bills = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         return readPartyBills(tx, partyId, log);
       });
       return c.json(bills);
@@ -3235,7 +3220,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
       const groups = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         return {
           ...(await listOrderGroups(tx, partyId)),
           printProblems: await listPrintProblems(tx, partyId),
@@ -3250,7 +3235,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
       const current = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         return readCurrentOrders(tx, partyId);
       });
       return c.json(current);
@@ -3276,7 +3261,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const sendCfg = sendingCfg(cfg, c, session.device);
       const submitted = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
         withTransaction(deps.db, async (tx) => {
-          await checkZones(tx, deps.cfg, session, [{ partyId }]);
+          await checkZones(tx, session, [{ partyId }]);
           return submitGroups(
             tx,
             sendCfg,
@@ -3303,7 +3288,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const command = { ...groupCommand(personId, body), ...allergyCommand(body) };
       const fired = await withTransaction(deps.db, async (tx) => {
         const current = await recheckFireSession(tx, session);
-        await checkZones(tx, deps.cfg, current, [{ partyId }]);
+        await checkZones(tx, current, [{ partyId }]);
         return fireGroup(
           tx,
           requestCfg(deps.cfg, current),
@@ -3331,7 +3316,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
         const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
         const answer = await withTransaction(deps.db, async (tx) => {
-          await checkZones(tx, deps.cfg, session, [{ partyId }]);
+          await checkZones(tx, session, [{ partyId }]);
           return command(
             tx,
             cfg,
@@ -3364,7 +3349,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         const args = groupCommand(personId, body);
         const items = parseLineQuantities(body.items, "items");
         const answer = await withTransaction(deps.db, async (tx) => {
-          await checkZones(tx, deps.cfg, session, [{ partyId }]);
+          await checkZones(tx, session, [{ partyId }]);
           return command(
             tx,
             cfg,
@@ -3391,7 +3376,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
       const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
       const answer = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         return markGroupServed(
           tx,
           cfg,
@@ -3420,7 +3405,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (typeof body.minutes !== "number") throw invalid("minutes");
       const minutes = body.minutes;
       const answer = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         return snoozeReminder(tx, cfg, partyId, groupId, minutes, args);
       });
       return c.json(answer);
@@ -3437,7 +3422,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
       const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
       const answer = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         return unsnoozeReminder(tx, cfg, partyId, groupId, args);
       });
       return c.json(answer);
@@ -3456,7 +3441,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         throw invalid("heldGroupIds");
       }
       const reordered = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         return reorderHeldGroups(
           tx,
           partyId,
@@ -3490,7 +3475,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           throw new AppError("device_profile.not_admitted", {});
         const current = { ...session, device };
         const cfg = requestCfg(deps.cfg, current);
-        await checkZones(tx, deps.cfg, current, [{ partyId }]);
+        await checkZones(tx, current, [{ partyId }]);
         return fireHeldLine(
           tx,
           cfg,
@@ -3516,7 +3501,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (typeof body.lineId !== "string" || !isUuid(body.lineId)) throw invalid("lineId");
       const lineId = body.lineId.toLowerCase();
       const answer = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         return splitHeldLineIntoUnits(
           tx,
           cfg,
@@ -3543,7 +3528,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const moves = parseLineQuantities(body.moves, "moves");
       const target = parseMoveTarget(body.target);
       const moved = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         return moveLinesToGroup(
           tx,
           cfg,
@@ -3573,7 +3558,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         expectedEdit: parseBillEditExpected(body.expectedEdit),
       };
       const answer = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         return recallToDraft(
           tx,
           cfg,
@@ -3594,7 +3579,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c, { passive: true });
       const partyId = requireDraftPartyParam(c.req.param("id"));
       const answer = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         const drafts = await readDrafts(tx, deps.cfg, partyId);
         const family = await partyFamily(tx, partyId);
         const bills = await tx
@@ -3630,7 +3615,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         deps.db,
         async (tx) => {
           await requireEconomicWrite(tx, deps.cfg, deps.admission);
-          await checkZones(tx, deps.cfg, session, [{ partyId }]);
+          await checkZones(tx, session, [{ partyId }]);
           const result = await saveDraft(
             tx,
             cfg,
@@ -3672,7 +3657,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         deps.db,
         async (tx) => {
           await requireEconomicWrite(tx, deps.cfg, deps.admission);
-          await checkZones(tx, deps.cfg, session, [{ partyId }]);
+          await checkZones(tx, session, [{ partyId }]);
           const split = await splitDraft(
             tx,
             cfg,
@@ -3710,7 +3695,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const body = asObject(await readRawJsonBody<unknown>(c));
       const revision = requireRevision(body.revision);
       const draft = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         return takeOverDraft(
           tx,
           cfg,
@@ -3738,7 +3723,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const draftId = requireDraftParam(body.draftId);
       if (!Array.isArray(body.lineIds)) throw invalid("lineIds");
       const answer = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        await checkZones(tx, session, [{ partyId }]);
         const at = new Date();
         const draft = (await readDrafts(tx, cfg, partyId)).find((entry) => entry.id === draftId);
         if (draft === undefined) throw new AppError("draft.not_found", { draftId });
@@ -3774,7 +3759,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           sends: true,
           deadEnds: await findDeadEnds(
             tx,
-            cfg,
             zoneId,
             lines.map((line, index) => ({
               key: line.id,
@@ -3784,7 +3768,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             })),
             at,
           ),
-          stations: await availableStations(tx, cfg, at),
+          stations: await availableStations(tx, at),
         };
       });
       return c.json(answer);
@@ -3814,7 +3798,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           deps.db,
           async (tx) => {
             await requireEconomicWrite(tx, deps.cfg, deps.admission);
-            await checkZones(tx, deps.cfg, session, [{ partyId }]);
+            await checkZones(tx, session, [{ partyId }]);
             const result = await submitDraft(
               tx,
               sendCfg,
@@ -3838,14 +3822,12 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/dead-ends/order", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
-      const cfg = requestCfg(deps.cfg, session);
       const body = await readJsonBody<{ workingOrderId: string; toZoneId?: string }>(c);
       const id = requireUuidParam(body.workingOrderId, "WorkingOrderId");
       if (body.toZoneId !== undefined) requireUuidParam(body.toZoneId, "ServiceZoneId");
       const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(
           tx,
-          deps.cfg,
           session,
           named({ orderId: id }, body.toZoneId !== undefined && { zoneId: body.toZoneId }),
         );
@@ -3860,7 +3842,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           .where(eq(workingOrders.id, id));
         if (order === undefined || (order.status !== "open" && order.status !== "placed"))
           throw new AppError("working_order.not_found", { workingOrderId: id });
-        const context = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
+        const context = await VENUE_SERVICE.findOrderContext(tx, id);
         const zoneId = body.toZoneId ?? context?.zoneId ?? null;
         const unsent = await unsentDishLines(tx, id);
         const sends =
@@ -3868,7 +3850,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           (body.toZoneId === undefined
             ? (context?.serviceMode ?? "prepay") === "prepay" ||
               (order.partyId === null && paysAfterSending(context?.serviceMode))
-            : await moveWouldSend(tx, cfg, id, body.toZoneId));
+            : await moveWouldSend(tx, id, body.toZoneId));
         const chosen =
           unsent.length === 0
             ? []
@@ -3887,7 +3869,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           deadEnds: sends
             ? await findDeadEnds(
                 tx,
-                cfg,
                 zoneId,
                 unsent
                   .filter((line) => line.productId !== null)
@@ -3900,7 +3881,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
                 at,
               )
             : [],
-          stations: await availableStations(tx, cfg, at),
+          stations: await availableStations(tx, at),
           revision: order.revision,
         };
       });
@@ -3922,7 +3903,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.lines === null || typeof body.lines !== "object" || Array.isArray(body.lines))
         throw invalid("lines");
       const revision = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        await checkZones(tx, session, [{ orderId: id }]);
         const [order] = await tx
           .select({ status: workingOrders.status, revision: workingOrders.revision })
           .from(workingOrders)
@@ -3992,9 +3973,9 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const id = requireTabParam(c.req.param("id"));
       const tab = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        await checkZones(tx, session, [{ orderId: id }]);
         return {
-          lines: await readTabLines(tx, deps.cfg, id),
+          lines: await readTabLines(tx, id),
           revision: await readOrderRevision(tx, id),
         };
       });
@@ -4010,7 +3991,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<Record<string, unknown>>(c);
       const request = stationMoveRequest(id, body);
       const result = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        await checkZones(tx, session, [{ orderId: id }]);
         return moveDishesToStation(
           tx,
           cfg,
@@ -4051,7 +4032,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         deps.db,
         async (tx) => {
           await requireEconomicWrite(tx, deps.cfg, deps.admission);
-          await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+          await checkZones(tx, session, [{ orderId: id }]);
           const revision = await updateOrderLine(
             tx,
             sendCfg,
@@ -4088,7 +4069,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         throw new AppError("course.not_found", { courseId });
       }
       await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        await checkZones(tx, session, [{ orderId: id }]);
         await setLineCourse(
           tx,
           cfg,
@@ -4119,7 +4100,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       }>(c);
       await withTransaction(deps.db, async (tx) => {
         const current = await recheckFireSession(tx, session);
-        await checkZones(tx, deps.cfg, current, [{ orderId: id }]);
+        await checkZones(tx, current, [{ orderId: id }]);
         await sendLines(
           tx,
           requestCfg(deps.cfg, current),
@@ -4146,7 +4127,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         expectedEdit: BillEditExpected | null;
       }>(c);
       await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        await checkZones(tx, session, [{ orderId: id }]);
         await recallLines(
           tx,
           cfg,
@@ -4176,7 +4157,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         deps.db,
         async (tx) => {
           await requireEconomicWrite(tx, deps.cfg, deps.admission);
-          await checkZones(tx, deps.cfg, session, [{ orderId: billId }]);
+          await checkZones(tx, session, [{ orderId: billId }]);
           const split = await splitBill(tx, cfg, billId, transfers, {
             admission: deps.admission,
             ...command,
@@ -4214,7 +4195,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await withIssuanceTransaction(
         deps.db,
         async (tx) => {
-          await checkZones(tx, deps.cfg, session, [
+          await checkZones(tx, session, [
             { orderId: fromBillId },
             ...(toBillId === null ? [] : [{ orderId: toBillId }]),
           ]);
@@ -4251,7 +4232,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         expectedEdit: parseBillEditExpected(body.expectedEdit),
       };
       const named = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [await billNameZoneSubject(tx, billId)]);
+        await checkZones(tx, session, [await billNameZoneSubject(tx, billId)]);
         return setBillName(tx, billId, body.name, command);
       });
       return c.json(named);
@@ -4269,7 +4250,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const fromBillId = requireOtherBill(body.fromBillId, "fromBillId");
       const command = billCommand(personId, body);
       await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: intoBillId }, { orderId: fromBillId }]);
+        await checkZones(tx, session, [{ orderId: intoBillId }, { orderId: fromBillId }]);
         let attendance: OrderAttendance | undefined;
         if (deps.attendance !== undefined) {
           const reading = deps.clock.now();
@@ -4308,7 +4289,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const transfers = requireTransfers(body.transfers);
       const command = billCommand(personId, body);
       await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: fromBillId }, { orderId: toBillId }]);
+        await checkZones(tx, session, [{ orderId: fromBillId }, { orderId: toBillId }]);
         await transferItems(tx, cfg, fromBillId, toBillId, transfers, {
           ...command,
           expectedEdits: parseBillEditExpecteds(body.expectedEdits),
@@ -4337,14 +4318,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           const current = await recheckFireSession(tx, session);
-          await checkZones(tx, deps.cfg, current, [{ orderId: billId }, { tableId: to.tableId }]);
-          return previewBillMoveAllergy(
-            tx,
-            requestCfg(deps.cfg, current),
-            billId,
-            to.tableId,
-            command,
-          );
+          await checkZones(tx, current, [{ orderId: billId }, { tableId: to.tableId }]);
+          return previewBillMoveAllergy(tx, billId, to.tableId, command);
         }),
       );
     }),
@@ -4364,7 +4339,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await withTransaction(deps.db, async (tx) => {
         const current =
           command.allergy === undefined ? session : await recheckFireSession(tx, session);
-        await checkZones(tx, deps.cfg, current, [
+        await checkZones(tx, current, [
           { orderId: billId },
           ...named(
             "tableId" in to && { tableId: to.tableId },

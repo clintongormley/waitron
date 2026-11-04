@@ -1615,7 +1615,7 @@ async function bootServer(
           return result;
         },
         seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
-        readOpeningHours: (result) => readSetupOpeningHours(db, result),
+        readOpeningHours: () => readSetupOpeningHours(db),
         adopt: (req, hooks) =>
           adoptFromPrimary(
             {
@@ -2686,7 +2686,6 @@ async function bootServer(
     }),
     db,
     cfg: {
-      locationId: tradingContext.locationId,
       contentDefaultLanguage: venueLocale,
       operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
       operationDescriptionDefault,
@@ -3000,8 +2999,7 @@ async function bootServer(
     contentSuggestionsAlertSource(),
     invoiceDeliveryAlertSource({ testPages }),
     stationOutputAlertSource({
-      stationStates: (tx, at) =>
-        VENUE_SERVICE.stationStates(tx, { locationId: tradingContext.locationId }, at),
+      stationStates: (tx, at) => VENUE_SERVICE.stationStates(tx, at),
     }),
     passScreenAlertSource({ cfg: tradingContext }),
     batteryAlertSource({

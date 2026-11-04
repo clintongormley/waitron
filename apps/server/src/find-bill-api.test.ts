@@ -47,7 +47,7 @@ async function restrict(allowed: string[]) {
       .select({ id: zoneServicePolicies.departmentId })
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, venue.counterZone));
-    await setProfileServiceAccess(tx, venue.cfg, profile, {
+    await setProfileServiceAccess(tx, profile, {
       departmentId: zone!.id,
       allowedZoneIds: allowed.length ? allowed : [venue.counterZone],
       startingZoneId: allowed[0] ?? venue.counterZone,

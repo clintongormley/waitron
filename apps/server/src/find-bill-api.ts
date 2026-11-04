@@ -8,7 +8,6 @@ import { findTransactionsRelation, readFindTransactions } from "./find-bill-tran
 import { parseBillsQuery, parseTransactionsQuery } from "./find-bill-query.js";
 import type { FindBillOptions } from "./find-bill-types.js";
 import type { Logger } from "./logger.js";
-import type { TradingContext } from "./trading-context.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
 import { checkZones, orderZoneCondition, type OrderZoneCondition } from "./zone-access.js";
@@ -16,10 +15,9 @@ import "./errors.js";
 
 export async function readFindBillOptions(
   tx: Transaction,
-  cfg: TradingContext,
   inZones?: OrderZoneCondition,
 ): Promise<FindBillOptions> {
-  const bills = findBillsRelation(cfg, inZones);
+  const bills = findBillsRelation(inZones);
   const choices = async (relation: SQL, select: SQL) =>
     (await tx.execute<{ id: string; name: string }>(sql`${relation} ${select}`)).rows;
   const zones = await choices(
@@ -47,13 +45,11 @@ export function mountFindBillApi(app: Hono, deps: TillApiDeps, log: Logger, run:
       const session = await requireSession(deps, c);
       const query = parseBillsQuery(new URL(c.req.url).searchParams);
       const result = await withTransaction(deps.db, async (tx) => {
-        if (query.zoneId !== undefined)
-          await checkZones(tx, deps.cfg, session, [{ zoneId: query.zoneId }]);
+        if (query.zoneId !== undefined) await checkZones(tx, session, [{ zoneId: query.zoneId }]);
         return readFindBills(
           tx,
-          deps.cfg,
           query,
-          await orderZoneCondition(tx, deps.cfg, session.device.deviceProfileId),
+          await orderZoneCondition(tx, session.device.deviceProfileId),
         );
       });
       return c.json(result);
@@ -66,12 +62,11 @@ export function mountFindBillApi(app: Hono, deps: TillApiDeps, log: Logger, run:
       if (!isUuid(raw)) throw new AppError("working_order.not_found", { workingOrderId: raw });
       const id = raw.toLowerCase();
       const result = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        await checkZones(tx, session, [{ orderId: id }]);
         const bill = await readFindBill(
           tx,
-          deps.cfg,
           id,
-          await orderZoneCondition(tx, deps.cfg, session.device.deviceProfileId),
+          await orderZoneCondition(tx, session.device.deviceProfileId),
         );
         return { ...bill, edit: await readBillEditState(tx, id) };
       });
@@ -85,9 +80,8 @@ export function mountFindBillApi(app: Hono, deps: TillApiDeps, log: Logger, run:
       const result = await withTransaction(deps.db, async (tx) =>
         readFindTransactions(
           tx,
-          deps.cfg,
           query,
-          await orderZoneCondition(tx, deps.cfg, session.device.deviceProfileId),
+          await orderZoneCondition(tx, session.device.deviceProfileId),
         ),
       );
       return c.json(result);
@@ -97,11 +91,7 @@ export function mountFindBillApi(app: Hono, deps: TillApiDeps, log: Logger, run:
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const result = await withTransaction(deps.db, async (tx) =>
-        readFindBillOptions(
-          tx,
-          deps.cfg,
-          await orderZoneCondition(tx, deps.cfg, session.device.deviceProfileId),
-        ),
+        readFindBillOptions(tx, await orderZoneCondition(tx, session.device.deviceProfileId)),
       );
       return c.json(result);
     }),

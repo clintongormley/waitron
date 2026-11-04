@@ -85,7 +85,6 @@ type Destination =
 
 export async function previewBillMoveAllergy(
   tx: Transaction,
-  cfg: TradingContext,
   billId: string,
   tableId: string,
   options: MoveBillOptions,
@@ -103,7 +102,7 @@ export async function previewBillMoveAllergy(
   if (options.otherPartyId === undefined)
     throw new AppError("management.request_invalid", { field: "otherPartyId" });
   const table = await inspectTargetTable(tx, tableId, null, options);
-  if (table.holding === null) await refuseUnseatable(tx, cfg, table);
+  if (table.holding === null) await refuseUnseatable(tx, table);
   await requireRelocatableBillEditors(
     tx,
     [billId, ...(table.holding === null ? [] : await readPartyBillIds(tx, [table.holding]))],
@@ -171,7 +170,7 @@ async function moveBillOnce(
   const path = await guardPathParty(tx, billId, options);
   if (options.allergy !== undefined && path.partyId !== null)
     throw new AppError("management.request_invalid", { field: "allergy" });
-  const destination = await resolveDestination(tx, cfg, path.partyId, to, options);
+  const destination = await resolveDestination(tx, path.partyId, to, options);
 
   if (path.status === "abandoned") throw new AppError("tab.not_open", { tabId: billId });
   if (path.status === "settled") throw new AppError("bill.paid", { workingOrderId: billId });
@@ -345,7 +344,6 @@ async function workStillToCome(tx: Transaction, sent: SentWork | null): Promise<
  */
 async function resolveDestination(
   tx: Transaction,
-  cfg: TradingContext,
   source: string | null,
   to: MoveTarget,
   options: MoveBillOptions,
@@ -357,7 +355,7 @@ async function resolveDestination(
     throw new AppError("table.already_in_party", { tableId });
   }
   if (table.holding !== null) return { kind: "party", partyId: table.holding };
-  await refuseUnseatable(tx, cfg, table);
+  await refuseUnseatable(tx, table);
   return { kind: "free", tableId, zoneId: table.zoneId };
 }
 
@@ -432,12 +430,8 @@ async function inspectTargetTable(
 }
 
 /** A table no party holds, refused as seating refuses one in a zone that seats no one. */
-export async function refuseUnseatable(
-  tx: Transaction,
-  cfg: TradingContext,
-  table: TargetTable,
-): Promise<void> {
-  const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, table.zoneId);
+export async function refuseUnseatable(tx: Transaction, table: TargetTable): Promise<void> {
+  const context = await VENUE_SERVICE.resolveZoneContext(tx, table.zoneId);
   if (context.serviceMode !== "table_tab") {
     throw new AppError("service_zone.mode_incompatible", {
       zoneId: table.zoneId,
@@ -554,18 +548,18 @@ async function adoptZone(
   zoneId: string,
   options: { takesOrders: boolean } = { takesOrders: true },
 ): Promise<void> {
-  const previous = await VENUE_SERVICE.findOrderContext(tx, cfg, billId);
+  const previous = await VENUE_SERVICE.findOrderContext(tx, billId);
   if (options.takesOrders && previous?.zoneId !== zoneId)
-    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, zoneId, new Date());
+    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, zoneId, new Date());
   if (previous === null) {
-    await VENUE_SERVICE.recordOrderContext(tx, cfg, billId, zoneId);
+    await VENUE_SERVICE.recordOrderContext(tx, billId, zoneId);
   } else {
-    await VENUE_SERVICE.retargetOrderContext(tx, cfg, billId, zoneId);
+    await VENUE_SERVICE.retargetOrderContext(tx, billId, zoneId);
   }
   // Within table service a later course's dishes wait for their course. `fireLines` judges the
   // earliest course from this bill's ticket items and the lines it is given, and a no-preparation
   // dish leaves no ticket item, so it would send one waiting for a later course.
-  if (!(await moveWouldSend(tx, cfg, billId, zoneId, previous?.serviceMode ?? "prepay"))) return;
+  if (!(await moveWouldSend(tx, billId, zoneId, previous?.serviceMode ?? "prepay"))) return;
   const unsent = await unsentDishLines(tx, billId);
   await assertSendable(
     tx,
@@ -576,15 +570,12 @@ async function adoptZone(
 
 export async function moveWouldSend(
   tx: Transaction,
-  cfg: TradingContext,
   billId: string,
   toZoneId: string,
   previousMode?: string,
 ): Promise<boolean> {
   const sourceMode =
-    previousMode ??
-    (await VENUE_SERVICE.findOrderContext(tx, cfg, billId))?.serviceMode ??
-    "prepay";
-  const targetMode = (await VENUE_SERVICE.resolveZoneContext(tx, cfg, toZoneId)).serviceMode;
+    previousMode ?? (await VENUE_SERVICE.findOrderContext(tx, billId))?.serviceMode ?? "prepay";
+  const targetMode = (await VENUE_SERVICE.resolveZoneContext(tx, toZoneId)).serviceMode;
   return sourceMode !== "table_tab" && targetMode === "table_tab";
 }

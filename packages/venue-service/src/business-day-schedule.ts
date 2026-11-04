@@ -14,7 +14,6 @@ import {
   type BusinessDayClock,
 } from "@waitron/shared";
 import type { BusinessDayClockConflict } from "@waitron/module";
-import type { VenueScope } from "./operations.js";
 import { menuPeriods } from "./schema/menus.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 import {
@@ -54,7 +53,6 @@ interface Placement {
 
 export async function businessDayClockConflicts(
   tx: Transaction,
-  _cfg: VenueScope,
   before: BusinessDayClock,
   candidate: BusinessDayClock,
   effectiveBusinessDay: string,
@@ -281,7 +279,6 @@ export async function businessDayClockConflicts(
 /** A keep-open saved for the night before the change runs under the old changeover. */
 export async function keptOpenConflicts(
   tx: Transaction,
-  _cfg: VenueScope,
   before: BusinessDayClock,
   candidate: BusinessDayClock,
   effectiveBusinessDay: string,
@@ -314,13 +311,12 @@ export async function keptOpenConflicts(
 }
 export async function assertBusinessDayClockChange(
   tx: Transaction,
-  cfg: VenueScope,
   before: BusinessDayClock,
   candidate: BusinessDayClock,
   effectiveBusinessDay: string,
 ): Promise<void> {
-  const result = await businessDayClockConflicts(tx, cfg, before, candidate, effectiveBusinessDay);
-  const keptOpen = await keptOpenConflicts(tx, cfg, before, candidate, effectiveBusinessDay);
+  const result = await businessDayClockConflicts(tx, before, candidate, effectiveBusinessDay);
+  const keptOpen = await keptOpenConflicts(tx, before, candidate, effectiveBusinessDay);
   const conflictCount = result.conflictCount + keptOpen.length;
   if (conflictCount > 0)
     throw new AppError("venue.business_day_hours_conflict", {
@@ -330,12 +326,11 @@ export async function assertBusinessDayClockChange(
 }
 export async function assertBusinessDayScheduleWrite(
   tx: Transaction,
-  cfg: VenueScope,
   changeKind: "time" | "metadata",
   expectedClockRevision: number,
 ): Promise<void> {
   if (changeKind === "metadata") return;
-  const revision = await readBusinessDayScheduleRevision(tx, cfg);
+  const revision = await readBusinessDayScheduleRevision(tx);
   if (
     !Number.isSafeInteger(expectedClockRevision) ||
     expectedClockRevision < 0 ||
@@ -347,7 +342,6 @@ export async function assertBusinessDayScheduleWrite(
  *  order, each under the starts before it. */
 export async function assertWaitingChangeFits(
   tx: Transaction,
-  cfg: VenueScope,
   at: Date,
   acquiredClock?: BusinessDayClock,
 ): Promise<void> {
@@ -356,13 +350,7 @@ export async function assertWaitingChangeFits(
   const waiting = clock.cutoverChanges.filter((change) => !settled.cutoverChanges.includes(change));
   for (const change of waiting) {
     const next = { ...settled, cutoverChanges: [...settled.cutoverChanges, change] };
-    const result = await businessDayClockConflicts(
-      tx,
-      cfg,
-      settled,
-      next,
-      change.effectiveBusinessDay,
-    );
+    const result = await businessDayClockConflicts(tx, settled, next, change.effectiveBusinessDay);
     if (result.conflictCount > 0)
       throw new AppError("hours.clock_change_conflict", {
         dayCutover: change.dayCutover,
@@ -390,11 +378,7 @@ export function sameScheduleRanges(
   return oldKeys.length === newKeys.length && oldKeys.every((key, index) => key === newKeys[index]);
 }
 
-export async function readBusinessDayScheduleRevision(
-  tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: VenueScope,
-): Promise<number> {
+export async function readBusinessDayScheduleRevision(tx: Transaction): Promise<number> {
   const [settings] = await tx
     .select({ revision: locationBusinessDaySettings.revision })
     .from(locationBusinessDaySettings);
@@ -403,11 +387,10 @@ export async function readBusinessDayScheduleRevision(
 
 export async function readBusinessDayScheduleStatus(
   tx: Transaction,
-  cfg: VenueScope,
   clock: BusinessDayClock,
   at: Date,
 ): Promise<BusinessDayScheduleStatus> {
-  const clockRevision = await readBusinessDayScheduleRevision(tx, cfg);
+  const clockRevision = await readBusinessDayScheduleRevision(tx);
   let currentBusinessDay: string;
   try {
     currentBusinessDay = businessDayAt(clock, at);

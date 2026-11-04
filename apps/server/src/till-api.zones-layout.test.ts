@@ -195,7 +195,7 @@ describe("GET /api/zones offers the due layout", () => {
         .insert(floorPlanSets)
         .values({ locationId: v.cfg.locationId })
         .returning({ id: floorPlanSets.id });
-      await linkFloorPlanSet(tx, v.cfg, {
+      await linkFloorPlanSet(tx, {
         setId: row!.id,
         departmentId: d.departmentId,
         name: "Private party",
@@ -222,7 +222,7 @@ describe("GET /api/zones offers the due layout", () => {
         .set({ floorPlanSetId: null })
         .where(eq(menuPeriods.floorPlanSetId, d.dinner));
       await tx.delete(departmentFloorPlanSets).where(eq(departmentFloorPlanSets.setId, d.dinner));
-      await floorDeletionFor(v.cfg, REMOVALS).removeSets(tx, [d.dinner]);
+      await floorDeletionFor(REMOVALS).removeSets(tx, [d.dinner]);
     });
 
     expect(await zoneAt(AFTERNOON, d.zoneId)).toMatchObject({
@@ -267,12 +267,12 @@ describe("hasPlan says the department has a set", () => {
 
   it("is false for a zone with tables whose department has no set", async () => {
     const zoneId = await inTx(v, async (tx) => {
-      const department = await createDepartment(tx, v.cfg, {
+      const department = await createDepartment(tx, {
         name: `Dept ${randomUUID().slice(0, 8)}`,
         orderStart: "table",
       });
       return (
-        await createServiceZone(tx, v.cfg, {
+        await createServiceZone(tx, {
           name: `Setless ${randomUUID().slice(0, 8)}`,
           departmentId: department.id,
         })
@@ -302,17 +302,16 @@ describe("GET /api/zones reads one moment", () => {
 
   it("works a zone's closed state out at the server clock's moment, as it does its layout", async () => {
     const zoneId = await inTx(v, async (tx) => {
-      const department = await createDepartment(tx, v.cfg, {
+      const department = await createDepartment(tx, {
         name: `Dept ${randomUUID().slice(0, 8)}`,
         orderStart: "table",
       });
-      const zone = await createServiceZone(tx, v.cfg, {
+      const zone = await createServiceZone(tx, {
         name: `Shut ${randomUUID().slice(0, 8)}`,
         departmentId: department.id,
       });
       await replaceZoneClosedWeek(
         tx,
-        v.cfg,
         zone.id,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,

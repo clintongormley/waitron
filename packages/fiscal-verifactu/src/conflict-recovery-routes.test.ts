@@ -106,7 +106,7 @@ function mount(
   };
   const ctx: ModuleRouteContext = {
     db: suite.db,
-    cfg: { locationId: node.locationId },
+    cfg: {},
     core: {} as ModuleRouteContext["core"],
     ...(options.absent ? {} : { liveOperations: bridge }),
   };

@@ -6,7 +6,6 @@ import {
   type DeleteImpactItem,
   type DeleteTarget,
 } from "@waitron/shared";
-import type { VenueScope } from "./operations.js";
 import { readDevicesKitchenScreens } from "./kitchen-screens.js";
 import { routingCells, routingCellPeriods } from "./schema/routing.js";
 import { stationDayStates } from "./schema/station-times.js";
@@ -19,7 +18,7 @@ import "./errors.js";
 
 export type StationDeleteSettings = { removes: DeleteImpactItem[]; boundScreens: DeleteTarget[] };
 
-async function settings(tx: Transaction, cfg: VenueScope, id: string) {
+async function settings(tx: Transaction, id: string) {
   const [station] = await tx
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
@@ -76,7 +75,6 @@ async function settings(tx: Transaction, cfg: VenueScope, id: string) {
   const bound: DeleteTarget[] = [];
   const resolved = await readDevicesKitchenScreens(
     tx,
-    cfg,
     displays.map((display) => display.id),
   );
   for (const display of displays) {
@@ -119,18 +117,13 @@ async function settings(tx: Transaction, cfg: VenueScope, id: string) {
 
 export async function readStationDeleteSettings(
   tx: Transaction,
-  cfg: VenueScope,
   id: string,
 ): Promise<StationDeleteSettings> {
-  return (await settings(tx, cfg, id)).impact;
+  return (await settings(tx, id)).impact;
 }
 
-export async function clearStationDeleteSettings(
-  tx: Transaction,
-  cfg: VenueScope,
-  id: string,
-): Promise<void> {
-  const rows = await settings(tx, cfg, id);
+export async function clearStationDeleteSettings(tx: Transaction, id: string): Promise<void> {
+  const rows = await settings(tx, id);
   if (rows.periods.length > 0)
     await tx.delete(routingCellPeriods).where(
       inArray(

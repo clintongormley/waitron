@@ -1491,7 +1491,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       const deviceName = uniqueName("Grill screen");
       const deviceId = await withTransaction(suite.db, async (tx) => {
         const { deviceId } = await seedDevice(tx, { profileId: id, label: deviceName });
-        await VENUE_SERVICE.setDeviceKitchenScreens(tx, venueCfg, {
+        await VENUE_SERVICE.setDeviceKitchenScreens(tx, {
           deviceId,
           profileId: id,
           screens: [{ kind: "station", stationIds: [grill, cold], zoneIds: null }],
@@ -1511,7 +1511,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       const body = (await res.json()) as ProfileRow & { narrowedDevices: unknown };
       expect(body.name).toBe(renamed);
       const grillName = await withTransaction(suite.db, async (tx) =>
-        (await VENUE_SERVICE.readDeviceKitchenScreens(tx, venueCfg, deviceId))[0]!.stations.find(
+        (await VENUE_SERVICE.readDeviceKitchenScreens(tx, deviceId))[0]!.stations.find(
           (slot) => slot.id === grill,
         ),
       );
@@ -2094,15 +2094,15 @@ describe("Management API — who and where a device profile serves (W97)", () =>
     await setupTenantOnce();
     cookie = await login(mountApp(), MANAGER_EMAIL);
     place = await withTransaction(suite.db, async (tx) => {
-      const terrace = await createServiceZone(tx, venueCfg, {
+      const terrace = await createServiceZone(tx, {
         name: uniqueName("Terrace"),
         departmentId: ordering.departmentId,
       });
-      const deli = await createDepartment(tx, venueCfg, {
+      const deli = await createDepartment(tx, {
         name: uniqueName("Deli"),
         orderStart: "counter",
       });
-      const deliCounter = await createServiceZone(tx, venueCfg, {
+      const deliCounter = await createServiceZone(tx, {
         name: uniqueName("Deli counter"),
         departmentId: deli.id,
       });
@@ -2547,7 +2547,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
 
   it("reads back a zone switched off since it was chosen, so the manager sees what is stored", async () => {
     const spare = await withTransaction(suite.db, (tx) =>
-      createServiceZone(tx, venueCfg, {
+      createServiceZone(tx, {
         name: uniqueName("Spare"),
         departmentId: ordering.departmentId,
       }),

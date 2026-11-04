@@ -108,9 +108,9 @@ async function setupTill() {
   return provisionSignedInTill(suite.db, {
     taxId: nextNif(),
     dayCutover: "05:00",
-    seed: async (tx, cfg) => {
-      const departmentId = await createBareDepartment(tx, cfg, "Restaurant", new Date());
-      const zone = await createServiceZone(tx, cfg, { name: "Barra", departmentId });
+    seed: async (tx) => {
+      const departmentId = await createBareDepartment(tx, "Restaurant", new Date());
+      const zone = await createServiceZone(tx, { name: "Barra", departmentId });
       return { departmentId, startingZoneId: zone.id };
     },
   });
@@ -130,7 +130,7 @@ async function secondDeviceOnOwnProfile(till: Till) {
     })
     .returning({ id: deviceProfiles.id });
   await withTransaction(suite.db, (tx) =>
-    setProfileServiceAccess(tx, till.cfg, profile!.id, {
+    setProfileServiceAccess(tx, profile!.id, {
       departmentId: till.departmentId,
       allowedZoneIds: null,
       startingZoneId: till.startingZoneId,

@@ -86,9 +86,7 @@ async function fixture(formFactor: "till" | "phone-portrait" | "tablet-landscape
         : await response.text(),
     };
   };
-  const current = await run((tx) =>
-    VENUE_SERVICE.readDeviceZoneSelection(tx, venue.cfg, device.deviceId),
-  );
+  const current = await run((tx) => VENUE_SERVICE.readDeviceZoneSelection(tx, device.deviceId));
   expect(current.startingZoneId).not.toBeNull();
   const input: DeviceZoneSelectionInput = {
     profileId: current.profileId,
@@ -147,7 +145,7 @@ describe("the device's zone preferences", () => {
 
   it("two handhelds on one profile keep their own zones", async () => {
     const f = await fixture("phone-portrait");
-    const { id: chosen } = await run((tx) => createZone(tx, f.venue.cfg, { name: "Patio" }));
+    const { id: chosen } = await run((tx) => createZone(tx, { name: "Patio" }));
     const current = await f.request("GET");
     expect(current.json.zones.length).toBeGreaterThan(1);
     const saved = await f.request("PUT", {
@@ -275,9 +273,7 @@ describe("the device's zone preferences", () => {
             }),
           );
         if (change === "selection")
-          await run((tx) =>
-            VENUE_SERVICE.setDeviceZoneSelection(tx, f.venue.cfg, f.deviceId, f.input),
-          );
+          await run((tx) => VENUE_SERVICE.setDeviceZoneSelection(tx, f.deviceId, f.input));
         if (change === "scope")
           await suite.db
             .update(floorZones)

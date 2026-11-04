@@ -667,11 +667,11 @@ describe("routing cells in a staged import", () => {
       });
       const cfg = { locationId: locationId(venueResult.locationId) };
       const variant = await withTransaction(source.db, async (tx) => {
-        const department = await createDepartment(tx, cfg, {
+        const department = await createDepartment(tx, {
           name: "Dining room",
           orderStart: "table",
         });
-        const zone = await createServiceZone(tx, cfg, {
+        const zone = await createServiceZone(tx, {
           name: "Terrace",
           departmentId: department.id,
         });
@@ -697,13 +697,11 @@ describe("routing cells in a staged import", () => {
           .returning();
         await setRoutingCell(
           tx,
-          cfg,
           { row: { kind: "category", categoryId: category.id }, zoneId: null },
           { kind: "no_preparation" },
         );
         await setRoutingCell(
           tx,
-          cfg,
           { row: { kind: "product", productId: product.id }, zoneId: zone.id },
           { kind: "station", stationId: station!.id },
         );

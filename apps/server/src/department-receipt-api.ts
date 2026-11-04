@@ -81,7 +81,7 @@ export function mountDepartmentReceiptSettingsApi(
           stored.operationDescription === undefined && cfg.operationDescriptionDefault !== undefined
             ? { ...stored, operationDescription: cfg.operationDescriptionDefault }
             : stored;
-        const policy = await VENUE_SERVICE.readDepartmentReceiptPolicy(tx, cfg, id);
+        const policy = await VENUE_SERVICE.readDepartmentReceiptPolicy(tx, id);
         const venueAddress = await readVenueAddress(tx);
         return {
           receipt,
@@ -104,12 +104,10 @@ export function mountDepartmentReceiptSettingsApi(
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "departmentId");
       const body = await readJsonBody<unknown>(c);
-      const cfg = deps.venueCfg();
       // Decoding runs outside the write queue; permission, scope, language, policy and image are rechecked before saving.
       const prepared = await withTransaction(deps.db, async (tx) => {
         const checked = await checkedDepartmentReceiptWrite(
           tx,
-          cfg,
           id,
           sessionId,
           body,
@@ -133,7 +131,6 @@ export function mountDepartmentReceiptSettingsApi(
       await withTransaction(deps.db, async (tx) => {
         const checked = await checkedDepartmentReceiptWrite(
           tx,
-          cfg,
           id,
           sessionId,
           body,

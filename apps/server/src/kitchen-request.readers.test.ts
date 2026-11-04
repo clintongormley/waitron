@@ -84,7 +84,6 @@ async function serve(tx: Transaction, venue: Venue, lineId: string) {
 async function routeBottledToBar(tx: Transaction, venue: Venue) {
   await setRoutingCell(
     tx,
-    venue.cfg,
     { row: { kind: "category", categoryId: venue.folders.bottled }, zoneId: null },
     { kind: "station", stationId: venue.stations.bar },
   );

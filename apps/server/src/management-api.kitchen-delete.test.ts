@@ -254,7 +254,7 @@ it("station bound to an off KDS refuses deletion with distinct device count", as
     .values({ name: "KDS", formFactor: "kds" })
     .returning();
   await inTx(v, (tx) =>
-    setProfileKitchenScreens(tx, v.cfg, profile!.id, {
+    setProfileKitchenScreens(tx, profile!.id, {
       station: { stationIds: null, zoneIds: null },
     }),
   );
@@ -263,7 +263,7 @@ it("station bound to an off KDS refuses deletion with distinct device count", as
   };
   await suite.db.update(devices).set({ active: false }).where(eq(devices.id, device.id));
   await inTx(v, (tx) =>
-    setDeviceKitchenScreens(tx, v.cfg, {
+    setDeviceKitchenScreens(tx, {
       deviceId: device!.id,
       profileId: profile!.id,
       screens: [{ kind: "station", stationIds: [station], zoneIds: null }],

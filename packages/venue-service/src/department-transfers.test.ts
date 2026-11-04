@@ -62,16 +62,16 @@ async function venue() {
     }
     const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
     const cfg = { locationId: locationId(await venueLocationId(tx)) };
-    const a = await createDepartment(tx, cfg, { name: `Deli${suffix}`, orderStart: "table" });
-    const b = await createDepartment(tx, cfg, {
+    const a = await createDepartment(tx, { name: `Deli${suffix}`, orderStart: "table" });
+    const b = await createDepartment(tx, {
       name: `Restaurant${suffix}`,
       orderStart: "table",
     });
-    const az = await createServiceZone(tx, cfg, {
+    const az = await createServiceZone(tx, {
       name: `Deli counter${suffix}`,
       departmentId: a.id,
     });
-    const bz = await createServiceZone(tx, cfg, {
+    const bz = await createServiceZone(tx, {
       name: `Restaurant counter${suffix}`,
       departmentId: b.id,
     });
@@ -79,13 +79,13 @@ async function venue() {
       .insert(deviceProfiles)
       .values({ name: randomUUID(), formFactor: "till", capabilities: ["take-orders"] })
       .returning();
-    await setProfileServiceScope(tx, cfg, profile!.id, {
+    await setProfileServiceScope(tx, profile!.id, {
       departmentId: b.id,
       allowedZoneIds: null,
       startingZoneId: bz.id,
     });
     const tab = await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 1 });
-    await recordOrderServiceContext(tx, cfg, tab.id, az.id);
+    await recordOrderServiceContext(tx, tab.id, az.id);
     return { cfg, a: a.id, b: b.id, az: az.id, bz: bz.id, profile: profile!.id, tab: tab.id };
   });
 }
@@ -97,18 +97,13 @@ describe("departmental tab transfers", () => {
     const v = await pending();
     await withTransaction(suite.db, async (tx) => {
       await tx.update(workingOrders).set({ label: "Alex" }).where(eq(workingOrders.id, v.tab));
-      const incoming = await service.listIncomingDepartmentTransfers(tx, v.cfg, receiver(v));
-      const detail = await service.readIncomingDepartmentTransfer(
-        tx,
-        v.cfg,
-        v.request.id,
-        receiver(v),
-      );
-      const sent = await service.listSentDepartmentTransfers(tx, v.cfg, v.tab, {
+      const incoming = await service.listIncomingDepartmentTransfers(tx, receiver(v));
+      const detail = await service.readIncomingDepartmentTransfer(tx, v.request.id, receiver(v));
+      const sent = await service.listSentDepartmentTransfers(tx, v.tab, {
         departmentId: v.a,
         personId: "sender",
       });
-      const history = await service.listDepartmentSentTransfers(tx, v.cfg, {
+      const history = await service.listDepartmentSentTransfers(tx, {
         departmentId: v.a,
         personId: "sender",
       });
@@ -133,18 +128,13 @@ describe("departmental tab transfers", () => {
           .update(workingOrders)
           .set({ deliveryTableId: table!.id, label: "Alex" })
           .where(eq(workingOrders.id, v.tab));
-        const incoming = await service.listIncomingDepartmentTransfers(tx, v.cfg, receiver(v));
-        const detail = await service.readIncomingDepartmentTransfer(
-          tx,
-          v.cfg,
-          v.request.id,
-          receiver(v),
-        );
-        const sent = await service.listSentDepartmentTransfers(tx, v.cfg, v.tab, {
+        const incoming = await service.listIncomingDepartmentTransfers(tx, receiver(v));
+        const detail = await service.readIncomingDepartmentTransfer(tx, v.request.id, receiver(v));
+        const sent = await service.listSentDepartmentTransfers(tx, v.tab, {
           departmentId: v.a,
           personId: "sender",
         });
-        const history = await service.listDepartmentSentTransfers(tx, v.cfg, {
+        const history = await service.listDepartmentSentTransfers(tx, {
           departmentId: v.a,
           personId: "sender",
         });
@@ -170,7 +160,7 @@ describe("departmental tab transfers", () => {
           })
           .returning();
         if (formFactor !== "kds")
-          await setProfileServiceScope(tx, v.cfg, profile!.id, {
+          await setProfileServiceScope(tx, profile!.id, {
             departmentId,
             allowedZoneIds: null,
             startingZoneId: departmentId === v.a ? v.az : v.bz,
@@ -185,30 +175,30 @@ describe("departmental tab transfers", () => {
         .select()
         .from(deviceProfiles)
         .where(eq(deviceProfiles.id, v.profile));
-      expect(await service.listDepartmentTransferProfiles(tx, v.cfg, v.b)).toEqual([
+      expect(await service.listDepartmentTransferProfiles(tx, v.b)).toEqual([
         { id: v.profile, name: profile!.name },
       ]);
       await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, v.bz));
-      expect(await service.listDepartmentTransferProfiles(tx, v.cfg, v.b)).toEqual([]);
+      expect(await service.listDepartmentTransferProfiles(tx, v.b)).toEqual([]);
     });
   });
 
   it("keeps responsibility at the source while a durable directional request is pending", async () => {
     const v = await venue();
     await withTransaction(suite.db, (tx) =>
-      service.setDepartmentTransferSettings(tx, v.cfg, v.b, {
+      service.setDepartmentTransferSettings(tx, v.b, {
         receivingProfileId: v.profile,
         destinationDepartmentIds: [],
       }),
     );
     await withTransaction(suite.db, (tx) =>
-      service.setDepartmentTransferSettings(tx, v.cfg, v.a, {
+      service.setDepartmentTransferSettings(tx, v.a, {
         receivingProfileId: null,
         destinationDepartmentIds: [v.b],
       }),
     );
     const request = await withTransaction(suite.db, (tx) =>
-      service.requestDepartmentTransfer(tx, v.cfg, v.tab, v.b, {
+      service.requestDepartmentTransfer(tx, v.tab, v.b, {
         departmentId: v.a,
         personId: "sender",
       }),
@@ -222,29 +212,29 @@ describe("departmental tab transfers", () => {
       revision: 0,
     });
     await withTransaction(suite.db, async (tx) => {
-      expect(await getOrderServiceContext(tx, v.cfg, v.tab)).toEqual({
+      expect(await getOrderServiceContext(tx, v.tab)).toEqual({
         zoneId: v.az,
         departmentId: v.a,
         serviceMode: "table_tab",
       });
       const [tab] = await tx.select().from(workingOrders).where(eq(workingOrders.id, v.tab));
       expect(tab).toMatchObject({ status: "open", revision: 0 });
-      expect(await service.readDepartmentTransferSettings(tx, v.cfg, v.a)).toEqual({
+      expect(await service.readDepartmentTransferSettings(tx, v.a)).toEqual({
         departmentId: v.a,
         receivingProfileId: null,
         destinationDepartmentIds: [v.b],
       });
-      expect(await service.listDepartmentTransfers(tx, v.cfg, v.b)).toEqual([request]);
+      expect(await service.listDepartmentTransfers(tx, v.b)).toEqual([request]);
     });
   });
   async function ready() {
     const v = await venue();
     await withTransaction(suite.db, async (tx) => {
-      await service.setDepartmentTransferSettings(tx, v.cfg, v.b, {
+      await service.setDepartmentTransferSettings(tx, v.b, {
         receivingProfileId: v.profile,
         destinationDepartmentIds: [],
       });
-      await service.setDepartmentTransferSettings(tx, v.cfg, v.a, {
+      await service.setDepartmentTransferSettings(tx, v.a, {
         receivingProfileId: null,
         destinationDepartmentIds: [v.b],
       });
@@ -255,18 +245,18 @@ describe("departmental tab transfers", () => {
   it("lists the incoming queue for the receiving desk and answers null for any other profile", async () => {
     const v = await ready();
     const request = await withTransaction(suite.db, (tx) =>
-      service.requestDepartmentTransfer(tx, v.cfg, v.tab, v.b, {
+      service.requestDepartmentTransfer(tx, v.tab, v.b, {
         departmentId: v.a,
         personId: "sender",
       }),
     );
     await withTransaction(suite.db, async (tx) => {
       const desk = { departmentId: v.b, personId: "receiver", profileId: v.profile };
-      expect(await service.listIncomingDepartmentTransfers(tx, v.cfg, desk)).toMatchObject([
+      expect(await service.listIncomingDepartmentTransfers(tx, desk)).toMatchObject([
         { id: request.id, status: "pending" },
       ]);
       expect(
-        await service.listIncomingDepartmentTransfers(tx, v.cfg, {
+        await service.listIncomingDepartmentTransfers(tx, {
           ...desk,
           profileId: randomUUID(),
         }),
@@ -281,12 +271,12 @@ describe("departmental tab transfers", () => {
         .insert(deviceProfiles)
         .values({ name: randomUUID(), formFactor: "till" })
         .returning();
-      await setProfileServiceScope(tx, v.cfg, profile!.id, {
+      await setProfileServiceScope(tx, profile!.id, {
         departmentId: v.a,
         allowedZoneIds: null,
         startingZoneId: v.az,
       });
-      await service.setDepartmentTransferSettings(tx, v.cfg, v.a, {
+      await service.setDepartmentTransferSettings(tx, v.a, {
         receivingProfileId: profile!.id,
         destinationDepartmentIds: [v.b],
       });
@@ -299,7 +289,7 @@ describe("departmental tab transfers", () => {
     );
     await expect(
       withTransaction(suite.db, (tx) =>
-        service.requestDepartmentTransfer(tx, v.cfg, v.tab, v.a, {
+        service.requestDepartmentTransfer(tx, v.tab, v.a, {
           departmentId: v.b,
           personId: "sender",
         }),
@@ -325,7 +315,7 @@ describe("departmental tab transfers", () => {
     });
     await expect(
       withTransaction(suite.db, (tx) =>
-        service.requestDepartmentTransfer(tx, v.cfg, v.tab, v.b, {
+        service.requestDepartmentTransfer(tx, v.tab, v.b, {
           departmentId: v.a,
           personId: "sender",
         }),
@@ -353,7 +343,7 @@ describe("departmental tab transfers", () => {
         if (kind === "inactive")
           await tx.update(departments).set({ active: false }).where(eq(departments.id, v.b));
         if (kind === "desk")
-          await service.setDepartmentTransferSettings(tx, v.cfg, v.b, {
+          await service.setDepartmentTransferSettings(tx, v.b, {
             receivingProfileId: null,
             destinationDepartmentIds: [],
           });
@@ -363,7 +353,7 @@ describe("departmental tab transfers", () => {
             .set({ retiredAt: new Date().toISOString() })
             .where(eq(deviceProfiles.id, v.profile));
         if (kind === "scope")
-          await setProfileServiceScope(tx, v.cfg, v.profile, {
+          await setProfileServiceScope(tx, v.profile, {
             departmentId: v.a,
             allowedZoneIds: null,
             startingZoneId: v.az,
@@ -386,7 +376,7 @@ describe("departmental tab transfers", () => {
               : "department_transfer.desk_unavailable";
       await expect(
         withTransaction(suite.db, (tx) =>
-          service.requestDepartmentTransfer(tx, v.cfg, v.tab, destination, {
+          service.requestDepartmentTransfer(tx, v.tab, destination, {
             departmentId: sender,
             personId: "sender",
           }),
@@ -404,14 +394,14 @@ describe("departmental tab transfers", () => {
   it("refuses a second pending destination and allows another request after withdrawal", async () => {
     const v = await ready();
     const request = await withTransaction(suite.db, (tx) =>
-      service.requestDepartmentTransfer(tx, v.cfg, v.tab, v.b, {
+      service.requestDepartmentTransfer(tx, v.tab, v.b, {
         departmentId: v.a,
         personId: "sender",
       }),
     );
     await expect(
       withTransaction(suite.db, (tx) =>
-        service.requestDepartmentTransfer(tx, v.cfg, v.tab, v.b, {
+        service.requestDepartmentTransfer(tx, v.tab, v.b, {
           departmentId: v.a,
           personId: "sender",
         }),
@@ -420,14 +410,14 @@ describe("departmental tab transfers", () => {
     expect(service).toHaveProperty("withdrawDepartmentTransfer", expect.any(Function));
     await expect(
       withTransaction(suite.db, (tx) =>
-        service.withdrawDepartmentTransfer(tx, v.cfg, request.id, {
+        service.withdrawDepartmentTransfer(tx, request.id, {
           departmentId: v.b,
           personId: "other",
         }),
       ),
     ).rejects.toMatchObject({ code: "department_transfer.not_allowed" });
     const withdrawn = await withTransaction(suite.db, (tx) =>
-      service.withdrawDepartmentTransfer(tx, v.cfg, request.id, {
+      service.withdrawDepartmentTransfer(tx, request.id, {
         departmentId: v.a,
         personId: "sender",
       }),
@@ -436,21 +426,21 @@ describe("departmental tab transfers", () => {
     expect(withdrawn.resolvedAt).toEqual(expect.any(String));
     await expect(
       withTransaction(suite.db, (tx) =>
-        service.withdrawDepartmentTransfer(tx, v.cfg, request.id, {
+        service.withdrawDepartmentTransfer(tx, request.id, {
           departmentId: v.a,
           personId: "sender",
         }),
       ),
     ).rejects.toMatchObject({ code: "department_transfer.not_pending" });
     const next = await withTransaction(suite.db, (tx) =>
-      service.requestDepartmentTransfer(tx, v.cfg, v.tab, v.b, {
+      service.requestDepartmentTransfer(tx, v.tab, v.b, {
         departmentId: v.a,
         personId: "sender",
       }),
     );
     expect(next.id).not.toBe(request.id);
     expect(
-      await withTransaction(suite.db, (tx) => service.listDepartmentTransfers(tx, v.cfg, v.b)),
+      await withTransaction(suite.db, (tx) => service.listDepartmentTransfers(tx, v.b)),
     ).toEqual([next]);
   });
 
@@ -459,7 +449,7 @@ describe("departmental tab transfers", () => {
     async (kind) => {
       const v = await ready();
       const before = await withTransaction(suite.db, (tx) =>
-        service.readDepartmentTransferSettings(tx, v.cfg, v.b),
+        service.readDepartmentTransferSettings(tx, v.b),
       );
       let target = v.a;
       await withTransaction(suite.db, async (tx) => {
@@ -483,7 +473,7 @@ describe("departmental tab transfers", () => {
                 .insert(deviceProfiles)
                 .values({ name: randomUUID(), formFactor: "till" })
                 .returning();
-              await setProfileServiceScope(tx, v.cfg, p!.id, {
+              await setProfileServiceScope(tx, p!.id, {
                 departmentId: v.a,
                 allowedZoneIds: null,
                 startingZoneId: v.az,
@@ -495,16 +485,14 @@ describe("departmental tab transfers", () => {
       if (kind === "missing") target = randomUUID();
       await expect(
         withTransaction(suite.db, (tx) =>
-          service.setDepartmentTransferSettings(tx, v.cfg, v.b, {
+          service.setDepartmentTransferSettings(tx, v.b, {
             receivingProfileId: profileId,
             destinationDepartmentIds: [target],
           }),
         ),
       ).rejects.toMatchObject({ code: "department_transfer.settings_invalid" });
       expect(
-        await withTransaction(suite.db, (tx) =>
-          service.readDepartmentTransferSettings(tx, v.cfg, v.b),
-        ),
+        await withTransaction(suite.db, (tx) => service.readDepartmentTransferSettings(tx, v.b)),
       ).toEqual(before);
     },
   );
@@ -516,7 +504,7 @@ describe("departmental tab transfers", () => {
     );
     await expect(
       withTransaction(suite.db, (tx) =>
-        service.requestDepartmentTransfer(tx, v.cfg, v.tab, v.b, {
+        service.requestDepartmentTransfer(tx, v.tab, v.b, {
           departmentId: v.a,
           personId: "sender",
         }),
@@ -526,7 +514,7 @@ describe("departmental tab transfers", () => {
   it("allows deleting an unused receiving profile and keeps the pending request", async () => {
     const v = await ready();
     const request = await withTransaction(suite.db, (tx) =>
-      service.requestDepartmentTransfer(tx, v.cfg, v.tab, v.b, {
+      service.requestDepartmentTransfer(tx, v.tab, v.b, {
         departmentId: v.a,
         personId: "sender",
       }),
@@ -537,19 +525,17 @@ describe("departmental tab transfers", () => {
       ),
     ).resolves.toBeDefined();
     expect(
-      await withTransaction(suite.db, (tx) =>
-        service.readDepartmentTransferSettings(tx, v.cfg, v.b),
-      ),
+      await withTransaction(suite.db, (tx) => service.readDepartmentTransferSettings(tx, v.b)),
     ).toEqual({ departmentId: v.b, receivingProfileId: null, destinationDepartmentIds: [] });
     expect(
-      await withTransaction(suite.db, (tx) => service.listDepartmentTransfers(tx, v.cfg, v.b)),
+      await withTransaction(suite.db, (tx) => service.listDepartmentTransfers(tx, v.b)),
     ).toEqual([request]);
   });
 
   async function pending() {
     const v = await ready();
     const request = await withTransaction(suite.db, (tx) =>
-      service.requestDepartmentTransfer(tx, v.cfg, v.tab, v.b, {
+      service.requestDepartmentTransfer(tx, v.tab, v.b, {
         departmentId: v.a,
         personId: "sender",
       }),
@@ -568,7 +554,7 @@ describe("departmental tab transfers", () => {
     tableId: string | null = null,
   ) =>
     withTransaction(suite.db, (tx) =>
-      service.acceptDepartmentTransfer(tx, v.cfg, v.request.id, receiver(v), {
+      service.acceptDepartmentTransfer(tx, v.request.id, receiver(v), {
         tabRevision: revision,
         zoneId,
         tableId,
@@ -584,7 +570,6 @@ describe("departmental tab transfers", () => {
         .where(eq(locations.id, v.cfg.locationId));
       await service.replaceZoneClosedWeek(
         tx,
-        v.cfg,
         v.bz,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -609,7 +594,7 @@ describe("departmental tab transfers", () => {
         .from(departmentTransferRequests)
         .where(eq(departmentTransferRequests.id, v.request.id)),
     ).toEqual([v.request]);
-    expect(await getOrderServiceContext(suite.db, v.cfg, v.tab)).toEqual({
+    expect(await getOrderServiceContext(suite.db, v.tab)).toEqual({
       zoneId: v.az,
       departmentId: v.a,
       serviceMode: "table_tab",
@@ -641,7 +626,7 @@ describe("departmental tab transfers", () => {
     });
     const sender = { departmentId: v.a, personId: "sender" };
     const rows = await withTransaction(suite.db, (tx) =>
-      service.listDepartmentSentTransfers(tx, v.cfg, sender),
+      service.listDepartmentSentTransfers(tx, sender),
     );
     expect(rows).toHaveLength(101);
     expect(rows.find((row) => row.id === v.request.id)?.status).toBe("pending");
@@ -652,7 +637,7 @@ describe("departmental tab transfers", () => {
         .sort(),
     ).toEqual(ids.slice(5).sort());
     const history = await withTransaction(suite.db, (tx) =>
-      service.listSentDepartmentTransfers(tx, v.cfg, v.tab, sender),
+      service.listSentDepartmentTransfers(tx, v.tab, sender),
     );
     expect(history).toHaveLength(106);
     expect(history.some((row) => row.id === ids[0])).toBe(true);
@@ -667,7 +652,6 @@ describe("departmental tab transfers", () => {
       await withTransaction(suite.db, (tx) =>
         service.deleteDepartment(
           tx,
-          v.cfg,
           {
             removeSets: async () => {},
             readImpact: async () => ({ refusals: [], removes: [] }),
@@ -694,14 +678,14 @@ describe("departmental tab transfers", () => {
       if (reader === "request") {
         expect(
           await withTransaction(suite.db, (tx) =>
-            service.readDepartmentTransfer(tx, v.cfg, v.request.id, sender),
+            service.readDepartmentTransfer(tx, v.request.id, sender),
           ),
         ).toEqual(accepted);
       } else {
         const history = await withTransaction(suite.db, (tx) =>
           reader === "tab"
-            ? service.listSentDepartmentTransfers(tx, v.cfg, v.tab, sender)
-            : service.listDepartmentSentTransfers(tx, v.cfg, sender),
+            ? service.listSentDepartmentTransfers(tx, v.tab, sender)
+            : service.listDepartmentSentTransfers(tx, sender),
         );
         expect(history).toHaveLength(1);
         expect(history[0]).toMatchObject({
@@ -717,22 +701,22 @@ describe("departmental tab transfers", () => {
       }
       await expect(
         withTransaction(suite.db, (tx) =>
-          service.readDepartmentTransfer(tx, v.cfg, v.request.id, { ...sender, departmentId: v.b }),
+          service.readDepartmentTransfer(tx, v.request.id, { ...sender, departmentId: v.b }),
         ),
       ).rejects.toMatchObject({ code: "department_transfer.not_allowed" });
       await expect(
         withTransaction(suite.db, (tx) =>
-          service.withdrawDepartmentTransfer(tx, v.cfg, v.request.id, sender),
+          service.withdrawDepartmentTransfer(tx, v.request.id, sender),
         ),
       ).rejects.toMatchObject({ code: "department.not_found" });
       expect(
         await withTransaction(suite.db, (tx) =>
-          service.listSentDepartmentTransfers(tx, v.cfg, v.tab, { ...sender, departmentId: v.b }),
+          service.listSentDepartmentTransfers(tx, v.tab, { ...sender, departmentId: v.b }),
         ),
       ).toEqual([]);
       expect(
         await withTransaction(suite.db, (tx) =>
-          service.listDepartmentSentTransfers(tx, v.cfg, { ...sender, departmentId: v.b }),
+          service.listDepartmentSentTransfers(tx, { ...sender, departmentId: v.b }),
         ),
       ).toEqual([]);
       expect(
@@ -770,11 +754,11 @@ describe("departmental tab transfers", () => {
       });
     const before = await snapshot();
     for (const action of [
-      (tx: Transaction) => service.readDepartmentTransfer(tx, v.cfg, v.request.id, sender),
-      (tx: Transaction) => service.listSentDepartmentTransfers(tx, v.cfg, v.tab, sender),
-      (tx: Transaction) => service.listDepartmentSentTransfers(tx, v.cfg, sender),
-      (tx: Transaction) => service.withdrawDepartmentTransfer(tx, v.cfg, v.request.id, sender),
-      (tx: Transaction) => service.requestDepartmentTransfer(tx, v.cfg, v.tab, v.b, sender),
+      (tx: Transaction) => service.readDepartmentTransfer(tx, v.request.id, sender),
+      (tx: Transaction) => service.listSentDepartmentTransfers(tx, v.tab, sender),
+      (tx: Transaction) => service.listDepartmentSentTransfers(tx, sender),
+      (tx: Transaction) => service.withdrawDepartmentTransfer(tx, v.request.id, sender),
+      (tx: Transaction) => service.requestDepartmentTransfer(tx, v.tab, v.b, sender),
     ]) {
       await expect(withTransaction<unknown>(suite.db, action)).rejects.toMatchObject({
         code: "department.not_found",
@@ -788,27 +772,25 @@ describe("departmental tab transfers", () => {
     await accept(v);
     const sender = { departmentId: v.a, personId: "sender" };
     let rows = await withTransaction(suite.db, (tx) =>
-      service.listDepartmentSentTransfers(tx, v.cfg, sender),
+      service.listDepartmentSentTransfers(tx, sender),
     );
     expect(rows[0]).toMatchObject({ status: "accepted", currentDepartmentId: v.b });
-    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, v.tab, v.az));
-    rows = await withTransaction(suite.db, (tx) =>
-      service.listDepartmentSentTransfers(tx, v.cfg, sender),
-    );
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.tab, v.az));
+    rows = await withTransaction(suite.db, (tx) => service.listDepartmentSentTransfers(tx, sender));
     expect(rows[0]).toMatchObject({ status: "accepted", currentDepartmentId: v.a });
   });
 
   it("keeps an already pending transfer actionable when its sending direction is removed", async () => {
     const v = await pending();
     await withTransaction(suite.db, (tx) =>
-      service.setDepartmentTransferSettings(tx, v.cfg, v.a, {
+      service.setDepartmentTransferSettings(tx, v.a, {
         receivingProfileId: null,
         destinationDepartmentIds: [],
       }),
     );
     expect(
       await withTransaction(suite.db, (tx) =>
-        service.listDepartmentTransferDestinations(tx, v.cfg, {
+        service.listDepartmentTransferDestinations(tx, {
           departmentId: v.a,
           personId: "sender",
         }),
@@ -826,7 +808,7 @@ describe("departmental tab transfers", () => {
     );
     expect(
       (
-        await service.readDepartmentTransfer(suite.db, other.cfg, other.request.id, {
+        await service.readDepartmentTransfer(suite.db, other.request.id, {
           departmentId: other.a,
           personId: "sender",
         })
@@ -843,7 +825,7 @@ describe("departmental tab transfers", () => {
       resolvedAt: expect.any(String),
     });
     expect(
-      await withTransaction(suite.db, (tx) => service.listDepartmentTransfers(tx, v.cfg, v.b)),
+      await withTransaction(suite.db, (tx) => service.listDepartmentTransfers(tx, v.b)),
     ).toEqual([]);
     await expect(accept(v)).rejects.toMatchObject({ code: "department_transfer.not_pending" });
     await withTransaction(suite.db, (tx) =>
@@ -895,9 +877,7 @@ describe("departmental tab transfers", () => {
 
   it("withdraws a pending request when another operation changes the tab department", async () => {
     const v = await pending();
-    await withTransaction(suite.db, (tx) =>
-      service.retargetOrderServiceContext(tx, v.cfg, v.tab, v.bz),
-    );
+    await withTransaction(suite.db, (tx) => service.retargetOrderServiceContext(tx, v.tab, v.bz));
     const [request] = await suite.db
       .select()
       .from(departmentTransferRequests)
@@ -906,11 +886,11 @@ describe("departmental tab transfers", () => {
     await expect(accept(v)).rejects.toMatchObject({ code: "department_transfer.not_pending" });
     const unchanged = await pending();
     await withTransaction(suite.db, (tx) =>
-      service.retargetOrderServiceContext(tx, unchanged.cfg, unchanged.tab, unchanged.az),
+      service.retargetOrderServiceContext(tx, unchanged.tab, unchanged.az),
     );
     expect(
       (
-        await service.readDepartmentTransfer(suite.db, unchanged.cfg, unchanged.request.id, {
+        await service.readDepartmentTransfer(suite.db, unchanged.request.id, {
           departmentId: unchanged.a,
           personId: "sender",
         })
@@ -997,9 +977,11 @@ describe("departmental tab transfers", () => {
       revision: 1,
     });
     expect(result.resolvedAt).toEqual(expect.any(String));
-    expect(
-      await withTransaction(suite.db, (tx) => getOrderServiceContext(tx, v.cfg, v.tab)),
-    ).toEqual({ zoneId: v.bz, departmentId: v.b, serviceMode: "table_tab" });
+    expect(await withTransaction(suite.db, (tx) => getOrderServiceContext(tx, v.tab))).toEqual({
+      zoneId: v.bz,
+      departmentId: v.b,
+      serviceMode: "table_tab",
+    });
     const [tab] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, v.tab));
     expect(tab).toMatchObject({
       status: "open",
@@ -1021,7 +1003,7 @@ describe("departmental tab transfers", () => {
     ).toEqual([before.context]);
     await expect(accept(v, 4)).rejects.toMatchObject({ code: "department_transfer.not_pending" });
     expect(
-      await withTransaction(suite.db, (tx) => service.listDepartmentTransfers(tx, v.cfg, v.b)),
+      await withTransaction(suite.db, (tx) => service.listDepartmentTransfers(tx, v.b)),
     ).toEqual([]);
   });
 
@@ -1031,7 +1013,7 @@ describe("departmental tab transfers", () => {
       tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, v.tab)),
     );
     const request = await withTransaction(suite.db, (tx) =>
-      service.requestDepartmentTransfer(tx, v.cfg, v.tab, v.b, {
+      service.requestDepartmentTransfer(tx, v.tab, v.b, {
         departmentId: v.a,
         personId: "sender",
       }),
@@ -1087,7 +1069,7 @@ describe("departmental tab transfers", () => {
             .set({ departmentId: v.b, zoneId: v.bz })
             .where(eq(orderServiceContexts.workingOrderId, v.tab));
         if (kind === "disabled_zone") {
-          await createServiceZone(tx, v.cfg, {
+          await createServiceZone(tx, {
             name: "Other active receiving zone",
             departmentId: v.b,
           });
@@ -1099,7 +1081,7 @@ describe("departmental tab transfers", () => {
             .set({ retiredAt: new Date().toISOString() })
             .where(eq(deviceProfiles.id, v.profile));
         if (kind === "desk_changed")
-          await service.setDepartmentTransferSettings(tx, v.cfg, v.b, {
+          await service.setDepartmentTransferSettings(tx, v.b, {
             receivingProfileId: null,
             destinationDepartmentIds: [],
           });
@@ -1132,7 +1114,7 @@ describe("departmental tab transfers", () => {
                 : "department_transfer.destination_invalid";
       await expect(
         withTransaction(suite.db, (tx) =>
-          service.acceptDepartmentTransfer(tx, v.cfg, v.request.id, actor, {
+          service.acceptDepartmentTransfer(tx, v.request.id, actor, {
             tabRevision: 0,
             zoneId,
             tableId: null,
@@ -1301,7 +1283,7 @@ describe("departmental tab transfers", () => {
     const v = await pending();
     const results = await Promise.allSettled([
       withTransaction(suite.db, (tx) =>
-        service.withdrawDepartmentTransfer(tx, v.cfg, v.request.id, {
+        service.withdrawDepartmentTransfer(tx, v.request.id, {
           departmentId: v.a,
           personId: "sender",
         }),
@@ -1318,7 +1300,7 @@ describe("departmental tab transfers", () => {
       .where(eq(departmentTransferRequests.id, v.request.id));
     expect(request!.status).toBe("withdrawn");
     expect(
-      await withTransaction(suite.db, (tx) => getOrderServiceContext(tx, v.cfg, v.tab)),
+      await withTransaction(suite.db, (tx) => getOrderServiceContext(tx, v.tab)),
     ).toMatchObject({ departmentId: v.a, zoneId: v.az });
   });
   it("requires a decline reason and records the receiving person without moving the tab", async () => {
@@ -1326,11 +1308,11 @@ describe("departmental tab transfers", () => {
     expect(service).toHaveProperty("declineDepartmentTransfer", expect.any(Function));
     await expect(
       withTransaction(suite.db, (tx) =>
-        service.declineDepartmentTransfer(tx, v.cfg, v.request.id, receiver(v), "  "),
+        service.declineDepartmentTransfer(tx, v.request.id, receiver(v), "  "),
       ),
     ).rejects.toMatchObject({ code: "department_transfer.reason_required" });
     const result = await withTransaction(suite.db, (tx) =>
-      service.declineDepartmentTransfer(tx, v.cfg, v.request.id, receiver(v), "  Closing soon  "),
+      service.declineDepartmentTransfer(tx, v.request.id, receiver(v), "  Closing soon  "),
     );
     expect(result).toMatchObject({
       status: "declined",
@@ -1339,7 +1321,7 @@ describe("departmental tab transfers", () => {
       revision: 1,
     });
     expect(
-      await withTransaction(suite.db, (tx) => getOrderServiceContext(tx, v.cfg, v.tab)),
+      await withTransaction(suite.db, (tx) => getOrderServiceContext(tx, v.tab)),
     ).toMatchObject({ departmentId: v.a });
     await expect(accept(v)).rejects.toMatchObject({ code: "department_transfer.not_pending" });
   });
@@ -1379,7 +1361,7 @@ describe("departmental tab transfers", () => {
       params: { workingOrderId: v.tab },
     });
     expect(
-      await withTransaction(suite.db, (tx) => getOrderServiceContext(tx, v.cfg, v.tab)),
+      await withTransaction(suite.db, (tx) => getOrderServiceContext(tx, v.tab)),
     ).toMatchObject({ departmentId: v.a, zoneId: v.az });
     expect(
       await suite.db
@@ -1395,7 +1377,6 @@ describe("departmental tab transfers", () => {
       withTransaction(suite.db, (tx) =>
         service.acceptDepartmentTransfer(
           tx,
-          v.cfg,
           v.request.id,
           { ...receiver(v), departmentId: v.a },
           { tabRevision: 0, zoneId: v.bz, tableId: null },
@@ -1404,7 +1385,7 @@ describe("departmental tab transfers", () => {
     ).rejects.toMatchObject({ code: "department_transfer.not_allowed" });
     await expect(
       withTransaction(suite.db, (tx) =>
-        service.declineDepartmentTransfer(tx, v.cfg, randomUUID(), receiver(v), "Closing soon"),
+        service.declineDepartmentTransfer(tx, randomUUID(), receiver(v), "Closing soon"),
       ),
     ).rejects.toMatchObject({ code: "department_transfer.not_found" });
   });
@@ -1474,9 +1455,9 @@ describe("combined department transfer settings", () => {
   it("saves a usable receiving profile with the department fields", async () => {
     const v = await venue();
     await withTransaction(suite.db, async (tx) => {
-      await service.setDepartmentSalePolicyField(tx, v.cfg, v.b, "printTradingName", true);
-      await service.setDepartmentSalePolicyField(tx, v.cfg, v.b, "receiptPrintMode", "on_request");
-      await service.saveDepartmentEditSettings(tx, v.cfg, v.b, {
+      await service.setDepartmentSalePolicyField(tx, v.b, "printTradingName", true);
+      await service.setDepartmentSalePolicyField(tx, v.b, "receiptPrintMode", "on_request");
+      await service.saveDepartmentEditSettings(tx, v.b, {
         name: "New restaurant",
         tradingName: "Receipt name",
         orderStart: "counter",
@@ -1484,12 +1465,12 @@ describe("combined department transfer settings", () => {
         collectionNumber: "numbered",
         transfers: { receivingProfileId: v.profile, destinationDepartmentIds: [v.a] },
       });
-      expect(await service.readDepartmentTransferSettings(tx, v.cfg, v.b)).toEqual({
+      expect(await service.readDepartmentTransferSettings(tx, v.b)).toEqual({
         departmentId: v.b,
         receivingProfileId: v.profile,
         destinationDepartmentIds: [v.a],
       });
-      expect(await service.resolveSalePolicy(tx, v.cfg, v.bz)).toEqual({
+      expect(await service.resolveSalePolicy(tx, v.bz)).toEqual({
         zoneId: v.bz,
         departmentId: v.b,
         departmentName: "New restaurant",
@@ -1506,20 +1487,14 @@ describe("combined department transfer settings", () => {
   it("rolls back every department field when its receiving profile belongs elsewhere", async () => {
     const v = await venue();
     const before = await withTransaction(suite.db, async (tx) => ({
-      policy: await service.resolveSalePolicy(tx, v.cfg, v.az),
-      transfers: await service.readDepartmentTransferSettings(tx, v.cfg, v.a),
+      policy: await service.resolveSalePolicy(tx, v.az),
+      transfers: await service.readDepartmentTransferSettings(tx, v.a),
     }));
     await expect(
       withTransaction(suite.db, async (tx) => {
-        await service.setDepartmentSalePolicyField(tx, v.cfg, v.a, "printTradingName", true);
-        await service.setDepartmentSalePolicyField(
-          tx,
-          v.cfg,
-          v.a,
-          "receiptPrintMode",
-          "on_request",
-        );
-        await service.saveDepartmentEditSettings(tx, v.cfg, v.a, {
+        await service.setDepartmentSalePolicyField(tx, v.a, "printTradingName", true);
+        await service.setDepartmentSalePolicyField(tx, v.a, "receiptPrintMode", "on_request");
+        await service.saveDepartmentEditSettings(tx, v.a, {
           name: "New deli",
           tradingName: "Changed receipt",
           orderStart: "counter",
@@ -1534,8 +1509,8 @@ describe("combined department transfer settings", () => {
     });
     expect(
       await withTransaction(suite.db, async (tx) => ({
-        policy: await service.resolveSalePolicy(tx, v.cfg, v.az),
-        transfers: await service.readDepartmentTransferSettings(tx, v.cfg, v.a),
+        policy: await service.resolveSalePolicy(tx, v.az),
+        transfers: await service.readDepartmentTransferSettings(tx, v.a),
       })),
     ).toEqual(before);
   });

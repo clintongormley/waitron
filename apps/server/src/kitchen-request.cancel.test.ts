@@ -129,7 +129,7 @@ const jobs = () =>
       .orderBy(sql`rowid`),
   );
 const notices = async (order: Order, stationId = venue.stationId) =>
-  (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, stationId))).filter(
+  (await inTx(venue, (tx) => listStationNotices(tx, stationId))).filter(
     (notice) => notice.workingOrderId === order.billId,
   );
 

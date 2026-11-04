@@ -358,7 +358,6 @@ describe("a receipt-language change while orders are open", () => {
       const grill = await createStation(tx, venue.cfg, { name: "Plancha" });
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: productId("Paella") }, zoneId: null },
         { kind: "station", stationId: grill.id },
       );

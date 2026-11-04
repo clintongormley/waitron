@@ -2,7 +2,6 @@ import { and, eq, inArray, ne } from "drizzle-orm";
 import type { RecordSaleInput } from "@waitron/core";
 import { parties, saleReceiptGuests, sales, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { LocationId } from "@waitron/shared";
 import { isValidGuestCount } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -28,12 +27,11 @@ export interface RecordedSale {
 /** Writes, after `recordSale`, the sale's receipt header for its zone (`recordSaleReceiptHeader`), then {@link recordReceiptGuests}. */
 export async function recordSaleReceiptFacts(
   tx: Transaction,
-  cfg: { locationId: LocationId },
   sale: RecordedSale,
   guestCount: GuestCountChoice,
 ): Promise<void> {
-  const context = await VENUE_SERVICE.findOrderContext(tx, cfg, sale.workingOrderId);
-  await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, sale.saleId, context?.zoneId ?? null);
+  const context = await VENUE_SERVICE.findOrderContext(tx, sale.workingOrderId);
+  await VENUE_SERVICE.recordSaleReceiptHeader(tx, sale.saleId, context?.zoneId ?? null);
   await recordReceiptGuests(tx, sale, guestCount);
 }
 

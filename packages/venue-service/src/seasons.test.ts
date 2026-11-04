@@ -31,7 +31,7 @@ import {
 import { resolveDepartmentDays } from "./day-resolver.js";
 import { saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { configureZone, createDepartment, type VenueScope } from "./operations.js";
+import { configureZone, createDepartment } from "./operations.js";
 import { departmentDays, seasons, zoneDays } from "./schema/seasons.js";
 import {
   DEFAULT_SEASONS,
@@ -75,9 +75,9 @@ const shape = (rows: { name: string; startsOn: string }[]) =>
 
 describe("ensureDefaultSeasons", () => {
   it("gives the venue the four default seasons once, however often it runs", async () => {
-    const locationId = await newLocation("Four seasons");
-    const first = await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
-    const second = await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
+    await newLocation("Four seasons");
+    const first = await withTransaction(db, (tx) => ensureDefaultSeasons(tx));
+    const second = await withTransaction(db, (tx) => ensureDefaultSeasons(tx));
     const expected = [
       { name: "Spring", startsOn: "03-01" },
       { name: "Summer", startsOn: "06-01" },
@@ -86,14 +86,14 @@ describe("ensureDefaultSeasons", () => {
     ];
     expect(shape(first)).toEqual(expected);
     expect(second).toEqual(first);
-    const stored = await withTransaction(db, (tx) => readSeasons(tx, { locationId }));
+    const stored = await withTransaction(db, (tx) => readSeasons(tx));
     expect(stored).toEqual(first);
   });
 
   it("gives a new venue Spring green, Summer amber, Autumn orange and Winter blue", async () => {
-    const locationId = await newLocation("Coloured seasons");
-    await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
-    const stored = await withTransaction(db, (tx) => readSeasons(tx, { locationId }));
+    await newLocation("Coloured seasons");
+    await withTransaction(db, (tx) => ensureDefaultSeasons(tx));
+    const stored = await withTransaction(db, (tx) => readSeasons(tx));
     expect(stored.map(({ name, colour }) => [name, colour])).toEqual([
       ["Spring", "green"],
       ["Summer", "amber"],
@@ -108,9 +108,9 @@ describe("ensureDefaultSeasons", () => {
       .insert(seasons)
       .values({ locationId, name: "All year", startsOn: "01-01" })
       .returning({ id: seasons.id });
-    const result = await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
+    const result = await withTransaction(db, (tx) => ensureDefaultSeasons(tx));
     expect(result).toEqual([{ id: own!.id, name: "All year", startsOn: "01-01", colour: "grey" }]);
-    expect(await withTransaction(db, (tx) => readSeasons(tx, { locationId }))).toEqual(result);
+    expect(await withTransaction(db, (tx) => readSeasons(tx))).toEqual(result);
   });
 
   const staffVenue = async (tenant: boolean, province: string | null, locale: string) => {
@@ -157,42 +157,29 @@ describe("ensureDefaultSeasons", () => {
   ] as const)(
     "names the default seasons in the staff language: $title gives $language",
     async ({ tenant, province, locale, language }) => {
-      const locationId = await staffVenue(tenant, province, locale);
-      const written = await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
+      await staffVenue(tenant, province, locale);
+      const written = await withTransaction(db, (tx) => ensureDefaultSeasons(tx));
       const stripped = written.map(({ name, startsOn, colour }) => ({ name, startsOn, colour }));
       expect(stripped).toEqual(starterSeasons(language));
     },
   );
 
   it("names the default seasons in a passed staff language over the venue's own", async () => {
-    const locationId = await staffVenue(false, null, "es-ES");
-    const written = await withTransaction(db, (tx) =>
-      ensureDefaultSeasons(tx, { locationId }, "en"),
-    );
+    await staffVenue(false, null, "es-ES");
+    const written = await withTransaction(db, (tx) => ensureDefaultSeasons(tx, "en"));
     expect(written.map(({ name, startsOn, colour }) => ({ name, startsOn, colour }))).toEqual(
       starterSeasons("en"),
     );
   });
 
   it("gives a venue whose seasons are all written by a later call the staff language", async () => {
-    const locationId = await staffVenue(false, null, "es-ES");
+    await staffVenue(false, null, "es-ES");
     const saved = await withTransaction(db, (tx) =>
-      saveSeasons(tx, { locationId }, { save: [], delete: [] }, AT, 0),
+      saveSeasons(tx, { save: [], delete: [] }, AT, 0),
     );
     expect(saved.map(({ name, startsOn, colour }) => ({ name, startsOn, colour }))).toEqual(
       starterSeasons("es"),
     );
-  });
-
-  // A1301: deleted with cfg in S18
-  it("reads the venue's seasons whatever location the scope names", async () => {
-    const locationId = await newLocation("Scope-blind seasons");
-    const own = await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
-    const read = await withTransaction(db, (tx) =>
-      readSeasons(tx, { locationId: brandLocationId(randomUUID()) }),
-    );
-    expect(own).toHaveLength(4);
-    expect(read).toEqual(own);
   });
 
   it("reads the venue's seasons, ordered by start", async () => {
@@ -201,7 +188,7 @@ describe("ensureDefaultSeasons", () => {
       { locationId: mine, name: "Late", startsOn: "10-01" },
       { locationId: mine, name: "Early", startsOn: "02-01" },
     ]);
-    const read = await withTransaction(db, (tx) => readSeasons(tx, { locationId: mine }));
+    const read = await withTransaction(db, (tx) => readSeasons(tx));
     expect(shape(read)).toEqual([
       { name: "Early", startsOn: "02-01" },
       { name: "Late", startsOn: "10-01" },
@@ -228,7 +215,7 @@ async function autumnVenue() {
     dayCutover: "06:00",
   });
   const venueId = await venueLocationId(db);
-  const cfg: VenueScope = { locationId: brandLocationId(venueId) };
+  const cfg: { locationId: LocationId } = { locationId: brandLocationId(venueId) };
   const [zone] = await db
     .insert(floorZones)
     .values({ locationId: cfg.locationId, name: "Terrace", displayOrder: 0 })
@@ -243,16 +230,14 @@ async function autumnVenue() {
     .returning({ id: seasons.id, name: seasons.name });
   const seasonId = (name: string) => stored.find((season) => season.name === name)!.id;
   return scoped(async (tx) => {
-    const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
-    ).id;
-    const bar = (await createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" })).id;
-    await configureZone(tx, cfg, { zoneId: zone!.id, departmentId: restaurant });
+    const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
+    const bar = (await createDepartment(tx, { name: "Bar", orderStart: "counter" })).id;
+    await configureZone(tx, { zoneId: zone!.id, departmentId: restaurant });
     const period = async (name: string) => {
       const menuId = (await createCatalogue(tx, { name: `${name} ${cfg.locationId}` })).id;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
-      return (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId, staffMenuIds: [] })).id;
+      return (await saveMenuPeriod(tx, restaurant, { name, menuId, staffMenuIds: [] })).id;
     };
     const breakfast = await period("Breakfast");
     const dinner = await period("Dinner");
@@ -301,19 +286,19 @@ const refusal = async (promise: Promise<unknown>) => {
   }
   throw new Error("expected a refusal");
 };
-const seasonsOf = (v: AutumnVenue) => scoped((tx) => readSeasons(tx, v.cfg)).then(shape);
+const seasonsOf = () => scoped((tx) => readSeasons(tx)).then(shape);
 const seasonOnDay = (v: AutumnVenue, day: string) =>
   scoped(async (tx) => {
     const clock = await readVenueClock(tx);
-    const days = await resolveDepartmentDays(tx, v.cfg, v.restaurant, [day], clock);
+    const days = await resolveDepartmentDays(tx, v.restaurant, [day], clock);
     return days.get(day)?.seasonId;
   });
 const restaurantWeek = (v: AutumnVenue, seasonId: string) =>
-  scoped((tx) => readDepartmentSeasonWeeks(tx, v.cfg, [v.restaurant])).then((weeks) =>
+  scoped((tx) => readDepartmentSeasonWeeks(tx, [v.restaurant])).then((weeks) =>
     weeks.get(v.restaurant)?.get(seasonId),
   );
 const terraceWeek = (v: AutumnVenue, seasonId: string) =>
-  scoped((tx) => readZoneSeasonWeeks(tx, v.cfg, [v.terrace])).then((weeks) =>
+  scoped((tx) => readZoneSeasonWeeks(tx, [v.terrace])).then((weeks) =>
     weeks.get(v.terrace)?.get(seasonId),
   );
 const THREE = [
@@ -325,7 +310,7 @@ const THREE = [
 describe("seasonDeleteImpact", () => {
   it("lists the departments that painted the season, not ones holding only empty days", async () => {
     const v = await autumnVenue();
-    const impact = (id: string) => scoped((tx) => seasonDeleteImpact(tx, v.cfg, id));
+    const impact = (id: string) => scoped((tx) => seasonDeleteImpact(tx, id));
     expect(await impact(v.autumn)).toEqual({
       departments: [{ id: v.restaurant, name: "Restaurant" }],
     });
@@ -335,8 +320,8 @@ describe("seasonDeleteImpact", () => {
 });
 
 describe("saveSeasons", () => {
-  const change = (v: { cfg: VenueScope }, sent: Partial<SeasonChange>, revision = 0) =>
-    scoped((tx) => saveSeasons(tx, v.cfg, { save: [], delete: [], ...sent }, AT, revision));
+  const change = (sent: Partial<SeasonChange>, revision = 0) =>
+    scoped((tx) => saveSeasons(tx, { save: [], delete: [], ...sent }, AT, revision));
   const entry = (
     id: string | undefined,
     name: string,
@@ -344,24 +329,24 @@ describe("saveSeasons", () => {
     colour: CalendarColour = "grey",
   ): SeasonEntry =>
     id === undefined ? { name, startsOn, colour } : { id, name, startsOn, colour };
-  const everyWeek = (v: AutumnVenue) =>
+  const everyWeek = () =>
     scoped(async (tx) => ({
-      departments: await readDepartmentSeasonWeeks(tx, v.cfg),
-      zones: await readZoneSeasonWeeks(tx, v.cfg),
+      departments: await readDepartmentSeasonWeeks(tx),
+      zones: await readZoneSeasonWeeks(tx),
     }));
 
   it.each(["02-29", "13-01", "04-31", "1-1"])("refuses the start %s", async (startsOn) => {
     const v = await autumnVenue();
-    expect(await refusal(change(v, { save: [entry(v.winter, "Winter", startsOn)] }))).toEqual({
+    expect(await refusal(change({ save: [entry(v.winter, "Winter", startsOn)] }))).toEqual({
       code: "season.invalid",
       params: { field: "save.0.startsOn" },
     });
-    expect(await seasonsOf(v)).toEqual(THREE);
+    expect(await seasonsOf()).toEqual(THREE);
   });
 
   it("refuses a start another season holds", async () => {
     const v = await autumnVenue();
-    expect(await refusal(change(v, { save: [entry(v.winter, "Winter", "11-01")] }))).toEqual({
+    expect(await refusal(change({ save: [entry(v.winter, "Winter", "11-01")] }))).toEqual({
       code: "season.invalid",
       params: { field: "save.0.startsOn", reason: "taken" },
     });
@@ -369,22 +354,23 @@ describe("saveSeasons", () => {
 
   it("refuses a name another season holds, as trimmed, and an empty name", async () => {
     const v = await autumnVenue();
-    expect(await refusal(change(v, { save: [entry(v.lateAutumn, "  Winter ", "11-01")] }))).toEqual(
-      { code: "season.invalid", params: { field: "save.0.name", reason: "taken" } },
-    );
-    expect(await refusal(change(v, { save: [entry(v.lateAutumn, "   ", "11-01")] }))).toEqual({
+    expect(await refusal(change({ save: [entry(v.lateAutumn, "  Winter ", "11-01")] }))).toEqual({
+      code: "season.invalid",
+      params: { field: "save.0.name", reason: "taken" },
+    });
+    expect(await refusal(change({ save: [entry(v.lateAutumn, "   ", "11-01")] }))).toEqual({
       code: "season.invalid",
       params: { field: "save.0.name" },
     });
     expect(
-      await refusal(change(v, { save: [entry(v.lateAutumn, null as unknown as string, "11-01")] })),
+      await refusal(change({ save: [entry(v.lateAutumn, null as unknown as string, "11-01")] })),
     ).toEqual({ code: "season.invalid", params: { field: "save.0.name" } });
-    expect(await seasonsOf(v)).toEqual(THREE);
+    expect(await seasonsOf()).toEqual(THREE);
   });
 
   it("renames a season, trimming the name, and keeps its own start", async () => {
     const v = await autumnVenue();
-    const saved = await change(v, { save: [entry(v.lateAutumn, " Fall ", "11-01")] });
+    const saved = await change({ save: [entry(v.lateAutumn, " Fall ", "11-01")] });
     expect(saved).toContainEqual({
       id: v.lateAutumn,
       name: "Fall",
@@ -396,7 +382,7 @@ describe("saveSeasons", () => {
   it("moves Winter to 11-15, so 20 November resolves to Winter on the next read", async () => {
     const v = await autumnVenue();
     expect(await seasonOnDay(v, "2030-11-20")).toBe(v.lateAutumn);
-    const saved = await change(v, { save: [entry(v.winter, "Winter", "11-15")] });
+    const saved = await change({ save: [entry(v.winter, "Winter", "11-15")] });
     expect(saved).toContainEqual({
       id: v.winter,
       name: "Winter",
@@ -409,16 +395,16 @@ describe("saveSeasons", () => {
 
   it("refuses a move under a stale clock revision before anything changes", async () => {
     const v = await autumnVenue();
-    expect(await refusal(change(v, { save: [entry(v.winter, "Winter", "11-15")] }, 1))).toEqual({
+    expect(await refusal(change({ save: [entry(v.winter, "Winter", "11-15")] }, 1))).toEqual({
       code: "hours.clock_changed",
       params: {},
     });
-    expect(await seasonsOf(v)).toEqual(THREE);
+    expect(await seasonsOf()).toEqual(THREE);
   });
 
   it("renames and recolours under a stale clock revision, while a move under the same revision is refused", async () => {
     const v = await autumnVenue();
-    const renamed = await change(v, { save: [entry(v.lateAutumn, "Fall", "11-01", "teal")] }, 1);
+    const renamed = await change({ save: [entry(v.lateAutumn, "Fall", "11-01", "teal")] }, 1);
     expect(renamed).toContainEqual({
       id: v.lateAutumn,
       name: "Fall",
@@ -426,9 +412,9 @@ describe("saveSeasons", () => {
       colour: "teal",
     });
     expect(
-      await refusal(change(v, { save: [entry(v.lateAutumn, "Fall", "11-05", "teal")] }, 1)),
+      await refusal(change({ save: [entry(v.lateAutumn, "Fall", "11-05", "teal")] }, 1)),
     ).toEqual({ code: "hours.clock_changed", params: {} });
-    expect(await seasonsOf(v)).toEqual([
+    expect(await seasonsOf()).toEqual([
       { name: "Autumn", startsOn: "09-01" },
       { name: "Fall", startsOn: "11-01" },
       { name: "Winter", startsOn: "12-01" },
@@ -439,46 +425,46 @@ describe("saveSeasons", () => {
     const v = await autumnVenue();
     expect(
       await refusal(
-        change(v, { save: [entry(v.winter, "Winter", "12-01"), entry(v.winter, "Cold", "12-05")] }),
+        change({ save: [entry(v.winter, "Winter", "12-01"), entry(v.winter, "Cold", "12-05")] }),
       ),
     ).toEqual({ code: "season.invalid", params: { field: "save.1.id" } });
     expect(
-      await refusal(change(v, { save: [entry(v.winter, "Cold", "12-01")], delete: [v.winter] })),
+      await refusal(change({ save: [entry(v.winter, "Cold", "12-01")], delete: [v.winter] })),
     ).toEqual({ code: "season.invalid", params: { field: "save.0.id" } });
-    expect(await seasonsOf(v)).toEqual(THREE);
+    expect(await seasonsOf()).toEqual(THREE);
   });
 
   it("refuses a delete under a stale clock revision before anything changes", async () => {
     const v = await autumnVenue();
-    const weeksBefore = await everyWeek(v);
-    expect(await refusal(change(v, { delete: [v.winter] }, 1))).toEqual({
+    const weeksBefore = await everyWeek();
+    expect(await refusal(change({ delete: [v.winter] }, 1))).toEqual({
       code: "hours.clock_changed",
       params: {},
     });
-    expect(await seasonsOf(v)).toEqual(THREE);
-    expect(await everyWeek(v)).toEqual(weeksBefore);
+    expect(await seasonsOf()).toEqual(THREE);
+    expect(await everyWeek()).toEqual(weeksBefore);
   });
 
   it("refuses an id that is not a string at its own path", async () => {
-    const v = await autumnVenue();
+    await autumnVenue();
     for (const id of [null, 7])
       expect(
         await refusal(
-          change(v, {
+          change({
             save: [
               { id: id as unknown as string, name: "Cold", startsOn: "12-05", colour: "grey" },
             ],
           }),
         ),
       ).toEqual({ code: "season.invalid", params: { field: "save.0.id" } });
-    expect(await seasonsOf(v)).toEqual(THREE);
+    expect(await seasonsOf()).toEqual(THREE);
   });
 
   it("names the entry whose changed name or start clashes, not a later one keeping its own", async () => {
     const v = await autumnVenue();
     expect(
       await refusal(
-        change(v, {
+        change({
           save: [
             entry(v.lateAutumn, "Winter", "11-01"),
             entry(v.winter, "Winter", "12-01", "teal"),
@@ -488,7 +474,7 @@ describe("saveSeasons", () => {
     ).toEqual({ code: "season.invalid", params: { field: "save.0.name", reason: "taken" } });
     expect(
       await refusal(
-        change(v, {
+        change({
           save: [
             entry(v.lateAutumn, "Late autumn", "12-01"),
             entry(v.winter, "Winter", "12-01", "teal"),
@@ -496,12 +482,12 @@ describe("saveSeasons", () => {
         }),
       ),
     ).toEqual({ code: "season.invalid", params: { field: "save.0.startsOn", reason: "taken" } });
-    expect(await seasonsOf(v)).toEqual(THREE);
+    expect(await seasonsOf()).toEqual(THREE);
   });
 
   it("adds Christmas weeks, a copy of Winter's department and zone weeks", async () => {
     const v = await autumnVenue();
-    const saved = await change(v, { save: [entry(undefined, "Christmas weeks", "12-20", "red")] });
+    const saved = await change({ save: [entry(undefined, "Christmas weeks", "12-20", "red")] });
     const christmas = saved.find((season) => season.name === "Christmas weeks")!;
     expect(christmas).toEqual({
       id: expect.any(String),
@@ -519,22 +505,19 @@ describe("saveSeasons", () => {
 
   it("splits Autumn with Mid autumn from 10-01, whose copied weeks border cleanly", async () => {
     const v = await autumnVenue();
-    const saved = await change(v, { save: [entry(undefined, " Mid autumn ", "10-01")] });
+    const saved = await change({ save: [entry(undefined, " Mid autumn ", "10-01")] });
     const mid = saved.find((season) => season.startsOn === "10-01")!;
     expect(mid.name).toBe("Mid autumn");
     expect(await restaurantWeek(v, mid.id)).toEqual(v.autumnWeek);
     expect(await terraceWeek(v, mid.id)).toEqual(v.zoneWeek);
     expect(
-      (await scoped((tx) => readDepartmentSeasonWeeks(tx, v.cfg, [v.bar]))).get(v.bar)?.get(mid.id),
+      (await scoped((tx) => readDepartmentSeasonWeeks(tx, [v.bar]))).get(v.bar)?.get(mid.id),
     ).toEqual(EMPTY_WEEK());
   });
 
   it("gives a venue without seasons its four before adding", async () => {
-    const locationId = await newLocation("No seasons yet, saveSeasons");
-    const saved = await change(
-      { cfg: { locationId } },
-      { save: [entry(undefined, "Fair", "04-10")] },
-    );
+    await newLocation("No seasons yet, saveSeasons");
+    const saved = await change({ save: [entry(undefined, "Fair", "04-10")] });
     expect(shape(saved)).toEqual([
       { name: "Spring", startsOn: "03-01" },
       { name: "Fair", startsOn: "04-10" },
@@ -542,13 +525,13 @@ describe("saveSeasons", () => {
       { name: "Autumn", startsOn: "09-01" },
       { name: "Winter", startsOn: "12-01" },
     ]);
-    expect(await scoped((tx) => readSeasons(tx, { locationId }))).toEqual(saved);
+    expect(await scoped((tx) => readSeasons(tx))).toEqual(saved);
   });
 
   it("refuses an add's bad or taken start, taken name, and stale revision", async () => {
-    const v = await autumnVenue();
+    await autumnVenue();
     const add = (name: string, startsOn: string, revision = 0) =>
-      refusal(change(v, { save: [entry(undefined, name, startsOn)] }, revision));
+      refusal(change({ save: [entry(undefined, name, startsOn)] }, revision));
     expect(await add("Leap", "02-29")).toEqual({
       code: "season.invalid",
       params: { field: "save.0.startsOn" },
@@ -565,16 +548,16 @@ describe("saveSeasons", () => {
       code: "hours.clock_changed",
       params: {},
     });
-    expect(await seasonsOf(v)).toEqual(THREE);
+    expect(await seasonsOf()).toEqual(THREE);
   });
 
   it("gives a deleted season's days back to the one before and removes its weeks", async () => {
     const v = await autumnVenue();
-    const added = await change(v, { save: [entry(undefined, "Christmas weeks", "12-20")] });
+    const added = await change({ save: [entry(undefined, "Christmas weeks", "12-20")] });
     const christmas = added.find((season) => season.startsOn === "12-20")!;
-    await change(v, { delete: [christmas.id] });
+    await change({ delete: [christmas.id] });
     expect(await seasonOnDay(v, "2030-12-20")).toBe(v.winter);
-    expect(await seasonsOf(v)).toEqual(THREE);
+    expect(await seasonsOf()).toEqual(THREE);
     expect(
       await db.select().from(departmentDays).where(eq(departmentDays.seasonId, christmas.id)),
     ).toEqual([]);
@@ -585,9 +568,9 @@ describe("saveSeasons", () => {
     const v = await autumnVenue();
     expect(await seasonOnDay(v, "2030-09-15")).toBe(v.autumn);
     expect(await terraceWeek(v, v.autumn)).toEqual(v.zoneWeek);
-    await change(v, { delete: [v.autumn] });
+    await change({ delete: [v.autumn] });
     expect(await seasonOnDay(v, "2030-09-15")).toBe(v.winter);
-    expect(await seasonsOf(v)).toEqual(THREE.slice(1));
+    expect(await seasonsOf()).toEqual(THREE.slice(1));
     expect(
       await db.select().from(departmentDays).where(eq(departmentDays.seasonId, v.autumn)),
     ).toEqual([]);
@@ -601,32 +584,29 @@ describe("saveSeasons", () => {
       .insert(seasons)
       .values({ locationId, name: "All year", startsOn: "01-01" })
       .returning({ id: seasons.id });
-    expect(await refusal(change({ cfg: { locationId } }, { delete: [only!.id] }))).toEqual({
+    expect(await refusal(change({ delete: [only!.id] }))).toEqual({
       code: "season.invalid",
       params: { field: "delete", reason: "last" },
     });
-    expect(await scoped((tx) => readSeasons(tx, { locationId }))).toHaveLength(1);
+    expect(await scoped((tx) => readSeasons(tx))).toHaveLength(1);
   });
 
   it("swaps Summer's and Autumn's starts and their names in one call, each id keeping its weeks", async () => {
-    const cfg: VenueScope = { locationId: await newLocation("Swapped seasons") };
-    const [, summer, autumn] = await scoped((tx) => ensureDefaultSeasons(tx, cfg));
-    const kitchen = (await scoped((tx) => createDepartment(tx, cfg, { name: "Kitchen" }))).id;
+    await newLocation("Swapped seasons");
+    const [, summer, autumn] = await scoped((tx) => ensureDefaultSeasons(tx));
+    const kitchen = (await scoped((tx) => createDepartment(tx, { name: "Kitchen" }))).id;
     await scoped((tx) => writeDepartmentSeasonWeeks(tx, kitchen, [summer!.id], EMPTY_WEEK()));
     const daysOf = (seasonId: string) =>
       db.select().from(departmentDays).where(eq(departmentDays.seasonId, seasonId));
     const summerDays = await daysOf(summer!.id);
     expect(summerDays).toHaveLength(7);
     expect(await daysOf(autumn!.id)).toEqual([]);
-    const saved = await change(
-      { cfg },
-      {
-        save: [
-          entry(summer!.id, "Autumn", "09-01", summer!.colour),
-          entry(autumn!.id, "Summer", "06-01", autumn!.colour),
-        ],
-      },
-    );
+    const saved = await change({
+      save: [
+        entry(summer!.id, "Autumn", "09-01", summer!.colour),
+        entry(autumn!.id, "Summer", "06-01", autumn!.colour),
+      ],
+    });
     expect(saved.map(({ id, name, startsOn }) => ({ id, name, startsOn }))).toEqual([
       expect.objectContaining({ name: "Spring", startsOn: "03-01" }),
       { id: autumn!.id, name: "Summer", startsOn: "06-01" },
@@ -639,17 +619,16 @@ describe("saveSeasons", () => {
 
   it("stores each entry's colour, and refuses one outside the calendar colours", async () => {
     const v = await autumnVenue();
-    await change(v, { save: [entry(v.lateAutumn, "Late autumn", "11-01", "sky")] });
+    await change({ save: [entry(v.lateAutumn, "Late autumn", "11-01", "sky")] });
     expect(
-      (await scoped((tx) => readSeasons(tx, v.cfg))).find((season) => season.id === v.lateAutumn)
-        ?.colour,
+      (await scoped((tx) => readSeasons(tx))).find((season) => season.id === v.lateAutumn)?.colour,
     ).toBe("sky");
-    await change(v, { save: [entry(v.lateAutumn, "Late autumn", "11-01", "teal")] });
-    const read = await scoped((tx) => readSeasons(tx, v.cfg));
+    await change({ save: [entry(v.lateAutumn, "Late autumn", "11-01", "teal")] });
+    const read = await scoped((tx) => readSeasons(tx));
     expect(read.find((season) => season.id === v.lateAutumn)?.colour).toBe("teal");
     expect(
       await refusal(
-        change(v, {
+        change({
           save: [
             {
               id: v.lateAutumn,
@@ -661,12 +640,12 @@ describe("saveSeasons", () => {
         }),
       ),
     ).toEqual({ code: "season.invalid", params: { field: "save.0.colour" } });
-    expect(await scoped((tx) => readSeasons(tx, v.cfg))).toEqual(read);
+    expect(await scoped((tx) => readSeasons(tx))).toEqual(read);
   });
 
   it("adds, moves, recolours and deletes in one call, answering the venue's seasons by start", async () => {
     const v = await autumnVenue();
-    const saved = await change(v, {
+    const saved = await change({
       save: [
         entry(undefined, "Mid autumn", "10-01", "pink"),
         entry(v.lateAutumn, "Late autumn", "11-10"),
@@ -688,13 +667,11 @@ describe("saveSeasons", () => {
     ]);
     expect(await restaurantWeek(v, advent.id)).toEqual(EMPTY_WEEK());
     expect(await terraceWeek(v, advent.id)).toBeUndefined();
-    expect(await scoped((tx) => readSeasons(tx, v.cfg))).toEqual(saved);
+    expect(await scoped((tx) => readSeasons(tx))).toEqual(saved);
     expect(await restaurantWeek(v, mid.id)).toEqual(v.autumnWeek);
     expect(await restaurantWeek(v, early.id)).toEqual(v.winterWeek);
     expect(await terraceWeek(v, early.id)).toEqual(v.zoneWeek);
-    const barWeeks = (await scoped((tx) => readDepartmentSeasonWeeks(tx, v.cfg, [v.bar]))).get(
-      v.bar,
-    );
+    const barWeeks = (await scoped((tx) => readDepartmentSeasonWeeks(tx, [v.bar]))).get(v.bar);
     expect(barWeeks?.get(mid.id)).toEqual(EMPTY_WEEK());
     expect(barWeeks?.has(early.id)).toBe(false);
     expect(
@@ -703,31 +680,31 @@ describe("saveSeasons", () => {
   });
 
   it("refuses a duplicate between two sent entries naming the later one", async () => {
-    const v = await autumnVenue();
+    await autumnVenue();
     expect(
       await refusal(
-        change(v, {
+        change({
           save: [entry(undefined, "Fair", "04-10"), entry(undefined, "Fair", "05-10")],
         }),
       ),
     ).toEqual({ code: "season.invalid", params: { field: "save.1.name", reason: "taken" } });
     expect(
       await refusal(
-        change(v, {
+        change({
           save: [entry(undefined, "Fair", "04-10"), entry(undefined, "Festival", "04-10")],
         }),
       ),
     ).toEqual({ code: "season.invalid", params: { field: "save.1.startsOn", reason: "taken" } });
-    expect(await seasonsOf(v)).toEqual(THREE);
+    expect(await seasonsOf()).toEqual(THREE);
   });
 
   it("a refusal anywhere writes nothing", async () => {
     const v = await autumnVenue();
-    const seasonsBefore = await scoped((tx) => readSeasons(tx, v.cfg));
-    const weeksBefore = await everyWeek(v);
+    const seasonsBefore = await scoped((tx) => readSeasons(tx));
+    const weeksBefore = await everyWeek();
     expect(
       await refusal(
-        change(v, {
+        change({
           save: [
             entry(v.autumn, "Autumn", "09-01", "red"),
             entry(undefined, "Mid autumn", "10-01"),
@@ -751,7 +728,6 @@ describe("saveSeasons", () => {
     expect(
       await refusal(
         change(
-          v,
           {
             save: [entry(v.autumn, "Fall", "09-05", "red"), entry(undefined, "Fair", "04-10")],
             delete: [v.lateAutumn],
@@ -760,13 +736,13 @@ describe("saveSeasons", () => {
         ),
       ),
     ).toMatchObject({ code: "hours.clock_change_conflict" });
-    expect(await scoped((tx) => readSeasons(tx, v.cfg))).toEqual(seasonsBefore);
-    expect(await everyWeek(v)).toEqual(weeksBefore);
+    expect(await scoped((tx) => readSeasons(tx))).toEqual(seasonsBefore);
+    expect(await everyWeek()).toEqual(weeksBefore);
   });
 
   it("a new season inside a season deleted in the same call copies the deleted season's weeks", async () => {
     const v = await autumnVenue();
-    const saved = await change(v, {
+    const saved = await change({
       save: [entry(undefined, "Christmas", "12-20")],
       delete: [v.winter],
     });

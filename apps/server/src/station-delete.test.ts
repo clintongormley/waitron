@@ -121,12 +121,12 @@ async function binding(v: PartyVenue, id: string) {
       .insert(deviceProfiles)
       .values({ name: "Display profile", formFactor: "kds" })
       .returning();
-    await setProfileKitchenScreens(tx, v.cfg, profile!.id, {
+    await setProfileKitchenScreens(tx, profile!.id, {
       station: { stationIds: null, zoneIds: null },
     });
     const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Off display" });
     await tx.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
-    await setDeviceKitchenScreens(tx, v.cfg, {
+    await setDeviceKitchenScreens(tx, {
       deviceId,
       profileId: profile!.id,
       screens: [{ kind: "station", stationIds: [id], zoneIds: null }],
@@ -176,7 +176,7 @@ describe("permanent station deletion", () => {
     const display = await binding(v, id);
     const { order } = await food(v, id);
     const before = await snapshot(v);
-    expect(await inTx(v, (tx) => readStationDeleteImpact(tx, v.cfg, id))).toEqual({
+    expect(await inTx(v, (tx) => readStationDeleteImpact(tx, id))).toEqual({
       target: { id, name: "Delete me" },
       refusals: [
         {
@@ -204,7 +204,7 @@ describe("permanent station deletion", () => {
         },
       ],
     });
-    await expect(inTx(v, (tx) => deleteStation(tx, v.cfg, id))).rejects.toMatchObject({
+    await expect(inTx(v, (tx) => deleteStation(tx, id))).rejects.toMatchObject({
       code: "station.is_default",
       params: { stationId: id },
     });
@@ -228,7 +228,7 @@ describe("permanent station deletion", () => {
     const { v, id } = await fixture();
     const { order } = await food(v, id, flags);
     const before = await snapshot(v);
-    const impact = await inTx(v, (tx) => readStationDeleteImpact(tx, v.cfg, id));
+    const impact = await inTx(v, (tx) => readStationDeleteImpact(tx, id));
     expect(impact.refusals).toEqual(
       blocked
         ? [
@@ -241,13 +241,13 @@ describe("permanent station deletion", () => {
         : [],
     );
     if (blocked) {
-      await expect(inTx(v, (tx) => deleteStation(tx, v.cfg, id))).rejects.toMatchObject({
+      await expect(inTx(v, (tx) => deleteStation(tx, id))).rejects.toMatchObject({
         code: "station.work_in_progress",
         params: { stationId: id, count: 1 },
       });
       expect(await snapshot(v)).toEqual(before);
     } else {
-      await inTx(v, (tx) => deleteStation(tx, v.cfg, id));
+      await inTx(v, (tx) => deleteStation(tx, id));
       const after = await snapshot(v);
       expect(after.ticket_items).toEqual(before.ticket_items);
       expect(after.working_order_lines).toEqual(before.working_order_lines);
@@ -257,12 +257,12 @@ describe("permanent station deletion", () => {
     "rechecks a new %s after the impact read",
     async (kind) => {
       const { v, id } = await fixture();
-      expect((await inTx(v, (tx) => readStationDeleteImpact(tx, v.cfg, id))).refusals).toEqual([]);
+      expect((await inTx(v, (tx) => readStationDeleteImpact(tx, id))).refusals).toEqual([]);
       if (kind === "default") await inTx(v, (tx) => setDefaultStation(tx, v.cfg, id));
       if (kind === "screen") await binding(v, id);
       if (kind === "ticket") await food(v, id);
       const before = await snapshot(v);
-      await expect(inTx(v, (tx) => deleteStation(tx, v.cfg, id))).rejects.toMatchObject({
+      await expect(inTx(v, (tx) => deleteStation(tx, id))).rejects.toMatchObject({
         code:
           kind === "default"
             ? "station.is_default"
@@ -304,7 +304,7 @@ describe("permanent station deletion", () => {
     const beforeRest = await inTx(v, (tx) => readRestOfOrder(tx, [ready.order.id]));
     const beforeDrafts = await inTx(v, (tx) => tx.select().from(orderDrafts));
     const beforeEvents = await inTx(v, (tx) => tx.select().from(orderDraftEvents));
-    expect((await inTx(v, (tx) => readStationDeleteImpact(tx, v.cfg, id))).removes).toEqual([
+    expect((await inTx(v, (tx) => readStationDeleteImpact(tx, id))).removes).toEqual([
       { key: "station_unsent_lines", count: 1, targets: [] },
       { key: "station_draft_lines", count: 1, targets: [] },
     ]);
@@ -328,7 +328,7 @@ describe("permanent station deletion", () => {
     const [sender] = await inTx(v, (tx) =>
       tx.select().from(devices).where(eq(devices.id, v.cfg.origin.deviceId)),
     );
-    const impact = await inTx(v, (tx) => deleteStation(tx, v.cfg, id, new Date(at)));
+    const impact = await inTx(v, (tx) => deleteStation(tx, id, new Date(at)));
     expect(impact).toEqual({
       target: { id, name: "Delete me" },
       refusals: [],
@@ -394,7 +394,7 @@ describe("permanent station deletion", () => {
       false,
     );
     for (const action of [
-      () => inTx(v, (tx) => deleteStation(tx, v.cfg, id)),
+      () => inTx(v, (tx) => deleteStation(tx, id)),
       () => inTx(v, (tx) => updateStation(tx, v.cfg, id, {})),
       () => inTx(v, (tx) => setDefaultStation(tx, v.cfg, id)),
       () => inTx(v, (tx) => listStationPrinters(tx, { stationId: id })),
@@ -420,7 +420,7 @@ describe("permanent station deletion", () => {
       );
     });
     const before = await snapshot(v);
-    const impact = await inTx(v, (tx) => deleteStation(tx, v.cfg, id));
+    const impact = await inTx(v, (tx) => deleteStation(tx, id));
     expect(impact).toEqual({
       target: { id, name: "Delete me" },
       refusals: [],
@@ -487,7 +487,7 @@ describe("permanent station deletion", () => {
       }
     });
     const before = await snapshot(v);
-    expect((await inTx(v, (tx) => deleteStation(tx, v.cfg, id, new Date(at)))).removes).toEqual([
+    expect((await inTx(v, (tx) => deleteStation(tx, id, new Date(at)))).removes).toEqual([
       { key: "station_unsent_lines", count: 2, targets: [] },
       { key: "station_draft_lines", count: 2, targets: [] },
     ]);
@@ -565,7 +565,7 @@ describe("permanent station deletion", () => {
       }
     });
     const before = await snapshot(v);
-    const result = await inTx(v, (tx) => deleteStation(tx, v.cfg, id));
+    const result = await inTx(v, (tx) => deleteStation(tx, id));
     expect(result.ends).toEqual([]);
     const after = await snapshot(v);
     for (const key of [
@@ -601,7 +601,7 @@ describe("permanent station deletion", () => {
         .set({ partyId: multi.partyId, label: null })
         .where(eq(workingOrders.id, second.order.id));
     });
-    expect((await inTx(v, (tx) => readStationDeleteImpact(tx, v.cfg, id))).refusals).toEqual([
+    expect((await inTx(v, (tx) => readStationDeleteImpact(tx, id))).refusals).toEqual([
       {
         code: "station.work_in_progress",
         params: { stationId: id, count: 2 },
@@ -629,7 +629,7 @@ describe("permanent station deletion", () => {
         .set({ warmAfterMinutes: 2, overdueAfterMinutes: 4, forgottenAfterMinutes: 6 })
         .where(eq(kitchenStations.id, id)),
     );
-    await inTx(v, (tx) => deleteStation(tx, v.cfg, id));
+    await inTx(v, (tx) => deleteStation(tx, id));
     expect(
       await inTx(v, (tx) =>
         tx
@@ -651,7 +651,7 @@ describe("permanent station deletion", () => {
     const before = await snapshot(v);
     await expect(
       inTx(v, async (tx) => {
-        await deleteStation(tx, v.cfg, id);
+        await deleteStation(tx, id);
         throw new Error("injected after deletion");
       }),
     ).rejects.toThrow("injected after deletion");
@@ -661,7 +661,7 @@ describe("permanent station deletion", () => {
     const { v } = await fixture();
     for (const target of [randomUUID()])
       for (const read of [readStationDeleteImpact, deleteStation])
-        await expect(inTx(v, (tx) => read(tx, v.cfg, target))).rejects.toMatchObject({
+        await expect(inTx(v, (tx) => read(tx, target))).rejects.toMatchObject({
           code: "station.not_found",
           params: { stationId: target },
         });
@@ -706,7 +706,7 @@ describe("A773 no dispatch state", () => {
           id,
           destination.id,
           undefined,
-          (at) => closeStationForToday(tx, v.cfg, id, destination.id, at),
+          (at) => closeStationForToday(tx, id, destination.id, at),
           { deviceId: v.cfg.origin.deviceId, personId: OPERATOR },
         ),
       ),
@@ -732,7 +732,7 @@ describe("A773 no dispatch state", () => {
         id,
         destination.id,
         "send",
-        (at) => closeStationForToday(tx, v.cfg, id, destination.id, at),
+        (at) => closeStationForToday(tx, id, destination.id, at),
         { deviceId: v.cfg.origin.deviceId, personId: OPERATOR },
       ),
     );

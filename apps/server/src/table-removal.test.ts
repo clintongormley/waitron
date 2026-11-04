@@ -211,7 +211,7 @@ async function strayPartyRow(partyId: string, tableId: string): Promise<void> {
 const reset = (zoneId: string, removals: readonly TableRemoval[] = NONE) =>
   inTx(v, (tx) => resetZone(tx, v.cfg, removals, zoneId, NOW, "due"));
 const catchUp = (zoneId: string, removals: readonly TableRemoval[] = NONE) =>
-  inTx(v, (tx) => catchUpZone(tx, v.cfg, removals, zoneId, NOW));
+  inTx(v, (tx) => catchUpZone(tx, removals, zoneId, NOW));
 
 /** Whether `removeLiveTables` removed the one table it was given. */
 async function removeLiveTable(
@@ -219,7 +219,7 @@ async function removeLiveTable(
   removals: readonly TableRemoval[],
   tableId: string,
 ): Promise<boolean> {
-  return !(await removeLiveTables(tx, v.cfg, removals, [tableId], NOW)).has(tableId);
+  return !(await removeLiveTables(tx, removals, [tableId], NOW)).has(tableId);
 }
 
 describe("removing a live table the master no longer has", () => {
@@ -321,15 +321,15 @@ describe("removing a live table the master no longer has", () => {
     const released: string[] = [];
     const bookings: TableRemoval = {
       refuse: () => Promise.resolve(new Map()),
-      release: (_tx, cfg, tableId, label) => {
-        released.push(`${cfg.locationId}:${tableId}:${label}`);
+      release: (_tx, tableId, label) => {
+        released.push(`${tableId}:${label}`);
         return Promise.resolve();
       },
     };
 
     await reset(zoneId, [bookings]);
 
-    expect(released).toEqual([`${v.cfg.locationId}:${t1}:Let go 1`]);
+    expect(released).toEqual([`${t1}:Let go 1`]);
     expect(await tableExists(t1!)).toBe(false);
   });
 
@@ -609,7 +609,7 @@ describe("a catch-up that changes nothing", () => {
     const statements = await inTx(v, async (tx) => {
       const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
       try {
-        await catchUpZone(tx, v.cfg, [BOOKINGS_TABLE_REMOVAL], zoneId, NOW);
+        await catchUpZone(tx, [BOOKINGS_TABLE_REMOVAL], zoneId, NOW);
         return prepare.mock.calls.length;
       } finally {
         prepare.mockRestore();
@@ -644,7 +644,7 @@ describe("a catch-up that removes two tables", () => {
     const statements = await inTx(v, async (tx) => {
       const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
       try {
-        await catchUpZone(tx, v.cfg, [BOOKINGS_TABLE_REMOVAL], zoneId, NOW);
+        await catchUpZone(tx, [BOOKINGS_TABLE_REMOVAL], zoneId, NOW);
         return prepare.mock.calls.length;
       } finally {
         prepare.mockRestore();
@@ -696,8 +696,8 @@ describe("removeLiveTables", () => {
     } = await plannedZone("Refused 1");
     const released: string[] = [];
     const bookings: TableRemoval = {
-      refuse: (_tx, cfg, tableIds, now) => {
-        released.push(`refuse ${cfg.locationId} ${now.toISOString()}`);
+      refuse: (_tx, tableIds, now) => {
+        released.push(`refuse ${now.toISOString()}`);
         return Promise.resolve(
           new Map(tableIds.map((tableId) => [tableId, new AppError("table.booked", { tableId })])),
         );
@@ -712,7 +712,7 @@ describe("removeLiveTables", () => {
     const removed = await inTx(v, (tx) => removeLiveTable(tx, [bookings], t1!));
 
     expect(removed).toBe(false);
-    expect(released).toEqual([`refuse ${v.cfg.locationId} ${NOW.toISOString()}`]);
+    expect(released).toEqual([`refuse ${NOW.toISOString()}`]);
     expect(await tableExists(t1!)).toBe(true);
     expect(await todayRow(t1!)).toBeDefined();
     expect(await resetRowOf(t1!)).toBeDefined();
@@ -726,17 +726,17 @@ describe("removeLiveTables", () => {
     const asked: string[][] = [];
     const released: string[] = [];
     const bookings: TableRemoval = {
-      refuse: (_tx, _cfg, tableIds) => {
+      refuse: (_tx, tableIds) => {
         asked.push([...tableIds]);
         return Promise.resolve(new Map([[t1!, new AppError("table.booked", { tableId: t1! })]]));
       },
-      release: (_tx, _cfg, tableId) => {
+      release: (_tx, tableId) => {
         released.push(tableId);
         return Promise.resolve();
       },
     };
 
-    const kept = await inTx(v, (tx) => removeLiveTables(tx, v.cfg, [bookings], [t1!, t2!], NOW));
+    const kept = await inTx(v, (tx) => removeLiveTables(tx, [bookings], [t1!, t2!], NOW));
 
     expect(kept).toEqual(new Set([t1!]));
     expect(asked).toEqual([[t1!, t2!]]);

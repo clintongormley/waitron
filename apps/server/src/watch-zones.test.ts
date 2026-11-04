@@ -33,7 +33,7 @@ useVenueDb({
   setup: async (db) => {
     v = await setupPartyVenue(db);
     terrace = await inTx(v, async (tx) => {
-      const zone = await createZone(tx, v.cfg, { name: "Terrace" });
+      const zone = await createZone(tx, { name: "Terrace" });
       await offerProducts(tx, v.cfg, { zone: { zoneId: zone.id }, orderStart: "table" });
       return zone.id;
     });
@@ -72,7 +72,7 @@ describe("orderWatchZones", () => {
         otherPartyId: null,
       }),
     );
-    expect(await inTx(v, (tx) => VENUE_SERVICE.findOrderZones(tx, v.cfg, [presented]))).toEqual(
+    expect(await inTx(v, (tx) => VENUE_SERVICE.findOrderZones(tx, [presented]))).toEqual(
       new Map([[presented, v.tables.zoneId]]),
     );
     expect(await inTx(v, (tx) => orderWatchZones(tx, v.cfg, orders))).toEqual(
@@ -111,7 +111,7 @@ describe("orderWatchZones", () => {
 
     const actualPartyId = (await billRow(v, merged.tabId)).partyId;
     expect(actualPartyId).toBe(merged.partyId);
-    expect(await inTx(v, (tx) => VENUE_SERVICE.findOrderZones(tx, v.cfg, [merged.tabId]))).toEqual(
+    expect(await inTx(v, (tx) => VENUE_SERVICE.findOrderZones(tx, [merged.tabId]))).toEqual(
       new Map([[merged.tabId, terrace]]),
     );
     expect(
@@ -149,7 +149,7 @@ describe("orderWatchZones", () => {
       ]),
     );
     expect(batch).toHaveBeenCalledTimes(1);
-    expect(batch.mock.calls[0]?.[2]).toEqual([recorded, noZone]);
+    expect(batch.mock.calls[0]?.[1]).toEqual([recorded, noZone]);
     batch.mockClear();
     expect(await inTx(v, (tx) => orderWatchZones(tx, v.cfg, [partyBill(tabId, partyId)]))).toEqual(
       new Map([[tabId, v.tables.zoneId]]),

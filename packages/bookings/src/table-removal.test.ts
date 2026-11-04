@@ -72,8 +72,8 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, fn);
 }
 
-function refusalsOf(v: Venue, tableIds: string[]) {
-  return inTx((tx) => BOOKINGS_TABLE_REMOVAL.refuse(tx, v, tableIds, AFTER_MADRID_MIDNIGHT));
+function refusalsOf(tableIds: string[]) {
+  return inTx((tx) => BOOKINGS_TABLE_REMOVAL.refuse(tx, tableIds, AFTER_MADRID_MIDNIGHT));
 }
 
 // 2026-09-15T22:30:00Z is 00:30 on 2026-09-16 in Madrid (CEST, UTC+2): the venue's today is the
@@ -89,7 +89,7 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
     await insertBooking(v, { tableId: later, date: "2026-10-01" });
 
     for (const tableId of [today, later]) {
-      const err = (await refusalsOf(v, [tableId])).get(tableId);
+      const err = (await refusalsOf([tableId])).get(tableId);
       expect(err).toBeInstanceOf(AppError);
       expect(err).toMatchObject({ code: "table.booked", params: { tableId } });
     }
@@ -104,11 +104,11 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
     await insertBooking(v, { tableId: twice, date: "2026-09-16" });
     await insertBooking(v, { tableId: twice, date: "2026-09-20" });
 
-    const refusals = await refusalsOf(v, [booked, free, twice]);
+    const refusals = await refusalsOf([booked, free, twice]);
 
     expect([...refusals.keys()].sort()).toEqual([booked, twice].sort());
     expect(refusals.get(twice)).toMatchObject({ code: "table.booked", params: { tableId: twice } });
-    expect((await refusalsOf(v, [])).size).toBe(0);
+    expect((await refusalsOf([])).size).toBe(0);
   });
 
   it("names the earliest upcoming booking's date and time, by date before time", async () => {
@@ -126,7 +126,7 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
     });
     await insertBooking(v, { tableId: other, date: "2026-09-16", time: "08:00:00" });
 
-    const refusals = await refusalsOf(v, [t, other]);
+    const refusals = await refusalsOf([t, other]);
 
     expect(refusals.get(t)?.params).toEqual({ tableId: t, date: "2026-09-17", time: "21:30" });
     expect(refusals.get(other)?.params).toEqual({
@@ -146,7 +146,7 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
     await insertBooking(v, { tableId: t, date: "2026-09-16", status: "completed" });
     await insertBooking(v, { tableId: other, date: "2026-09-16" });
 
-    expect((await refusalsOf(v, [t])).size).toBe(0);
+    expect((await refusalsOf([t])).size).toBe(0);
   });
 
   it("does not refuse for a seated or no-show booking today", async () => {
@@ -155,7 +155,7 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
     await insertBooking(v, { tableId: t, date: "2026-09-16", status: "seated" });
     await insertBooking(v, { tableId: t, date: "2026-09-16", status: "no_show" });
 
-    expect((await refusalsOf(v, [t])).size).toBe(0);
+    expect((await refusalsOf([t])).size).toBe(0);
   });
 
   it("reads today in the default zone when the venue's zone is one Intl rejects", async () => {
@@ -163,7 +163,7 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
     const t = await makeTable(v, "T5");
     await insertBooking(v, { tableId: t, date: "2026-09-16" });
 
-    expect((await refusalsOf(v, [t])).get(t)).toMatchObject({
+    expect((await refusalsOf([t])).get(t)).toMatchObject({
       code: "table.booked",
       params: { tableId: t },
     });
@@ -178,7 +178,7 @@ describe("BOOKINGS_TABLE_REMOVAL.release", () => {
     const past = await insertBooking(v, { tableId: t, date: "2026-09-01", status: "completed" });
     const kept = await insertBooking(v, { tableId: other, date: "2026-09-01" });
 
-    await inTx((tx) => BOOKINGS_TABLE_REMOVAL.release(tx, v, t, "Terrace 4"));
+    await inTx((tx) => BOOKINGS_TABLE_REMOVAL.release(tx, t, "Terrace 4"));
 
     const released = await inTx((tx) => getBooking(tx, past));
     expect(released).toMatchObject({ tableId: null, tableLabel: "Terrace 4" });
@@ -213,7 +213,7 @@ describe("BOOKINGS_TABLE_REMOVAL.deleteRefusals", () => {
     await insertBooking(v, { tableId: other, date: "2026-09-01" });
 
     const result = await inTx((tx) =>
-      BOOKINGS_TABLE_REMOVAL.deleteRefusals!(tx, v, [t], AFTER_MADRID_MIDNIGHT),
+      BOOKINGS_TABLE_REMOVAL.deleteRefusals!(tx, [t], AFTER_MADRID_MIDNIGHT),
     );
 
     const expected = [
@@ -232,47 +232,11 @@ describe("BOOKINGS_TABLE_REMOVAL.deleteRefusals", () => {
       })),
     );
     expect(
-      await inTx((tx) => BOOKINGS_TABLE_REMOVAL.deleteRefusals!(tx, v, [], AFTER_MADRID_MIDNIGHT)),
+      await inTx((tx) => BOOKINGS_TABLE_REMOVAL.deleteRefusals!(tx, [], AFTER_MADRID_MIDNIGHT)),
     ).toEqual([]);
     expect(await inTx((tx) => getBooking(tx, past))).toMatchObject({
       tableId: t,
       tableLabel: null,
-    });
-  });
-});
-
-// A1301: deleted with cfg in S18
-describe("BOOKINGS_TABLE_REMOVAL whatever location the scope names", () => {
-  it("refuses, names and releases the venue's bookings for a scope naming no location", async () => {
-    const v = await setupVenue();
-    const t = await makeTable(v, "Stray");
-    const booking = await insertBooking(v, { tableId: t, date: "2026-09-16", time: "21:00:00" });
-    const stray = { locationId: brandLocationId(randomUUID()) };
-
-    const refusals = await inTx((tx) =>
-      BOOKINGS_TABLE_REMOVAL.refuse(tx, stray, [t], AFTER_MADRID_MIDNIGHT),
-    );
-    expect(refusals.get(t)).toMatchObject({
-      code: "table.booked",
-      params: { tableId: t, date: "2026-09-16", time: "21:00" },
-    });
-
-    expect(
-      await inTx((tx) =>
-        BOOKINGS_TABLE_REMOVAL.deleteRefusals!(tx, stray, [t], AFTER_MADRID_MIDNIGHT),
-      ),
-    ).toEqual([
-      {
-        code: "table.booked",
-        params: { tableId: t, date: "2026-09-16", time: "21:00" },
-        targets: [{ id: booking, name: "Ana · 2026-09-16 21:00" }],
-      },
-    ]);
-
-    await inTx((tx) => BOOKINGS_TABLE_REMOVAL.release(tx, stray, t, "Stray"));
-    expect(await inTx((tx) => getBooking(tx, booking))).toMatchObject({
-      tableId: null,
-      tableLabel: "Stray",
     });
   });
 });

@@ -273,7 +273,6 @@ export interface ReturningDetails {
  */
 export async function returningDevicesOf(
   tx: Transaction,
-  cfg: TradingContext,
   ids: readonly string[],
 ): Promise<Map<string, ReturningDetails>> {
   if (ids.length === 0) return new Map();
@@ -291,7 +290,6 @@ export async function returningDevicesOf(
     );
   const screens = await VENUE_SERVICE.readDevicesKitchenScreens(
     tx,
-    cfg,
     rows.map((row) => row.id),
   );
   return new Map(
@@ -533,12 +531,12 @@ export async function acceptDeviceJoinRequest(
   if (existing !== undefined && existing.deletedAt !== null)
     throw new AppError("join_request.not_found", {});
 
-  const { kitchenScreens, formFactor } = await resolveDeviceKitchenScreens(tx, cfg, {
+  const { kitchenScreens, formFactor } = await resolveDeviceKitchenScreens(tx, {
     profileId: input.profileId,
     kitchenScreens: input.kitchenScreens,
   });
   const writeKitchenScreens = () =>
-    VENUE_SERVICE.setDeviceKitchenScreens(tx, cfg, {
+    VENUE_SERVICE.setDeviceKitchenScreens(tx, {
       deviceId: row.id,
       profileId: input.profileId,
       screens: kitchenScreens,

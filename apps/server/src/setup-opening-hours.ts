@@ -1,6 +1,5 @@
 import { eq, sql } from "drizzle-orm";
 import type { Database } from "@waitron/db";
-import { locationId } from "@waitron/shared";
 import {
   departments,
   readOpeningHoursModel,
@@ -9,7 +8,6 @@ import {
 
 export async function readSetupOpeningHours(
   db: Database,
-  venue: { locationId: string },
 ): Promise<{ departmentId: string } | undefined> {
   const tables = await db.execute(
     sql`select name from sqlite_master where type = 'table' and name = 'menu_periods'`,
@@ -20,11 +18,7 @@ export async function readSetupOpeningHours(
     .from(departments)
     .where(eq(departments.isDefault, true));
   if (first === undefined) return undefined;
-  const model = await readOpeningHoursModel(
-    db,
-    { locationId: locationId(venue.locationId) },
-    new Date(),
-  );
+  const model = await readOpeningHoursModel(db, new Date());
   const department = model.departments.find(({ id }) => id === first.id);
   if (!department?.active || department.periods.length !== 1) return undefined;
   const period = department.periods[0]!;

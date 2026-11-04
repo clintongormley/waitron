@@ -2,7 +2,6 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/catalogue";
 import type { BusinessDayClock } from "@waitron/shared";
-import type { VenueScope } from "./operations.js";
 import type { CalendarColour, LocalDate } from "./hours-types.js";
 import {
   readDayPlan,
@@ -79,27 +78,25 @@ function timeAt(minute: number, cutover: string): string {
 
 export async function readPlannedServiceGuides(
   tx: Transaction,
-  cfg: VenueScope,
   stationIds: readonly string[],
   request: ServiceGuideRequest,
 ): Promise<PlannedServiceGuides> {
-  const departments = await readActiveDepartments(tx, cfg);
-  const periods = await readActivePeriods(tx, cfg);
+  const departments = await readActiveDepartments(tx);
+  const periods = await readActivePeriods(tx);
   const departmentIds = departments.map(({ id }) => id);
   const columns = request.kind === "season" ? WEEKDAYS.map(String) : [...new Set(request.dates)];
   const context = (column: string): Context =>
     request.kind === "season"
       ? { dayCutover: request.cutover, endMinute: 1440 }
       : serviceDayWallContext(request.clock, column);
-  const zones = stationIds.length ? await readServiceZones(tx, cfg) : [];
+  const zones = stationIds.length ? await readServiceZones(tx) : [];
   const departmentRanges = new Map<string, Map<string, readonly ServiceRange[]>>();
   let closures: ReadonlyMap<string, ReadonlyMap<string, readonly ClosedRange[]>>;
   if (request.kind === "season") {
     const only = { seasonIds: [request.seasonId], weekdays: WEEKDAYS };
-    const weeks = await readDepartmentSeasonWeeks(tx, cfg, departmentIds, request.cutover, only);
+    const weeks = await readDepartmentSeasonWeeks(tx, departmentIds, request.cutover, only);
     const zoneWeeks = await readZoneSeasonWeeks(
       tx,
-      cfg,
       zones.map(({ id }) => id),
       request.cutover,
       only,
@@ -130,13 +127,13 @@ export async function readPlannedServiceGuides(
       (day) => !request.plan?.seasonIdOn.has(day) || !request.plan.special.has(day),
     );
     const extra = missing.length
-      ? await readDayPlan(tx, cfg, missing)
+      ? await readDayPlan(tx, missing)
       : { seasonIdOn: new Map(), special: new Map() };
     const plan: DayPlan = {
       seasonIdOn: new Map([...extra.seasonIdOn, ...(request.plan?.seasonIdOn ?? [])]),
       special: new Map([...extra.special, ...(request.plan?.special ?? [])]),
     };
-    const days = await resolveDepartmentsDays(tx, cfg, departmentIds, columns, request.clock, plan);
+    const days = await resolveDepartmentsDays(tx, departmentIds, columns, request.clock, plan);
     for (const id of departmentIds)
       departmentRanges.set(
         id,
@@ -144,7 +141,6 @@ export async function readPlannedServiceGuides(
       );
     closures = await resolveZoneClosedDays(
       tx,
-      cfg,
       zones.map(({ id }) => id),
       columns,
       request.clock,
@@ -164,7 +160,7 @@ export async function readPlannedServiceGuides(
       .from(products)
       .leftJoin(parentProducts, parentJoin)
       .where(and(eq(products.active, true), inArray(routedId, offeredIds)));
-    const base = await loadRoutingRules(tx, cfg, null);
+    const base = await loadRoutingRules(tx, null);
     const rules = {
       ...base,
       zoneDepartment: new Map(zones.map(({ id, departmentId }) => [id, departmentId])),

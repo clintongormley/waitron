@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, or, type SQL } from "drizzle-orm";
 import { kitchenStations, readVenueClock, type Transaction } from "@waitron/db";
-import { AppError, locationId, compareStationNames } from "@waitron/shared";
+import { AppError, compareStationNames } from "@waitron/shared";
 import {
   departments,
   readDayPlan,
@@ -28,9 +28,6 @@ import "./errors.js";
 
 export type { SeasonStaffingEdit, SpecialDayStaffingEdit };
 
-type ScopeCfg = { locationId: string };
-
-const venueScope = (cfg: ScopeCfg) => ({ locationId: locationId(cfg.locationId) });
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 const storedTime = (value: string) => `${value}:00`;
 const wireTime = (value: string) => value.slice(0, 5);
@@ -258,17 +255,15 @@ async function insertDay(
 
 export async function readSeasonStaffing(
   tx: Transaction,
-  cfg: ScopeCfg,
   seasonId: string,
 ): Promise<SeasonStaffing> {
-  const scope = venueScope(cfg);
-  const all = await readSeasons(tx, scope);
+  const all = await readSeasons(tx);
   if (!all.some((season) => season.id === seasonId))
     throw new AppError("season.not_found", { seasonId });
   const areas = await listStaffingAreas(tx);
   const cutover = await currentCutover(tx);
   const paint = await readPaint(tx, areas, eq(staffingDays.seasonId, seasonId), cutover);
-  const forecast = await readPlannedServiceGuides(tx, scope, idsOf(areas, "station"), {
+  const forecast = await readPlannedServiceGuides(tx, idsOf(areas, "station"), {
     kind: "season",
     seasonId,
     cutover,
@@ -323,11 +318,9 @@ export async function saveSeasonStaffing(
 
 export async function readSpecialDayStaffing(
   tx: Transaction,
-  cfg: ScopeCfg,
   specialDayId: string,
 ): Promise<SpecialDayStaffing> {
-  const scope = venueScope(cfg);
-  const found = await readSpecialDayPlan(tx, scope, specialDayId);
+  const found = await readSpecialDayPlan(tx, specialDayId);
   if (found === null) throw new AppError("special_day.not_found", { specialDayId });
   const { name: specialDayName, plan } = found;
   const dates = found.dates.map(({ dateId, storedDate }) => ({ dateId, date: storedDate }));
@@ -343,7 +336,7 @@ export async function readSpecialDayStaffing(
     ),
     cutover,
   );
-  const forecast = await readPlannedServiceGuides(tx, scope, idsOf(areas, "station"), {
+  const forecast = await readPlannedServiceGuides(tx, idsOf(areas, "station"), {
     kind: "dates",
     dates: dates.map(({ date }) => date),
     clock,
@@ -405,13 +398,12 @@ export interface ResolveStaffingGiven {
  *  the area wins, else the season's weekday row, else no entry. */
 export async function resolveStaffing(
   tx: Transaction,
-  cfg: ScopeCfg,
   businessDays: readonly string[],
   given: ResolveStaffingGiven = {},
 ): Promise<Map<string, Map<string, StaffingBlock[]>>> {
   const resolved = new Map<string, Map<string, StaffingBlock[]>>();
   if (businessDays.length === 0) return resolved;
-  const plan = given.plan ?? (await readDayPlan(tx, venueScope(cfg), businessDays));
+  const plan = given.plan ?? (await readDayPlan(tx, businessDays));
   for (const day of businessDays)
     if (!plan.seasonIdOn.has(day) || !plan.special.has(day))
       throw new Error(`the day plan does not cover ${day}`);

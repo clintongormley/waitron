@@ -96,7 +96,7 @@ function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T> | T): P
 describe("table CRUD", () => {
   it("creates a table WITH a zone and lists it (active, by label)", async () => {
     const cfg = await setupVenue();
-    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
+    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
     const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "12", zoneId }));
     const tables = await asApp(cfg, (tx) => listTables(tx, cfg, new Date()));
     expect(tables).toEqual([
@@ -113,7 +113,7 @@ describe("table CRUD", () => {
 describe("a joined table's parts", () => {
   it("lists Long table but none of its parts, unless asked for every table", async () => {
     const cfg = await setupVenue();
-    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Counter" }));
+    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, { name: "Counter" }));
     const entry = (
       key: string,
       label: string,
@@ -159,9 +159,9 @@ describe("zone CRUD", () => {
   it("creates, lists (ordered by display_order, active-only), renames, deactivates a zone", async () => {
     const cfg = await setupVenue();
     const { id } = await asApp(cfg, (tx) =>
-      createZone(tx, cfg, { name: "Dining room", displayOrder: 1 }),
+      createZone(tx, { name: "Dining room", displayOrder: 1 }),
     );
-    await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace", displayOrder: 0 }));
+    await asApp(cfg, (tx) => createZone(tx, { name: "Terrace", displayOrder: 0 }));
     // Ordered by display_order: Terrace (0) before Dining room (1).
     expect((await asApp(cfg, (tx) => listZones(tx, cfg))).map((z) => z.name)).toEqual([
       "Terrace",
@@ -183,7 +183,7 @@ describe("zone CRUD", () => {
   // A1301: deleted with cfg in S18
   it("listZones lists the venue's active zones whatever location the scope names", async () => {
     const cfg = await setupVenue();
-    await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace", displayOrder: 0 }));
+    await asApp(cfg, (tx) => createZone(tx, { name: "Terrace", displayOrder: 0 }));
     const elsewhere = { ...cfg, locationId: brandLocationId(randomUUID()) };
     expect((await asApp(cfg, (tx) => listZones(tx, elsewhere))).map((z) => z.name)).toEqual([
       "Terrace",
@@ -193,7 +193,7 @@ describe("zone CRUD", () => {
   it("listZones returns exactly the FloorZone shape (id/name/displayOrder/active — no createdAt)", async () => {
     const cfg = await setupVenue();
     const { id } = await asApp(cfg, (tx) =>
-      createZone(tx, cfg, { name: "Dining room", displayOrder: 3 }),
+      createZone(tx, { name: "Dining room", displayOrder: 3 }),
     );
     const [z] = await asApp(cfg, (tx) => listZones(tx, cfg));
     expect(z).toEqual({ id, name: "Dining room", displayOrder: 3, active: true });
@@ -201,7 +201,7 @@ describe("zone CRUD", () => {
 
   it("hides deleted zones even when management requests inactive entries", async () => {
     const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Closed room" }));
+    const { id } = await asApp(cfg, (tx) => createZone(tx, { name: "Closed room" }));
     await asApp(cfg, async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${id}`),
     );
@@ -214,17 +214,17 @@ describe("zone CRUD", () => {
 
   it("createZone defaults displayOrder to 0 when omitted", async () => {
     const cfg = await setupVenue();
-    await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Solo" }));
+    await asApp(cfg, (tx) => createZone(tx, { name: "Solo" }));
     const [z] = await asApp(cfg, (tx) => listZones(tx, cfg));
     expect(z).toMatchObject({ name: "Solo", displayOrder: 0 });
   });
 
   it("rejects a duplicate name (zone.name_taken) and an unknown id (zone.not_found)", async () => {
     const cfg = await setupVenue();
-    await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Dining room" }));
-    await expect(
-      asApp(cfg, (tx) => createZone(tx, cfg, { name: "Dining room" })),
-    ).rejects.toMatchObject({ code: "zone.name_taken", params: { name: "Dining room" } });
+    await asApp(cfg, (tx) => createZone(tx, { name: "Dining room" }));
+    await expect(asApp(cfg, (tx) => createZone(tx, { name: "Dining room" }))).rejects.toMatchObject(
+      { code: "zone.name_taken", params: { name: "Dining room" } },
+    );
     const missing = randomUUID();
     await expect(
       asApp(cfg, (tx) => updateZone(tx, cfg, missing, { name: "X" })),
@@ -233,14 +233,12 @@ describe("zone CRUD", () => {
 
   it("createZone keeps a primary-key clash as an internal database error", async () => {
     const cfg = await setupVenue();
-    const existing = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
+    const existing = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
     const generateId = vi
       .spyOn(floorZones.id as unknown as { defaultFn: () => string }, "defaultFn")
       .mockReturnValue(existing.id);
     try {
-      await expect(
-        asApp(cfg, (tx) => createZone(tx, cfg, { name: "Garden" })),
-      ).rejects.toMatchObject({
+      await expect(asApp(cfg, (tx) => createZone(tx, { name: "Garden" }))).rejects.toMatchObject({
         errcode: 1555,
         message: "UNIQUE constraint failed: floor_zones.id",
       });
@@ -254,7 +252,7 @@ describe("zone CRUD", () => {
 
   it("updateZone does not translate a primary-key clash from another write in its trigger", async () => {
     const cfg = await setupVenue();
-    const existing = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
+    const existing = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
     await db.execute(sql`create trigger test_zone_key_clash before update on floor_zones
       when new.name = 'Trigger collision'
       begin
@@ -278,7 +276,7 @@ describe("zone CRUD", () => {
 
   it("updateZone keeps a name-key refusal internal when the patch supplies no name", async () => {
     const cfg = await setupVenue();
-    const existing = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
+    const existing = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
     await db.execute(sql`create trigger test_zone_name_clash before update on floor_zones
       when new.name = old.name
       begin
@@ -302,8 +300,8 @@ describe("zone CRUD", () => {
 
   it("updateZone surfaces a name collision as zone.name_taken", async () => {
     const cfg = await setupVenue();
-    await asApp(cfg, (tx) => createZone(tx, cfg, { name: "A" }));
-    const { id } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "B" }));
+    await asApp(cfg, (tx) => createZone(tx, { name: "A" }));
+    const { id } = await asApp(cfg, (tx) => createZone(tx, { name: "B" }));
     await expect(asApp(cfg, (tx) => updateZone(tx, cfg, id, { name: "A" }))).rejects.toMatchObject({
       code: "zone.name_taken",
       params: { name: "A" },
@@ -312,9 +310,7 @@ describe("zone CRUD", () => {
 
   it("updateZone refuses to restore or reorder a deleted zone", async () => {
     const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) =>
-      createZone(tx, cfg, { name: "Patio", displayOrder: 5 }),
-    );
+    const { id } = await asApp(cfg, (tx) => createZone(tx, { name: "Patio", displayOrder: 5 }));
     await asApp(cfg, async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${id}`),
     );
@@ -333,7 +329,7 @@ describe("zone CRUD", () => {
 
   it("deactivating a zone takes its tables out of service", async () => {
     const cfg = await setupVenue();
-    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
+    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
     const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T8", zoneId }));
 
     await asApp(cfg, async (tx) =>
@@ -363,7 +359,7 @@ describe("zone CRUD", () => {
     await db.execute(sql`create trigger refuse_zone_insert before insert on floor_zones
       begin select raise(abort, 'zone insert refused'); end`);
     try {
-      const err = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Big" })).catch(
+      const err = await asApp(cfg, (tx) => createZone(tx, { name: "Big" })).catch(
         (e: unknown) => e,
       );
       expect(err).toBeInstanceOf(Error);
@@ -376,7 +372,7 @@ describe("zone CRUD", () => {
 
   it("updateZone rethrows a NON-unique DB error raw, not as zone.name_taken", async () => {
     const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
+    const { id } = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
     // `floor_zones` declares no CHECK, so a temporary trigger supplies the non-unique refusal.
     await db.execute(sql`
       create trigger floor_zones_refuse_update before update on floor_zones
@@ -477,9 +473,7 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
     );
     await asApp(cfg, (tx) => fireLines(tx, cfg, tabId, lines));
 
-    let row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
-      (t) => t.id === tableId,
-    )!;
+    let row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 0, pendingToServe: 2 });
 
     const [item] = await asApp(cfg, (tx) =>
@@ -491,11 +485,11 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
     await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item!.id, "preparing"));
     await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item!.id, "ready"));
 
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 1, pendingToServe: 2 });
 
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 0, pendingToServe: 1 });
   });
 });
@@ -529,9 +523,7 @@ describe("listTablesWithState — A773 no dispatch state", () => {
     );
     await asApp(cfg, (tx) => fireLines(tx, cfg, tabId, lines));
 
-    let row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
-      (t) => t.id === tableId,
-    )!;
+    let row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 0, pendingToServe: 2 });
     expect(row).not.toHaveProperty("enRoute");
 
@@ -545,23 +537,23 @@ describe("listTablesWithState — A773 no dispatch state", () => {
       await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item.id, "preparing"));
       await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item.id, "ready"));
     }
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 2, pendingToServe: 2 });
     expect(row).not.toHaveProperty("enRoute");
 
     const ready = row;
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toEqual(ready);
     expect(row).toMatchObject({ readyToServe: 2, pendingToServe: 2 });
     expect(row).not.toHaveProperty("enRoute");
 
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 1, pendingToServe: 1 });
     expect(row).not.toHaveProperty("enRoute");
 
     await asApp(cfg, (tx) => unserveLine(tx, cfg, tabId, 1));
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 2, pendingToServe: 2 });
     expect(row).not.toHaveProperty("enRoute");
   });
@@ -603,13 +595,11 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
                      where working_order_line_id = ${lines[0]!.id}`),
     );
 
-    let row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
-      (t) => t.id === tableId,
-    )!;
+    let row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row.timingBand).toBe("overdue");
 
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row.timingBand).toBe("fresh");
   });
 
@@ -647,25 +637,21 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
                      where working_order_line_id = ${lines[0]!.id}`),
     );
 
-    const row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
-      (t) => t.id === tableId,
-    )!;
+    const row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row.timingBand).toBe("forgotten");
   });
 
   it("a free table (no open tab) reports fresh", async () => {
     const { cfg, tableId } = await setupTabVenue();
-    const row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
-      (t) => t.id === tableId,
-    )!;
+    const row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row.timingBand).toBe("fresh");
   });
 });
 
 it("renames a zone onto a deleted name while retaining the deleted row", async () => {
   const cfg = await setupVenue();
-  const target = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
-  const source = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Dining" }));
+  const target = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
+  const source = await asApp(cfg, (tx) => createZone(tx, { name: "Dining" }));
   await asApp(cfg, async (tx) =>
     tx.execute(sql`update floor_zones set active = false where id = ${target.id}`),
   );
@@ -684,7 +670,7 @@ it("renames a zone onto a deleted name while retaining the deleted row", async (
 
 it("refuses zone removal while an open party occupies a table there", async () => {
   const cfg = await setupVenue();
-  const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
+  const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
   const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T9", zoneId }));
   await asApp(cfg, async (tx) => {
     const [party] = await tx
@@ -696,7 +682,7 @@ it("refuses zone removal while an open party occupies a table there", async () =
 
   await expect(
     asApp(cfg, (tx) =>
-      deleteZone(tx, cfg, floorDeletionFor(cfg, []), zoneId, new Date("2026-10-11T12:00:00Z")),
+      deleteZone(tx, floorDeletionFor([]), zoneId, new Date("2026-10-11T12:00:00Z")),
     ),
   ).rejects.toMatchObject({
     code: "zone.table_in_use",
@@ -714,8 +700,8 @@ it("refuses zone removal while an open party occupies a table there", async () =
 
 it("allows removing a zone with a closed party while another zone has an open party", async () => {
   const cfg = await setupVenue();
-  const { id: removedZone } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Dining" }));
-  const { id: otherZone } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Bar" }));
+  const { id: removedZone } = await asApp(cfg, (tx) => createZone(tx, { name: "Dining" }));
+  const { id: otherZone } = await asApp(cfg, (tx) => createZone(tx, { name: "Bar" }));
   const { id: removedTable } = await asApp(cfg, (tx) =>
     createTable(tx, cfg, { label: "D1", zoneId: removedZone }),
   );
@@ -744,7 +730,7 @@ it("allows removing a zone with a closed party while another zone has an open pa
 
   await expect(
     asApp(cfg, (tx) =>
-      deleteZone(tx, cfg, floorDeletionFor(cfg, []), removedZone, new Date("2026-10-11T12:00:00Z")),
+      deleteZone(tx, floorDeletionFor([]), removedZone, new Date("2026-10-11T12:00:00Z")),
     ),
   ).resolves.toMatchObject({ target: { id: removedZone, name: "Dining" }, refusals: [], ends: [] });
   expect(

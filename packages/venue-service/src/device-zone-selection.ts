@@ -3,7 +3,7 @@ import { and, count, eq, isNull } from "drizzle-orm";
 import { deviceProfiles, devices, type Transaction } from "@waitron/db";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/module";
 import { AppError, isUuid } from "@waitron/shared";
-import { listServiceZones, type VenueScope } from "./operations.js";
+import { listServiceZones } from "./operations.js";
 import { readProfileServiceScopes, readProfileZones } from "./profile-access.js";
 import { deviceZoneSelections, deviceZoneSelectionZones } from "./schema/device-zone-selection.js";
 import "./errors.js";
@@ -19,7 +19,6 @@ function uuid(value: unknown, field: Field): string {
 
 export async function readDeviceZoneSelection(
   tx: Transaction,
-  cfg: VenueScope,
   deviceId: string,
 ): Promise<DeviceZoneSelection> {
   const [profile] = await tx
@@ -34,9 +33,9 @@ export async function readDeviceZoneSelection(
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
     .where(and(eq(devices.id, deviceId), isNull(devices.deletedAt)));
   if (profile === undefined) throw new AppError("device.not_found", { deviceId });
-  const scope = await readProfileZones(tx, cfg, profile.id);
+  const scope = await readProfileZones(tx, profile.id);
   const profileScope = await readProfileServiceScopes(tx, [profile.id]);
-  const zones = (await listServiceZones(tx, cfg))
+  const zones = (await listServiceZones(tx))
     .filter((zone) => scope.allowedZoneIds === null || scope.allowedZoneIds.includes(zone.id))
     .map(({ id, name, serviceMode, departmentId, departmentName }) => ({
       id,
@@ -114,7 +113,6 @@ export async function readDeviceZoneSelection(
 
 export async function setDeviceZoneSelection(
   tx: Transaction,
-  cfg: VenueScope,
   deviceId: string,
   input: DeviceZoneSelectionInput,
 ): Promise<DeviceZoneSelection> {
@@ -126,7 +124,7 @@ export async function setDeviceZoneSelection(
   const ids = input.selectedZoneIds.map((value) => uuid(value, "selectedZoneIds"));
   if (new Set(ids).size !== ids.length) invalid("selectedZoneIds");
   const start = uuid(input.startingZoneId, "startingZoneId");
-  const current = await readDeviceZoneSelection(tx, cfg, deviceId);
+  const current = await readDeviceZoneSelection(tx, deviceId);
   if (current.profileId !== profileId || current.snapshot !== input.snapshot)
     throw new AppError("device_zones.changed", {});
   if (ids.some((id) => !current.zones.some((zone) => zone.id === id))) invalid("selectedZoneIds");
@@ -149,7 +147,7 @@ export async function setDeviceZoneSelection(
   await tx
     .insert(deviceZoneSelectionZones)
     .values(ids.map((zoneId) => ({ deviceId, deviceProfileId: profileId, zoneId })));
-  return readDeviceZoneSelection(tx, cfg, deviceId);
+  return readDeviceZoneSelection(tx, deviceId);
 }
 
 export async function countDeviceZoneSelections(

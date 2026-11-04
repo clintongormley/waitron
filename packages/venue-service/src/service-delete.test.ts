@@ -111,7 +111,7 @@ describe("service deletion", () => {
       },
     };
     const impact = await run((tx) =>
-      serviceDelete.readDepartmentDeleteImpact(tx, f.cfg, floor, f.dining, NOW),
+      serviceDelete.readDepartmentDeleteImpact(tx, floor, f.dining, NOW),
     );
     expect(impact.refusals).toEqual([second, first]);
     expect(impact.removes).toContainEqual({
@@ -123,7 +123,7 @@ describe("service deletion", () => {
       ],
     });
     expect(
-      await refusal(run((tx) => serviceDelete.deleteDepartment(tx, f.cfg, floor, f.dining, NOW))),
+      await refusal(run((tx) => serviceDelete.deleteDepartment(tx, floor, f.dining, NOW))),
     ).toBe("zone.table_in_use");
     expect(
       await run((tx) =>
@@ -149,9 +149,7 @@ describe("service deletion", () => {
       }),
       clear: async () => {},
     };
-    const impact = await run((tx) =>
-      serviceDelete.readZoneDeleteImpact(tx, f.cfg, floor, f.alpha, NOW),
-    );
+    const impact = await run((tx) => serviceDelete.readZoneDeleteImpact(tx, floor, f.alpha, NOW));
     expect(impact.refusals).toEqual([
       {
         code: "zone.table_in_use",
@@ -170,14 +168,14 @@ describe("service deletion", () => {
       tx.update(departments).set({ active: false }).where(eq(departments.id, f.garden)),
     );
     const first = await run((tx) =>
-      serviceDelete.readDepartmentDeleteImpact(tx, f.cfg, noFloor, f.dining, NOW),
+      serviceDelete.readDepartmentDeleteImpact(tx, noFloor, f.dining, NOW),
     );
     expect(first.refusals).toEqual([]);
     await run((tx) =>
       tx.update(departments).set({ active: false }).where(eq(departments.id, f.bar)),
     );
     const last = await run((tx) =>
-      serviceDelete.readDepartmentDeleteImpact(tx, f.cfg, noFloor, f.dining, NOW),
+      serviceDelete.readDepartmentDeleteImpact(tx, noFloor, f.dining, NOW),
     );
     expect(last.refusals).toContainEqual({
       code: "department.last_active",
@@ -185,7 +183,7 @@ describe("service deletion", () => {
       targets: [],
     });
     expect(
-      await refusal(run((tx) => serviceDelete.deleteDepartment(tx, f.cfg, noFloor, f.dining, NOW))),
+      await refusal(run((tx) => serviceDelete.deleteDepartment(tx, noFloor, f.dining, NOW))),
     ).toBe("department.last_active");
   });
 
@@ -218,7 +216,7 @@ describe("service deletion", () => {
       return requests.map((row) => row.id);
     });
     const department = await run((tx) =>
-      serviceDelete.readDepartmentDeleteImpact(tx, f.cfg, noFloor, f.dining, NOW),
+      serviceDelete.readDepartmentDeleteImpact(tx, noFloor, f.dining, NOW),
     );
     expect(
       department.refusals
@@ -226,17 +224,15 @@ describe("service deletion", () => {
         .map((r) => r.params.requestId)
         .sort(),
     ).toEqual([...ids].sort());
-    const zone = await run((tx) =>
-      serviceDelete.readZoneDeleteImpact(tx, f.cfg, noFloor, f.alpha, NOW),
-    );
+    const zone = await run((tx) => serviceDelete.readZoneDeleteImpact(tx, noFloor, f.alpha, NOW));
     expect(zone.refusals).toContainEqual({
       code: "zone.transfer_pending",
       params: { zoneId: f.alpha, requestId: ids[1] },
       targets: [],
     });
-    expect(
-      await refusal(run((tx) => serviceDelete.deleteZone(tx, f.cfg, noFloor, f.alpha, NOW))),
-    ).toBe("zone.transfer_pending");
+    expect(await refusal(run((tx) => serviceDelete.deleteZone(tx, noFloor, f.alpha, NOW)))).toBe(
+      "zone.transfer_pending",
+    );
   });
 
   it("open and placed counter orders refuse a zone and its department without tables", async () => {
@@ -257,9 +253,7 @@ describe("service deletion", () => {
       );
       return orders.map((order) => order.id);
     });
-    const zone = await run((tx) =>
-      serviceDelete.readZoneDeleteImpact(tx, f.cfg, noFloor, f.alpha, NOW),
-    );
+    const zone = await run((tx) => serviceDelete.readZoneDeleteImpact(tx, noFloor, f.alpha, NOW));
     for (const orderId of orderIds)
       expect(zone.refusals).toContainEqual({
         code: "zone.order_in_progress",
@@ -267,7 +261,7 @@ describe("service deletion", () => {
         targets: [],
       });
     const department = await run((tx) =>
-      serviceDelete.readDepartmentDeleteImpact(tx, f.cfg, noFloor, f.dining, NOW),
+      serviceDelete.readDepartmentDeleteImpact(tx, noFloor, f.dining, NOW),
     );
     for (const orderId of orderIds)
       expect(department.refusals).toContainEqual({
@@ -306,9 +300,7 @@ describe("service deletion", () => {
       await tx.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
       return rows;
     });
-    const one = await run((tx) =>
-      serviceDelete.readZoneDeleteImpact(tx, f.cfg, noFloor, f.alpha, NOW),
-    );
+    const one = await run((tx) => serviceDelete.readZoneDeleteImpact(tx, noFloor, f.alpha, NOW));
     expect(one.refusals.filter((r) => r.code === "zone.profile_in_use")).toEqual([
       {
         code: "zone.profile_in_use",
@@ -317,7 +309,7 @@ describe("service deletion", () => {
       },
     ]);
     const all = await run((tx) =>
-      serviceDelete.readDepartmentDeleteImpact(tx, f.cfg, noFloor, f.dining, NOW),
+      serviceDelete.readDepartmentDeleteImpact(tx, noFloor, f.dining, NOW),
     );
     expect(
       all.refusals
@@ -343,9 +335,7 @@ describe("service deletion", () => {
       await tx.insert(deviceProfileZones).values({ deviceProfileId: row!.id, zoneId: f.alpha });
       return row!;
     });
-    const impact = await run((tx) =>
-      serviceDelete.readZoneDeleteImpact(tx, f.cfg, noFloor, f.alpha, NOW),
-    );
+    const impact = await run((tx) => serviceDelete.readZoneDeleteImpact(tx, noFloor, f.alpha, NOW));
     expect(impact.refusals.filter((row) => row.code === "zone.profile_in_use")).toEqual([
       {
         code: "zone.profile_in_use",
@@ -353,20 +343,20 @@ describe("service deletion", () => {
         targets: [{ id: profile.id, name: "Selected Alpha" }],
       },
     ]);
-    expect(
-      await refusal(run((tx) => serviceDelete.deleteZone(tx, f.cfg, noFloor, f.alpha, NOW))),
-    ).toBe("zone.profile_in_use");
+    expect(await refusal(run((tx) => serviceDelete.deleteZone(tx, noFloor, f.alpha, NOW)))).toBe(
+      "zone.profile_in_use",
+    );
     expect(
       await run((tx) =>
         tx.select({ active: floorZones.active }).from(floorZones).where(eq(floorZones.id, f.alpha)),
       ),
     ).toEqual([{ active: true }]);
     const unrelated = await run((tx) =>
-      serviceDelete.readZoneDeleteImpact(tx, f.cfg, noFloor, f.gamma, NOW),
+      serviceDelete.readZoneDeleteImpact(tx, noFloor, f.gamma, NOW),
     );
     expect(unrelated.refusals.filter((row) => row.code === "zone.profile_in_use")).toEqual([]);
     const otherDepartment = await run((tx) =>
-      serviceDelete.readDepartmentDeleteImpact(tx, f.cfg, noFloor, f.bar, NOW),
+      serviceDelete.readDepartmentDeleteImpact(tx, noFloor, f.bar, NOW),
     );
     expect(
       otherDepartment.refusals.filter((row) => row.code === "department.profile_in_use"),
@@ -389,17 +379,15 @@ describe("service deletion", () => {
       await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, f.beta));
       return profile!.id;
     });
-    const impact = await run((tx) =>
-      serviceDelete.readZoneDeleteImpact(tx, f.cfg, noFloor, f.alpha, NOW),
-    );
+    const impact = await run((tx) => serviceDelete.readZoneDeleteImpact(tx, noFloor, f.alpha, NOW));
     expect(impact.refusals).toContainEqual({
       code: "zone.profile_in_use",
       params: { zoneId: f.alpha, profileId },
       targets: [{ id: profileId, name: expect.any(String) }],
     });
-    expect(
-      await refusal(run((tx) => serviceDelete.deleteZone(tx, f.cfg, noFloor, f.alpha, NOW))),
-    ).toBe("zone.profile_in_use");
+    expect(await refusal(run((tx) => serviceDelete.deleteZone(tx, noFloor, f.alpha, NOW)))).toBe(
+      "zone.profile_in_use",
+    );
   });
 
   it("an already-empty explicit bound refuses its department deletion", async () => {
@@ -418,7 +406,7 @@ describe("service deletion", () => {
       return profile!.id;
     });
     const impact = await run((tx) =>
-      serviceDelete.readDepartmentDeleteImpact(tx, f.cfg, noFloor, f.dining, NOW),
+      serviceDelete.readDepartmentDeleteImpact(tx, noFloor, f.dining, NOW),
     );
     expect(impact.refusals.filter((row) => row.code === "department.profile_in_use")).toEqual([
       {
@@ -428,7 +416,7 @@ describe("service deletion", () => {
       },
     ]);
     expect(
-      await refusal(run((tx) => serviceDelete.deleteDepartment(tx, f.cfg, noFloor, f.dining, NOW))),
+      await refusal(run((tx) => serviceDelete.deleteDepartment(tx, noFloor, f.dining, NOW))),
     ).toBe("department.profile_in_use");
     expect(
       await run((tx) =>
@@ -463,17 +451,15 @@ describe("service deletion", () => {
       });
       return profile!.id;
     });
-    const impact = await run((tx) =>
-      serviceDelete.readZoneDeleteImpact(tx, f.cfg, noFloor, f.alpha, NOW),
-    );
+    const impact = await run((tx) => serviceDelete.readZoneDeleteImpact(tx, noFloor, f.alpha, NOW));
     expect(impact.refusals).toContainEqual({
       code: "zone.profile_in_use",
       params: { zoneId: f.alpha, profileId },
       targets: [{ id: profileId, name: expect.any(String) }],
     });
-    expect(
-      await refusal(run((tx) => serviceDelete.deleteZone(tx, f.cfg, noFloor, f.alpha, NOW))),
-    ).toBe("zone.profile_in_use");
+    expect(await refusal(run((tx) => serviceDelete.deleteZone(tx, noFloor, f.alpha, NOW)))).toBe(
+      "zone.profile_in_use",
+    );
     expect(
       await run((tx) =>
         tx.select({ active: floorZones.active }).from(floorZones).where(eq(floorZones.id, f.alpha)),
@@ -495,7 +481,7 @@ describe("service deletion", () => {
     };
     await expect(
       run(async (tx) => {
-        await serviceDelete.deleteZone(tx, f.cfg, floor, f.alpha, NOW);
+        await serviceDelete.deleteZone(tx, floor, f.alpha, NOW);
         throw Error("abort");
       }),
     ).rejects.toThrow("abort");
@@ -530,7 +516,7 @@ describe("service deletion", () => {
         await tx.delete(diningTables).where(eq(diningTables.id, tableId));
       },
     };
-    await run((tx) => serviceDelete.deleteZone(tx, f.cfg, floor, f.alpha, NOW));
+    await run((tx) => serviceDelete.deleteZone(tx, floor, f.alpha, NOW));
     expect(
       await run((tx) => tx.select().from(diningTables).where(eq(diningTables.id, tableId))),
     ).toEqual([]);
@@ -546,9 +532,9 @@ describe("service deletion", () => {
         throw Error("floor failed");
       },
     };
-    await expect(
-      run((tx) => serviceDelete.deleteZone(tx, f.cfg, floor, f.alpha, NOW)),
-    ).rejects.toThrow("floor failed");
+    await expect(run((tx) => serviceDelete.deleteZone(tx, floor, f.alpha, NOW))).rejects.toThrow(
+      "floor failed",
+    );
     expect(
       await run((tx) =>
         tx
@@ -562,8 +548,7 @@ describe("service deletion", () => {
   it("rechecks a new order, transfer and profile after the preview", async () => {
     const f = await fixture();
     expect(
-      (await run((tx) => serviceDelete.readZoneDeleteImpact(tx, f.cfg, noFloor, f.alpha, NOW)))
-        .refusals,
+      (await run((tx) => serviceDelete.readZoneDeleteImpact(tx, noFloor, f.alpha, NOW))).refusals,
     ).toEqual([]);
     const orderId = await run(async (tx) => {
       const order = await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 4 });
@@ -576,9 +561,9 @@ describe("service deletion", () => {
       });
       return order.id;
     });
-    expect(
-      await refusal(run((tx) => serviceDelete.deleteZone(tx, f.cfg, noFloor, f.alpha, NOW))),
-    ).toBe("zone.order_in_progress");
+    expect(await refusal(run((tx) => serviceDelete.deleteZone(tx, noFloor, f.alpha, NOW)))).toBe(
+      "zone.order_in_progress",
+    );
     await run((tx) =>
       tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, orderId)),
     );
@@ -596,9 +581,9 @@ describe("service deletion", () => {
         .returning({ id: departmentTransferRequests.id });
       return request!.id;
     });
-    expect(
-      await refusal(run((tx) => serviceDelete.deleteZone(tx, f.cfg, noFloor, f.alpha, NOW))),
-    ).toBe("zone.transfer_pending");
+    expect(await refusal(run((tx) => serviceDelete.deleteZone(tx, noFloor, f.alpha, NOW)))).toBe(
+      "zone.transfer_pending",
+    );
     await run((tx) =>
       tx
         .update(departmentTransferRequests)
@@ -606,8 +591,7 @@ describe("service deletion", () => {
         .where(eq(departmentTransferRequests.id, transferId)),
     );
     expect(
-      (await run((tx) => serviceDelete.readZoneDeleteImpact(tx, f.cfg, noFloor, f.alpha, NOW)))
-        .refusals,
+      (await run((tx) => serviceDelete.readZoneDeleteImpact(tx, noFloor, f.alpha, NOW))).refusals,
     ).toEqual([]);
     const profileId = await run(async (tx) => {
       const [profile] = await tx
@@ -623,9 +607,9 @@ describe("service deletion", () => {
       await tx.insert(deviceProfileZones).values({ deviceProfileId: profile!.id, zoneId: f.alpha });
       return profile!.id;
     });
-    expect(
-      await refusal(run((tx) => serviceDelete.deleteZone(tx, f.cfg, noFloor, f.alpha, NOW))),
-    ).toBe("zone.profile_in_use");
+    expect(await refusal(run((tx) => serviceDelete.deleteZone(tx, noFloor, f.alpha, NOW)))).toBe(
+      "zone.profile_in_use",
+    );
     expect(
       (
         await run((tx) =>
@@ -650,7 +634,7 @@ describe("service deletion", () => {
 
   it("deletes an unused zone, frees its name, and rejects repeated reads and writes", async () => {
     const f = await fixture();
-    const impact = await run((tx) => serviceDelete.deleteZone(tx, f.cfg, noFloor, f.alpha, NOW));
+    const impact = await run((tx) => serviceDelete.deleteZone(tx, noFloor, f.alpha, NOW));
     expect(impact.target).toEqual({ id: f.alpha, name: "Alpha" });
     expect(impact.refusals).toEqual([]);
     expect(impact.ends).toEqual([]);
@@ -666,13 +650,11 @@ describe("service deletion", () => {
       tx.insert(floorZones).values({ locationId: f.cfg.locationId, name: "Alpha" }),
     );
     expect(
-      await refusal(
-        run((tx) => serviceDelete.readZoneDeleteImpact(tx, f.cfg, noFloor, f.alpha, NOW)),
-      ),
+      await refusal(run((tx) => serviceDelete.readZoneDeleteImpact(tx, noFloor, f.alpha, NOW))),
     ).toBe("service_zone.not_found");
-    expect(
-      await refusal(run((tx) => serviceDelete.deleteZone(tx, f.cfg, noFloor, f.alpha, NOW))),
-    ).toBe("service_zone.not_found");
+    expect(await refusal(run((tx) => serviceDelete.deleteZone(tx, noFloor, f.alpha, NOW)))).toBe(
+      "service_zone.not_found",
+    );
   });
 
   it("deletes a department and linked inactive zone while preserving their names", async () => {
@@ -681,11 +663,9 @@ describe("service deletion", () => {
       tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, f.beta)),
     );
     const before = await run((tx) =>
-      serviceDelete.readDepartmentDeleteImpact(tx, f.cfg, noFloor, f.dining, NOW),
+      serviceDelete.readDepartmentDeleteImpact(tx, noFloor, f.dining, NOW),
     );
-    const done = await run((tx) =>
-      serviceDelete.deleteDepartment(tx, f.cfg, noFloor, f.dining, NOW),
-    );
+    const done = await run((tx) => serviceDelete.deleteDepartment(tx, noFloor, f.dining, NOW));
     expect(done).toEqual(before);
     expect(
       await run((tx) =>
@@ -709,7 +689,7 @@ describe("service deletion", () => {
         .values({ locationId: f.cfg.locationId, name: "Dining", tradingName: "Dining" }),
     );
     expect(
-      await refusal(run((tx) => serviceDelete.deleteDepartment(tx, f.cfg, noFloor, f.dining, NOW))),
+      await refusal(run((tx) => serviceDelete.deleteDepartment(tx, noFloor, f.dining, NOW))),
     ).toBe("department.not_found");
   });
 });

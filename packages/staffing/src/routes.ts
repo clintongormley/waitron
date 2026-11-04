@@ -188,9 +188,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const week = c.req.query("week");
         if (!isRotaWeek(week)) throw new AppError("management.request_invalid", { field: "week" });
-        return c.json(
-          await gatedBy("schedule.manage", sessionId, (tx) => readRotaWeek(tx, ctx.cfg, week)),
-        );
+        return c.json(await gatedBy("schedule.manage", sessionId, (tx) => readRotaWeek(tx, week)));
       }),
     );
     app.post(`${ROOT}/rota/change-week`, (c) =>
@@ -211,7 +209,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const body = await readJsonBody<unknown>(c);
         const shiftId = await gatedBy("schedule.manage", sessionId, (tx) =>
-          addRotaShift(tx, ctx.cfg, rotaBody(body, false) as unknown as RotaShiftInput),
+          addRotaShift(tx, rotaBody(body, false) as unknown as RotaShiftInput),
         );
         return c.json({ shiftId }, 201);
       }),
@@ -222,7 +220,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
         const shiftId = normaliseUuid(c.req.param("shiftId"), "shiftId");
         const body = await readJsonBody<unknown>(c);
         await gatedBy("schedule.manage", sessionId, (tx) =>
-          updateRotaShift(tx, ctx.cfg, shiftId, rotaBody(body, true) as RotaShiftPatch),
+          updateRotaShift(tx, shiftId, rotaBody(body, true) as RotaShiftPatch),
         );
         return c.body(null, 204);
       }),
@@ -231,7 +229,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const shiftId = normaliseUuid(c.req.param("shiftId"), "shiftId");
-        await gatedBy("schedule.manage", sessionId, (tx) => removeRotaShift(tx, ctx.cfg, shiftId));
+        await gatedBy("schedule.manage", sessionId, (tx) => removeRotaShift(tx, shiftId));
         return c.body(null, 204);
       }),
     );
@@ -251,7 +249,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
         if (month === null) throw new AppError("management.request_invalid", { field: "month" });
         const at = new Date();
         return c.json(
-          await gatedBy(VIEW_VENUE, sessionId, (tx) => readStaffingMonth(tx, ctx.cfg, month, at)),
+          await gatedBy(VIEW_VENUE, sessionId, (tx) => readStaffingMonth(tx, month, at)),
         );
       }),
     );
@@ -260,9 +258,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = normaliseUuid(c.req.param("seasonId"), "SeasonId");
-        return c.json(
-          await gatedBy(VIEW_VENUE, sessionId, (tx) => readSeasonStaffing(tx, ctx.cfg, id)),
-        );
+        return c.json(await gatedBy(VIEW_VENUE, sessionId, (tx) => readSeasonStaffing(tx, id)));
       }),
     );
 
@@ -282,9 +278,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = normaliseUuid(c.req.param("specialDayId"), "SpecialDayId");
-        return c.json(
-          await gatedBy(VIEW_VENUE, sessionId, (tx) => readSpecialDayStaffing(tx, ctx.cfg, id)),
-        );
+        return c.json(await gatedBy(VIEW_VENUE, sessionId, (tx) => readSpecialDayStaffing(tx, id)));
       }),
     );
 

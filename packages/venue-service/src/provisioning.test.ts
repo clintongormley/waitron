@@ -124,7 +124,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     expect(steps.rows).toEqual(
       STARTER_STEPS.map((step) => ({ name: STARTER_STEP_NAMES[step.name].es })),
     );
-    const seasons = await db.transaction((tx) => readSeasons(tx, { locationId }));
+    const seasons = await db.transaction((tx) => readSeasons(tx));
     expect(seasons.map(({ name }) => name)).toEqual(
       (["Spring", "Summer", "Autumn", "Winter"] as const).map(
         (season) => STARTER_SEASON_NAMES[season].es,
@@ -205,7 +205,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
 
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
 
-    const read = await db.transaction((tx) => readSeasons(tx, { locationId }));
+    const read = await db.transaction((tx) => readSeasons(tx));
     expect(read.map(({ name, startsOn }) => ({ name, startsOn }))).toEqual([
       { name: "Spring", startsOn: "03-01" },
       { name: "Summer", startsOn: "06-01" },
@@ -384,7 +384,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
     const venueId = await venueLocationId(db);
     const locationId = brandLocationId(venueId);
-    const cfg = { locationId };
     const node = { locationId, nodeId: await seedNode(db) };
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     const stored = async () =>
@@ -398,8 +397,8 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await runSeed();
     expect(await stored()).toEqual({ geographies: 0, entries: 0 });
     const fresh = await db.transaction(async (tx) => ({
-      read: await readHolidays(tx, cfg, "2026-01-01", "2026-01-31"),
-      model: await readHolidayAreaModel(tx, cfg),
+      read: await readHolidays(tx, "2026-01-01", "2026-01-31"),
+      model: await readHolidayAreaModel(tx),
     }));
     expect(fresh.read.facts.map(({ date, scope }) => ({ date, scope }))).toEqual([
       { date: "2026-01-01", scope: "national" },
@@ -418,7 +417,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const entry = await db.transaction((tx) =>
       saveSpecialDay(
         tx,
-        cfg,
         null,
         {
           name: "Corpus Christi",
@@ -431,7 +429,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     );
     const readDays = () =>
       db.transaction((tx) =>
-        readSpecialDaysModel(tx, cfg, "2026-06-04", "2026-06-04", new Date("2026-01-01T12:00:00Z")),
+        readSpecialDaysModel(tx, "2026-06-04", "2026-06-04", new Date("2026-01-01T12:00:00Z")),
       );
     const before = await readDays();
     await runSeed();
@@ -467,8 +465,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         pass: await profile("tablet-landscape", ["show-expo", "hand-over-orders"]),
       };
       const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
-      const access = (id: string) =>
-        db.transaction((tx) => readProfileServiceAccess(tx, { locationId }, id));
+      const access = (id: string) => db.transaction((tx) => readProfileServiceAccess(tx, id));
       const defaults = async () => {
         const rows = await db.execute<{ department_id: string; zone_id: string }>(sql`
           select department_id, zone_id from zone_service_policies
@@ -525,7 +522,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       await runSeed();
 
       expect(await bindings()).toEqual(before);
-      const screens = await db.transaction((tx) => readProfileKitchenScreens(tx, { locationId }));
+      const screens = await db.transaction((tx) => readProfileKitchenScreens(tx));
       const till = screens.find((entry) => entry.profileId === profiles.till)?.screens;
       expect({ ...till?.pass, stationIds: [...(till?.pass?.stationIds ?? [])].sort() }).toEqual({
         stationIds: [bar!.id],
@@ -535,14 +532,14 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
 
     it("leaves a profile's scope alone on a re-run", async () => {
-      const { locationId, profiles, runSeed, access, defaults } = await venue();
+      const { profiles, runSeed, access, defaults } = await venue();
       await runSeed();
       const { department_id } = await defaults();
       const terrace = await db.transaction((tx) =>
-        createServiceZone(tx, { locationId }, { name: "Terrace", departmentId: department_id }),
+        createServiceZone(tx, { name: "Terrace", departmentId: department_id }),
       );
       await db.transaction((tx) =>
-        setProfileServiceAccess(tx, { locationId }, profiles.till, {
+        setProfileServiceAccess(tx, profiles.till, {
           departmentId: department_id,
           allowedZoneIds: [terrace.id],
           startingZoneId: terrace.id,

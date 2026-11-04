@@ -121,7 +121,7 @@ async function readAllergyState(tx: Transaction, cfg: TradingContext, requestedP
     zoneId === null || freshIds.length === 0
       ? []
       : (
-          await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId, {
+          await VENUE_SERVICE.listZoneOffers(tx, zoneId, {
             menuItemIds: [...new Set(freshIds)],
             withDefault: false,
           })

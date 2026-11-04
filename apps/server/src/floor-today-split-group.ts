@@ -116,14 +116,7 @@ async function splitGroup(
         if (leaving.length > 0) await leaveForClearing(tx, leaving, nowIso());
         await leaveAsGroup(tx, merge.joinId, partIds, staying.length >= 2 ? seats : null);
       } else {
-        await putBack(
-          tx,
-          cfg,
-          removals,
-          now,
-          { zoneId, merge, staying, rejoin },
-          { partIds, seats },
-        );
+        await putBack(tx, removals, now, { zoneId, merge, staying, rejoin }, { partIds, seats });
       }
     },
   );
@@ -132,7 +125,6 @@ async function splitGroup(
 /** `partIds` leave the group and `rejoin`'s joined table is put back over `staying`. */
 async function putBack(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   now: Date,
   {
@@ -189,7 +181,7 @@ async function putBack(
       name: null,
     })
     .where(eq(floorTodayTables.tableId, joinedId));
-  await catchUpZone(tx, cfg, removals, zoneId, now);
+  await catchUpZone(tx, removals, zoneId, now);
 }
 
 /** `partIds` leave the group; with `seats`, what stays is still a group of that many seats. */

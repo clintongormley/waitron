@@ -74,7 +74,7 @@ beforeEach(async () => {
   requestCookie = await sessionCookieForTest(suite.db, token);
   const [party] = await suite.db.insert(parties).values({ openedBy: personId }).returning();
   partyId = party!.id;
-  const zone = await createZone(suite.db, cfg, { name: "Tables" });
+  const zone = await createZone(suite.db, { name: "Tables" });
   tableZoneId = zone.id;
   const table = await createTable(suite.db, cfg, { label: "Table 1", zoneId: zone.id });
   await suite.db.insert(partyTables).values({ partyId, tableId: table.id });
@@ -441,10 +441,10 @@ describe("A669 allergy routes", () => {
     expect(await snapshot()).toMatchObject({ answer: null, revision: 0 });
   });
   it.each(verbs)("checks party zones for %s and serves an allowed control", async (verb) => {
-    const elsewhere = await createZone(suite.db, cfg, { name: "Elsewhere" });
-    const [department] = await listDepartments(suite.db, cfg);
+    const elsewhere = await createZone(suite.db, { name: "Elsewhere" });
+    const [department] = await listDepartments(suite.db);
     const restrict = (zoneId: string) =>
-      setProfileServiceAccess(suite.db, cfg, profileId, {
+      setProfileServiceAccess(suite.db, profileId, {
         departmentId: department!.id,
         allowedZoneIds: [zoneId],
         startingZoneId: zoneId,

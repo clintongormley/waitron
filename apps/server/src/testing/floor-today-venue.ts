@@ -163,18 +163,18 @@ export async function setsDepartment(
 }> {
   const name = (base: string) => `${base} ${randomUUID().slice(0, 8)}`;
   return inTx(v, async (tx) => {
-    const department = await createDepartment(tx, v.cfg, {
+    const department = await createDepartment(tx, {
       name: name("Dept"),
       orderStart: "table",
     });
-    const zone = await createServiceZone(tx, v.cfg, {
+    const zone = await createServiceZone(tx, {
       name: name("Inside"),
       departmentId: department.id,
     });
     const menu = await createCatalogue(tx, { name: name("Menu") });
     const period = async (periodName: string) =>
       (
-        await saveMenuPeriod(tx, v.cfg, department.id, {
+        await saveMenuPeriod(tx, department.id, {
           name: periodName,
           menuId: menu.id,
           staffMenuIds: [],
@@ -184,7 +184,6 @@ export async function setsDepartment(
     const dinnerPeriod = await period("Dinner");
     await replaceMenuWeek(
       tx,
-      v.cfg,
       department.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -201,7 +200,7 @@ export async function setsDepartment(
         .insert(floorPlanSets)
         .values({ locationId: v.cfg.locationId })
         .returning({ id: floorPlanSets.id });
-      await linkFloorPlanSet(tx, v.cfg, {
+      await linkFloorPlanSet(tx, {
         setId: row!.id,
         departmentId: department.id,
         name: setName,
@@ -296,7 +295,7 @@ export async function standardAndDinner(
         .where(eq(menuPeriods.id, d.lunchPeriod));
       const { revision } = await readLayout(tx, v.cfg, { setId, zoneId: d.zoneId });
       const day = await todayBusinessDay(tx, now);
-      return updateLayout(tx, v.cfg, REMOVALS, d.zoneId, day, now, {
+      return updateLayout(tx, REMOVALS, d.zoneId, day, now, {
         setId,
         layoutRevision: revision,
       });

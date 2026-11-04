@@ -28,7 +28,6 @@ describe("findDeadEnds", () => {
     await inTx(v, async (tx) => {
       await setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: v.productId("Caña") }, zoneId: null },
         { kind: "station", stationId: bar!.id },
       );
@@ -38,7 +37,6 @@ describe("findDeadEnds", () => {
         .where(eq(kitchenStations.isDefault, true));
       await setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: v.productId("Burger") }, zoneId: null },
         { kind: "station", stationId: kitchen!.id },
       );
@@ -46,12 +44,11 @@ describe("findDeadEnds", () => {
         .update(kitchenStations)
         .set({ isDefault: false })
         .where(eq(kitchenStations.id, kitchen!.id));
-      await setStationToday(tx, v.cfg, bar!.id, "closed", at);
+      await setStationToday(tx, bar!.id, "closed", at);
     });
     const answer = await inTx(v, (tx) =>
       findDeadEnds(
         tx,
-        v.cfg,
         v.counter.zoneId,
         [
           { key: "lager", productId: v.productId("Caña"), quantity: "2", makeAt: null },
@@ -73,7 +70,6 @@ describe("findDeadEnds", () => {
     const chosen = await inTx(v, (tx) =>
       findDeadEnds(
         tx,
-        v.cfg,
         v.counter.zoneId,
         [{ key: "lager", productId: v.productId("Caña"), quantity: "2", makeAt: bar!.id }],
         at,
@@ -86,7 +82,6 @@ describe("findDeadEnds", () => {
     const switchedOff = await inTx(v, (tx) =>
       findDeadEnds(
         tx,
-        v.cfg,
         v.counter.zoneId,
         [{ key: "lager", productId: v.productId("Caña"), quantity: "2", makeAt: null }],
         at,
@@ -103,11 +98,10 @@ describe("findDeadEnds", () => {
         name: `Destination bar ${randomUUID()}`,
       })
       .returning({ id: kitchenStations.id });
-    await inTx(v, (tx) => setStationToday(tx, v.cfg, bar!.id, "closed", at, destination!.id));
+    await inTx(v, (tx) => setStationToday(tx, bar!.id, "closed", at, destination!.id));
     const replaced = await inTx(v, (tx) =>
       findDeadEnds(
         tx,
-        v.cfg,
         v.counter.zoneId,
         [{ key: "lager", productId: v.productId("Caña"), quantity: "2", makeAt: null }],
         at,

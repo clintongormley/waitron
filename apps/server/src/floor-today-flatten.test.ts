@@ -472,7 +472,7 @@ describe("Split a table and the floor-wide reset on a flattened group", () => {
 
     const command = await commandFor(v, partyId);
     await inTx(v, (tx) => finishTable(tx, { partyId, ...command }));
-    await inTx(v, (tx) => catchUpZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+    await inTx(v, (tx) => catchUpZone(tx, REMOVALS, zoneId, NOW));
 
     const after = await everything();
     expect(after.today).toEqual(before.today);

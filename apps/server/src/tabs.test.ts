@@ -667,7 +667,7 @@ describe("readTabLines", () => {
         },
       ]),
     );
-    const pending = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const pending = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(pending.find((line) => line.productId === cafeId)).toMatchObject({
       nutrition: { allergens: { milk: {} }, dietaryDeclarations: ["no_meat"] },
     });
@@ -708,7 +708,7 @@ describe("readTabLines", () => {
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, variantId, quantity: "1" }]),
     );
-    const rows = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const rows = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(rows[0]).toMatchObject({
       productId: variantId,
       nutrition: { allergens: { nuts: { kinds: ["almonds"] } }, dietaryDeclarations: ["kosher"] },
@@ -717,7 +717,7 @@ describe("readTabLines", () => {
     await db.execute(
       sql`update products set allergens = null, dietary_declarations = null where id = ${variantId}`,
     );
-    const inherited = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const inherited = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(inherited[0]!.nutrition).toEqual({
       allergens: { milk: {} },
       dietaryDeclarations: ["halal"],
@@ -738,7 +738,7 @@ describe("readTabLines", () => {
     await asApp(cfg, (tx) => fireAll(tx, cfg, tabId));
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
 
-    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(lines).toHaveLength(3);
     expect(lines[0]).toMatchObject({
       lineNo: 1,
@@ -779,8 +779,8 @@ describe("readTabLines", () => {
       ]),
     );
 
-    await asApp(cfg, (tx) => deleteCourse(tx, cfg, postres.id));
-    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    await asApp(cfg, (tx) => deleteCourse(tx, postres.id));
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     const cafe = lines.find((l) => l.productId === cafeId)!;
     const agua = lines.find((l) => l.productId === aguaId)!;
     // The earliest course fires on send; a later one is held.
@@ -810,7 +810,7 @@ describe("readTabLines", () => {
       ]),
     );
 
-    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(lines).toHaveLength(2);
     const parent = lines.find((l) => l.productId === cafeId)!;
     const child = lines.find((l) => l.productId === aguaId)!;
@@ -840,7 +840,7 @@ describe("readTabLines", () => {
         and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.productId, aguaId)),
       );
 
-    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(lines.find((line) => line.productId === aguaId)).toMatchObject({
       quantity: "0.150",
       priceQuantity: "0.050",
@@ -864,7 +864,7 @@ describe("readTabLines", () => {
         },
       ]),
     );
-    const lines = await asApp(venue.cfg, (tx) => readTabLines(tx, venue.cfg, venue.party.tabId));
+    const lines = await asApp(venue.cfg, (tx) => readTabLines(tx, venue.party.tabId));
     const water = lines.find((line) => line.productId === venue.products.water)!;
     const chips = lines.find((line) => line.productId === venue.products.chips)!;
     expect(chips.parentLineNo).toBe(water.lineNo);
@@ -890,7 +890,7 @@ describe("readTabLines", () => {
       ]),
     );
 
-    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(lines).toHaveLength(2);
     const parent = lines.find((l) => l.productId === cafeId)!;
     const child = lines.find((l) => l.productId === aguaId)!;
@@ -914,7 +914,7 @@ describe("readTabLines", () => {
       ]),
     );
 
-    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     const parent = lines.find((l) => l.productId === cafeId)!;
     const child = lines.find((l) => l.productId === aguaId)!;
     expect(parent).toMatchObject({
@@ -950,7 +950,7 @@ describe("readTabLines", () => {
       .where(eq(workingOrderLines.workingOrderId, tabId))
       .orderBy(workingOrderLines.lineNo);
 
-    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
 
     expect(lines.map(({ lineNo, id }) => ({ lineNo, id }))).toEqual(stored);
     expect(stored).toHaveLength(2);
@@ -961,7 +961,7 @@ describe("readTabLines", () => {
     const { tabId } = await asApp(cfg, (tx) =>
       openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
-    const [line] = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const [line] = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(line!.note).toBeNull();
   });
 
@@ -974,12 +974,12 @@ describe("readTabLines", () => {
         { menuItemId: aguaOffer, quantity: "1", hold: true },
       ]),
     );
-    const before = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const before = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(before[0]).toMatchObject({ sentAt: expect.any(String), firedAt: expect.any(String) });
 
     await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]));
 
-    const [recalled, held] = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const [recalled, held] = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(recalled).toMatchObject({
       lineNo: 1,
       firedAt: null,
@@ -991,13 +991,13 @@ describe("readTabLines", () => {
 
   it("reads a no-preparation line that was released as sent, with no ticket state", async () => {
     const { cfg, tableId, aguaId, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: aguaOffer, quantity: "1" }]),
     );
 
-    const [line] = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const [line] = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(line).toMatchObject({ sentAt: expect.any(String), firedAt: null, state: null });
   });
 
@@ -1009,14 +1009,14 @@ describe("readTabLines", () => {
     await asApp(cfg, (tx) =>
       tx.execute(sql`update products set unit_price = 999 where id = ${cafeId}`),
     );
-    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(lines[0]!.unitPriceGross).toBe("1.50");
   });
 
   it("returns [] for an open tab with no lines", async () => {
     const { cfg, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
-    expect(await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId))).toEqual([]);
+    expect(await asApp(cfg, (tx) => readTabLines(tx, tabId))).toEqual([]);
   });
 
   it("refuses a settled tab and an absent id (tab.not_open — assertTabOpen, an UNLOCKED read)", async () => {
@@ -1027,12 +1027,12 @@ describe("readTabLines", () => {
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
-    await expect(asApp(cfg, (tx) => readTabLines(tx, cfg, tabId))).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => readTabLines(tx, tabId))).rejects.toMatchObject({
       code: "tab.not_open",
       params: { tabId },
     });
     const missing = randomUUID();
-    await expect(asApp(cfg, (tx) => readTabLines(tx, cfg, missing))).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => readTabLines(tx, missing))).rejects.toMatchObject({
       code: "tab.not_open",
       params: { tabId: missing },
     });
@@ -1044,7 +1044,7 @@ describe("listTablesWithState (occupancy)", () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const operatorId = randomUUID();
 
-    const free = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    const free = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(free).toEqual([
       expect.objectContaining({
         id: tableId,
@@ -1063,7 +1063,7 @@ describe("listTablesWithState (occupancy)", () => {
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "2" }]),
     );
-    const busy = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    const busy = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(busy[0]).toMatchObject({
       state: "open-tab",
       hasOpenTab: true,
@@ -1076,11 +1076,11 @@ describe("listTablesWithState (occupancy)", () => {
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
-    const paid = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    const paid = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(paid[0]).toMatchObject({ state: "open-tab", hasOpenTab: false });
 
     await asApp(cfg, (tx) => finishTable(tx, { partyId, expectedPartyRevision: 0, operatorId }));
-    const freed = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    const freed = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(freed[0]).toMatchObject({ state: "free", hasOpenTab: false, party: null });
   });
 
@@ -1088,7 +1088,7 @@ describe("listTablesWithState (occupancy)", () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const orderId = await seedFiredDelivery(cfg, cafeOffer, tableId);
 
-    const pending = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    const pending = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(pending[0]).toMatchObject({
       state: "delivery-pending",
       hasOpenTab: false,
@@ -1101,13 +1101,13 @@ describe("listTablesWithState (occupancy)", () => {
         sql`update working_orders set status = 'settled', settled_at = ${settledAt}, collected_at = ${settledAt} where id = ${orderId}`,
       ),
     );
-    const cleared = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    const cleared = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(cleared[0]).toMatchObject({ state: "free", pendingDeliveries: 0 });
   });
 
   it("reports pendingToServe (unserved tab lines), 0 for a free table, and carries zoneId", async () => {
     const { cfg, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId } = await setupVenue();
-    const zone = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Comedor" }));
+    const zone = await asApp(cfg, (tx) => createZone(tx, { name: "Comedor" }));
     await asApp(cfg, async (tx) => {
       // Through the table definition: `departments.id` and `.created_at` are `$defaultFn` generators.
       const [department] = await tx
@@ -1130,7 +1130,6 @@ describe("listTablesWithState (occupancy)", () => {
       await offerMenuThroughZone(tx, cfg, zone.id, menuId, { makeDefault: true });
       await setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "category", categoryId }, zoneId: null },
         { kind: "no_preparation" },
       );
@@ -1152,7 +1151,7 @@ describe("listTablesWithState (occupancy)", () => {
       }),
     );
 
-    let rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    let rows = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(rows.find((t) => t.id === tableId)).toMatchObject({
       zoneId: zone.id,
       pendingToServe: 2,
@@ -1164,11 +1163,11 @@ describe("listTablesWithState (occupancy)", () => {
 
     await asApp(cfg, (tx) => fireAll(tx, cfg, tabId));
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
-    rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    rows = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(rows.find((t) => t.id === tableId)!.pendingToServe).toBe(1);
 
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 2));
-    rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    rows = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(rows.find((t) => t.id === tableId)!.pendingToServe).toBe(0);
   });
 
@@ -1178,7 +1177,7 @@ describe("listTablesWithState (occupancy)", () => {
       openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     await seedFiredDelivery(cfg, cafeOffer, tableId);
-    const rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    const rows = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(rows[0]).toMatchObject({ state: "open-tab", hasOpenTab: true, pendingDeliveries: 1 });
   });
 });
@@ -1278,7 +1277,7 @@ it("returns a tab line's stored staff names and options answers", async () => {
         optionSnapshots,
       })
       .where(eq(workingOrderLines.workingOrderId, tabId));
-    expect((await readTabLines(tx, cfg, tabId))[0]).toMatchObject({
+    expect((await readTabLines(tx, tabId))[0]).toMatchObject({
       name: "Recorded coffee (Large)",
       optionSnapshots,
     });
@@ -1286,11 +1285,10 @@ it("returns a tab line's stored staff names and options answers", async () => {
 });
 
 /** Route `productId` to no station: a bottled drink handed over at the bar. */
-async function routeToNoPreparation(cfg: OriginConfig, productId: string): Promise<void> {
+async function routeToNoPreparation(productId: string): Promise<void> {
   await withTransaction(db, (tx) =>
     setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "product", productId }, zoneId: null },
       { kind: "no_preparation" },
     ),
@@ -1339,7 +1337,7 @@ async function sentState(orderId: string): Promise<
 describe("sent_at: when a line is sent, and what the kitchen was asked to make", () => {
   it("stamps a routed line and a no-preparation line sent in one round; only the routed one has a ticket, at the quantity fired", async () => {
     const { cfg, tableId, cafeId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -1359,7 +1357,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("stamps neither held dish until selected line release, then both", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
@@ -1407,7 +1405,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("stamps a held course's no-route line when its routed line is sent by sendLines", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
@@ -1426,7 +1424,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("sending everything held stamps a held no-route line even when nothing routed is held beside it", async () => {
     const { cfg, tableId, aguaId, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
@@ -1446,7 +1444,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("sending one held line of a course stamps the course's no-route line only once nothing routed in it is still held", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
@@ -1476,7 +1474,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("stamps a no-route line with no course at the round even when the round holds another line", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -1596,7 +1594,7 @@ async function ticketOfLine(
 
 /** A station's notices, as the fields a cook reads. */
 async function noticesAt(cfg: OriginConfig, stationId: string) {
-  return (await asApp(cfg, (tx) => listStationNotices(tx, cfg, stationId))).map((notice) => ({
+  return (await asApp(cfg, (tx) => listStationNotices(tx, stationId))).map((notice) => ({
     kind: notice.kind,
     lineName: notice.lineName,
     quantity: notice.quantity,
@@ -1961,7 +1959,7 @@ describe("when a station does not allow changes after sending", () => {
 
   it("still changes a no-preparation line that was released, which has no ticket item", async () => {
     const { cfg, tableId, aguaId, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
@@ -1973,7 +1971,7 @@ describe("when a station does not allow changes after sending", () => {
     );
     await expect(asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]))).resolves.toBeUndefined();
 
-    const [line] = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    const [line] = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(line).toMatchObject({ sentAt: expect.any(String), state: null, note: "sin hielo" });
   });
 });
@@ -2355,7 +2353,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
   it("edits a held-course line and a no-route line freely, with no notice", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -3297,7 +3295,7 @@ describe("the kitchen screen and the expo board are told which lines were sold i
     }
 
     expect(await linesOf(tabId)).toEqual([]);
-    const notices = await asApp(cfg, (tx) => listStationNotices(tx, cfg, stationId));
+    const notices = await asApp(cfg, (tx) => listStationNotices(tx, stationId));
     expect(notices.map((notice) => [notice.kind, notice.lineName, notice.soldInEach])).toEqual([
       ["void", "Bread", false],
       ["void", "Almendras", false],

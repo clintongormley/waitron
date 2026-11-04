@@ -208,11 +208,7 @@ it("transfers two photo identities sharing replacement bytes with framing, names
         originalFilename: "second.webp",
       })
     ).image;
-    const department = await createDepartment(
-      tx,
-      { locationId: brandLocationId(source.locationId) },
-      { name: "Photo receipt" },
-    );
+    const department = await createDepartment(tx, { name: "Photo receipt" });
     await tx.insert(departmentReceipts).values({
       departmentId: department.id,
       receipt: { logo: a.filename, phone: "+34 600 111 222" },
@@ -244,7 +240,7 @@ it("transfers two photo identities sharing replacement bytes with framing, names
   expect(transferred.tables.media_image_blobs).toHaveLength(1);
   expect(transferred.tables.media_image_edits).toHaveLength(2);
   const originalBundle = structuredClone(transferred);
-  const target = await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
@@ -288,7 +284,7 @@ it("transfers two photo identities sharing replacement bytes with framing, names
     .select()
     .from(departments)
     .where(eq(departments.name, "Photo receipt"));
-  const scope = { locationId: brandLocationId(target.locationId), receiptLanguages: ["es-ES"] };
+  const scope = { receiptLanguages: ["es-ES"] };
   for (const paper of ["58mm", "80mm"] as const) {
     const printed = await readPrintedDepartmentReceipt(
       targetSuite.db,
@@ -784,11 +780,10 @@ describe("configuration transfer database path", () => {
         .select({ id: departments.id })
         .from(departments)
         .where(eq(departments.isDefault, true));
-      const practiceZone = await createServiceZone(
-        tx,
-        { locationId: brandLocationId(source.locationId) },
-        { name: "Practice tables", departmentId: defaultDepartment!.id },
-      );
+      const practiceZone = await createServiceZone(tx, {
+        name: "Practice tables",
+        departmentId: defaultDepartment!.id,
+      });
       await tx.insert(diningTables).values({
         zoneId: practiceZone.id,
         id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
@@ -1892,7 +1887,7 @@ it("transfers staff roles, who holds them and a painted season week under new id
   });
   const scope = { locationId: brandLocationId(source.locationId) };
   const original = await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(tx, scope, { name: "Staffed room" });
+    const department = await createDepartment(tx, { name: "Staffed room" });
     const [season] = await tx
       .select({ id: seasons.id })
       .from(seasons)
@@ -2001,7 +1996,7 @@ it("transfers a station's painted season day and a special day's painted date un
   });
   const scope = { locationId: brandLocationId(source.locationId) };
   const original = await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(tx, scope, { name: "Terrace" });
+    const department = await createDepartment(tx, { name: "Terrace" });
     const [station] = await tx
       .insert(kitchenStations)
       .values({ locationId: scope.locationId, name: "Staffed grill" })
@@ -2157,10 +2152,10 @@ it("transfers a department's receipt logo with its image and pictures, and the i
   });
   const { writeDepartmentReceipt, readDepartmentReceipt, readPrintedDepartmentReceipt } =
     await import("@waitron/venue-service");
-  const cfg = { locationId: brandLocationId(source.locationId), receiptLanguages: ["es-ES"] };
+  const cfg = { receiptLanguages: ["es-ES"] };
   const pictures = await drawLogoRasters(photo.bytes);
   await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(tx, cfg, { name: "Logo receipt" });
+    const department = await createDepartment(tx, { name: "Logo receipt" });
     await writeDepartmentReceipt(tx, cfg, department.id, { logo }, pictures);
     await tx.insert(tenantReceipts).values({ receipt: { headerSubtitle: "Retired default" } });
   });
@@ -2173,27 +2168,26 @@ it("transfers a department's receipt logo with its image and pictures, and the i
     versions,
   );
   expect(transferred.tables).not.toHaveProperty("tenant_receipts");
-  const target = await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
-  const printed = async (db: typeof suite.db, location: string) =>
+  const printed = async (db: typeof suite.db) =>
     withTransaction(db, async (tx) => {
       const [department] = await tx
         .select()
         .from(departments)
         .where(eq(departments.name, "Logo receipt"));
-      const scope = { ...cfg, locationId: brandLocationId(location) };
       return {
-        receipt: await readDepartmentReceipt(tx, scope, department!.id),
-        narrow: (await readPrintedDepartmentReceipt(tx, scope, department!.id, "58mm")).logo,
-        wide: (await readPrintedDepartmentReceipt(tx, scope, department!.id, "80mm")).logo,
+        receipt: await readDepartmentReceipt(tx, cfg, department!.id),
+        narrow: (await readPrintedDepartmentReceipt(tx, cfg, department!.id, "58mm")).logo,
+        wide: (await readPrintedDepartmentReceipt(tx, cfg, department!.id, "80mm")).logo,
         image: (await readImageBytes(tx, logo)) !== null,
       };
     });
-  const imported = await printed(targetSuite.db, target.locationId);
-  expect(imported).toEqual(await printed(suite.db, source.locationId));
+  const imported = await printed(targetSuite.db);
+  expect(imported).toEqual(await printed(suite.db));
   expect(imported.receipt).toEqual({ logo });
   // 10 × 6 fitted inside 160 dots high on either paper.
   expect([imported.narrow?.widthDots, imported.wide?.widthDots, imported.image]).toEqual([
@@ -3371,11 +3365,7 @@ it("carries a department's Needs clearing switch to the importing venue", async 
     modules: ALL_MODULES,
   });
   await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(
-      tx,
-      { locationId: brandLocationId(source.locationId) },
-      { name: "Cleared terrace" },
-    );
+    const department = await createDepartment(tx, { name: "Cleared terrace" });
     await tx
       .update(departments)
       .set({ needsClearing: true })
@@ -3410,11 +3400,7 @@ describe("a department's late-send manager setting in a configuration transfer",
       modules: ALL_MODULES,
     });
     await withTransaction(suite.db, async (tx) => {
-      const department = await createDepartment(
-        tx,
-        { locationId: brandLocationId(source.locationId) },
-        { name: "Late send terrace" },
-      );
+      const department = await createDepartment(tx, { name: "Late send terrace" });
       await tx
         .update(departments)
         .set({ lateSendNeedsManager: true })
@@ -3500,11 +3486,7 @@ it("carries a department's reminder minutes to the importing venue", async () =>
     modules: ALL_MODULES,
   });
   await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(
-      tx,
-      { locationId: brandLocationId(source.locationId) },
-      { name: "Reminded terrace" },
-    );
+    const department = await createDepartment(tx, { name: "Reminded terrace" });
     await tx
       .update(departments)
       .set({ releaseReminderMinutes: 25 })
@@ -3813,8 +3795,8 @@ async function shortNamedBundle(taxId: string) {
     simplifiedInvoiceLimit: null,
   };
   await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(tx, cfg, { name: "Short service" });
-    const zone = await createServiceZone(tx, cfg, {
+    const department = await createDepartment(tx, { name: "Short service" });
+    const zone = await createServiceZone(tx, {
       name: "Short zone",
       departmentId: department.id,
     });
@@ -4454,18 +4436,16 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const cfg = { locationId: brandLocationId(source.locationId) };
   const original = await withTransaction(suite.db, async (tx) => {
-    const restaurant = await createDepartment(tx, cfg, {
+    const restaurant = await createDepartment(tx, {
       name: "Restaurant",
       orderStart: "table",
     });
-    await createServiceZone(tx, cfg, { name: "Dining room", departmentId: restaurant.id });
-    const terrace = await createServiceZone(tx, cfg, {
+    await createServiceZone(tx, { name: "Dining room", departmentId: restaurant.id });
+    const terrace = await createServiceZone(tx, {
       name: "Terrace",
       departmentId: restaurant.id,
     });
-    await tx.insert(kitchenStations).values({ locationId: source.locationId, name: "Grill" });
     const [live, retired] = await tx
       .insert(deviceProfiles)
       .values([
@@ -4474,7 +4454,7 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
       ])
       .returning({ id: deviceProfiles.id });
     for (const profile of [live!, retired!]) {
-      await setProfileServiceAccess(tx, cfg, profile.id, {
+      await setProfileServiceAccess(tx, profile.id, {
         departmentId: restaurant.id,
         allowedZoneIds: [terrace.id],
         startingZoneId: terrace.id,
@@ -4487,7 +4467,7 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
       .from(deviceProfiles)
       .where(sql`${deviceProfiles.id} not in (${live!.id}, ${retired!.id})`);
     for (const { id } of seeded) {
-      await setProfileServiceAccess(tx, cfg, id, {
+      await setProfileServiceAccess(tx, id, {
         departmentId: null,
         allowedZoneIds: null,
         startingZoneId: null,
@@ -4516,19 +4496,11 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await withTransaction(targetSuite.db, async (tx) => {
-    const [location] = await tx
-      .select({ id: kitchenStations.locationId })
-      .from(kitchenStations)
-      .where(eq(kitchenStations.name, "Grill"));
     const [profile] = await tx
       .select({ id: deviceProfiles.id })
       .from(deviceProfiles)
       .where(eq(deviceProfiles.name, "Terrace handheld"));
-    const access = await readProfileServiceAccess(
-      tx,
-      { locationId: brandLocationId(location!.id) },
-      profile!.id,
-    );
+    const access = await readProfileServiceAccess(tx, profile!.id);
     const zones = new Map(
       (await tx.select({ id: floorZones.id, name: floorZones.name }).from(floorZones)).map(
         (zone) => [zone.id, zone.name],
@@ -4557,13 +4529,12 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const cfg = { locationId: brandLocationId(source.locationId) };
   const original = await withTransaction(suite.db, async (tx) => {
-    const restaurant = await createDepartment(tx, cfg, {
+    const restaurant = await createDepartment(tx, {
       name: "Restaurant",
       orderStart: "table",
     });
-    const terrace = await createServiceZone(tx, cfg, {
+    const terrace = await createServiceZone(tx, {
       name: "Terrace",
       departmentId: restaurant.id,
     });
@@ -4579,14 +4550,14 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
         { name: "Old till", formFactor: "till" },
       ])
       .returning({ id: deviceProfiles.id });
-    await VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, till!.id, {
+    await VENUE_SERVICE.setProfileKitchenScreens(tx, till!.id, {
       station: { stationIds: [grill!.id], zoneIds: null },
       pass: { stationIds: [grill!.id], zoneIds: [terrace.id] },
     });
-    await VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, wall!.id, {
+    await VENUE_SERVICE.setProfileKitchenScreens(tx, wall!.id, {
       pass_monitor: { stationIds: null, zoneIds: null },
     });
-    await VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, retired!.id, {
+    await VENUE_SERVICE.setProfileKitchenScreens(tx, retired!.id, {
       station: { stationIds: [grill!.id], zoneIds: null },
     });
     return { till: till!.id, wall: wall!.id, retired: retired!.id };
@@ -4617,10 +4588,6 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await withTransaction(targetSuite.db, async (tx) => {
-    const [station] = await tx
-      .select({ locationId: kitchenStations.locationId })
-      .from(kitchenStations)
-      .where(eq(kitchenStations.name, "Grill"));
     const names = new Map<string, string>([
       ...(await tx.select({ id: floorZones.id, name: floorZones.name }).from(floorZones)).map(
         (zone): [string, string] => [zone.id, zone.name],
@@ -4635,11 +4602,7 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
       ).map((row): [string, string] => [row.id, row.name]),
     ]);
     const named = (ids: readonly string[] | null) => ids?.map((id) => names.get(id)) ?? null;
-    return (
-      await VENUE_SERVICE.readProfileKitchenScreens(tx, {
-        locationId: brandLocationId(station!.locationId),
-      })
-    )
+    return (await VENUE_SERVICE.readProfileKitchenScreens(tx))
       .filter(({ screens }) => Object.keys(screens).length > 0)
       .map(({ profileId, screens }) => ({
         profile: names.get(profileId),
@@ -5429,9 +5392,8 @@ it("A725 transfers station and department choices", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const scope = { locationId: brandLocationId(source.locationId) };
   await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(tx, scope, {
+    const department = await createDepartment(tx, {
       name: "Receipt department",
       orderStart: "table",
     });
@@ -5439,11 +5401,11 @@ it("A725 transfers station and department choices", async () => {
       .update(departmentSalePolicies)
       .set({ receiptPrintMode: "on_request" })
       .where(eq(departmentSalePolicies.departmentId, department.id));
-    const explicit = await createServiceZone(tx, scope, {
+    const explicit = await createServiceZone(tx, {
       name: "Explicit receipts",
       departmentId: department.id,
     });
-    const inherited = await createServiceZone(tx, scope, {
+    const inherited = await createServiceZone(tx, {
       name: "Inherited receipts",
       departmentId: department.id,
     });
@@ -5499,19 +5461,18 @@ it("transfers a department's customer and staff period menus to its zone under n
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const scope = { locationId: brandLocationId(source.locationId) };
   const sourceIds = await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(tx, scope, {
+    const department = await createDepartment(tx, {
       name: "Menus restaurant",
       orderStart: "table",
     });
-    const bar = await createServiceZone(tx, scope, {
+    const bar = await createServiceZone(tx, {
       name: "Menus bar",
       departmentId: department.id,
     });
     const drinks = await createCatalogue(tx, { name: "Transferred drinks" });
     const breakfasts = await createCatalogue(tx, { name: "Transferred breakfasts" });
-    const period = await saveMenuPeriod(tx, scope, department.id, {
+    const period = await saveMenuPeriod(tx, department.id, {
       name: "Menus service",
       colour: "red",
       menuId: drinks.id,
@@ -5599,15 +5560,15 @@ it("exports and imports all seven cell classes into another venue, remapping eve
   });
   const scope = { locationId: brandLocationId(source.locationId) };
   const sourceIds = await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(tx, scope, {
+    const department = await createDepartment(tx, {
       name: "Routes dining room",
       orderStart: "table",
     });
-    const terrace = await createServiceZone(tx, scope, {
+    const terrace = await createServiceZone(tx, {
       name: "Routes terrace",
       departmentId: department.id,
     });
-    const lounge = await createServiceZone(tx, scope, {
+    const lounge = await createServiceZone(tx, {
       name: "Routes lounge",
       departmentId: department.id,
     });
@@ -5631,31 +5592,20 @@ it("exports and imports all seven cell classes into another venue, remapping eve
     const atStation = (id: string) => ({ kind: "station" as const, stationId: id });
     const categoryRow = { kind: "category" as const, categoryId: category.id };
     const productRow = { kind: "product" as const, productId: product.id };
-    await setRoutingCell(tx, scope, { row: categoryRow, zoneId: null }, atStation(bar!.id));
+    await setRoutingCell(tx, { row: categoryRow, zoneId: null }, atStation(bar!.id));
     await setRoutingCell(
       tx,
-      scope,
       { row: categoryRow, zoneId: terrace.id },
       {
         kind: "no_preparation",
       },
     );
-    await setRoutingCell(tx, scope, { row: productRow, zoneId: null }, atStation(griddle!.id));
-    await setRoutingCell(tx, scope, { row: productRow, zoneId: lounge.id }, atStation(bar!.id));
-    await setRoutingCell(
-      tx,
-      scope,
-      { row: { kind: "all" }, zoneId: terrace.id },
-      atStation(griddle!.id),
-    );
+    await setRoutingCell(tx, { row: productRow, zoneId: null }, atStation(griddle!.id));
+    await setRoutingCell(tx, { row: productRow, zoneId: lounge.id }, atStation(bar!.id));
+    await setRoutingCell(tx, { row: { kind: "all" }, zoneId: terrace.id }, atStation(griddle!.id));
     const noCategoryRow = { kind: "no_category" as const };
-    await setRoutingCell(
-      tx,
-      scope,
-      { row: noCategoryRow, zoneId: null },
-      { kind: "no_preparation" },
-    );
-    await setRoutingCell(tx, scope, { row: noCategoryRow, zoneId: terrace.id }, atStation(bar!.id));
+    await setRoutingCell(tx, { row: noCategoryRow, zoneId: null }, { kind: "no_preparation" });
+    await setRoutingCell(tx, { row: noCategoryRow, zoneId: terrace.id }, atStation(bar!.id));
     return [
       source.locationId,
       department.id,
@@ -5737,11 +5687,11 @@ it("carries a cell's period choices with their cell, including a period whose me
   });
   const scope = { locationId: brandLocationId(source.locationId) };
   const sourceIds = await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(tx, scope, {
+    const department = await createDepartment(tx, {
       name: "Periods dining room",
       orderStart: "table",
     });
-    const terrace = await createServiceZone(tx, scope, {
+    const terrace = await createServiceZone(tx, {
       name: "Periods terrace",
       departmentId: department.id,
     });
@@ -5763,7 +5713,7 @@ it("carries a cell's period choices with their cell, including a period whose me
       vatClass: "general",
     });
     const emptyMenu = await createCatalogue(tx, { name: "Periods empty menu" });
-    const period = await saveMenuPeriod(tx, scope, department.id, {
+    const period = await saveMenuPeriod(tx, department.id, {
       name: "Periods lunches",
       colour: "red",
       menuId: emptyMenu.id,
@@ -5772,13 +5722,11 @@ it("carries a cell's period choices with their cell, including a period whose me
     const atBar = { kind: "station" as const, stationId: bar!.id };
     await setRoutingCell(
       tx,
-      scope,
       { row: { kind: "product", productId: product.id }, zoneId: null },
       atBar,
     );
     await setRoutingCell(
       tx,
-      scope,
       { row: { kind: "category", categoryId: category.id }, zoneId: terrace.id },
       atBar,
     );
@@ -5808,7 +5756,7 @@ it("carries a cell's period choices with their cell, including a period whose me
     "a strong passphrase",
   );
   expect(decoded.tables.routing_cell_periods).toHaveLength(2);
-  const target = await applyVenue(planVenue(venue("B24681362"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B24681362"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: async (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
@@ -5855,11 +5803,7 @@ it("carries a cell's period choices with their cell, including a period whose me
     for (const id of [row.cell_id, row.period_id, row.department_id])
       expect(sourceIds).not.toContain(id);
   const model = await withTransaction(targetSuite.db, (tx) =>
-    routingModel(
-      tx,
-      { locationId: brandLocationId(target.locationId) },
-      new Date("2026-10-09T10:00:00Z"),
-    ),
+    routingModel(tx, new Date("2026-10-09T10:00:00Z")),
   );
   const [productLine, categoryLine] = choices.rows;
   expect(
@@ -5967,7 +5911,7 @@ describe("special days in a configuration transfer", () => {
         closedAllDay: true,
       });
       await insertSpecialDay(tx, cfg, { date: "2027-01-01", name: "New Year" });
-      await setStationToday(tx, cfg, bar.id, "closed", AT);
+      await setStationToday(tx, bar.id, "closed", AT);
     });
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
@@ -6088,8 +6032,8 @@ describe("special days in a configuration transfer", () => {
       tuesday: await namedOn(tx, imported.cfg, "2026-10-06"),
       // 23:00 in Madrid on New Year's Eve, and noon on an ordinary Tuesday.
       states: [
-        await stationStates(tx, imported.cfg, new Date("2026-12-31T22:00:00Z")),
-        await stationStates(tx, imported.cfg, AT),
+        await stationStates(tx, new Date("2026-12-31T22:00:00Z")),
+        await stationStates(tx, AT),
       ],
     }));
     expect(read.eve).toMatchObject({
@@ -6234,7 +6178,7 @@ describe("public holidays in a configuration transfer", () => {
     });
     await moveTo(suite.db, source, "Lleida", "Vielha e Mijaran");
     await withTransaction(suite.db, async (tx) => {
-      await saveHolidayArea(tx, cfg, { areaKey: "aran" });
+      await saveHolidayArea(tx, { areaKey: "aran" });
     });
     await moveTo(suite.db, source, "Madrid", "  MADRID ");
     const versions = await schemaVersionsByModule(
@@ -6303,12 +6247,11 @@ describe("public holidays in a configuration transfer", () => {
     }
     expect(target.locationId).not.toBe(source.locationId);
 
-    const cfg = scope(target);
     const read = () =>
       withTransaction(targetSuite.db, async (tx) => ({
-        model: await readHolidayAreaModel(tx, cfg),
-        epiphany: await readHolidays(tx, cfg, "2026-01-06", "2026-01-06"),
-        aran: await readHolidays(tx, cfg, "2026-06-17", "2026-06-17"),
+        model: await readHolidayAreaModel(tx),
+        epiphany: await readHolidays(tx, "2026-01-06", "2026-01-06"),
+        aran: await readHolidays(tx, "2026-06-17", "2026-06-17"),
       }));
     const inMadrid = await read();
 
@@ -6460,17 +6403,16 @@ it("round-trips departmental transfer directions and desks with remapped ids, le
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const cfg = { locationId: brandLocationId(source.locationId) };
   const original = await withTransaction(suite.db, async (tx) => {
-    const a = await createDepartment(tx, cfg, {
+    const a = await createDepartment(tx, {
       name: "Transfer deli",
       orderStart: "table",
     });
-    const b = await createDepartment(tx, cfg, {
+    const b = await createDepartment(tx, {
       name: "Transfer restaurant",
       orderStart: "table",
     });
-    const zone = await createServiceZone(tx, cfg, {
+    const zone = await createServiceZone(tx, {
       name: "Transfer receiving zone",
       departmentId: b.id,
     });
@@ -6482,16 +6424,16 @@ it("round-trips departmental transfer directions and desks with remapped ids, le
         capabilities: ["take-orders"],
       })
       .returning();
-    await setProfileServiceScope(tx, cfg, profile!.id, {
+    await setProfileServiceScope(tx, profile!.id, {
       departmentId: b.id,
       allowedZoneIds: null,
       startingZoneId: zone.id,
     });
-    await setDepartmentTransferSettings(tx, cfg, a.id, {
+    await setDepartmentTransferSettings(tx, a.id, {
       receivingProfileId: null,
       destinationDepartmentIds: [b.id],
     });
-    await setDepartmentTransferSettings(tx, cfg, b.id, {
+    await setDepartmentTransferSettings(tx, b.id, {
       receivingProfileId: profile!.id,
       destinationDepartmentIds: [],
     });
@@ -6568,14 +6510,14 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
       .update(locations)
       .set({ dayCutover: "04:30:00" })
       .where(eq(locations.id, scope.locationId));
-    const department = await createDepartment(tx, scope, {
+    const department = await createDepartment(tx, {
       name: "Period transfer",
       orderStart: "table",
     });
     const customer = await createCatalogue(tx, { name: "Period customer" });
     const staffFirst = await createCatalogue(tx, { name: "Period staff first" });
     const staffSecond = await createCatalogue(tx, { name: "Period staff second" });
-    const period = await saveMenuPeriod(tx, scope, department.id, {
+    const period = await saveMenuPeriod(tx, department.id, {
       name: "Night transfer",
       colour: "blue",
       menuId: customer.id,
@@ -6583,7 +6525,6 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     });
     await replaceMenuWeek(
       tx,
-      scope,
       department.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -6697,17 +6638,16 @@ it("transfers order start policies under new department and zone ids", async () 
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const scope = { locationId: brandLocationId(source.locationId) };
   const sourceIds = await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(tx, scope, {
+    const department = await createDepartment(tx, {
       name: "Order start department",
       orderStart: "table",
     });
-    const explicit = await createServiceZone(tx, scope, {
+    const explicit = await createServiceZone(tx, {
       name: "Counter override",
       departmentId: department.id,
     });
-    const inherited = await createServiceZone(tx, scope, {
+    const inherited = await createServiceZone(tx, {
       name: "Department follower",
       departmentId: department.id,
     });
@@ -6792,7 +6732,6 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
   const { getStoredLogoRasters } = await import("@waitron/layouts");
   const { resolveReceiptTrim } = await import("@waitron/shared");
   const cfg = {
-    locationId: brandLocationId(source.locationId),
     receiptLanguages: ["es-ES", "ca-ES"],
   };
   const logo = `${"a".repeat(64)}.png`;
@@ -6818,9 +6757,9 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
   };
   const ids = await withTransaction(suite.db, async (tx) => {
     await tx.insert(tenantReceipts).values({ receipt: { ...defaults, logoRasters: pictures } });
-    const own = await createDepartment(tx, cfg, { name: "Own receipt" });
-    const empty = await createDepartment(tx, cfg, { name: "Empty receipt" });
-    const imported = await createDepartment(tx, cfg, { name: "Bad optional receipt" });
+    const own = await createDepartment(tx, { name: "Own receipt" });
+    const empty = await createDepartment(tx, { name: "Empty receipt" });
+    const imported = await createDepartment(tx, { name: "Bad optional receipt" });
     await writeDepartmentReceipt(tx, cfg, own.id, authored, pictures);
     await tx.insert(departmentReceipts).values({
       departmentId: imported.id,
@@ -6852,16 +6791,15 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
       .from(departments)
       .where(eq(departments.locationId, target.locationId));
     const idFor = (name: string) => rows.find((row) => row.name === name)!.id;
-    const targetCfg = { ...cfg, locationId: brandLocationId(target.locationId) };
     const global = await getReceipt(tx);
-    const empty = await readDepartmentReceipt(tx, targetCfg, idFor("Empty receipt"));
+    const empty = await readDepartmentReceipt(tx, cfg, idFor("Empty receipt"));
     return {
       ids: [idFor("Own receipt"), idFor("Empty receipt"), idFor("Bad optional receipt")],
-      own: await readDepartmentReceipt(tx, targetCfg, idFor("Own receipt")),
-      printed: await readPrintedDepartmentReceipt(tx, targetCfg, idFor("Own receipt"), "58mm"),
+      own: await readDepartmentReceipt(tx, cfg, idFor("Own receipt")),
+      printed: await readPrintedDepartmentReceipt(tx, cfg, idFor("Own receipt"), "58mm"),
       empty,
       inherited: resolveReceiptTrim(empty, {}, "es-ES", "es-ES"),
-      bad: await readDepartmentReceipt(tx, targetCfg, idFor("Bad optional receipt")),
+      bad: await readDepartmentReceipt(tx, cfg, idFor("Bad optional receipt")),
       global,
       pictures: await getStoredLogoRasters(tx, logo),
     };
@@ -7184,17 +7122,16 @@ it("round-trips deleted kitchen configuration and preserves archived products an
       .insert(deviceProfiles)
       .values({ name: "Bound till", formFactor: "till" })
       .returning();
-    await VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, profile!.id, {
+    await VENUE_SERVICE.setProfileKitchenScreens(tx, profile!.id, {
       station: { stationIds: [station.id], zoneIds: null },
     });
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "product", productId: product.id }, zoneId: null },
       { kind: "station", stationId: station.id },
     );
-    await deleteCourse(tx, cfg, course.id);
-    await deleteStation(tx, cfg, station.id);
+    await deleteCourse(tx, course.id);
+    await deleteStation(tx, station.id);
     const live = await createCourse(tx, cfg, { name: "Live starters", displayOrder: 0 });
     return {
       course: course.id,
@@ -7256,7 +7193,7 @@ it("round-trips deleted kitchen configuration and preserves archived products an
     const rows = await targetSuite.db.execute(sql`select count(*) as count from tenants`);
     expect(rows.rows).toEqual([{ count: 0 }]);
   }
-  const target = await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
@@ -7273,11 +7210,9 @@ it("round-trips deleted kitchen configuration and preserves archived products an
       })
       .from(products)
       .where(eq(products.name, "Archived flan")),
-    screens: (
-      await VENUE_SERVICE.readProfileKitchenScreens(tx, {
-        locationId: locationId(target.locationId),
-      })
-    ).filter((row) => row.screens.station !== undefined),
+    screens: (await VENUE_SERVICE.readProfileKitchenScreens(tx)).filter(
+      (row) => row.screens.station !== undefined,
+    ),
   }));
   expect(imported.courses.map(({ id, name, active }) => ({ id, name, active }))).toEqual([
     { id: imported.courses[0]!.id, name: "Live starters", active: true },
@@ -7309,11 +7244,11 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
   };
   const removals = enabledTableRemovals(ALL_MODULES);
   const ids = await withTransaction(suite.db, async (tx) => {
-    const old = await createDepartment(tx, cfg, {
+    const old = await createDepartment(tx, {
       name: "Shared service name",
       tradingName: "Retained brand",
     });
-    const zone = await createServiceZone(tx, cfg, {
+    const zone = await createServiceZone(tx, {
       name: "Shared zone name",
       departmentId: old.id,
     });
@@ -7324,16 +7259,15 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     await createTable(tx, cfg, { label: "Old table", zoneId: zone.id });
     await deleteDepartment(
       tx,
-      cfg,
       moduleCoreServices(cfg, removals).floorDeletion,
       old.id,
       new Date("2026-10-11T12:00:00Z"),
     );
-    const live = await createDepartment(tx, cfg, {
+    const live = await createDepartment(tx, {
       name: "Shared service name",
       tradingName: "Live brand",
     });
-    const liveZone = await createServiceZone(tx, cfg, {
+    const liveZone = await createServiceZone(tx, {
       name: "Shared zone name",
       departmentId: live.id,
     });
@@ -7452,8 +7386,8 @@ it("carries Long table's parts, naming the imported tables", async () => {
     partKeys: [],
   });
   const sourceIds = await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(tx, cfg, { name: "Joined service" });
-    const zone = await createServiceZone(tx, cfg, {
+    const department = await createDepartment(tx, { name: "Joined service" });
+    const zone = await createServiceZone(tx, {
       name: "Joined zone",
       departmentId: department.id,
     });
@@ -7528,8 +7462,8 @@ it("carries a kept size, naming the imported table", async () => {
     simplifiedInvoiceLimit: null,
   };
   const sourceIds = await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(tx, cfg, { name: "Sized service" });
-    const zone = await createServiceZone(tx, cfg, {
+    const department = await createDepartment(tx, { name: "Sized service" });
+    const zone = await createServiceZone(tx, {
       name: "Sized zone",
       departmentId: department.id,
     });
@@ -7585,20 +7519,18 @@ describe("dated business-day configuration transfer", () => {
       modules: ALL_MODULES,
     });
     await withTransaction(suite.db, async (tx) => {
-      const scope = { locationId: brandLocationId(source.locationId) };
-      const department = await createDepartment(tx, scope, {
+      const department = await createDepartment(tx, {
         name: "Clock service",
         orderStart: "table",
       });
       const menu = await createCatalogue(tx, { name: "Clock menu" });
-      const period = await saveMenuPeriod(tx, scope, department.id, {
+      const period = await saveMenuPeriod(tx, department.id, {
         name: "Clock period",
         menuId: menu.id,
         staffMenuIds: [],
       });
       await replaceMenuWeek(
         tx,
-        scope,
         department.id,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -7780,13 +7712,13 @@ describe("seasons in a configuration transfer", () => {
             .where(eq(seasons.locationId, scope.locationId))
         ).map((season) => [season.name, season.id]),
       );
-      const department = await createDepartment(tx, scope, {
+      const department = await createDepartment(tx, {
         name: "Season transfer",
         orderStart: "table",
       });
       const period = async (name: string) =>
         (
-          await saveMenuPeriod(tx, scope, department.id, {
+          await saveMenuPeriod(tx, department.id, {
             name,
             menuId: (await createCatalogue(tx, { name: `${name} menu` })).id,
             staffMenuIds: [],
@@ -7799,19 +7731,18 @@ describe("seasons in a configuration transfer", () => {
           weekday,
           slots,
         }));
-      await replaceMenuWeek(tx, scope, department.id, week(dinner), HARVEST_SATURDAY, 0, {
+      await replaceMenuWeek(tx, department.id, week(dinner), HARVEST_SATURDAY, 0, {
         seasonId: ids.get("Harvest")!,
       });
-      await replaceMenuWeek(tx, scope, department.id, week(lateBar), HARVEST_SATURDAY, 0, {
+      await replaceMenuWeek(tx, department.id, week(lateBar), HARVEST_SATURDAY, 0, {
         seasonId: ids.get(STARTER_SEASON_NAMES.Winter.es)!,
       });
-      const terrace = await createServiceZone(tx, scope, {
+      const terrace = await createServiceZone(tx, {
         name: "Season terrace",
         departmentId: department.id,
       });
       await replaceZoneClosedWeek(
         tx,
-        scope,
         terrace.id,
         saturday([{ startsAt: "20:00", endsAt: "23:00" }]).map((ranges, weekday) => ({
           weekday,
@@ -7862,7 +7793,6 @@ describe("seasons in a configuration transfer", () => {
     ]);
     expect(await saturdays(targetSuite.db)).toEqual(await saturdays(suite.db));
 
-    const targetScope = { locationId: brandLocationId(target.locationId) };
     const [department] = await targetSuite.db
       .select({ id: departments.id })
       .from(departments)
@@ -7871,24 +7801,12 @@ describe("seasons in a configuration transfer", () => {
       sql`select id from floor_zones where name='Season terrace'`,
     );
     const answers = await withTransaction(targetSuite.db, async (tx) => ({
-      harvest: await VENUE_SERVICE.resolveDepartmentService(
-        tx,
-        targetScope,
-        department!.id,
-        HARVEST_SATURDAY,
-      ),
-      winter: await VENUE_SERVICE.resolveDepartmentService(
-        tx,
-        targetScope,
-        department!.id,
-        WINTER_SATURDAY,
-      ),
-      closedInHarvest: await VENUE_SERVICE.closedZoneIdsAt(tx, targetScope, HARVEST_SATURDAY, [
+      harvest: await VENUE_SERVICE.resolveDepartmentService(tx, department!.id, HARVEST_SATURDAY),
+      winter: await VENUE_SERVICE.resolveDepartmentService(tx, department!.id, WINTER_SATURDAY),
+      closedInHarvest: await VENUE_SERVICE.closedZoneIdsAt(tx, HARVEST_SATURDAY, [
         zone.rows[0]!.id,
       ]),
-      closedInWinter: await VENUE_SERVICE.closedZoneIdsAt(tx, targetScope, WINTER_SATURDAY, [
-        zone.rows[0]!.id,
-      ]),
+      closedInWinter: await VENUE_SERVICE.closedZoneIdsAt(tx, WINTER_SATURDAY, [zone.rows[0]!.id]),
     }));
     expect(answers.harvest).toMatchObject({ open: true, periodName: "Dinner" });
     expect(answers.winter).toMatchObject({ open: true, periodName: "Late bar" });
@@ -7930,16 +7848,16 @@ describe("special days in a configuration transfer", () => {
     });
     const scope = { locationId: brandLocationId(source.locationId) };
     await withTransaction(suite.db, async (tx) => {
-      const department = await createDepartment(tx, scope, {
+      const department = await createDepartment(tx, {
         name: "Fiesta restaurant",
         orderStart: "table",
       });
-      const { id: bar } = await saveMenuPeriod(tx, scope, department.id, {
+      const { id: bar } = await saveMenuPeriod(tx, department.id, {
         name: "Bar",
         menuId: (await createCatalogue(tx, { name: "Fiesta bar menu" })).id,
         staffMenuIds: [],
       });
-      const terrace = await createServiceZone(tx, scope, {
+      const terrace = await createServiceZone(tx, {
         name: "Fiesta terrace",
         departmentId: department.id,
       });
@@ -8048,21 +7966,13 @@ describe("special days in a configuration transfer", () => {
         where z.name='Fiesta terrace' and p.location_id=${target.locationId}`,
     );
     const answers = await withTransaction(targetSuite.db, async (tx) => ({
-      fiesta: await VENUE_SERVICE.resolveDepartmentService(
-        tx,
-        targetScope,
-        department!.id,
-        FIESTA_EVENING,
-      ),
+      fiesta: await VENUE_SERVICE.resolveDepartmentService(tx, department!.id, FIESTA_EVENING),
       closedAllDay: await VENUE_SERVICE.resolveDepartmentService(
         tx,
-        targetScope,
         department!.id,
         CLOSED_EVENING,
       ),
-      terrace: await VENUE_SERVICE.closedZoneIdsAt(tx, targetScope, FIESTA_EVENING, [
-        zone.rows[0]!.id,
-      ]),
+      terrace: await VENUE_SERVICE.closedZoneIdsAt(tx, FIESTA_EVENING, [zone.rows[0]!.id]),
     }));
     expect(answers.fiesta).toMatchObject({ open: true, periodName: "Bar" });
     expect(answers.closedAllDay).toMatchObject({ open: false });
@@ -8111,7 +8021,7 @@ describe("special days in a configuration transfer", () => {
 });
 
 it("exports profile zone settings but leaves enrolled device zone selections behind", async () => {
-  const source = await applyVenue(planVenue(venue("B12345678"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B12345678"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
@@ -8123,10 +8033,9 @@ it("exports profile zone settings but leaves enrolled device zone selections beh
     const device = {
       id: (await seedDevice(tx, { profileId: profile!.id, label: "Selected till" })).deviceId,
     };
-    const cfg = { locationId: locationId(source.locationId) };
-    const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, cfg, device!.id);
+    const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, device!.id);
     expect(current.startingZoneId).not.toBeNull();
-    await VENUE_SERVICE.setDeviceZoneSelection(tx, cfg, device!.id, {
+    await VENUE_SERVICE.setDeviceZoneSelection(tx, device!.id, {
       ...current,
       startingZoneId: current.startingZoneId!,
     });
@@ -8190,13 +8099,12 @@ describe("A773 pass display policy", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const cfg = { locationId: locationId(source.locationId) };
     const deviceId = await withTransaction(suite.db, async (tx) => {
       const [profile] = await tx
         .insert(deviceProfiles)
         .values({ name: "Hidden pass", formFactor: "till" })
         .returning();
-      await VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, profile!.id, {
+      await VENUE_SERVICE.setProfileKitchenScreens(tx, profile!.id, {
         pass: { stationIds: null, zoneIds: null, showNonPassStations: false },
         pass_monitor: { stationIds: null, zoneIds: null },
       });
@@ -8204,7 +8112,7 @@ describe("A773 pass display policy", () => {
         locationId: source.locationId,
         profileId: profile!.id,
       });
-      await VENUE_SERVICE.setDeviceKitchenScreens(tx, cfg, {
+      await VENUE_SERVICE.setDeviceKitchenScreens(tx, {
         deviceId,
         profileId: profile!.id,
         screens: [{ kind: "pass", stationIds: null, zoneIds: null }],

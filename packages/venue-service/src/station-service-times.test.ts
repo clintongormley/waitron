@@ -51,12 +51,12 @@ async function fixture(db: Transaction) {
   });
   const venueId = await venueLocationId(db);
   const cfg = { locationId: locationId(venueId) };
-  const department = (await createDepartment(db, cfg, { name: "Dining", orderStart: "table" })).id;
+  const department = (await createDepartment(db, { name: "Dining", orderStart: "table" })).id;
   const [terrace] = await db
     .insert(floorZones)
     .values({ ...cfg, name: "Terrace" })
     .returning();
-  await configureZone(db, cfg, { zoneId: terrace!.id, departmentId: department });
+  await configureZone(db, { zoneId: terrace!.id, departmentId: department });
   const stations = await db
     .insert(kitchenStations)
     .values([
@@ -80,7 +80,7 @@ async function fixture(db: Transaction) {
   ).id;
   await addProductToMenu(db, { menuId: menu, productId: product });
   const lunch = (
-    await saveMenuPeriod(db, cfg, department, {
+    await saveMenuPeriod(db, department, {
       name: "Lunch",
       menuId: menu,
       staffMenuIds: [],
@@ -88,7 +88,7 @@ async function fixture(db: Transaction) {
     })
   ).id;
   const afternoon = (
-    await saveMenuPeriod(db, cfg, department, {
+    await saveMenuPeriod(db, department, {
       name: "Afternoon",
       menuId: menu,
       staffMenuIds: [],
@@ -98,7 +98,6 @@ async function fixture(db: Transaction) {
   const lunchRange = { periodId: lunch, startsAt: "12:00", endsAt: "16:00" };
   await replaceMenuWeek(
     db,
-    cfg,
     department,
     week("slots", [lunchRange, { periodId: afternoon, startsAt: "16:00", endsAt: "18:00" }]),
     at,
@@ -107,7 +106,6 @@ async function fixture(db: Transaction) {
   const station = stations[1]!.id;
   await setRoutingCell(
     db,
-    cfg,
     { row: { kind: "category", categoryId: category }, zoneId: terrace!.id },
     { kind: "no_preparation" },
     [{ periodId: lunch, target: { kind: "station", stationId: station } }],
@@ -132,22 +130,18 @@ const planned = (f: Awaited<ReturnType<typeof fixture>>, ranges = [f.lunchRange]
   always: null,
   days: [{ date: day, departments: [{ departmentId: f.department, ranges }] }],
 });
-const specialDay = (
-  db: Transaction,
-  f: Awaited<ReturnType<typeof fixture>>,
-  input: SpecialDayInput,
-) => saveSpecialDay(db, f.cfg, null, input, at, 0);
+const specialDay = (db: Transaction, input: SpecialDayInput) =>
+  saveSpecialDay(db, null, input, at, 0);
 /** A second department whose Monday 15:00-17:00 service reaches the station through its own zone. */
 async function paintableTakeaway(db: Transaction, f: Awaited<ReturnType<typeof fixture>>) {
-  const takeaway = (await createDepartment(db, f.cfg, { name: "Takeaway", orderStart: "table" }))
-    .id;
+  const takeaway = (await createDepartment(db, { name: "Takeaway", orderStart: "table" })).id;
   const [counter] = await db
     .insert(floorZones)
     .values({ ...f.cfg, name: "Counter" })
     .returning();
-  await configureZone(db, f.cfg, { zoneId: counter!.id, departmentId: takeaway });
+  await configureZone(db, { zoneId: counter!.id, departmentId: takeaway });
   const period = (
-    await saveMenuPeriod(db, f.cfg, takeaway, {
+    await saveMenuPeriod(db, takeaway, {
       name: "Lunch",
       menuId: f.menu,
       staffMenuIds: [],
@@ -156,7 +150,6 @@ async function paintableTakeaway(db: Transaction, f: Awaited<ReturnType<typeof f
   ).id;
   await replaceMenuWeek(
     db,
-    f.cfg,
     takeaway,
     week("slots", [{ periodId: period, startsAt: "15:00", endsAt: "17:00" }]),
     at,
@@ -164,7 +157,6 @@ async function paintableTakeaway(db: Transaction, f: Awaited<ReturnType<typeof f
   );
   await setRoutingCell(
     db,
-    f.cfg,
     { row: { kind: "category", categoryId: f.category }, zoneId: counter!.id },
     { kind: "station", stationId: f.station },
   );
@@ -174,7 +166,7 @@ it("shows a special date's painted Dinner 19:00-01:00 for a station routed only 
   tx(async (db) => {
     const f = await fixture(db);
     const dinner = (
-      await saveMenuPeriod(db, f.cfg, f.department, {
+      await saveMenuPeriod(db, f.department, {
         name: "Dinner",
         menuId: f.menu,
         staffMenuIds: [],
@@ -183,12 +175,11 @@ it("shows a special date's painted Dinner 19:00-01:00 for a station routed only 
     ).id;
     await setRoutingCell(
       db,
-      f.cfg,
       { row: { kind: "category", categoryId: f.category }, zoneId: f.terrace },
       { kind: "no_preparation" },
       [{ periodId: dinner, target: { kind: "station", stationId: f.station } }],
     );
-    await specialDay(db, f, {
+    await specialDay(db, {
       name: "Late opening",
       repeatsYearly: false,
       dates: [{ date: day, closedAllDay: false }],
@@ -200,19 +191,19 @@ it("shows a special date's painted Dinner 19:00-01:00 for a station routed only 
         },
       ],
     });
-    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
+    expect(await stationServiceTimes(db, f.station, day, day)).toEqual(
       planned(f, [{ periodId: dinner, startsAt: "19:00", endsAt: "01:00" }]),
     );
   }));
 it("shows only Lunch when the period line sends Cocktails there only during Lunch", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(planned(f));
+    expect(await stationServiceTimes(db, f.station, day, day)).toEqual(planned(f));
   }));
 it("applies a special day's painted ranges and zone closures", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    await specialDay(db, f, {
+    await specialDay(db, {
       name: "Celebration",
       repeatsYearly: false,
       dates: [{ date: day, closedAllDay: false }],
@@ -235,7 +226,7 @@ it("applies a special day's painted ranges and zone closures", async () =>
         },
       ],
     });
-    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
+    expect(await stationServiceTimes(db, f.station, day, day)).toEqual(
       planned(f, [{ periodId: f.lunch, startsAt: "13:00", endsAt: "15:00" }]),
     );
   }));
@@ -244,12 +235,11 @@ it("cuts Lunch at 15:00 when its only routing zone closes then", async () =>
     const f = await fixture(db);
     await replaceZoneClosedWeek(
       db,
-      f.cfg,
       f.terrace,
       week("ranges", [{ startsAt: "15:00", endsAt: "06:00" }]),
       0,
     );
-    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
+    expect(await stationServiceTimes(db, f.station, day, day)).toEqual(
       planned(f, [{ ...f.lunchRange, endsAt: "15:00" }]),
     );
   }));
@@ -260,23 +250,20 @@ it("unions overlapping zone shares without duplicate ranges", async () =>
       .insert(floorZones)
       .values({ ...f.cfg, name: "Inside" })
       .returning();
-    await configureZone(db, f.cfg, { zoneId: inside!.id, departmentId: f.department });
+    await configureZone(db, { zoneId: inside!.id, departmentId: f.department });
     await setRoutingCell(
       db,
-      f.cfg,
       { row: { kind: "category", categoryId: f.category }, zoneId: inside!.id },
       { kind: "station", stationId: f.station },
     );
     await replaceZoneClosedWeek(
       db,
-      f.cfg,
       f.terrace,
       week("ranges", [{ startsAt: "14:00", endsAt: "06:00" }]),
       0,
     );
     await replaceZoneClosedWeek(
       db,
-      f.cfg,
       inside!.id,
       week("ranges", [
         { startsAt: "06:00", endsAt: "13:00" },
@@ -284,7 +271,7 @@ it("unions overlapping zone shares without duplicate ranges", async () =>
       ]),
       0,
     );
-    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
+    expect(await stationServiceTimes(db, f.station, day, day)).toEqual(
       planned(f, [{ ...f.lunchRange, endsAt: "15:00" }]),
     );
   }));
@@ -293,12 +280,11 @@ it("keeps separate surviving segments around a zone closure", async () =>
     const f = await fixture(db);
     await replaceZoneClosedWeek(
       db,
-      f.cfg,
       f.terrace,
       week("ranges", [{ startsAt: "13:00", endsAt: "14:00" }]),
       0,
     );
-    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
+    expect(await stationServiceTimes(db, f.station, day, day)).toEqual(
       planned(f, [
         { ...f.lunchRange, endsAt: "13:00" },
         { ...f.lunchRange, startsAt: "14:00" },
@@ -308,14 +294,14 @@ it("keeps separate surviving segments around a zone closure", async () =>
 it("answers default without a grid", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    expect(await stationServiceTimes(db, f.cfg, f.defaultStation, day, day)).toEqual({
+    expect(await stationServiceTimes(db, f.defaultStation, day, day)).toEqual({
       always: "default",
       days: [],
     });
   }));
 it("refuses a deleted station instead of showing a switched-off grid", async () => {
   const f = await tx(fixture);
-  await expect(tx((db) => stationServiceTimes(db, f.cfg, f.off, day, day))).rejects.toMatchObject({
+  await expect(tx((db) => stationServiceTimes(db, f.off, day, day))).rejects.toMatchObject({
     code: "station.not_found",
   });
 });
@@ -343,7 +329,7 @@ it.each([
       await db.delete(sectionMembers).where(eq(sectionMembers.productId, f.product));
     }
     if (kind === "whole venue closed")
-      await specialDay(db, f, {
+      await specialDay(db, {
         name: "Closed",
         repeatsYearly: false,
         dates: [{ date: day, closedAllDay: true }],
@@ -351,27 +337,20 @@ it.each([
     if (kind === "whole zone closed")
       await replaceZoneClosedWeek(
         db,
-        f.cfg,
         f.terrace,
         week("ranges", [{ startsAt: "06:00", endsAt: "06:00" }]),
         0,
       );
     expect(
-      await stationServiceTimes(db, f.cfg, kind === "unrouted" ? f.unused : f.station, day, day),
+      await stationServiceTimes(db, kind === "unrouted" ? f.unused : f.station, day, day),
     ).toEqual({ always: null, days: [{ date: day, departments: [] }] });
   }),
 );
 it("planning ignores a station's daily closure", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    await closeStationForToday(
-      db,
-      f.cfg,
-      f.station,
-      f.defaultStation,
-      new Date("2026-10-12T11:00:00Z"),
-    );
-    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(planned(f));
+    await closeStationForToday(db, f.station, f.defaultStation, new Date("2026-10-12T11:00:00Z"));
+    expect(await stationServiceTimes(db, f.station, day, day)).toEqual(planned(f));
   }));
 it.each([
   ["2026-10-12", "2026-11-23", "to"],
@@ -380,25 +359,27 @@ it.each([
   [day, "2026-10-11", "to"],
 ])("refuses a bad or oversized range %s..%s", async (from, to, field) => {
   const f = await tx(fixture);
-  await expect(
-    tx((db) => stationServiceTimes(db, f.cfg, f.station, from!, to!)),
-  ).rejects.toMatchObject({ code: "management.request_invalid", params: { field } });
+  await expect(tx((db) => stationServiceTimes(db, f.station, from!, to!))).rejects.toMatchObject({
+    code: "management.request_invalid",
+    params: { field },
+  });
 });
 it("allows exactly 42 days, keeping closed dates in order", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    const result = await stationServiceTimes(db, f.cfg, f.unused, day, "2026-11-22");
+    const result = await stationServiceTimes(db, f.unused, day, "2026-11-22");
     expect(result.always).toBeNull();
     expect(result.days).toHaveLength(42);
     expect(result.days[0]).toEqual({ date: day, departments: [] });
     expect(result.days[41]).toEqual({ date: "2026-11-22", departments: [] });
   }));
 it("refuses unknown stations", async () => {
-  const f = await tx(fixture);
+  await tx(fixture);
   const stationId = randomUUID();
-  await expect(
-    tx((db) => stationServiceTimes(db, f.cfg, stationId, day, day)),
-  ).rejects.toMatchObject({ code: "station.not_found", params: { stationId } });
+  await expect(tx((db) => stationServiceTimes(db, stationId, day, day))).rejects.toMatchObject({
+    code: "station.not_found",
+    params: { stationId },
+  });
 });
 
 it("reads products from staff menus and routes a variant by its parent's category", async () =>
@@ -414,19 +395,19 @@ it("reads products from staff menus and routes a variant by its parent's categor
     await db.update(products).set({ active: false }).where(eq(products.id, f.product));
     expect(variant!.parentId).toBe(f.product);
     const { updateMenuPeriod } = await import("./menu-timetable.js");
-    await updateMenuPeriod(db, f.cfg, f.lunch, {
+    await updateMenuPeriod(db, f.lunch, {
       name: "Lunch",
       menuId: empty,
       staffMenuIds: [variantMenu],
       colour: "blue",
     });
-    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(planned(f));
+    expect(await stationServiceTimes(db, f.station, day, day)).toEqual(planned(f));
   }));
 it("a repeating special day uses its occurrence, with an unpainted department still following the week", async () =>
   tx(async (db) => {
     const f = await fixture(db);
     const takeaway = await paintableTakeaway(db, f);
-    await specialDay(db, f, {
+    await specialDay(db, {
       name: "Annual day",
       repeatsYearly: true,
       dates: [{ date: day, closedAllDay: false }],
@@ -438,7 +419,7 @@ it("a repeating special day uses its occurrence, with an unpainted department st
         },
       ],
     });
-    expect(await stationServiceTimes(db, f.cfg, f.station, "2037-10-12", "2037-10-12")).toEqual({
+    expect(await stationServiceTimes(db, f.station, "2037-10-12", "2037-10-12")).toEqual({
       always: null,
       days: [
         {
@@ -453,28 +434,26 @@ it("keeps cross-midnight service ranges", async () =>
     const f = await fixture(db);
     await replaceMenuWeek(
       db,
-      f.cfg,
       f.department,
       week("slots", [{ periodId: f.lunch, startsAt: "22:00", endsAt: "02:00" }]),
       at,
       0,
     );
-    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
+    expect(await stationServiceTimes(db, f.station, day, day)).toEqual(
       planned(f, [{ periodId: f.lunch, startsAt: "22:00", endsAt: "02:00" }]),
     );
   }));
 it("keeps each active department's ranges, cut by its own zone", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    const second = (await createDepartment(db, f.cfg, { name: "Takeaway", orderStart: "table" }))
-      .id;
+    const second = (await createDepartment(db, { name: "Takeaway", orderStart: "table" })).id;
     const [zone] = await db
       .insert(floorZones)
       .values({ ...f.cfg, name: "Counter" })
       .returning();
-    await configureZone(db, f.cfg, { zoneId: zone!.id, departmentId: second });
+    await configureZone(db, { zoneId: zone!.id, departmentId: second });
     const period = (
-      await saveMenuPeriod(db, f.cfg, second, {
+      await saveMenuPeriod(db, second, {
         name: "Lunch",
         menuId: f.menu,
         staffMenuIds: [],
@@ -483,7 +462,6 @@ it("keeps each active department's ranges, cut by its own zone", async () =>
     ).id;
     await replaceMenuWeek(
       db,
-      f.cfg,
       second,
       week("slots", [{ periodId: period, startsAt: "15:00", endsAt: "17:00" }]),
       at,
@@ -491,18 +469,16 @@ it("keeps each active department's ranges, cut by its own zone", async () =>
     );
     await setRoutingCell(
       db,
-      f.cfg,
       { row: { kind: "category", categoryId: f.category }, zoneId: zone!.id },
       { kind: "station", stationId: f.station },
     );
     await replaceZoneClosedWeek(
       db,
-      f.cfg,
       zone!.id,
       week("ranges", [{ startsAt: "16:00", endsAt: "06:00" }]),
       0,
     );
-    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual({
+    expect(await stationServiceTimes(db, f.station, day, day)).toEqual({
       always: null,
       days: [
         {
@@ -522,7 +498,7 @@ it("keeps each active department's ranges, cut by its own zone", async () =>
 it("reads the last valid calendar date without stepping beyond its requested range", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    expect(await stationServiceTimes(db, f.cfg, f.unused, "9999-12-31", "9999-12-31")).toEqual({
+    expect(await stationServiceTimes(db, f.unused, "9999-12-31", "9999-12-31")).toEqual({
       always: null,
       days: [{ date: "9999-12-31", departments: [] }],
     });
@@ -531,12 +507,12 @@ it("reads the last valid calendar date without stepping beyond its requested ran
 it("applies a special day's closure to the date it stands on", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    await specialDay(db, f, {
+    await specialDay(db, {
       name: "Closed Monday",
       repeatsYearly: false,
       dates: [{ date: day, closedAllDay: true }],
     });
-    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual({
+    expect(await stationServiceTimes(db, f.station, day, day)).toEqual({
       always: null,
       days: [{ date: day, departments: [] }],
     });
@@ -547,7 +523,6 @@ it("clamps a station forecast to the following dated start", async () =>
     const f = await fixture(db);
     await replaceMenuWeek(
       db,
-      f.cfg,
       f.department,
       week("slots", [{ periodId: f.lunch, startsAt: "09:00", endsAt: "06:00" }]),
       at,
@@ -558,7 +533,7 @@ it("clamps a station forecast to the following dated start", async () =>
       effectiveBusinessDay: "2026-10-13",
       dayCutover: "03:00:00",
     });
-    expect(await stationServiceTimes(db, f.cfg, f.station, day, "2026-10-13")).toEqual({
+    expect(await stationServiceTimes(db, f.station, day, "2026-10-13")).toEqual({
       always: null,
       days: [
         {
@@ -580,7 +555,6 @@ it("sends nothing from a range that starts after the following dated start", asy
     const f = await fixture(db);
     await replaceMenuWeek(
       db,
-      f.cfg,
       f.department,
       week("slots", [{ periodId: f.lunch, startsAt: "04:00", endsAt: "05:00" }]),
       at,
@@ -591,7 +565,7 @@ it("sends nothing from a range that starts after the following dated start", asy
       effectiveBusinessDay: "2026-10-13",
       dayCutover: "03:00:00",
     });
-    expect((await stationServiceTimes(db, f.cfg, f.station, day, day)).days).toEqual([
+    expect((await stationServiceTimes(db, f.station, day, day)).days).toEqual([
       { date: day, departments: [] },
     ]);
   }));
@@ -606,16 +580,16 @@ const seasonDates = [
   "2030-12-01",
   "2030-12-02",
 ];
-async function seasonIds(db: Transaction, f: Awaited<ReturnType<typeof fixture>>) {
-  const seasons = await readSeasons(db, f.cfg);
+async function seasonIds(db: Transaction) {
+  const seasons = await readSeasons(db);
   return (name: string) => seasons.find((season) => season.name === name)!.id;
 }
 async function winterLunchOnly(db: Transaction, f: Awaited<ReturnType<typeof fixture>>) {
-  const seasonId = await seasonIds(db, f);
-  await replaceMenuWeek(db, f.cfg, f.department, week("slots", [f.lunchRange]), at, 0, {
+  const seasonId = await seasonIds(db);
+  await replaceMenuWeek(db, f.department, week("slots", [f.lunchRange]), at, 0, {
     seasonId: seasonId("Winter"),
   });
-  await replaceMenuWeek(db, f.cfg, f.department, week("slots", []), at, 0, {
+  await replaceMenuWeek(db, f.department, week("slots", []), at, 0, {
     seasonId: seasonId("Autumn"),
   });
 }
@@ -631,7 +605,7 @@ it("shows Winter's Monday Lunch on 2 December only, reading each date's own seas
   tx(async (db) => {
     const f = await fixture(db);
     await winterLunchOnly(db, f);
-    expect(await stationServiceTimes(db, f.cfg, f.station, "2030-11-25", "2030-12-02")).toEqual({
+    expect(await stationServiceTimes(db, f.station, "2030-11-25", "2030-12-02")).toEqual({
       always: null,
       days: seasonDates.map(lunchOn(f, ["2030-12-02"])),
     });
@@ -640,17 +614,16 @@ it("shows Winter's Monday Lunch on 2 December only, reading each date's own seas
 it("cuts Lunch by the zone's closure in each date's own season", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    const seasonId = await seasonIds(db, f);
+    const seasonId = await seasonIds(db);
     await replaceZoneClosedWeek(
       db,
-      f.cfg,
       f.terrace,
       week("ranges", [{ startsAt: "12:00", endsAt: "16:00" }]),
       0,
       at,
       { seasonId: seasonId("Winter") },
     );
-    expect(await stationServiceTimes(db, f.cfg, f.station, "2030-11-25", "2030-12-02")).toEqual({
+    expect(await stationServiceTimes(db, f.station, "2030-11-25", "2030-12-02")).toEqual({
       always: null,
       days: seasonDates.map(lunchOn(f, ["2030-11-25"])),
     });
@@ -663,7 +636,7 @@ it("reads the seasons and each season week once over a 42-day range", async () =
       .session;
     const spy = vi.spyOn(session, "prepareQuery");
     try {
-      await stationServiceTimes(db, f.cfg, f.station, "2030-11-01", "2030-12-12");
+      await stationServiceTimes(db, f.station, "2030-11-01", "2030-12-12");
       const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
       for (const table of ["seasons", "department_days", "zone_days"])
         expect(
@@ -679,8 +652,8 @@ it("A724: a selected season supplies raw department guides and batched station d
   tx(async (db) => {
     const f = await fixture(db);
     await winterLunchOnly(db, f);
-    const ids = await seasonIds(db, f);
-    const result = await service.readPlannedServiceGuides?.(db, f.cfg, [f.station, f.unused], {
+    const ids = await seasonIds(db);
+    const result = await service.readPlannedServiceGuides?.(db, [f.station, f.unused], {
       kind: "season",
       seasonId: ids("Winter"),
       cutover: "06:00",
@@ -695,7 +668,7 @@ it("A724: a selected season supplies raw department guides and batched station d
       colour: "blue",
       departmentId: f.department,
     });
-    const autumn = await service.readPlannedServiceGuides?.(db, f.cfg, [f.station], {
+    const autumn = await service.readPlannedServiceGuides?.(db, [f.station], {
       kind: "season",
       seasonId: ids("Autumn"),
       cutover: "06:00",
@@ -706,12 +679,12 @@ it("A724: a selected season supplies raw department guides and batched station d
 it("A724: scheduled default demand stays bounded and no-preparation stays empty", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    await clearRoutingCell(db, f.cfg, {
+    await clearRoutingCell(db, {
       row: { kind: "category", categoryId: f.category },
       zoneId: f.terrace,
     });
-    const ids = await seasonIds(db, f);
-    const result = await service.readPlannedServiceGuides?.(db, f.cfg, [f.defaultStation], {
+    const ids = await seasonIds(db);
+    const result = await service.readPlannedServiceGuides?.(db, [f.defaultStation], {
       kind: "season",
       seasonId: ids("Autumn"),
       cutover: "06:00",
@@ -724,11 +697,10 @@ it("A724: scheduled default demand stays bounded and no-preparation stays empty"
     ]);
     await setRoutingCell(
       db,
-      f.cfg,
       { row: { kind: "category", categoryId: f.category }, zoneId: f.terrace },
       { kind: "no_preparation" },
     );
-    const none = await service.readPlannedServiceGuides?.(db, f.cfg, [f.defaultStation], {
+    const none = await service.readPlannedServiceGuides?.(db, [f.defaultStation], {
       kind: "season",
       seasonId: ids("Autumn"),
       cutover: "06:00",
@@ -741,7 +713,7 @@ it("A724: batched dated forecasts retain distinct sending departments", async ()
     const f = await fixture(db);
     const takeaway = await paintableTakeaway(db, f);
     const clock = await readVenueClock(db);
-    const result = await service.readPlannedServiceGuides?.(db, f.cfg, [f.station, f.unused], {
+    const result = await service.readPlannedServiceGuides?.(db, [f.station, f.unused], {
       kind: "dates",
       dates: [day],
       clock,
@@ -761,13 +733,12 @@ it("A724: a full-day sending window", async () =>
     const f = await fixture(db);
     await replaceMenuWeek(
       db,
-      f.cfg,
       f.department,
       week("slots", [{ periodId: f.lunch, startsAt: "06:00", endsAt: "06:00" }]),
       at,
       0,
     );
-    const result = await stationServiceTimes(db, f.cfg, f.station, day, day);
+    const result = await stationServiceTimes(db, f.station, day, day);
     expect(
       result.days[0]!.departments.flatMap((d) => d.ranges.map((r) => [r.startsAt, r.endsAt])),
     ).toEqual([["06:00", "06:00"]]);
@@ -776,12 +747,12 @@ it("A724: a full-day sending window", async () =>
 it("A724: season forecasting batches stations and never reads calendar dates", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    const ids = await seasonIds(db, f);
+    const ids = await seasonIds(db);
     const session = (db as unknown as { session: { prepareQuery: (...args: never[]) => unknown } })
       .session;
     const spy = vi.spyOn(session, "prepareQuery");
     try {
-      await service.readPlannedServiceGuides(db, f.cfg, [f.station, f.defaultStation, f.unused], {
+      await service.readPlannedServiceGuides(db, [f.station, f.defaultStation, f.unused], {
         kind: "season",
         seasonId: ids("Autumn"),
         cutover: "06:00",
@@ -808,17 +779,15 @@ it("A724: two reaching zones union their open shares without filling a shared cl
       .insert(floorZones)
       .values({ ...f.cfg, name: "Inside" })
       .returning();
-    await configureZone(db, f.cfg, { zoneId: second!.id, departmentId: f.department });
+    await configureZone(db, { zoneId: second!.id, departmentId: f.department });
     await setRoutingCell(
       db,
-      f.cfg,
       { row: { kind: "category", categoryId: f.category }, zoneId: second!.id },
       { kind: "station", stationId: f.station },
     );
-    await replaceMenuWeek(db, f.cfg, f.department, week("slots", [f.lunchRange]), at, 0);
+    await replaceMenuWeek(db, f.department, week("slots", [f.lunchRange]), at, 0);
     await replaceZoneClosedWeek(
       db,
-      f.cfg,
       f.terrace,
       week("ranges", [{ startsAt: "13:00", endsAt: "15:00" }]),
       0,
@@ -826,13 +795,12 @@ it("A724: two reaching zones union their open shares without filling a shared cl
     );
     await replaceZoneClosedWeek(
       db,
-      f.cfg,
       second!.id,
       week("ranges", [{ startsAt: "14:00", endsAt: "16:00" }]),
       0,
       at,
     );
-    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
+    expect(await stationServiceTimes(db, f.station, day, day)).toEqual(
       planned(f, [
         { periodId: f.lunch, startsAt: "12:00", endsAt: "14:00" },
         { periodId: f.lunch, startsAt: "15:00", endsAt: "16:00" },

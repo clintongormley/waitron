@@ -1,5 +1,5 @@
 import type { Transaction } from "@waitron/db";
-import { cutoverForBusinessDay, locationId } from "@waitron/shared";
+import { cutoverForBusinessDay } from "@waitron/shared";
 import { readCalendarMonthPlan } from "@waitron/venue-service";
 import { listStaffingAreas, resolveStaffing } from "./paint.js";
 import { areaKey, slotsForDay, placeShift, matchAreaDay } from "./slots.js";
@@ -9,20 +9,13 @@ import type { StaffingMonth } from "./staffing-types.js";
 /** `month` is a `YYYY-MM` the caller has checked; `at` decides `today`. */
 export async function readStaffingMonth(
   tx: Transaction,
-  cfg: { locationId: string },
   month: string,
   at: Date,
 ): Promise<StaffingMonth> {
-  const frame = await readCalendarMonthPlan(
-    tx,
-    { locationId: locationId(cfg.locationId) },
-    month,
-    at,
-  );
+  const frame = await readCalendarMonthPlan(tx, month, at);
   const areas = await listStaffingAreas(tx);
   const resolved = await resolveStaffing(
     tx,
-    cfg,
     frame.days.map((day) => day.date),
     { plan: frame.plan, areas, cutover: frame.clock.dayCutover },
   );

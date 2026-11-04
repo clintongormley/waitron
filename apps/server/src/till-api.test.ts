@@ -249,7 +249,6 @@ const suite = useVenueDb({
         });
         await setRoutingCell(
           tx,
-          venueScope,
           { row: { kind: "product", productId: p.id }, zoneId: null },
           { kind: "station", stationId: defaultStationId },
         );
@@ -2074,7 +2073,7 @@ describe("zone-offer catalogue routes", () => {
         .select({ departmentId: zoneServicePolicies.departmentId })
         .from(zoneServicePolicies)
         .where(eq(zoneServicePolicies.zoneId, counterZoneId));
-      await setProfileServiceAccess(tx, cfg, profileId, {
+      await setProfileServiceAccess(tx, profileId, {
         departmentId: policy!.departmentId,
         allowedZoneIds: null,
         startingZoneId: second!.id,
@@ -3640,7 +3639,6 @@ describe("KDS-1 station-display operate routes", () => {
       );
       await VENUE_SERVICE.recordKitchenNotices(
         tx,
-        cfg,
         id,
         [
           {
@@ -4657,11 +4655,11 @@ describe("sale-policy order flow routes", () => {
       mountTillApi(app, deps(suite.db), collect([]));
       const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
       const zone = await withTransaction(suite.db, async (tx) => {
-        const department = await createDepartment(tx, cfg, {
+        const department = await createDepartment(tx, {
           name: `Counter flow ${randomUUID()}`,
           orderStart: "table",
         });
-        const zone = await createServiceZone(tx, cfg, {
+        const zone = await createServiceZone(tx, {
           name: `Counter flow ${randomUUID()}`,
           departmentId: department.id,
         });
@@ -4704,11 +4702,11 @@ describe("sale-policy order flow routes", () => {
       mountTillApi(app, deps(suite.db), collect([]));
       const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
       const zoneId = await withTransaction(suite.db, async (tx) => {
-        const department = await createDepartment(tx, cfg, {
+        const department = await createDepartment(tx, {
           name: `Pay flow ${randomUUID()}`,
           orderStart: "counter",
         });
-        const zone = await createServiceZone(tx, cfg, {
+        const zone = await createServiceZone(tx, {
           name: `Pay flow ${randomUUID()}`,
           departmentId: department.id,
         });

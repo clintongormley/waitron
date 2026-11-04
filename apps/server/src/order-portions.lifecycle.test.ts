@@ -138,7 +138,7 @@ async function fixture() {
       orderNumber: 2,
       partyId: seated.partyId,
     });
-    await VENUE_SERVICE.recordOrderContext(tx, venue.cfg, other!.id, venue.zoneId);
+    await VENUE_SERVICE.recordOrderContext(tx, other!.id, venue.zoneId);
     await VENUE_SERVICE.writePartyAllergy(
       tx,
       seated.partyId,
@@ -487,7 +487,7 @@ describe("A803 portion grouping: the bill line read", () => {
       await registerPortions(tx, out.portions);
       return { unbound: plain.rows[0]!.lineNo, measured: out.rows[0]!.lineNo };
     });
-    const lines = await inTx(venue, (tx) => readTabLines(tx, venue.cfg, p.billId));
+    const lines = await inTx(venue, (tx) => readTabLines(tx, p.billId));
     const portion = (lineNo: number) => lines.find((line) => line.lineNo === lineNo)!.portion;
     const extraOf = (lineNo: number) => lines.find((line) => line.parentLineNo === lineNo)!.portion;
     const firstNo = lines.find((line) => line.id === first!.lineId)!.lineNo;
@@ -522,7 +522,7 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
         orderNumber: 2,
         partyId: seated.partyId,
       });
-      await VENUE_SERVICE.recordOrderContext(tx, venue.cfg, other!.id, venue.zoneId);
+      await VENUE_SERVICE.recordOrderContext(tx, other!.id, venue.zoneId);
       await VENUE_SERVICE.writePartyAllergy(
         tx,
         seated.partyId,

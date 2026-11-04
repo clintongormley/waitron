@@ -169,14 +169,7 @@ describe("A773 waiter request: tab send", () => {
       await addTabRound(tx, venue.cfg, venue.party.tabId, [burger(venue)]);
       const [requested] = await items(tx, venue.party.tabId);
       expect(requested).toMatchObject({ stationId: venue.stations.grill, firedAt: null });
-      await setStationToday(
-        tx,
-        venue.cfg,
-        venue.stations.grill,
-        "closed",
-        new Date(),
-        venue.stations.kitchen,
-      );
+      await setStationToday(tx, venue.stations.grill, "closed", new Date(), venue.stations.kitchen);
       const before = await jobCounts(tx, venue);
       await sendLines(tx, venue.cfg, venue.party.tabId, []);
       expect(await items(tx, venue.party.tabId)).toEqual([requested]);
@@ -189,14 +182,7 @@ describe("A773 waiter request: tab send", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await addTabRound(tx, venue.cfg, venue.party.tabId, [{ ...burger(venue), hold: true }]);
-      await setStationToday(
-        tx,
-        venue.cfg,
-        venue.stations.grill,
-        "closed",
-        new Date(),
-        venue.stations.kitchen,
-      );
+      await setStationToday(tx, venue.stations.grill, "closed", new Date(), venue.stations.kitchen);
       await setStationsWaitForPass(tx, true, [venue.stations.kitchen]);
       const before = await jobCounts(tx, venue);
       await sendLines(tx, venue.cfg, venue.party.tabId, []);
@@ -217,14 +203,7 @@ describe("A773 waiter request: tab send", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await addTabRound(tx, venue.cfg, venue.party.tabId, [{ ...burger(venue), hold: true }]);
-      await setStationToday(
-        tx,
-        venue.cfg,
-        venue.stations.grill,
-        "closed",
-        new Date(),
-        venue.stations.kitchen,
-      );
+      await setStationToday(tx, venue.stations.grill, "closed", new Date(), venue.stations.kitchen);
       const before = await jobCounts(tx, venue);
       await sendLines(tx, venue.cfg, venue.party.tabId, []);
       expect(await items(tx, venue.party.tabId)).toEqual([

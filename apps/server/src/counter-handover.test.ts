@@ -82,7 +82,6 @@ useVenueDb({
       ).rows;
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: item!.product_id }, zoneId: null },
         { kind: "no_preparation" },
       );
@@ -262,10 +261,8 @@ describe("handing over a counter order sent without payment", () => {
 
   it("refuses a presented table bill, even in a mode that takes payment after sending (working_order.not_settled)", async () => {
     const id = await tabWith(venue, "Paella");
-    await inTx(venue, (tx) =>
-      VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, id, zones.ticket_then_pay),
-    );
-    const context = await inTx(venue, (tx) => VENUE_SERVICE.findOrderContext(tx, venue.cfg, id));
+    await inTx(venue, (tx) => VENUE_SERVICE.retargetOrderContext(tx, id, zones.ticket_then_pay));
+    const context = await inTx(venue, (tx) => VENUE_SERVICE.findOrderContext(tx, id));
     expect(context?.serviceMode).toBe("ticket_then_pay");
     await placeOrder(
       { ...deps(), admission: testTradingAdmission() },
@@ -808,7 +805,7 @@ describe("GET /api/orders/counter-waiting", () => {
       await tx.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
     });
 
-    const rows = await listCounterWaiting({ db: venue.db }, venue.cfg);
+    const rows = await listCounterWaiting({ db: venue.db });
     expect(rows.find((row) => row.id === id)).toMatchObject({
       status: "placed",
       serviceMode: "prepay",
@@ -956,7 +953,7 @@ describe("GET /api/orders/counter-waiting", () => {
     const statements = async () => {
       const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
       try {
-        const rows = await listCounterWaiting({ db: venue.db }, venue.cfg);
+        const rows = await listCounterWaiting({ db: venue.db });
         return { rows: rows.length, statements: prepare.mock.calls.length };
       } finally {
         prepare.mockRestore();

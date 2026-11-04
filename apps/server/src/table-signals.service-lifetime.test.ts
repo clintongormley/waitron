@@ -32,7 +32,6 @@ useVenueDb({
       const station = await createStation(tx, venue.cfg, { name: "Extra station" });
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: venue.olivesId }, zoneId: null },
         { kind: "station", stationId: station.id },
       );
@@ -60,7 +59,7 @@ async function snapshot(billId: string) {
 async function signalsOf(order: { billId: string; partyId: string }) {
   return inTx(venue, async (tx) => {
     const bills = await readBillSignals(tx, [order.billId], Date.now());
-    const tables = await listTablesWithState(tx, venue.cfg);
+    const tables = await listTablesWithState(tx);
     const table = tables.find((row) => row.party?.id === order.partyId)!;
     return {
       bill: bills.get(order.billId),

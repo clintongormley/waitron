@@ -3,7 +3,6 @@ import { readVenueClock, type Transaction, type VenuePlace } from "@waitron/db";
 import type { BusinessDayClock } from "@waitron/shared";
 import { rangeDates } from "./hours-rules.js";
 import { type CalendarDay, type HolidayFact, type LocalDate } from "./hours-types.js";
-import { type VenueScope } from "./operations.js";
 import { departments } from "./schema/service.js";
 import type { Season } from "./season-rules.js";
 import { calendarCutAnchor } from "./calendar-cut.js";
@@ -17,7 +16,6 @@ import "./errors.js";
  *  calendar draws them, cut at a past day's own ends. */
 export async function calendarDays(
   tx: Transaction,
-  cfg: VenueScope,
   dates: readonly LocalDate[],
   holidays: readonly HolidayFact[],
   stored?: BusinessDayClock,
@@ -28,7 +26,7 @@ export async function calendarDays(
   // A business day's cutover never reads the zone (`cutoverAt`, @waitron/shared
   // business-day-clock.ts), so a venue whose zone cannot be read still has its days drawn.
   const clock = isReadableZone(stored.timeZone) ? stored : { ...stored, timeZone: "UTC" };
-  const plan = await readDayPlan(tx, cfg, dates, seasons);
+  const plan = await readDayPlan(tx, dates, seasons);
   const active = await tx
     .select({ id: departments.id })
     .from(departments)
@@ -36,7 +34,6 @@ export async function calendarDays(
   const open = new Set<LocalDate>();
   const resolved = await resolveDepartmentsDays(
     tx,
-    cfg,
     active.map(({ id }) => id),
     dates,
     clock,
@@ -74,7 +71,6 @@ export async function calendarDays(
  */
 export type HolidayReader = (
   tx: Transaction,
-  cfg: VenueScope,
   from: LocalDate,
   to: LocalDate,
   place?: VenuePlace,
@@ -82,21 +78,19 @@ export type HolidayReader = (
 
 async function readHolidays(
   tx: Transaction,
-  cfg: VenueScope,
   dates: readonly LocalDate[],
   holidays: HolidayReader | undefined,
 ): Promise<readonly HolidayFact[]> {
-  return holidays === undefined ? [] : holidays(tx, cfg, dates[0]!, dates[dates.length - 1]!);
+  return holidays === undefined ? [] : holidays(tx, dates[0]!, dates[dates.length - 1]!);
 }
 
 /** The calendar from `from` to `to`, both included, with any holiday facts `holidays` supplies. */
 export async function readCalendarDays(
   tx: Transaction,
-  cfg: VenueScope,
   from: LocalDate,
   to: LocalDate,
   holidays?: HolidayReader,
 ): Promise<CalendarDay[]> {
   const dates = rangeDates(from, to);
-  return (await calendarDays(tx, cfg, dates, await readHolidays(tx, cfg, dates, holidays))).days;
+  return (await calendarDays(tx, dates, await readHolidays(tx, dates, holidays))).days;
 }

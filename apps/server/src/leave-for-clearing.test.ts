@@ -33,11 +33,11 @@ describe("leaveForClearing", () => {
 
   async function secondDepartment(): Promise<{ departmentId: string; zoneId: string }> {
     return inTx(v, async (tx) => {
-      const department = await createDepartment(tx, v.cfg, {
+      const department = await createDepartment(tx, {
         name: `Terrace ${randomUUID()}`,
         orderStart: "table",
       });
-      const zone = await createServiceZone(tx, v.cfg, {
+      const zone = await createServiceZone(tx, {
         name: `Zone ${randomUUID()}`,
         departmentId: department.id,
       });

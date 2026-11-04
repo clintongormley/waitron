@@ -166,7 +166,7 @@ export async function listStations(
 /** The active stations, each with how it stands today. */
 export async function listStationsToday(tx: Transaction, cfg: TradingContext) {
   const listed = await listStations(tx, cfg);
-  const states = await VENUE_SERVICE.stationStates(tx, { locationId: cfg.locationId }, new Date());
+  const states = await VENUE_SERVICE.stationStates(tx, new Date());
   return listed.map((station) => {
     const state = states.get(station.id);
     return {

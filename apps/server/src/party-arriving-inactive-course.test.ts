@@ -60,7 +60,7 @@ describe("arriving dishes whose course no longer holds them", () => {
             .where(eq(ticketItems.workingOrderLineId, later.id))
         )[0]!.firedAt,
       ).toBeNull();
-      if (kind === "inactive") await inTx(venue, (tx) => deleteCourse(tx, venue.cfg, course!.id));
+      if (kind === "inactive") await inTx(venue, (tx) => deleteCourse(tx, course!.id));
       if (kind === "unheld")
         await inTx(venue, (tx) =>
           updateCourse(tx, venue.cfg, course!.id, { heldUntilFired: false }),

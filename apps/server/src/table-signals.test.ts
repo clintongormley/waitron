@@ -80,7 +80,7 @@ const suite = useVenueDb({
 async function withBar(v: PartyVenue): Promise<string> {
   return inTx(v, async (tx) => {
     const { id } = await createStation(tx, v.cfg, { name: "Barra" });
-    await routeProductTo(tx, v.cfg, v.productId("Caña"), id);
+    await routeProductTo(tx, v.productId("Caña"), id);
     return id;
   });
 }
@@ -983,7 +983,7 @@ describe("the floor's attention signals", () => {
     const statements = async () => {
       const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
       try {
-        const rows = await inTx(v, (tx) => listTablesWithState(tx, v.cfg));
+        const rows = await inTx(v, (tx) => listTablesWithState(tx));
         return { count: prepare.mock.calls.length, rows };
       } finally {
         prepare.mockRestore();
@@ -1035,7 +1035,7 @@ describe("each station's oldest ready time", () => {
         name: "Barra",
         thresholds: { readyWarningAfterMinutes: 6 },
       });
-      await routeProductTo(tx, v.cfg, v.productId("Caña"), id);
+      await routeProductTo(tx, v.productId("Caña"), id);
       return id;
     });
     const kitchen = await cocina(v);

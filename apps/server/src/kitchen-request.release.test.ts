@@ -174,7 +174,6 @@ describe("A773 waiter request: release", () => {
     await withTransaction(db, async (tx) => {
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "category", categoryId: venue.folders.bottled }, zoneId: null },
         { kind: "station", stationId: venue.stations.bar },
       );
@@ -301,7 +300,6 @@ describe("A773 waiter request: release", () => {
     await withTransaction(db, async (tx) => {
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "category", categoryId: venue.folders.bottled }, zoneId: null },
         { kind: "station", stationId: venue.stations.bar },
       );
@@ -358,7 +356,7 @@ describe("A773 waiter request: release", () => {
           venue.party.tabId,
           [requested!.workingOrderLineId, held!.workingOrderLineId],
           undefined,
-          routingOnce(tx, venue.cfg, laterAt),
+          routingOnce(tx, laterAt),
         );
       const row = async () =>
         tx.select().from(ticketItems).where(eq(ticketItems.id, requested!.id));
@@ -408,14 +406,7 @@ describe("A773 waiter request: release", () => {
       expect(await items(tx, venue.party.tabId)).toEqual([
         expect.objectContaining({ stationId: venue.stations.grill, firedAt: null }),
       ]);
-      await setStationToday(
-        tx,
-        venue.cfg,
-        venue.stations.grill,
-        "closed",
-        new Date(),
-        venue.stations.kitchen,
-      );
+      await setStationToday(tx, venue.stations.grill, "closed", new Date(), venue.stations.kitchen);
       await setStationsWaitForPass(tx, true, [venue.stations.kitchen]);
       const before = await jobCounts(tx, venue);
       await fire(tx, venue, placed.groups[0]!.id);

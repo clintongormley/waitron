@@ -8,7 +8,7 @@ import {
 } from "./business-day-schedule.js";
 import { readDepartmentWeekReads, stageMenuWeek } from "./menu-timetable.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
-import { storedTime, wireTime, type VenueScope } from "./operations.js";
+import { storedTime, wireTime } from "./operations.js";
 import {
   departmentDayRanges,
   departmentDays,
@@ -55,21 +55,19 @@ export function joinTouching<T extends { startsAt: string; endsAt: string }>(
  *  or the one named, which must exist. */
 export async function targetSeasons(
   tx: Transaction,
-  cfg: VenueScope,
   seasonId: string | undefined,
 ): Promise<Season[]> {
-  if (seasonId === undefined) return ensureDefaultSeasons(tx, cfg);
-  return [(await seasonsNaming(tx, cfg, seasonId)).own];
+  if (seasonId === undefined) return ensureDefaultSeasons(tx);
+  return [(await seasonsNaming(tx, seasonId)).own];
 }
 
 /** The venue's seasons, after giving a venue without any its four, and the one `id` names, which
  *  must exist. */
 export async function seasonsNaming(
   tx: Transaction,
-  cfg: VenueScope,
   id: string,
 ): Promise<{ all: Season[]; own: Season }> {
-  const all = await ensureDefaultSeasons(tx, cfg);
+  const all = await ensureDefaultSeasons(tx);
   const own = all.find((season) => season.id === id);
   if (own === undefined) throw new AppError("season.not_found", { seasonId: id });
   return { all, own };
@@ -206,7 +204,6 @@ const emptyFilter = (only: SeasonDays | undefined) =>
 /** With `only`, each read week holds just those weekdays' ranges, the rest left empty. */
 export async function readDepartmentSeasonWeeks(
   tx: Transaction,
-  _cfg: VenueScope,
   departmentIds?: readonly string[],
   cutover?: string,
   only?: SeasonDays,
@@ -255,7 +252,6 @@ export async function readDepartmentSeasonWeeks(
 /** With `only`, each read week holds just those weekdays' ranges, the rest left empty. */
 export async function readZoneSeasonWeeks(
   tx: Transaction,
-  _cfg: VenueScope,
   zoneIds?: readonly string[],
   cutover?: string,
   only?: SeasonDays,
@@ -314,7 +310,6 @@ async function within<T>(prefix: string, fn: () => Promise<T>): Promise<T> {
  *  week is written `afterWrite` runs with the clock and zones this save read. */
 export async function saveSeasonWeeks(
   tx: Transaction,
-  cfg: VenueScope,
   seasonId: string,
   input: {
     departments?: readonly { departmentId: string; days: readonly MenuWeekDay[] }[];
@@ -327,13 +322,12 @@ export async function saveSeasonWeeks(
   expectedClockRevision: number,
   afterWrite?: (read: ServingRead) => Promise<void>,
 ): Promise<void> {
-  const season = (await seasonsNaming(tx, cfg, seasonId)).own;
+  const season = (await seasonsNaming(tx, seasonId)).own;
   const clock = await readVenueClock(tx);
   const inForce = inForceClock(clock, at);
   const departmentEntries = input.departments ?? [];
   const departmentReads = await readDepartmentWeekReads(
     tx,
-    cfg,
     departmentEntries.map((entry) => entry.departmentId),
     clock,
   );
@@ -341,7 +335,7 @@ export async function saveSeasonWeeks(
   for (const [index, entry] of departmentEntries.entries()) {
     departmentWeeks.push(
       await within(`departments.${index}.`, () =>
-        stageMenuWeek(tx, cfg, entry.departmentId, entry.days, inForce, season, departmentReads),
+        stageMenuWeek(tx, entry.departmentId, entry.days, inForce, season, departmentReads),
       ),
     );
   }
@@ -349,11 +343,10 @@ export async function saveSeasonWeeks(
   const serving = new Map(
     zoneEntries.length === 0
       ? []
-      : (await readServiceZones(tx, cfg)).map((zone) => [zone.id, zone.departmentId] as const),
+      : (await readServiceZones(tx)).map((zone) => [zone.id, zone.departmentId] as const),
   );
   const zoneSeasonWeeks = await readZoneSeasonWeeks(
     tx,
-    cfg,
     zoneEntries.map((entry) => entry.zoneId),
     clock.dayCutover,
   );
@@ -363,18 +356,13 @@ export async function saveSeasonWeeks(
       throw new AppError("service_zone.not_found", { zoneId: entry.zoneId });
     zoneWeeks.push(
       await within(`zones.${index}.`, () =>
-        stageZoneClosedWeek(tx, cfg, entry.zoneId, entry.days, inForce, season, zoneSeasonWeeks),
+        stageZoneClosedWeek(tx, entry.zoneId, entry.days, inForce, season, zoneSeasonWeeks),
       ),
     );
   }
   const changed = [...departmentWeeks, ...zoneWeeks].some((week) => week.changed);
-  await assertBusinessDayScheduleWrite(
-    tx,
-    cfg,
-    changed ? "time" : "metadata",
-    expectedClockRevision,
-  );
+  await assertBusinessDayScheduleWrite(tx, changed ? "time" : "metadata", expectedClockRevision);
   for (const week of [...departmentWeeks, ...zoneWeeks]) await week.write();
   await afterWrite?.({ clock, departmentOf: serving });
-  if (changed) await assertWaitingChangeFits(tx, cfg, at, clock);
+  if (changed) await assertWaitingChangeFits(tx, at, clock);
 }

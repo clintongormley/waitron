@@ -393,9 +393,9 @@ for (const action of ["preview", "move"] as const) {
     `${action} checks the %s zone and admits an allowed control`,
     async (which) => {
       const f = await fixture();
-      const [department] = await listDepartments(v.db, v.cfg);
+      const [department] = await listDepartments(v.db);
       const restrict = (allowedZoneIds: string[]) =>
-        setProfileServiceAccess(v.db, v.cfg, f.profileId, {
+        setProfileServiceAccess(v.db, f.profileId, {
           departmentId: department!.id,
           allowedZoneIds,
           startingZoneId: allowedZoneIds[0]!,

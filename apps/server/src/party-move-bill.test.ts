@@ -100,11 +100,11 @@ useVenueDb({
     // The tables zone in a department of its own, so a menu priced for the counter's department
     // is not served at the tables.
     await inTx(v, async (tx) => {
-      const department = await createDepartment(tx, v.cfg, {
+      const department = await createDepartment(tx, {
         name: "Comedor",
         orderStart: "table",
       });
-      await configureZone(tx, v.cfg, { zoneId: v.tables.zoneId, departmentId: department.id });
+      await configureZone(tx, { zoneId: v.tables.zoneId, departmentId: department.id });
       await offerProducts(tx, v.cfg, { zone: "tables" });
       comedorDepartment = department.id;
     });
@@ -115,7 +115,6 @@ useVenueDb({
     await inTx(v, (tx) =>
       setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: v.productId("Agua") }, zoneId: null },
         { kind: "no_preparation" },
       ),
@@ -380,9 +379,7 @@ describe("move a bill to another party (after Split a table, or guests joining)"
     await order(v, ana.tabId, "Burger", "Vino");
     await order(v, luis.tabId, "Agua");
     // Stands in for the old tab move, which leaves one party's bills in two service modes.
-    await inTx(v, (tx) =>
-      VENUE_SERVICE.retargetOrderContext(tx, v.cfg, luis.tabId, v.counter.zoneId),
-    );
+    await inTx(v, (tx) => VENUE_SERVICE.retargetOrderContext(tx, luis.tabId, v.counter.zoneId));
     const checkId = await splitOff(ana.partyId, ana.tabId, [2]);
 
     const result = await move(checkId, { tableId: mesa });
@@ -1008,7 +1005,7 @@ describe("the service area of a moved bill", () => {
     await order(v, ana.tabId, "Burger");
     const placed = await placedCounterOrder("Tarta");
     const linesBefore = await lineRows(placed);
-    const before = await inTx(v, (tx) => VENUE_SERVICE.findOrderContext(tx, v.cfg, placed));
+    const before = await inTx(v, (tx) => VENUE_SERVICE.findOrderContext(tx, placed));
     expect(before!.serviceMode).toBe("prepay");
     expect(before!.departmentId).not.toBe(comedorDepartment);
 
@@ -1020,7 +1017,7 @@ describe("the service area of a moved bill", () => {
       partyId: ana.partyId,
       status: "placed",
     });
-    expect(await inTx(v, (tx) => VENUE_SERVICE.findOrderContext(tx, v.cfg, placed))).toEqual({
+    expect(await inTx(v, (tx) => VENUE_SERVICE.findOrderContext(tx, placed))).toEqual({
       zoneId: v.tables.zoneId,
       departmentId: comedorDepartment,
       serviceMode: "table_tab",

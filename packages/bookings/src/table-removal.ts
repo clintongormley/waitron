@@ -6,7 +6,7 @@ import { bookings } from "./schema/bookings.js";
 import { venueWallClockAt } from "./wall-clock.js";
 
 export const BOOKINGS_TABLE_REMOVAL: TableRemoval = {
-  async deleteRefusals(tx, _cfg, tableIds) {
+  async deleteRefusals(tx, tableIds) {
     if (tableIds.length === 0) return [];
     const rows = await tx
       .select({
@@ -30,7 +30,7 @@ export const BOOKINGS_TABLE_REMOVAL: TableRemoval = {
       targets: [{ id: row.id, name: `${row.contactName} · ${row.date} ${row.time.slice(0, 5)}` }],
     }));
   },
-  async refuse(tx, _cfg, tableIds, now) {
+  async refuse(tx, tableIds, now) {
     const refusals = new Map<string, AppError>();
     if (tableIds.length === 0) return refusals;
     const { date: venueToday } = await venueWallClockAt(tx, now);
@@ -59,7 +59,7 @@ export const BOOKINGS_TABLE_REMOVAL: TableRemoval = {
     return refusals;
   },
 
-  async release(tx, _cfg, tableId, label) {
+  async release(tx, tableId, label) {
     await tx
       .update(bookings)
       .set({ tableLabel: label, tableId: null })

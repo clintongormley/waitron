@@ -47,7 +47,7 @@ async function fixture() {
       ])
       .returning();
     const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-    const period = await saveMenuPeriod(tx, cfg, department!.id, {
+    const period = await saveMenuPeriod(tx, department!.id, {
       name: "Late",
       menuId: menu!.id,
       staffMenuIds: [],
@@ -57,15 +57,14 @@ async function fixture() {
         weekday: day,
         slots: day === weekday ? [{ periodId: period.id, startsAt: "22:00", endsAt: "03:00" }] : [],
       }));
-    await replaceMenuWeek(tx, cfg, department!.id, week(1), at, 0);
-    const inactivePeriod = await saveMenuPeriod(tx, cfg, inactive!.id, {
+    await replaceMenuWeek(tx, department!.id, week(1), at, 0);
+    const inactivePeriod = await saveMenuPeriod(tx, inactive!.id, {
       name: "Terrace",
       menuId: menu!.id,
       staffMenuIds: [],
     });
     await replaceMenuWeek(
       tx,
-      cfg,
       inactive!.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -76,7 +75,6 @@ async function fixture() {
     );
     await tx.update(departments).set({ active: false }).where(eq(departments.id, inactive!.id));
     return {
-      cfg,
       department: department!.id,
       inactive: inactive!.id,
       period: period.id,
@@ -95,7 +93,6 @@ const special = (
   withTransaction(suite.db, (tx) =>
     saveSpecialDay(
       tx,
-      f.cfg,
       null,
       {
         name: `Special ${date}`,
@@ -108,10 +105,10 @@ const special = (
     ),
   );
 
-const tones = async (cfg: Awaited<ReturnType<typeof fixture>>["cfg"], from: string, to = from) =>
+const tones = async (from: string, to = from) =>
   withTransaction(suite.db, async (tx) => {
-    const calendar = await readCalendarDays(tx, cfg, from, to);
-    const model = await readSpecialDaysModel(tx, cfg, from, to, at);
+    const calendar = await readCalendarDays(tx, from, to);
+    const model = await readSpecialDaysModel(tx, from, to, at);
     return {
       calendar: calendar.map((day) => day.tone),
       model: model.days.map((day) => day.tone),
@@ -121,8 +118,8 @@ const tones = async (cfg: Awaited<ReturnType<typeof fixture>>["cfg"], from: stri
 
 describe("calendar follows department service periods", () => {
   it("uses business-day ranges rather than midnight tails", async () => {
-    const f = await fixture();
-    expect(await tones(f.cfg, "2026-10-19", "2026-10-20")).toEqual({
+    await fixture();
+    expect(await tones("2026-10-19", "2026-10-20")).toEqual({
       calendar: ["standard", "closed"],
       model: ["standard", "closed"],
       closed: [false, true],
@@ -132,9 +129,9 @@ describe("calendar follows department service periods", () => {
   it("reads each date's own season: Winter's Monday Lunch opens 2 December, Autumn's empty Monday closes 25 November", async () => {
     const f = await fixture();
     await withTransaction(suite.db, async (tx) => {
-      const seasons = await readSeasons(tx, f.cfg);
+      const seasons = await readSeasons(tx);
       const seasonId = (name: string) => seasons.find((season) => season.name === name)!.id;
-      const lunch = await saveMenuPeriod(tx, f.cfg, f.department, {
+      const lunch = await saveMenuPeriod(tx, f.department, {
         name: "Lunch",
         menuId: (await tx.select().from(catalogues))[0]!.id,
         staffMenuIds: [],
@@ -143,19 +140,18 @@ describe("calendar follows department service periods", () => {
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: weekday === 1 ? slots : [] }));
       await replaceMenuWeek(
         tx,
-        f.cfg,
         f.department,
         monday([{ periodId: lunch.id, startsAt: "12:00", endsAt: "15:00" }]),
         at,
         0,
         { seasonId: seasonId("Winter") },
       );
-      await replaceMenuWeek(tx, f.cfg, f.department, monday([]), at, 0, {
+      await replaceMenuWeek(tx, f.department, monday([]), at, 0, {
         seasonId: seasonId("Autumn"),
       });
     });
     const calendar = await withTransaction(suite.db, (tx) =>
-      readCalendarDays(tx, f.cfg, "2030-11-25", "2030-12-02"),
+      readCalendarDays(tx, "2030-11-25", "2030-12-02"),
     );
     expect(calendar.map((day) => [day.date, day.tone])).toEqual([
       ["2030-11-25", "closed"],
@@ -172,12 +168,12 @@ describe("calendar follows department service periods", () => {
   it("keeps a special day without paint closed like the standard week", async () => {
     const f = await fixture();
     await special(f, "2026-10-20", false);
-    expect(await tones(f.cfg, "2026-10-20")).toEqual({
+    expect(await tones("2026-10-20")).toEqual({
       calendar: ["special_day"],
       model: ["special_day"],
       closed: [true],
     });
-    expect(await tones(f.cfg, "2026-10-27")).toEqual({
+    expect(await tones("2026-10-27")).toEqual({
       calendar: ["closed"],
       model: ["closed"],
       closed: [true],
@@ -188,12 +184,12 @@ describe("calendar follows department service periods", () => {
     const f = await fixture();
     await special(f, "2026-10-19", false, [{ periodId: null, startsAt: "22:00", endsAt: "03:00" }]);
     await special(f, "2026-10-26", false);
-    expect(await tones(f.cfg, "2026-10-19")).toEqual({
+    expect(await tones("2026-10-19")).toEqual({
       calendar: ["special_day"],
       model: ["special_day"],
       closed: [true],
     });
-    expect(await tones(f.cfg, "2026-10-26")).toEqual({
+    expect(await tones("2026-10-26")).toEqual({
       calendar: ["special_day"],
       model: ["special_day"],
       closed: [false],
@@ -205,12 +201,12 @@ describe("calendar follows department service periods", () => {
     const lunch = [{ periodId: f.period, startsAt: "10:00", endsAt: "14:00" }];
     await special(f, "2026-10-20", false, lunch);
     await special(f, "2026-10-27", true, lunch);
-    expect(await tones(f.cfg, "2026-10-20")).toEqual({
+    expect(await tones("2026-10-20")).toEqual({
       calendar: ["special_day"],
       model: ["special_day"],
       closed: [false],
     });
-    expect(await tones(f.cfg, "2026-10-27")).toEqual({
+    expect(await tones("2026-10-27")).toEqual({
       calendar: ["special_day"],
       model: ["special_day"],
       closed: [true],
@@ -219,13 +215,13 @@ describe("calendar follows department service periods", () => {
 
   it("a special day's Closed tick overrides a normally open weekday", async () => {
     const f = await fixture();
-    expect(await tones(f.cfg, "2026-10-19")).toEqual({
+    expect(await tones("2026-10-19")).toEqual({
       calendar: ["standard"],
       model: ["standard"],
       closed: [false],
     });
     await special(f, "2026-10-19", true);
-    expect(await tones(f.cfg, "2026-10-19")).toEqual({
+    expect(await tones("2026-10-19")).toEqual({
       calendar: ["special_day"],
       model: ["special_day"],
       closed: [true],
@@ -234,7 +230,7 @@ describe("calendar follows department service periods", () => {
 
   it("ignores inactive departments, and closes when no active department is open", async () => {
     const f = await fixture();
-    expect(await tones(f.cfg, "2026-10-20")).toEqual({
+    expect(await tones("2026-10-20")).toEqual({
       calendar: ["closed"],
       model: ["closed"],
       closed: [true],
@@ -243,7 +239,7 @@ describe("calendar follows department service periods", () => {
       .update(departments)
       .set({ active: false })
       .where(eq(departments.id, f.department));
-    expect(await tones(f.cfg, "2026-10-19")).toEqual({
+    expect(await tones("2026-10-19")).toEqual({
       calendar: ["closed"],
       model: ["closed"],
       closed: [true],

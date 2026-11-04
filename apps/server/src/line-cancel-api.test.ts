@@ -68,7 +68,6 @@ useVenueDb({
       const station = await createStation(tx, venue.cfg, { name: "Extra preparation" });
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: venue.olivesId }, zoneId: null },
         { kind: "station", stationId: station.id },
       );
@@ -871,9 +870,9 @@ describe("the public cancellation read and command", () => {
       const [device] = await venue.db.select().from(devices).where(eq(devices.id, venue.deviceId));
       const profileId = device!.deviceProfileId;
       const elsewhere = await inTx(venue, (tx) =>
-        createZone(tx, venue.cfg, { name: `Elsewhere-${randomUUID()}` }),
+        createZone(tx, { name: `Elsewhere-${randomUUID()}` }),
       );
-      const [department] = await listDepartments(venue.db, venue.cfg);
+      const [department] = await listDepartments(venue.db);
       const body = await bodyFor(p);
       const call = () =>
         send(
@@ -885,7 +884,7 @@ describe("the public cancellation read and command", () => {
         );
       try {
         await inTx(venue, (tx) =>
-          setProfileServiceAccess(tx, venue.cfg, profileId, {
+          setProfileServiceAccess(tx, profileId, {
             departmentId: department!.id,
             allowedZoneIds: [elsewhere.id],
             startingZoneId: elsewhere.id,
@@ -898,7 +897,7 @@ describe("the public cancellation read and command", () => {
         expect(await frozen()).toEqual(before);
       } finally {
         await inTx(venue, (tx) =>
-          setProfileServiceAccess(tx, venue.cfg, profileId, {
+          setProfileServiceAccess(tx, profileId, {
             departmentId: null,
             allowedZoneIds: null,
             startingZoneId: null,
@@ -1162,10 +1161,8 @@ describe("the public cancellation read and command", () => {
       approver: { personId: venue.managerId, pin: PINS.manager },
     });
     const [device] = await venue.db.select().from(devices).where(eq(devices.id, venue.deviceId));
-    const elsewhere = await inTx(venue, (tx) =>
-      createZone(tx, venue.cfg, { name: `Other-${randomUUID()}` }),
-    );
-    const [department] = await listDepartments(venue.db, venue.cfg);
+    const elsewhere = await inTx(venue, (tx) => createZone(tx, { name: `Other-${randomUUID()}` }));
+    const [department] = await listDepartments(venue.db);
     const profile = await inTx(venue, async (tx) => {
       const [created] = await tx
         .insert(deviceProfiles)
@@ -1175,7 +1172,7 @@ describe("the public cancellation read and command", () => {
           capabilities: ["take-orders"],
         })
         .returning();
-      await setProfileServiceAccess(tx, venue.cfg, created!.id, {
+      await setProfileServiceAccess(tx, created!.id, {
         departmentId: department!.id,
         allowedZoneIds: [elsewhere.id],
         startingZoneId: elsewhere.id,

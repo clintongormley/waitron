@@ -190,7 +190,7 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
 /** Live tables the fake bookings removal refuses to let go of. */
 const bookedTables = new Set<string>();
 const fakeBookings: TableRemoval = {
-  refuse: (_tx, _cfg, tableIds) =>
+  refuse: (_tx, tableIds) =>
     Promise.resolve(
       new Map(
         tableIds
@@ -248,7 +248,7 @@ beforeAll(async () => {
   venue = setup.venue;
   testDepartmentId = (
     await withTransaction(suite.db, (tx) =>
-      createDepartment(tx, tillConfigFromVenue(venue), {
+      createDepartment(tx, {
         name: unique("Test department"),
         orderStart: "table",
       }),
@@ -780,7 +780,7 @@ describe("/management-api/tables", () => {
     const { id } = await withTransaction(suite.db, async (tx) =>
       createTable(tx, cfg, {
         label: unique("shape"),
-        zoneId: (await createTableZone(tx, cfg, { name: unique("Shape zone") })).id,
+        zoneId: (await createTableZone(tx, { name: unique("Shape zone") })).id,
       }),
     );
     const response = await req("/tables", { method: "GET" }, managerCookie);
@@ -796,9 +796,7 @@ describe("/management-api/tables", () => {
       const { id } = await withTransaction(suite.db, async (tx) =>
         createTable(tx, tillConfigFromVenue(venue), {
           label: unique("en"),
-          zoneId: (
-            await createTableZone(tx, tillConfigFromVenue(venue), { name: unique("Tables") })
-          ).id,
+          zoneId: (await createTableZone(tx, { name: unique("Tables") })).id,
         }),
       );
       return id;
@@ -833,11 +831,11 @@ describe("/management-api/tables", () => {
       const cfg = tillConfigFromVenue(venue);
       const zoneId = await createZone(unique("Served"));
       const departmentId = await withTransaction(suite.db, async (tx) => {
-        const department = await createDepartment(tx, cfg, {
+        const department = await createDepartment(tx, {
           name: unique("Dept"),
           orderStart: "table",
         });
-        await configureZone(tx, cfg, { zoneId, departmentId: department.id });
+        await configureZone(tx, { zoneId, departmentId: department.id });
         return department.id;
       });
       const { id: tableId } = await withTransaction(suite.db, (tx) =>
@@ -1559,13 +1557,12 @@ describe("/management-api/stations (KDS-1 config)", () => {
   });
 
   it("keeps a station open through default changes until it is deleted", async () => {
-    const cfg = { locationId: brandLocationId(venue.locationId) };
     const first = await createStation(unique("Swap default"), { isDefault: true });
     const second = await createStation(unique("Swap closed"));
     // Tuesday 6 October 2026, 12:00 in Madrid.
     const at = new Date("2026-10-06T10:00:00Z");
     const state = async () =>
-      (await withTransaction(suite.db, (tx) => stationStates(tx, cfg, at))).get(second);
+      (await withTransaction(suite.db, (tx) => stationStates(tx, at))).get(second);
     expect(await state()).toMatchObject({ open: true, isDefault: false, active: true });
 
     expect(

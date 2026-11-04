@@ -482,7 +482,7 @@ describe("replacement department receipt HTTP contract", () => {
       app,
       {
         db: suite.db,
-        cfg: { locationId: f.cfg.locationId, contentDefaultLanguage: "es" },
+        cfg: { contentDefaultLanguage: "es" },
         core: moduleCoreServices(f.cfg, []),
         renderReceiptLogo: render,
       },

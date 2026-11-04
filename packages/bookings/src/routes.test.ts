@@ -17,7 +17,6 @@ import {
   registerModulePermissions,
   startManagementSession,
 } from "@waitron/identity";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import type { ModuleRouteContext } from "@waitron/module";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
@@ -34,7 +33,6 @@ const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_0
 const noopLog: Logger = () => {};
 
 interface Venue {
-  cfg: ModuleRouteContext["cfg"];
   /** The route context `BOOKINGS_ROUTES.mount` receives — `core.seatTable` bound to this venue. */
   ctx: ModuleRouteContext;
   /** A live MANAGEMENT session cookie for a `manager` (holds `booking.manage`). */
@@ -77,12 +75,8 @@ async function setupVenue(): Promise<Venue> {
     return { managerSid: managerSession.token, staffSid: staffSession.token };
   });
 
-  const cfg: ModuleRouteContext["cfg"] = {
-    locationId: brandLocationId(locationId),
-  };
   return {
-    cfg,
-    ctx: { db, cfg, core: fakeCore({ locationId, nodeId }) },
+    ctx: { db, cfg: {}, core: fakeCore({ locationId, nodeId }) },
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
   };
@@ -94,14 +88,15 @@ function mountApp(ctx: ModuleRouteContext): Hono {
   return app;
 }
 
-async function seedTable(cfg: ModuleRouteContext["cfg"], label = "12"): Promise<string> {
+async function seedTable(label = "12"): Promise<string> {
+  const locationId = await venueLocationId(suite.db);
   const [zone] = await suite.db
     .insert(floorZones)
-    .values({ locationId: cfg.locationId, name: label })
+    .values({ locationId, name: label })
     .returning({ id: floorZones.id });
   const [row] = await suite.db
     .insert(diningTables)
-    .values({ locationId: cfg.locationId, label, zoneId: zone!.id })
+    .values({ locationId, label, zoneId: zone!.id })
     .returning({ id: diningTables.id });
   await suite.db.insert(floorTodayTables).values({ tableId: row!.id });
   return row!.id;
@@ -184,9 +179,9 @@ describe("Bookings API (routes, gates and request screens)", () => {
   it.each(["cancel", "no-show", "seat", "complete"] as const)(
     "409s an edit after %s with booking.invalid_transition",
     async (action) => {
-      const { ctx, cfg, managerCookie } = await setupVenue();
+      const { ctx, managerCookie } = await setupVenue();
       const app = mountApp(ctx);
-      const tableId = await seedTable(cfg);
+      const tableId = await seedTable();
       const id = await createBooking(app, managerCookie, { tableId });
       if (action === "complete") {
         expect(
@@ -230,7 +225,7 @@ describe("Bookings API (routes, gates and request screens)", () => {
   it("runs the manager happy path: create → list → patch → seat → read-back", async () => {
     const { ctx, managerCookie } = await setupVenue();
     const app = mountApp(ctx);
-    const tableId = await seedTable(ctx.cfg);
+    const tableId = await seedTable();
 
     const id = await createBooking(app, managerCookie, {
       tableId,
@@ -275,7 +270,7 @@ describe("Bookings API (routes, gates and request screens)", () => {
   it("seats with an explicit tableId in the body when the booking has none", async () => {
     const { ctx, managerCookie } = await setupVenue();
     const app = mountApp(ctx);
-    const tableId = await seedTable(ctx.cfg, "7");
+    const tableId = await seedTable("7");
     const id = await createBooking(app, managerCookie);
 
     const seatRes = await send(app, "POST", `/management-api/bookings/${id}/seat`, managerCookie, {
@@ -315,7 +310,7 @@ describe("Bookings API (routes, gates and request screens)", () => {
   it("completes a seated booking (204)", async () => {
     const { ctx, managerCookie } = await setupVenue();
     const app = mountApp(ctx);
-    const tableId = await seedTable(ctx.cfg);
+    const tableId = await seedTable();
     const id = await createBooking(app, managerCookie, { tableId });
     await send(app, "POST", `/management-api/bookings/${id}/seat`, managerCookie, {});
     const res = await send(

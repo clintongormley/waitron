@@ -371,7 +371,7 @@ async function enrolStationScreen(
   const profileId = await seedProfile(formFactor);
   const screen: DeviceKitchenScreen = { kind: "station", stationIds, zoneIds: null };
   await withTransaction(suite.db, (tx) =>
-    VENUE_SERVICE.addProfileKitchenScreen(tx, venue.cfg, profileId, screen),
+    VENUE_SERVICE.addProfileKitchenScreen(tx, profileId, screen),
   );
   const { deviceId, jar } = await knockAndAccept(app, venue, {
     name,
@@ -405,10 +405,8 @@ async function enrolHandheld(
   return { deviceId, jar, profileId };
 }
 
-const shownOn = (venue: Venue, deviceId: string) =>
-  withTransaction(suite.db, (tx) =>
-    VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, deviceId),
-  );
+const shownOn = (deviceId: string) =>
+  withTransaction(suite.db, (tx) => VENUE_SERVICE.readDeviceKitchenScreens(tx, deviceId));
 
 async function switchStationOff(stationId: string): Promise<void> {
   await suite.db
@@ -876,7 +874,6 @@ describe("Device API — the device-guarded routes", () => {
         select id from working_order_lines where working_order_id = ${orderId} order by line_no`);
       await VENUE_SERVICE.recordKitchenNotices(
         tx,
-        venue.cfg,
         orderId,
         [
           {
@@ -896,9 +893,7 @@ describe("Device API — the device-guarded routes", () => {
       );
     });
     const foreignNotice = (
-      await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.listStationNotices(tx, venue.cfg, cold.id),
-      )
+      await withTransaction(suite.db, (tx) => VENUE_SERVICE.listStationNotices(tx, cold.id))
     )[0]!.id;
     const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId]);
     const notices = async () => {
@@ -927,9 +922,7 @@ describe("Device API — the device-guarded routes", () => {
     expect(ack.status).toBe(204);
     expect(await notices()).toEqual([]);
     expect(
-      await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.listStationNotices(tx, venue.cfg, cold.id),
-      ),
+      await withTransaction(suite.db, (tx) => VENUE_SERVICE.listStationNotices(tx, cold.id)),
     ).toHaveLength(1);
 
     const malformed = await send(
@@ -1120,7 +1113,7 @@ describe("Device API — the device-guarded routes", () => {
     expect(queued(before.stations[2]!)).toEqual([]);
 
     await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+      VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
         station: { stationIds: [venue.defaultStationId, pastry!.id], zoneIds: null },
       }),
     );
@@ -1173,7 +1166,6 @@ describe("Device API — the device-guarded routes", () => {
           select id from working_order_lines where working_order_id = ${orderId} order by line_no`);
         await VENUE_SERVICE.recordKitchenNotices(
           tx,
-          venue.cfg,
           orderId,
           [
             {
@@ -1187,9 +1179,7 @@ describe("Device API — the device-guarded routes", () => {
         );
       });
       const notice = (
-        await withTransaction(suite.db, (tx) =>
-          VENUE_SERVICE.listStationNotices(tx, venue.cfg, cold.id),
-        )
+        await withTransaction(suite.db, (tx) => VENUE_SERVICE.listStationNotices(tx, cold.id))
       )[0]!.id;
       return { venue, app, cold: cold.id, orderId, items, notice };
     }
@@ -1210,7 +1200,7 @@ describe("Device API — the device-guarded routes", () => {
       expect((await advance(app, jar, items[1]!, "preparing")).status).toBe(204);
       expect((await advance(app, jar, items[1]!, "ready")).status).toBe(204);
       const before = await suite.db.select().from(ticketItems).where(eq(ticketItems.id, items[1]!));
-      await withTransaction(suite.db, (tx) => deleteStation(tx, venue.cfg, cold));
+      await withTransaction(suite.db, (tx) => deleteStation(tx, cold));
 
       const off = (await read(app, jar)).find((entry) => entry.id === cold);
       expect(off).toMatchObject({
@@ -1321,7 +1311,7 @@ describe("Device API — the device-guarded routes", () => {
         cold,
       ]);
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+        VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
           station: { stationIds: [venue.defaultStationId], zoneIds: null },
         }),
       );
@@ -1430,7 +1420,7 @@ describe("Device API — the device-guarded routes", () => {
     expect((await read()).status).toBe(200);
 
     await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+      VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
         pass: { stationIds: null, zoneIds: null },
       }),
     );
@@ -1468,7 +1458,7 @@ describe("Device API — the device-guarded routes", () => {
       "Till",
     );
     await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+      VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
         station: { stationIds: [cold.id], zoneIds: null },
       }),
     );
@@ -1800,9 +1790,7 @@ describe("Device management routes (device.manage)", () => {
     for (const id of ids)
       expected.set(
         id,
-        await withTransaction(suite.db, (tx) =>
-          VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, id),
-        ),
+        await withTransaction(suite.db, (tx) => VENUE_SERVICE.readDeviceKitchenScreens(tx, id)),
       );
     expect(new Set([...expected.values()].map((screens) => JSON.stringify(screens))).size).toBe(4);
     const batch = vi.spyOn(VENUE_SERVICE, "readDevicesKitchenScreens");
@@ -2268,7 +2256,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "kitchen_screen.required" } });
     expect(await storedBody(deviceId)).toMatchObject({ name: "Kitchen screen" });
-    expect(await shownOn(venue, deviceId)).toMatchObject([
+    expect(await shownOn(deviceId)).toMatchObject([
       { kind: "station", stations: [{ id: venue.defaultStationId, available: true }] },
     ]);
   });
@@ -2284,7 +2272,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       const profileId = await seedProfile("kds");
       const offer = (stationIds: string[]) =>
         withTransaction(suite.db, (tx) =>
-          VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+          VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
             station: { stationIds, zoneIds: null },
           }),
         );
@@ -2305,16 +2293,14 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       return { deviceId, jar, profileId, off: off!.id, grill: grill!.id };
     }
 
-    const shown = (venue: Venue, deviceId: string) =>
-      withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, deviceId),
-      );
+    const shown = (deviceId: string) =>
+      withTransaction(suite.db, (tx) => VENUE_SERVICE.readDeviceKitchenScreens(tx, deviceId));
 
     it("a PATCH without kitchenScreens omits a deleted station and keeps what a narrowing took", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const { deviceId, grill } = await narrowedKds(venue, app);
-      const before = await shown(venue, deviceId);
+      const before = await shown(deviceId);
       expect(before).toMatchObject([
         {
           kind: "station",
@@ -2329,7 +2315,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
 
       expect(res.status).toBe(204);
       expect(await labelOf(deviceId)).toBe("Renamed");
-      expect(await shown(venue, deviceId)).toEqual(before);
+      expect(await shown(deviceId)).toEqual(before);
     });
 
     it("a PATCH with kitchenScreens replaces the choice and forgets what a narrowing took", async () => {
@@ -2342,7 +2328,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       });
 
       expect(res.status).toBe(204);
-      expect(await shown(venue, deviceId)).toEqual([
+      expect(await shown(deviceId)).toEqual([
         {
           kind: "station",
           available: true,
@@ -2370,7 +2356,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       const kds = await seedProfile("kds");
       const every = { stationIds: null, zoneIds: null };
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, kds, { pass: every }),
+        VENUE_SERVICE.setProfileKitchenScreens(tx, kds, { pass: every }),
       );
       const { deviceId } = await knockAndAccept(app, venue, {
         name: "Pass screen",
@@ -2378,14 +2364,14 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         kitchenScreens: [{ kind: "pass", ...every }],
       });
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, kds, { station: every }),
+        VENUE_SERVICE.setProfileKitchenScreens(tx, kds, { station: every }),
       );
       const till = await seedProfile("till");
 
       expect((await edit(app, venue.managerCookie, deviceId, { profileId: till })).status).toBe(
         204,
       );
-      expect(await shown(venue, deviceId)).toEqual([
+      expect(await shown(deviceId)).toEqual([
         {
           kind: "pass",
           available: true,
@@ -2416,7 +2402,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       );
       const [wide, narrow] = [await seedProfile("till"), await seedProfile("till")];
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, narrow, {
+        VENUE_SERVICE.setProfileKitchenScreens(tx, narrow, {
           station: { stationIds: [venue.defaultStationId], zoneIds: null },
         }),
       );
@@ -2428,7 +2414,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         ],
       });
       const deliSlot = async () =>
-        (await shown(venue, deviceId))[0]!.stations.find((slot) => slot.id === deli.id);
+        (await shown(deviceId))[0]!.stations.find((slot) => slot.id === deli.id);
 
       expect((await edit(app, venue.managerCookie, deviceId, { profileId: narrow })).status).toBe(
         204,
@@ -2452,7 +2438,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const { deviceId, off } = await narrowedKds(venue, app);
-      const before = await shown(venue, deviceId);
+      const before = await shown(deviceId);
       const stored = await edit(app, venue.managerCookie, deviceId, {
         kitchenScreens: [{ kind: "station", stationIds: [off], zoneIds: null }],
       });
@@ -2463,7 +2449,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
           params: { field: "stationIds", reason: "not_found", screen: "station" },
         },
       });
-      expect(await shown(venue, deviceId)).toEqual(before);
+      expect(await shown(deviceId)).toEqual(before);
       const other = await withTransaction(suite.db, (tx) =>
         createStation(tx, venue.cfg, { name: "Other" }),
       );
@@ -2518,7 +2504,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         .returning({ id: floorZones.id });
       const profileId = await seedProfile("kds");
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+        VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
           pass: { stationIds: null, zoneIds: [offered!.id] },
         }),
       );
@@ -2552,7 +2538,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         zoneIds: [zone!.id],
       };
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, { pass: screen }),
+        VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, { pass: screen }),
       );
       const { deviceId } = await knockAndAccept(app, venue, {
         name: "Deleted-zone pass",
@@ -2574,7 +2560,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         },
       });
       expect(await labelOf(deviceId)).toBe("Deleted-zone pass");
-      expect((await shownOn(venue, deviceId))[0]?.zones).toEqual([]);
+      expect((await shownOn(deviceId))[0]?.zones).toEqual([]);
     });
 
     /** A kitchen display running a pass monitor on Cocina and Grill, both offered on its profile. */
@@ -2589,7 +2575,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         zoneIds: null,
       };
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.addProfileKitchenScreen(tx, venue.cfg, profileId, monitor),
+        VENUE_SERVICE.addProfileKitchenScreen(tx, profileId, monitor),
       );
       const { deviceId } = await knockAndAccept(app, venue, {
         name: "Pass monitor",
@@ -2609,9 +2595,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
 
       expect(res.status).toBe(204);
       expect((await deviceBindings(deviceId)).deviceProfileId).toBe(till);
-      expect(await shown(venue, deviceId)).toMatchObject([
-        { kind: "pass_monitor", available: false },
-      ]);
+      expect(await shown(deviceId)).toMatchObject([{ kind: "pass_monitor", available: false }]);
     });
 
     it("a PATCH moving a kitchen display onto a profile offering fewer stations narrows its screen to them", async () => {
@@ -2620,7 +2604,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       const { deviceId, grill } = await monitorKds(venue, app);
       const fewer = await seedProfile("kds");
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.addProfileKitchenScreen(tx, venue.cfg, fewer, {
+        VENUE_SERVICE.addProfileKitchenScreen(tx, fewer, {
           kind: "pass_monitor",
           stationIds: [venue.defaultStationId],
           zoneIds: null,
@@ -2630,7 +2614,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       const res = await edit(app, venue.managerCookie, deviceId, { profileId: fewer });
 
       expect(res.status).toBe(204);
-      expect(await shown(venue, deviceId)).toMatchObject([
+      expect(await shown(deviceId)).toMatchObject([
         {
           kind: "pass_monitor",
           available: true,
@@ -2646,7 +2630,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const { deviceId, profileId } = await monitorKds(venue, app);
-      const before = await shown(venue, deviceId);
+      const before = await shown(deviceId);
       const bare = await seedProfile("kds");
 
       const res = await edit(app, venue.managerCookie, deviceId, { profileId: bare });
@@ -2654,7 +2638,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({ error: { code: "kitchen_screen.required" } });
       expect((await deviceBindings(deviceId)).deviceProfileId).toBe(profileId);
-      expect(await shown(venue, deviceId)).toEqual(before);
+      expect(await shown(deviceId)).toEqual(before);
     });
 
     it("a PATCH naming the station of a kitchen display moved onto a profile not offering its station screen is kitchen_screen.required", async () => {
@@ -2663,13 +2647,13 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       const { deviceId, profileId } = await enrolStationScreen(app, venue, [
         venue.defaultStationId,
       ]);
-      const before = await shown(venue, deviceId);
+      const before = await shown(deviceId);
       expect(before).toMatchObject([
         { kind: "station", stations: [{ id: venue.defaultStationId, available: true }] },
       ]);
       const passOnly = await seedProfile("kds");
       await withTransaction(suite.db, async (tx) => {
-        await VENUE_SERVICE.addProfileKitchenScreen(tx, venue.cfg, passOnly, {
+        await VENUE_SERVICE.addProfileKitchenScreen(tx, passOnly, {
           kind: "pass",
           stationIds: null,
           zoneIds: null,
@@ -2681,7 +2665,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({ error: { code: "kitchen_screen.required" } });
       expect((await deviceBindings(deviceId)).deviceProfileId).toBe(profileId);
-      expect(await shown(venue, deviceId)).toEqual(before);
+      expect(await shown(deviceId)).toEqual(before);
     });
 
     it("a PATCH moving a till onto a kitchen display profile with no screen chosen is kitchen_screen.required", async () => {
@@ -2690,7 +2674,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       const { deviceId, profileId } = await enrolTill(app, venue, "Till");
       const kds = await seedProfile("kds");
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.addProfileKitchenScreen(tx, venue.cfg, kds, {
+        VENUE_SERVICE.addProfileKitchenScreen(tx, kds, {
           kind: "station",
           stationIds: null,
           zoneIds: null,
@@ -2708,7 +2692,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const { deviceId, jar, grill } = await narrowedKds(venue, app);
-      const expected = await shown(venue, deviceId);
+      const expected = await shown(deviceId);
       expect(expected).toMatchObject([
         {
           kind: "station",
@@ -2761,7 +2745,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       name: "Renamed",
       madeHereStationIds: [venue.defaultStationId],
     });
-    expect(await shownOn(venue, deviceId)).toMatchObject([
+    expect(await shownOn(deviceId)).toMatchObject([
       { kind: "station", stations: [], everyStation: false },
     ]);
   });
@@ -2787,7 +2771,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       },
     });
     expect(await storedBody(deviceId)).toMatchObject({ name: "Kitchen screen" });
-    const [shown] = await shownOn(venue, deviceId);
+    const [shown] = await shownOn(deviceId);
     expect(shown!.stations.map((station) => station.id)).not.toContain(off.id);
     expect(shown!.stations.map((station) => station.id)).toContain(venue.defaultStationId);
   });
@@ -2810,7 +2794,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       const profileId = await seedProfile("kds");
       const offer = (passStations: string[] | null) =>
         withTransaction(suite.db, (tx) =>
-          VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+          VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
             station: every,
             pass: { stationIds: passStations, zoneIds: null, showNonPassStations: passValue },
             pass_monitor: every,
@@ -2988,7 +2972,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       ).toBe(204);
       expect(await removalCount(pass)).toBe(1);
       await offer([venue.defaultStationId, grill]);
-      const [widened] = await shownOn(venue, pass);
+      const [widened] = await shownOn(pass);
       expect(widened).toMatchObject({
         kind: "pass",
         showNonPassStations: false,
@@ -3002,7 +2986,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       );
 
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, { station: every }),
+        VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, { station: every }),
       );
       const removals = await removalCount(pass);
       expect(removals).toBeGreaterThan(0);
@@ -3037,7 +3021,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       ]);
       const profileId = await seedProfile("kds", ["prepare-orders"]);
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+        VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
           station: { stationIds: [grill!.id, cold!.id], zoneIds: null },
         }),
       );
@@ -3076,7 +3060,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         },
       });
       const stationsOf = async (deviceId: string) =>
-        (await shownOn(venue, deviceId)).flatMap((screen) => screen.stations.map((st) => st.id));
+        (await shownOn(deviceId)).flatMap((screen) => screen.stations.map((st) => st.id));
       expect(await stationsOf(first.deviceId)).toEqual([grill]);
       expect(await stationsOf(second.deviceId)).toEqual([cold]);
     });
@@ -4174,7 +4158,7 @@ describe("a device's approved profiles and switching its active one", () => {
         zoneIds: null,
       };
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.addProfileKitchenScreen(tx, venue.cfg, kitchen, screen),
+        VENUE_SERVICE.addProfileKitchenScreen(tx, kitchen, screen),
       );
       const staff = await signIn(t.deviceId, "staff");
       await signIn(t.deviceId, "manager");
@@ -4479,11 +4463,10 @@ describe("a device's approved profiles and switching its active one", () => {
       await withTransaction(suite.db, async (tx) => {
         await VENUE_SERVICE.addProfileKitchenScreen(
           tx,
-          venue.cfg,
           listing,
           stationScreen(venue.defaultStationId),
         );
-        await VENUE_SERVICE.addProfileKitchenScreen(tx, venue.cfg, other, stationScreen(grill.id));
+        await VENUE_SERVICE.addProfileKitchenScreen(tx, other, stationScreen(grill.id));
       });
       const moved = await manage(app, venue, t.deviceId, {
         profileId: listing,
@@ -4506,7 +4489,7 @@ describe("a device's approved profiles and switching its active one", () => {
       expect((await deviceBindings(t.deviceId)).deviceProfileId).toBe(other);
       expect(
         await withTransaction(suite.db, (tx) =>
-          VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, t.deviceId),
+          VENUE_SERVICE.readDeviceKitchenScreens(tx, t.deviceId),
         ),
       ).toEqual([
         {
@@ -4538,7 +4521,7 @@ describe("a device's approved profiles and switching its active one", () => {
       );
       const [wide, narrow] = [await seedProfile("till"), await seedProfile("till")];
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, narrow, {
+        VENUE_SERVICE.setProfileKitchenScreens(tx, narrow, {
           station: { stationIds: [venue.defaultStationId], zoneIds: null },
         }),
       );
@@ -4560,7 +4543,7 @@ describe("a device's approved profiles and switching its active one", () => {
       const deliSlot = async (deviceId: string) =>
         (
           await withTransaction(suite.db, (tx) =>
-            VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, deviceId),
+            VENUE_SERVICE.readDeviceKitchenScreens(tx, deviceId),
           )
         )[0]!.stations.find((slot) => slot.id === deli.id);
       for (const { deviceId } of [kept, picked]) {
@@ -4570,7 +4553,7 @@ describe("a device's approved profiles and switching its active one", () => {
         expect(await deliSlot(deviceId)).toMatchObject({ available: false, switchedOff: false });
       }
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.setDeviceKitchenScreens(tx, venue.cfg, {
+        VENUE_SERVICE.setDeviceKitchenScreens(tx, {
           deviceId: picked.deviceId,
           profileId: narrow,
           screens: [{ kind: "station", stationIds: [venue.defaultStationId], zoneIds: null }],
@@ -4657,9 +4640,9 @@ it.each([false, true])(
     const secondProfileId = await seedProfile("till");
     const save = () =>
       withTransaction(suite.db, async (tx) => {
-        const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, venue.cfg, device.deviceId);
+        const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, device.deviceId);
         expect(current.startingZoneId).not.toBeNull();
-        await VENUE_SERVICE.setDeviceZoneSelection(tx, venue.cfg, device.deviceId, {
+        await VENUE_SERVICE.setDeviceZoneSelection(tx, device.deviceId, {
           ...current,
           startingZoneId: current.startingZoneId!,
         });
@@ -4720,7 +4703,7 @@ it.each([false, true])(
       .where(eq(devices.id, device.deviceId));
     expect(
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.readDeviceZoneSelection(tx, venue.cfg, device.deviceId),
+        VENUE_SERVICE.readDeviceZoneSelection(tx, device.deviceId),
       ),
     ).toMatchObject({ profileId: secondProfileId, adjusted: false });
   },

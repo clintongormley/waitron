@@ -9,7 +9,6 @@ import {
 import type { LocalDate } from "./hours-types.js";
 import { readRoutingUses, requirePeriod } from "./menu-timetable.js";
 import type { PeriodRoutingUse } from "./menu-timetable-types.js";
-import type { VenueScope } from "./operations.js";
 import { menuPeriods } from "./schema/menus.js";
 import {
   departmentDayRanges,
@@ -116,7 +115,6 @@ async function paintedIn(
 /** Where each of the venue's periods, or only `periodId`, is painted, keyed by period id. */
 export async function readPaintedIn(
   tx: Transaction,
-  _cfg: VenueScope,
   at: Date,
   periodId?: string,
 ): Promise<Map<string, PaintedIn>> {
@@ -127,14 +125,13 @@ export async function readPaintedIn(
  *  lists them. */
 export async function periodDeleteImpact(
   tx: Transaction,
-  cfg: VenueScope,
   periodId: string,
   at: Date,
 ): Promise<PeriodDeleteImpact> {
-  const period = await requirePeriod(tx, cfg, periodId);
+  const period = await requirePeriod(tx, periodId);
   const today = await businessDayAt(tx, at);
   const painted = (await paintedIn(tx, today, periodId)).get(periodId)!;
-  const routingUses = (await readRoutingUses(tx, cfg, periodId)).get(periodId) ?? [];
+  const routingUses = (await readRoutingUses(tx, periodId)).get(periodId) ?? [];
   const replacements = await tx
     .select({ id: menuPeriods.id, name: menuPeriods.name })
     .from(menuPeriods)
@@ -145,19 +142,18 @@ export async function periodDeleteImpact(
     specialDays: painted.specialDays.length,
     routingUses,
     replacements,
-    clockRevision: await readBusinessDayScheduleRevision(tx, cfg),
+    clockRevision: await readBusinessDayScheduleRevision(tx),
   };
 }
 
 export async function deletePeriod(
   tx: Transaction,
-  cfg: VenueScope,
   periodId: string,
   replacementId: string | null,
   at: Date,
   expectedClockRevision: number,
 ): Promise<void> {
-  const period = await requirePeriod(tx, cfg, periodId);
+  const period = await requirePeriod(tx, periodId);
   if (replacementId !== null) {
     const [replacement] =
       replacementId === periodId
@@ -175,7 +171,7 @@ export async function deletePeriod(
       throw new AppError("menu_period.invalid", { field: "replacementPeriodId" });
   }
   const clock = await readVenueClock(tx);
-  await assertBusinessDayScheduleWrite(tx, cfg, "time", expectedClockRevision);
+  await assertBusinessDayScheduleWrite(tx, "time", expectedClockRevision);
   const dayIds = (
     await tx
       .selectDistinct({ dayId: departmentDayRanges.dayId })
@@ -209,7 +205,7 @@ export async function deletePeriod(
     await joinTouchingRanges(tx, dayIds, clock, at);
   }
   await tx.delete(menuPeriods).where(eq(menuPeriods.id, periodId));
-  await assertWaitingChangeFits(tx, cfg, at, clock);
+  await assertWaitingChangeFits(tx, at, clock);
 }
 
 /** Joins touching ranges of one period within each of `dayIds`' days, ordered from a dated day's

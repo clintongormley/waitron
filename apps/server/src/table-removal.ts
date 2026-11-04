@@ -15,7 +15,6 @@ import type { TableRemoval } from "@waitron/module";
 import type { AppError, DeleteImpactRefusal } from "@waitron/shared";
 import { foodOnItsWay, releaseDeliveries } from "./delivery-release.js";
 import { leaveMerges } from "./floor-today-merges.js";
-import type { TradingContext } from "./trading-context.js";
 
 /** Those of `tableIds` an open party holds or used earlier in its meal, or that an unpaid order, or one with food on its way, is delivered to. */
 export async function tablesTied(
@@ -48,7 +47,6 @@ export async function tablesTied(
 /** Each of `tableIds` some module refuses to let go of, with the first module's refusal. */
 export async function refusedByAModule(
   tx: Transaction,
-  cfg: Pick<TradingContext, "locationId">,
   removals: readonly TableRemoval[],
   tableIds: readonly string[],
   now: Date,
@@ -56,7 +54,7 @@ export async function refusedByAModule(
   const refused = new Map<string, AppError>();
   if (tableIds.length === 0) return refused;
   for (const removal of removals) {
-    const refusals = await removal.refuse(tx, { locationId: cfg.locationId }, tableIds, now);
+    const refusals = await removal.refuse(tx, tableIds, now);
     for (const id of tableIds) {
       const refusal = refusals.get(id);
       if (refusal !== undefined && !refused.has(id)) refused.set(id, refusal);
@@ -71,15 +69,13 @@ export async function refusedByAModule(
  */
 export async function removeLiveTables(
   tx: Transaction,
-  cfg: Pick<TradingContext, "locationId">,
   removals: readonly TableRemoval[],
   tableIds: readonly string[],
   now: Date,
 ): Promise<Set<string>> {
-  const kept = new Set((await refusedByAModule(tx, cfg, removals, tableIds, now)).keys());
+  const kept = new Set((await refusedByAModule(tx, removals, tableIds, now)).keys());
   const rest = tableIds.filter((id) => !kept.has(id));
   if (rest.length === 0) return kept;
-  const { locationId } = cfg;
   const labels = new Map(
     (
       await tx
@@ -90,7 +86,7 @@ export async function removeLiveTables(
   );
   for (const tableId of rest) {
     const label = labels.get(tableId)!;
-    for (const removal of removals) await removal.release(tx, { locationId }, tableId, label);
+    for (const removal of removals) await removal.release(tx, tableId, label);
     await releaseDeliveries(tx, tableId, label);
     await leaveMerges(tx, [tableId]);
     await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, tableId));
@@ -135,7 +131,6 @@ async function deleteWithItsSplit(tx: Transaction, tableId: string): Promise<boo
 
 export async function tableDeleteRefusals(
   tx: Transaction,
-  cfg: Pick<TradingContext, "locationId">,
   removals: readonly TableRemoval[],
   tableIds: readonly string[],
   now: Date,
@@ -145,11 +140,9 @@ export async function tableDeleteRefusals(
   let labels: Map<string, string> | undefined;
   for (const removal of removals) {
     if (removal.deleteRefusals) {
-      result.push(
-        ...(await removal.deleteRefusals(tx, { locationId: cfg.locationId }, tableIds, now)),
-      );
+      result.push(...(await removal.deleteRefusals(tx, tableIds, now)));
     } else {
-      const refusals = await removal.refuse(tx, { locationId: cfg.locationId }, tableIds, now);
+      const refusals = await removal.refuse(tx, tableIds, now);
       for (const id of tableIds) {
         const refusal = refusals.get(id);
         if (refusal === undefined) continue;

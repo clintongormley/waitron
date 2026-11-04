@@ -84,9 +84,9 @@ async function kitchen(grillWaits: boolean): Promise<Kitchen> {
     const { id: grill } = await createStation(tx, v.cfg, { name: "Grill" });
     const { id: bar } = await createStation(tx, v.cfg, { name: "Bar" });
     const desserts = await createCourse(tx, v.cfg, { name: "Desserts", displayOrder: 3 });
-    await routeProductTo(tx, v.cfg, v.productId("Tarta"), grill);
-    await routeProductTo(tx, v.cfg, v.productId("Vino"), bar);
-    await routeProductTo(tx, v.cfg, v.productId("Caña"), bar);
+    await routeProductTo(tx, v.productId("Tarta"), grill);
+    await routeProductTo(tx, v.productId("Vino"), bar);
+    await routeProductTo(tx, v.productId("Caña"), bar);
     await setProductCourse(tx, v.cfg, v.productId("Tarta"), desserts.id);
     await setProductCourse(tx, v.cfg, v.productId("Vino"), desserts.id);
     const printer = async (name: string, stationId: string) => {
@@ -121,7 +121,7 @@ async function withPastry(k: Kitchen): Promise<string> {
     const pastry = `00000000${randomUUID().slice(8)}`;
     await tx.update(kitchenStations).set({ id: pastry }).where(eq(kitchenStations.id, created));
     expect(pastry < k.grill).toBe(true);
-    await routeProductTo(tx, k.v.cfg, k.v.productId("Flan"), pastry);
+    await routeProductTo(tx, k.v.productId("Flan"), pastry);
     await setProductCourse(tx, k.v.cfg, k.v.productId("Flan"), k.desserts);
     await setStationsWaitForPass(tx, true, [pastry]);
     return pastry;
@@ -194,7 +194,7 @@ async function passDevice(k: Kitchen): Promise<PassActor> {
 async function releaseAtPass(k: Kitchen, groupId: string): Promise<void> {
   const by = await passDevice(k);
   await withTransaction(db, async (tx) => {
-    const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, k.v.cfg, by.deviceId)).find(
+    const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, by.deviceId)).find(
       (candidate) => candidate.kind === "pass",
     )!;
     const card = (await readScopedPassBoard(tx, k.v.cfg, passScopeOf(screen))).toFire.find(
@@ -517,7 +517,7 @@ describe("A773 fire paper: the cue on the station card", () => {
     await fire(k, desserts!);
     const by = await passDevice(k);
     const board = await withTransaction(db, async (tx) => {
-      const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, k.v.cfg, by.deviceId)).find(
+      const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, by.deviceId)).find(
         (candidate) => candidate.kind === "pass",
       )!;
       return readScopedPassBoard(tx, k.v.cfg, passScopeOf(screen));
@@ -563,7 +563,7 @@ describe("A773 fire paper: the station names in the cue", () => {
         .update(ticketItems)
         .set({ state: "ready", readyAt: new Date().toISOString() })
         .where(eq(ticketItems.stationId, pastry));
-      await deleteStation(tx, k.v.cfg, pastry);
+      await deleteStation(tx, pastry);
       await updateStation(tx, k.v.cfg, k.grill, { name: "Pastry" });
     });
     const named = await inTx(k.v, (tx) =>

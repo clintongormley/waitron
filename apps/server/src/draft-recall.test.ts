@@ -1320,7 +1320,7 @@ describe("party Recall to draft", () => {
           .select({ id: products.id })
           .from(products)
           .where(eq(products.name, name));
-        await routeProductTo(tx, venue.cfg, product!.id, station);
+        await routeProductTo(tx, product!.id, station);
         routed.push(product!.id);
       }
       await setStationPrinting(tx, { printHeldWork: true }, [stationId, screenId]);
@@ -1384,7 +1384,7 @@ describe("party Recall to draft", () => {
     } finally {
       await inTx(venue, async (tx) => {
         for (const productId of routed)
-          await clearRoutingCell(tx, venue.cfg, {
+          await clearRoutingCell(tx, {
             row: { kind: "product", productId },
             zoneId: null,
           });

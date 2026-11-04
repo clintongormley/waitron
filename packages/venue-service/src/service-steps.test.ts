@@ -135,11 +135,11 @@ describe("a new department's starter steps", () => {
     },
   ] as const)("$title", async ({ locales, names, ...row }) => {
     const venue = "venue" in row ? row.venue : {};
-    const cfg = await seedVenueCfg(`Starter ${locales.join(" ")}`, [...locales], venue);
+    await seedVenueCfg(`Starter ${locales.join(" ")}`, [...locales], venue);
     const department = await scoped((tx) =>
-      createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
+      createDepartment(tx, { name: "Dining", orderStart: "table" }),
     );
-    expect(await scoped((tx) => listServiceSteps(tx, cfg))).toEqual(
+    expect(await scoped((tx) => listServiceSteps(tx))).toEqual(
       starterSteps(department.id, [...names]),
     );
   });
@@ -147,26 +147,26 @@ describe("a new department's starter steps", () => {
 
 describe("service steps", () => {
   it("lists each active department's steps in order, and none of a deleted department", async () => {
-    const cfg = await seedVenueCfg("Listing steps");
+    await seedVenueCfg("Listing steps");
     const { dining, bar, gone } = await scoped(async (tx) => ({
-      dining: await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
-      bar: await createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" }),
-      gone: await createDepartment(tx, cfg, { name: "Gone", orderStart: "table" }),
+      dining: await createDepartment(tx, { name: "Dining", orderStart: "table" }),
+      bar: await createDepartment(tx, { name: "Bar", orderStart: "counter" }),
+      gone: await createDepartment(tx, { name: "Gone", orderStart: "table" }),
     }));
     await scoped(async (tx) => {
-      await saveServiceSteps(tx, cfg, dining.id, [
+      await saveServiceSteps(tx, dining.id, [
         { name: "Set up", start: "seated", courseId: null, minutes: 0 },
         { name: "Take order", start: "after_previous", courseId: null, minutes: 2 },
       ]);
-      await saveServiceSteps(tx, cfg, bar.id, [
+      await saveServiceSteps(tx, bar.id, [
         { name: "Check in", start: "seated", courseId: null, minutes: 5 },
       ]);
-      await saveServiceSteps(tx, cfg, gone.id, [
+      await saveServiceSteps(tx, gone.id, [
         { name: "Gone step", start: "seated", courseId: null, minutes: 0 },
       ]);
       await tx.update(departments).set({ active: false }).where(eq(departments.id, gone.id));
     });
-    const listed = await scoped((tx) => listServiceSteps(tx, cfg));
+    const listed = await scoped((tx) => listServiceSteps(tx));
     const byDepartment = [dining.id, bar.id].sort();
     expect(listed.map((step) => [step.departmentId, step.name])).toEqual(
       byDepartment.flatMap((id) =>
@@ -193,7 +193,7 @@ describe("service steps", () => {
     const mains = await seedCourse(cfg, "Mains", 2);
     const starters = await seedCourse(cfg, "Starters", 1);
     await seedCourse(cfg, "Retired", 0, false);
-    expect(await scoped((tx) => listStepCourses(tx, cfg))).toEqual([
+    expect(await scoped((tx) => listStepCourses(tx))).toEqual([
       { id: starters, name: "Starters" },
       { id: mains, name: "Mains" },
     ]);
@@ -203,10 +203,10 @@ describe("service steps", () => {
     const cfg = await seedVenueCfg("Change set");
     const mains = await seedCourse(cfg, "Mains", 1);
     const department = await scoped((tx) =>
-      createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
+      createDepartment(tx, { name: "Dining", orderStart: "table" }),
     );
     await scoped((tx) =>
-      saveServiceSteps(tx, cfg, department.id, [
+      saveServiceSteps(tx, department.id, [
         { name: "Set up", start: "seated", courseId: null, minutes: 0 },
         { name: "Take order", start: "after_previous", courseId: null, minutes: 2 },
         { name: "Dessert?", start: "course_served", courseId: mains, minutes: 10 },
@@ -215,7 +215,7 @@ describe("service steps", () => {
     const first = await departmentRows(department.id);
     const [setUp, takeOrder, dessert] = first;
     await scoped((tx) =>
-      saveServiceSteps(tx, cfg, department.id, [
+      saveServiceSteps(tx, department.id, [
         { id: takeOrder!.id, name: "  Order  ", start: "seated", courseId: null, minutes: 3 },
         { id: dessert!.id, name: "Dessert?", start: "course_served", courseId: mains, minutes: 10 },
         { name: "Anything else?", start: "since_last_order", courseId: null, minutes: 20 },
@@ -236,16 +236,16 @@ describe("service steps", () => {
   });
 
   it("refuses a step id of another department, naming it, and writes nothing", async () => {
-    const cfg = await seedVenueCfg("Foreign step");
+    await seedVenueCfg("Foreign step");
     const { dining, bar } = await scoped(async (tx) => ({
-      dining: await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
-      bar: await createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" }),
+      dining: await createDepartment(tx, { name: "Dining", orderStart: "table" }),
+      bar: await createDepartment(tx, { name: "Bar", orderStart: "counter" }),
     }));
     await scoped(async (tx) => {
-      await saveServiceSteps(tx, cfg, dining.id, [
+      await saveServiceSteps(tx, dining.id, [
         { name: "Set up", start: "seated", courseId: null, minutes: 0 },
       ]);
-      await saveServiceSteps(tx, cfg, bar.id, [
+      await saveServiceSteps(tx, bar.id, [
         { name: "Check in", start: "seated", courseId: null, minutes: 0 },
       ]);
     });
@@ -253,7 +253,7 @@ describe("service steps", () => {
     const before = await departmentRows(dining.id);
     const error = await captureError(() =>
       scoped((tx) =>
-        saveServiceSteps(tx, cfg, dining.id, [
+        saveServiceSteps(tx, dining.id, [
           { name: "New", start: "seated", courseId: null, minutes: 0 },
           { id: barStep!.id, name: "Stolen", start: "seated", courseId: null, minutes: 0 },
         ]),
@@ -274,17 +274,17 @@ describe("service steps", () => {
       const courseId =
         kind === "inactive" ? await seedCourse(cfg, "Retired", 0, false) : randomUUID();
       const department = await scoped((tx) =>
-        createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
+        createDepartment(tx, { name: "Dining", orderStart: "table" }),
       );
       await scoped((tx) =>
-        saveServiceSteps(tx, cfg, department.id, [
+        saveServiceSteps(tx, department.id, [
           { name: "Set up", start: "seated", courseId: null, minutes: 0 },
         ]),
       );
       const before = await departmentRows(department.id);
       const error = await captureError(() =>
         scoped((tx) =>
-          saveServiceSteps(tx, cfg, department.id, [
+          saveServiceSteps(tx, department.id, [
             { name: "Dessert?", start: "course_served", courseId, minutes: 10 },
           ]),
         ),
@@ -295,17 +295,17 @@ describe("service steps", () => {
   );
 
   it("an empty list deletes the department's steps", async () => {
-    const cfg = await seedVenueCfg("Empty list");
+    await seedVenueCfg("Empty list");
     const department = await scoped((tx) =>
-      createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
+      createDepartment(tx, { name: "Dining", orderStart: "table" }),
     );
     await scoped((tx) =>
-      saveServiceSteps(tx, cfg, department.id, [
+      saveServiceSteps(tx, department.id, [
         { name: "Set up", start: "seated", courseId: null, minutes: 0 },
         { name: "Take order", start: "after_previous", courseId: null, minutes: 2 },
       ]),
     );
-    await scoped((tx) => saveServiceSteps(tx, cfg, department.id, []));
+    await scoped((tx) => saveServiceSteps(tx, department.id, []));
     expect(await departmentRows(department.id)).toEqual([]);
   });
 });
@@ -337,12 +337,12 @@ describe("a step's completions", () => {
       .then((rows) => rows.map((row) => row.stepId));
 
   it("a department save keeps a renamed step's completions and drops a removed step's", async () => {
-    const cfg = await seedVenueCfg("Completions on save");
+    await seedVenueCfg("Completions on save");
     const department = await scoped((tx) =>
-      createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
+      createDepartment(tx, { name: "Dining", orderStart: "table" }),
     );
     await scoped((tx) =>
-      saveServiceSteps(tx, cfg, department.id, [
+      saveServiceSteps(tx, department.id, [
         { name: "Set up", start: "seated", courseId: null, minutes: 0 },
         { name: "Take order", start: "after_previous", courseId: null, minutes: 2 },
       ]),
@@ -350,7 +350,7 @@ describe("a step's completions", () => {
     const [setUp, takeOrder] = await departmentRows(department.id);
     const partyId = await doneOnEach([setUp!.id, takeOrder!.id]);
     await scoped((tx) =>
-      saveServiceSteps(tx, cfg, department.id, [
+      saveServiceSteps(tx, department.id, [
         { id: setUp!.id, name: "Lay the table", start: "seated", courseId: null, minutes: 0 },
       ]),
     );
@@ -358,15 +358,15 @@ describe("a step's completions", () => {
   });
 
   it("a department delete takes its steps' completions", async () => {
-    const cfg = await seedVenueCfg("Completions on delete");
+    await seedVenueCfg("Completions on delete");
     const { dining, bar } = await scoped(async (tx) => ({
-      dining: await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
-      bar: await createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" }),
+      dining: await createDepartment(tx, { name: "Dining", orderStart: "table" }),
+      bar: await createDepartment(tx, { name: "Bar", orderStart: "counter" }),
     }));
     const [diningStep] = await departmentRows(dining.id);
     const [barStep] = await departmentRows(bar.id);
     const partyId = await doneOnEach([diningStep!.id, barStep!.id]);
-    await scoped((tx) => clearServiceDeleteSettings(tx, cfg, [], dining.id));
+    await scoped((tx) => clearServiceDeleteSettings(tx, [], dining.id));
     expect(await completedSteps(partyId)).toEqual([barStep!.id]);
   });
 });

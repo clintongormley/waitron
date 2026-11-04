@@ -173,14 +173,14 @@ it("counts base and child routing rows once and clears only their union", async 
           ),
       ),
     ).toEqual(sorted([...children]));
-    expect(await module.readStationDeleteSettings(tx, f.cfg, f.gone)).toEqual({
+    expect(await module.readStationDeleteSettings(tx, f.gone)).toEqual({
       removes: [
         { key: "station_routing_cells", count: 1, targets: [] },
         { key: "station_routing_periods", count: 3, targets: [] },
       ],
       boundScreens: [],
     });
-    await module.clearStationDeleteSettings(tx, f.cfg, f.gone);
+    await module.clearStationDeleteSettings(tx, f.gone);
     expect(
       await tx.select().from(routingCells).where(eq(routingCells.locationId, f.cfg.locationId)),
     ).toEqual(bases.slice(1));
@@ -197,7 +197,7 @@ it("counts base and child routing rows once and clears only their union", async 
           ),
       ),
     ).toEqual(sorted(children.slice(3)));
-    expect(await module.readStationDeleteSettings(tx, f.cfg, f.gone)).toEqual({
+    expect(await module.readStationDeleteSettings(tx, f.gone)).toEqual({
       removes: [],
       boundScreens: [],
     });
@@ -226,11 +226,11 @@ it("clears owned daily dates and incoming destinations without reopening their o
         { stationId: f.other, businessDay: "2026-10-10", open: false, sendsToStationId: f.gone },
       ])
       .returning();
-    expect((await module.readStationDeleteSettings(tx, f.cfg, f.gone)).removes).toEqual([
+    expect((await module.readStationDeleteSettings(tx, f.gone)).removes).toEqual([
       { key: "station_daily_states", count: 2, targets: [] },
       { key: "station_daily_destinations", count: 1, targets: [{ id: f.other, name: "Survivor" }] },
     ]);
-    await module.clearStationDeleteSettings(tx, f.cfg, f.gone);
+    await module.clearStationDeleteSettings(tx, f.gone);
     expect(
       await tx
         .select()
@@ -238,11 +238,12 @@ it("clears owned daily dates and incoming destinations without reopening their o
         .where(inArray(stationDayStates.stationId, [f.gone, f.other])),
     ).toEqual(rows.slice(2).map((row) => ({ ...row, sendsToStationId: null })));
 
+    expect((await (await routingAt(tx, at)).makers(null, [product!.id])).get(product!.id)).toEqual({
+      kind: "made",
+      route: { kind: "station", stationId: f.home },
+    });
     expect(
-      (await (await routingAt(tx, f.cfg, at)).makers(null, [product!.id])).get(product!.id),
-    ).toEqual({ kind: "made", route: { kind: "station", stationId: f.home } });
-    expect(
-      (await routingModel(tx, f.cfg, at)).stationTimes.find((row) => row.stationId === f.other),
+      (await routingModel(tx, at)).stationTimes.find((row) => row.stationId === f.other),
     ).toMatchObject({ status: { open: false, why: "closed_by_hand" }, closedSendsTo: f.home });
   });
 });
@@ -251,13 +252,13 @@ it("ignores deleted KDS rows while an off retained display still binds the stati
   await run(async (tx) => {
     const f = await fixture(tx);
     const pid = await profile(tx, "Every");
-    await setProfileKitchenScreens(tx, f.cfg, pid, {
+    await setProfileKitchenScreens(tx, pid, {
       station: { stationIds: null, zoneIds: null },
     });
     const deleted = await device(tx, pid, "Deleted display", false);
     const off = await device(tx, pid, "Off display", false);
     for (const id of [deleted, off])
-      await setDeviceKitchenScreens(tx, f.cfg, {
+      await setDeviceKitchenScreens(tx, {
         deviceId: id,
         profileId: pid,
         screens: [{ kind: "station", stationIds: [f.gone], zoneIds: null }],
@@ -266,7 +267,7 @@ it("ignores deleted KDS rows while an off retained display still binds the stati
       .update(devices)
       .set({ deletedAt: at.toISOString(), tokenHash: "" })
       .where(eq(devices.id, deleted));
-    expect((await module.readStationDeleteSettings(tx, f.cfg, f.gone)).boundScreens).toEqual([
+    expect((await module.readStationDeleteSettings(tx, f.gone)).boundScreens).toEqual([
       { id: off, name: "Off display" },
     ]);
   });
@@ -277,10 +278,10 @@ it("finds explicitly bound KDS choices including switched-off devices and dedupl
     const f = await fixture(tx);
     const bounded = await profile(tx, "Bound");
     const every = await profile(tx, "Every");
-    await setProfileKitchenScreens(tx, f.cfg, bounded, {
+    await setProfileKitchenScreens(tx, bounded, {
       station: { stationIds: [f.gone, f.other], zoneIds: null },
     });
-    await setProfileKitchenScreens(tx, f.cfg, every, {
+    await setProfileKitchenScreens(tx, every, {
       station: { stationIds: null, zoneIds: null },
     });
     const explicit = await device(tx, every, "Á explicit");
@@ -290,7 +291,7 @@ it("finds explicitly bound KDS choices including switched-off devices and dedupl
     const removed = await device(tx, every, "Removed");
     const kindRemoved = await device(tx, every, "Kind removed");
     for (const id of [explicit, off, removed, kindRemoved])
-      await setDeviceKitchenScreens(tx, f.cfg, {
+      await setDeviceKitchenScreens(tx, {
         deviceId: id,
         profileId: every,
         screens: [{ kind: "station", stationIds: [f.gone, f.other], zoneIds: null }],
@@ -299,7 +300,7 @@ it("finds explicitly bound KDS choices including switched-off devices and dedupl
       [boundEvery, bounded],
       [bothEvery, every],
     ])
-      await setDeviceKitchenScreens(tx, f.cfg, {
+      await setDeviceKitchenScreens(tx, {
         deviceId: id!,
         profileId: pid!,
         screens: [{ kind: "station", stationIds: null, zoneIds: null }],
@@ -312,7 +313,7 @@ it("finds explicitly bound KDS choices including switched-off devices and dedupl
     await tx
       .insert(deviceKitchenScreenRemovals)
       .values({ deviceId: noticeOnly, screen: "pass", stationId: f.gone });
-    const impact = await module.readStationDeleteSettings(tx, f.cfg, f.gone);
+    const impact = await module.readStationDeleteSettings(tx, f.gone);
     expect(impact.boundScreens).toEqual([
       { id: explicit, name: "Á explicit" },
       { id: boundEvery, name: "B bound" },
@@ -332,7 +333,7 @@ it("finds explicitly bound KDS choices including switched-off devices and dedupl
       },
       { key: "station_profile_screens", count: 1, targets: [{ id: bounded, name: "Bound" }] },
     ]);
-    await module.clearStationDeleteSettings(tx, f.cfg, f.gone);
+    await module.clearStationDeleteSettings(tx, f.gone);
     expect(
       await tx
         .select()
@@ -364,18 +365,18 @@ it("retains empty explicit device and profile parents and all unrelated zones", 
   await run(async (tx) => {
     const f = await fixture(tx);
     const pid = await profile(tx, "Till", "till");
-    await setProfileKitchenScreens(tx, f.cfg, pid, {
+    await setProfileKitchenScreens(tx, pid, {
       pass: { stationIds: [f.gone], zoneIds: [f.zone] },
       station: { stationIds: [f.other], zoneIds: null },
     });
     const explicit = await device(tx, pid, "Explicit");
     const every = await device(tx, pid, "Every");
-    await setDeviceKitchenScreens(tx, f.cfg, {
+    await setDeviceKitchenScreens(tx, {
       deviceId: explicit,
       profileId: pid,
       screens: [{ kind: "pass", stationIds: [f.gone], zoneIds: [f.zone] }],
     });
-    await setDeviceKitchenScreens(tx, f.cfg, {
+    await setDeviceKitchenScreens(tx, {
       deviceId: every,
       profileId: pid,
       screens: [{ kind: "pass", stationIds: null, zoneIds: null }],
@@ -392,7 +393,7 @@ it("retains empty explicit device and profile parents and all unrelated zones", 
       .select()
       .from(deviceKitchenScreenZones)
       .where(eq(deviceKitchenScreenZones.deviceId, explicit));
-    await module.clearStationDeleteSettings(tx, f.cfg, f.gone);
+    await module.clearStationDeleteSettings(tx, f.gone);
     expect(
       await tx
         .select()
@@ -412,13 +413,13 @@ it("retains empty explicit device and profile parents and all unrelated zones", 
         .where(eq(deviceKitchenScreenZones.deviceId, explicit)),
     ).toEqual(zones);
     expect(
-      (await readProfileKitchenScreens(tx, f.cfg)).find((row) => row.profileId === pid)?.screens,
+      (await readProfileKitchenScreens(tx)).find((row) => row.profileId === pid)?.screens,
     ).toEqual({
       pass: { stationIds: [], zoneIds: [f.zone], showNonPassStations: true },
       station: { stationIds: [f.other], zoneIds: null },
     });
-    expect(await readDeviceKitchenScreens(tx, f.cfg, explicit)).toEqual([]);
-    expect((await readDeviceKitchenScreens(tx, f.cfg, every))[0]?.stations).toEqual([]);
+    expect(await readDeviceKitchenScreens(tx, explicit)).toEqual([]);
+    expect((await readDeviceKitchenScreens(tx, every))[0]?.stations).toEqual([]);
   });
 });
 
@@ -427,29 +428,26 @@ it("omits deleted stations from public routing and screen offerings while retain
     const f = await fixture(tx);
     const pid = await profile(tx, "History");
     const did = await device(tx, pid, "History");
-    await setProfileKitchenScreens(tx, f.cfg, pid, {
+    await setProfileKitchenScreens(tx, pid, {
       station: { stationIds: [f.gone, f.other], zoneIds: null },
     });
-    await setDeviceKitchenScreens(tx, f.cfg, {
+    await setDeviceKitchenScreens(tx, {
       deviceId: did,
       profileId: pid,
       screens: [{ kind: "station", stationIds: [f.gone, f.other], zoneIds: null }],
     });
-    await setStationToday(tx, f.cfg, f.gone, "closed", at, f.home);
+    await setStationToday(tx, f.gone, "closed", at, f.home);
     await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.gone));
-    expect((await routingModel(tx, f.cfg, at)).stations.map((row) => row.id)).toEqual([
+    expect((await routingModel(tx, at)).stations.map((row) => row.id)).toEqual([f.home, f.other]);
+    expect((await routingModel(tx, at)).stationTimes.map((row) => row.stationId)).toEqual([
       f.home,
       f.other,
     ]);
-    expect((await routingModel(tx, f.cfg, at)).stationTimes.map((row) => row.stationId)).toEqual([
-      f.home,
+    expect([...(await stationStates(tx, at)).keys()]).toEqual([f.home, f.other]);
+    expect((await readDeviceKitchenScreens(tx, did))[0]?.stations.map((row) => row.id)).toEqual([
       f.other,
     ]);
-    expect([...(await stationStates(tx, f.cfg, at)).keys()]).toEqual([f.home, f.other]);
-    expect(
-      (await readDeviceKitchenScreens(tx, f.cfg, did))[0]?.stations.map((row) => row.id),
-    ).toEqual([f.other]);
-    expect((await (await routingAt(tx, f.cfg, at)).stations()).get(f.gone)).toMatchObject({
+    expect((await (await routingAt(tx, at)).stations()).get(f.gone)).toMatchObject({
       active: false,
       byHand: "closed",
     });
@@ -465,13 +463,13 @@ it.each(["set", "destinations", "open", "close", "service", "read settings", "cl
       return f;
     });
     const actions: Record<string, (tx: Transaction) => Promise<unknown>> = {
-      set: (tx) => setStationToday(tx, f.cfg, f.gone, null, at),
-      destinations: (tx) => stationDestinations(tx, f.cfg, f.gone, at),
-      open: (tx) => openStationForToday(tx, f.cfg, f.gone, at),
-      close: (tx) => closeStationForToday(tx, f.cfg, f.gone, f.home, at),
-      service: (tx) => stationServiceTimes(tx, f.cfg, f.gone, "2026-10-10", "2026-10-10"),
-      "read settings": (tx) => module.readStationDeleteSettings(tx, f.cfg, f.gone),
-      "clear settings": (tx) => module.clearStationDeleteSettings(tx, f.cfg, f.gone),
+      set: (tx) => setStationToday(tx, f.gone, null, at),
+      destinations: (tx) => stationDestinations(tx, f.gone, at),
+      open: (tx) => openStationForToday(tx, f.gone, at),
+      close: (tx) => closeStationForToday(tx, f.gone, f.home, at),
+      service: (tx) => stationServiceTimes(tx, f.gone, "2026-10-10", "2026-10-10"),
+      "read settings": (tx) => module.readStationDeleteSettings(tx, f.gone),
+      "clear settings": (tx) => module.clearStationDeleteSettings(tx, f.gone),
     };
     await expect(run(actions[kind]!)).rejects.toMatchObject({ code: "station.not_found" });
   },
@@ -481,28 +479,28 @@ it("refuses dropping an emptied profile bound instead of making a till unrestric
   const f = await run(async (tx) => {
     const f = await fixture(tx);
     const pid = await profile(tx, "Emptied", "till");
-    await setProfileKitchenScreens(tx, f.cfg, pid, {
+    await setProfileKitchenScreens(tx, pid, {
       station: { stationIds: [f.gone], zoneIds: null },
     });
-    await module.clearStationDeleteSettings(tx, f.cfg, f.gone);
+    await module.clearStationDeleteSettings(tx, f.gone);
     return { ...f, pid };
   });
-  await expect(run((tx) => setProfileKitchenScreens(tx, f.cfg, f.pid, {}))).rejects.toMatchObject({
+  await expect(run((tx) => setProfileKitchenScreens(tx, f.pid, {}))).rejects.toMatchObject({
     code: "device_profile.access_invalid",
     params: { field: "stationScreenStations", reason: "empty" },
   });
   await expect(
     run((tx) =>
-      setProfileKitchenScreens(tx, f.cfg, f.pid, { station: { stationIds: [], zoneIds: null } }),
+      setProfileKitchenScreens(tx, f.pid, { station: { stationIds: [], zoneIds: null } }),
     ),
   ).rejects.toMatchObject({ code: "device_profile.access_invalid", params: { reason: "empty" } });
   await run((tx) =>
-    setProfileKitchenScreens(tx, f.cfg, f.pid, {
+    setProfileKitchenScreens(tx, f.pid, {
       station: { stationIds: [f.other], zoneIds: null },
     }),
   );
   expect(
-    (await run((tx) => readProfileKitchenScreens(tx, f.cfg))).find((row) => row.profileId === f.pid)
+    (await run((tx) => readProfileKitchenScreens(tx))).find((row) => row.profileId === f.pid)
       ?.screens,
   ).toEqual({ station: { stationIds: [f.other], zoneIds: null } });
 });
@@ -512,10 +510,10 @@ it("rejects stale profile and device writes retaining a deleted station", async 
     const f = await fixture(tx);
     const pid = await profile(tx, "Stale");
     const did = await device(tx, pid, "Stale");
-    await setProfileKitchenScreens(tx, f.cfg, pid, {
+    await setProfileKitchenScreens(tx, pid, {
       station: { stationIds: [f.gone], zoneIds: null },
     });
-    await setDeviceKitchenScreens(tx, f.cfg, {
+    await setDeviceKitchenScreens(tx, {
       deviceId: did,
       profileId: pid,
       screens: [{ kind: "station", stationIds: [f.gone], zoneIds: null }],
@@ -525,7 +523,7 @@ it("rejects stale profile and device writes retaining a deleted station", async 
   });
   await expect(
     run((tx) =>
-      setProfileKitchenScreens(tx, f.cfg, f.pid, {
+      setProfileKitchenScreens(tx, f.pid, {
         station: { stationIds: [f.gone], zoneIds: null },
       }),
     ),
@@ -535,7 +533,7 @@ it("rejects stale profile and device writes retaining a deleted station", async 
   });
   await expect(
     run((tx) =>
-      setDeviceKitchenScreens(tx, f.cfg, {
+      setDeviceKitchenScreens(tx, {
         deviceId: f.did,
         profileId: f.pid,
         screens: [{ kind: "station", stationIds: [f.gone], zoneIds: null }],
@@ -552,11 +550,11 @@ it.each(["pass", "pass_monitor"] as const)(
       const bounded = await profile(tx, "Bound pass");
       const every = await profile(tx, "Every pass");
       const till = await profile(tx, "Till pass", "till");
-      await setProfileKitchenScreens(tx, f.cfg, bounded, {
+      await setProfileKitchenScreens(tx, bounded, {
         [kind]: { stationIds: [f.gone, f.other], zoneIds: null },
       });
       for (const pid of [every, till])
-        await setProfileKitchenScreens(tx, f.cfg, pid, {
+        await setProfileKitchenScreens(tx, pid, {
           [kind]: { stationIds: null, zoneIds: null },
         });
       const explicit = await device(tx, every, "A explicit");
@@ -573,7 +571,7 @@ it.each(["pass", "pass_monitor"] as const)(
         [kindRemoved, every],
         [tillExplicit, till],
       ])
-        await setDeviceKitchenScreens(tx, f.cfg, {
+        await setDeviceKitchenScreens(tx, {
           deviceId: did!,
           profileId: pid!,
           screens: [{ kind, stationIds: [f.gone, f.other], zoneIds: null }],
@@ -582,7 +580,7 @@ it.each(["pass", "pass_monitor"] as const)(
         [boundEvery, bounded],
         [bothEvery, every],
       ])
-        await setDeviceKitchenScreens(tx, f.cfg, {
+        await setDeviceKitchenScreens(tx, {
           deviceId: did!,
           profileId: pid!,
           screens: [{ kind, stationIds: null, zoneIds: null }],
@@ -591,7 +589,7 @@ it.each(["pass", "pass_monitor"] as const)(
         { deviceId: removed, screen: kind, stationId: f.gone },
         { deviceId: kindRemoved, screen: kind },
       ]);
-      expect((await module.readStationDeleteSettings(tx, f.cfg, f.gone)).boundScreens).toEqual([
+      expect((await module.readStationDeleteSettings(tx, f.gone)).boundScreens).toEqual([
         { id: explicit, name: "A explicit" },
         { id: boundEvery, name: "B bound" },
         { id: off, name: "Off" },

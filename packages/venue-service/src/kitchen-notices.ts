@@ -16,7 +16,7 @@ import {
   thousandthsToDecimal,
   type Decimal,
 } from "@waitron/shared";
-import { readLinesSoldInEach, type VenueScope } from "./operations.js";
+import { readLinesSoldInEach } from "./operations.js";
 import {
   KITCHEN_NOTICE_DIRECTIONS,
   kitchenNoticeKind,
@@ -85,7 +85,6 @@ const FOLD_KEY = sql<string>`case when ${kitchenNotices.orderNoteChange} is null
 /** Copy line presentation before deleting a line: notices outlive the work they describe. */
 export async function recordKitchenNotices(
   tx: Transaction,
-  _cfg: VenueScope,
   orderId: string,
   items: readonly KitchenNoticeItem[],
   kind: KitchenNoticeKind,
@@ -218,10 +217,9 @@ export async function recordKitchenNotices(
 // Allergy instructions stay actionable until acknowledged, independently of the ordinary notice cap.
 export async function listStationNotices(
   tx: Transaction,
-  cfg: VenueScope,
   stationId: string,
 ): Promise<KitchenNotice[]> {
-  return (await listStationsNotices(tx, cfg, [stationId])).get(stationId)!;
+  return (await listStationsNotices(tx, [stationId])).get(stationId)!;
 }
 
 /**
@@ -230,7 +228,6 @@ export async function listStationNotices(
  */
 export async function listStationsNotices(
   tx: Transaction,
-  _cfg: VenueScope,
   stationIds: readonly string[],
 ): Promise<Map<string, KitchenNotice[]>> {
   const byStation = new Map<string, KitchenNotice[]>(stationIds.map((id) => [id, []]));
@@ -377,7 +374,6 @@ function sameNames(a: Record<string, string> | null, b: Record<string, string> |
  */
 export async function acknowledgeKitchenNotice(
   tx: Transaction,
-  _cfg: VenueScope,
   id: string,
   scope: { stationId?: string } = {},
 ): Promise<void> {

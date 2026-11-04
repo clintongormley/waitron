@@ -570,11 +570,11 @@ describe("screens and actions are separate", () => {
 describe("the order of a sale's refusals", () => {
   it("refuses a profile that takes no orders for that, before checking the zone it names", async () => {
     const deli = await withTransaction(suite.db, async (tx) => {
-      const department = await createDepartment(tx, v.cfg, {
+      const department = await createDepartment(tx, {
         name: `Deli ${randomUUID()}`,
         orderStart: "counter",
       });
-      return createServiceZone(tx, v.cfg, {
+      return createServiceZone(tx, {
         name: `Deli ${randomUUID()}`,
         departmentId: department.id,
       });
@@ -585,7 +585,7 @@ describe("the order of a sale's refusals", () => {
         .select({ departmentId: zoneServicePolicies.departmentId })
         .from(zoneServicePolicies)
         .where(eq(zoneServicePolicies.zoneId, v.counter.zoneId));
-      await setProfileServiceAccess(tx, v.cfg, restaurantOnly, {
+      await setProfileServiceAccess(tx, restaurantOnly, {
         departmentId: policy!.departmentId,
         allowedZoneIds: null,
         startingZoneId: v.counter.zoneId,

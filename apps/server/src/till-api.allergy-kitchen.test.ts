@@ -158,23 +158,13 @@ describe("A669 reads HTTP", () => {
           wasStarted: false,
         },
       ];
-      await VENUE_SERVICE.recordKitchenNotices(
-        tx,
-        f.v.cfg,
-        f.party.tabId,
-        items,
-        "allergy_changed",
-        { allergyBlock: changed },
-      );
-      await VENUE_SERVICE.recordKitchenNotices(
-        tx,
-        f.v.cfg,
-        f.party.tabId,
-        items,
-        "allergy_removed",
-        { allergyBlock: null },
-      );
-      await VENUE_SERVICE.recordKitchenNotices(tx, f.v.cfg, f.party.tabId, items, "changed", {
+      await VENUE_SERVICE.recordKitchenNotices(tx, f.party.tabId, items, "allergy_changed", {
+        allergyBlock: changed,
+      });
+      await VENUE_SERVICE.recordKitchenNotices(tx, f.party.tabId, items, "allergy_removed", {
+        allergyBlock: null,
+      });
+      await VENUE_SERVICE.recordKitchenNotices(tx, f.party.tabId, items, "changed", {
         orderNoteChange: { before: null, after: "Whole order note" },
       });
     });

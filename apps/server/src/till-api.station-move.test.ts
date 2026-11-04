@@ -60,7 +60,7 @@ const call = async (path: string, body: unknown, cookie = venue.cookie) => {
 
 describe("GET /api/stations", () => {
   it("reports the current open state of active stations", async () => {
-    await inTx(venue, (tx) => setStationToday(tx, venue.cfg, grill, "closed", new Date()));
+    await inTx(venue, (tx) => setStationToday(tx, grill, "closed", new Date()));
     const response = await send(venue.app, venue.cookie, "GET", "/api/stations");
     expect(response.status).toBe(200);
     expect(response.json).toEqual(

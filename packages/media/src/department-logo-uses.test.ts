@@ -1,4 +1,3 @@
-import { locationId } from "@waitron/shared";
 import { expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
@@ -127,10 +126,8 @@ it("protects a deleted department's retained receipt logo after its name is reus
       invoiceLocales: ["es-ES"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(tx);
-    const cfg = { locationId: locationId(venueId) };
-    await createDepartment(tx, cfg, { name: "Survivor" });
-    const old = await createDepartment(tx, cfg, { name: "Dining" });
+    await createDepartment(tx, { name: "Survivor" });
+    const old = await createDepartment(tx, { name: "Dining" });
     const { image } = await uploadImage(
       tx,
       { image: photo, names: { en: "Retained logo" } },
@@ -141,7 +138,6 @@ it("protects a deleted department's retained receipt logo after its name is reus
       .values({ departmentId: old.id, receipt: { logo: image.filename } });
     await deleteDepartment(
       tx,
-      cfg,
       {
         removeSets: async () => {},
         readImpact: async () => ({ refusals: [], removes: [] }),
@@ -150,7 +146,7 @@ it("protects a deleted department's retained receipt logo after its name is reus
       old.id,
       new Date("2026-10-11T12:00:00Z"),
     );
-    await createDepartment(tx, cfg, { name: "Dining" });
+    await createDepartment(tx, { name: "Dining" });
     const uses = [{ kind: "department_receipt", id: old.id, name: "Dining", active: false }];
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
     expect((await readImage(tx, image.id)).usageCount).toBe(1);

@@ -129,7 +129,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
     })
     .returning({ id: deviceProfiles.id });
   await withTransaction(db, (tx) =>
-    setProfileServiceAccess(tx, cfg, profile!.id, {
+    setProfileServiceAccess(tx, profile!.id, {
       departmentId: seeded.departmentId,
       allowedZoneIds: null,
       startingZoneId: seeded.startingZoneId,
@@ -176,24 +176,22 @@ export async function provisionSignedInTill<S extends TillSeed>(
 /** A counter department with no periods and an empty week, for a seed that paints its own. */
 export async function createBareDepartment(
   tx: Transaction,
-  cfg: TradingContext,
   name: string,
   at: Date,
 ): Promise<string> {
-  const departmentId = (await createDepartment(tx, cfg, { name, orderStart: "counter" })).id;
+  const departmentId = (await createDepartment(tx, { name, orderStart: "counter" })).id;
   const initialPeriods = await tx
     .select({ id: menuPeriods.id })
     .from(menuPeriods)
     .where(eq(menuPeriods.departmentId, departmentId));
   await replaceMenuWeek(
     tx,
-    cfg,
     departmentId,
     [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
     at,
     0,
   );
-  for (const period of initialPeriods) await deletePeriod(tx, cfg, period.id, null, at, 0);
+  for (const period of initialPeriods) await deletePeriod(tx, period.id, null, at, 0);
   return departmentId;
 }
 

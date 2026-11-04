@@ -14,7 +14,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { businessDayBounds, locationId } from "@waitron/shared";
+import { businessDayBounds } from "@waitron/shared";
 import { resolveDepartmentService } from "@waitron/venue-service";
 import { sql } from "drizzle-orm";
 import { ALL_MODULES } from "./modules.js";
@@ -61,7 +61,7 @@ describe("business-day timeline through cold restore and reset", () => {
     for (const moment of moments)
       serviceBefore.push(
         await withTransaction(suite.db, (tx) =>
-          resolveDepartmentService(tx, venue.cfg, department, new Date(moment)),
+          resolveDepartmentService(tx, department, new Date(moment)),
         ),
       );
     const root = await mkdtemp(join(tmpdir(), "a495-cold-restore-"));
@@ -149,12 +149,7 @@ describe("business-day timeline through cold restore and reset", () => {
           expect(model.businessDayClock.pending === null).toBe(index === 1);
           expect(
             await withTransaction(restored.venue, (tx) =>
-              resolveDepartmentService(
-                tx,
-                { locationId: locationId(venue.cfg.locationId) },
-                department,
-                new Date(moment),
-              ),
+              resolveDepartmentService(tx, department, new Date(moment)),
             ),
           ).toEqual(serviceBefore[index]);
         }

@@ -44,10 +44,9 @@ async function seasonVenue() {
     taxId: nextNif(),
     dayCutover: "06:00",
     seed: async (tx, cfg) => {
-      const restaurant = await createBareDepartment(tx, cfg, "Restaurant", SUNDAY_00_15);
-      const diningRoomId = (
-        await createServiceZone(tx, cfg, { name: "Sala", departmentId: restaurant })
-      ).id;
+      const restaurant = await createBareDepartment(tx, "Restaurant", SUNDAY_00_15);
+      const diningRoomId = (await createServiceZone(tx, { name: "Sala", departmentId: restaurant }))
+        .id;
       const dish = async (menuName: string, name: string) => {
         const menuId = (await createCatalogue(tx, { name: menuName })).id;
         const product = await createProduct(tx, {
@@ -64,7 +63,7 @@ async function seasonVenue() {
       const dinnerMenu = await dish("Cena", "Solomillo");
       const lateBarMenu = await dish("Copas", "Gin tonic");
       const period = async (name: string, menuId: string) =>
-        (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId, staffMenuIds: [] })).id;
+        (await saveMenuPeriod(tx, restaurant, { name, menuId, staffMenuIds: [] })).id;
       const dinner = await period("Dinner", dinnerMenu.menuId);
       const lateBar = await period("Late bar", lateBarMenu.menuId);
       const seasonId = async (name: string) =>
@@ -79,10 +78,10 @@ async function seasonVenue() {
           weekday,
           slots: weekday === SATURDAY ? [{ periodId, startsAt: "20:00", endsAt: "02:00" }] : [],
         }));
-      await replaceMenuWeek(tx, cfg, restaurant, saturday(dinner), SUNDAY_00_15, 0, {
+      await replaceMenuWeek(tx, restaurant, saturday(dinner), SUNDAY_00_15, 0, {
         seasonId: await seasonId("Autumn"),
       });
-      await replaceMenuWeek(tx, cfg, restaurant, saturday(lateBar), SUNDAY_00_15, 0, {
+      await replaceMenuWeek(tx, restaurant, saturday(lateBar), SUNDAY_00_15, 0, {
         seasonId: await seasonId("Winter"),
       });
       return {

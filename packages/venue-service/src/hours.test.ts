@@ -17,14 +17,13 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
+import { locationId, type LocationId } from "@waitron/shared";
 import { readCalendarDays, type HolidayReader } from "./hours.js";
 import { createHolidayStore, readHolidayFacts as installedReadHolidayFacts } from "./holidays.js";
 import { stationStates } from "./routing-store.js";
 import { readCalendarDays as packageReadCalendarDays } from "./index.js";
 import { type CalendarDay, type HolidayFact, type LocalDate } from "./hours-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import type { VenueScope } from "./operations.js";
 import { departments } from "./schema/service.js";
 import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
@@ -43,7 +42,7 @@ beforeAll(() => {
 const AT = new Date("2026-10-06T10:00:00Z");
 
 interface Fixture {
-  cfg: VenueScope;
+  cfg: { locationId: LocationId };
   restaurant: HoursSubject;
   deli: HoursSubject;
   bar: HoursSubject;
@@ -90,14 +89,13 @@ async function fixture(): Promise<Fixture> {
       .insert(catalogues)
       .values({ name: `Calendar ${randomUUID()}` })
       .returning();
-    const calendarPeriod = await saveMenuPeriod(tx, cfg, restaurant!.id, {
+    const calendarPeriod = await saveMenuPeriod(tx, restaurant!.id, {
       name: "Open",
       menuId: calendarMenu!.id,
       staffMenuIds: [],
     });
     await replaceMenuWeek(
       tx,
-      cfg,
       restaurant!.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -119,7 +117,6 @@ async function fixture(): Promise<Fixture> {
 
 /** Saves special day `id` (a new one when null) holding `dates`, through the special-day writer. */
 const saveDay = (
-  f: Fixture,
   id: string | null,
   name: string,
   dates: readonly LocalDate[],
@@ -134,7 +131,6 @@ const saveDay = (
   withTransaction(db, (tx) =>
     saveSpecialDay(
       tx,
-      f.cfg,
       id,
       {
         name,
@@ -149,7 +145,7 @@ const saveDay = (
 
 const dateSnapshot = (f: Fixture, subject: HoursSubject, date: LocalDate) =>
   withTransaction(db, async (tx) => {
-    const day = (await readCalendarDays(tx, f.cfg, date, date))[0]!;
+    const day = (await readCalendarDays(tx, date, date))[0]!;
     const named = (
       await tx
         .select({
@@ -162,7 +158,7 @@ const dateSnapshot = (f: Fixture, subject: HoursSubject, date: LocalDate) =>
         .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
         .where(eq(specialDayDates.locationId, f.cfg.locationId))
     ).find((row) => occursOn({ date: row.date, repeats: row.repeatsYearly }, date));
-    const states = await stationStates(tx, f.cfg, new Date(`${date}T10:00:00Z`));
+    const states = await stationStates(tx, new Date(`${date}T10:00:00Z`));
     return {
       subject,
       openingDate: day.date,
@@ -186,11 +182,11 @@ const storedDates = (f: Fixture) =>
       .orderBy(asc(specialDayDates.date)),
   }));
 
-const tone = (f: Fixture, date: LocalDate) =>
-  withTransaction(db, async (tx) => (await readCalendarDays(tx, f.cfg, date, date))[0]!.tone);
-const toneAndClosed = (f: Fixture, date: LocalDate) =>
+const tone = (date: LocalDate) =>
+  withTransaction(db, async (tx) => (await readCalendarDays(tx, date, date))[0]!.tone);
+const toneAndClosed = (date: LocalDate) =>
   withTransaction(db, async (tx) => {
-    const day = (await readCalendarDays(tx, f.cfg, date, date))[0]!;
+    const day = (await readCalendarDays(tx, date, date))[0]!;
     return [day.tone, day.closed];
   });
 
@@ -226,14 +222,14 @@ async function addSubjects(f: Fixture) {
 
 describe("calendar facts beside station states", () => {
   it("refuses a calendar date that does not exist", async () => {
-    const f = await fixture();
+    await fixture();
     await expect(
-      withTransaction(db, (tx) => readCalendarDays(tx, f.cfg, "2026-02-30", "2026-02-30")),
+      withTransaction(db, (tx) => readCalendarDays(tx, "2026-02-30", "2026-02-30")),
     ).rejects.toMatchObject({
       code: "hours.invalid",
       params: { field: "from" },
     });
-    await expect(tone(f, "2026-02-30")).rejects.toMatchObject({
+    await expect(tone("2026-02-30")).rejects.toMatchObject({
       code: "hours.invalid",
       params: { field: "from" },
     });
@@ -245,19 +241,18 @@ describe("the calendar's Closed colour", () => {
     const f = await fixture();
     const deliPeriod = await withTransaction(db, async (tx) => {
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-      const restaurantPeriod = await saveMenuPeriod(tx, f.cfg, f.departmentIds.restaurant, {
+      const restaurantPeriod = await saveMenuPeriod(tx, f.departmentIds.restaurant, {
         name: "Lunch",
         menuId: menu!.id,
         staffMenuIds: [],
       });
-      const deliPeriod = await saveMenuPeriod(tx, f.cfg, f.departmentIds.deli, {
+      const deliPeriod = await saveMenuPeriod(tx, f.departmentIds.deli, {
         name: "Deli",
         menuId: menu!.id,
         staffMenuIds: [],
       });
       await replaceMenuWeek(
         tx,
-        f.cfg,
         f.departmentIds.restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -271,14 +266,14 @@ describe("the calendar's Closed colour", () => {
       );
       return deliPeriod;
     });
-    expect(await toneAndClosed(f, "2026-10-19")).toEqual(["standard", false]);
-    expect(await toneAndClosed(f, "2026-10-20")).toEqual(["closed", true]);
+    expect(await toneAndClosed("2026-10-19")).toEqual(["standard", false]);
+    expect(await toneAndClosed("2026-10-20")).toEqual(["closed", true]);
     for (const [date, open] of [
       ["2026-10-21", false],
       ["2026-10-22", true],
       ["2026-10-23", true],
     ] as const) {
-      await saveDay(f, null, `Special ${date}`, [date], {
+      await saveDay(null, `Special ${date}`, [date], {
         paint: open
           ? [
               {
@@ -288,20 +283,19 @@ describe("the calendar's Closed colour", () => {
             ]
           : [],
       });
-      expect(await toneAndClosed(f, date)).toEqual(["special_day", !open]);
+      expect(await toneAndClosed(date)).toEqual(["special_day", !open]);
     }
     const { terraceDepartment: terrace } = await addSubjects(f);
-    expect(await toneAndClosed(f, "2026-10-21")).toEqual(["special_day", true]);
+    expect(await toneAndClosed("2026-10-21")).toEqual(["special_day", true]);
     await withTransaction(db, async (tx) => {
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-      const period = await saveMenuPeriod(tx, f.cfg, terrace.id, {
+      const period = await saveMenuPeriod(tx, terrace.id, {
         name: "Terrace",
         menuId: menu!.id,
         staffMenuIds: [],
       });
       await replaceMenuWeek(
         tx,
-        f.cfg,
         terrace.id,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -311,12 +305,12 @@ describe("the calendar's Closed colour", () => {
         0,
       );
     });
-    expect(await toneAndClosed(f, "2026-10-21")).toEqual(["special_day", false]);
+    expect(await toneAndClosed("2026-10-21")).toEqual(["special_day", false]);
     await setDepartmentActive(terrace, false);
-    expect(await toneAndClosed(f, "2026-10-21")).toEqual(["special_day", true]);
-    expect(await toneAndClosed(f, "2026-10-26")).toEqual(["standard", false]);
-    await saveDay(f, null, "Closed Monday", ["2026-10-26"], { closedAllDay: true });
-    expect(await toneAndClosed(f, "2026-10-26")).toEqual(["special_day", true]);
+    expect(await toneAndClosed("2026-10-21")).toEqual(["special_day", true]);
+    expect(await toneAndClosed("2026-10-26")).toEqual(["standard", false]);
+    await saveDay(null, "Closed Monday", ["2026-10-26"], { closedAllDay: true });
+    expect(await toneAndClosed("2026-10-26")).toEqual(["special_day", true]);
   });
 });
 
@@ -337,27 +331,27 @@ describe("holiday facts beside the calendar", () => {
   ];
   /** A reader standing in for a later holiday provider; it records every call it gets. */
   function fakeReader() {
-    const calls: { tx: Transaction; cfg: VenueScope; from: LocalDate; to: LocalDate }[] = [];
-    const reader: HolidayReader = async (tx, cfg, from, to) => {
-      calls.push({ tx, cfg, from, to });
+    const calls: { tx: Transaction; from: LocalDate; to: LocalDate }[] = [];
+    const reader: HolidayReader = async (tx, from, to) => {
+      calls.push({ tx, from, to });
       return FACTS;
     };
     return { reader, calls };
   }
-  const calendar = (f: Fixture, reader?: HolidayReader) =>
-    withTransaction(db, (tx) => readCalendarDays(tx, f.cfg, "2026-10-13", "2026-10-16", reader));
+  const calendar = (reader?: HolidayReader) =>
+    withTransaction(db, (tx) => readCalendarDays(tx, "2026-10-13", "2026-10-16", reader));
   const holidaysOn = (days: CalendarDay[], date: LocalDate) =>
     days.find((day) => day.date === date)!.holidays.map((holiday) => holiday.id);
 
   it("merges each date's facts by date, asking the reader once with the caller's transaction", async () => {
-    const f = await fixture();
+    await fixture();
     const { reader, calls } = fakeReader();
     let outer: Transaction | undefined;
     const days = await withTransaction(db, (tx) => {
       outer = tx;
-      return readCalendarDays(tx, f.cfg, "2026-10-13", "2026-10-16", reader);
+      return readCalendarDays(tx, "2026-10-13", "2026-10-16", reader);
     });
-    expect(calls).toEqual([{ tx: outer, cfg: f.cfg, from: "2026-10-13", to: "2026-10-16" }]);
+    expect(calls).toEqual([{ tx: outer, from: "2026-10-13", to: "2026-10-16" }]);
     expect(calls[0]!.tx).toBe(outer);
     expect(days.map((day) => [day.date, day.holidays.map((holiday) => holiday.name)])).toEqual([
       ["2026-10-13", []],
@@ -367,13 +361,13 @@ describe("holiday facts beside the calendar", () => {
     ]);
     expect(days[1]!.holidays[0]).toEqual(FACTS[0]);
     // With no reader, no date has a fact.
-    expect((await calendar(f)).every((day) => day.holidays.length === 0)).toBe(true);
+    expect((await calendar()).every((day) => day.holidays.length === 0)).toBe(true);
   });
 
   it("reads holiday facts on an ordinary date", async () => {
     const f = await fixture();
     const { reader } = fakeReader();
-    const wednesday = (await calendar(f, reader))[1]!;
+    const wednesday = (await calendar(reader))[1]!;
     expect(wednesday).toEqual({
       date: "2026-10-14",
       specialDay: null,
@@ -385,33 +379,33 @@ describe("holiday facts beside the calendar", () => {
   });
 
   it("keeps a date's facts as they are while a special date there is added, renamed and deleted", async () => {
-    const f = await fixture();
+    await fixture();
     const { reader } = fakeReader();
-    const before = holidaysOn(await calendar(f, reader), "2026-10-14");
+    const before = holidaysOn(await calendar(reader), "2026-10-14");
     expect(before).toEqual(["h1", "h2"]);
 
-    const added = await saveDay(f, null, "Our own party", ["2026-10-14"]);
-    let days = await calendar(f, reader);
+    const added = await saveDay(null, "Our own party", ["2026-10-14"]);
+    let days = await calendar(reader);
     expect(days[1]!.specialDay).toEqual({ id: added.id, name: "Our own party" });
     expect(holidaysOn(days, "2026-10-14")).toEqual(before);
 
-    await saveDay(f, added.id, "Renamed party", ["2026-10-14"]);
-    days = await calendar(f, reader);
+    await saveDay(added.id, "Renamed party", ["2026-10-14"]);
+    days = await calendar(reader);
     expect(days[1]!.specialDay?.name).toBe("Renamed party");
     expect(holidaysOn(days, "2026-10-14")).toEqual(before);
 
-    await withTransaction(db, (tx) => deleteSpecialDay(tx, f.cfg, added.id, AT, 0));
-    days = await calendar(f, reader);
+    await withTransaction(db, (tx) => deleteSpecialDay(tx, added.id, AT, 0));
+    days = await calendar(reader);
     expect(days[1]!.specialDay).toBeNull();
     expect(holidaysOn(days, "2026-10-14")).toEqual(before);
   });
 
   it("lets another module read facts and a special date's id from the package, without the page", async () => {
-    const f = await fixture();
-    const added = await saveDay(f, null, "Harvest festival", ["2026-10-16"]);
+    await fixture();
+    const added = await saveDay(null, "Harvest festival", ["2026-10-16"]);
     const { reader } = fakeReader();
     const days = await withTransaction(db, (tx) =>
-      packageReadCalendarDays(tx, f.cfg, "2026-10-16", "2026-10-16", reader),
+      packageReadCalendarDays(tx, "2026-10-16", "2026-10-16", reader),
     );
     expect(days).toEqual([
       {
@@ -425,10 +419,10 @@ describe("holiday facts beside the calendar", () => {
   });
 
   it("gives the page model the same facts", async () => {
-    const f = await fixture();
+    await fixture();
     const { reader, calls } = fakeReader();
     const model = await withTransaction(db, (tx) =>
-      readCalendarDays(tx, f.cfg, "2026-10-13", "2026-10-16", reader),
+      readCalendarDays(tx, "2026-10-13", "2026-10-16", reader),
     );
     expect(calls.map(({ from, to }) => [from, to])).toEqual([["2026-10-13", "2026-10-16"]]);
     expect(model.map((day) => day.holidays.map((holiday) => holiday.id))).toEqual([
@@ -529,7 +523,7 @@ describe("Hours with the holiday store", () => {
   it("reads a holiday with no special date as its facts beside the standard hours", async () => {
     const f = await placed();
     const days = await withTransaction(db, (tx) =>
-      readCalendarDays(tx, f.cfg, "2026-12-24", "2026-12-26", store.readHolidayFacts),
+      readCalendarDays(tx, "2026-12-24", "2026-12-26", store.readHolidayFacts),
     );
     expect(days[1]).toEqual({
       date: "2026-12-25",
@@ -562,34 +556,34 @@ describe("Hours with the holiday store", () => {
   });
 
   it("gives the calendar a fact the provider repeats only once", async () => {
-    const f = await placed();
+    await placed();
     const repeating = createHolidayStore((country) => (country === "ZZ" ? pack(true) : undefined));
     const days = await withTransaction(db, (tx) =>
-      readCalendarDays(tx, f.cfg, "2026-12-25", "2026-12-25", repeating.readHolidayFacts),
+      readCalendarDays(tx, "2026-12-25", "2026-12-25", repeating.readHolidayFacts),
     );
     expect(days[0]!.holidays.map(({ id }) => id)).toEqual(["shipped:feast", "shipped:north"]);
   });
 
   it("keeps a holiday's facts while a special date there is saved, renamed, moved and deleted", async () => {
-    const f = await placed();
+    await placed();
     const calendar = () =>
       withTransaction(db, (tx) =>
-        readCalendarDays(tx, f.cfg, "2026-12-24", "2026-12-25", store.readHolidayFacts),
+        readCalendarDays(tx, "2026-12-24", "2026-12-25", store.readHolidayFacts),
       );
     const before = await calendar();
-    const added = await saveDay(f, null, "Ours", ["2026-12-25"]);
+    const added = await saveDay(null, "Ours", ["2026-12-25"]);
     expect((await calendar())[1]).toEqual({
       ...before[1],
       specialDay: { id: added.id, name: "Ours" },
       tone: "public_holiday",
     });
-    await saveDay(f, added.id, "Renamed", ["2026-12-25"]);
+    await saveDay(added.id, "Renamed", ["2026-12-25"]);
     expect((await calendar())[1]!.holidays).toEqual(before[1]!.holidays);
-    await saveDay(f, added.id, "Renamed", ["2026-12-24"]);
+    await saveDay(added.id, "Renamed", ["2026-12-24"]);
     const moved = await calendar();
     expect(moved.map(({ specialDay }) => specialDay?.id ?? null)).toEqual([added.id, null]);
     expect(moved.map(({ holidays }) => holidays)).toEqual(before.map(({ holidays }) => holidays));
-    await withTransaction(db, (tx) => deleteSpecialDay(tx, f.cfg, added.id, AT, 0));
+    await withTransaction(db, (tx) => deleteSpecialDay(tx, added.id, AT, 0));
     expect(await calendar()).toEqual(before);
   });
 });
@@ -628,7 +622,7 @@ describe("Hours on a real Spanish public holiday", () => {
   it("shows holiday facts without changing station states", async () => {
     const f = await seville();
     const days = await withTransaction(db, (tx) =>
-      readCalendarDays(tx, f.cfg, HOLIDAY, HOLIDAY, installedReadHolidayFacts),
+      readCalendarDays(tx, HOLIDAY, HOLIDAY, installedReadHolidayFacts),
     );
     expect(days).toEqual([
       {
@@ -667,23 +661,23 @@ describe("special-day station occurrences", () => {
     });
   }
 
-  const calendar = (f: Fixture, from: LocalDate, to = from) =>
-    withTransaction(db, (tx) => readCalendarDays(tx, f.cfg, from, to));
+  const calendar = (from: LocalDate, to = from) =>
+    withTransaction(db, (tx) => readCalendarDays(tx, from, to));
 
   it("closes the Calendar on each yearly occurrence without closing prep stations, adjacent dates or earlier years", async () => {
     const f = await fixture();
     const id = await closure(f);
-    const days = await calendar(f, "2027-12-20", "2027-12-31");
+    const days = await calendar("2027-12-20", "2027-12-31");
     expect(days.filter((day) => day.closed).map((day) => day.date)).toEqual(["2027-12-25"]);
     expect(days.find((day) => day.date === "2027-12-25")).toMatchObject({
       tone: "special_day",
       specialDay: { id, name: "Navidad" },
     });
     expect(
-      (await calendar(f, "2025-12-20", "2025-12-31")).every((day) => day.tone === "standard"),
+      (await calendar("2025-12-20", "2025-12-31")).every((day) => day.tone === "standard"),
     ).toBe(true);
     for (const at of ["2027-12-25T12:00:00Z", "2025-12-25T12:00:00Z"]) {
-      const states = await withTransaction(db, (tx) => stationStates(tx, f.cfg, new Date(at)));
+      const states = await withTransaction(db, (tx) => stationStates(tx, new Date(at)));
       for (const id of [f.bar.id, f.restaurant.id, f.kitchen.id])
         expect(states.get(id)?.open).toBe(true);
     }
@@ -692,22 +686,22 @@ describe("special-day station occurrences", () => {
   it("applies a repeating leap-day Calendar closure only in leap years", async () => {
     const f = await fixture();
     await closure(f, { date: "2024-02-29" });
-    expect((await calendar(f, "2027-02-28", "2027-03-01")).map((day) => day.tone)).toEqual([
+    expect((await calendar("2027-02-28", "2027-03-01")).map((day) => day.tone)).toEqual([
       "standard",
       "standard",
     ]);
-    expect((await calendar(f, "2028-02-28", "2028-03-01")).map((day) => day.tone)).toEqual([
+    expect((await calendar("2028-02-28", "2028-03-01")).map((day) => day.tone)).toEqual([
       "standard",
       "special_day",
       "standard",
     ]);
-    expect((await calendar(f, "2028-02-29"))[0]!.closed).toBe(true);
+    expect((await calendar("2028-02-29"))[0]!.closed).toBe(true);
   });
 
   it("reports a recurring Calendar closure even when its first date is before the requested range", async () => {
     const f = await fixture();
     const id = await closure(f);
-    expect((await calendar(f, "2027-12-25"))[0]).toMatchObject({
+    expect((await calendar("2027-12-25"))[0]).toMatchObject({
       date: "2027-12-25",
       tone: "special_day",
       closed: true,
@@ -718,7 +712,7 @@ describe("special-day station occurrences", () => {
   it("does not report a repeating Calendar closure when no occurrence remains in the date range", async () => {
     const f = await fixture();
     await closure(f, { date: "2024-02-29" });
-    expect((await calendar(f, "9999-01-01"))[0]).toMatchObject({
+    expect((await calendar("9999-01-01"))[0]).toMatchObject({
       date: "9999-01-01",
       tone: "standard",
       specialDay: null,
@@ -728,13 +722,13 @@ describe("special-day station occurrences", () => {
   it("does not report an expired one-off closure on a later Calendar date", async () => {
     const f = await fixture();
     const id = await closure(f, { repeats: false });
-    expect((await calendar(f, "2027-01-01"))[0]).toMatchObject({
+    expect((await calendar("2027-01-01"))[0]).toMatchObject({
       date: "2027-01-01",
       tone: "standard",
       specialDay: null,
     });
-    expect((await calendar(f, "2027-12-25"))[0]).toMatchObject({ specialDay: null });
-    expect((await calendar(f, "2026-12-25"))[0]).toMatchObject({
+    expect((await calendar("2027-12-25"))[0]).toMatchObject({ specialDay: null });
+    expect((await calendar("2026-12-25"))[0]).toMatchObject({
       date: "2026-12-25",
       tone: "special_day",
       closed: true,

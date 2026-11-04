@@ -143,7 +143,7 @@ export function moduleCoreServices(
   const dashboard: OriginConfig = { ...cfg, origin: jobOrigin("dashboard") };
   return {
     seatTable: (tx, req) => seatTable(tx, dashboard, req),
-    floorDeletion: floorDeletionFor(cfg, removals),
+    floorDeletion: floorDeletionFor(removals),
     floorPlanSets: floorPlanSetsFor(),
   };
 }

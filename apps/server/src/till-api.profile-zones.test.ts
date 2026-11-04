@@ -256,8 +256,7 @@ const suite = useVenueDb({
 const noopLog: Logger = () => {};
 
 /** What the lookup routes hand their lookup for a session on `profileId`. */
-const lookupScope = (tx: Transaction, profileId: string) =>
-  orderZoneCondition(tx, v.cfg, profileId);
+const lookupScope = (tx: Transaction, profileId: string) => orderZoneCondition(tx, profileId);
 
 interface Fixtures {
   /** Restaurant: the provisioned department, with the counter, tables and bar zones. */
@@ -381,18 +380,18 @@ beforeAll(async () => {
   );
   const zones = await inTx(v, async (tx) => {
     const restaurantId = await departmentOf(tx, v.tables.zoneId);
-    const bar = await createServiceZone(tx, v.cfg, { name: "Bar", departmentId: restaurantId });
-    await configureZone(tx, v.cfg, {
+    const bar = await createServiceZone(tx, { name: "Bar", departmentId: restaurantId });
+    await configureZone(tx, {
       zoneId: bar.id,
       departmentId: restaurantId,
       orderStart: "counter",
     });
-    const deli = await createDepartment(tx, v.cfg, { name: "Deli", orderStart: "counter" });
-    const deliCounter = await createServiceZone(tx, v.cfg, {
+    const deli = await createDepartment(tx, { name: "Deli", orderStart: "counter" });
+    const deliCounter = await createServiceZone(tx, {
       name: "Deli counter",
       departmentId: deli.id,
     });
-    const deliTables = await createServiceZone(tx, v.cfg, {
+    const deliTables = await createServiceZone(tx, {
       name: "Deli tables",
       departmentId: deli.id,
     });
@@ -460,7 +459,7 @@ beforeAll(async () => {
   personId = person!.id;
   restaurantProfile = await profile();
   await inTx(v, async (tx) =>
-    setProfileServiceAccess(tx, v.cfg, restaurantProfile, {
+    setProfileServiceAccess(tx, restaurantProfile, {
       departmentId: await departmentOf(tx, v.tables.zoneId),
       allowedZoneIds: null,
       startingZoneId: f.bar,
@@ -470,7 +469,7 @@ beforeAll(async () => {
   plain = await signIn(await profile());
   deliProfile = await profile();
   await inTx(v, async (tx) =>
-    setProfileServiceAccess(tx, v.cfg, deliProfile, {
+    setProfileServiceAccess(tx, deliProfile, {
       departmentId: await departmentOf(tx, f.deliCounter),
       allowedZoneIds: null,
       startingZoneId: f.deliCounter,
@@ -1481,7 +1480,7 @@ describe("A773 pass board", () => {
       createStation(tx, v.cfg, { name: `Grill ${randomUUID().slice(0, 4)}` }),
     );
     const deliTablesBurger = await inTx(v, async (tx) => {
-      await routeProductTo(tx, v.cfg, v.productId("Burger"), grill.id);
+      await routeProductTo(tx, v.productId("Burger"), grill.id);
       await setStationsWaitForPass(tx, true, [grill.id]);
       return (
         await offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, orderStart: "table" })
@@ -1742,7 +1741,7 @@ describe("a Restaurant profile in its own zones", () => {
       lines: [{ menuItemId: f.deliSpecial, quantity: "1" }],
     });
     expect(answer.status).toBe(200);
-    const zones = await inTx(v, (tx) => VENUE_SERVICE.findOrderZones(tx, v.cfg, [orderId]));
+    const zones = await inTx(v, (tx) => VENUE_SERVICE.findOrderZones(tx, [orderId]));
     expect(zones.get(orderId)).toBe(f.bar);
   });
 
@@ -1837,7 +1836,7 @@ describe("a Restaurant profile in its own zones", () => {
 
   it("refuses a Restaurant zone moved to the Deli after the profile was saved, as it refuses the Deli's", async () => {
     const { terrace, table } = await inTx(v, async (tx) => {
-      const zone = await createServiceZone(tx, v.cfg, {
+      const zone = await createServiceZone(tx, {
         name: "Terrace",
         departmentId: await departmentOf(tx, v.tables.zoneId),
       });
@@ -1858,9 +1857,7 @@ describe("a Restaurant profile in its own zones", () => {
         .from(zoneServicePolicies)
         .where(eq(zoneServicePolicies.zoneId, f.deliCounter)),
     );
-    await inTx(v, (tx) =>
-      configureZone(tx, v.cfg, { zoneId: terrace, departmentId: deli!.departmentId }),
-    );
+    await inTx(v, (tx) => configureZone(tx, { zoneId: terrace, departmentId: deli!.departmentId }));
     expect(await send(restaurant, "GET", `/api/service-zones/${terrace}/offers`)).toEqual(
       notAllowed(terrace),
     );
@@ -1871,7 +1868,7 @@ describe("a Restaurant profile in its own zones", () => {
 
   it("refuses a Restaurant zone deactivated after the profile was saved", async () => {
     const patio = await inTx(v, async (tx) => {
-      const zone = await createServiceZone(tx, v.cfg, {
+      const zone = await createServiceZone(tx, {
         name: "Patio",
         departmentId: await departmentOf(tx, v.tables.zoneId),
       });
@@ -1891,11 +1888,11 @@ describe("a Restaurant profile in its own zones", () => {
     const profileId = await profile();
     const zoneId = await inTx(v, async (tx) => {
       const restaurantId = await departmentOf(tx, v.tables.zoneId);
-      const zone = await createServiceZone(tx, v.cfg, {
+      const zone = await createServiceZone(tx, {
         name: "Snug",
         departmentId: restaurantId,
       });
-      await setProfileServiceAccess(tx, v.cfg, profileId, {
+      await setProfileServiceAccess(tx, profileId, {
         departmentId: restaurantId,
         allowedZoneIds: [zone.id],
         startingZoneId: zone.id,
@@ -2098,7 +2095,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     const profileId = await profile();
     await inTx(v, async (tx) => {
       await tx.update(deviceProfiles).set({ formFactor }).where(eq(deviceProfiles.id, profileId));
-      await setProfileServiceAccess(tx, v.cfg, profileId, {
+      await setProfileServiceAccess(tx, profileId, {
         departmentId: await departmentOf(tx, f.restTables),
         allowedZoneIds: [f.restTables],
         startingZoneId: f.restTables,
@@ -2118,7 +2115,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     const profileId = await profile();
     await inTx(v, async (tx) => {
       await tx.update(deviceProfiles).set({ formFactor }).where(eq(deviceProfiles.id, profileId));
-      await setProfileServiceAccess(tx, v.cfg, profileId, {
+      await setProfileServiceAccess(tx, profileId, {
         departmentId: await departmentOf(tx, f.restTables),
         allowedZoneIds: [f.restTables, f.counter],
         startingZoneId: f.restTables,

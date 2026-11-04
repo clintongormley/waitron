@@ -1,10 +1,8 @@
 import { and, eq, inArray, ne } from "drizzle-orm";
 import { diningTables, workingOrders } from "@waitron/db";
 import type { Database, SQL, Transaction } from "@waitron/db";
-import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { partyFamily, partyStateAndZone } from "./parties.js";
-import type { TradingContext } from "./trading-context.js";
 
 /** What a till request acts on, by where its service zone is read from. */
 export type ZoneSubject =
@@ -13,17 +11,13 @@ export type ZoneSubject =
 /** The zones the session's profile may work in, or null when it has no department restriction. */
 export type ZoneScope = ReadonlySet<string> | null;
 
-async function subjectZones(
-  tx: Transaction,
-  cfg: TradingContext,
-  subject: ZoneSubject,
-): Promise<(string | null)[]> {
+async function subjectZones(tx: Transaction, subject: ZoneSubject): Promise<(string | null)[]> {
   if ("zoneId" in subject) return [subject.zoneId.toLowerCase()];
   if ("orderId" in subject) {
     const id = subject.orderId.toLowerCase();
-    return [(await VENUE_SERVICE.findOrderZones(tx, cfg, [id])).get(id) ?? null];
+    return [(await VENUE_SERVICE.findOrderZones(tx, [id])).get(id) ?? null];
   }
-  if ("partyId" in subject) return partySubjectZones(tx, cfg, subject.partyId.toLowerCase());
+  if ("partyId" in subject) return partySubjectZones(tx, subject.partyId.toLowerCase());
   const [table] = await tx
     .select({ zoneId: diningTables.zoneId })
     .from(diningTables)
@@ -32,11 +26,7 @@ async function subjectZones(
 }
 
 /** A closed party holds no table, and a dish of any bill of its family can still be read through it. */
-async function partySubjectZones(
-  tx: Transaction,
-  cfg: TradingContext,
-  partyId: string,
-): Promise<(string | null)[]> {
+async function partySubjectZones(tx: Transaction, partyId: string): Promise<(string | null)[]> {
   const party = await partyStateAndZone(tx, partyId);
   if (party?.state !== "closed") return [party?.zoneId ?? null];
   const bills = await tx
@@ -50,7 +40,6 @@ async function partySubjectZones(
     );
   const zones = await VENUE_SERVICE.findOrderZones(
     tx,
-    cfg,
     bills.map((bill) => bill.id),
   );
   return [...zones.values()];
@@ -62,27 +51,25 @@ async function partySubjectZones(
  */
 export async function assertSubjectZones(
   tx: Transaction,
-  cfg: TradingContext,
   profileId: string,
   subjects: readonly ZoneSubject[],
 ): Promise<void> {
-  const scope = await readZoneScope(tx, cfg, profileId);
+  const scope = await readZoneScope(tx, profileId);
   if (scope === null) return;
   for (const subject of subjects)
-    for (const zoneId of await subjectZones(tx, cfg, subject))
+    for (const zoneId of await subjectZones(tx, subject))
       // venue-service raises the refusal: it re-reads the profile's zones and refuses this one.
       if (zoneId !== null && !scope.has(zoneId))
-        await VENUE_SERVICE.assertProfileZone(tx, cfg, profileId, zoneId);
+        await VENUE_SERVICE.assertProfileZone(tx, profileId, zoneId);
 }
 
 /** {@link assertSubjectZones} for the session's profile, first thing in the route's own transaction. */
 export async function checkZones(
   tx: Transaction,
-  cfg: TradingContext,
   session: { device: { deviceProfileId: string } },
   subjects: readonly ZoneSubject[],
 ): Promise<void> {
-  await assertSubjectZones(tx, cfg, session.device.deviceProfileId, subjects);
+  await assertSubjectZones(tx, session.device.deviceProfileId, subjects);
 }
 
 /**
@@ -90,19 +77,15 @@ export async function checkZones(
  * It reads committed rows outside the transaction that acts, and takes no turn in the write queue.
  */
 export async function gateZones(
-  deps: { db: Database; cfg: TradingContext },
+  deps: { db: Database },
   session: { device: { deviceProfileId: string } },
   subjects: readonly ZoneSubject[],
 ): Promise<void> {
-  await assertSubjectZones(deps.db, deps.cfg, session.device.deviceProfileId, subjects);
+  await assertSubjectZones(deps.db, session.device.deviceProfileId, subjects);
 }
 
-export async function readZoneScope(
-  tx: Transaction,
-  cfg: { locationId: LocationId },
-  profileId: string,
-): Promise<ZoneScope> {
-  const { allowedZoneIds } = await VENUE_SERVICE.readProfileZones(tx, cfg, profileId);
+export async function readZoneScope(tx: Transaction, profileId: string): Promise<ZoneScope> {
+  const { allowedZoneIds } = await VENUE_SERVICE.readProfileZones(tx, profileId);
   return allowedZoneIds === null ? null : new Set(allowedZoneIds);
 }
 
@@ -116,25 +99,23 @@ export type OrderZoneCondition = (orderId: SQL) => SQL;
 
 export async function orderZoneCondition(
   tx: Transaction,
-  cfg: TradingContext,
   profileId: string,
 ): Promise<OrderZoneCondition | undefined> {
-  const scope = await readZoneScope(tx, cfg, profileId);
+  const scope = await readZoneScope(tx, profileId);
   if (scope === null) return undefined;
-  return (orderId) => VENUE_SERVICE.orderInZones(cfg, orderId, [...scope]);
+  return (orderId) => VENUE_SERVICE.orderInZones(orderId, [...scope]);
 }
 
 /** The orders the session's profile may see: those in its zones, and those in none. Read as {@link gateZones} reads. */
 export async function visibleOrders<T extends { id: string }>(
-  deps: { db: Database; cfg: TradingContext },
+  deps: { db: Database },
   session: { device: { deviceProfileId: string } },
   orders: readonly T[],
 ): Promise<T[]> {
-  const scope = await readZoneScope(deps.db, deps.cfg, session.device.deviceProfileId);
+  const scope = await readZoneScope(deps.db, session.device.deviceProfileId);
   if (scope === null) return [...orders];
   const zones = await VENUE_SERVICE.findOrderZones(
     deps.db,
-    deps.cfg,
     orders.map((order) => order.id),
   );
   return orders.filter((order) => inScope(scope, zones.get(order.id)));

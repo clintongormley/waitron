@@ -66,12 +66,12 @@ export async function releasePassItems(
     throw new AppError("session.required", {});
   const refused = passReleaseRefusal(device);
   if (refused !== null) throw new AppError("device.forbidden_action", { action: refused });
-  const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, cfg, by.deviceId)).find(
+  const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, by.deviceId)).find(
     (candidate) => candidate.kind === "pass",
   );
   if (screen?.available !== true) throw new AppError("device.unauthorized", {});
   const ask = passReleaseAsk(body);
-  await assertSubjectZones(tx, cfg, device.deviceProfileId, [
+  await assertSubjectZones(tx, device.deviceProfileId, [
     ask.target.kind === "group"
       ? { partyId: ask.target.partyId }
       : { orderId: ask.target.workingOrderId },

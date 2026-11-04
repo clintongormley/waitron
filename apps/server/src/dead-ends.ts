@@ -35,10 +35,9 @@ export async function requireMakeAtStation(
 
 export async function availableStations(
   tx: Transaction,
-  cfg: TradingContext,
   at: Date,
 ): Promise<DeadEndAnswer["stations"]> {
-  const states = await VENUE_SERVICE.stationStates(tx, cfg, at);
+  const states = await VENUE_SERVICE.stationStates(tx, at);
   return [...states].flatMap(([id, state]) =>
     state.active ? [{ id, name: state.name, open: state.open }] : [],
   );
@@ -46,13 +45,12 @@ export async function availableStations(
 
 export async function findDeadEnds(
   tx: Transaction,
-  cfg: TradingContext,
   zoneId: string | null,
   lines: readonly { key: string; productId: string; quantity: string; makeAt: string | null }[],
   at: Date,
 ): Promise<readonly DeadEnd[]> {
   if (lines.length === 0) return [];
-  const states = await (await VENUE_SERVICE.routingAt(tx, cfg, at)).stations();
+  const states = await (await VENUE_SERVICE.routingAt(tx, at)).stations();
   const routed = lines.filter((line) => !states.get(line.makeAt ?? "")?.active);
   if (routed.length === 0) return [];
   const productsById = new Map(
@@ -65,7 +63,6 @@ export async function findDeadEnds(
   );
   const outcomes = await VENUE_SERVICE.resolveMakers(
     tx,
-    cfg,
     zoneId,
     routed.map((line) => line.productId),
     at,

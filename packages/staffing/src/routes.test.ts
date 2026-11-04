@@ -20,7 +20,6 @@ import {
   type PersonRoleValue,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import {
   VENUE_SERVICE_MIGRATIONS,
@@ -77,10 +76,9 @@ async function routed() {
     };
   });
   const app = new Hono();
-  const cfg = { locationId: brandLocationId(venue.cfg.locationId) };
   STAFFING_ROUTES.mount(
     app,
-    { db: suite.db, cfg, core: {} as ModuleRouteContext["core"] },
+    { db: suite.db, cfg: {}, core: {} as ModuleRouteContext["core"] },
     noopLog,
   );
   const call = (

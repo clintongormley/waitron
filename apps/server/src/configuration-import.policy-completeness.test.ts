@@ -6,7 +6,6 @@ import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { planVenue, type VenueRequest } from "@waitron/provisioning";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
-import { locationId } from "@waitron/shared";
 import { createDepartment, createServiceZone, resolveSalePolicy } from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
@@ -56,10 +55,9 @@ async function fixture() {
     db: target.db,
     modules: ALL_MODULES,
   });
-  const cfg = { locationId: locationId(prepared.locationId) };
   const { department, zone } = await withTransaction(source.db, async (tx) => {
-    const department = await createDepartment(tx, cfg, { name: "Terrace", orderStart: "table" });
-    const zone = await createServiceZone(tx, cfg, {
+    const department = await createDepartment(tx, { name: "Terrace", orderStart: "table" });
+    const zone = await createServiceZone(tx, {
       name: "Garden",
       departmentId: department.id,
     });
@@ -113,11 +111,7 @@ it("imports complete policies and resolves inherited values for the remapped zon
   );
   const [zone] = await target.db.select().from(floorZones).where(eq(floorZones.name, "Garden"));
   expect(zone!.id).not.toBe(f.zone.id);
-  expect(
-    await withTransaction(target.db, (tx) =>
-      resolveSalePolicy(tx, { locationId: locationId(f.installed.locationId) }, zone!.id),
-    ),
-  ).toMatchObject({
+  expect(await withTransaction(target.db, (tx) => resolveSalePolicy(tx, zone!.id))).toMatchObject({
     zoneId: zone!.id,
     departmentName: "Terrace",
     orderStart: "table",

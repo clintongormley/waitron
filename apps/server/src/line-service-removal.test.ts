@@ -44,7 +44,6 @@ useVenueDb({
       const extra = await createStation(tx, venue.cfg, { name: "Extra station" });
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: venue.olivesId }, zoneId: null },
         { kind: "station", stationId: extra.id },
       );
@@ -121,7 +120,7 @@ async function snapshot(order: Fixture) {
       .select()
       .from(serviceCommands)
       .where(eq(serviceCommands.scopeId, order.billId)),
-    notices: (await listStationNotices(tx, venue.cfg, venue.stationId)).filter(
+    notices: (await listStationNotices(tx, venue.stationId)).filter(
       (notice) => notice.workingOrderId === order.billId,
     ),
   }));

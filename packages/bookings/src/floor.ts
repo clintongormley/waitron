@@ -23,7 +23,7 @@ function reservationGraceFloor(venueNow: string): string {
  * without one.
  */
 export const BOOKINGS_FLOOR_ANNOTATIONS: FloorAnnotator = {
-  async annotate(tx, _cfg, now, tableIds) {
+  async annotate(tx, now, tableIds) {
     const result = new Map<string, { reservedTime: string | null }>();
     for (const id of tableIds) result.set(id, { reservedTime: null });
     if (tableIds.length === 0) return result;

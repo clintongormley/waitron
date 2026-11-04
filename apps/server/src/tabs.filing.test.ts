@@ -523,7 +523,6 @@ describe("a sent line is payable whatever its availability; an unsent one is not
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
       await setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "product", productId: beer.id }, zoneId: null },
         { kind: "no_preparation" },
       );

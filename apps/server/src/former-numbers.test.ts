@@ -57,7 +57,6 @@ useVenueDb({
         stations[key] = id;
         await setRoutingCell(
           tx,
-          v.cfg,
           { row: { kind: "product", productId: v.productId(dish) }, zoneId: null },
           { kind: "station", stationId: id },
         );
@@ -341,7 +340,7 @@ describe("the numbers an order's sent dishes were sent under, on the counter rea
       OPERATOR,
     );
 
-    const waiting = await listCounterWaiting({ db: v.db }, v.cfg);
+    const waiting = await listCounterWaiting({ db: v.db });
     expect(waiting.find((o) => o.id === o41)).toMatchObject({ formerNumbers: [n40] });
   });
 

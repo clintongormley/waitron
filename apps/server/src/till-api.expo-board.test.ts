@@ -37,13 +37,13 @@ async function fixture() {
   const { grill, bar, terraceWine } = await inTx(v, async (tx) => {
     const grill = (await createStation(tx, v.cfg, { name: "Grill" })).id;
     const bar = (await createStation(tx, v.cfg, { name: "Bar" })).id;
-    await routeProductTo(tx, v.cfg, v.productId("Burger"), grill);
-    await routeProductTo(tx, v.cfg, v.productId("Vino"), bar);
+    await routeProductTo(tx, v.productId("Burger"), grill);
+    await routeProductTo(tx, v.productId("Vino"), bar);
     const [policy] = await tx
       .select({ departmentId: zoneServicePolicies.departmentId })
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
-    const terrace = await createServiceZone(tx, v.cfg, {
+    const terrace = await createServiceZone(tx, {
       name: "Terrace",
       departmentId: policy!.departmentId,
     });

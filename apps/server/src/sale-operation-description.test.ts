@@ -100,7 +100,6 @@ async function fixture(nullHeader = false) {
     printTradingName: true,
   });
   return {
-    cfg,
     primary: primary!.id,
     fallback: fallback!.id,
     zoneId: zone!.id,
@@ -115,7 +114,7 @@ async function authored(departmentId: string, receipt: Record<string, unknown>) 
     .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
 }
 const read = (
-  cfg: { locationId: ReturnType<typeof locationId>; operationDescriptionDefault?: string },
+  cfg: { operationDescriptionDefault?: string },
   source: Parameters<typeof readSaleOperationDescription>[2],
 ) => withTransaction(suite.db, (tx) => readSaleOperationDescription(tx, cfg, source));
 
@@ -127,7 +126,7 @@ describe("department operation description", () => {
       await authored(f.primary, { operationDescription: "Deli meals" });
       await authored(f.fallback, { operationDescription: "Terrace drinks" });
       const source = kind === "order" ? { kind, orderId: f.orderId } : { kind, saleId: f.saleId };
-      expect(await read(f.cfg, source)).toBe("Deli meals");
+      expect(await read({}, source)).toBe("Deli meals");
     },
   );
   it("fresh issuance follows the zone's current department, while corrections retain the sale's", async () => {
@@ -138,14 +137,14 @@ describe("department operation description", () => {
       .update(zoneServicePolicies)
       .set({ departmentId: f.fallback })
       .where(eq(zoneServicePolicies.zoneId, f.zoneId));
-    expect(await read(f.cfg, { kind: "order", orderId: f.orderId })).toBe("Terrace drinks");
-    expect(await read(f.cfg, { kind: "sale", saleId: f.saleId })).toBe("Deli meals");
+    expect(await read({}, { kind: "order", orderId: f.orderId })).toBe("Terrace drinks");
+    expect(await read({}, { kind: "sale", saleId: f.saleId })).toBe("Deli meals");
   });
   it("reads a retained deleted department for a correction", async () => {
     const f = await fixture();
     await authored(f.primary, { operationDescription: "Retained meals" });
     await suite.db.update(departments).set({ active: false }).where(eq(departments.id, f.primary));
-    expect(await read(f.cfg, { kind: "sale", saleId: f.saleId })).toBe("Retained meals");
+    expect(await read({}, { kind: "sale", saleId: f.saleId })).toBe("Retained meals");
   });
   it.each([undefined, "", " \t\n ", 7, ["Deli meals"], "x".repeat(501), "Bad\u0000text"])(
     "refuses missing/invalid authored description %j when no default is offered, without another department fallback",
@@ -157,20 +156,20 @@ describe("department operation description", () => {
         { kind: "order", orderId: f.orderId },
         { kind: "sale", saleId: f.saleId },
       ] as const) {
-        await expect(read(f.cfg, source)).rejects.toMatchObject({
+        await expect(read({}, source)).rejects.toMatchObject({
           code: "department.operation_description_required",
           params: { departmentId: f.primary },
         });
       }
       await authored(f.primary, { operationDescription: "Deli meals" });
-      expect(await read(f.cfg, { kind: "order", orderId: f.orderId })).toBe("Deli meals");
+      expect(await read({}, { kind: "order", orderId: f.orderId })).toBe("Deli meals");
     },
   );
   it.each([undefined, "", " \t\n ", 7, ["Deli meals"], "x".repeat(501), "Bad\u0000text"])(
     "files the fiscal seat's default for missing/invalid authored description %j",
     async (operationDescription) => {
       const f = await fixture();
-      const cfg = { ...f.cfg, operationDescriptionDefault: "Seat default" };
+      const cfg = { operationDescriptionDefault: "Seat default" };
       await authored(f.primary, operationDescription === undefined ? {} : { operationDescription });
       await authored(f.fallback, { operationDescription: "Fallback drinks" });
       for (const source of [
@@ -192,13 +191,13 @@ describe("department operation description", () => {
         .from(departmentReceipts)
         .where(eq(departmentReceipts.departmentId, f.primary)),
     ).toEqual([]);
-    const withDefault = { ...f.cfg, operationDescriptionDefault: "Seat default" };
+    const withDefault = { operationDescriptionDefault: "Seat default" };
     for (const source of [
       { kind: "order", orderId: f.orderId },
       { kind: "sale", saleId: f.saleId },
     ] as const) {
       expect(await read(withDefault, source)).toBe("Seat default");
-      await expect(read(f.cfg, source)).rejects.toMatchObject({
+      await expect(read({}, source)).rejects.toMatchObject({
         code: "department.operation_description_required",
         params: { departmentId: f.primary },
       });
@@ -206,7 +205,7 @@ describe("department operation description", () => {
   });
   it.each(["", " \t\n "])("treats a blank default %j as no default", async (blank) => {
     const f = await fixture();
-    const cfg = { ...f.cfg, operationDescriptionDefault: blank };
+    const cfg = { operationDescriptionDefault: blank };
     for (const source of [
       { kind: "order", orderId: f.orderId },
       { kind: "sale", saleId: f.saleId },
@@ -220,8 +219,8 @@ describe("department operation description", () => {
   it.each(["order", "sale"] as const)(
     "refuses missing %s context even when the fiscal seat offers a default",
     async (kind) => {
-      const f = await fixture();
-      const cfg = { ...f.cfg, operationDescriptionDefault: "Seat default" };
+      await fixture();
+      const cfg = { operationDescriptionDefault: "Seat default" };
       const source =
         kind === "order" ? { kind, orderId: randomUUID() } : { kind, saleId: randomUUID() };
       await expect(read(cfg, source)).rejects.toMatchObject({
@@ -232,7 +231,7 @@ describe("department operation description", () => {
   );
   it("refuses a sale's null department header even when the fiscal seat offers a default", async () => {
     const f = await fixture(true);
-    const cfg = { ...f.cfg, operationDescriptionDefault: "Seat default" };
+    const cfg = { operationDescriptionDefault: "Seat default" };
     await expect(read(cfg, { kind: "sale", saleId: f.saleId })).rejects.toMatchObject({
       code: "sale.department_missing",
       params: {},
@@ -245,7 +244,7 @@ describe("department operation description", () => {
       await authored(f.fallback, { operationDescription: "Fallback drinks" });
       const source =
         kind === "order" ? { kind, orderId: randomUUID() } : { kind, saleId: randomUUID() };
-      await expect(read(f.cfg, source)).rejects.toEqual(
+      await expect(read({}, source)).rejects.toEqual(
         expect.objectContaining({
           code: "sale.department_missing",
           params: {},
@@ -256,7 +255,7 @@ describe("department operation description", () => {
   it("refuses a sale's null department header", async () => {
     const f = await fixture(true);
     await authored(f.fallback, { operationDescription: "Fallback drinks" });
-    await expect(read(f.cfg, { kind: "sale", saleId: f.saleId })).rejects.toEqual(
+    await expect(read({}, { kind: "sale", saleId: f.saleId })).rejects.toEqual(
       expect.objectContaining({
         code: "sale.department_missing",
         params: {},

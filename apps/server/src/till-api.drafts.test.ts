@@ -779,11 +779,10 @@ describe("POST /api/dead-ends/draft", () => {
     await inTx(venue, async (tx) => {
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: beer!.id }, zoneId: null },
         { kind: "station", stationId: bar!.id },
       );
-      await setStationToday(tx, venue.cfg, bar!.id, "closed", new Date());
+      await setStationToday(tx, bar!.id, "closed", new Date());
     });
     const [defaultStation] = await inTx(venue, (tx) =>
       tx
@@ -820,11 +819,11 @@ describe("POST /api/dead-ends/draft", () => {
       });
     } finally {
       await inTx(venue, async (tx) => {
-        await clearRoutingCell(tx, venue.cfg, {
+        await clearRoutingCell(tx, {
           row: { kind: "product", productId: beer!.id },
           zoneId: null,
         });
-        await setStationToday(tx, venue.cfg, bar!.id, null, new Date());
+        await setStationToday(tx, bar!.id, null, new Date());
       });
       await inTx(venue, (tx) =>
         tx
@@ -854,11 +853,10 @@ describe("a draft's chosen station at submission", () => {
     await inTx(venue, async (tx) => {
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: beer!.id }, zoneId: null },
         { kind: "station", stationId: bar!.id },
       );
-      await setStationToday(tx, venue.cfg, bar!.id, "closed", new Date());
+      await setStationToday(tx, bar!.id, "closed", new Date());
     });
     const chosen = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: await openBillOf(party.partyId),
@@ -906,11 +904,11 @@ describe("a draft's chosen station at submission", () => {
       expect(await snapshot()).toEqual(before);
     } finally {
       await inTx(venue, async (tx) => {
-        await clearRoutingCell(tx, venue.cfg, {
+        await clearRoutingCell(tx, {
           row: { kind: "product", productId: beer!.id },
           zoneId: null,
         });
-        await setStationToday(tx, venue.cfg, bar!.id, null, new Date());
+        await setStationToday(tx, bar!.id, null, new Date());
       });
       await inTx(venue, (tx) =>
         tx

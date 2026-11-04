@@ -60,7 +60,6 @@ async function makePrinter(tx: Transaction, name: string): Promise<string> {
 
 async function makeDish(
   tx: Transaction,
-  cfg: OriginConfig,
   catalogueId: string,
   name: string,
   stationId: string,
@@ -73,7 +72,7 @@ async function makeDish(
     unitPrice: "1.50",
     vatClass: "general",
   });
-  await routeProductTo(tx, cfg, id, stationId);
+  await routeProductTo(tx, id, stationId);
   return id;
 }
 
@@ -91,9 +90,9 @@ async function threeStations(tx: Transaction, cfg: OriginConfig, catalogueId: st
   await attachPrinterToStation(tx, { stationId: x.id, printerId: px });
   await attachPrinterToStation(tx, { stationId: y.id, printerId: py });
   await attachPrinterToStation(tx, { stationId: z.id, printerId: pz });
-  const salad = await makeDish(tx, cfg, catalogueId, "Salad", x.id);
-  const steak = await makeDish(tx, cfg, catalogueId, "Steak", y.id);
-  const tart = await makeDish(tx, cfg, catalogueId, "Tart", z.id);
+  const salad = await makeDish(tx, catalogueId, "Salad", x.id);
+  const steak = await makeDish(tx, catalogueId, "Steak", y.id);
+  const tart = await makeDish(tx, catalogueId, "Tart", z.id);
   return { x: x.id, y: y.id, z: z.id, px, py, pz, salad, steak, tart };
 }
 
@@ -669,7 +668,7 @@ it("fires and reprints through a replaced station printer set with no drawer pul
       unitPrice: "3.50",
       vatClass: "general",
     });
-    await routeProductTo(tx, cfg, productId, station.id);
+    await routeProductTo(tx, productId, station.id);
     await replaceStationPrinters(tx, station.id, [next, shared]);
     const orderId = await fireNewOrder(tx, cfg, [{ productId, quantity: "1" }]);
     const fired = await tx.select().from(printJobs);

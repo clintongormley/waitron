@@ -86,11 +86,11 @@ async function provisionTenant(): Promise<TradingContext> {
 /** A department with one zone and one set. */
 async function setAndZone(): Promise<{ setId: string; zoneId: string }> {
   return withTransaction(suite.db, async (tx) => {
-    const dept = await createDepartment(tx, cfg, {
+    const dept = await createDepartment(tx, {
       name: `Dept-${randomUUID().slice(0, 6)}`,
       orderStart: "table",
     });
-    const zone = await createServiceZone(tx, cfg, {
+    const zone = await createServiceZone(tx, {
       name: `Inside-${randomUUID().slice(0, 6)}`,
       departmentId: dept.id,
     });
@@ -98,7 +98,7 @@ async function setAndZone(): Promise<{ setId: string; zoneId: string }> {
       .insert(floorPlanSets)
       .values({ locationId: cfg.locationId })
       .returning({ id: floorPlanSets.id });
-    await linkFloorPlanSet(tx, cfg, { setId: set!.id, departmentId: dept.id, name: "Dinner" });
+    await linkFloorPlanSet(tx, { setId: set!.id, departmentId: dept.id, name: "Dinner" });
     return { setId: set!.id, zoneId: zone.id };
   });
 }

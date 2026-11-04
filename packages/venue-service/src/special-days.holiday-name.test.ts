@@ -13,9 +13,9 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { listVenueReadiness, type VenueScope } from "./operations.js";
+import { listVenueReadiness } from "./operations.js";
 import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { listSpecialDays, readSpecialDay, saveSpecialDay, specialDaysOn } from "./special-days.js";
 
@@ -117,16 +117,15 @@ async function venue() {
     city: "Villa Real",
   });
   const venueId = await venueLocationId(db);
-  const cfg: VenueScope = { locationId: brandLocationId(venueId) };
+  const cfg: { locationId: LocationId } = { locationId: brandLocationId(venueId) };
   return { cfg };
 }
 type Venue = Awaited<ReturnType<typeof venue>>;
 
-const save = (v: Venue, input: unknown, at = AT) =>
-  scoped((tx) => saveSpecialDay(tx, v.cfg, null, input, at, 0));
+const save = (input: unknown, at = AT) => scoped((tx) => saveSpecialDay(tx, null, input, at, 0));
 const dates = (days: readonly string[]) => days.map((date) => ({ date, closedAllDay: false }));
-const yearly = (v: Venue, name: string, date: string) =>
-  save(v, { name, repeatsYearly: true, dates: dates([date]) });
+const yearly = (name: string, date: string) =>
+  save({ name, repeatsYearly: true, dates: dates([date]) });
 const refusal = async (promise: Promise<unknown>) => {
   try {
     await promise;
@@ -139,8 +138,8 @@ const refusal = async (promise: Promise<unknown>) => {
   throw new Error("expected a refusal");
 };
 /** The special day standing on each day, by its id, or null. */
-const standing = async (v: Venue, days: readonly string[]) => {
-  const found = await scoped((tx) => specialDaysOn(tx, v.cfg, days));
+const standing = async (days: readonly string[]) => {
+  const found = await scoped((tx) => specialDaysOn(tx, days));
   return Object.fromEntries(days.map((day) => [day, found.get(day)?.specialDayId ?? null]));
 };
 
@@ -171,8 +170,8 @@ const rawDay = (
 
 describe("a special-day date records the public holiday it was saved on", () => {
   it("stores the holiday's official name on a holiday, and none on an ordinary date", async () => {
-    const v = await venue();
-    const day = await save(v, {
+    await venue();
+    const day = await save({
       name: "Semana Santa",
       repeatsYearly: false,
       dates: dates(["2026-04-03", "2026-04-04"]),
@@ -192,8 +191,8 @@ describe("a special-day date records the public holiday it was saved on", () => 
 
 describe("reading a special day gives each date's stored holiday name", () => {
   it("names the holiday on a holiday date and leaves an ordinary date without one, in one read and the list", async () => {
-    const v = await venue();
-    const day = await save(v, {
+    await venue();
+    const day = await save({
       name: "Semana Santa",
       repeatsYearly: false,
       dates: dates(["2026-04-03", "2026-04-04"]),
@@ -202,8 +201,8 @@ describe("reading a special day gives each date's stored holiday name", () => {
       { date: "2026-04-03", closedAllDay: false, holidayName: "Viernes Santo" },
       { date: "2026-04-04", closedAllDay: false },
     ];
-    expect((await scoped((tx) => readSpecialDay(tx, v.cfg, day.id))).dates).toEqual(expected);
-    expect(await scoped((tx) => listSpecialDays(tx, v.cfg))).toEqual([
+    expect((await scoped((tx) => readSpecialDay(tx, day.id))).dates).toEqual(expected);
+    expect(await scoped((tx) => listSpecialDays(tx))).toEqual([
       { id: day.id, name: "Semana Santa", repeatsYearly: false, dates: expected },
     ]);
   });
@@ -211,10 +210,10 @@ describe("reading a special day gives each date's stored holiday name", () => {
 
 describe("one special day's own dates under name-following", () => {
   it("refuses two dates of one repeating day that meet where the holiday falls in a later year", async () => {
-    const v = await venue();
+    await venue();
     expect(
       await refusal(
-        save(v, {
+        save({
           name: "Viernes Santo",
           repeatsYearly: true,
           dates: dates(["2026-04-03", "2027-03-26"]),
@@ -227,8 +226,8 @@ describe("one special day's own dates under name-following", () => {
   });
 
   it("accepts a holiday date and the same month and day a year later, which never meet in this suite's invented holiday list", async () => {
-    const v = await venue();
-    const day = await save(v, {
+    await venue();
+    const day = await save({
       name: "Viernes Santo",
       repeatsYearly: true,
       dates: dates(["2026-04-03", "2027-04-03"]),
@@ -237,8 +236,8 @@ describe("one special day's own dates under name-following", () => {
   });
 
   it("keeps a kept date's stored holiday name when the day is saved again", async () => {
-    const v = await venue();
-    const day = await yearly(v, "Viernes Santo", "2026-04-03");
+    await venue();
+    const day = await yearly("Viernes Santo", "2026-04-03");
     await db
       .update(specialDayDates)
       .set({ holidayName: "Stored name" })
@@ -246,7 +245,6 @@ describe("one special day's own dates under name-following", () => {
     await scoped((tx) =>
       saveSpecialDay(
         tx,
-        v.cfg,
         day.id,
         {
           name: "Good Friday",
@@ -266,18 +264,17 @@ describe("one special day's own dates under name-following", () => {
   });
 
   it("checks a kept date stored without a holiday name on its month and day, though the list names it", async () => {
-    const v = await venue();
-    const day = await yearly(v, "Viernes Santo", "2026-04-03");
+    await venue();
+    const day = await yearly("Viernes Santo", "2026-04-03");
     await db
       .update(specialDayDates)
       .set({ holidayName: null })
       .where(eq(specialDayDates.specialDayId, day.id));
     // Where 2027's list puts Viernes Santo, which the unnamed date does not follow.
-    await save(v, { name: "Cena", repeatsYearly: false, dates: dates(["2027-03-26"]) });
+    await save({ name: "Cena", repeatsYearly: false, dates: dates(["2027-03-26"]) });
     const saved = await scoped((tx) =>
       saveSpecialDay(
         tx,
-        v.cfg,
         day.id,
         { name: "Good Friday", repeatsYearly: true, dates: dates(["2026-04-03"]) },
         AT,
@@ -290,33 +287,33 @@ describe("one special day's own dates under name-following", () => {
 
 describe("a repeating holiday date follows the holiday's name", () => {
   it("applies on the date the later year's list gives the name, not on the old month and day", async () => {
-    const v = await venue();
-    const day = await yearly(v, "Viernes Santo", "2026-04-03");
-    expect(await standing(v, ["2026-04-03", "2027-03-26", "2027-04-03"])).toEqual({
+    await venue();
+    const day = await yearly("Viernes Santo", "2026-04-03");
+    expect(await standing(["2026-04-03", "2027-03-26", "2027-04-03"])).toEqual({
       "2026-04-03": day.id,
       "2027-03-26": day.id,
       "2027-04-03": null,
     });
     // As the till reads it: the business day and the one before, neither on 3 April.
-    expect(await standing(v, ["2027-03-25", "2027-03-26"])).toEqual({
+    expect(await standing(["2027-03-25", "2027-03-26"])).toEqual({
       "2027-03-25": null,
       "2027-03-26": day.id,
     });
   });
 
   it("keeps a fixed holiday's date", async () => {
-    const v = await venue();
-    const day = await yearly(v, "Natividad del Señor", "2026-12-25");
-    expect(await standing(v, ["2027-12-25", "2028-12-25"])).toEqual({
+    await venue();
+    const day = await yearly("Natividad del Señor", "2026-12-25");
+    expect(await standing(["2027-12-25", "2028-12-25"])).toEqual({
       "2027-12-25": day.id,
       "2028-12-25": day.id,
     });
   });
 
   it("applies nothing in a year whose list lacks the name, or that has no list", async () => {
-    const v = await venue();
-    await yearly(v, "Viernes Santo", "2026-04-03");
-    expect(await standing(v, ["2028-04-03", "2028-04-14", "2029-04-03", "2029-03-30"])).toEqual({
+    await venue();
+    await yearly("Viernes Santo", "2026-04-03");
+    expect(await standing(["2028-04-03", "2028-04-14", "2029-04-03", "2029-03-30"])).toEqual({
       "2028-04-03": null,
       "2028-04-14": null,
       "2029-04-03": null,
@@ -325,31 +322,31 @@ describe("a repeating holiday date follows the holiday's name", () => {
   });
 
   it("repeats a date with no holiday name on its month and day", async () => {
-    const v = await venue();
-    const day = await yearly(v, "Fiesta de la casa", "2026-06-10");
-    expect(await standing(v, ["2027-06-10", "2029-06-10"])).toEqual({
+    await venue();
+    const day = await yearly("Fiesta de la casa", "2026-06-10");
+    expect(await standing(["2027-06-10", "2029-06-10"])).toEqual({
       "2027-06-10": day.id,
       "2029-06-10": day.id,
     });
   });
 
   it("reads the holiday lists once for a read, and not at all without a holiday-named repeating date", async () => {
-    const v = await venue();
-    await yearly(v, "Fiesta de la casa", "2026-06-10");
+    await venue();
+    await yearly("Fiesta de la casa", "2026-06-10");
     reads.count = 0;
-    await standing(v, ["2027-06-10", "2028-06-10"]);
+    await standing(["2027-06-10", "2028-06-10"]);
     expect(reads.count).toBe(0);
-    await yearly(v, "Viernes Santo", "2026-04-03");
+    await yearly("Viernes Santo", "2026-04-03");
     reads.count = 0;
-    await standing(v, ["2027-03-26", "2028-04-03", "2028-06-10"]);
+    await standing(["2027-03-26", "2028-04-03", "2028-06-10"]);
     expect(reads.count).toBe(1);
   });
 
   it("reads no holiday list for days in the holiday-named date's own year", async () => {
-    const v = await venue();
-    const day = await yearly(v, "Viernes Santo", "2026-04-03");
+    await venue();
+    const day = await yearly("Viernes Santo", "2026-04-03");
     reads.count = 0;
-    expect(await standing(v, ["2026-04-02", "2026-04-03"])).toEqual({
+    expect(await standing(["2026-04-02", "2026-04-03"])).toEqual({
       "2026-04-02": null,
       "2026-04-03": day.id,
     });
@@ -360,24 +357,24 @@ describe("a repeating holiday date follows the holiday's name", () => {
 describe("a date saved on a day beats a holiday date that moved onto it", () => {
   it("gives the day to the one-off date, not to the repeating holiday that later followed its name there", async () => {
     const v = await venue();
-    await yearly(v, "Viernes Santo", "2026-04-03");
+    await yearly("Viernes Santo", "2026-04-03");
     const dinner = await rawDay(v, "Company dinner", "2027-03-26");
-    const found = await scoped((tx) => specialDaysOn(tx, v.cfg, ["2027-03-26"]));
+    const found = await scoped((tx) => specialDaysOn(tx, ["2027-03-26"]));
     expect(found.get("2027-03-26")).toMatchObject({ specialDayId: dinner.id, closedAllDay: true });
   });
 
   it("gives the day to a repeating month and day standing there, not to the holiday that moved there", async () => {
     const v = await venue();
-    await yearly(v, "Viernes Santo", "2026-04-03");
+    await yearly("Viernes Santo", "2026-04-03");
     const anniversary = await rawDay(v, "Aniversario", "2027-03-26", true);
-    expect(await standing(v, ["2027-03-26"])).toEqual({ "2027-03-26": anniversary.id });
+    expect(await standing(["2027-03-26"])).toEqual({ "2027-03-26": anniversary.id });
   });
 
   it("still stands the moved holiday date on its new day when nothing else is there", async () => {
     const v = await venue();
-    const friday = await yearly(v, "Viernes Santo", "2026-04-03");
+    const friday = await yearly("Viernes Santo", "2026-04-03");
     const dinner = await rawDay(v, "Company dinner", "2027-03-27");
-    expect(await standing(v, ["2027-03-26", "2027-03-27"])).toEqual({
+    expect(await standing(["2027-03-26", "2027-03-27"])).toEqual({
       "2027-03-26": friday.id,
       "2027-03-27": dinner.id,
     });
@@ -386,25 +383,25 @@ describe("a date saved on a day beats a holiday date that moved onto it", () => 
 
 describe("the date-taken check uses each year's resolved date", () => {
   it("refuses a one-off date where a repeating holiday falls in a later year, and allows the old month and day", async () => {
-    const v = await venue();
-    const friday = await yearly(v, "Viernes Santo", "2026-04-03");
+    await venue();
+    const friday = await yearly("Viernes Santo", "2026-04-03");
     expect(
-      await refusal(save(v, { name: "Cena", repeatsYearly: false, dates: dates(["2027-03-26"]) })),
+      await refusal(save({ name: "Cena", repeatsYearly: false, dates: dates(["2027-03-26"]) })),
     ).toEqual({
       code: "special_day.date_taken",
       params: { date: "2027-03-26", specialDayId: friday.id, name: "Viernes Santo" },
     });
-    await save(v, { name: "Cena", repeatsYearly: false, dates: dates(["2027-04-03"]) });
+    await save({ name: "Cena", repeatsYearly: false, dates: dates(["2027-04-03"]) });
   });
 
   it("refuses a repeating holiday whose later date another special day already holds", async () => {
-    const v = await venue();
-    const dinner = await save(v, {
+    await venue();
+    const dinner = await save({
       name: "Cena",
       repeatsYearly: false,
       dates: dates(["2027-03-26"]),
     });
-    expect(await refusal(yearly(v, "Viernes Santo", "2026-04-03"))).toEqual({
+    expect(await refusal(yearly("Viernes Santo", "2026-04-03"))).toEqual({
       code: "special_day.date_taken",
       params: { date: "2027-03-26", specialDayId: dinner.id, name: "Cena" },
     });
@@ -413,41 +410,41 @@ describe("the date-taken check uses each year's resolved date", () => {
 
 describe("a repeating month and day against a repeating holiday date", () => {
   it("refuses them where they first meet in a later year, though their stored dates differ", async () => {
-    const v = await venue();
-    const thursday = await yearly(v, "Jueves Santo", "2026-04-02");
-    expect(await refusal(yearly(v, "Aniversario", "2026-03-25"))).toEqual({
+    await venue();
+    const thursday = await yearly("Jueves Santo", "2026-04-02");
+    expect(await refusal(yearly("Aniversario", "2026-03-25"))).toEqual({
       code: "special_day.date_taken",
       params: { date: "2027-03-25", specialDayId: thursday.id, name: "Jueves Santo" },
     });
-    await yearly(v, "Aniversario", "2026-03-24");
+    await yearly("Aniversario", "2026-03-24");
   });
 });
 
 it("finds no special day on an empty list of days", async () => {
-  const v = await venue();
-  await yearly(v, "Jueves Santo", "2026-04-02");
-  expect(await scoped((tx) => specialDaysOn(tx, v.cfg, []))).toEqual(new Map());
+  await venue();
+  await yearly("Jueves Santo", "2026-04-02");
+  expect(await scoped((tx) => specialDaysOn(tx, []))).toEqual(new Map());
 });
 
 describe("the readiness list warns when a later year has no holiday of the name", () => {
-  const warnings = async (v: Venue, at: Date) =>
-    (await scoped((tx) => listVenueReadiness(tx, v.cfg, at))).filter(
+  const warnings = async (at: Date) =>
+    (await scoped((tx) => listVenueReadiness(tx, at))).filter(
       (issue) => issue.code === "special_day.holiday_missing",
     );
 
   it("names each current or next year whose list lacks the name, or that has no list", async () => {
-    const v = await venue();
-    const friday = await yearly(v, "Viernes Santo", "2026-04-03");
-    const christmas = await yearly(v, "Natividad del Señor", "2026-12-25");
+    await venue();
+    const friday = await yearly("Viernes Santo", "2026-04-03");
+    const christmas = await yearly("Natividad del Señor", "2026-12-25");
     const missing = (day: { id: string; name: string }, year: number) => ({
       code: "special_day.holiday_missing",
       specialDayId: day.id,
       holidayName: day.name,
       year,
     });
-    expect(await warnings(v, new Date("2026-06-01T10:00:00Z"))).toEqual([]);
-    expect(await warnings(v, new Date("2027-06-01T10:00:00Z"))).toEqual([missing(friday, 2028)]);
-    expect(await warnings(v, new Date("2028-06-01T10:00:00Z"))).toEqual([
+    expect(await warnings(new Date("2026-06-01T10:00:00Z"))).toEqual([]);
+    expect(await warnings(new Date("2027-06-01T10:00:00Z"))).toEqual([missing(friday, 2028)]);
+    expect(await warnings(new Date("2028-06-01T10:00:00Z"))).toEqual([
       missing(friday, 2028),
       missing(friday, 2029),
       missing(christmas, 2029),
@@ -455,15 +452,15 @@ describe("the readiness list warns when a later year has no holiday of the name"
   });
 
   it("does not warn for a one-off date", async () => {
-    const v = await venue();
-    await save(v, { name: "Viernes Santo", repeatsYearly: false, dates: dates(["2026-04-03"]) });
-    expect(await warnings(v, new Date("2028-06-01T10:00:00Z"))).toEqual([]);
+    await venue();
+    await save({ name: "Viernes Santo", repeatsYearly: false, dates: dates(["2026-04-03"]) });
+    expect(await warnings(new Date("2028-06-01T10:00:00Z"))).toEqual([]);
   });
 });
 
 describe("the readiness list warns when two special days come to share a date", () => {
-  const clashes = async (v: Venue, at: Date) =>
-    (await scoped((tx) => listVenueReadiness(tx, v.cfg, at))).filter(
+  const clashes = async (at: Date) =>
+    (await scoped((tx) => listVenueReadiness(tx, at))).filter(
       (issue) => issue.code === "special_day.date_shared",
     );
   const clash = (
@@ -483,51 +480,51 @@ describe("the readiness list warns when two special days come to share a date", 
 
   it("names a repeating holiday that moved onto a fixed date, which applies, in the current and next year", async () => {
     const v = await venue();
-    const friday = await yearly(v, "Viernes Santo", "2026-04-03");
+    const friday = await yearly("Viernes Santo", "2026-04-03");
     const feria = await rawDay(v, "Feria", "2026-03-26", true);
     const expected = [clash("2027-03-26", feria, "Feria", friday, "Viernes Santo")];
-    expect(await clashes(v, new Date("2026-06-01T10:00:00Z"))).toEqual(expected);
-    expect(await clashes(v, new Date("2027-06-01T10:00:00Z"))).toEqual(expected);
-    expect(await standing(v, ["2027-03-26"])).toEqual({ "2027-03-26": feria.id });
+    expect(await clashes(new Date("2026-06-01T10:00:00Z"))).toEqual(expected);
+    expect(await clashes(new Date("2027-06-01T10:00:00Z"))).toEqual(expected);
+    expect(await standing(["2027-03-26"])).toEqual({ "2027-03-26": feria.id });
   });
 
   it("names a one-off date the moved holiday meets as the one that applies", async () => {
     const v = await venue();
-    const friday = await yearly(v, "Viernes Santo", "2026-04-03");
+    const friday = await yearly("Viernes Santo", "2026-04-03");
     const dinner = await rawDay(v, "Company dinner", "2027-03-26");
-    expect(await clashes(v, new Date("2026-06-01T10:00:00Z"))).toEqual([
+    expect(await clashes(new Date("2026-06-01T10:00:00Z"))).toEqual([
       clash("2027-03-26", dinner, "Company dinner", friday, "Viernes Santo"),
     ]);
   });
 
   it("says nothing when no two special days meet", async () => {
     const v = await venue();
-    await yearly(v, "Viernes Santo", "2026-04-03");
+    await yearly("Viernes Santo", "2026-04-03");
     await rawDay(v, "Company dinner", "2027-03-27");
-    expect(await clashes(v, new Date("2026-06-01T10:00:00Z"))).toEqual([]);
+    expect(await clashes(new Date("2026-06-01T10:00:00Z"))).toEqual([]);
   });
 
   it("says nothing of a clash outside the current and next year", async () => {
     const v = await venue();
-    await yearly(v, "Viernes Santo", "2026-04-03");
+    await yearly("Viernes Santo", "2026-04-03");
     await rawDay(v, "Feria", "2026-03-26", true);
-    expect(await clashes(v, new Date("2028-06-01T10:00:00Z"))).toEqual([]);
+    expect(await clashes(new Date("2028-06-01T10:00:00Z"))).toEqual([]);
   });
 
   it("gives two holiday-following dates that meet to the earlier stored date, the holiday's first", async () => {
     const v = await venue();
-    const friday = await yearly(v, "Viernes Santo", "2026-04-03");
+    const friday = await yearly("Viernes Santo", "2026-04-03");
     const later = await rawDay(v, "Vigilia", "2026-04-04", true, "Viernes Santo");
-    expect(await clashes(v, new Date("2026-06-01T10:00:00Z"))).toEqual([
+    expect(await clashes(new Date("2026-06-01T10:00:00Z"))).toEqual([
       clash("2027-03-26", friday, "Viernes Santo", later, "Vigilia"),
     ]);
   });
 
   it("gives two holiday-following dates that meet to the earlier stored date, the other's first", async () => {
     const w = await venue();
-    const first = await yearly(w, "Viernes Santo", "2026-04-03");
+    const first = await yearly("Viernes Santo", "2026-04-03");
     const earlier = await rawDay(w, "Vigilia", "2026-04-02", true, "Viernes Santo");
-    expect(await clashes(w, new Date("2026-06-01T10:00:00Z"))).toEqual([
+    expect(await clashes(new Date("2026-06-01T10:00:00Z"))).toEqual([
       clash("2027-03-26", earlier, "Vigilia", first, "Viernes Santo"),
     ]);
   });
@@ -536,10 +533,10 @@ describe("the readiness list warns when two special days come to share a date", 
 describe("saving either special day of a pair that came to share a date", () => {
   const pair = async () => {
     const v = await venue();
-    const friday = await yearly(v, "Viernes Santo", "2026-04-03");
+    const friday = await yearly("Viernes Santo", "2026-04-03");
     const feria = await rawDay(v, "Feria", "2026-03-26", true);
     const update = (id: string, input: unknown) =>
-      scoped((tx) => saveSpecialDay(tx, v.cfg, id, input, AT, 0));
+      scoped((tx) => saveSpecialDay(tx, id, input, AT, 0));
     return { v, friday, feria, update };
   };
   const feriaOn = (date: string) => ({
@@ -573,7 +570,7 @@ describe("saving either special day of a pair that came to share a date", () => 
   });
 
   it("saves the fixed yearly day once it moves off the shared date", async () => {
-    const { v, friday, feria, update } = await pair();
+    const { friday, feria, update } = await pair();
     const saved = await update(feria.id, feriaOn("2026-03-27"));
     expect(saved.id).toBe(feria.id);
     expect(
@@ -582,7 +579,7 @@ describe("saving either special day of a pair that came to share a date", () => 
         .from(specialDayDates)
         .where(eq(specialDayDates.specialDayId, feria.id)),
     ).toEqual([{ date: "2026-03-27" }]);
-    expect(await standing(v, ["2027-03-26", "2027-03-27"])).toEqual({
+    expect(await standing(["2027-03-26", "2027-03-27"])).toEqual({
       "2027-03-26": friday.id,
       "2027-03-27": feria.id,
     });
