@@ -592,15 +592,6 @@ The review left detached `readOnly` changes and a retained table's scroll/sort u
 The station dialog widens or narrows with the chosen station's name, so its
   buttons shift a little as a station is picked (it did so before this batch).
 
-### Purchase dialog focus
-
-Also seen in the purchase form's tests, not changed and not
-  tried by hand: once put back with an edit, keyboard focus is outside the dialog, and Escape
-  neither asks nor closes until focus is back on a field inside the dialog (the tests put it there
-  with `focus()`; a click was not tried). Measured (`~/waitron-campaign-c/item-a397-measurements.md`,
-  A397.2): after a put-back, focus is on the page body and the dialog is no longer modal; the
-  measurements attribute this to how `wt-dialog` handles being put back.
-
 ### Catalogue ResizeObserver warning
 
 The historical catalogue-only warning was not reproduced.
@@ -639,20 +630,6 @@ plans to retire the editor.
   `<wt-disclosure heading="Kitchen" open><div style="height: 200px">body</div></wt-disclosure>`,
   click the header, let the close finish, click again — no height transition starts.
   (`packages/ui/src/components/wt-disclosure.ts`.)
-
-## A542. An open `wt-dialog` moved in the page stays open but is no longer modal
-
-- **A542. An open `wt-dialog` moved in the page stays open but is no longer modal** — OPEN, found
-  by A539's mutation tests, not fixed. A probe read `[open, :modal]` as `[true, true]` before
-  removing and re-attaching it and `[true, false]` after, with `el.open` still true; out of modal
-  the window no longer bounds its height, so a long body grows past the screen. Likely Chromium
-  closing modality on removal; the fix would re-show it modally on reconnect.
-  (`packages/ui/src/components/wt-dialog.ts`.)
-
-  **2026-10-19, A738:** the modifier picker's combined-edit reconnect cases reproduced loss of
-  `:modal` in all three close paths, including native Escape. That picker now recreates its modal
-  while retaining its draft; the shared primitive remains unchanged. Run
-  `pnpm --filter @waitron/till exec vitest run src/widgets/modifier-picker.unsaved.test.ts -t "combined line edits"`.
 
 ## Decisions and deliberate limits
 
@@ -982,15 +959,6 @@ still asks, and a full page's own Cancel leaves without asking too.
   An isolated run of the complete file on the branch's earlier head passed. The cause remains
   unverified. Capture the current scroll/limit, pointer position, drag state and visible box
   before attributing it to the scroll helper.
-
-## Once put back with an edit, keyboard focus is outside the dialog, and Escape neither asks nor closes
-
-- **Once put back with an edit, keyboard focus is outside the dialog, and Escape neither asks nor
-  closes until focus is back on a field inside the dialog** — seen in the purchase form's
-  tests, not changed and not tried by hand (the tests put it there with `focus()`; a click was not
-  tried). Measured (`~/waitron-campaign-c/item-a397-measurements.md`, A397.2): after a put-back, focus
-  is on the page body and the dialog is no longer modal; the measurements attribute this to how
-  `wt-dialog` handles being put back. Left open by A397 part 1 (#1429), under A331 batch 5.
 
 ## `wt-combobox` without a search box never exposes `aria-required`
 

@@ -4690,8 +4690,15 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   instead of pressing the form's button; they pass, but never prove the button works. Left open by
   A331 batch 3a (#1401).
 
-- **A542. An open `wt-dialog` moved in the page stays open but is no longer modal** — OPEN.
-  [Detail](backlog/dashboard.md#a542-an-open-wt-dialog-moved-in-the-page-stays-open-but-is-no-longer-modal)
+- **The till's modifier picker still recreates its modal when put back.** A738 added that because
+  `wt-dialog` lost modality there; `wt-dialog` now restores it, so the recreation may no longer be
+  needed. Not tried without it. (`apps/till/src/widgets/modifier-picker.ts`.)
+
+- **Dialogs put back together stack in page order, not opening order**, so a dialog opened over
+  another but drawn before it in the page comes back underneath it, and the lower of two dialogs
+  drawn beside each other, put back alone, comes back on top. No screen has been checked for either
+  shape. (`packages/ui/src/components/wt-dialog.ts`; pinned by the two stacking cases in
+  `wt-dialog.test.ts`.)
 
 - **In a text field inside a dialog, with the field's text selected, End and Home do not move the
   caret**, so typing replaces the whole text. Seen on the A721 branch in the Seasons window and the

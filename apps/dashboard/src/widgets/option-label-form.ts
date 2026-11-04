@@ -126,7 +126,7 @@ export class OptionLabelForm extends LitElement {
       });
       this.#leave = coordinator;
       this.#scope = scope;
-      this.#baseline ??= this.#comparisonValue();
+      this.#baseline ??= structuredClone(this.#comparisonValue());
       scope.commit(this.#baseline);
     }
   }
