@@ -59,7 +59,10 @@ calculation. Ordinary and capital purchases remain separate in `deductible.byRat
 
 Your result is `86.35 - 261.99 = -175.64`. July and September have no trade in this dataset,
 so the third-quarter return equals August and the annual aggregate has the same figures.
-The test also adds the three monthly results to check the quarter.
+The test also adds the three monthly results to check the quarter. With these dates, that checks
+reconciliation of the example rather than which side of a period boundary an invoice falls on.
+The focused [VAT-return tests](../src/vat-return.test.ts) and
+[input-VAT tests](../src/input-vat.test.ts) cover date selection separately.
 
 ## Inspect the file
 

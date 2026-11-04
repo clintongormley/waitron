@@ -1151,7 +1151,7 @@ soon. The north star names it: "selling, printing, paying and closing". A1308's 
 **What exists.** The dashboard's Sales screen shows one day's figures, worked out live
 (`computeDailyClose`). `recordDailyClose` freezes a day with each till's cash count and tests cover
 it. Its sale-write integration scenario is in
-`apps/server/src/reporting-write-workflows.test.ts`.
+`apps/server/src/reporting-write-workflows.test.ts`. No production caller records the close yet.
 
 **What is missing:**
 

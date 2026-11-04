@@ -6713,7 +6713,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   its `d1` row is a kitchen display (`kind: "kds_station"`). Remove that comment in the next
   comment-cleanup pass.
 
-- **A977. Widen the English-only guard to every text file, after A963–A975.** Accented
+- **A977. Widen the English-only guard to every text file, after the remaining English cleanup.** Accented
   letters too; a shrinking-only list of test folders still to clean. Exempt homes include a
   package's `src/starter-content.ts` (A918). [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 

@@ -1,5 +1,10 @@
 # A972 — demo data per country pack and region (design)
 
+> **2026-11-04 (A1009):** The five standalone demo scripts and commands are retired.
+> Their checks now live in `catalogue-allergen-workflow.test.ts` and `reporting-write-workflows.test.ts`
+> in the server. See the [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md).
+> References below describe the earlier scripts.
+
 Status: design, waiting for the owner's answers to Q1–Q4 (lane B, 2026-10-27).
 
 **2026-10-27 update:** the owner answered Q1(b), Q2 share, Q3(b) and Q4(b).

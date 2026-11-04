@@ -486,6 +486,7 @@ describe("reporting over recorded sales", () => {
       [quarter!, "3T"],
     ] as const) {
       const modelo = mapModelo303(aggregate);
+      expect(modelo.period).toEqual(aggregate.period);
       expect(modelo.boxes["27"]).toBe("86.35");
       expect(modelo.boxes["46"]).toBe("-175.64");
       const record = toDr303Record(modelo, {
