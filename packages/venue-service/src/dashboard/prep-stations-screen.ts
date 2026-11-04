@@ -445,11 +445,22 @@ export class PrepStationsScreen extends LitElement {
         <p>${t("prep.pass_gap_error")}</p>
       </section>`;
     if (this.passCoverage.length === 0) return nothing;
+    const activeZones = (this.view?.zones ?? []).filter((zone) => zone.active !== false);
+    const everywhere = new Map<string, string>();
+    if (activeZones.length >= 2) {
+      const gapZones = new Map<string, Set<string | null>>();
+      for (const gap of this.passCoverage)
+        gapZones.set(gap.stationId, (gapZones.get(gap.stationId) ?? new Set()).add(gap.zoneId));
+      for (const gap of this.passCoverage)
+        if (activeZones.every((zone) => gapZones.get(gap.stationId)!.has(zone.id)))
+          everywhere.set(gap.stationId, everywhere.get(gap.stationId) ?? gap.stationName);
+    }
     const zones = new Map<
       string | null,
       { zoneId: string | null; zoneName: string; stations: string[] }
     >();
     for (const gap of this.passCoverage) {
+      if (gap.zoneId !== null && everywhere.has(gap.stationId)) continue;
       const zone = zones.get(gap.zoneId) ?? {
         zoneId: gap.zoneId,
         zoneName: gap.zoneName ?? "",
@@ -458,13 +469,29 @@ export class PrepStationsScreen extends LitElement {
       zone.stations.push(gap.stationName);
       zones.set(gap.zoneId, zone);
     }
+    type Line = {
+      key: "prep.pass_gap_every_zone" | "prep.pass_gap_no_zone" | "prep.pass_gap";
+      zoneName: string;
+      stations: string[];
+    };
+    const lines: Line[] = [];
+    if (everywhere.size > 0)
+      lines.push({
+        key: "prep.pass_gap_every_zone",
+        zoneName: "",
+        stations: [...everywhere.values()],
+      });
+    for (const { zoneId, zoneName, stations } of zones.values())
+      lines.push({
+        key: zoneId === null ? "prep.pass_gap_no_zone" : "prep.pass_gap",
+        zoneName,
+        stations,
+      });
     return html`<section data-test="pass-coverage" class="warning" role="status">
-      ${[...zones.values()].map(({ zoneId, zoneName, stations }) => {
+      ${lines.map(({ key, zoneName, stations }) => {
         const values: Record<string, string> = { stations: listOf(stations), zone: zoneName };
         // Split before filling, so a name holding "{devices}" stays text.
-        const [before = "", after = ""] = t(
-          zoneId === null ? "prep.pass_gap_no_zone" : "prep.pass_gap",
-        )
+        const [before = "", after = ""] = t(key)
           .split("{devices}")
           .map((part) =>
             part.replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole),

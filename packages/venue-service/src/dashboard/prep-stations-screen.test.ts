@@ -5686,6 +5686,169 @@ describe("A773 station policy: the pass coverage warning", () => {
     expect(warning(el)!.querySelectorAll("a")).toHaveLength(1);
   });
 
+  const zonedView = (zones: PrepStationsView["zones"]) =>
+    vi.fn().mockResolvedValue({ ...view, zones });
+  const terraceAndHall = [
+    { id: "terrace", name: "Terrace", active: true },
+    { id: "hall", name: "Hall" },
+  ];
+  const gap = (stationId: string, stationName: string, zoneId: string | null) => ({
+    stationId,
+    stationName,
+    zoneId,
+    zoneName: zoneId === null ? null : zoneId === "hall" ? "Hall" : "Terrace",
+  });
+
+  it("A1320 a station uncovered in every active zone gets one line, drawn first, and its no-zone gap stays", async () => {
+    setLocale("en");
+    const el = await mount(
+      api({
+        load: zonedView(terraceAndHall),
+        readPassCoverage: vi
+          .fn()
+          .mockResolvedValue([
+            gap("grill", "Grill", "terrace"),
+            gap("cold", "Cold", "terrace"),
+            gap("grill", "Grill", "hall"),
+            gap("grill", "Grill", null),
+          ]),
+      }),
+    );
+    await settle(el);
+    expect(lines(el)).toEqual([
+      "No pass screen covers Grill in any zone. Set one up under Devices.",
+      "Nothing fires dishes from Cold in Terrace: no pass screen covers them there. Set one up under Devices.",
+      "Nothing fires dishes from Grill that have no service zone: only a pass screen on every service zone covers them. Set one up under Devices.",
+    ]);
+    for (const line of warning(el)!.querySelectorAll("p")) {
+      expect(line.querySelectorAll("a")).toHaveLength(1);
+      expect(line.querySelector("a")!.textContent).toBe("Devices");
+      expect(line.querySelector("a")!.getAttribute("href")).toBe("/manage/devices");
+    }
+  });
+
+  it.each(["en", "es"] as const)(
+    "A1320 two stations uncovered in every zone share one line (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mount(
+        api({
+          load: zonedView(terraceAndHall),
+          readPassCoverage: vi
+            .fn()
+            .mockResolvedValue([
+              gap("grill", "Grill", "terrace"),
+              gap("cold", "Cold", "terrace"),
+              gap("grill", "Grill", "hall"),
+              gap("cold", "Cold", "hall"),
+            ]),
+        }),
+      );
+      await settle(el);
+      expect(lines(el)).toEqual([
+        locale === "en"
+          ? "No pass screen covers Grill and Cold in any zone. Set one up under Devices."
+          : filled("es", "prep.pass_gap_every_zone", { stations: "Grill y Cold" }),
+      ]);
+    },
+  );
+
+  it("A1320 with one active zone a station uncovered there keeps the per-zone line", async () => {
+    setLocale("en");
+    const el = await mount(
+      api({
+        load: zonedView([{ id: "terrace", name: "Terrace", active: true }]),
+        readPassCoverage: vi.fn().mockResolvedValue([gap("grill", "Grill", "terrace")]),
+      }),
+    );
+    await settle(el);
+    expect(lines(el)).toEqual([
+      "Nothing fires dishes from Grill in Terrace: no pass screen covers them there. Set one up under Devices.",
+    ]);
+  });
+
+  it("A1320 an inactive zone does not count towards every zone, and a gap in one is absorbed", async () => {
+    setLocale("en");
+    const el = await mount(
+      api({
+        load: zonedView([
+          ...terraceAndHall,
+          { id: "patio", name: "Patio", active: false },
+          { id: "garden", name: "Garden", active: false },
+        ]),
+        readPassCoverage: vi
+          .fn()
+          .mockResolvedValue([
+            gap("grill", "Grill", "terrace"),
+            gap("grill", "Grill", "patio"),
+            gap("grill", "Grill", "hall"),
+          ]),
+      }),
+    );
+    await settle(el);
+    expect(lines(el)).toEqual([
+      "No pass screen covers Grill in any zone. Set one up under Devices.",
+    ]);
+  });
+
+  it("A1320 a station covered in one active zone keeps its per-zone lines", async () => {
+    setLocale("en");
+    const el = await mount(
+      api({
+        load: zonedView([...terraceAndHall, { id: "patio", name: "Patio" }]),
+        readPassCoverage: vi
+          .fn()
+          .mockResolvedValue([gap("grill", "Grill", "terrace"), gap("grill", "Grill", "hall")]),
+      }),
+    );
+    await settle(el);
+    expect(lines(el)).toEqual([
+      "Nothing fires dishes from Grill in Terrace: no pass screen covers them there. Set one up under Devices.",
+      "Nothing fires dishes from Grill in Hall: no pass screen covers them there. Set one up under Devices.",
+    ]);
+  });
+
+  it("A1320 two stations sharing a name are judged apart: only the one uncovered everywhere folds", async () => {
+    setLocale("en");
+    const el = await mount(
+      api({
+        load: zonedView(terraceAndHall),
+        readPassCoverage: vi
+          .fn()
+          .mockResolvedValue([
+            gap("grill-a", "Grill", "terrace"),
+            gap("grill-b", "Grill", "terrace"),
+            gap("grill-a", "Grill", "hall"),
+          ]),
+      }),
+    );
+    await settle(el);
+    expect(lines(el)).toEqual([
+      "No pass screen covers Grill in any zone. Set one up under Devices.",
+      "Nothing fires dishes from Grill in Terrace: no pass screen covers them there. Set one up under Devices.",
+    ]);
+  });
+
+  it("A1320 a station name holding {devices} stays plain text in the every-zone line", async () => {
+    setLocale("en");
+    const el = await mount(
+      api({
+        load: zonedView(terraceAndHall),
+        readPassCoverage: vi
+          .fn()
+          .mockResolvedValue([
+            gap("odd", "{devices} {zone}", "terrace"),
+            gap("odd", "{devices} {zone}", "hall"),
+          ]),
+      }),
+    );
+    await settle(el);
+    expect(lines(el)).toEqual([
+      "No pass screen covers {devices} {zone} in any zone. Set one up under Devices.",
+    ]);
+    expect(warning(el)!.querySelectorAll("a")).toHaveLength(1);
+  });
+
   it("A773 station policy: draws no warning when every waiting station is covered", async () => {
     const a = api();
     const el = await mount(a);
