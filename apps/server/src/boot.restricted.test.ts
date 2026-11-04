@@ -1,4 +1,4 @@
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
@@ -18,6 +18,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverRestriction, recordHandoverRestrictionTx } from "@waitron/node-db";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { StartedServer, StartServerSeams } from "./boot.js";
+import { ensureBoxSecrets } from "./box-secrets.js";
+import { awaitListening, httpsVia } from "./testing/boot-harness.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import type { PeerStatusBody } from "./peer-status-api.js";
@@ -72,6 +74,7 @@ async function boot(
     restricted: boolean;
     seams?: StartServerSeams;
     beforeStart?: () => Promise<void>;
+    tls?: boolean;
   },
 ): Promise<{ port: number; venue: Venue }> {
   beforeServerStarts();
@@ -123,6 +126,12 @@ async function boot(
     WAITRON_MIN_TICK_MS: String(MIN_TICK_MS),
     WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
   };
+  if (options.tls === true) {
+    await ensureBoxSecrets({ stateDir: scratch, hostnames: ["localhost"], now: () => new Date() });
+    server = await startServer(env, env, options.seams);
+    await awaitListening(httpPort());
+    return { port: httpPort(), venue };
+  }
   server = await startServer(env, env, options.seams);
   await vi.waitFor(
     async () => {
@@ -353,44 +362,78 @@ describe("a full start's stepdown, through its test seam", () => {
     );
   }, 60_000);
 
-  const startHandover = (port: number, cookie: string) =>
-    fetch(`http://127.0.0.1:${port}/management-api/handover`, {
-      method: "POST",
-      headers: {
-        cookie,
-        "content-type": "application/json",
-        origin: "https://dashboard.example",
-      },
-      body: JSON.stringify({
-        operationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        destinationNodeId: "00000000-0000-4000-8000-0000000000cc",
-        signIn: { method: "password", password: "correct horse" },
-      }),
-    });
+  const handoverRequest = (cookie: string): RequestInit => ({
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({
+      operationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      destinationNodeId: "00000000-0000-4000-8000-0000000000cc",
+      signIn: { method: "password", password: "correct horse" },
+    }),
+  });
 
-  it("a full start refuses a handover from a person without node.promote", async () => {
-    const { port, venue } = await boot(suite, { restricted: false });
-    const response = await startHandover(port, venue.managerCookie);
+  const adminCookie = async (): Promise<string> => {
+    const { token } = await openManagementSession(suite.db, "admin");
+    return `${MANAGEMENT_COOKIE}=${token}`;
+  };
+
+  /** Asks over the real TLS listener, trusting the authority this box minted. */
+  const startHandoverSecurely = async (
+    port: number,
+    cookie: string,
+  ): Promise<{ status: number; code: string }> => {
+    const { via, close } = httpsVia(await readFile(join(scratch!, "tls", "ca.crt")));
+    try {
+      const response = await fetch(`https://127.0.0.1:${port}/management-api/handover`, {
+        ...via,
+        ...handoverRequest(cookie),
+      });
+      const body = (await response.json()) as { error: { code: string } };
+      return { status: response.status, code: body.error.code };
+    } finally {
+      await close();
+    }
+  };
+
+  it("a full start refuses a handover over plain HTTP, even from an administrator", async () => {
+    let cookie = "";
+    const { port } = await boot(suite, {
+      restricted: false,
+      beforeStart: async () => {
+        cookie = await adminCookie();
+      },
+    });
+    const response = await fetch(
+      `http://127.0.0.1:${port}/management-api/handover`,
+      handoverRequest(cookie),
+    );
     expect(response.status).toBe(403);
     expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
       "authorization.not_permitted",
     );
   }, 60_000);
 
+  it("a full start refuses a handover from a person without node.promote", async () => {
+    const { port, venue } = await boot(suite, { restricted: false, tls: true });
+    expect(await startHandoverSecurely(port, venue.managerCookie)).toEqual({
+      status: 403,
+      code: "authorization.not_permitted",
+    });
+  }, 60_000);
+
   it("a full start with Veri*Factu enabled takes a handover as far as checking the destination", async () => {
     let cookie = "";
     const { port } = await boot(suite, {
       restricted: false,
+      tls: true,
       beforeStart: async () => {
-        const { token } = await openManagementSession(suite.db, "admin");
-        cookie = `${MANAGEMENT_COOKIE}=${token}`;
+        cookie = await adminCookie();
       },
     });
-    const response = await startHandover(port, cookie);
-    expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
-      "handover.destination_not_spare",
-    );
-    expect(response.status).toBe(409);
+    expect(await startHandoverSecurely(port, cookie)).toEqual({
+      status: 409,
+      code: "handover.destination_not_spare",
+    });
   }, 60_000);
 
   it("a full start answers a peer's signed query", async () => {

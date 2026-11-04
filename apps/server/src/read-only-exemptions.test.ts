@@ -402,6 +402,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         // Listed for a fenced box only.
         retire: await post(base, "/api/box/retire"),
         unlisted: await post(base, "/management-api/catalogues"),
+        startHandover: await post(base, "/management-api/handover"),
         // A GET: the gate never refuses it, and this box's own id finds this box's row.
         statusRead: await readStatus(base, MIRROR_OPERATION_ID),
       }).toEqual({
@@ -412,6 +413,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         offer: { status: 400, code: "handover.request_invalid" },
         retire: GATED,
         unlisted: GATED,
+        startHandover: GATED,
         statusRead: { status: 200, signerNodeId: mirror.nodeId, state: "prepared" },
       });
     } finally {
@@ -526,6 +528,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         // Listed for a mirror only.
         offer: await post(base, "/api/node/handover/offer"),
         unlisted: await post(base, "/management-api/catalogues"),
+        startHandover: await post(base, "/management-api/handover"),
       }).toEqual({
         retire: { status: 401, code: "management_session.required" },
         promote: { status: 401, code: "password.invalid" },
@@ -534,6 +537,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         membership: { status: 200, body: { accepted: false } },
         offer: GATED,
         unlisted: GATED,
+        startHandover: GATED,
       });
     } finally {
       await server.close();

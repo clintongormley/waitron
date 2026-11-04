@@ -21,6 +21,7 @@ import { currentBinding, peerKeyOf, signAsThisBox } from "./handover-signing.js"
 import { handoverPageAt, handoverPageOf } from "./handover-status-api.js";
 import { advanceHandover, beginHandoverFromOffer } from "./handover-store.js";
 import type { Logger } from "./logger.js";
+import { requireNodeOperationHttps } from "./node-operation-https.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import type { PeerStatusApiDeps } from "./peer-status-api.js";
 import "./errors.js";
@@ -300,6 +301,7 @@ export function mountHandoverSourceStartApi(
   app.post("/management-api/handover", (c) =>
     run(c, log, async () => {
       c.header("Cache-Control", "no-store");
+      requireNodeOperationHttps(c);
       const token = requireManagementSession(c);
       await authorizeManager(deps.db, {
         managementSessionId: token,

@@ -1,4 +1,5 @@
-import type { AddressInfo } from "node:net";
+import { Socket, type AddressInfo } from "node:net";
+import { TLSSocket } from "node:tls";
 import { serve } from "@hono/node-server";
 import { sql } from "drizzle-orm";
 import { Hono, type Context } from "hono";
@@ -91,6 +92,7 @@ let gate: HandoverGate;
 let exchange: Exchange;
 let exchanged: string[];
 let stepDownAfterOffer: ReturnType<typeof vi.fn<HandoverSourceStartDeps["stepDownAfterOffer"]>>;
+let socket: TLSSocket;
 const closers: (() => Promise<void>)[] = [];
 
 const toSpare: Exchange = (path, init) => spareApp.request(path, init);
@@ -178,6 +180,7 @@ beforeEach(async () => {
   const session = await openManagementSession(mainBox.db, "admin");
   personId = session.personId;
   cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
+  socket = new TLSSocket(new Socket());
   gate = createHandoverGate();
   exchanged = [];
   exchange = toSpare;
@@ -192,6 +195,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  socket.destroy();
   for (const close of closers.splice(0)) await close();
 });
 
@@ -200,19 +204,23 @@ async function start(
   on: Hono = app,
   withCookie: string | null = cookie,
 ): Promise<{ status: number; body: unknown }> {
-  const response = await on.request(ROUTE, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...(withCookie === null ? {} : { cookie: withCookie }),
+  const response = await on.request(
+    ROUTE,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(withCookie === null ? {} : { cookie: withCookie }),
+      },
+      body: JSON.stringify({
+        operationId: OP,
+        destinationNodeId: spare,
+        signIn: PASSWORD_SIGN_IN,
+        ...body,
+      }),
     },
-    body: JSON.stringify({
-      operationId: OP,
-      destinationNodeId: spare,
-      signIn: PASSWORD_SIGN_IN,
-      ...body,
-    }),
-  });
+    { incoming: { socket } },
+  );
   return { status: response.status, body: await response.json() };
 }
 
@@ -367,6 +375,71 @@ describe("a valid start", () => {
   });
 });
 
+describe("the connection", () => {
+  const NOT_PERMITTED = refusal(403, "authorization.not_permitted", {
+    permission: "node.promote",
+  });
+  const send = async (
+    headers: Record<string, string>,
+    env: unknown,
+    signIn: unknown = PASSWORD_SIGN_IN,
+  ): Promise<{ status: number; body: unknown }> => {
+    const response = await app.request(
+      ROUTE,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify({ operationId: OP, destinationNodeId: spare, signIn }),
+      },
+      env as object,
+    );
+    return { status: response.status, body: await response.json() };
+  };
+
+  it("refuses plain HTTP and records nothing", async () => {
+    expect(await send({ cookie }, undefined)).toEqual(NOT_PERMITTED);
+    await expectNothingRecorded();
+    expect(exchanged).toEqual([]);
+  });
+
+  it("refuses a request from another origin and records nothing", async () => {
+    const answer = await send(
+      { cookie, origin: "https://elsewhere.example" },
+      {
+        incoming: { socket },
+      },
+    );
+    expect(answer).toEqual(NOT_PERMITTED);
+    await expectNothingRecorded();
+    expect(exchanged).toEqual([]);
+  });
+
+  it("refuses a request a browser marks as from another site and records nothing", async () => {
+    const answer = await send(
+      { cookie, "sec-fetch-site": "cross-site" },
+      {
+        incoming: { socket },
+      },
+    );
+    expect(answer).toEqual(NOT_PERMITTED);
+    await expectNothingRecorded();
+  });
+
+  it("refuses plain HTTP before reading a session", async () => {
+    expect(await send({}, undefined)).toEqual(NOT_PERMITTED);
+  });
+
+  it("refuses plain HTTP before reading a password", async () => {
+    const answer = await send({ cookie }, undefined, { method: "password", password: "wrong" });
+    expect(answer).toEqual(NOT_PERMITTED);
+  });
+
+  it("accepts a request from this box's own origin", async () => {
+    const answer = await send({ cookie, origin: "http://localhost" }, { incoming: { socket } });
+    expect(answer.status).toBe(200);
+  });
+});
+
 describe("who may start one", () => {
   it("refuses without a session", async () => {
     expect(await start({}, app, null)).toEqual(refusal(401, "management_session.required"));
@@ -437,11 +510,15 @@ describe("a malformed request", () => {
     ["an array", "[]"],
     ["a null", "null"],
   ])("refuses %s as the whole body", async (_name, raw) => {
-    const response = await app.request(ROUTE, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: raw,
-    });
+    const response = await app.request(
+      ROUTE,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: raw,
+      },
+      { incoming: { socket } },
+    );
     expect({ status: response.status, body: await response.json() }).toEqual(
       refusal(400, "handover.request_invalid", { field: "body" }),
     );
