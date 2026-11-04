@@ -6643,9 +6643,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   test's venue the Spanish refund dialog shows the reason "Mistake" in English. Found by A798-B
   slice 8 (#2012).
 
-- **A971. Spain's pack provides English for every word it shows** (holiday names, area labels,
-  notices) — check first; a holiday with two names may need a schema change. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
-
 - **Regional demo screen qualification.** Inspect the seeded till, kitchen and dashboard in both
   screen languages, themes and phone/desktop widths when the stack is available. The regional cuts'
   local Mailpit start refused the absent Docker socket. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)

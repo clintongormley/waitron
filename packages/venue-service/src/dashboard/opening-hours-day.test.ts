@@ -3,7 +3,7 @@ import { setLocale } from "@waitron/dashboard-kit";
 import type { LocalDate } from "../hours-types.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import { DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.js";
-import { openingHoursDay } from "./opening-hours-day.js";
+import { openingHoursDay, dayNameLines } from "./opening-hours-day.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => setLocale("en"));
@@ -168,4 +168,49 @@ describe("openingHoursDay", () => {
       text: "as Restaurant",
     });
   });
+});
+
+it.each(["en", "es"])("uses %s for month, week and day-box holiday names", (locale) => {
+  setLocale(locale);
+  const model = monthModel();
+  const day = model.days.find((day) => day.date === "2026-12-15")!;
+  day.holidays = [
+    {
+      id: "holiday",
+      date: day.date,
+      name: "Official holiday",
+      englishName: "English holiday",
+      scope: "national",
+      sourceId: "source",
+    },
+  ];
+  expect(dayNameLines(day)).toEqual([
+    { name: locale === "en" ? "English holiday" : "Official holiday", kind: "holiday" },
+  ]);
+  expect(openingHoursDay(day, model.seasons, DEPARTMENTS, "").name).toBe(
+    locale === "en" ? "English holiday" : "Official holiday",
+  );
+});
+
+it.each([
+  ["en", "Official holiday", "English holiday"],
+  ["en", "English holiday", "English holiday"],
+  ["es", "Official holiday", "Official holiday"],
+  ["es", "English holiday", "Official holiday"],
+])("shows one holiday line in %s for a special day saved as %s", (locale, savedName, displayed) => {
+  setLocale(locale!);
+  const model = monthModel();
+  const day = model.days.find((day) => day.date === "2026-12-15")!;
+  day.holidays = [
+    {
+      id: "holiday",
+      date: day.date,
+      name: "Official holiday",
+      englishName: "English holiday",
+      scope: "national",
+      sourceId: "source",
+    },
+  ];
+  day.specialDay = { id: "special", name: savedName! };
+  expect(dayNameLines(day)).toEqual([{ name: displayed, kind: "holiday" }]);
 });

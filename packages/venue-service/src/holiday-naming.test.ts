@@ -62,3 +62,42 @@ describe("a date's holiday name", () => {
     expect(holidayDateName(facts, TARGET, "x")).toBe(`${long("a")} · ${long("b")} · ${long("c")}`);
   });
 });
+
+describe("holiday display language", () => {
+  const translated = { ...NATIONAL, englishName: "English public holiday" };
+
+  it("uses English display names without changing official facts", () => {
+    expect(holidayDateName([translated], TARGET, "", "en-GB")).toBe("English public holiday");
+    expect(translated.name).toBe(NATIONAL.name);
+  });
+
+  it("retains official names in Spanish and when no display language is requested", () => {
+    expect(holidayDateName([translated], TARGET, "", "es-ES")).toBe(NATIONAL.name);
+    expect(holidayDateName([translated], TARGET, "")).toBe(NATIONAL.name);
+  });
+
+  it("keeps locally authored names and deduplicates the displayed labels", () => {
+    expect(holidayDateName([NATIONAL], TARGET, "", "en")).toBe(NATIONAL.name);
+    expect(
+      holidayDateName(
+        [translated, { ...REGIONAL, englishName: "English public holiday" }],
+        TARGET,
+        "",
+        "en",
+      ),
+    ).toBe("English public holiday");
+  });
+});
+
+it("uses the dashboard's English fallback for an unsupported display language", () => {
+  expect(
+    holidayDateName([{ ...NATIONAL, englishName: "English holiday" }], TARGET, "", "fr-CA"),
+  ).toBe("English holiday");
+});
+
+it.each(["", "   "])(
+  "keeps the official name when the English label is blank: %j",
+  (englishName) => {
+    expect(holidayDateName([{ ...NATIONAL, englishName }], TARGET, "", "en")).toBe(NATIONAL.name);
+  },
+);

@@ -17,6 +17,7 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId, type LocationId } from "@waitron/shared";
 import {
   createHolidayStore,
+  readHolidayDates as packageReadHolidayDates,
   readHolidayFacts as packageReadHolidayFacts,
   readHolidays as packageReadHolidays,
 } from "./holidays.js";
@@ -945,4 +946,32 @@ it("gives the holiday dates by year and name, adding an area's holiday once the 
       ["Isle A day", "2026-07-01"],
     ]),
   );
+});
+
+describe("country-pack English display names", () => {
+  it("keeps English area names in the venue projection", async () => {
+    await venue({ country: "ES", province: "25", city: "Vielha" });
+    const model = await run((tx) => packageIndex.readHolidayAreaModel(tx));
+    expect(model.areaOptions).toContainEqual(
+      expect.objectContaining({ key: "lleida-except-aran", englishName: "Lleida, outside Aran" }),
+    );
+  });
+});
+
+it("keeps English display names separate from annual holiday matching", async () => {
+  await venue({ country: "ES", province: "28", city: "Madrid" });
+  const read = await run((tx) => packageIndex.readHolidays(tx, "2026-12-25", "2026-12-25"));
+  expect(read.facts).toHaveLength(1);
+  expect(read.facts[0]!.englishName).toBe("Christmas Day");
+  const dates = await run((tx) => packageReadHolidayDates(tx, 2026, 2026));
+  expect(dates.get(2026)!.get(read.facts[0]!.name)).toBe("2026-12-25");
+  expect(dates.get(2026)!.has("Christmas Day")).toBe(false);
+});
+
+it("keeps absent country translations absent, including a country without a calendar", async () => {
+  await venue({ country: "ZY" });
+  expect(await run((tx) => store.readHolidayEnglishNames(tx, ["Historic local holiday"]))).toEqual(
+    new Map(),
+  );
+  expect(await run((tx) => store.readHolidayEnglishNames(tx, []))).toEqual(new Map());
 });

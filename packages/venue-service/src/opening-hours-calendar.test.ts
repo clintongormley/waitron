@@ -1,3 +1,4 @@
+import { listVenueReadiness } from "./operations.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -192,6 +193,7 @@ describe("the Opening hours year read", () => {
           id: "shipped:BOE-A-2025-21667:0601",
           date: "2026-01-06",
           name: "Epifanía del Señor",
+          englishName: "Epiphany",
           scope: "national",
           sourceId: "BOE-A-2025-21667",
         },
@@ -217,8 +219,21 @@ describe("the Opening hours year read", () => {
       "missing_year",
     ]);
     expect(next.missingHolidays).toEqual([
-      { specialDayId: easterWeek.id, name: "Easter week", holidayName: "Viernes Santo" },
+      {
+        specialDayId: easterWeek.id,
+        name: "Easter week",
+        holidayName: "Viernes Santo",
+        englishName: "Good Friday",
+      },
     ]);
+    const readiness = await run((tx) => listVenueReadiness(tx, new Date("2026-06-01T12:00:00Z")));
+    expect(readiness).toContainEqual({
+      code: "special_day.holiday_missing",
+      specialDayId: easterWeek.id,
+      holidayName: next.missingHolidays[0]!.holidayName,
+      englishName: "Good Friday",
+      year: 2027,
+    });
     const known = new Map([[2027, new Map([["Viernes Santo", "2027-03-26"]])]]);
     expect(await run((tx) => missingHolidaysIn(tx, [2027], known))).toEqual([]);
   });
@@ -1008,4 +1023,18 @@ describe("a past day's range around a start change", () => {
         closed: false,
       });
   });
+});
+
+it("carries the pack's English holiday label through the real month projection", async () => {
+  await venue();
+  const month = await readMonth("2026-01");
+  const day = month.days.find((day) => day.date === "2026-01-06")!;
+  expect(day.holidays).toContainEqual(
+    expect.objectContaining({
+      id: "shipped:BOE-A-2025-21667:0601",
+      date: "2026-01-06",
+      englishName: "Epiphany",
+    }),
+  );
+  expect(day.holidays[0]!.name).not.toBe("Epiphany");
 });

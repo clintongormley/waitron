@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
-import { tableNoMatches } from "@waitron/dashboard-kit";
+import { tableNoMatches, currentLocale } from "@waitron/dashboard-kit";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -15,6 +15,7 @@ import {
 import { DepartmentsZonesDrag } from "./departments-zones-drag.js";
 import { format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
+import { holidayDisplayName } from "../holiday-naming.js";
 import { periodsWindowPath } from "./opening-hours-paths.js";
 
 export type DepartmentZoneRow =
@@ -374,7 +375,10 @@ export class DepartmentsList extends LitElement {
         issue.code === "special_day.holiday_missing"
           ? html`<p class="issue" data-test="holiday-missing">
               ${format("venue.readiness.holiday_missing", {
-                name: issue.holidayName,
+                name: holidayDisplayName(
+                  { name: issue.holidayName, englishName: issue.englishName },
+                  currentLocale(),
+                ),
                 year: String(issue.year),
               })}
             </p>`

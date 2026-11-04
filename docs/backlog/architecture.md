@@ -395,11 +395,6 @@ until A977).
   Both dialogs use that helper for the issuing list. Add sourced names for that list without
   admitting those values to the postal-country list. This is a wording follow-up; the identifiers
   retain their explicit issuing code.
-- **A971 — point 5: Spain's pack provides English.** Check every word `country-es` shows on a screen:
-  holiday names (`data/es-2026.ts`, one `name` per row, verbatim from the BOE and compared by a
-  test), the area label «Lleida, fuera del territorio de Arán» (Waitron's wording), and the notices
-  (`spain.ts:199–235`, already `{ en, es }`). A holiday carrying an English name beside the official
-  one may need a schema change — ask before adding one.
 - **Regional demo screen qualification.** Inspect the seeded till, kitchen and dashboard in
   English/Spanish, both themes and phone/desktop widths when the development stack can start.
   The regional cuts' local launches refused at Mailpit's absent Docker socket; their native setup
@@ -1136,6 +1131,8 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   the next slice.
 
 ## Decisions and deliberate limits
+
+- **Official holiday names and English display names (A971, owner 2026-10-23).** Keep the published official name as the annual-rule key; choose the display name by the screen language. The country calendar supplies English names for holidays and area choices. A stored name absent from the supplied English-name inventory stays as recorded. This changes no stored holiday rule or database schema.
 
 **A972 regional demos (owner, 2026-10-27).** Each regional demo extends Casa Delgado
 with one menu section, a regional wine and its own staff. Build Catalonia first,

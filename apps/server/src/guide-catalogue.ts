@@ -18,6 +18,7 @@ export const GUIDE_PAGES = [
   "box-status",
   "backup-recovery",
   "time-zone",
+  "opening-hours",
   "servers",
 ] as const;
 

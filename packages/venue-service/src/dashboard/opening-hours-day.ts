@@ -1,3 +1,4 @@
+import { currentLocale } from "@waitron/dashboard-kit";
 import { holidayDateName } from "../holiday-naming.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { ServiceRange } from "../service-day.js";
@@ -49,10 +50,14 @@ export interface DayNameLine {
 /** A date's names as the Month and the Week write them: its special day's, left out when it is the
  *  holiday's, then its holiday's. */
 export function dayNameLines(day: Day): DayNameLine[] {
-  const holiday = holidayDateName(day.holidays, day.date, "");
+  const holiday = holidayDateName(day.holidays, day.date, "", currentLocale());
   const special = day.specialDay?.name ?? "";
+  const holidayNames = new Set([
+    holidayDateName(day.holidays, day.date, ""),
+    holidayDateName(day.holidays, day.date, "", "en"),
+  ]);
   return [
-    ...(special && special !== holiday ? [{ name: special, kind: "special" as const }] : []),
+    ...(special && !holidayNames.has(special) ? [{ name: special, kind: "special" as const }] : []),
     ...(holiday ? [{ name: holiday, kind: "holiday" as const }] : []),
   ];
 }
@@ -66,7 +71,7 @@ export function openingHoursDay(
   departments: readonly MonthDepartment[],
   departmentId: string,
 ): OpeningHoursDay {
-  const holiday = holidayDateName(day.holidays, day.date, "");
+  const holiday = holidayDateName(day.holidays, day.date, "", currentLocale());
   const special = day.specialDay?.name ?? "";
   const season = seasons.find(({ id }) => id === day.seasonId)?.name;
   const line = day.specialDay

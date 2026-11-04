@@ -189,15 +189,22 @@ function fromDetail(detail: SpecialDayDetail): Draft {
     paint,
   };
 }
-/** The same-named special day with the latest date; on a tie, the lowest id. */
-function offerMatch(days: readonly SpecialDaySummary[], name: string): string | undefined {
+/** Prefer the displayed name before alternate holiday labels, keeping an exact saved match first. */
+function offerMatch(
+  days: readonly SpecialDaySummary[],
+  names: readonly string[],
+): SpecialDaySummary | undefined {
   const latest = (day: SpecialDaySummary) =>
     day.dates.reduce((last, { date }) => (date > last ? date : last), "");
-  return days
-    .filter((day) => day.name === name)
-    .sort((a, b) =>
-      latest(a) !== latest(b) ? (latest(a) < latest(b) ? 1 : -1) : a.id < b.id ? -1 : 1,
-    )[0]?.id;
+  for (const name of names) {
+    const match = days
+      .filter((day) => day.name === name)
+      .sort((a, b) =>
+        latest(a) !== latest(b) ? (latest(a) < latest(b) ? 1 : -1) : a.id < b.id ? -1 : 1,
+      )[0];
+    if (match !== undefined) return match;
+  }
+  return undefined;
 }
 /** What a season days read depends on in the model: a change re-reads, a bare refresh does not. */
 function seasonSignature(model: Model): string {
@@ -413,7 +420,7 @@ export class SpecialDayPainter extends LitElement {
   @state() private taken: ReadonlyMap<LocalDate, string> = new Map();
   @state() private deleting?: { busy: boolean; message: string };
   /** The same-named special day offered before a new day on a public holiday, until answered. */
-  @state() private offered?: { id: string };
+  @state() private offered?: { id: string; name: string };
   /** Replaced by an edit and by Save: the offer is about the new day only as it opened. */
   private offerToken = {};
   /** A new day pre-filled from a public holiday can be saved as it opened. */
@@ -561,9 +568,16 @@ export class SpecialDayPainter extends LitElement {
     if (id === null) {
       this.loading = false;
       const date = this.date && isLocalDate(this.date) ? this.date : undefined;
-      const name = date ? holidayDateName(this.holidays, date, "") : "";
+      const name = date ? holidayDateName(this.holidays, date, "", currentLocale()) : "";
       this.adopt(undefined, this.newDates(), name);
-      if (name) this.offerExisting(name);
+      if (name && date)
+        this.offerExisting([
+          ...new Set([
+            name,
+            holidayDateName(this.holidays, date, ""),
+            holidayDateName(this.holidays, date, "", "en"),
+          ]),
+        ]);
       return;
     }
     this.read(id, this.addDate && isLocalDate(this.addDate) ? [this.addDate] : []);
@@ -711,13 +725,13 @@ export class SpecialDayPainter extends LitElement {
     this.scope?.commit(copyDraft(baseline));
   }
   /** A list that fails or lands late offers nothing: the pre-filled new day stands. */
-  private offerExisting(name: string) {
+  private offerExisting(names: readonly string[]) {
     const generation = this.generation;
     const token = (this.offerToken = {});
     this.api.specialDays.listSpecialDays().then((days) => {
       if (generation !== this.generation || token !== this.offerToken) return;
-      const id = offerMatch(days, name);
-      this.offered = id === undefined ? undefined : { id };
+      const match = offerMatch(days, names);
+      this.offered = match === undefined ? undefined : { id: match.id, name: match.name };
     }, ignore);
   }
   private addTo({ id }: { id: string }) {
@@ -1623,8 +1637,8 @@ export class SpecialDayPainter extends LitElement {
       <p class="explain" data-test="explain">${t("special.explain")}</p>
     </section>`;
   }
-  private offer(offered: { id: string }) {
-    const name = this.draft.name;
+  private offer(offered: { id: string; name: string }) {
+    const name = offered.name;
     return html`<section class="panel" data-test="offer">
       <p>${format("special.offer", { name })}</p>
       <wt-button data-test="add-to" @click=${() => this.addTo(offered)}

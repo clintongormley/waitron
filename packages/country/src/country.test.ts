@@ -320,6 +320,64 @@ describe("holiday calendar", () => {
     sourceIds: state === "complete" || state === "area_required" ? ["XY-source"] : [],
   });
 
+  it("carries separate English labels through fact and area reads without changing official names", () => {
+    const translated = createHolidayCalendar({
+      ...dataset,
+      areas: dataset.areas.map((area) => ({ ...area, englishName: "English area" })),
+      years: dataset.years.map((year) => ({
+        ...year,
+        rows: year.rows.map((row) => ({ ...row, englishName: "English holiday" })),
+      })),
+    });
+    expect(translated.englishNameFor?.("R2 Day")).toBe("English holiday");
+    expect(calendar.englishNameFor?.("R2 Day")).toBeUndefined();
+    expect(translated.areasForProvince("02")).toEqual([
+      { key: "isle-a", name: "Isle A", englishName: "English area" },
+      { key: "isle-b", name: "Isle B", englishName: "English area" },
+    ]);
+    expect(
+      translated.read({ provinceCode: "03", areaKey: null, from: "2030-05-05", to: "2030-05-05" })
+        .facts,
+    ).toEqual([
+      {
+        id: "shipped:r2-day",
+        date: "2030-05-05",
+        name: "R2 Day",
+        englishName: "English holiday",
+        scope: "regional",
+        sourceId: "XY-source",
+      },
+    ]);
+  });
+
+  it.each([undefined, "", "   "])(
+    "does not let a later %s label erase a known English holiday name",
+    (later) => {
+      const first = {
+        key: "first",
+        date: "2030-04-01",
+        name: "Original holiday",
+        englishName: "Known English holiday",
+        scope: "national" as const,
+        regions: ["R1"],
+        sourceId: "XY-source",
+      };
+      const years = [
+        { year: 2030, dataVersion: "XY-2030.1", sourceIds: ["XY-source"], rows: [first] },
+        {
+          year: 2032,
+          dataVersion: "XY-2032.1",
+          sourceIds: ["XY-source"],
+          rows: [{ ...first, key: "later", date: "2032-04-01", englishName: later }],
+        },
+      ];
+      for (const ordered of [years, [...years].reverse()]) {
+        const read = createHolidayCalendar({ ...dataset, areas: [], years: ordered });
+        expect(read.englishNameFor("Original holiday")).toBe("Known English holiday");
+      }
+    },
+  );
+
   it("maps a province to its region and nothing else", () => {
     expect(calendar.regionForProvince("01")).toBe("R1");
     expect(calendar.regionForProvince("03")).toBe("R2");

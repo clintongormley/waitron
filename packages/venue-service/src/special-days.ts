@@ -29,7 +29,7 @@ import {
 } from "./schema/seasons.js";
 import { menuPeriods } from "./schema/menus.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
-import { readHolidayDates } from "./holidays.js";
+import { readHolidayDates, readHolidayEnglishNames } from "./holidays.js";
 import { joinTouching, type ServingRead } from "./season-weeks.js";
 import { inForceClock, scheduleCutovers, settledClock } from "./service-day-context.js";
 import { clockTimeSkippedInDay, parseRanges, type ClosedRange } from "./service-day.js";
@@ -352,6 +352,7 @@ export async function specialDayOccurrences(
 export interface MissingHoliday {
   specialDayId: string;
   holidayName: string;
+  englishName?: string;
   year: number;
 }
 
@@ -407,9 +408,10 @@ export async function specialDayReadiness(
     }
   }
   return {
-    missing: missing.map(({ specialDayId, holidayName, year }) => ({
+    missing: missing.map(({ specialDayId, holidayName, year, englishName }) => ({
       specialDayId,
       holidayName,
+      ...(englishName === undefined ? {} : { englishName }),
       year,
     })),
     clashes: [...clashes.values()],
@@ -449,7 +451,14 @@ export async function missingHolidaysIn(
           holidayName: rule.holidayName!,
           year,
         });
-  return [...missing.values()];
+  const labels = await readHolidayEnglishNames(
+    tx,
+    [...missing.values()].map((row) => row.holidayName),
+  );
+  return [...missing.values()].map((row) => {
+    const englishName = labels.get(row.holidayName);
+    return { ...row, ...(englishName === undefined ? {} : { englishName }) };
+  });
 }
 
 export interface SpecialDayInput {

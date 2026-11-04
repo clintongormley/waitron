@@ -234,6 +234,20 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
   const readHolidayFacts: HolidayReader = async (tx, from, to, place) =>
     (await readHolidays(tx, from, to, place)).facts;
 
+  async function readHolidayEnglishNames(
+    tx: Transaction,
+    names: readonly string[],
+  ): Promise<Map<string, string>> {
+    if (names.length === 0) return new Map();
+    const { calendar } = await readAddress(tx);
+    const englishNames = new Map<string, string>();
+    for (const name of names) {
+      const englishName = calendar?.englishNameFor(name);
+      if (englishName !== undefined) englishNames.set(name, englishName);
+    }
+    return englishNames;
+  }
+
   async function readHolidayAreaModel(tx: Transaction): Promise<HolidayAreaModel> {
     const address = await readAddress(tx);
     const current = (await geographiesOf(tx)).find((row) => matches(row, address));
@@ -243,10 +257,7 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
   function areaModelAt(address: Address, current: GeographyRow | undefined): HolidayAreaModel {
     const areaOptions =
       address.calendar !== undefined && address.provinceCode !== null
-        ? address.calendar.areasForProvince(address.provinceCode).map(({ key, name }) => ({
-            key,
-            name,
-          }))
+        ? address.calendar.areasForProvince(address.provinceCode).map((option) => ({ ...option }))
         : [];
     return {
       venue: { country: address.country, provinceCode: address.provinceCode, city: address.city },
@@ -307,6 +318,7 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
   return {
     readHolidays,
     readHolidayDates,
+    readHolidayEnglishNames,
     readHolidayFacts,
     readHolidayAreaModel,
     readHolidayYear,
@@ -319,6 +331,7 @@ const INSTALLED = createHolidayStore();
 export const {
   readHolidays,
   readHolidayDates,
+  readHolidayEnglishNames,
   readHolidayAreaModel,
   readHolidayYear,
   saveHolidayArea,

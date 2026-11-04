@@ -36,10 +36,17 @@ const codeOf = (province: string) => findAdministrativeArea(SPAIN, province)!.co
 const day = (province: string, date: string, areaKey: string | null = null) =>
   calendar.read({ provinceCode: codeOf(province), areaKey, from: date, to: date });
 const ids = (read: { facts: readonly { id: string }[] }) => read.facts.map(({ id }) => id);
-const fact = (row: string, date: string, name: string, scope: "national" | "regional") => ({
+const fact = (
+  row: string,
+  date: string,
+  name: string,
+  scope: "national" | "regional",
+  englishName: string,
+) => ({
   id: `shipped:${ANNEX}:${row}`,
   date,
   name,
+  englishName,
   scope,
   sourceId: ANNEX,
 });
@@ -171,7 +178,15 @@ describe("territorial areas", () => {
 describe("Spain's 2026 holidays", () => {
   it("lists 2 November in Andalucía and not in Cataluña", () => {
     expect(day("Sevilla", "2026-11-02")).toEqual({
-      facts: [fact("0211", "2026-11-02", "Día siguiente a Todos los Santos", "national")],
+      facts: [
+        fact(
+          "0211",
+          "2026-11-02",
+          "Día siguiente a Todos los Santos",
+          "national",
+          "Day after All Saints' Day",
+        ),
+      ],
       coverage: complete("01"),
     });
     expect(day("Barcelona", "2026-11-02")).toEqual({ facts: [], coverage: complete("09") });
@@ -180,7 +195,7 @@ describe("Spain's 2026 holidays", () => {
   it("lists a national holiday no region may replace everywhere", () => {
     for (const province of ["Sevilla", "Barcelona", "Ceuta", "Lleida", "Santa Cruz de Tenerife"])
       expect(day(province, "2026-01-01").facts, province).toEqual([
-        fact("0101", "2026-01-01", "Año Nuevo", "national"),
+        fact("0101", "2026-01-01", "Año Nuevo", "national", "New Year's Day"),
       ]);
   });
 
@@ -193,7 +208,7 @@ describe("Spain's 2026 holidays", () => {
 
   it("lists a region's own holiday only in that region", () => {
     expect(day("Granada", "2026-02-28").facts).toEqual([
-      fact("2802", "2026-02-28", "Día de Andalucía", "regional"),
+      fact("2802", "2026-02-28", "Día de Andalucía", "regional", "Andalusia Day"),
     ]);
     expect(ids(day("Madrid", "2026-02-28"))).toEqual([]);
     expect(ids(day("Zaragoza", "2026-04-23"))).toEqual([`shipped:${ANNEX}:2304A`]);
@@ -230,6 +245,7 @@ describe("Spain's 2026 holidays", () => {
         id: `shipped:${ANNEX}:note-1:tenerife`,
         date: "2026-02-02",
         name: "Festividad de la Virgen de la Candelaria",
+        englishName: "Our Lady of Candelaria",
         scope: "regional",
         sourceId: ANNEX,
       },
@@ -245,7 +261,7 @@ describe("Spain's 2026 holidays", () => {
     expect(
       calendar.read({ provinceCode: "41", areaKey: null, from: "2026-12-25", to: "2027-01-06" }),
     ).toEqual({
-      facts: [fact("2512", "2026-12-25", "Natividad del Señor", "national")],
+      facts: [fact("2512", "2026-12-25", "Natividad del Señor", "national", "Christmas Day")],
       coverage: [
         ...complete("01"),
         { year: 2027, state: "missing_year", regionCode: "01", dataVersion: null, sourceIds: [] },
@@ -346,4 +362,61 @@ describe("reading an archived page", () => {
       "note 1 was not read",
     );
   });
+});
+
+describe("English holiday display names", () => {
+  it.each([
+    ["Madrid", "2026-01-01", null, "Año Nuevo", "New Year's Day"],
+    ["Madrid", "2026-12-25", null, "Natividad del Señor", "Christmas Day"],
+    [
+      "Sevilla",
+      "2026-11-02",
+      null,
+      "Día siguiente a Todos los Santos",
+      "Day after All Saints' Day",
+    ],
+    [
+      "Santa Cruz de Tenerife",
+      "2026-02-02",
+      "tenerife",
+      "Festividad de la Virgen de la Candelaria",
+      "Our Lady of Candelaria",
+    ],
+  ])(
+    "retains the official name beside English for %s on %s",
+    (province, date, area, name, englishName) => {
+      expect(day(province!, date!, area).facts).toEqual([
+        expect.objectContaining({ name, englishName }),
+      ]);
+    },
+  );
+
+  it("provides an English name for every shipped holiday, including territorial notes", () => {
+    for (const row of SPAIN_2026.rows)
+      expect(row, row.key).toHaveProperty("englishName", expect.stringMatching(/\S/));
+  });
+
+  it("retains official area names alongside English in the actual calendar read", () => {
+    expect(calendar.areasForProvince("25")).toEqual([
+      { key: "aran", name: "Arán", englishName: "Aran" },
+      {
+        key: "lleida-except-aran",
+        name: "Lleida, fuera del territorio de Arán",
+        englishName: "Lleida, outside Aran",
+      },
+    ]);
+    expect(calendar.areasForProvince("35")).toContainEqual({
+      key: "lanzarote-la-graciosa",
+      name: "Lanzarote y La Graciosa",
+      englishName: "Lanzarote and La Graciosa",
+    });
+    for (const area of HOLIDAY_AREAS)
+      expect(area, area.key).toHaveProperty("englishName", expect.stringMatching(/\S/));
+  });
+});
+
+it("resolves English for a stored official holiday name even when a future year is unavailable", () => {
+  expect(calendar.englishNameFor?.("Viernes Santo")).toBe("Good Friday");
+  expect(calendar.englishNameFor?.("Natividad del Señor")).toBe("Christmas Day");
+  expect(calendar.englishNameFor?.("A locally authored name")).toBeUndefined();
 });
