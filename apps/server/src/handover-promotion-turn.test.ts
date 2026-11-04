@@ -101,14 +101,14 @@ describe("the turn between a promotion and an offer", () => {
     const first = recording(OFFER);
     const second = recording(OTHER_OFFER);
 
-    finish[OFFER]!();
-    await first;
-    expect(() => promotionTurn(box).claim()).toThrowError(
-      expect.objectContaining({ params: { operationId: OTHER_OFFER } }),
-    );
-
     finish[OTHER_OFFER]!();
     await second;
+    expect(() => promotionTurn(box).claim()).toThrowError(
+      expect.objectContaining({ params: { operationId: OFFER } }),
+    );
+
+    finish[OFFER]!();
+    await first;
     expect(() => promotionTurn(box).claim()).not.toThrow();
   });
 
