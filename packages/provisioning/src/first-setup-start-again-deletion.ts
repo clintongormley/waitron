@@ -21,11 +21,6 @@ import { deleteBackupRoomNote } from "./backup-room-note-file.js";
 import { readDurableHostJsonWithBytes, writeDurableHostJson } from "./durable-host-json.js";
 import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
 import { insideFirstSetupWorkspace } from "./first-setup-workspace.js";
-import {
-  createFirstSetupBackupWorkspace,
-  insideBackupRepairTarget,
-} from "./first-setup-backup-workspace.js";
-import { isEmptiedTombstone } from "./first-setup-backup-discard.js";
 import { removeAndSync } from "./folder-sync.js";
 import { openImmutableWhenWalEmpty } from "./read-only-database.js";
 import { quoteIdent } from "./identifiers.js";
@@ -37,8 +32,6 @@ export const START_AGAIN_MARKER_LIMIT = 1024 * 1024;
 const MARKER_LIMIT = START_AGAIN_MARKER_LIMIT;
 const HASH = /^[a-f0-9]{64}$/;
 const RECORDS = "first-setup-resolutions";
-const BACKUP = "backup-recovery";
-const POINTER = "current.json";
 const LEGACY = [
   "first-setup-workspaces",
   "first-setup-selection.json",
@@ -83,12 +76,11 @@ const REFUSED = {
 type Root = "venue" | "state";
 type Roots = { stateDir: string; venueDir: string };
 /**
- * `discarding`: the id of the backup recovery this Start again is about to discard. `held`: the
- * setup database holds what activation wrote, so the `modules.json` activation writes after its
+ * `held`: the setup database holds what activation wrote, so the `modules.json` activation writes after its
  * commit is deleted with it rather than refused. `nodeId`: the attempt's node; without it, no
  * node.db row counts as the attempt's.
  */
-type Options = { discarding?: string; held?: true; nodeId?: string };
+type Options = { held?: true; nodeId?: string };
 const MODULES = "modules.json";
 /** A marker that names `modules.json` was taken with `held`. */
 const heldBy = (marker: StartAgainMarker): Options =>
@@ -251,51 +243,6 @@ async function entries(path: string): Promise<{ name: string; folder: boolean }[
   return result;
 }
 
-/**
- * Whether the state folder's backup recovery folder may stay: its pointer names either an
- * abandoned journal, with every recovery folder an emptied tombstone, or the recovery being
- * discarded, with every other recovery folder an emptied tombstone. The journal is read by its
- * chain only, since the attempt it was taken against may have changed since.
- */
-async function backupRecoveryKept(roots: Roots, { discarding }: Options): Promise<boolean> {
-  try {
-    const found = await entries(join(roots.stateDir, RECORDS, BACKUP));
-    if (found === null || !found.some((entry) => entry.name === POINTER && !entry.folder))
-      return false;
-    const last = (await createFirstSetupBackupWorkspace(roots).readChain()).at(-1);
-    if (last === undefined) return false;
-    if (
-      discarding === undefined ? last.phase !== "abandoned" : last.target.recoveryId !== discarding
-    )
-      return false;
-    for (const { name } of found)
-      if (name !== POINTER && name !== discarding && !(await isEmptiedTombstone(roots, name)))
-        return false;
-    return true;
-  } catch (error) {
-    if (error instanceof AppError) return false;
-    throw error;
-  }
-}
-
-/** With `discarding`, the venue folder may hold the pointer of the recovery being discarded. */
-async function venuePointerOnly(roots: Roots, { discarding }: Options): Promise<boolean> {
-  if (discarding === undefined) return false;
-  try {
-    const records = (await entries(join(roots.venueDir, RECORDS)))!;
-    const backup = (await entries(join(roots.venueDir, RECORDS, BACKUP)))!;
-    return (
-      records.length === 1 &&
-      records[0]!.name === BACKUP &&
-      backup.length === 1 &&
-      backup[0]!.name === POINTER &&
-      !backup[0]!.folder
-    );
-  } catch {
-    return false;
-  }
-}
-
 /** Every item of D3's deletion list present on disk, in its deletion order. */
 async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]> {
   const items: Item[] = [];
@@ -328,13 +275,9 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
   await file("state", "first-setup-node-key.json");
   await file("state", "module-operation-public.json");
   if (options.held === true) await file("state", MODULES);
-  const kept = await backupRecoveryKept(roots, options);
-  if (options.discarding !== undefined && !kept)
-    throw incomplete(`layout unexpected: ${RECORDS}/${BACKUP}`);
   const records = await entries(join(roots.stateDir, RECORDS));
   if (records !== null) {
     for (const record of records) {
-      if (kept && record.name === BACKUP) continue;
       if (!record.folder || !isUuid(record.name))
         throw incomplete(`layout unexpected: ${RECORDS}/${record.name}`);
       const relative = `${RECORDS}/${record.name}`;
@@ -347,7 +290,7 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
       await filesIn(relative, true);
       items.push({ kind: "folder", path: join(roots.stateDir, relative) });
     }
-    if (!kept) items.push({ kind: "folder", path: join(roots.stateDir, RECORDS) });
+    items.push({ kind: "folder", path: join(roots.stateDir, RECORDS) });
   }
   await file("venue", "first-setup-claim.json");
   await file("state", "first-setup.json");
@@ -540,13 +483,10 @@ export async function assertStartAgainAllowedOnDisk(
           {},
           { reason: `earlier layout: ${root}/${name}` },
         );
-  if (Object.values(canonical).some(insideBackupRepairTarget))
-    throw notReady("folder in a backup recovery target");
   for (const root of ["state", "venue"] as const)
     for (const name of REFUSED[root])
       if (
         (await exists(join(rootOf(root), name))) &&
-        !(root === "venue" && name === RECORDS && (await venuePointerOnly(canonical, options))) &&
         !(root === "state" && name === MODULES && options.held === true)
       )
         throw notReady(`refused artifact: ${root}/${name}`);

@@ -20,7 +20,6 @@ const GIT_SPAWN_TIMEOUT_MS = 30_000;
 const ALLOWED = [
   "apps/server/test/start-again-deleted.ts",
   "deploy/waitron.sh",
-  "packages/provisioning/src/first-setup-backup-workspace.ts",
   "packages/provisioning/src/first-setup-start-again-choice.ts",
   "packages/provisioning/src/first-setup-start-again-confirmation.ts",
   "packages/provisioning/src/first-setup-start-again-names.ts",

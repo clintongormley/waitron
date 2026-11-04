@@ -27,7 +27,6 @@ import {
   startAgainMarkerFor,
   writeStartAgainMarker,
   readStartAgainMarker,
-  resolveFirstSetupBackupWorkspace,
 } from "@waitron/provisioning";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
@@ -107,7 +106,6 @@ it("a held setup database, wiped, then the fresh-box restore writes into the usu
   expect(await exists(join(f.roots.stateDir, "trading.env"))).toBe(true);
   for (const dir of [f.roots.venueDir, f.roots.stateDir])
     expect(await exists(join(dir, "first-setup-resolutions"))).toBe(false);
-  expect((await resolveFirstSetupBackupWorkspace(f.roots)).kind).toBe("absent");
 }, 180_000);
 
 it("control: the same fresh-box restore beside a held setup database that was not wiped is refused, and places nothing", async () => {
@@ -135,7 +133,6 @@ it("a missing setup database, wiped, then the fresh-box restore writes into the 
   expect(await exists(join(f.roots.stateDir, "trading.env"))).toBe(true);
   for (const dir of [f.roots.venueDir, f.roots.stateDir])
     expect(await exists(join(dir, "first-setup-resolutions"))).toBe(false);
-  expect((await resolveFirstSetupBackupWorkspace(f.roots)).kind).toBe("absent");
 }, 180_000);
 
 it("control: the same fresh-box restore beside a missing setup database that was not wiped is refused, and places nothing", async () => {

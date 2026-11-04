@@ -149,8 +149,6 @@ export const FIRST_SETUP_HOST_FILES = [
   "first-setup-selection.json",
   "first-setup-retirement.json",
   "first-setup-workspace.json",
-  // Not START_AGAIN_MARKER_FILE: the deletion module imports this one through the backup
-  // workspace, so loading it first would read that name before it exists.
   "first-setup-deleting.json",
   START_AGAIN_CONFIRMATIONS_DIR,
   START_AGAIN_CHOICES_DIR,

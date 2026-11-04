@@ -192,7 +192,7 @@ it.each([
   ["an unparseable time", { at: "yesterday" }],
   ["a time not in canonical form", { at: "2026-10-24T13:50:12Z" }],
   ["an attempt id that is not a UUID", { attemptId: "../escape" }],
-  ["a database other than missing, present or unreadable", { database: "gone" }],
+  ["a database other than missing or unreadable", { database: "gone" }],
   ["a negative owner generation", { ownerGeneration: -1 }],
   ["a fractional owner generation", { ownerGeneration: 1.5 }],
   ["an unknown reached", { shown: { reached: "sold" } }],
@@ -244,65 +244,7 @@ it.each([false, "yes"])(
   },
 );
 
-const recovery = {
-  startedAt: "2026-10-24T13:40:00.000Z",
-  lastActiveAt: "2026-10-24T13:44:00.000Z",
-  lastActiveSource: "memory" as const,
-  failed: false,
-  cloud: true,
-};
-
-it("a confirmation that showed a stopped backup recovery keeps it, and only its keys", async () => {
-  const dir = await stateDir();
-  const shown = { ...record.shown, recovery };
-  await writeStartAgainConfirmation(dir, {
-    ...record,
-    shown: { ...shown, recovery: { ...recovery, extra: 1 } },
-  } as typeof record);
-  const stored = JSON.parse(
-    await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8"),
-  ) as { shown: { recovery: object } };
-  expect(stored).toEqual({ ...V2, ...record, shown });
-  expect(Object.keys(stored.shown.recovery)).toEqual([
-    "startedAt",
-    "lastActiveAt",
-    "lastActiveSource",
-    "failed",
-    "cloud",
-  ]);
-});
-
-it.each([
-  ["not an object", null],
-  ["a start time not in canonical form", { ...recovery, startedAt: "2026-10-24T13:40:00Z" }],
-  ["an unparseable last activity", { ...recovery, lastActiveAt: "soon" }],
-  ["an unknown activity source", { ...recovery, lastActiveSource: "disk" }],
-  ["a failed other than a boolean", { ...recovery, failed: "no" }],
-  ["a missing Cloud flag", { ...recovery, cloud: undefined }],
-])(
-  "a shown recovery with %s is refused setup.attempt_invalid and writes nothing",
-  async (_label, value) => {
-    const dir = await stateDir();
-    await expect(
-      writeStartAgainConfirmation(dir, {
-        ...record,
-        shown: { ...record.shown, recovery: value },
-      } as unknown as typeof record),
-    ).rejects.toMatchObject({ code: "setup.attempt_invalid", params: {} });
-    expect(await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR)).catch(() => [])).toEqual([]);
-  },
-);
-
-it("a record with the database present is written when it showed a stopped backup recovery", async () => {
-  const dir = await stateDir();
-  const present = { ...record, database: "present", shown: { ...record.shown, recovery } };
-  await writeStartAgainConfirmation(dir, present as typeof record);
-  expect(
-    JSON.parse(await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8")),
-  ).toEqual({ ...V2, ...present });
-});
-
-it("a record with the database present that showed no backup recovery is refused setup.attempt_invalid and writes nothing", async () => {
+it("a record with the database present is refused setup.attempt_invalid and writes nothing", async () => {
   const dir = await stateDir();
   await expect(
     writeStartAgainConfirmation(dir, {
@@ -315,20 +257,16 @@ it("a record with the database present that showed no backup recovery is refused
 
 it("a shown.held key is not stored in the record", async () => {
   const dir = await stateDir();
-  const present = { ...record, database: "present" as const, shown: { ...record.shown, recovery } };
   await writeStartAgainConfirmation(dir, {
-    ...present,
-    shown: { ...present.shown, held: { rows: 105, kept: 1, records: 1, accepted: 0 } },
-  } as typeof present);
+    ...record,
+    shown: { ...record.shown, held: { rows: 105, kept: 1, records: 1, accepted: 0 } },
+  } as typeof record);
   expect(
     JSON.parse(await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8")),
-  ).toEqual({ ...V2, ...present });
+  ).toEqual({ ...V2, ...record });
 });
 
-it.each([
-  ["with no recovery", {}],
-  ["beside a stopped recovery", { recovery }],
-])(
+it.each([["with no recovery", {}]])(
   "a record with the database unreadable keeps what the page showed, %s",
   async (_label, extra) => {
     const dir = await stateDir();
@@ -356,12 +294,6 @@ it.each([
     "unreadable with a databaseUnreadable other than true",
     "unreadable",
     { databaseUnreadable: "yes" },
-  ],
-  ["present with databaseUnreadable", "present", { databaseUnreadable: true, recovery }],
-  [
-    "present with a databaseUnreadable other than true",
-    "present",
-    { databaseUnreadable: false, recovery },
   ],
   ["missing with databaseUnreadable", "missing", { databaseUnreadable: true }],
 ])(

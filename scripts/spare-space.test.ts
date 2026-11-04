@@ -24,7 +24,6 @@ const NAMES: ReadonlyArray<{ pattern: RegExp; allowed: readonly string[] }> = [
     pattern: /\bSPARE_SPACE_FILE\b|["'`]spare-space["'`]/,
     allowed: [
       "apps/server/src/spare-space.ts",
-      "packages/provisioning/src/first-setup-backup-workspace.ts",
       "packages/provisioning/src/index.ts",
       "packages/provisioning/src/spare-space-name.ts",
     ],
@@ -37,7 +36,6 @@ const NAMES: ReadonlyArray<{ pattern: RegExp; allowed: readonly string[] }> = [
     pattern: /\bSPARE_SPACE_RELEASED_FILE\b|["'`]spare-space\.released["'`]/,
     allowed: [
       "apps/server/src/spare-space.ts",
-      "packages/provisioning/src/first-setup-backup-workspace.ts",
       "packages/provisioning/src/index.ts",
       "packages/provisioning/src/spare-space-name.ts",
     ],
@@ -122,12 +120,10 @@ describe("the spare file guard (weaker than its name: reads text)", () => {
   it("passes each allowed file's legitimate use and refuses the same use elsewhere", () => {
     const releases = 'import { releaseSpare } from "./spare-space.js";';
     const tops = 'import { SPARE_SPACE_BYTES, topUpSpare } from "./spare-space.js";';
-    const named = 'import { SPARE_SPACE_FILE } from "./spare-space-name.js";';
     expect(
       strays([
         { path: "apps/server/src/node-entry.ts", text: releases },
         { path: "apps/server/src/node-entry.ts", text: tops },
-        { path: "packages/provisioning/src/first-setup-backup-workspace.ts", text: named },
         {
           path: "packages/provisioning/src/spare-space-name.ts",
           text: 'export const SPARE_SPACE_FILE = "spare-space";',

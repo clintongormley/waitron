@@ -180,7 +180,6 @@ export {
   writeStartAgainConfirmation,
   type StartAgainConfirmation,
   type StartAgainSummary,
-  type StartAgainRecoveryShown,
 } from "./first-setup-start-again-confirmation.js";
 export {
   START_AGAIN_MARKER_FILE,
@@ -241,20 +240,3 @@ export {
   setAsideFolderPaths,
   type SetAsideIo,
 } from "./first-setup-start-again-set-aside.js";
-export {
-  ABANDONABLE as ABANDONABLE_BACKUP_PHASES,
-  createFirstSetupBackupWorkspace,
-  resolveFirstSetupBackupWorkspace,
-  assertFirstSetupBackupBootTarget,
-} from "./first-setup-backup-workspace.js";
-export {
-  abandonedRecoveryBytes,
-  emptyAbandonedBackupRecovery,
-  isEmptiedTombstone,
-} from "./first-setup-backup-discard.js";
-export type {
-  BackupRepairTarget,
-  BackupRepairObservation,
-  BackupRepairPhase,
-  BackupRepairRecord,
-} from "./first-setup-backup-workspace.js";

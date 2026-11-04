@@ -14,16 +14,6 @@ export type StartAgainSummary = {
   readonly recoveryRecordDamaged?: true;
   /** The setup database is present and some of it could not be read. */
   readonly databaseUnreadable?: true;
-  readonly recovery?: StartAgainRecoveryShown;
-};
-
-/** A stopped backup recovery that Start again would discard, as the summary showed it. */
-export type StartAgainRecoveryShown = {
-  readonly startedAt: string;
-  readonly lastActiveAt: string;
-  readonly lastActiveSource: "memory" | "saved-step";
-  readonly failed: boolean;
-  readonly cloud: boolean;
 };
 
 /** Written on the repair page, where nobody signs in: the administrator is the setup's own. */
@@ -31,7 +21,7 @@ export interface StartAgainConfirmation {
   version: 2;
   at: string;
   attemptId: string;
-  database: "missing" | "present" | "unreadable";
+  database: "missing" | "unreadable";
   setupAdministrator: { displayName: string; email: string };
   confirmedOn: "repair-page";
   signedIn: false;
@@ -72,25 +62,6 @@ export const isCanonicalInstant = (value: unknown): value is string =>
   Number.isFinite(Date.parse(value)) &&
   new Date(Date.parse(value)).toISOString() === value;
 
-function recoveryShown(value: unknown): StartAgainRecoveryShown {
-  if (
-    !object(value) ||
-    !isCanonicalInstant(value.startedAt) ||
-    !isCanonicalInstant(value.lastActiveAt) ||
-    !["memory", "saved-step"].includes(value.lastActiveSource as string) ||
-    typeof value.failed !== "boolean" ||
-    typeof value.cloud !== "boolean"
-  )
-    throw invalid();
-  return {
-    startedAt: value.startedAt,
-    lastActiveAt: value.lastActiveAt,
-    lastActiveSource: value.lastActiveSource as StartAgainRecoveryShown["lastActiveSource"],
-    failed: value.failed,
-    cloud: value.cloud,
-  };
-}
-
 function confirmation(value: StartAgainConfirmationInput): StartAgainConfirmation {
   const { at, attemptId, database, setupAdministrator, ownerGeneration, shown } = value as Record<
     string,
@@ -100,7 +71,7 @@ function confirmation(value: StartAgainConfirmationInput): StartAgainConfirmatio
     !isCanonicalInstant(at) ||
     typeof attemptId !== "string" ||
     !isUuid(attemptId) ||
-    (database !== "missing" && database !== "present" && database !== "unreadable") ||
+    (database !== "missing" && database !== "unreadable") ||
     !object(setupAdministrator) ||
     !text(setupAdministrator.displayName) ||
     !text(setupAdministrator.email) ||
@@ -111,9 +82,7 @@ function confirmation(value: StartAgainConfirmationInput): StartAgainConfirmatio
     (Object.hasOwn(shown, "recoveryRecordDamaged") && shown.recoveryRecordDamaged !== true) ||
     // Only a present, damaged database is shown as one that cannot be read.
     (database === "unreadable") !== (shown.databaseUnreadable === true) ||
-    (Object.hasOwn(shown, "databaseUnreadable") && shown.databaseUnreadable !== true) ||
-    // A record with database "present" is written only when Start again discards a recovery.
-    (database === "present" && !Object.hasOwn(shown, "recovery"))
+    (Object.hasOwn(shown, "databaseUnreadable") && shown.databaseUnreadable !== true)
   )
     throw invalid();
   return {
@@ -132,7 +101,6 @@ function confirmation(value: StartAgainConfirmationInput): StartAgainConfirmatio
       reached: shown.reached as StartAgainSummary["reached"],
       ...(shown.recoveryRecordDamaged === true && { recoveryRecordDamaged: true as const }),
       ...(shown.databaseUnreadable === true && { databaseUnreadable: true as const }),
-      ...(Object.hasOwn(shown, "recovery") && { recovery: recoveryShown(shown.recovery) }),
     },
   };
 }

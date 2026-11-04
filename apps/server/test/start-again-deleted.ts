@@ -108,7 +108,7 @@ export async function expectStartAgainRefused(f: Held, send: () => Promise<void>
 }
 
 export const LEFT_STATE =
-  /^(first-setup-start-again-confirmations\/(\w|[-.])*|first-setup-resolutions\/|first-setup-resolutions\/backup-recovery\/(current\.json)?|first-setup-resolutions\/backup-recovery\/[^/]+\/(\d{6}\.json|target\/|target\/(venue|state)\/|target\/(venue|state)\/((venue|migrations|recovery)\.lock(-journal)?|venue\.holder\.json))?)$/;
+  /^(first-setup-start-again-confirmations\/(\w|[-.])*|first-setup-resolutions\/)$/;
 
 export const noConfirmations = (f: Held) =>
   expect(access(join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR))).rejects.toMatchObject({

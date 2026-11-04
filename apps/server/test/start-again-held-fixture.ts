@@ -171,8 +171,7 @@ async function askStartAgain(f: Held, host: Held["host"] = f.host) {
   };
 }
 
-// What Start again leaves: the anchor's lock files, the confirmation record, and the discarded
-// recovery's journal pointer, records and its target's lock files.
+// What Start again leaves: the anchor's lock files and the confirmation record.
 const LEFT_VENUE = /^(venue|recovery|migrations)\.lock(-journal)?$|^venue\.holder\.json$/;
 
 /** Leaves the fiscal module's recovery-key record unreadable, as a damaged disk would. */
