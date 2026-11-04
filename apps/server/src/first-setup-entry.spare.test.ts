@@ -59,11 +59,17 @@ async function restartDeletesLogsIn(
   return { ask };
 }
 
-it("the repair app's answer to whether the next start deletes old logs says it does below the floor, whatever the log folder", async () => {
-  writeFileSync(join(stateDir, "first-setup.json"), "opaque retained attempt");
-  const repair = await restartDeletesLogsIn();
-  expect(await repair.ask()).toBe(true);
-});
+it.each([
+  ["inside the state folder", () => join(stateDir, "logs")],
+  ["outside both the state and venue folders", () => join(root, "logs")],
+])(
+  "the repair app's answer to whether the next start deletes old logs says it does below the floor, with the log folder %s",
+  async (_where, logDir) => {
+    writeFileSync(join(stateDir, "first-setup.json"), "opaque retained attempt");
+    const repair = await restartDeletesLogsIn(logDir());
+    expect(await repair.ask()).toBe(true);
+  },
+);
 
 it("the repair app's answer to whether the next start deletes old logs cannot say when the disk reads as having room, where the next start deletes no log", async () => {
   writeFileSync(join(stateDir, "first-setup.json"), "opaque retained attempt");
