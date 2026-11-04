@@ -654,13 +654,11 @@ export interface OrderDetail {
   invoicePdfDownloads: OrderInvoicePdfDownload[];
 }
 
-/** `emailTransport`: whether the caller's mail transport check answered available. */
-export async function readOrderDetail(
+export async function readVisibleOrder(
   tx: Transaction,
   id: string,
   scope: OrderListFilter["scope"],
-  emailTransport: boolean,
-): Promise<OrderDetail> {
+): Promise<OrderRow> {
   const { rows } = await listOrders(tx, {
     status: "all",
     dates: "any",
@@ -671,6 +669,16 @@ export async function readOrderDetail(
   });
   const row = rows[0];
   if (row === undefined) throw new AppError("working_order.not_found", { workingOrderId: id });
+  return row;
+}
+
+export async function readOrderDetail(
+  tx: Transaction,
+  id: string,
+  scope: OrderListFilter["scope"],
+  emailTransport: boolean,
+): Promise<OrderDetail> {
+  const row = await readVisibleOrder(tx, id, scope);
   return {
     row,
     lines: row.kind === "bill" ? await readBillLines(tx, id) : await readSaleLines(tx, id),
