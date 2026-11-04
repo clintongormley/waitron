@@ -1002,8 +1002,8 @@ a Waitron bug. Acknowledging the alert does not resolve its cause.
 
 ### fiscal-reconcile
 
-**4 November 2026, W41s-10a candidate update:** the caller findings below describe the earlier
-implementation. The candidate adds a module-owned startup/daily sweep through the optional fiscal
+**4 November 2026, W41s-10a (#2449):** the caller findings below describe the earlier
+implementation. #2449 added a module-owned startup/daily sweep through the optional fiscal
 reconciliation seat, with node/taxpayer/environment scope and an independent host duty. The
 runtime checks are `apps/server/src/fiscal-reconciliation.test.ts` and
 `boot.fiscal-reconciliation.test.ts`; the scoped sweep, completeness and concurrency suites sit

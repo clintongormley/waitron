@@ -188,9 +188,9 @@ under `docs/backlog/`.
   Keep the installed certificate until a replacement passes its checks.
   [Remaining workflow](backlog/self-service-refusals.md#certificate).
 
-- **A1089: reconciliation alerts need an evidence/decision route.** W41s-10a's candidate adds a
-  module-owned startup/daily caller, scoped to node, taxpayer and environment, separately from
-  payment reconciliation. The older caller audits are historical. Inspect retained findings before
+- **A1089: reconciliation alerts need an evidence/decision route.** A module-owned startup/daily
+  caller (W41s-10a, #2449) runs scoped to node, taxpayer and environment, separately from payment
+  reconciliation. The older caller audits are historical. Inspect retained findings before
   offering decisions for persistent mismatches; a local queue-reset marker does not prove another
   submission occurred. [Audit and remaining work](backlog/self-service-refusals.md#fiscal-reconcile).
 
@@ -199,7 +199,7 @@ under `docs/backlog/`.
   follow the owner's 29 October evidence-first decision. The 08:07 instruction approves the
   read-only build after fresh plan review and coordination of shared files. The screen and its
   qualification remain open. A local queue-reset marker does not prove a repeat submission;
-  persistent recovery remains open. W41s-10a's caller still needs its fiscal review and CI gates.
+  persistent recovery remains open.
 
 - **A1089: fiscal environment refusals need safe configuration or recovery guidance.** Separate a wrong host environment from missing immutable metadata. Never relabel records, promote test data or reset invoice numbering.
   [Audit](backlog/self-service-refusals.md#fiscal-environment).
