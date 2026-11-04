@@ -3433,6 +3433,43 @@ describe("A773 fire paper: course headings", () => {
     expect(await newGrillHeadings(v, printerId, seen)).toEqual([`${word} 1 · MAIN COURSES`]);
   });
 
+  it("A773 fire paper: a heading lists its dishes' courses in display order, not name order", async () => {
+    const v = await setupPartyVenue(db);
+    const printerId = await inTx(v, async (tx) => {
+      const { id: grill } = await createStation(tx, v.cfg, { name: "Grill" });
+      const starters = await createCourse(tx, v.cfg, { name: "Starters", displayOrder: 1 });
+      const mains = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 2 });
+      for (const [name, course] of [
+        ["Burger", mains],
+        ["Paella", starters],
+      ] as const) {
+        await routeProductTo(tx, v.cfg, v.productId(name), grill);
+        await setProductCourse(tx, v.cfg, v.productId(name), course.id);
+      }
+      return makeSharedPrinter(tx, "Grill", [grill]);
+    });
+    const { partyId, tabId } = await seatWithNoAllergies(v, await v.table("Table 141"));
+    const dish = (name: string) => ({ menuItemId: v.item(name), quantity: "1" });
+    const placed = await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, partyId, {
+        groups: [{ lines: [dish("Burger"), dish("Paella")], release: "hold" }],
+        operatorId: OPERATOR,
+        billId: tabId,
+      }),
+    );
+    const expectedPartyRevision = await revisionOf(v, partyId);
+    await inTx(v, (tx) =>
+      fireGroup(tx, v.cfg, partyId, placed.groups[0]!.id, {
+        operatorId: OPERATOR,
+        submissionId: randomUUID(),
+        expectedPartyRevision,
+      }),
+    );
+    expect(await newGrillHeadings(v, printerId, new Set())).toEqual([
+      `${kitchenTicketWords("es").group} 1 · STARTERS, MAINS`,
+    ]);
+  });
+
   it("A773 fire paper: reordering held groups keeps each heading's number and course", async () => {
     const v = await setupPartyVenue(db);
     const printerId = await inTx(v, async (tx) => {
