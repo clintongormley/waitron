@@ -26,6 +26,7 @@ function facts(overrides: Partial<StepFacts> = {}): StepFacts {
     openedAt: at("20:30"),
     firstOrderAt: null,
     lastOrderAt: null,
+    ordersArrived: false,
     drafting: false,
     courseServedAt: new Map(),
     allServedAt: null,

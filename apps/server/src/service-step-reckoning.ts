@@ -11,7 +11,7 @@ export interface StepFacts {
    * The order times are dishes arriving from another table or the counter: the party has sent no
    * order itself.
    */
-  ordersArrived?: boolean;
+  ordersArrived: boolean;
   drafting: boolean;
   courseServedAt: ReadonlyMap<string, number>;
   allServedAt: number | null;
@@ -74,9 +74,7 @@ function repeatShownAt(last: number, every: number, at: number): number {
  * must not clear the steps that serving started.
  */
 function ordersClear(rule: StepRule, facts: StepFacts): boolean {
-  return (
-    facts.ordersArrived !== true || (rule.start !== "course_served" && rule.start !== "all_served")
-  );
+  return !facts.ordersArrived || (rule.start !== "course_served" && rule.start !== "all_served");
 }
 
 /**
