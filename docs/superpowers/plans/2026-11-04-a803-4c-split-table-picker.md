@@ -25,10 +25,16 @@ taken from `3ef533f4fe~1` are in `~/waitron-campaign-c/a803-4c-look/boards/`. Bi
 main `4259a040d2` (2026-11-04). Every file and line below was read at that commit; what was run is
 named in "Receipts".
 
-**Review weight: FULL.** Risk triggers: a cross-package contract (`VENUE_SERVICE.splitPartyAllergies`
-and the till-server wire), concurrency (two tills on one party), and the received-money floor.
-Per-task review by a high-effort reviewer; `/finish-branch`'s full wave at the end, with the Codex
-run-it seat run twice.
+**Review weight: FULL.** Risk triggers: a fiscal invariant (the route starts issuing an invoice, D7),
+a cross-package contract (`VENUE_SERVICE.splitPartyAllergies` and the till-server wire), concurrency
+(two tills on one party), and the received-money floor. Per-task review by a high-effort reviewer;
+`/finish-branch`'s full wave at the end, with the Codex run-it seat run twice.
+
+**Who lands it: the owner.** The standing rule (owner, 2026-10-21) is that a lane lands its own green
+PR unless the PR changes invoices, the record chain, invoice series or AEAT filing. This PR makes a
+route issue an invoice it never issued before (D7), so it is on that list, even though it only calls
+the function Move dishes calls and changes no fiscal function. The branch is finished to green and
+then waits for the owner. Questions 1 and 2 hold landing for the owner anyway, so this adds no wait.
 
 **Execution.** Subagent-driven: each task goes to one `implementer` (medium effort), then a
 high-effort reviewer. Each task is sized well under 100 tool calls (estimate in its heading). An
@@ -36,8 +42,9 @@ implementer past about 150 calls stops at a passing or cleanly red point, commit
 done, left, files, each check's state. Fixing a behaviour defect a review found stays at high effort.
 
 **A working product at every commit.** The server learns the new request beside the old one (Task
-5); the till moves to it in Tasks 11–12 while the old panel steps still work up to Task 11; the old
-request and the old window go in Tasks 14a and 14b.
+5). The new panel is built behind a temporary screen property, `splitPanelLive`, that only tests set;
+Task 12c sets it in the app, and until then the old steps are what a waiter sees. The old request,
+the old window and that property go in Tasks 14a and 14b.
 
 **No table change (owner's A1308 hold).** 4c needs no migration, no schema file change and no new or
 changed table, column, index or trigger. It reads and writes `working_orders`, `working_order_lines`,
@@ -58,13 +65,64 @@ that lost loose dishes, inside `withIssuanceTransaction`, exactly as the Move di
 (`till-api.ts:4193-4204`). Without it, ticking the last unpaid dishes of a part-paid bill would leave
 a fully paid bill with no invoice (D7). The suites H2, F and Filing below stay passing and unedited.
 
+## Revision 1 (2026-11-04): answers to plan review 1
+
+The review is `~/waitron-campaign-c/a803-4c-plan-review/review-1.md` (1 Critical, 5 Important, 17
+Minor). Every finding is Applied; none is Rejected. Three are applied differently from what the review
+recommended (I3, M5, M9), and the row says why. Each was checked at `ae09c6c03f`. "Ran" means this
+revision ran it, with the receipt under "Receipts"; "Read" means only read. The task text below is
+already changed, so an implementer reads the task and not this table.
+
+| Finding | Answer | Where | Evidence checked for this revision |
+| --- | --- | --- | --- |
+| C1 the plan dropped the till's guard on what the waiter saw, and ten test cases with it | **Applied** | D20, D16, finding 15, "Moved till-app cases", Task 11c, new Task 12c | Read: `till-app.ts:15589-15617`; A773 §6 "a new outbox/editor since the prompt refuses" (`2026-10-17-a773-one-editor-design.md:220-221`); the `describe` at `till-app-parties.test.ts:11914`, whose ten cases are listed by title in the new table. Also found by search and not in the review's list as such: `:1910`'s row, `:2359`, `:2397`, `:2429`, `:2450`, `:2482`, and that `#onSplitTable` keeps `billId` in old cases only until Task 14a |
+| I1 Question 3 overruled A650 without naming it | **Applied** | Question 3, D2 steps 6 and 14, D6, Changed checks rows 5–10, Task 4, Task 18 | **Ran (R9):** the name-gone rule over today's one-bill command turned exactly rows 1, 2, 3, 4, 5, 8 and 9 red (7 failed, 2,958 passed); rows 6, 7 and 10 stayed green. Read: A650 §0 ruling 1 (`2026-10-14-a650-moved-slips-design.md`), `docs/backlog/till.md:2023-2034`, A650's rows 8, 9 and 18 (`:108`, `:109`, `:177`) |
+| I2 Task 2 omitted the route | **Applied** | Task 2 Files and Implement | Read: `till-api.ts:3150-3180`; `till-api.table-actions.test.ts:167` pins the answer's keys |
+| I3 a form's refusal on the banner | **Applied, by a different mechanism** | D14, D16, Departures (row removed), Tasks 11c, 12d, 16 | The review asked for `splitRefusal.message`, with a fifth owner question if Refund cannot live there. Read: `wt-form-actions`'s `error` is a string (`packages/ui-core/src/components/wt-form-actions.ts`), so it cannot hold a button or `errorText`'s templates (`till-app.ts:1478`). So the panel draws the same message itself, above the buttons, with the exported `formMessageStyles`. Refund then does live there, so no fifth question is needed. Forms contract read at `design-system.md:2653-2672` |
+| I4 Refund for a bill not on screen acts on the bill on screen | **Applied** | D16, Task 12d | Read: the refusal already names the bill (`errors.ts:608`, `bill-payments.ts:454`); `billWriteError` drops it (`till-app.ts:683-688`); `#onRefundExcess` opens the bill on screen (`:17830-17839`); `#leavingActions` asks before a switch and closes the panel only on proceed (`till-table-order-screen.ts:5164-5185`) |
+| I5 reconnect protection dropped; Question 2 undercounted | **Applied** | Deleted checks, Task 11b, Question 2 | Read: `split-guests-dialog.unsaved.test.ts:159`, `:178`, `:242-260`; `.actions-unsaved.test.ts:254`, which covers only ticks; `design-system.md:2871`, `:2883`; `till-table-order-screen.ts:1522-1525`. Two checks now go with no successor, not four |
+| M1 Question 4 is already answered | **Applied**: question deleted | D4, D12, Owner questions | Read: spec §3.7 case 2 ("take that bill over first"), A773 §6 ("A sole common editor can be retained"), `bill-editing.bill-moves.test.ts:280`, `:329` ("refuses a stale empty bill"), `requireExpectedState` (`bill-editing.ts`) |
+| M2 Task 11a cannot pass types | **Applied** | Task 11a, D20 | Read: `till-table-order-screen.ts:5056-5061` (`satisfies SplitTableDetail`), `till-app.ts:15599` |
+| M3 a control named a case that did not exist | **Applied** | Task 2 case 13, Task 3b | Read: `working-order.ts:2144`, `party-allergy.ts:520-523`, `order-groups.ts:2806-2816` (only an `immediate` dish fires on arrival) |
+| M4 D5 silent on `heldByCourse` | **Applied** | D5 | Read: `heldByCourse` is local to one `groupArrivingDishes` call (`order-groups.ts:2806`); `addTabRound` has no caller outside `testing/` (`rg -n 'addTabRound\b' apps packages -g '!*.test.ts'`). The review's `[ 'fired', 'held', 'held' ]` was not run again |
+| M5 the Split anyway note is untrue when only a paid bill stays | **Applied: the wording changes**, not the server | Question 1, D12, Tasks 8, 11c | The review offered either. Calling `insertPartyBill` there would reverse `ensureFamilyBill`, whose rule counts a paid bill (`table-actions.ts:400`, `notAbandonedInFamily`), and Task 2 case 4 pins it. A second note says what is true |
+| M6 turning picks into a whole bill can take unsent dishes | **Applied** | D12, Task 8 | Read: plan's D12 and Task 8; "locked" is defined nowhere |
+| M7 row 12 understated | **Applied** | Row 12 | Read: `requireOtherBill` (`till-api.ts:970`), pinned at `till-api.table-actions.test.ts:554` |
+| M8 Task 7's "its code" | **Applied** | Task 7 | Read: `requirePartyParam` refuses a non-UUID `party.not_open` (`till-api.ts:806`); an unknown UUID gives `[null]` from `partySubjectZones` (`zone-access.ts:29-31`); no status filter finds no bills |
+| M9 Task 2's RED text | **Applied, with a different message** | Task 2 RED | The review's text said `ERR_INVALID_STATE`. **Ran (R10):** a selection through today's fixture printed `Error: Unknown named parameter 'wholeBillIds'` for both a filled and an empty selection. A failing claim would have printed `tab.not_open`. The plan quotes what was printed |
+| M10 the bill on screen left fully paid | **Applied** | D17, Task 12b | Read: `#loadTabLines` empties the list on a failed read (`till-app.ts:11236-11238`); `billToShow` (`state/bill-state.ts:38-44`) |
+| M11 nobody builds `SplitSource` | **Applied** | Task 8 (`splitSourcesFrom`), Task 11a, Tasks 12a, 12c | Read: `#recalledLineIds` covers the bill on screen (`till-table-order-screen.ts:2615-2622`); `fallbackPortionKeys` (`:314`); `Draft` (`api/client.ts:808`) |
+| M12 who lands it | **Applied** | Header | Read: the owner's 2026-10-21 rule, as kept in the lanes' memory `lanes-land-their-own-prs.md` |
+| M13 a lost reply reads nothing | **Applied, going further** | D16's connection row, Task 12d | Read: `tableWriteError` answers `table.error` for no code (`till-app.ts:748-756`). "Could not update the table" would be false if the split went through, so after the re-read the app follows a table that has gone as a success |
+| M14 the guide explains a corner | **Applied, plus one more sentence** | Question 1, Task 15 | The owner's 2026-11-04 rule. The everything-ticked sentence goes too: the screen itself asks that question, and it would have needed rewording for M5 |
+| M15 A1192 exists | **Applied** | Task 18 | `/usr/bin/grep -n A1192 docs/backlog.md`: `:1900` |
+| M16 Task 17b undersized | **Applied** | Tasks 16, 17b, 17c | Counted from this revised plan, one per arrow in its control lines: 25 server and 42 till. Task 17b splits in two, with one scripted call per control |
+| M17 A590's window | **Applied** | Task 13, "Could not be established", R5 | Read: `capabilities: ["print-receipt"]` (`till-app-table-service.test.ts:154`); `[data-update-layout]` (`till-floor-screen.ts:2258`). The review's run printing `[1]` was not run again; Task 13's RED runs it |
+
+**Found while applying these, not in the review:**
+
+- `api.splitTable`'s new signature at Task 5 turns the app tests' `toHaveBeenCalledWith` red at Task 5,
+  not Task 12a as row 18 said, and Task 5's GREEN did not run them. Row 18 is split and Task 5 runs them.
+- `#onSplitTable`'s no-`field` refusal case (`till-app-parties.test.ts:2429`) pins the banner, and
+  I3 reverses that, so it is a changed check (row 25).
+- D16 sent `tab.line_not_found` and Task 11a a failed read to `table.reread_failed`, whose words begin
+  "The order was updated" (`strings.ts:1370`), which is false in both places. Two new sentences.
+- `draft.out_of_date` and `draft.taken_over` say "Reload" (`i18n/codes.ts:350-361`), which is not what
+  a waiter does in a panel that has just read again. Two new sentences replace them in the panel only.
+- `SplitGuestsDetail` is exported by the file Task 14a deletes and imported by the screen
+  (`till-table-order-screen.ts:117`, `:266`), so the type moves first.
+
 ## Owner questions
 
-Building goes ahead on each default. Questions 1 and 2 block landing only. Questions 3 and 4 do not
-block landing: the build carries the default and the PR says so. All go to
+Building goes ahead on each default. Questions 1 and 2 block landing only. Question 3 does not block
+landing: the build carries the default and the PR says so. All go to
 `~/waitron-campaign-c/questions.md` at Task 0, one at a time.
 
-**Question 1 of 4 (new words; blocks landing).** Every new text a person reads, with a recommended
+A fourth question, whether a bill someone else is editing may leave whole without a take-over, is
+answered already: D4 cites the decisions.
+
+**Question 1 of 3 (new words; blocks landing). Rule: new Spanish needs your approval (master plan).
+Recommended: the wordings below.** Every new text a person reads, with a recommended
 wording. Worked example, from board 08: García is at T7 + T8 with Bills 1, 2 and 3. The waiter chooses
 Split a table → T8, ticks Bills 2 and 3 and three dishes of Bill 1.
 
@@ -83,6 +141,10 @@ Split a table → T8, ticks Bills 2 and 3 and three dishes of Bill 1.
 | `table.split_nothing_stays` | `Nothing would stay at {kept}. Move the guests to {table} instead?` | `No quedaría nada en {kept}. ¿Mover los clientes a {table}?` | Everything ticked; board 10. «Mover clientes» as in `table.action_move_guests` |
 | `table.split_anyway` | `Split anyway` | `Separar igualmente` | Everything ticked; `table.split_guests_confirm` «Separar» |
 | `table.split_anyway_note` | `Split anyway leaves {kept} with an empty bill.` | `Separar igualmente deja {kept} con una cuenta vacía.` | Everything ticked; board 10 |
+| `table.split_anyway_note_paid` | `Split anyway leaves {kept} with nothing to pay.` | `Separar igualmente deja {kept} sin nada que pagar.` | Everything ticked, when the only bills staying are paid: the server adds no empty bill then (D12) |
+| `table.split_changed` | `{bill} changed while you were choosing. Check its row, then choose Split again.` | `{bill} ha cambiado mientras elegías. Revisa su fila y elige Separar de nuevo.` | Bottom of the panel, when a ticked bill changed (D16, D20). Replaces `draft.out_of_date`'s "Reload it" there |
+| `table.split_taken` | `Someone else has unsent dishes on a bill you ticked. Take it over on its row or untick it, then choose Split again.` | `Otra persona tiene platos sin enviar en una cuenta que has marcado. Toma el pedido en su fila o desmárcala y elige Separar de nuevo.` | Bottom of the panel (D16). Replaces `draft.taken_over`'s "Reload the table" there |
+| `table.split_read_failed` | `This table's bills could not be read. Choose Back and try again.` | `No se pudieron leer las cuentas de esta mesa. Elige Atrás e inténtalo de nuevo.` | Bottom of the panel when its read fails; Split stays quiet. `action.back` «Atrás» |
 | `table.split_bill_part_paid` | `{amount} paid` | `{amount} pagados` | Bill header beside the label, board 10; `bill_pay.paid_part` «pagados» |
 | `table.split_take_over_first` | `You can tick this bill once you take the order over.` | `Podrás marcar esta cuenta cuando tomes el pedido.` | Under a take-over row; board 10 |
 | `table.split_presented` | `Presented: this bill goes whole or stays.` | `Presentada: esta cuenta se va entera o se queda.` | Under a presented bill's header; `presented_pay.balance` «Cuenta presentada» |
@@ -97,64 +159,50 @@ Plus the guide section (Task 15), English and Spanish, also shown to the owner:
   any bill. Single dishes go together on a new bill at that table. Set each table's guests, then
   choose **Split**. With nothing ticked, the table leaves with an empty bill.
 
-  A part-paid bill can go whole, with its payments; its paid dishes cannot be picked on their own. If
-  someone else has an unsent order on a bill, choose **Take over draft** on its row before you tick
-  it. If everything is ticked, the till offers **Move guests** instead; **Split anyway** leaves the
-  other table with an empty bill."
+  If someone else has an unsent order on a bill, choose **Take over draft** on its row before you tick
+  it."
 - ES: «Cuando parte de un grupo pasa a una mesa propia, abre el menú **⋮**, elige **Separar una
   mesa** y toca la mesa que se separa. Marca lo que se lleva: cuentas enteras o platos sueltos de
   cualquier cuenta. Los platos sueltos van juntos en una cuenta nueva en esa mesa. Indica los
   comensales de cada mesa y elige **Separar**. Si no marcas nada, la mesa se va con una cuenta vacía.
 
-  Una cuenta en parte pagada puede irse entera, con sus pagos; sus platos pagados no se pueden elegir
-  sueltos. Si otra persona tiene un pedido sin enviar en una cuenta, elige **Tomar el pedido** en su
-  fila antes de marcarla. Si lo marcas todo, la caja ofrece **Mover clientes**; **Separar
-  igualmente** deja la otra mesa con una cuenta vacía.»
+  Si otra persona tiene un pedido sin enviar en una cuenta, elige **Tomar el pedido** en su fila antes
+  de marcarla.»
 
 Task 15 writes these from the code built; where that code makes a proposal untrue, Task 15 changes it
 and updates the posted question, so the owner approves the text that ships.
 
-**Question 2 of 4 (deleted test checks; blocks landing).** The guests window
-`widgets/split-guests-dialog.ts` goes, with its three test files: spec §3.7 puts guest counts "in the
-same window", so a second window is exactly what the spec removes. Default: it goes. Its behaviour
-moves to the panel and each check is rewritten there or named as gone. The table is "Deleted checks"
-below; four checks have no successor, each with its reason. Worked example of what is lost: today the
-guests window opens with the cursor in the first field; after 4c focus goes to the panel's heading,
-as every action panel does (`design-system.md:1090`).
+**Question 2 of 3 (deleted test checks; blocks landing). Rule: a check of the old guests window goes
+only where the panel cannot do what it checked; every other check moves to the panel at least as
+strictly. Recommended: yes.** The window `widgets/split-guests-dialog.ts` goes, with its three test
+files: spec §3.7 puts guest counts "in the same window", so a second window is exactly what the spec
+removes. The tables "Deleted checks" and "Moved till-app cases" name where every check goes. Two have
+no successor, each with its reason: the cursor starting in the first field, because the panel's heading
+takes focus instead, and a technical check that the window's own signals reach the screen around it,
+because that window is gone. Worked example of what is lost: today the guests window opens
+with the cursor in the first field; after 4c focus goes to the panel's heading, as every action panel
+does (`design-system.md:1090`). The ten cases protecting what the waiter saw when choosing are not
+lost: they move, under their titles (Task 12c).
 
-**Question 3 of 4 (does not block landing).** Staying dishes whose kitchen paper names a place that
-is gone. Spec §3.7 says "a MOVED notice for the dishes that changed table only", and the build follows
-it. Running that change (R1) turned red three checks that pin something the spec's sentence may not
-have had in mind:
+**Question 3 of 3 (does not block landing). Rule: on 14 October you ruled a slip prints "when an order
+left a table, or a name on its kitchen paper is gone" (A650, ruling 1), with "From: Mesa 51, 52 / To:
+Mesa 51" for the bills that stay. On 18 October you ruled Split a table tells the kitchen only about
+"the dishes that changed table" (spec §3.7), which plainly ends that "bills that stay" slip. Does the
+later ruling also silence a slip when the name on the ticket has gone?** Recommended, and built: no.
 
-Worked example. Today's plan joins Counter 6 and Table 9 and names the join "García birthday". A
-burger is sent; its ticket says **García birthday**. Table 9 leaves with no dishes. The burger has not
-moved, but no place called García birthday exists any more; the group now reads as Counter 6.
+Worked example. Today's plan joins Counter 6 and Table 9 and names the join "García birthday". A burger
+is sent; its ticket says **García birthday**. Table 9 leaves with no dishes. The burger has not moved,
+but no place called García birthday exists any more; the group now reads as Counter 6.
 
-- **(A, built by default: the spec's words.)** No slip. The cook still holds a ticket naming a place
-  that has gone from the floor.
-- (B, my recommendation.) A staying dish is told only when **no** name its paper printed is still one
-  of its places: "From García birthday, To Counter 6". Plain T7 + T8 → T7 still gets nothing, as board
-  09 shows, because "T7" is still on the ticket. The three checks at `today-names.test.ts:468`, `:482`
-  and `:751` then stay as they are.
+- **(B, built by default, recommended: both rulings stand.)** A staying dish is told only when **no**
+  name its paper printed is still one of its places: "From García birthday, To Counter 6". Plain T7 +
+  T8 → T7 gets nothing, as board 09 shows, because "T7" is still on the ticket. The checks at
+  `today-names.test.ts:468`, `:482` and `:751` stay as they are. A test run of this rule changed only
+  the checks the spec's sentence means to change (R9).
+- (A: the later ruling silences this too.) No slip. The cook still holds a ticket naming a place that
+  has gone from the floor. Those three checks then change.
 
-The rule to decide: does "changed table only" also silence a slip when the name on the ticket
-vanishes? Changing from A to B later is a small filter in `splitTable` and restoring three checks.
-
-**Question 4 of 4 (does not block landing).** A bill with someone else's unsent dishes when the bill
-would leave **whole**. Spec §3.7 and board 10 say take it over first. A773 §6, which §3.7 cites, says
-"A sole common editor can be retained during relocation", and that is what the server does today:
-`bill-editing.bill-moves.test.ts:280` ("split a table carries only its moved bill editor") pins that
-Ana's unsent dishes travel with her bill and she stays its editor.
-
-Worked example. Bill 2 holds two dishes Luis has not sent. Clint splits T8 off and wants Bill 2 to go.
-
-- **(A, built by default: spec §3.7 and board 10 in the till; the server unchanged.)** The till greys
-  Bill 2's tick and shows **Bill 2 · Luis has an unsent order** with **Take over draft**. The server
-  still accepts it (that test stays), so a request sent in the moment before the till re-reads is not
-  wrongly refused, and Luis's dishes follow the bill.
-- (B) The till lets Clint tick Bill 2 and Luis keeps editing it at T8. Rows appear only where the
-  server refuses: a loose dish on Luis's bill, or two whole bills with different editors.
+Changing from B to A later removes one call in `splitTable` and changes those three checks.
 
 ## Read this first: what the planning pass found
 
@@ -183,8 +231,9 @@ Worked example. Bill 2 holds two dishes Luis has not sent. Clint splits T8 off a
 
 5. **Finding 8's change reaches ten checks in three files, not one** (measured, R1). The outline and
    the brief name `party-table-actions.test.ts`'s PAELLA case. Narrowing the MOVED reach to the leaving
-   bill turned ten cases red: the list is "Changed test checks" rows 1–10. Question 3 asks about three
-   of them.
+   bill turned ten cases red: the list is "Changed test checks" rows 1–10. Seven change. The other
+   three pin A650's ruling on a name gone from kitchen paper, which nothing has reversed, so they stay
+   (Question 3, D6, R9).
 
 6. **The till holds one bill's dishes.** `lines` and `#balanceShown()` are the bill on screen
    (`till-table-order-screen.ts:5416-5423`). To list every bill the till needs every bill's lines and
@@ -232,15 +281,22 @@ Worked example. Bill 2 holds two dishes Luis has not sent. Clint splits T8 off a
 
 13. **Today's window protects things the panel must keep.** A staying count left untouched follows a
     count stored on another till, and a typed one does not (`split-guests-dialog.ts:89-97`, pinned at
-    `split-guests-dialog.unsaved.test.ts:212-260`). A refused count reopens beside its field with what
-    was sent (`SplitRefusal`, `till-table-order-screen.ts:272-281`; `till-app.ts:15629-15643`). Tasks
-    11a and 11b carry both over.
+    `split-guests-dialog.unsaved.test.ts:212-260`), including while the screen is taken out of the page
+    and put back. A refused count reopens beside its field with what was sent (`SplitRefusal`,
+    `till-table-order-screen.ts:272-281`; `till-app.ts:15629-15643`). Tasks 11a, 11b and 11c carry these
+    over.
 
 14. **Open items 4c must not absorb.** A1327 (a dish waiting for the pass gets no MOVED line): a loose
     dish in that state has the same gap, because it comes from `readSentItems`, which 4c does not
     change. A1330, A1331 and A1333 (service steps after a bill leaves): Split anyway reaches A1333's
     state more easily; it stays the owner's question. Task 18 adds a sentence to A1327 and A1333 and
     changes none of their code.
+
+15. **The server cannot refuse a change the till has already read.** It compares each bill's edit
+    state with what the request sends. If a background read picks up a change and the till sends the
+    new state, the server accepts. So the till compares with what the waiter saw, and refuses before
+    sending (`#splitTablePrompts`, `till-app.ts:15589-15617`). A773 §6 asks for this: "a new
+    outbox/editor since the prompt refuses". The panel keeps that guard, per ticked bill (D20).
 
 ## Where the outline is now wrong
 
@@ -257,7 +313,7 @@ Worked example. Bill 2 holds two dishes Luis has not sent. Clint splits T8 off a
 | Floor's join at `till-floor-screen.ts:1662-1669` | `:1659-1669` | read |
 | "The 4a widget gains bill headers with a tri-state tick" | A new `till-split-picker` draws the headers around one `till-portion-picker` per bill, which gains a `whole` property | D13 |
 | Guest steppers via `guestsStepper` | Needs `name` and `label` parameters first | Finding 12 |
-| 4c about 12 tasks | 24 tasks, about 1,100 calls | Task list |
+| 4c about 12 tasks | 29 tasks, about 1,360 calls | Task list |
 | (master) `guests:{staying,leaving}`, `allSelected:"move-guests"\|"split-anyway"` in the body | `guestCounts` stays (existing name, `till-api.ts:826`); no `allSelected`: Move guests is its own command, as the outline said | D10 |
 | (master) "Test A666 seats before a floor join and A757 highest joined-table state remain intact" | Kept as Task 2 cases | below |
 
@@ -301,9 +357,10 @@ Worked example. Bill 2 holds two dishes Luis has not sent. Clint splits T8 off a
      `requireBillOfParty` (refuses presented, paid, abandoned, other party), `resolveMoveLines`, and a
      dish recalled into a draft refuses `draft.out_of_date` (`reservedRefusal`, as 4a's D2).
   5. Each whole bill in number order: `leaveParty(tx, id, "keep")`, collecting firers and held ids.
-  6. Read `readSentWork` for each whole bill and each loose source, **before** any table leaves and
-     before any line moves: 4b's finding 3 (the "before" picture needs held dishes still in their
-     group, and for whole bills `leaveParty` first, as `splitTable` does today).
+  6. Read `readPartiesSentWork(tx, [partyId])` once, **before** any table leaves and before any line
+     moves: every bill of the party and its family and every counter order delivered to its tables.
+     4b's finding 3 (the "before" picture needs held dishes still in their group, and for whole bills
+     `leaveParty` first, as `withMovedSlips` sees them today).
   7. `leaveTables`, `openParty` with the leaving count, `inheritKitchenNote` "copy" (as today).
   8. Each whole bill in number order: `allocateBillNumber`. Before step 9, so the new bill numbers last.
   9. Loose: `insertPartyBill(tx, cfg, newParty)` (label null, zone of the leaving table; S2 used
@@ -332,20 +389,42 @@ Worked example. Bill 2 holds two dishes Luis has not sent. Clint splits T8 off a
   plus, when the whole bills have two or more different editors, every whole bill not owned by the
   actor. All of them go in one `draft.taken_over` with `conflicts`, sorted by bill id (A773 §6), so the
   till can show every row at once rather than one refusal per bill. A staying bill is not in the set.
-  The new bill has no draft and no editor row. See Question 4 for the till's stricter gate.
+  The new bill has no draft and no editor row.
+
+  **The till is stricter than the server, by decision, not by question.** Spec §3.7 case 2 (owner,
+  2026-10-18, "Yes") and board 10: "take that bill over first", so the till greys the tick of a bill
+  holding someone else's unsent dishes and draws the take-over row. A773 §6: "A sole common editor can
+  be retained during relocation", so the server keeps accepting it (`bill-editing.bill-moves.test.ts:280`
+  stays green and unedited). A request sent with an out-of-date state is refused `draft.out_of_date`,
+  pinned by "refuses a stale empty bill" (`:329`).
 
 - **D5 Arriving dishes, bill by bill.** Each leaving bill gets its own fired group, as if the bills
   moved one after another (`groupArrivingDishes` takes one bill). So two bills with fired dishes make
   groups 1 and 2 at the new table, and a held copy takes the next number after them. Pinned by a case
   so a change is a decision.
 
-- **D6 MOVED slips** (spec §3.7; finding 5; Question 3's default). The `withMovedSlips` reach goes:
-  staying bills, the family's paid bills and counter orders delivered to the party's tables are no
-  longer read or told. Each whole bill: `enqueueMovedSlipsFor` over step 6's map. Each loose source:
-  `enqueueMovedSlips(tx, cfg, before, newBill, splitFrom)`, so `movedItems` keeps only ticket items of
-  that source now on the new bill (`kitchen-print.ts`, `movedItems`), one slip per source, because each
-  names the order number it was sent under. A dish waiting for the pass is outside `before` as today
-  (A1327, not absorbed).
+  One limit: `groupArrivingDishes` makes its own held group per course on each call (`heldByCourse`,
+  `order-groups.ts:2806`), so finding 3's two-groups shape would also appear for two whole bills that
+  each hold a waiting-course dish outside any group. The review ran it with the test-only `addTabRound`
+  and printed `[ 'fired', 'held', 'held' ]`. `addTabRound` has no caller outside `testing/`, and I found
+  no other way into that state, so I believe it cannot happen in service today. That is the same open
+  point as `tab.split_held_line` under "Could not be established". 4c does not change it.
+
+- **D6 MOVED slips** (spec §3.7; A650 ruling 1; finding 5; Question 3's default). Step 6's map is split
+  in three at step 14:
+  - **Each whole bill:** `enqueueMovedSlipsFor` over its entry, by today's rule (`kitchenToBeTold`).
+  - **The dishes that left each loose source:** `enqueueMovedSlips(tx, cfg, before, newBill, splitFrom)`,
+    so `movedItems` keeps only ticket items of that source now on the new bill (`kitchen-print.ts`,
+    `movedItems`), one slip per source, because each names the order number it was sent under. A dish
+    waiting for the pass is outside `before` as today (A1327, not absorbed).
+  - **Everything else in the map** (staying bills, what stays on a loose source, the family's paid bills,
+    counter orders delivered to the party's tables): a new `enqueueMovedSlipsForNamesGone(tx, cfg, rest)`
+    in `kitchen-print.ts`, told only when the paper printed at least one name and none of them is still
+    one of the order's places: `before.places.names` has entries and none is in `after.names`. So plain
+    T7 + T8 → T7 tells nothing, and "García birthday" ending prints From García birthday, To Counter 6.
+
+  That map has to be read for the third group, so 4c does not drop the read of staying bills. R9 ran the
+  rule over today's one-bill command. `withMovedSlips` stays for the other actions.
 
 - **D7 Issuance.** The route runs in `withIssuanceTransaction`; after `splitTable`, for each loose
   source, `issueIfFullyPaid(tx, fiscal, sendCfg, source, personId)`, then `captureKitchenActivity` over
@@ -387,18 +466,24 @@ Worked example. Bill 2 holds two dishes Luis has not sent. Clint splits T8 off a
   - Ticking a bill's header at `none` or `some` makes it whole; at `all`, none (board 08).
   - Unticking a row of a whole bill turns it into picks of every other row, each up to its limit, so
     the floor still holds: a €40 contribution on a €52 bill may leave some rows unticked (spec §6).
-  - A bill whose every dish is picked becomes whole, when no dish of it is paid, recalled or locked. A
-    whole bill keeps its number, name and payments; two ticks should not silently make a new bill and
-    leave an empty one behind.
+  - A bill whose every dish is picked becomes whole, unless a dish of it is paid or recalled or it
+    holds this person's own unsent dishes (`ownUnsent`), which go only if the whole bill is chosen
+    (`table.split_own_unsent`). A whole bill keeps its number, name and payments; two ticks should not
+    silently make a new bill and leave an empty one behind.
   - A whole part-paid bill is selectable with its payments; its paid rows are never picks (spec §3.7).
     Its floor binds picks only, never the whole tick.
   - A presented bill: header tick only, its rows greyed `presented`, because the server refuses
     picking from it `bill.presented`.
-  - A bill with someone else's unsent dishes: no tick and no rows until taken over (board 10; Question 4).
+  - A bill with someone else's unsent dishes: no tick and no rows until taken over (board 10; D4).
   - A dish recalled into any draft is in no row (4a's D17).
   - The till reads `pickedLineIds` per bill and sends whole bills in the order they are numbered.
   - **Everything ticked** means at least one bill is whole and nothing with dishes stays: every other
-    owing bill has no sent dish and no open draft. A paid bill does not count as staying.
+    owing bill has no sent dish and no open draft. A paid bill does not count as staying. Its note says
+    what the server will do: with an empty owing bill staying, or no bill at all staying, "with an empty
+    bill" (`table.split_anyway_note`). With only paid bills staying, including one on a party merged
+    into this one, the server adds nothing (`ensureFamilyBill`, `table-actions.ts:400`, Task 2 case 4),
+    so "with nothing to pay" (`table.split_anyway_note_paid`). This is the one place 4c says other than
+    spec §3.7 case 3's "leaves the staying table an empty bill", because that sentence is not true then.
 
 - **D13 The widgets.** New `widgets/split-picker.ts` (`till-split-picker`) draws, per bill: the header
   (a native checkbox with `.indeterminate`, the bill's short label, `{amount} paid`, the total), any
@@ -411,10 +496,13 @@ Worked example. Bill 2 holds two dishes Luis has not sent. Clint splits T8 off a
 
 - **D14 Guests.** Two `wt-number-stepper`s through `guestsStepper`, `name="stayingGuests"` and
   `"leavingGuests"`, `table.split_guests_at`. Staying starts from the party's count and follows a count
-  stored elsewhere while untouched; leaving starts blank; blank records no count. Invalid text marks
+  stored elsewhere while untouched, also while the screen is out of the page (as `#storedChanged` does,
+  `split-guests-dialog.ts:66`); leaving starts blank; blank records no count. Invalid text marks
   the field on Split, with `form.fix_fields` at the bottom and Split disabled until fixed; a server
-  refusal of a count (`refusedSplitSide`, `till-app.ts:731`) goes under its field and keeps Split
-  enabled. Enter submits from either stepper (`submitOnEnter`, as the window does). Split is primary
+  refusal of a count (`refusedSplitSide`, `till-app.ts:731`) goes under its field with `form.fix_fields`
+  at the bottom (`design-system.md:2666-2669`) and keeps Split enabled. While the panel's read has not
+  answered Split is quiet and disabled (the Forms contract's "waits for a load"); a failed read is a load
+  failure, not a check of the form, so it shows at once: `table.split_read_failed` at the bottom. Enter submits from either stepper (`submitOnEnter`, as the window does). Split is primary
   from the start: "nothing ticked" is a valid split (spec §3.7 case 4).
 
 - **D15 Everything ticked.** Pressing Split swaps the action row for board 10's question: **Move
@@ -425,33 +513,62 @@ Worked example. Bill 2 holds two dishes Luis has not sent. Clint splits T8 off a
   tables that would be left. Split anyway sends the split with the counts. Changing a tick returns to
   the action row.
 
-- **D16 Refusals.** The panel closes on send and keeps a snapshot; the app hands back `splitRefusal`
-  for every refusal below while the party still holds the table, and the panel reopens with picks and
-  counts (extending today's pattern, `till-table-order-screen.ts:2005-2008`). After a re-read,
-  `tidySplit` adjusts picks to what is now on screen. 4a closes its panel for good on a refusal; here a
-  split is many ticks, so they are not thrown away (master plan: "retain a losing editor's local unsaved
-  work"; root `CLAUDE.md` §3).
+- **D16 Refusals.** The panel closes on send and keeps nothing of its own: the app's `splitRefusal`
+  carries `{ tableId, selection, staying, leaving, field?, message, prompt? }`, and the panel reopens from
+  it, with its ticks and counts, while the party still holds the table (extending today's pattern,
+  `till-table-order-screen.ts:2005-2008`). After a re-read, `tidySplit` adjusts picks to what is now on
+  screen. 4a closes its panel for good on a refusal; here a split is many ticks, so they are not thrown
+  away (master plan: "retain a losing editor's local unsaved work"; root `CLAUDE.md` §3).
 
-  | Code | What the waiter sees | What is read again |
+  **Where the sentence goes** (Forms contract, `design-system.md:2653-2672`). The panel is a form: it has
+  two fields. A refusal naming a count goes under that stepper, with `form.fix_fields` at the bottom. Any
+  other refusal is one sentence at the bottom, above the buttons, on its own line and announced, until
+  Split is pressed again, and never disables Split. The till's `errorKey` banner is used only when there
+  is no panel to reopen: the party no longer holds the table, or the waiter has left.
+
+  **How.** The app's existing refusal handling runs unchanged and sets `errorKey`, with its re-reads.
+  Then, if the panel can reopen, `message` becomes `errorText(said, …)`'s result and `errorKey` is cleared.
+  `errorText` answers a string or a template (`till-app.ts:1478`), and `wt-form-actions`'s `error` is a
+  string, so the screen draws `<p class="form-message" role="alert" data-split-refusal>` directly above
+  its `wt-form-actions`, with `formMessageStyles` from `@waitron/ui` and the `.error-part`,
+  `.error-action` rules copied from `till-app.ts:1854-1889`, since those do not cross into the screen's
+  shadow root. A marked field's `form.fix_fields` still goes through `wt-form-actions`.
+
+  | Code | The sentence | What is read again |
   | --- | --- | --- |
-  | `management.request_invalid` naming `guestCounts.*` | Under that stepper | nothing |
+  | `management.request_invalid` naming `guestCounts.staying` or `.leaving` | `seat.guest_count_invalid` under that stepper | nothing; the observation (D20) stays |
+  | no `code`: the request failed or its reply was lost | Order and floor are read first. If the party no longer holds the table, the split went through: no message, no panel, and D17 follows it. Otherwise `table.error` | order and floor |
   | `party.out_of_date` | `#onTableRefusal`'s words | order and floor |
-  | `draft.taken_over` | Its words; the take-over rows now show | drafts |
-  | `draft.out_of_date` | Its words | drafts |
-  | `bill.line_paid`, `bill.received_exceeds_total`, `bill.refund_in_progress`, `order.payment_in_flight`, `working_order.not_open` | Their words with `{bill}: ` in front, and "Refund {amount}" for the second, through `#onBillMoneyRefusal` | bills, balance, sources |
+  | `draft.taken_over` | `table.split_taken`; the take-over rows now show | drafts |
+  | `draft.out_of_date`, and the till's own comparison at Send (D20) | `table.split_changed` naming the bill in its params | drafts |
+  | `tab.line_not_found` | `table.split_changed` naming the bill (`tabId` in its params) | sources |
+  | `bill.line_paid`, `bill.received_exceeds_total`, `bill.refund_in_progress`, `order.payment_in_flight`, `working_order.not_open` | Their words with `{bill}: ` in front (`table.refused_on_bill`), and "Refund {amount}" for the second, through `#onBillMoneyRefusal` | bills, balance, sources |
   | `bill.presented`, `bill.paid`, `tab.not_open` | The bill named, as `#refusedDestination` names one | bills, sources |
   | `tab.split_held_line` | `table.split_held_error` | sources |
   | `sale.total_exceeds_simplified_limit` | Its existing words (in `TABLE_REFUSALS`, `till-app.ts:620`) | nothing |
-  | `tab.line_not_found` | `table.reread_failed`'s words | sources |
-  | anything else | `tableWriteError` | nothing |
+  | anything else, including another `management.request_invalid` | `tableWriteError` | nothing |
+
+  **Refund on the bill the refusal names.** `bill.received_exceeds_total` names its bill
+  (`workingOrderId`, `errors.ts:608`), and a loose source may be any bill. So for a split: `CounterError`'s
+  `excess` gains `billId` and `bill` (the label); the button's `refund-excess` event carries `billId`;
+  `#onRefundExcess` (`till-app.ts:17830`) opens nothing but that bill, and every other caller, which sends
+  no `billId`, behaves as today.
+  - That bill on screen: the Refund dialog opens over the panel; the ticks stay, and `tidySplit` runs on
+    the re-read after it.
+  - Another bill: the screen stops the event at the panel and asks through `#leavingActions`, as any
+    bill switch asks. **Keep** leaves the ticks and opens nothing. **Discard** closes the panel, and the app
+    switches to that bill (`#flushBeforeSwitch`, `#showBill`, `#loadTabLines`), then opens its Refund.
 
   None sends the person to somebody else. The different-people question (finding 9) asks when any
   loose source's total is over the limit; `#askDifferentPeople` gains a `billIds` parameter.
 
 - **D17 After the split.** The till stays with the staying party at its other table, as today
   (`till-app-parties.test.ts:2280`). If the bill on screen left whole, `billToShow` chooses (as
-  `till-app.ts:15655-15668`). If loose dishes left the bill on screen it stays on screen and its lines
-  are re-read.
+  `till-app.ts:15655-15668`). If loose dishes left the bill on screen and it still owes, it stays on screen
+  and its lines are re-read. If they were its last unpaid dishes, it is now paid, and `GET lines` refuses
+  a settled bill, which would draw an empty list with no word why (`#loadTabLines`,
+  `till-app.ts:11236-11238`). So it counts as gone: `billToShow(undefined, read)` shows the lowest-numbered
+  bill still owing, or the paid bill if none is. A bill still owing stays what the waiter is working on.
 
 - **D18 Take-over rows.** `DraftSync` gains `partyDrafts` (the last `listDrafts` answer's drafts) and
   `takeOverOn(billId, draftId, revision)`: `api.takeOverDraft` with `expectedEditFor(billId)`, then its
@@ -467,12 +584,32 @@ Worked example. Bill 2 holds two dishes Luis has not sent. Clint splits T8 off a
   rule: only while `tablesReadAt < answeredAt`. A later read that started after the answer wins, and a
   poll that started before it does not.
 
-- **D20 Old steps go.** `split-table-bill`, `#splitTableBills`' bill buttons, `#splitGuestsDialog`, the
-  `split-table-open` event and `#splitTablePrompts`, `widgets/split-guests-dialog.ts`, and the words
-  `table.split_table_bill_heading`, `table.split_no_bill`, `table.split_guests_title`. The table step
-  `table.split_table_heading` and `table.split_guests_confirm` "Split" stay. The edit state is read at
-  Send, not when the panel opens: the panel can stay open across re-reads, and the server compares each
-  expected state, so a change after the last read is refused rather than overwritten.
+- **D20 What goes, and the guard that stays.** Going: `split-table-bill`, `#splitTableBills`' bill
+  buttons, `#splitGuestsDialog`, `widgets/split-guests-dialog.ts` (its `SplitGuestsDetail` type moves to
+  `widgets/guest-count.ts` first), `splitPanelLive`, `billId` in `SplitTableDetail` and `SplitRefusal`, and
+  the words `table.split_table_bill_heading`, `table.split_no_bill`, `table.split_guests_title`. The
+  table step `table.split_table_heading` and `table.split_guests_confirm` "Split" stay.
+
+  **`split-table-open`, `prompt` and `#splitTablePrompts` stay, because their guard stays** (A773 §6;
+  finding 15). What they hold changes, because a bill can now be ticked long after the panel opened:
+  - The opening composition from `#billComposition([])`: API, session, visit, party, bill on screen,
+    party revision. A prompt carried across a bill switch or to a replacement API sends nothing, as today.
+  - One observation per selected bill. The screen dispatches `split-table-observe { prompt, billIds }`
+    whenever the set of whole bills and loose sources changes, `#tidySplit`'s changes included. A bill's
+    edit state is recorded, with no banner, as it joins the set, and dropped as it leaves it, so a bill
+    that changed before it was ticked, or an unrelated bill, refuses nothing. A bill with no edit state when
+    ticked is recorded as missing, and a later read does not turn that into permission.
+  - At Send the app compares the selected bills only. One missing or moved sends no request and goes through
+    D16's `table.split_changed` row, with the panel reopened.
+  - A refused count keeps the observation, so a change made while the waiter corrects the count is still
+    refused (`till-app-parties.test.ts:12078`). Every other refusal retakes the composition and clears the
+    observations after its re-read, and the reopened panel's `split-table-observe` records new ones, because
+    the waiter is now looking at the new state and must be able to retry.
+  - Worked example: Clint ticks Bill 2 whole while its unsent order is his own. His other device saves more
+    dishes to it. The till's next read picks that up; Clint presses Split; the till says "Bill 2 changed
+    while you were choosing", with no request sent, and his ticks are still there. He checks the row and
+    presses Split again.
+  - A `split-table` event with no `prompt` composes at Send, as today; only tests send one.
 
 ## Departures from the master plan
 
@@ -482,7 +619,6 @@ Worked example. Bill 2 holds two dishes Luis has not sent. Clint splits T8 off a
 | `allSelected` flag and `guests` | no flag; `guestCounts` | D10 |
 | `A803 selection` in `portion-selection.test.ts` and `portion-picker.test.ts` | New whole-bill cases in `split-selection.test.ts` and `split-picker.test.ts` under the same title | D12, D13: the whole-bill model has its own file |
 | `A803 race replay` with promise barriers | The pattern 4b settled on: `waiting-course-copy.test.ts:1787` (`Promise.allSettled`, the asked-first order pinned) | 4b's Build record: the write lock takes them in turn, and the case that a barrier adds is covered by the order assertion |
-| Forms: a refusal naming no field goes in the bottom message | Banner through the app's `errorKey`, as every table action, with the panel reopened behind it | "Refund {amount}" and `#onTableRefusal`'s re-reads live there. D16. Task 16 checks it is visible at 390 px |
 | Refusal closes the panel (4a D9) | Panel reopens with picks | D16 |
 
 ## Current code map (main `4259a040d2`)
@@ -501,7 +637,7 @@ Worked example. Bill 2 holds two dishes Luis has not sent. Clint splits T8 off a
 | Till client | `api/client.ts`: `Draft` `:808`, `BillEditState` `:834`, `BillBalance` `:1216`, `PartyBill` `:2160`, `listDrafts` `:3961`, `takeOverDraft` `:4055`, `getTabLines` `:4283`, `getBillBalance` `:4428`, `splitTable` `:4704-4723` |
 | Model and picker | `state/portion-selection.ts` (`pickGroups` `:60`, `pickRows` `:138`, `setCount` `:148`, `toggleRow` `:157`, `tidyPicks` `:170`, `pickedLineIds` `:198`); `widgets/portion-picker.ts` |
 | Screen | `screens/till-table-order-screen.ts`: `ActionDraft` `:244`, `SplitTableDetail` `:263`, `SplitRefusal` `:272`, `DishSources` `:295`, `fallbackPortionKeys` `:314`, `ActionStep` `:444`, `splitTableId` `:1287`, `splitGuests` `:1295`, `#watchActions` `:1337`, refusal restore `:2005`, `#closeActions` `:4784`, `#chooseVerb` `:4798`, `#prepareRelocation` `:4810`, `#splitTableStep` `:4960-5021`, `#splitTable` `:5023`, `#splitGuestsDialog` `:5037`, `#actionBackNow` `:5101`, ⋮ item `:5239`, `#moveDishesStep` `:5476`, `.action-panel` CSS `:618` (22rem wide) |
-| App | `till-app.ts`: `TABLE_REFUSALS` `:615`, `BILL_MONEY_REFUSALS` `:660`, `refusedSplitSide` `:731`, `#ownBillsChange` `:11664`, `#refreshBillDraft` `:11688`, `#onTakeOverDraft` `:11863`, `#loadPartyBills` `:11948`, `#onTableRefusal` `:12124`, `#reloadTables` `:15041`, `#splitTablePrompts` `:15589`, `#onSplitTable` `:15598-15677`, `#onBillPairRefusal` `:15793`, `#billComposition` `:15868`, `#askDifferentPeople` `:15931`, `#onMoveDishes` `:15973`, `#refusedDestination` `:16003`, floor element `:19050`, bindings `:19630-19631` |
+| App | `till-app.ts`: `TABLE_REFUSALS` `:615`, `BILL_MONEY_REFUSALS` `:660`, `billWriteError` `:683`, `tableWriteError` `:748`, `errorText` `:1478`, `.error-part` CSS `:1854`, `#onSplitTableOpen` `:15591`, `#onSwitchBill` `:17137`, `#onRefundExcess` `:17830`, screen bindings `:19121`, `:19264`, `refusedSplitSide` `:731`, `#ownBillsChange` `:11664`, `#refreshBillDraft` `:11688`, `#onTakeOverDraft` `:11863`, `#loadPartyBills` `:11948`, `#onTableRefusal` `:12124`, `#reloadTables` `:15041`, `#splitTablePrompts` `:15589`, `#onSplitTable` `:15598-15677`, `#onBillPairRefusal` `:15793`, `#billComposition` `:15868`, `#askDifferentPeople` `:15931`, `#onMoveDishes` `:15973`, `#refusedDestination` `:16003`, floor element `:19050`, bindings `:19630-19631` |
 | Floor | `screens/till-floor-screen.ts`: `tablesReadAt` `:905`, `#carried` `:994`, `#revision` `:1378`, join `:1650-1669`, `#carry` `:1840`; `state/floor-today.ts:52` `nextFloorMoment` |
 | Words | `i18n/strings.ts` (EN from `:1116`, ES from `:2979`), `i18n/codes.ts:350`, `:450`, `:482` |
 | Guides | `apps/server/src/guide/{en,es}/table-service.md` (⋮ list EN `:247-255`, `#move-dishes` EN `:289`, `#held-dishes-move` EN `:328`, ES `:344`, numbers EN `:345-346`) |
@@ -515,7 +651,10 @@ other existing file is a stop: record it, do not edit it, and ask in the ledger.
 new shape is not an edit.
 
 **Behaviour, spec §3.7 ("a MOVED notice for the dishes that changed table only"). All ten ran red in
-R1.** Under Question 3's (B), rows 6, 7 and 10 stay unedited.
+R1, which told only the leaving bill.** Seven change. Rows 6, 7 and 10 pin A650's ruling 1, on a name
+gone from kitchen paper, and stay unedited on Question 3's default: under D6's rule they stayed green
+and the other seven went red (R9). Row 5's title cites A650's row 8; A650 ruling 1 said "Split a table
+prints" that slip, and spec §3.7, four days later, ended it.
 
 | # | Check | Pins today | Pins after | Task |
 | --- | --- | --- | --- | --- |
@@ -523,33 +662,63 @@ R1.** Under Question 3's (B), rows 6, 7 and 10 stay unedited.
 | 2 | `party-table-actions.test.ts:962-982` | The family's paid bill's BURG gets `moved_to: "PagoS 7"` | `noticesOn([ana.tabId])` equals `earlier`; the paid bill's row, lines and payments still equal | 4 |
 | 3 | `move-merge.test.ts:411-439` | BURG, FLAN, TINTO notices; three slips | BURG only; one slip `De: Mesa 4, 5 / A: Mesa 5` | 4 |
 | 4 | `move-merge.test.ts:441-452` | An empty table leaving gives BURG a notice | `noticesOf([tabId])` is `[]` | 4 |
-| 5 | `move-merge.test.ts:774-790` | Row 8: two slips, `De: Mesa 51, 52 / A: Mesa 51` | no slip printed | 4 |
-| 6 | `today-names.test.ts:468-480` | Named group, no bill: one slip, group name → own name | no slip | 4 |
-| 7 | `today-names.test.ts:482-497` | Named group with a bill: two slips | one slip, group name → Patio | 4 |
+| 5 | `move-merge.test.ts:774-790` | A650's row 8: two slips, `De: Mesa 51, 52 / A: Mesa 51` | no slip printed; title names spec §3.7 in place of "(row 8)" | 4 |
+| 6 | `today-names.test.ts:468-480` | Named group, no bill: one slip, group name → own name | **unedited**; under Question 3's (A), no slip | not changed |
+| 7 | `today-names.test.ts:482-497` | Named group with a bill: two slips | **unedited**; under (A), one slip, group name → Patio | not changed |
 | 8 | `today-names.test.ts:499-508` | Unnamed, no bill: one slip to Counter 6 | no slip | 4 |
 | 9 | `today-names.test.ts:510-524` | Unnamed with a bill: two slips | one slip to Table 9 | 4 |
-| 10 | `today-names.test.ts:751-763` | Delivered counter order at Table 9: one slip | no slip | 4 |
+| 10 | `today-names.test.ts:751-763` | Delivered counter order at Table 9: one slip | **unedited**; under (A), no slip | not changed |
 
 **Wire shape only, spec §3.7's new request; no behaviour assertion weakens.**
 
 | # | Check | Change | Task |
 | --- | --- | --- | --- |
 | 11 | `till-api.table-actions.test.ts:167` | answer keys gain `billIds`, then lose `billId` | 5, 14b |
-| 12 | `till-api.table-actions.test.ts:523-556` | "a malformed or missing bill" refuses `field: "selection"`, not `"billId"` | 14b |
+| 12 | `till-api.table-actions.test.ts:523-556` | "a malformed or missing bill": a malformed bill id goes from 409 `tab.not_open` (`requireOtherBill`, pinned at `:554`) to 400 `management.request_invalid { field: "selection" }`, and a missing one from `field: "billId"` to `field: "selection"` | 14b |
 | 13 | Bodies of 44 `split-table` posts in 11 server test files (`rg -c 'split-table' apps/server/src -g '*.test.ts'`) | `billId: x` → `selection: oneBill(x)` from `testing/table-action-fixture.ts` | 14b |
 | 14 | `till-api.zone-closed.test.ts` (its split case) | `billId` → `billIds[0]` | 14b |
 | 15 | `bill-editing.bill-moves.test.ts:297-300`, its direct `splitTable` import | passes `oneBill(from.billId)` | 2 |
 | 16 | `packages/venue-service/src/party-allergy.test.ts:406`, `:563` | `id` → `[id]`, `null` → `[]` | 1 |
 | 17 | `apps/till/src/api/client.test.ts:3078-3135`, `:5913-5918`; `client.bill-editing.test.ts:103-112` | body and answer | 5 |
-| 18 | `till-app-parties.test.ts` (19 `split-table` emits; `toHaveBeenCalledWith` at `:2303`, `:2315`, `:2347`, `:2374`; stub `:321`), `till-app-table-service.test.ts` (4 emits; stub `:293`; row `:1147`) | detail `{ tableId, selection, guestCounts }`, called with `selection` | 12a |
+| 18a | `till-app-parties.test.ts`, `api.splitTable` called with, at `:2303`, `:2315`, `:2347`, `:2374`, `:11808`, `:12019`, `:12068` | the bill argument becomes a selection (`oneBill(x)`, or an empty selection for null) | 5 |
+| 18b | `till-app-parties.test.ts` (19 `split-table` emits, stub `:321`, `splitRefusal` `toEqual` at `:2382`), `till-app-table-service.test.ts` (4 emits; stub `:293`; row `:1147`) | detail `{ tableId, selection, guestCounts }`; the old `billId` shape keeps working until then | 14a |
 | 19 | `screens/till-table-order-screen.a11y.test.ts:945-952` | scans the new panel, with a part-paid bill, a take-over row and a whole bill | 11a |
 | 20 | `.table-menu.test.ts:584-600` | the second step is the picker; Escape returns to the tables | 11a |
 | 21 | `.actions-unsaved.test.ts:211-240` | ticks and counts are protected; Split submits with no question | 11b |
+| 22 | `till-app-parties.test.ts:11914-12123`, ten cases | moved, under their titles: "Moved till-app cases" | 12c |
+| 23 | `till-app-parties.test.ts:1902-1909`, the Split a table row of `:1910` | moved: "Moved till-app cases" | 12d, removed 14a |
+| 24 | `till-app-parties.test.ts:2359-2427` | moved: "Moved till-app cases" | 12d, removed 14a |
+| 25 | `till-app-parties.test.ts:2429-2448` "says a refusal naming no field of the window on the banner" | **Behaviour, Forms contract:** the sentence is at the panel's bottom with the panel reopened, and there is no banner. Moved: "Moved till-app cases" | 12d, removed 14a |
+| 26 | `till-app-parties.test.ts:2450-2504`, two cases | moved, with the panel in place of the window: "Moved till-app cases" | 12d, removed 14a |
 
 `testing/table-action-fixture.ts`'s `splitTable` accepts `billId | null | SplitSelection` and answers
 `{ partyId, billIds, billId: billIds[0] }`, so the other test files that call it through the fixture (`rg -n 'splitTable\('
 apps/server/src -g '*.test.ts'`) need no edit. `observedTableActionBody` reads `selection` as well. A
 fixture, not an assertion.
+
+### Moved till-app cases
+
+Each old case drives the window or the bill buttons, so it cannot stay. Each new case goes in
+`src/till-app-split-table.test.ts` under the title given, drives the panel through its real controls, and
+is at least as strict. The old case goes when its new home exists, confirmed by name. Row 22's go in Task
+12c, because that is the commit that makes the panel live; the others keep passing on the old window
+until Task 14a removes it.
+
+| Old case, `till-app-parties.test.ts` | Title in its new home | Pins | Task |
+| --- | --- | --- | --- |
+| `:11943` × 3 "refuses a refreshed owner / draft / revision while the guests prompt stays open" | "refuses a refreshed owner / draft / revision on a ticked bill while the panel stays open" | no request; `table.split_changed` at the bottom; the panel the same element; no save and no take-over | 12c |
+| `:11980` "keeps missing metadata at prompt opening from becoming permission after refresh" | "keeps a bill with no edit state when ticked from becoming permission after refresh" | no request; the sentence | 12c |
+| `:12002` × 2 "allows %s when only an unrelated bill changed" | same title, for a whole bill and for nothing ticked | exactly one request, with exactly the ticked bill's edit | 12c |
+| `:12031` "refuses a guests prompt carried across a bill switch" | "refuses a panel carried across a bill switch" | no request | 12c |
+| `:12042` "allows a new prompt after cancelling and refreshing its bill" | "allows a new panel after Back and a refreshed bill" | one request with the new state | 12c |
+| `:12078` "retains the original observation when a refused guest count is corrected" | same title | second press sends nothing; `table.split_changed` | 12c |
+| `:12111` "does not send an old guests prompt to a replacement API" | "does not send an old panel to a replacement API" | neither API called | 12c |
+| `:1910`, its Split a table row, "does not reopen the $window window a refusal opened when a handheld comes back" | "does not reopen the panel a refusal opened when a handheld comes back to its order card" | panel absent after coming back | 12d |
+| `:2359` × 2 "hands %s back to Split a table's guests window, beside the field, without a banner" | "hands %s back to the panel, beside the field, without a banner" | `splitRefusal` `toEqual`, both counts shown, `form.fix_fields` at the bottom, `banner` null | 12d |
+| `:2397` "hands the refusal to the order card on a handheld" | same title | the stepper's refusal text | 12d |
+| `:2429` "says a refusal naming no field of the window on the banner" | "says a refusal naming no field at the bottom of the panel" | **reversed (row 25):** message set, panel open, `banner` null | 12d |
+| `:2450` "drops a refusal that arrives after the waiter has opened another party's table" | same title | panel absent, no refusal, no banner, on the other party | 12d |
+| `:2482` "does not hand a refused split to the next table opened" | same title | no refusal on the next table | 12d |
 
 ### Deleted checks (Question 2)
 
@@ -578,11 +747,11 @@ cases. New homes are `till-table-order-screen.split-table.test.ts` ("S"),
 | `:116` counts typed back, however spelled, close quietly | U |
 | `:130` an invalid count stays protected | U |
 | `:146` splitting commits with no question | U |
-| `:159` disconnect aborts a leave decision; reconnect keeps the baseline | **Gone as written.** The panel's scope is the screen's own, whose disconnect is already pinned in `.actions-unsaved.test.ts` |
-| `:178` retained departed controls cannot split | **Gone as written.** `#actionControlCurrent` guards the panel, pinned in `.actions-unsaved.test.ts` |
+| `:159` disconnect aborts a leave decision; reconnect keeps the baseline | U, with ticks and a typed count. `.actions-unsaved.test.ts:254` covers Move dishes' ticks only |
+| `:178` retained departed controls cannot split | U: a departed Split, Back, tick or stepper changes nothing. `.actions-unsaved.test.ts:304`, `:331`, `:410` cover Move dishes only |
 | `:197` a parent rerender keeps counts and the warning | U |
 | `:212`, `:230` a stored count moves an untouched side, not a typed one | U |
-| `:242`, `:251`, `:260` the same across take-out and put-back | U, as "while the panel is reopened by a refusal" |
+| `:242`, `:251`, `:260` the same across take-out and put-back | U, with the same titles on the panel: the screen taken out and put back, and separately reopened by a refusal |
 | `till-table-order-screen.test.ts:4962` Split a table picks a table, then a bill or none | S |
 | `:5130` names a table renamed for today | S |
 | `:5158` Back returns to the tables | S |
@@ -614,7 +783,7 @@ well above 15% free. Stop only processes you started.
 
 - [ ] `git fetch`, then `git log --oneline 4259a040d2..origin/main -- apps/server/src/table-actions.ts apps/server/src/bill-actions.ts apps/server/src/bill-editing.ts apps/server/src/till-api.ts apps/till/src/till-app.ts apps/till/src/screens/till-table-order-screen.ts apps/till/src/screens/till-floor-screen.ts apps/till/src/state apps/till/src/widgets/portion-picker.ts packages/venue-service/src/party-allergy.ts packages/module/src/module.ts`. If anything landed, rebase and re-read what this plan cites.
 - [ ] Overlap check over `git worktree list` and the lanes' queues (`~/waitron-campaign*/queue.md`), for every branch; overlap is a reason to rebase often, not to wait. Record it in the ledger. R7 covered only the first 40 local branches.
-- [ ] Post Questions 1 to 4 to `~/waitron-campaign-c/questions.md` (one-at-a-time format, worked examples as above).
+- [ ] Post Questions 1 to 3 to `~/waitron-campaign-c/questions.md` (one-at-a-time format, worked examples as above).
 - [ ] Ledger `docs/handoffs/2026-11-04-a803-4c-split-table-picker.md` (`Status: in progress`).
 
 ## Task 1: allergies follow any number of bills (about 30 calls)
@@ -629,11 +798,11 @@ well above 15% free. Stop only processes you started.
 - [ ] **Deletion control.** The `inArray` narrowed to the first id → the first case red, naming Bill 2's tick. Restore.
 - [ ] **Commit.** `git commit -s -m "A803 4c: a split's allergy copy follows any number of bills"`.
 
-## Task 2: several whole bills leave together (about 65 calls)
+## Task 2: several whole bills leave together (about 70 calls)
 
-**Files.** `apps/server/src/table-actions.ts`, `apps/server/src/testing/table-action-fixture.ts`, `apps/server/src/bill-editing.bill-moves.test.ts` (row 15), `apps/server/src/party-table-actions.test.ts`.
+**Files.** `apps/server/src/table-actions.ts`, `apps/server/src/till-api.ts` (a temporary mapping), `apps/server/src/testing/table-action-fixture.ts`, `apps/server/src/bill-editing.bill-moves.test.ts` (row 15), `apps/server/src/party-table-actions.test.ts`.
 
-The new signature (D1) with `loose` required to be empty until Task 3b (`management.request_invalid` for now). `requireRelocatableBillEditors` over the whole ids until Task 3a. MOVED reach unchanged until Task 4.
+The new signature (D1) with `loose` required to be empty until Task 3b (`management.request_invalid` for now). `requireRelocatableBillEditors` over the whole ids until Task 3a. MOVED reach unchanged until Task 4. The route (`till-api.ts:3164`) is `splitTable`'s only production caller, so it changes here: it still parses `billId` with `requireOtherBill`, maps it to a selection (`billId` to one whole bill, `null` to an empty one) and answers `{ partyId, billId: billIds[0] }`, keeping the answer's keys that `till-api.table-actions.test.ts:167` pins. Task 5's parser removes this mapping, and Task 5's RED therefore still reads `field: "billId"`.
 
 - [ ] **Failing tests**, `describe("A803 split")` in `party-table-actions.test.ts` (full rows compared):
   1. "… two of three whole bills leave together; the third stays": `billIds` is `[b2, b3]` in number order, both at the new party with numbers 1 and 2, `b1` keeps 1 at the staying party, one new party, table on it, revision moved by one.
@@ -648,10 +817,11 @@ The new signature (D1) with `loose` required to be empty until Task 3b (`managem
   10. "… the answer and allergy guests are copied once across both" (`splitPartyAllergies` through the command).
   11. The master plan's "A666 seats before a floor join and A757 highest joined-table state remain intact": "… a split of a joined table leaves the seats and the highest state as a one-bill split does", compared against a twin split with one bill.
   12. Refusals, `refused(...)` snapshot before and after (`:235-245`): a whole id twice, paid (`bill.paid`), abandoned, other party's (`bill.other_party`), with every row unchanged.
-- [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/party-table-actions.test.ts -t 'A803 split'`: each fails on the current one-bill signature with an object where a bill id goes (`tab.not_open` or a shape error). Anything else is a stop.
-- [ ] **Implement.** D2 steps 1, 2, 4 (whole), 5, 7, 8, 10, 11, 12, 13, 14 with the existing reach. Fixture as "Changed test checks" describes. Comment: replace `splitTable`'s doc comment (`:279-285`) with one that states the new contract, and no history.
+  13. "… allergies are copied before the bills arrive: a bill with a dish that fires on arrival arrives without `allergy.unanswered`". The party answered; a dish with no waiting course on the leaving bill, built with the test-only `addTabRound`, because arrival firing reaches `assertPartyAllergyAnswered` (`working-order.ts:2144`) only for such a dish (`order-groups.ts:2806-2816`).
+- [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/party-table-actions.test.ts -t 'A803 split'`: a case handing a selection to today's fixture fails with `Unknown named parameter 'wholeBillIds'` (R10: `node:sqlite`, reached because an object goes where a bill id goes). A case that uses no selection fails on its own assertion. Anything else is a stop.
+- [ ] **Implement.** D2 steps 1, 2, 4 (whole), 5, 7, 8, 10, 11, 12, 13, 14 with the existing reach, and the route's mapping above. Fixture as "Changed test checks" describes. Comment: replace `splitTable`'s doc comment (`:279-285`) with one that states the new contract, and no history.
 - [ ] **GREEN.** The file unfiltered; the move sweep; server types.
-- [ ] **Deletion controls.** `copyHeldGroups` per bill → case 6 red, "2 to be 1". `expectedEdits[0]` instead of a find → case 8 red. `ensureFamilyBill` removed → case 4 red. Number-order sort removed, seeded so ids sort against numbers → case 1 red.
+- [ ] **Deletion controls.** `copyHeldGroups` per bill → case 6 red, "2 to be 1". `expectedEdits[0]` instead of a find → case 8 red. `ensureFamilyBill` removed → case 4 red. Number-order sort removed, seeded so ids sort against numbers → case 1 red. Allergy copy after arrival instead of before → case 13 red, `allergy.unanswered`.
 - [ ] **Commit.** `git commit -s -m "A803 4c: Split a table takes any number of whole bills"`.
 
 ## Task 3a: who must own what (about 35 calls)
@@ -693,30 +863,33 @@ The new signature (D1) with `loose` required to be empty until Task 3b (`managem
   13. "… a bill both whole and loose, one bill in two loose entries, an empty entry: `management.request_invalid { field: 'selection' }`"; "… a line named twice: `tab.transfer_duplicate_line`"; "… a line of another bill: `tab.line_not_found`, and no line of the named bill with that number moved" (4a's M3 control).
   14. Full-row rollback of each refusal above: parties, party tables, bills, lines, tickets, groups, group events, drafts, allergy, notices, `print_jobs`, `bill_number_allocations`. Reuse `rowsOf` shaped as `waiting-course-copy.test.ts:802`, with no location.
 - [ ] **RED.** `… -t 'A803 split'`: Task 2's `management.request_invalid` for a non-empty `loose`.
-- [ ] **Implement.** Export `resolveMoveLines` and `reservedRefusal` (`requireBillOfParty` covers the closed-bill refusals, so `refuseClosedBill` stays private); extract `moveCheckedDishes(tx, cfg, from, to, transfers, { refuseHeld, actorId })` holding `:416-420`'s carve and bump, which `moveDishes` calls; `assertBillInvariant` stays with each caller, because a split runs it after every source has moved. D2 steps 4, 6, 9, 10.
+- [ ] **Implement.** Export `resolveMoveLines` and `reservedRefusal` (`requireBillOfParty` covers the closed-bill refusals, so `refuseClosedBill` stays private); extract `moveCheckedDishes(tx, cfg, from, to, transfers, { refuseHeld, actorId })` holding `:416-420`'s carve and bump, which `moveDishes` calls; `assertBillInvariant` stays with each caller, because a split runs it after every source has moved. D2 steps 4, 9, 10; step 6's read stays inside `withMovedSlips` until Task 4.
 - [ ] **GREEN.** The file; `src/move-dishes.test.ts`, `src/till-api.move-dishes.test.ts` (4a's unchanged, proving the extraction); the move sweep.
-- [ ] **Deletion controls.** `insertPartyBill` at the source party → case 3 red with the gap. `refuseHeld: true` → false → case 9 red. `assertBillInvariant` removed → case 5 red. `leaveParty(newBill)` removed → case 6 red (its fired group stays the source's). Allergy after arrival instead of before → the allergy firing case from Task 2 red.
+- [ ] **Deletion controls.** `insertPartyBill` at the source party → case 3 red with the gap. `refuseHeld: true` → false → case 9 red. `assertBillInvariant` removed → case 5 red. `leaveParty(newBill)` removed → case 6 red (its fired group stays the source's). Allergy after arrival instead of before, with loose dishes selected → Task 2's case 13 and this task's case 12 red.
 - [ ] **Commit.** `git commit -s -m "A803 4c: single dishes picked off any bill leave on one new bill"`.
 
-## Task 4: MOVED slips name only the dishes that changed table (about 50 calls)
+## Task 4: MOVED slips name only the dishes that changed table (about 55 calls)
 
-**Files.** `apps/server/src/table-actions.ts`, tests per rows 1–10, `apps/server/src/waiting-course-copy.test.ts`.
+**Files.** `apps/server/src/table-actions.ts`, `apps/server/src/kitchen-print.ts`, tests per rows 1–5, 8 and 9, `apps/server/src/move-merge.test.ts`, `apps/server/src/waiting-course-copy.test.ts`.
 
-- [ ] Check Question 3's answer in `questions.md`. With no answer, build (A). Under (B) leave rows 6, 7 and 10 as they are and add the filter D6's question describes.
+- [ ] Check Question 3's answer in `questions.md`. With no answer, or (B), build D6 as written and leave rows 6, 7 and 10 unedited. Under (A) leave out `enqueueMovedSlipsForNamesGone`, change rows 6, 7 and 10 as their row says, and delete cases 6 to 8 below.
 - [ ] **Failing tests**, `describe("A803 split: what the kitchen is told")` in `move-merge.test.ts` (it has `printedBy`, `byDish`, `stationWithPrinter`):
   1. "… a loose dish gets a notice and a slip naming only it, the source's other dishes nothing".
   2. "… a whole bill's dishes are told; a staying bill's are not".
   3. "… two sources give one slip each, each under the order number the dish was sent on".
   4. "… nothing selected tells the kitchen nothing".
   5. "… a loose held dish on HOLD paper prints under HOLD with its copy's number" (decoded print, `GRUPO 2`, in `waiting-course-copy.test.ts`, with 4b's helper), and later firing prints its FIRE ticket with the mark (4b's `T5.3` shape).
-- [ ] Rewrite rows 1–10. Each stays at least as strict: `toEqual` on the whole list; a "no slip" row asserts `slips` is `[]` **and** that the printer took other jobs earlier in the case (a control that prints nothing because no printer exists would prove nothing).
-- [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/move-merge.test.ts -t 'A803 split: what the kitchen is told'`: cases 1, 2 and 4 name the staying dish; 3 under the reach as built in 3b.
-- [ ] **Implement.** D6. `withMovedSlips` stays for the other actions; `splitTable` no longer uses it. Delete its import here if unused.
-- [ ] **GREEN.** The move sweep. New red outside rows 1–10 is a stop (R1 listed exactly these).
-- [ ] **Deletion controls.** The `{ parties: [partyId] }` reach put back → cases 1, 2, 4 red. Reading a loose source's `before` after the carve → case 1 red (nothing told). Copy after the slips → case 5 red, `GRUPO 3`, as 4b's control 27.
-- [ ] **Commit.** `git commit -s -m "A803 4c: the kitchen hears only about dishes that changed table"`.
+  6. "… a staying dish whose paper's every name has gone is told, from that name to what it now reads" (A650 ruling 1).
+  7. "… a staying dish with one name of its paper left is not told": a group whose name survives the split, and plain T7 + T8 → T7.
+  8. "… a loose source's staying dish is told once when its name has gone, and the dish that left once, on the new bill".
+- [ ] Rewrite rows 1–5, 8 and 9. Each stays at least as strict: `toEqual` on the whole list; a "no slip" row asserts `slips` is `[]` **and** that the printer took other jobs earlier in the case (a control that prints nothing because no printer exists would prove nothing). Rows 6, 7 and 10 are not touched.
+- [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/move-merge.test.ts -t 'A803 split: what the kitchen is told'`: cases 1, 2, 4 and 7 name the staying dish; 3 under the reach as built in 3b.
+- [ ] **Implement.** D6: step 6's one read; step 14's three groups; `enqueueMovedSlipsForNamesGone` in `kitchen-print.ts`, which reads each order's places once as `enqueueMovedSlipsFor` does and reuses `notifyMoved`. `withMovedSlips` stays for the other actions; `splitTable` no longer uses it. Delete its import here if unused.
+- [ ] **GREEN.** The move sweep. New red outside rows 1–5, 8 and 9 is a stop: R9 listed exactly these, and rows 6, 7 and 10 must pass unedited.
+- [ ] **Deletion controls.** The `{ parties: [partyId] }` reach put back → cases 1, 2, 4 red. Reading a loose source's `before` after the carve → case 1 red (nothing told). Copy after the slips → case 5 red, `GRUPO 3`, as 4b's control 27. `enqueueMovedSlipsForNamesGone` removed → rows 6, 7, 10 and case 6 red. Its test changed to "some name has gone" → case 7 red.
+- [ ] **Commit.** `git commit -s -m "A803 4c: the kitchen hears only about dishes that changed table, or a name that has gone"`.
 
-## Task 5: the route learns the selection, and issues what a split leaves paid (about 45 calls)
+## Task 5: the route learns the selection, and issues what a split leaves paid (about 50 calls)
 
 **Files.** `apps/server/src/till-api.ts`, `apps/till/src/api/client.ts`, `apps/till/src/till-app.ts` (mapping only), new `apps/server/src/split-table.fiscal.test.ts`, `apps/server/src/till-api.table-actions.test.ts`, rows 11 and 17.
 
@@ -728,8 +901,8 @@ The new signature (D1) with `loose` required to be empty until Task 3b (`managem
   4. A loose pick that leaves the source still owing issues nothing.
   5. A refusal by the trading admission rolls the whole split back: no new party, table still joined.
 - [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/split-table.fiscal.test.ts src/till-api.table-actions.test.ts -t 'A803 split'`: route answers `management.request_invalid { field: "billId" }`; case 1 finds no sale after Task 5's parse alone.
-- [ ] **Implement.** D7, D10. `checkZones` gets `{ partyId }` and each `{ orderId }` of the selection. Client `splitTable(partyId, tableId, selection, revision, edits, guests)` with its doc comment rewritten; the app's existing call maps its `billId` to a selection and reads `billIds` (nothing on screen changes yet). Rows 11, 17.
-- [ ] **GREEN.** Move sweep; F and Filing unedited; H2; till `src/api/client.test.ts`, `src/api/client.bill-editing.test.ts`; types.
+- [ ] **Implement.** D7, D10. `checkZones` gets `{ partyId }` and each `{ orderId }` of the selection. Client `splitTable(partyId, tableId, selection, revision, edits, guests)` with its doc comment rewritten; the app's existing call maps its `billId` to a selection and reads `billIds` (nothing on screen changes yet). Rows 11, 17, 18a.
+- [ ] **GREEN.** Move sweep; F and Filing unedited; H2; till `src/api/client.test.ts`, `src/api/client.bill-editing.test.ts`, `src/till-app-parties.test.ts`, `src/till-app-table-service.test.ts` (row 18a turns these red here, after checking free memory); types.
 - [ ] **Deletion controls.** `issueIfFullyPaid` loop removed → case 1 red ("0 to be 1"). Zone check of a loose source removed → the profile-zones case red. **`withIssuanceTransaction` has no control:** it differs from `withTransaction` only by recording an incident for an `IssuanceRefusal` (`packages/core/src/incidents.ts:30-48`), and `rg IssuanceRefusal apps/server/src -g '*.test.ts'` finds no server case that forces one. Say so in the PR rather than claiming it.
 - [ ] **Commit.** `git commit -s -m "A803 4c: the split route takes a selection and issues the invoice of a bill it leaves paid"`.
 
@@ -755,14 +928,14 @@ Pattern: `waiting-course-copy.test.ts:1787` (`Promise.allSettled`, one commits),
 
 **Files.** `apps/server/src/working-order.ts`, `apps/server/src/till-api.ts`, `apps/till/src/api/client.ts`, tests.
 
-- [ ] **Failing tests.** `till-api.table-actions.test.ts`, `describe("A803 split: the panel's read")`: three bills, one part-paid, one presented, one abandoned, one a family bill: `{ bills }` lists the open and presented of this party in number order, with the same `lines` as `GET …/lines` and the same `balance` as `GET …/payments` where those answer; `paidLines` present; the presented bill's lines present. Unknown party → its code. Add the rows: the action map in `till-api.profile-actions.test.ts` (session only, passive) and a refusing row in `.profile-zones.test.ts` beside `PUT /api/parties/:id/drafts`. Passive: reading it does not keep a session signed in (the shape of the drafts read's case). `client.test.ts`: `getSplitSources(partyId, options)` builds the GET and passes the signal.
+- [ ] **Failing tests.** `till-api.table-actions.test.ts`, `describe("A803 split: the panel's read")`: three bills, one part-paid, one presented, one abandoned, one a family bill: `{ bills }` lists the open and presented of this party in number order, with the same `lines` as `GET …/lines` and the same `balance` as `GET …/payments` where those answer; `paidLines` present; the presented bill's lines present. A party id that is no UUID → 409 `party.not_open` (`requirePartyParam`); a UUID naming no party → 200 `{ bills: [] }`, as the drafts read answers empty. Add the rows: the action map in `till-api.profile-actions.test.ts` (session only, passive) and a refusing row in `.profile-zones.test.ts` beside `PUT /api/parties/:id/drafts`. Passive: reading it does not keep a session signed in (the shape of the drafts read's case). `client.test.ts`: `getSplitSources(partyId, options)` builds the GET and passes the signal.
 - [ ] **RED.** `… -t "A803 split: the panel's read"`: 404.
 - [ ] **Implement.** D11. `readTabLines = assertTabOpen + readBillLines`, its other callers unchanged. One query per bill per reader; a party has few bills. Measure once with 20 bills of 20 lines at Task 17a and record the time rather than assuming; a slow answer is a finding, not a note.
 - [ ] **GREEN.** The file; `src/transfer-lines.test.ts`; types.
 - [ ] **Deletion control.** The status filter dropped → the abandoned bill listed, red. `readBillLines` back to `readTabLines` → the presented bill refuses, red with `tab.not_open`.
 - [ ] **Commit.** `git commit -s -m "A803 4c: a read of every bill's dishes and balance for Split a table"`.
 
-## Task 8: the selection model, `A803 selection` (about 55 calls)
+## Task 8: the selection model, `A803 selection` (about 60 calls)
 
 **Files.** New `apps/till/src/state/split-selection.ts`, `.test.ts`. No DOM.
 
@@ -786,6 +959,25 @@ export function rowsOf(source: SplitSource, split: SplitPicks): PickRow[];
 export function toSelection(sources: readonly SplitSource[], split: SplitPicks): SplitSelection;
 export function nothingStays(sources: readonly SplitSource[], split: SplitPicks): boolean;
 export function splitSummary(sources: readonly SplitSource[], split: SplitPicks): SplitSummary;
+/** Which note Everything ticked shows; `anyPaid`: a paid bill stays in the party or its family. */
+export function anywayNote(
+  sources: readonly SplitSource[],
+  split: SplitPicks,
+  anyPaid: boolean,
+): "empty" | "paid";
+/**
+ * The panel's rows from the read (D11), the party's bills, every draft of the party and this person.
+ * A bill the bills list does not hold is left out until the next read. `recalled` is the bill on
+ * screen's unsaved recalls, which no draft read has yet.
+ */
+export function splitSourcesFrom(
+  read: { bills: readonly { billId: string; lines: readonly TabLine[]; balance: BillBalance }[] },
+  bills: readonly PartyBill[],
+  drafts: readonly Draft[],
+  personId: string,
+  recalled: ReadonlySet<string>,
+  keyFor: (lines: readonly TabLine[], balance: BillBalance) => (dish: TabLine) => string | null,
+): SplitSource[];
 export function tidySplit(
   before: ReadonlyMap<string, readonly PickRow[]>,
   sources: readonly SplitSource[],
@@ -793,11 +985,11 @@ export function tidySplit(
 ): SplitPicks;
 ```
 
-- [ ] **Failing tests**, titled `A803 selection: …`: ticking a bill takes all of it and clears its picks; unticking one row of a whole bill turns the rest into picks, in line order, up to each limit; whole-bill tick of a part-paid bill is allowed and untick leaves its paid rows out; every dish picked on a clean bill becomes whole; every **unpaid** dish picked on a part-paid bill does not; a contribution's floor: €40 on €52 stays within it after an untick, and allows €40.00 but not €39.99; a contribution marks no dish paid; a presented bill: header only, rows blocked `presented`, no pick accepted; a held bill: no toggle; `2 of 4` from a whole bill: unticking the Caña row drops all four, and a pick count keeps 4a's first-members rule; recalled dishes in no row; `toSelection` sorts whole by number and lines by line number, and never lists a bill twice; nothing ticked gives an empty selection; `nothingStays` with a paid bill left (true), with an empty open bill left (true), with an own unsent draft on a staying bill (false), with nothing ticked (false); `splitSummary` for board 08's example: T8 takes Bill 2, Bill 3 and 3 dishes from Bill 1, €109.00; T7 keeps the rest of Bill 1, €67.00, exact `Decimal`; a re-read that pays a picked dish drops it; a re-read where a whole bill is presented stays whole; where a whole bill left or gained a foreign draft, it drops; bill order independent of list order.
+- [ ] **Failing tests**, titled `A803 selection: …`: ticking a bill takes all of it and clears its picks; unticking one row of a whole bill turns the rest into picks, in line order, up to each limit; whole-bill tick of a part-paid bill is allowed and untick leaves its paid rows out; every dish picked on a clean bill becomes whole; every **unpaid** dish picked on a part-paid bill does not; every sent dish picked on a bill holding this person's unsent dishes does not, and `toSelection` lists the picks and leaves the unsent dishes out of it; a contribution's floor: €40 on €52 stays within it after an untick, and allows €40.00 but not €39.99; a contribution marks no dish paid; a presented bill: header only, rows blocked `presented`, no pick accepted; a held bill: no toggle; `2 of 4` from a whole bill: unticking the Caña row drops all four, and a pick count keeps 4a's first-members rule; recalled dishes in no row; `toSelection` sorts whole by number and lines by line number, and never lists a bill twice; nothing ticked gives an empty selection; `nothingStays` with a paid bill left (true), with an empty open bill left (true), with an own unsent draft on a staying bill (false), with nothing ticked (false); `anywayNote` with only a paid bill staying (`"paid"`), with an empty open bill staying beside a paid one (`"empty"`), with no bill staying (`"empty"`); `splitSourcesFrom`: a dish recalled into a draft on a bill not on screen is in no row, a dish in `recalled` is in no row, someone else's draft sets `held` with its name and revision and leaves the bill's `ownUnsent` false, this person's draft sets `ownUnsent`, and a bill absent from the bills list is left out; `splitSummary` for board 08's example: T8 takes Bill 2, Bill 3 and 3 dishes from Bill 1, €109.00; T7 keeps the rest of Bill 1, €67.00, exact `Decimal`; a re-read that pays a picked dish drops it; a re-read where a whole bill is presented stays whole; where a whole bill left or gained a foreign draft, it drops; bill order independent of list order.
 - [ ] **RED.** `pnpm --filter @waitron/till exec vitest run src/state/split-selection.test.ts -t 'A803 selection'`: module missing.
 - [ ] **Implement.** Over `pickRows`, `setCount`, `tidyPicks`, `pickedLineIds`; no second money formula (`billGross`, 4a's D12). `PickRow.blocked` gains `{ reason: "presented" }`; 4a's cases stay unedited. `SplitSelection` is a local type here, matching the wire; the screen reads it.
 - [ ] **GREEN.** The file; `src/state/portion-selection.test.ts` unedited.
-- [ ] **Deletion controls.** The normalise-to-whole step → its case red. Floor limit ignored on untick → the €39.99 case red. Paid exclusion → the part-paid case red.
+- [ ] **Deletion controls.** The normalise-to-whole step → its case red. Floor limit ignored on untick → the €39.99 case red. Paid exclusion → the part-paid case red. `ownUnsent` exclusion → the unsent-dishes case red. Recalled drafts of other bills ignored → the `splitSourcesFrom` recall case red. `anyPaid` ignored → the `"paid"` case red.
 - [ ] **Commit.** `git commit -s -m "A803 4c: the selection across a table's bills"`.
 
 ## Task 9: the picker across bills (about 60 calls)
@@ -835,83 +1027,148 @@ export function tidySplit(
 - [ ] **Deletion control.** `expectedEdit` (on-screen) instead of `expectedEditFor(billId)` → case 2 red.
 - [ ] **Commit.** `git commit -s -m "A803 4c: taking over the unsent dishes of a bill not on screen"`.
 
-## Task 11a: the panel on the table screen (about 65 calls)
+## Task 11a: the panel on the table screen (about 70 calls)
 
-**Files.** `apps/till/src/screens/till-table-order-screen.ts`, new `.split-table.test.ts`, `widgets/guest-count.ts`, words, rows 19 and 20.
+**Files.** `apps/till/src/screens/till-table-order-screen.ts`, `apps/till/src/till-app.ts` (types only), new `.split-table.test.ts`, `widgets/guest-count.ts`, words, rows 19 and 20.
 
-The old `split-table-bill` step stays reachable behind a property the tests do not set until 12a, so the till works at this commit: **a new step `split-table-pick` is drawn only when the app has handed `splitSources`**; with none it falls back to the old step.
+The old `split-table-bill` step stays what a waiter sees: **a new step `split-table-pick` is drawn only under a temporary property `splitPanelLive`**, which tests set, Task 12c's app sets, and Task 14a removes. Rows come from two more properties, `splitRead` (D11's answer) and `partyDrafts`, through `splitSourcesFrom` (Task 8), kept until one of its inputs changes, as `#dishGroupsFor` does. Pass `fallbackPortionKeys` (`:314`) as `keyFor`, and `#recalledLineIds()` as `recalled`.
 
-- [ ] **Failing tests**, `.split-table.test.ts` (S in "Deleted checks", opening cases): tapping a table opens the pick step; heading `{table} leaves {party}` in EN and ES, focused; a renamed table by its name; hint names the staying tables; rows from `splitSources`; steppers named `stayingGuests`, `leavingGuests`, labelled, prefilled, staying from the party's count; Split primary at once; the summary lines for board 08; the new-bill note only with a loose pick; Back returns to the tables, Escape too; Split dispatches `split-table` with `{ tableId, selection, guestCounts }` once and closes; nothing ticked sends an empty selection; a read in progress: Split quiet with `table.reread_failed` on a failed read; invalid counts per the Deleted-checks rows.
+`SplitTableDetail` is a union until Task 14a, so types pass at this commit: `{ tableId, guestCounts, prompt? }` with either `billId` (the old step, `:5056-5061`, whose `satisfies` is unchanged) or `selection` (the new step). In `till-app.ts`, `#onSplitTableOpen` returns early on the new shape until Task 12a, and `#onSplitTable` until Task 12b. `split-table-open`'s `billId` becomes optional for the same reason.
+
+- [ ] **Failing tests**, `.split-table.test.ts` (S in "Deleted checks", opening cases): tapping a table opens the pick step and dispatches `split-table-open` with a `prompt`; heading `{table} leaves {party}` in EN and ES, focused; a renamed table by its name; hint names the staying tables; rows from `splitRead`; steppers named `stayingGuests`, `leavingGuests`, labelled, prefilled, staying from the party's count; Split primary at once once the read has answered; the summary lines for board 08; the new-bill note only with a loose pick; Back returns to the tables, Escape too; Split dispatches `split-table` with `{ tableId, selection, guestCounts, prompt }` once and closes; nothing ticked sends an empty selection; with no read answered Split is quiet and disabled; a failed read puts `table.split_read_failed` at the bottom and Split stays quiet; invalid counts per the Deleted-checks rows; a dish recalled on a bill not on screen is in no row; without `splitPanelLive` the old step draws.
 - [ ] **RED.** `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.split-table.test.ts`.
-- [ ] **Implement.** Move the panel's body into `#splitPickStep`, in as few new lines as the screen allows, with sources handed down as a property. `guestsStepper` gains optional `name` and `label`, its comment moved to the callers it still describes. `SplitTableDetail` becomes `{ tableId, selection, guestCounts }`. Rows 19, 20 (the a11y scan needs a part-paid bill, a held bill and a whole bill in its fixture). A help bubble is not added.
-- [ ] **GREEN.** `.split-table.test.ts`, `.table-menu.test.ts`, `.a11y.test.ts`; till types; `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/help-tooltip-mode.test.ts`.
-- [ ] **Deletion controls.** Staying prefill removed → its case red. Guest validation skipped → the four values red. `split-table` detail dropping `guestCounts` → its case red.
-- [ ] **Commit.** `git commit -s -m "A803 4c: Split a table's panel with its ticks and guests"`.
+- [ ] **Implement.** Move the panel's body into `#splitPickStep`, in as few new lines as the screen allows. `guestsStepper` gains optional `name` and `label`, its comment moved to the callers it still describes. Rows 19, 20 (the a11y scan needs a part-paid bill, a held bill and a whole bill in its fixture, with `splitPanelLive` set). A help bubble is not added.
+- [ ] **GREEN.** `.split-table.test.ts`, `.table-menu.test.ts`, `.a11y.test.ts`, `src/screens/till-table-order-screen.test.ts` (the old step unedited); till types; `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/help-tooltip-mode.test.ts`.
+- [ ] **Deletion controls.** Staying prefill removed → its case red. Guest validation skipped → the four values red. `split-table` detail dropping `guestCounts` → its case red. `recalled` not passed on to `splitSourcesFrom` → the recall case red.
+- [ ] **Commit.** `git commit -s -m "A803 4c: Split a table's panel with its ticks and guests, not live yet"`.
 
-## Task 11b: unsaved work, re-reads, refusals, everything ticked (about 60 calls)
+## Task 11b: the panel's unsaved work, including out of the page (about 55 calls)
 
-**Files.** Same screen, new `.split-table.unsaved.test.ts`, `.split-table.test.ts`, row 21.
+**Files.** Same screen, new `.split-table.unsaved.test.ts`, row 21.
 
-- [ ] **Failing tests**:
-  - `.split-table.unsaved.test.ts` (U rows): opening untouched asks nothing; a tick, a stepped count or a typed guest count asks on Back, Escape, a ⋮ item, a bill switch and navigation, keeps on Keep and discards on Discard; ticks back to where they were, and counts typed back however spelled, are clean; an invalid count stays protected; Split commits with no question; rerender keeps it all; stored count follows an untouched side, not a typed one, and the baseline moves with it.
-  - `.split-table.test.ts`: re-read cases: a picked dish paid elsewhere drops, with `Paid`; a whole bill gaining a foreign draft drops its tick and shows the row, and counts as changed; a party switch or the table leaving closes the panel, sending nothing; `splitRefusal` with a `field` reopens with what was sent, the message under that stepper, Split enabled; without a `field` reopens with picks and no field marked; a refusal for a table no longer held does not reopen; focus: after Split and after Back to the ⋮.
-  - Everything ticked (D15): Split swaps to the question with both tables named; Move guests sends `table-relocation-open` then `move-guests` with the leaving table; Split anyway sends the split; a tick change returns to Split; Back returns to Split, not out; the note's table names plural when two stay.
-- [ ] **RED.** `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.split-table.unsaved.test.ts src/screens/till-table-order-screen.split-table.test.ts -t 'unsaved|re-read|refusal|Everything'`.
-- [ ] **Implement.** `ActionDraft` gains `whole`, `staying`, `leaving`; `#watchActions` includes the new step; `equal` compares with `samePicks` per bill and `sameGuestCount`; the follow-stored rule moves here from the dialog (finding 13). `#tidySplit` on `updated` as `#tidyMovePicks` compares sources by identity. Row 21.
-- [ ] **GREEN.** Both files, `.actions-unsaved.test.ts`; till types.
-- [ ] **Deletion controls.** `samePicks` for whole bills dropped → the clean-again case red. `#tidySplit` removed → paid-elsewhere red. Follow-stored removed → stored-count red. `actionVerb = "move"` omitted → Move guests red (the ready check at `:4818`).
-- [ ] **Commit.** `git commit -s -m "A803 4c: Split a table's panel keeps its work across re-reads and refusals"`.
+- [ ] **Failing tests**, `.split-table.unsaved.test.ts` (U in "Deleted checks"), the old dialog's titles kept where they still say what is checked:
+  - Opening untouched asks nothing; a tick, a stepped count or a typed guest count asks on Back, Escape, a ⋮ item, a bill switch and navigation, keeps on Keep and discards on Discard.
+  - Ticks back to where they were, and counts typed back however spelled, are clean; an invalid count stays protected; Split commits with no question; a parent rerender keeps it all and keeps a pending warning.
+  - A stored count follows an untouched staying side, not a typed one, and the baseline moves with it.
+  - **Out of the page:** "disconnect aborts a leave decision; reconnect retains the opening baseline", with ticks and a typed count: still protected, and an old question's Discard does nothing.
+  - "retained departed controls cannot split, go back or replace the draft": a departed Split, Back, tick and stepper.
+  - "a count stored elsewhere while an untouched panel is taken out moves the staying side with it once it is put back"; "a typed staying count stored elsewhere while the panel is taken out counts as saved once it is put back"; "a split the panel stays open after keeps its counts when taken out and put back while the stored count is unchanged".
+- [ ] **RED.** `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.split-table.unsaved.test.ts`.
+- [ ] **Implement.** `ActionDraft` gains `whole`, `staying`, `leaving`; they live in fields the disconnect does not clear, as `moveDishesPicks` does, and `#actionBaseline` survives disconnect already (`:1522-1525`). `#watchActions` includes the new step; `equal` compares with `samePicks` per bill and `sameGuestCount`. The follow-stored rule moves here from the dialog (finding 13), with a `#storedGuestsChanged` flag set in `willUpdate` even while detached, as `split-guests-dialog.ts:66` does. Every new control's handler starts with `#actionControlCurrent(event)`. Row 21.
+- [ ] **GREEN.** The file, `.actions-unsaved.test.ts`; till types.
+- [ ] **Deletion controls.** `samePicks` for whole bills dropped → the clean-again case red. Follow-stored removed → stored-count red. `#storedGuestsChanged` not set while detached → the taken-out case red. `#actionControlCurrent` removed from the stepper → the departed-controls case red.
+- [ ] **Commit.** `git commit -s -m "A803 4c: Split a table's panel keeps its work when it is left or taken out"`.
 
-## Task 12a: the app reads, sends and follows (about 55 calls)
+## Task 11c: re-reads, reopening with a refusal, everything ticked (about 55 calls)
 
-**Files.** `apps/till/src/till-app.ts`, new `src/till-app-split-table.test.ts` (with the shared allergy fixture 4a's Task 8 used, in `apps/till/test/`), row 18.
+**Files.** Same screen, `.split-table.test.ts`, words.
 
-- [ ] **Failing tests**:
-  - Opening reads `getSplitSources` once; the answer goes down as `splitSources`; a later bills read with a changed `revision` reads again; an overtaken answer is dropped (generation); `partyId` change drops it; leaving the step aborts.
-  - Send: `expectedEdits` are those of whole bills and loose sources, sorted; party revision from the shown party; `selection` and `guestCounts` as dispatched. D17: stays with the staying party; the bill on screen gone → `billToShow`; dishes gone from the bill on screen → lines re-read, bill kept; `#refreshBillDraft` after. `#ownBillsChange` wraps it, so a background read does not say "no longer at this table".
-  - Different people (finding 9): a loose pick off a bill over the limit asks once and sends only after confirming; a whole bill over the limit asks nothing; a limit of null asks nothing; a loose source under the limit asks nothing.
-  - `api.splitTable` is given `selection`, and Rows 18.
+- [ ] **Failing tests**, `.split-table.test.ts`:
+  - Re-reads: a picked dish paid elsewhere drops, with `Paid`; a whole bill gaining a foreign draft drops its tick and shows the row, and counts as changed; a party switch or the table leaving closes the panel, sending nothing.
+  - What the app observes (D20): `split-table-observe` with the prompt and the sorted ids fires on a bill ticked, a dish picked off a bill, a bill unticked, and `#tidySplit` dropping a tick, and does not fire on a count change.
+  - Reopening (D16): `splitRefusal` with a `field` reopens with what was sent and the same prompt, the message under that stepper, `form.fix_fields` at the bottom, Split enabled; without a `field` reopens with the ticks, no field marked, the message in `[data-split-refusal]` with `role="alert"`, before `wt-form-actions` in document order, Split enabled, gone when Split is pressed again; a template message draws its button; a refusal for a table no longer held does not reopen; a reopened panel counts as changed; focus after Split and after Back to the ⋮.
+  - Refund for a bill not on screen (D16): pressing `[data-refund-excess]` with another bill's id asks; Keep leaves the ticks and dispatches nothing past the screen; Discard closes the panel and lets `refund-excess` through. For the bill on screen it asks nothing and lets it through.
+  - Everything ticked (D15): Split swaps to the question with both tables named; Move guests sends `table-relocation-open` then `move-guests` with the leaving table; Split anyway sends the split; a tick change returns to Split; Back returns to Split, not out; the note's table names plural when two stay; with only a paid bill staying the note is `table.split_anyway_note_paid`.
+- [ ] **RED.** `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.split-table.test.ts -t 're-read|observe|reopen|Refund|Everything'`.
+- [ ] **Implement.** `#tidySplit` on `updated`, as `#tidyMovePicks` compares sources by identity. `split-table-observe`. The bottom message and its styles (D16). The words.
+- [ ] **GREEN.** Both panel files, `.actions-unsaved.test.ts`; till types.
+- [ ] **Deletion controls.** `#tidySplit` removed → paid-elsewhere red. `actionVerb = "move"` omitted → Move guests red (the ready check at `:4818`). Observe not fired from `#tidySplit` → its case red. The message moved after `wt-form-actions` → the document-order case red. The `#leavingActions` wrapper around Refund removed → the Keep case red.
+- [ ] **Commit.** `git commit -s -m "A803 4c: Split a table's panel follows re-reads and reopens with a refusal"`.
+
+## Task 12a: the app reads every bill for the panel (about 35 calls)
+
+**Files.** `apps/till/src/till-app.ts`, new `src/till-app-split-table.test.ts` (with the shared allergy fixture 4a's Task 8 used, in `apps/till/test/`).
+
+- [ ] **Failing tests**, emitting the new `split-table-open`: it reads `getSplitSources` once; the answer reaches `tableOrder(el).splitRead`; `sync.partyDrafts` reaches `.partyDrafts`, on both screen bindings (`:19121`, `:19264`), and a drafts read replaces it; a later bills read with a changed `revision` reads again; an overtaken answer is dropped (generation); a `partyId` change drops it; leaving the step aborts; a failed read reaches the screen as failed. The old event shape with `billId` still does what it did.
 - [ ] **RED.** `pnpm --filter @waitron/till exec vitest run src/till-app-split-table.test.ts`.
-- [ ] **Implement.** `#splitSources` read and generation; `#onSplitTable` per D17, composition at Send (D20); `#askDifferentPeople(proceed, billIds = [activeTabId])`. Remove the `billId` mapping of Task 5.
-- [ ] **GREEN.** The file; `src/till-app-parties.test.ts`, `src/till-app-table-service.test.ts`; till types.
-- [ ] **Deletion controls.** Composition of the shown bill only → the `expectedEdits` case red. Generation check removed → overtaken case red. `billIds` ignored by the question → the over-limit source case red.
-- [ ] **Commit.** `git commit -s -m "A803 4c: the till reads every bill and sends the split"`.
+- [ ] **Implement.** `#splitRead` and its generation. The screen, not the app, joins them (`splitSourcesFrom`), because the allergy snapshot and unsaved recalls are the screen's.
+- [ ] **GREEN.** The file; `src/till-app-parties.test.ts`; till types.
+- [ ] **Deletion controls.** Generation check removed → the overtaken case red. `partyDrafts` not passed on the handheld binding → its case red.
+- [ ] **Commit.** `git commit -s -m "A803 4c: the till reads every bill for Split a table's panel"`.
 
-## Task 12b: refusals and take-over rows (about 55 calls)
+## Task 12b: the app sends the selection and follows it (about 50 calls)
+
+**Files.** `apps/till/src/till-app.ts`, `till-app-split-table.test.ts`.
+
+- [ ] **Failing tests**, emitting `split-table` with `selection` and no `prompt`:
+  - Send: `expectedEdits` are those of whole bills and loose sources, sorted; party revision from the shown party; `selection` and `guestCounts` as dispatched. `#ownBillsChange` wraps it, so a background read does not say "no longer at this table".
+  - D17: stays with the staying party; the bill on screen gone → `billToShow`; dishes gone from the bill on screen, which still owes → lines re-read, bill kept; **the last unpaid dishes picked off the bill on screen, which is now paid → the lowest-numbered bill still owing is shown, and with none, the paid bill, with no "gone" notice**; `#refreshBillDraft` after.
+  - Different people (finding 9): a loose pick off a bill over the limit asks once and sends only after confirming; a whole bill over the limit asks nothing; a limit of null asks nothing; a loose source under the limit asks nothing.
+- [ ] **RED.** `pnpm --filter @waitron/till exec vitest run src/till-app-split-table.test.ts -t 'send|follow|different people'`.
+- [ ] **Implement.** `#onSplitTable` per D17, a `billId` detail mapped to a selection until Task 14a; `#askDifferentPeople(proceed, billIds = [activeTabId])`.
+- [ ] **GREEN.** The file; `src/till-app-parties.test.ts`, `src/till-app-table-service.test.ts`; till types.
+- [ ] **Deletion controls.** Composition of the shown bill only → the `expectedEdits` case red. `billIds` ignored by the question → the over-limit source case red. The paid-bill follow removed → the now-paid case red, on an empty list.
+- [ ] **Commit.** `git commit -s -m "A803 4c: the till sends the split's selection and follows it"`.
+
+## Task 12c: the panel goes live, and compares what the waiter saw (about 60 calls)
+
+**Files.** `apps/till/src/till-app.ts`, `till-app-split-table.test.ts`, `till-app-parties.test.ts` (row 22).
+
+- [ ] **Before running anything,** write in the ledger what the failing case prints: `api.splitTable` called once with the fresh state, where the waiter ticked the old one.
+- [ ] **Failing tests.** Row 22's ten, under the titles in "Moved till-app cases", through the panel's real controls: open the panel, tick the bill in `till-split-picker`, `window.dispatchEvent(new Event("focus"))` to refresh, press Split. Each new case asserts at least what its old one does. Plus:
+  - The worked example in D20: this person's own draft saved elsewhere, refreshed, refused, then retried and sent with the new state.
+  - A bill changed before it was ticked sends with no refusal. A bill ticked, changed, unticked and ticked again sends with no refusal.
+  - After a server refusal of `draft.out_of_date` the observation is new, so the retry sends once; after a refused count it is not.
+  - A loose source is compared as a whole bill is.
+  - "a dish recalled on a bill not on screen is not offered, and cannot be sent", through the real app.
+- [ ] **RED.** `pnpm --filter @waitron/till exec vitest run src/till-app-split-table.test.ts -t 'refuses a refreshed|keeps a bill with no edit state|only an unrelated bill|carried across|allows a new panel|retains the original|replacement API'`.
+- [ ] **Implement.** D20. `.splitPanelLive=${true}` on both screen bindings. `#onSplitTableOpen` keeps the composition; a new `#onSplitTableObserve` keeps the observations; `#onSplitTable` compares them at Send. Delete row 22's old `describe` once every new title exists, confirming each by name.
+- [ ] **GREEN.** The file; `src/till-app-parties.test.ts`, `src/till-app-table-service.test.ts`, `src/till-app-drafts.test.ts`, `src/screens/till-table-order-screen.split-table.test.ts`; till types.
+- [ ] **Deletion controls.** The comparison at Send removed → the three "refuses a refreshed" cases red, `api.splitTable` called once. Observation taken at Send → the same. Observation kept for every bill rather than the selected ones → "only an unrelated bill" red. Observation not cleared after a refusal → the retry case red. Cleared after a refused count → `:12078`'s case red.
+- [ ] **Commit.** `git commit -s -m "A803 4c: Split a table's panel goes live and refuses a bill that changed since it was ticked"`.
+
+## Task 12d: refusals, and Refund on the bill they name (about 60 calls)
 
 **Files.** `apps/till/src/till-app.ts`, `till-app-split-table.test.ts`, `till-app-table-service.test.ts` (its refusal table, as 4a's Task 8 added `move-dishes` rows).
 
-- [ ] **Failing tests**, one per row of D16's table: what is said, what is re-read and what is not, that `splitRefusal` reopens the panel, and that a refusal arriving after the waiter left the party or the table does nothing. Named: `bill.received_exceeds_total` offers "Refund {amount}" on the bill named in its params, and a bill not on screen is named in front of the words; `draft.taken_over` runs `sync.load()` so rows appear; `party.out_of_date` reloads (`#onPartyOutOfDate`). A refused count does not read anything.
-- [ ] Take-over rows: `split-take-over` opens the screen's take-over dialog; confirming calls `sync.takeOverOn`; `takeOversAnswered` moves on; a refusal shows `takeOverRefusalError`; the row goes after a successful read; `#takeOverClosed` focuses the row's button while it is still there and the bill's tick otherwise.
-- [ ] **RED.** `pnpm --filter @waitron/till exec vitest run src/till-app-split-table.test.ts -t 'refus|take-over'`.
-- [ ] **Implement.** D16, D18. The screen's `takeOverPending` learns a `billId`, or a bill-less draft keeps today's path. A named refusal uses `#refusedDestination`'s rule, generalised to any bill of the selection.
-- [ ] **GREEN.** The file; `.split-table.test.ts`; `src/screens/till-table-order-screen.test.ts` take-over cases unedited.
-- [ ] **Deletion controls.** Bill name in front removed → its case red. Reopen removed → reopen case red. `takeOverOn` → `takeOver` → the row's case red with the on-screen bill's edit.
-- [ ] **Commit.** `git commit -s -m "A803 4c: Split a table's refusals say what happened and keep the picks"`.
+- [ ] **Failing tests**, one per row of D16's table: what is said and where, what is re-read and what is not, that `splitRefusal` reopens the panel with no banner, and that a refusal arriving after the waiter left the party or the table does nothing. Then the cases of rows 23–26 under the titles in "Moved till-app cases", with `:2429`'s reversed. Named:
+  - A bill not on screen is named in front of the words. `party.out_of_date` reloads (`#onPartyOutOfDate`) and its words go to the bottom. `draft.taken_over` runs `sync.load()` so rows appear, with `table.split_taken`. A refused count reads nothing.
+  - **A lost reply:** the request fails with no `code`, and the re-read shows the table gone → no message, no panel, D17's follow. The re-read shows the table still held → `table.error` at the bottom, panel reopened. The re-read also fails → the same, and the next press refused `party.out_of_date` is said as that row says.
+  - The table no longer held after a re-read, with a code → the banner, no panel.
+  - **Refund, bill on screen:** `bill.received_exceeds_total` shows "Refund {amount}" in the bottom message; pressing opens the Refund dialog on that bill.
+  - **Refund, bill not on screen:** with the refusal's `workingOrderId` naming Bill 2 and Bill 1 on screen, pressing Refund and answering Discard switches to Bill 2, and the dialog offers Bill 2's payment, pre-filled; answering Keep switches nothing and opens nothing, and the ticks stay.
+  - An excess refusal from Move dishes, with no `billId`, behaves as today.
+- [ ] **RED.** `pnpm --filter @waitron/till exec vitest run src/till-app-split-table.test.ts -t 'refus|lost reply|Refund'`.
+- [ ] **Implement.** D16. A named refusal uses `#refusedDestination`'s rule, generalised to any bill of the selection. `CounterError`'s `excess` gains `billId` and `bill`; `refund-excess` carries `billId`; `#onRefundExcess` switches first where needed and refuses to open anything but that bill.
+- [ ] **GREEN.** The file; `.split-table.test.ts`; `src/till-app-parties.test.ts`; `src/till-app-table-service.test.ts`.
+- [ ] **Deletion controls.** Bill name in front removed → its case red. Reopen removed → reopen case red. `billId` dropped from the `refund-excess` event → the not-on-screen case red, naming the on-screen bill's payment. `errorKey` not cleared on reopen → the "no banner" assertion red. The table-gone check after a lost reply removed → the first lost-reply case red, showing `table.error` for a split that went through.
+- [ ] **Commit.** `git commit -s -m "A803 4c: Split a table's refusals say what happened at the foot of the panel and keep the picks"`.
+
+## Task 12e: take-over rows (about 35 calls)
+
+**Files.** `apps/till/src/till-app.ts`, screen, `till-app-split-table.test.ts`.
+
+- [ ] **Failing tests.** `split-take-over` opens the screen's take-over dialog; confirming calls `sync.takeOverOn`; `takeOversAnswered` moves on; a refusal shows `takeOverRefusalError`; the row goes after a successful read; `#takeOverClosed` focuses the row's button while it is still there and the bill's tick otherwise; a tick taken after the take-over records the new state, so Split sends with no refusal.
+- [ ] **RED.** `pnpm --filter @waitron/till exec vitest run src/till-app-split-table.test.ts -t 'take-over'`.
+- [ ] **Implement.** D18. The screen's `takeOverPending` learns a `billId`, or a bill-less draft keeps today's path.
+- [ ] **GREEN.** The file; `src/screens/till-table-order-screen.test.ts` take-over cases unedited.
+- [ ] **Deletion control.** `takeOverOn` → `takeOver` → the row's case red with the on-screen bill's edit.
+- [ ] **Commit.** `git commit -s -m "A803 4c: taking over a bill's unsent dishes from Split a table's panel"`.
 
 ## Task 13: A590 (about 35 calls)
 
 **Files.** `apps/till/src/till-app.ts`, `screens/till-floor-screen.ts`, `state/floor-today.ts`, `till-app-table-service.test.ts`, `till-floor-screen*.test.ts`.
 
-- [ ] **Failing test.** `till-app-table-service.test.ts`, `A803 applies split room revision before reload`: tables at revision 1; `splitTable` answers `zoneRevisions: { [zone]: 9 }`; the next `getTablesState` is held (R5's mechanics); `back-to-floor`; a floor edit through the shortest control in reach (`[data-update-layout]` as `till-app-floor-layout.test.ts:127-135` presses it, with that file's zone set-up; or the details sheet); assert the API got revision **9**, and no `floor_today.out_of_date` shown. Release the read: it wins afterwards.
+- [ ] **Failing test.** `till-app-table-service.test.ts`, `A803 applies split room revision before reload`: tables at revision 1; `splitTable` answers `zoneRevisions: { [zone]: 9 }`; the next `getTablesState` is held (R5's mechanics); `back-to-floor`; a floor edit through the shortest control in reach (`[data-update-layout]` as `till-app-floor-layout.test.ts:127-135` presses it, with that file's zone set-up; or the details sheet). This file's fixture has `capabilities: ["print-receipt"]` (`:154`), so the case must add `take-orders` or the button is not drawn: the review's first attempt printed `button false`. Assert the API got revision **9**, and no `floor_today.out_of_date` shown. Release the read: it wins afterwards.
 - [ ] A handheld twin, set up as `till-app-parties.test.ts:1571-1580`: the floor mounts after the split and still sends 9.
 - [ ] `till-floor-screen`: a poll started **before** the answer and applied after it does not replace the carried revision; a read started after it does; own `#carried` newer than the app's wins, and the reverse.
-- [ ] **RED and first probe.** `pnpm --filter @waitron/till exec vitest run src/till-app-table-service.test.ts -t 'A803 applies split room revision'`. What the failing case prints: the API called with revision 1. If it prints 9 before any fix, the window cannot be hit: stop and record that (A590's own "or confirm the window cannot be hit").
+- [ ] **RED and first probe.** `pnpm --filter @waitron/till exec vitest run src/till-app-table-service.test.ts -t 'A803 applies split room revision'`. What the failing case prints: the API called with revision 1. The review's throwaway run printed `A590 sent revision [1]`, so expect that. If it prints 9 before any fix, the window cannot be hit: stop and record that (A590's own "or confirm the window cannot be hit").
 - [ ] **Implement.** D19.
 - [ ] **GREEN.** The two files; `src/screens/till-floor-screen.today-joins.test.ts`; till types.
 - [ ] **Deletion control.** The store on answer removed → red, revision 1. `tablesReadAt < answeredAt` dropped → the read-after case red.
 - [ ] **Commit.** `git commit -s -m "A803 4c: the floor keeps the room's revision a split answered (A590)"`.
 
-## Task 14a: the old window and steps go (about 45 calls)
+## Task 14a: the old window and steps go (about 60 calls)
 
 Waits for Question 2. Built on its default; the PR cannot land until it is answered.
 
 - [ ] Consumer trace, run first and listed in the ledger:
-  `rg -n 'split-guests|SplitGuests|split-table-bill|split-table-open|splitTablePrompts|split_table_bill_heading|split_no_bill|split_guests_title' apps docs/developers docs/operations scripts`.
-- [ ] **Failing check.** It cannot be red by a test; the check is that `rg` above prints only the historical dated plans after the edit (4a's Task 9b precedent).
-- [ ] Delete `widgets/split-guests-dialog.ts`, its three test files, the screen's `split-table-bill`, `#splitGuestsDialog`, `#splitTableBills`' bill buttons, `split-table-open`, and the words. Delete the screen cases in "Deleted checks" whose new home now exists, confirming each home exists by name.
-- [ ] `design-system.md:2871`, `:2883`, `:1090-1095`: name the panel's guests, not the window, and the focus sentence. `conventions-data.md:4727` stays true (`guestCounts`).
-- [ ] **GREEN.** All of `src/screens/till-table-order-screen*.test.ts`, `src/till-app-parties.test.ts`, `src/till-app-table-service.test.ts`, `src/widgets/split-picker*.test.ts`; till types; `pnpm exec vitest run scripts/native-form-fields.test.ts`.
+  `rg -n 'split-guests|SplitGuests|split-table-bill|splitPanelLive|split_table_bill_heading|split_no_bill|split_guests_title' apps docs/developers docs/operations scripts`. `split-table-open` and `#splitTablePrompts` stay (D20), so they are not in it. Also `rg -n 'data-target="none"' apps/till/src`, which must end empty.
+- [ ] **Failing check.** It cannot be red by a test; the check is that the `rg` above prints only the historical dated plans after the edit (4a's Task 9b precedent).
+- [ ] Move `SplitGuestsDetail` to `widgets/guest-count.ts` and its imports with it (`till-table-order-screen.ts:117`, `:266`). Delete `widgets/split-guests-dialog.ts`, its three test files, the screen's `split-table-bill`, `#splitGuestsDialog`, `#splitTableBills`' bill buttons, `splitPanelLive` from the screen, the app and every test, `billId` from `SplitTableDetail`, `SplitRefusal` and `split-table-open`, the app's mapping from it, and the words. The comment at `till-table-order-screen.ts:2050` loses "split-guests".
+- [ ] Row 18b: every remaining `split-table` emit and stub in `till-app-parties.test.ts` and `till-app-table-service.test.ts` sends `selection`, each pinned behaviour otherwise unchanged. Delete rows 23–26's old cases and the screen cases in "Deleted checks" whose new home now exists, confirming each home exists by name.
+- [ ] `design-system.md:2871`, `:2883`, `:1090-1095`: name the panel's guests, not the window, and the focus sentence; `:2883` keeps its "reconnect case", now in `.split-table.unsaved.test.ts`. `conventions-data.md:4727` stays true (`guestCounts`).
+- [ ] **GREEN.** All of `src/screens/till-table-order-screen*.test.ts`, `src/till-app-parties.test.ts`, `src/till-app-table-service.test.ts`, `src/till-app-split-table.test.ts`, `src/widgets/split-picker*.test.ts`; till types; `pnpm exec vitest run scripts/native-form-fields.test.ts`.
 - [ ] **Commit.** `git commit -s -m "A803 4c: the one-bill split steps and guests window go"`.
 
 ## Task 14b: the old request goes (about 35 calls)
@@ -924,20 +1181,20 @@ Waits for Question 2. Built on its default; the PR cannot land until it is answe
 
 ## Task 15: guides and the design contract (about 30 calls)
 
-- [ ] EN and ES: the section of Question 1 in `guide/{en,es}/table-service.md`, before `{#held-dishes-move}`, one heading `{#split-table}` in both. Write each sentence from the code built and keep it only if it changes what staff do (root `CLAUDE.md` §3, A803 4b's Build record). Check the ES names against the till's strings by `rg`, not memory: **Tomar el pedido**, **Mover clientes**, **Separar**, **Separar igualmente**.
+- [ ] EN and ES: the section of Question 1 in `guide/{en,es}/table-service.md`, before `{#held-dishes-move}`, one heading `{#split-table}` in both. Write each sentence from the code built and keep it only if it changes what staff do (root `CLAUDE.md` §3, A803 4b's Build record). Question 1's text has already lost the sentences on a part-paid bill and on everything ticked, which the screen itself says; do not put them back. Check the ES names against the till's strings by `rg`, not memory: **Tomar el pedido**, **Mover clientes**, **Separar**, **Separar igualmente**.
 - [ ] Remove nothing else, and leave `#held-dishes-move` as the owner cut it. `table-service.md:345-346`'s "A table split off with a bill starts again at Bill 1" stays true and gets "with bills". If a sentence there is now untrue, fix it in both languages.
-- [ ] `design-system.md` "The dish picker" (`:5795`): the whole-bill header, `whole` rows, the summary and notes, take-over rows, presented and everything-ticked, in the section's present-tense form, each guard named with what it does not see.
+- [ ] `design-system.md` "The dish picker" (`:5795`): the whole-bill header, `whole` rows, the summary and notes, take-over rows, presented and everything-ticked, in the section's present-tense form, each guard named with what it does not see. The action panel entry (`:1090`) gains that this panel's refusals sit at its foot, per Forms, and the till's banner only when no panel can reopen.
 - [ ] **G.** Guide checks; `git diff --stat` shows both twins.
 - [ ] **Commit.** `git commit -s -m "A803 4c: guides and design contract for Split a table's picker"`.
 
 ## Task 16: LOOK (about 45 calls; no commit unless a defect is fixed, test first)
 
 - [ ] `memory_pressure | grep free`; `wa-wt demo waitron-feat-a803-4c-split-table-picker`. Screenshots stay in `~/waitron-campaign-c/a803-4c-look/`; never commit or copy them to Drive; show them to the owner directly.
-- [ ] EN and ES, light and dark, 390 and 1280 px, and compare with the boards in `boards/`:
+- [ ] EN and ES, light and dark, 390 and 1280 px, and compare with the boards in `boards/`. Set up each state once and loop the eight combinations in one script, one call per state; do not spend a call per screenshot:
   - **Board 08:** nothing ticked; one bill whole (pale rows); `some` with a stepper at "2 of 4" and "1 of 2"; a dish on hold among the rows; the summary, the note and the steppers; a long dish name; a named bill and a long party name; four bills, to judge scrolling in the 22rem panel.
   - **Board 09:** after the split, both tables, the new table's Bills 1, 2, 3; the staying bill on screen; the kitchen's decoded MOVED job for only the dish that moved (decoded, not paper; physical printing stays unmeasured).
   - **Board 10:** a part-paid bill, its paid row, `{amount} paid`; a contribution's floor-greyed row; a take-over row before and after; everything ticked, with Move guests and Split anyway; nothing ticked.
-  - A presented bill. Refusals: a dish paid from another tab then Split, its banner beside the reopened panel at 390 px (the Departures row); a refused count under its stepper.
+  - A presented bill. Refusals: a dish paid from another tab then Split, its sentence at the foot of the reopened panel, seen without scrolling away from Split at 390 px; a refusal with Refund, its button included; a refused count under its stepper with `form.fix_fields` at the foot.
   - Keyboard: Tab order, Space on a tick, Enter from a stepper, focus to the heading on open, focus back to the ⋮ after Back.
   - **Touch:** steppers and ticks at `--wt-tap-min` at 390 px. A1265 (⋮ taller than the room) untouched, but measure and record.
 - [ ] A defect found is fixed test first in its own commit or added to the backlog in Task 18. A wording that does not fit updates Question 1 before landing.
@@ -946,20 +1203,25 @@ Waits for Question 2. Built on its default; the PR cannot land until it is answe
 
 - [ ] Every guard suite above, each status read. `pnpm --filter @waitron/till exec vitest run src/state src/widgets/portion-picker.test.ts src/widgets/split-picker.test.ts src/widgets/split-picker.a11y.test.ts src/screens/till-table-order-screen.split-table.test.ts src/screens/till-table-order-screen.split-table.unsaved.test.ts src/screens/till-table-order-screen.a11y.test.ts src/screens/till-table-order-screen.table-menu.test.ts src/screens/till-table-order-screen.actions-unsaved.test.ts src/till-app-split-table.test.ts src/till-app-parties.test.ts src/till-app-table-service.test.ts src/till-app-drafts.test.ts`, after checking free memory.
 - [ ] Task 7's timing: 20 bills of 20 lines, time the read, record it.
-- [ ] Audits: `rg -n 'locationId|location_id' <every new test file>` prints nothing; `rg -n 'A803 selection|A803 split|A803 race replay|A803 applies split room revision'` lists every named case; `rg 'split-guests|split_no_bill'` prints only dated plans; the Schema diff prints nothing; `git diff --stat <merge base> -- packages/fiscal-verifactu` prints nothing.
+- [ ] Audits: `rg -n 'locationId|location_id' <every new test file>` prints nothing; `rg -n 'A803 selection|A803 split|A803 race replay|A803 applies split room revision'` lists every named case; `rg 'split-guests|split_no_bill|splitPanelLive'` prints only dated plans; the Schema diff prints nothing; `git diff --stat <merge base> -- packages/fiscal-verifactu` prints nothing.
 - [ ] Spec walk, §3.7 line by line, naming the test per line, in the ledger. CI owns package coverage; do not add a whole-workspace run for this.
 
-## Task 17b: deletion controls re-run (no commit; about 60 calls)
+## Task 17b: deletion controls re-run, server (no commit; about 45 calls)
 
-- [ ] Re-run each deletion control of Tasks 1–13 at the current head, one at a time: name the edit, the case, the red message, green after restore, in the ledger. A control that stays green is a finding: find out why before going on. Restore with `git checkout -- <file>`, then `git status --short` is empty.
+- [ ] Re-run each deletion control of Tasks 1–7 at the current head: name the edit, the case, the red message, green after restore, in the ledger. **One call per control:** one shell command that makes the edit, runs the named case, prints the count and restores. Restore with `git checkout -- <file>`, then `git status --short` is empty. A control that stays green is a finding: find out why before going on.
+
+## Task 17c: deletion controls re-run, till (no commit; about 60 calls)
+
+- [ ] The same for Tasks 8–13, one call per control, after checking free memory. Beside another browser run only well above 15% free.
 
 ## Task 18: backlog, record pass, PR (about 30 calls)
 
 - [ ] `docs/backlog.md`: delete A590 and `docs/backlog/till.md`'s A590 detail (its check passed, Task 13), its decision left where a comment cites it (`rg A590`). A803's entry and detail (`docs/backlog.md:2050`, `docs/backlog/till.md:2996`): 4c has landed; pre-bills remain, through A446. A1327's and A1333's texts gain finding 14's sentence.
-- [ ] New short entries, each only if still true: Join and Move guests from the order screen drop the room revision (finding 11); A773 §6's take-over rows are built for Split a table only and not for joins and moves (finding 7); a LOOK finding left open; A1192 still prints a slip per portion; if Question 3 stays at (A), the "name gone" case as an open question with a pointer to it.
-- [ ] Dated one-line pointers, never rewrites: spec §3.7 "Bill numbers"; `2026-11-01-a803-4-portion-picker.md` Cut 4c: "built from `2026-11-04-a803-4c-split-table-picker.md`, whose findings correct this outline".
+- [ ] New short entries, each only if still true: Join and Move guests from the order screen drop the room revision (finding 11); A773 §6's take-over rows are built for Split a table only and not for joins and moves (finding 7); a LOOK finding left open. A1192 is already in the backlog (`docs/backlog.md:1900`): a split's slips are one more place it shows, and it gets no new entry.
+- [ ] A650's decision in `docs/backlog/till.md:2023-2034` is kept and gains one dated sentence: "2026-11-04, A803 4c: Split a table no longer tells bills that stay, by spec §3.7, except where a name on their paper has gone", worded to Question 3's answer. Moves to `## Decisions and deliberate limits` if not already there; never deleted.
+- [ ] Dated one-line pointers, never rewrites: spec §3.7 "Bill numbers"; `2026-11-01-a803-4-portion-picker.md` Cut 4c: "built from `2026-11-04-a803-4c-split-table-picker.md`, whose findings correct this outline"; `2026-10-14-a650-moved-slips-design.md` §0 ruling 1 and its rows 8, 9 and 18: the same sentence as above.
 - [ ] **Record pass.** Append "## Build record (4c)" to this plan: what was built versus planned, departures with reasons, line numbers that moved, the control table.
-- [ ] PR body in plain English: what the waiter and the kitchen see; no venue reset, no schema change; "Changed test checks" (the 21 rows) and "Deleted checks"; "For the owner": Questions 1 and 2 block landing; 3 and 4's defaults; that the route now issues an invoice for a bill it leaves fully paid, by the function Move dishes calls, no fiscal function changed, and that the lane's "truly fiscal PRs wait for the owner" rule is the driver's to judge on that sentence. Then `/finish-branch` with this plan named.
+- [ ] PR body in plain English: what the waiter and the kitchen see; no venue reset, no schema change; "Changed test checks" (every row), "Moved till-app cases" and "Deleted checks"; "For the owner": Questions 1 and 2 block landing; Question 3's default, naming the two rulings; that the route now issues an invoice for a bill it leaves fully paid, by the function Move dishes calls, no fiscal function changed, and that this is why the PR waits for the owner to land it. Then `/finish-branch` with this plan named.
 - [ ] Ledger `Status: in progress` until landed.
 
 ## Task list and sizes
@@ -968,30 +1230,35 @@ Waits for Question 2. Built on its default; the PR cannot land until it is answe
 | --- | --- | --- | --- |
 | 0 | preflight, questions posted, ledger | 15 | no commit |
 | 1 | allergies follow any number of bills | 30 | green |
-| 2 | several whole bills leave together (`A803 split`) | 65 | green |
+| 2 | several whole bills leave together (`A803 split`) | 70 | green |
 | 3a | who must own what | 35 | green |
 | 3b | loose dishes on one new bill (`A803 split`) | 60 | green |
-| 4 | MOVED only for moved dishes; rows 1–10 | 50 | green |
-| 5 | route takes the selection; issuance | 45 | green |
+| 4 | MOVED for moved dishes and names gone; rows 1–5, 8, 9 | 55 | green |
+| 5 | route takes the selection; issuance; row 18a | 50 | green |
 | 6 | `A803 race replay` | 45 | green |
 | 7 | one read for the panel | 45 | green |
-| 8 | selection model (`A803 selection`) | 55 | green |
+| 8 | selection model (`A803 selection`), `splitSourcesFrom` | 60 | green |
 | 9 | picker across bills, a11y | 60 | green |
 | 10 | take-over on any bill | 45 | green |
-| 11a | panel, ticks, guests | 65 | green |
-| 11b | unsaved work, re-reads, refusals, everything ticked | 60 | green |
-| 12a | app reads, sends, follows | 55 | green |
-| 12b | refusals and take-over rows | 55 | green |
+| 11a | panel, ticks, guests, not live | 70 | green |
+| 11b | unsaved work, out of the page | 55 | green |
+| 11c | re-reads, reopening, everything ticked | 55 | green |
+| 12a | app reads every bill | 35 | green |
+| 12b | app sends and follows | 50 | green |
+| 12c | panel goes live; what the waiter saw; row 22 | 60 | green |
+| 12d | refusals, Refund, lost reply; rows 23–26 | 60 | green |
+| 12e | take-over rows | 35 | green |
 | 13 | A590 | 35 | green |
-| 14a | old window and steps go (Question 2) | 45 | green |
+| 14a | old window and steps go (Question 2); row 18b | 60 | green |
 | 14b | old request goes | 35 | green |
 | 15 | guides, design contract | 30 | green |
 | 16 | LOOK boards 08–10 | 45 | no commit |
 | 17a | whole slice | 30 | no commit |
-| 17b | deletion controls | 60 | no commit |
+| 17b | deletion controls, server | 45 | no commit |
+| 17c | deletion controls, till | 60 | no commit |
 | 18 | backlog, record pass, PR | 30 | green |
 
-About 1,100 calls in 24 tasks, none planned above 65. The outline guessed 12 tasks.
+About 1,360 calls in 29 tasks, none planned above 70. The outline guessed 12 tasks.
 
 ## Against the master plan's slice 4
 
@@ -1002,9 +1269,9 @@ About 1,100 calls in 24 tasks, none planned above 65. The outline guessed 12 tas
 | A666, A757 intact | Task 2 case 11 |
 | `A803 selection`: whole-bill toggles, deselect becomes loose, a whole part-paid bill | Task 8, Task 9 |
 | `A803 race replay` for splits, two tills on one party, lost reply | Task 6 |
-| Recheck every `BillEditExpected`, ask take-over, no bulk | D4, Tasks 3a, 10, 12b |
+| Recheck every `BillEditExpected`, ask take-over, no bulk | D4, D20, Tasks 3a, 10, 12c, 12e |
 | Decoded MOVED names only moved dishes | Task 4 |
-| Cancel, Escape, navigation, switch bill, reconnect; reason not by colour alone | Tasks 9, 11b |
+| Cancel, Escape, navigation, switch bill, reconnect; reason not by colour alone | Tasks 9, 11b (its "Out of the page" cases) |
 | A590 `A803 applies split room revision before reload` | Task 13 |
 | LOOK boards 08–10 | Task 16 |
 | EN/ES guides, design-system contract, backlog | Tasks 15, 18 |
@@ -1044,8 +1311,9 @@ Free memory read 72–73% before the browser and sweep runs.
   empty and nothing split; its output is not used. Second attempt: `floor while order open: true`,
   `split called: 1, read held: true`, `floor after back: true, same instance true`. So on a till the floor
   stays mounted. **Not run:** the handheld (D19 rests on a comment in that test file and `#tabBody` read
-  at `till-app.ts:18988-19080`; Task 13's twin runs it), and no floor edit was sent, so A590's window
-  itself is still unmeasured: Task 13's RED step measures it, and says what to do if it cannot be hit.
+  at `till-app.ts:18988-19080`; Task 13's twin runs it), and no floor edit was sent, so this run did not
+  measure A590's window. Plan review 1 did (see "Could not be established"); Task 13's RED step runs it
+  again, and says what to do if it cannot be hit.
 - **R6, reads** (each by reading, not run): `guardParty` moves the revision (`parties.ts:386-395`);
   `requireBillOfParty` refuses `placed` (`parties.ts:254-270`); `refuseOrderOverSimplifiedLimit`
   (`working-order.ts:1482-1497`) from `moveOrderLines`; `takeOverDraft` refuses another bill's edit
@@ -1057,9 +1325,37 @@ Free memory read 72–73% before the browser and sweep runs.
 - **R8, A1308's hold.** `~/waitron-campaign-shared/a1308-hold.md` read. Lane C's 4b was named as finishing;
   4c changes no table, so it may start under the rule "Work that touches no tables carries on".
 
+Revision 1, at `ae09c6c03f`, same worktree. Each throwaway edit was reverted, and `git status --short`
+was empty after each. Free memory read 74% before the sweep.
+
+- **R9, the name-gone rule (Question 3's default).** What a failing case prints: an eighth red name, or
+  `today-names.test.ts:468`, `:482` or `:751` among the reds. Edit: `splitTable` read
+  `readPartiesSentWork(tx, [partyId])` where `withMovedSlips` read it, ran its write with a `null` reach,
+  then told the leaving bill by `kitchenToBeTold` and every other entry only when `before.places.names` had
+  entries and none was in `after.names`. `MOVES` sweep (log:
+  `~/waitron-campaign-c/a803-4c-look/probes/r1-b-filter.log`): 48 files, **7 failed, 2,958 passed**: rows 1,
+  2, 3, 4, 5, 8 and 9, by their case names. R2 is the control. Limit: today's one-bill command, so it says
+  nothing of loose sources; Task 4's cases 6 to 8 are those.
+- **R10, Task 2's RED.** What a failing claim prints: `tab.not_open`. Edit: `move-merge.test.ts:786` handing
+  `{ wholeBillIds: [tabId], loose: [] }`, then `{ wholeBillIds: [], loose: [] }`, to today's fixture.
+  `pnpm exec vitest run src/move-merge.test.ts -t 'row 8'`, twice: `Error: Unknown named parameter
+  'wholeBillIds'`, 1 failed and 44 skipped each time. The review recorded `ERR_INVALID_STATE` for this
+  input; I did not print the error's `code`, so the plan quotes only the message.
+- **Claims this revision makes that rest on a read, not a run.** Each is run by the task named: that the
+  `wt-form-actions` string cannot carry a button (D16, Task 11c); that the panel's bottom message can be
+  drawn with `formMessageStyles` and the copied rules (Task 11c, Task 16); that observing bills only when
+  ticked keeps all ten cases' behaviour (Task 12c); that `#leavingActions` gives Keep and Discard for
+  Refund as for a bill switch (Task 11c); that `billToShow(undefined, read)` is right for a bill just paid
+  (Task 12b); that an unknown party answers `{ bills: [] }` (Task 7); that the panel's state survives
+  disconnect as `moveDishesPicks` does (Task 11b). From the review and not re-run: `[ 'fired', 'held',
+  'held' ]` (D5) and `A590 sent revision [1]` (Task 13).
+
 ### Could not be established at planning
 
-- Whether A590's window can actually be hit (R5's limit).
+- Whether A590's window can actually be hit was open at planning (R5's limit). Plan review 1 ran a
+  throwaway case: split answered `zoneRevisions: { z1: 9 }`, next read held, `back-to-floor`, Update layout
+  pressed, `A590 sent revision [1]`; a window that could not be hit would have printed `[9]`. So I believe it
+  can be hit. Task 13's RED is the receipt that counts.
 - Whether the action panel's 22rem width carries four bills, steppers and the summary. Task 16 decides;
   a change of panel width is a shared layout matter, so it goes to the owner rather than being widened
   here (board 08 draws it wider).
