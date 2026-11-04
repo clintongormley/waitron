@@ -1389,6 +1389,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The box you chose did not answer, or its answer could not be checked, so the handover did not start. This box keeps selling. Try again with a new handover once that box is running.",
     es: "El equipo elegido no ha respondido, o no se ha podido comprobar su respuesta, así que el traspaso no ha empezado. Este equipo sigue vendiendo. Inténtalo de nuevo con otro traspaso cuando ese equipo esté en marcha.",
   },
+  "handover.restarted_before_stepdown": {
+    en: "This box restarted before the handover took effect, so that handover was cancelled and this box keeps selling. Start a new handover to try again.",
+    es: "Este equipo se ha reiniciado antes de que el traspaso surtiera efecto, así que ese traspaso se ha cancelado y este equipo sigue vendiendo. Empieza un traspaso nuevo para volver a intentarlo.",
+  },
+  "handover.membership_changed": {
+    en: "The venue's details or its list of boxes changed after this handover was started, so it was cancelled and this box keeps selling. Start a new handover to try again.",
+    es: "Los datos del local o su lista de equipos han cambiado después de empezar este traspaso, así que se ha cancelado y este equipo sigue vendiendo. Empieza un traspaso nuevo para volver a intentarlo.",
+  },
   "handover.summary_failed": {
     en: "The old box could not read part of the venue's data from its final copy, so it sent neither the copy nor its description. Its venue data is unchanged. Asking again makes it take a new copy and read that.",
     es: "El equipo antiguo no ha podido leer parte de los datos del local en su copia final, así que no ha enviado ni la copia ni su descripción. Sus datos del local no han cambiado. Si se vuelve a pedir, hará una copia nueva y la leerá.",

@@ -209,6 +209,13 @@ declare module "@waitron/shared" {
     "handover.destination_unaddressable": { destinationNodeId: string };
     /** A handover's spare did not answer in time, or gave an answer this box could not verify. */
     "handover.destination_unreachable": { destinationNodeId: string };
+    /** A start request repeats a handover this box closed at a restart, before it stepped down. */
+    "handover.restarted_before_stepdown": Record<string, never>;
+    /**
+     * A start request repeats a handover whose taxpayer, environment, chart term or chart digest
+     * differ from this box's own now, so this box closed it rather than offer it again.
+     */
+    "handover.membership_changed": Record<string, never>;
     /**
      * A node booting as primary found, by reconciling with its cloud peer, a higher-term membership
      * document that fences it, so it boots read-only rather than sell beside the promoted primary

@@ -199,6 +199,14 @@ describe("the repairs before the start check", () => {
     expect(outcome.result).toBe("proceed");
   });
 
+  it("records the refusal a repeat of the start request answers", async () => {
+    const b = await box(suite);
+    await insertOperation(suite, b.nodeId, { role: "source", state: "prepared" });
+    await repairAtStart({ node: suite.node, nodeId: b.nodeId });
+    const [event] = await suite.node.select().from(nodeHandoverEvents);
+    expect(event!.detail).toEqual({ code: "handover.restarted_before_stepdown", params: {} });
+  });
+
   it("with that peer silent, the box waits", async () => {
     const b = await box(suite);
     await insertOperation(suite, b.nodeId, { role: "source", state: "prepared" });

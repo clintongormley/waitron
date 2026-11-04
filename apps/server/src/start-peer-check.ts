@@ -27,7 +27,7 @@ import {
   type StartCheckResult,
 } from "./boot-peer-check.js";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
-import { advanceHandover } from "./handover-store.js";
+import { abandonHandover } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { saveVerifiedMembership } from "./node-membership-api.js";
 
@@ -64,8 +64,9 @@ export const finishInterruptedActivation: (deps: NodeDeps) => Promise<void> = ()
 export async function repairAtStart(deps: NodeDeps): Promise<void> {
   const open = await readOpenHandoverOperation(deps.node, deps.nodeId);
   if (open !== null && open.role === "source" && open.state === "prepared")
-    await advanceHandover(deps, open.operationId, "abandoned", {
-      reason: "restarted_before_stepdown",
+    await abandonHandover(deps, open.operationId, {
+      code: "handover.restarted_before_stepdown",
+      params: {},
     });
   await finishInterruptedActivation(deps);
 }

@@ -23,6 +23,12 @@ export interface HandoverStoreDeps {
   readonly nodeId: string;
 }
 
+/** Why a source operation closed, and so what a repeat of its start request answers. */
+export interface HandoverRefusal {
+  readonly code: ErrorCode;
+  readonly params: Readonly<Record<string, string>>;
+}
+
 function beginTx(
   tx: NodeTransaction,
   nodeId: string,
@@ -107,6 +113,28 @@ export async function advanceHandoverTx(
     envelope: envelope === undefined ? null : canonicalize(envelope as unknown as CanonicalValue),
   });
   await advanceHandoverOperationTx(tx, nodeId, operationId, to, null);
+}
+
+/** Closes a source operation that never stepped down, storing the refusal a repeat answers. */
+export function abandonHandover(
+  deps: HandoverStoreDeps,
+  operationId: string,
+  refusal: HandoverRefusal,
+): Promise<void> {
+  return advanceHandover(deps, operationId, "abandoned", {
+    code: refusal.code,
+    params: { ...refusal.params },
+  });
+}
+
+/** The refusal `abandonHandover` stored as an event's detail. */
+export function storedRefusal(detail: Readonly<Record<string, unknown>>): HandoverRefusal {
+  const { code, params } = detail;
+  // A fault in Waitron: `abandonHandover` is the only writer of a source's `abandoned`.
+  if (typeof code !== "string" || typeof params !== "object" || params === null) {
+    throw new Error("a stored handover refusal has no code or params");
+  }
+  return { code: code as ErrorCode, params: params as Record<string, string> };
 }
 
 /** Records why this box is waiting at its current step, beside the state it keeps. */

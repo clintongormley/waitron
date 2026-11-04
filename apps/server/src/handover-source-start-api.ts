@@ -1,25 +1,35 @@
 import type { Context, Hono } from "hono";
 import { readNodeMembership } from "@waitron/db";
 import {
+  bindingFingerprint,
   isOperationId,
   verifyEnvelope,
   type HandoverBinding,
   type SignedHandoverEnvelope,
 } from "@waitron/handover";
 import { authorizeManager, type TotpKeyRing } from "@waitron/identity";
-import { servingPrimaryNodeId, type CanonicalValue } from "@waitron/membership";
+import {
+  servingPrimaryNodeId,
+  type CanonicalValue,
+  type SignedMembershipDocument,
+} from "@waitron/membership";
 import { readHandoverEvent, readHandoverOperation, type HandoverOperation } from "@waitron/node-db";
 import {
   createErrorBoundary,
   readRawJsonBody,
   requireManagementSession,
 } from "@waitron/server-kit";
-import { AppError, isUuid, type ErrorCode } from "@waitron/shared";
+import { AppError, isUuid } from "@waitron/shared";
 import { askPeerStatus, originOf, postToBox } from "./boot-peer-check.js";
 import { confirmFreshSignIn } from "./fresh-sign-in.js";
 import { currentBinding, peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { handoverPageAt, handoverPageOf } from "./handover-status-api.js";
-import { advanceHandover, beginHandoverFromOffer } from "./handover-store.js";
+import {
+  abandonHandover,
+  beginHandoverFromOffer,
+  storedRefusal,
+  type HandoverRefusal,
+} from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import { createPasswordThrottle } from "./password-throttle.js";
@@ -68,31 +78,34 @@ const STATUS = {
   "handover.destination_not_spare": 409,
   "handover.destination_unaddressable": 409,
   "handover.destination_unreachable": 409,
+  "handover.restarted_before_stepdown": 409,
+  "handover.membership_changed": 409,
 } as const;
 
-// The refusals the offer route answers, and the one param each carries. A refusal is not signed
-// and its params reach this box's log, so nothing else from it is kept.
-const OFFER_REFUSALS: Readonly<Record<string, string | null>> = {
-  "handover.request_invalid": "field",
+const FIELD_NAME = /^[A-Za-z][A-Za-z.]{0,63}$/;
+
+function isFieldName(value: unknown): boolean {
+  return typeof value === "string" && FIELD_NAME.test(value);
+}
+
+// The refusals the offer route answers, and the one param each carries in the form it sends. A
+// refusal is not signed, and its params reach this box's log, its answer and its stored detail.
+const OFFER_REFUSALS: Readonly<
+  Record<string, { name: string; isValid: (value: unknown) => boolean } | null>
+> = {
+  "handover.request_invalid": { name: "field", isValid: isFieldName },
   "handover.peer_unknown": null,
   "handover.not_a_spare": null,
   "handover.promotion_running": null,
-  "handover.membership_mismatch": "operationId",
-  "handover.operation_in_progress": "operationId",
-  "handover.operation_conflict": "operationId",
+  "handover.membership_mismatch": { name: "operationId", isValid: isOperationId },
+  "handover.operation_in_progress": { name: "operationId", isValid: isOperationId },
+  "handover.operation_conflict": { name: "operationId", isValid: isOperationId },
 };
-
-const REFUSAL_PARAM_MAX_LENGTH = 64;
 
 interface StartRequest {
   operationId: string;
   destinationNodeId: string;
   signIn: unknown;
-}
-
-interface Refusal {
-  code: ErrorCode;
-  params: Record<string, string>;
 }
 
 function invalid(field: string): never {
@@ -123,17 +136,23 @@ function parseJson(text: string): unknown {
   }
 }
 
-function refusalIn(text: string): Refusal | null {
+function refusalIn(text: string): HandoverRefusal | null {
   const answer = parseJson(text);
   const error = isRecord(answer) ? answer.error : undefined;
   if (!isRecord(error) || typeof error.code !== "string") return null;
   if (!Object.hasOwn(OFFER_REFUSALS, error.code)) return null;
   const param = OFFER_REFUSALS[error.code]!;
-  const code = error.code as ErrorCode;
+  const code = error.code as HandoverRefusal["code"];
   if (param === null) return { code, params: {} };
-  const value = isRecord(error.params) ? error.params[param] : undefined;
-  if (typeof value !== "string" || value.length > REFUSAL_PARAM_MAX_LENGTH) return null;
-  return { code, params: { [param]: value } };
+  const value = isRecord(error.params) ? error.params[param.name] : undefined;
+  if (!param.isValid(value)) return null;
+  return { code, params: { [param.name]: value as string } };
+}
+
+/** `id`'s entry in `held`, when the chart names it a spare. */
+function spareIn(held: SignedMembershipDocument, id: string) {
+  const entry = held.body.nodes.find((node) => node.nodeId === id);
+  return entry?.standing === "serving-secondary" ? entry : null;
 }
 
 /** `POST /management-api/handover` — a person holding `node.promote` starts a controlled handover. */
@@ -149,7 +168,7 @@ export function mountHandoverSourceStartApi(
   // One request at a time, so one cannot record `abandoned` beneath another that goes on to step down.
   let running: string | null = null;
 
-  const unreachable = (destinationNodeId: string): Refusal => ({
+  const unreachable = (destinationNodeId: string): HandoverRefusal => ({
     code: "handover.destination_unreachable",
     params: { destinationNodeId },
   });
@@ -158,10 +177,13 @@ export function mountHandoverSourceStartApi(
     binding: HandoverBinding,
     contactUrl: string,
     envelope: string,
-  ): Promise<Refusal | null> => {
+  ): Promise<HandoverRefusal | null> => {
     const { destinationNodeId, operationId, sourceNodeId } = binding;
+    let keyOf: Awaited<ReturnType<typeof peerKeyOf>>;
     let answer: { status: number; text: string };
     try {
+      // Read before the offer goes, so a box that could not check the answer sends nothing.
+      keyOf = await peerKeyOf(deps);
       answer = await postToBox(
         exchange,
         destinationNodeId,
@@ -174,11 +196,7 @@ export function mountHandoverSourceStartApi(
     if (answer.status < 200 || answer.status > 299) {
       return refusalIn(answer.text) ?? unreachable(destinationNodeId);
     }
-    const verdict = verifyEnvelope<unknown>(
-      parseJson(answer.text),
-      "status",
-      await peerKeyOf(deps),
-    );
+    const verdict = verifyEnvelope<unknown>(parseJson(answer.text), "status", keyOf);
     if (!verdict.valid || verdict.signerNodeId !== destinationNodeId) {
       return unreachable(destinationNodeId);
     }
@@ -200,6 +218,11 @@ export function mountHandoverSourceStartApi(
     return null;
   };
 
+  const abandon = async (operationId: string, refusal: HandoverRefusal): Promise<never> => {
+    await abandonHandover(deps, operationId, refusal);
+    throw new AppError(refusal.code, refusal.params as never);
+  };
+
   const offerThenStepDown = async (
     c: Context,
     binding: HandoverBinding,
@@ -207,13 +230,7 @@ export function mountHandoverSourceStartApi(
     envelope: string,
   ): Promise<{ handoverPage: string }> => {
     const refused = await answerToOffer(binding, contactUrl, envelope);
-    if (refused !== null) {
-      await advanceHandover(deps, binding.operationId, "abandoned", {
-        code: refused.code,
-        params: refused.params,
-      });
-      throw new AppError(refused.code, refused.params as never);
-    }
+    if (refused !== null) return abandon(binding.operationId, refused);
     await deps.stepDownAfterOffer(c, binding);
     return { handoverPage: handoverPageAt(contactUrl, binding.operationId) };
   };
@@ -223,11 +240,11 @@ export function mountHandoverSourceStartApi(
     stored: HandoverOperation,
     request: StartRequest,
   ): Promise<{ handoverPage?: string }> => {
-    const { operationId } = request;
+    const { operationId, destinationNodeId } = request;
     if (
       stored.role !== "source" ||
       stored.scenario !== "controlled" ||
-      stored.destinationNodeId !== request.destinationNodeId
+      stored.destinationNodeId !== destinationNodeId
     ) {
       throw new AppError("handover.operation_conflict", { operationId });
     }
@@ -235,25 +252,37 @@ export function mountHandoverSourceStartApi(
       const event = await readHandoverEvent(deps.node, deps.nodeId, operationId, "abandoned");
       // A fault in Waitron: moving to `abandoned` records this event in the same transaction.
       if (event === null) throw new Error(`no abandoned event for handover ${operationId}`);
-      const { code, params } = event.detail as unknown as Refusal;
+      const { code, params } = storedRefusal(event.detail);
       throw new AppError(code, params as never);
     }
     if (stored.state !== "prepared") {
       return { handoverPage: await handoverPageOf(deps, stored) };
     }
+    const held = await readNodeMembership(deps.db);
+    if (held === null || servingPrimaryNodeId(held) !== deps.nodeId) {
+      return abandon(operationId, { code: "handover.not_main_box", params: {} });
+    }
+    const destination = spareIn(held, destinationNodeId);
+    if (destination === null) {
+      return abandon(operationId, {
+        code: "handover.destination_not_spare",
+        params: { destinationNodeId },
+      });
+    }
+    const binding = await currentBinding(
+      deps,
+      "controlled",
+      deps.nodeId,
+      destinationNodeId,
+      operationId,
+    );
+    if (bindingFingerprint(binding) !== stored.fingerprint) {
+      return abandon(operationId, { code: "handover.membership_changed", params: {} });
+    }
     const offer = await readHandoverEvent(deps.node, deps.nodeId, operationId, "offer");
     // A fault in Waitron: this route records the offer in the transaction that begins the operation.
     if (offer?.envelope == null) throw new Error(`no offer event for handover ${operationId}`);
-    const held = await readNodeMembership(deps.db);
-    const destination = held?.body.nodes.find(
-      (entry) => entry.nodeId === request.destinationNodeId,
-    );
-    return offerThenStepDown(
-      c,
-      stored.binding as unknown as HandoverBinding,
-      destination?.contactUrl ?? "",
-      offer.envelope,
-    );
+    return offerThenStepDown(c, binding, destination.contactUrl, offer.envelope);
   };
 
   const startNew = async (
@@ -267,8 +296,8 @@ export function mountHandoverSourceStartApi(
       throw new AppError("handover.not_main_box", {});
     }
     if (!deps.venueCanPromote) throw new AppError("handover.venue_not_supported", {});
-    const destination = held.body.nodes.find((entry) => entry.nodeId === destinationNodeId);
-    if (destination?.standing !== "serving-secondary") {
+    const destination = spareIn(held, destinationNodeId);
+    if (destination === null) {
       throw new AppError("handover.destination_not_spare", { destinationNodeId });
     }
     const { contactUrl } = destination;

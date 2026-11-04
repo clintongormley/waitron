@@ -15,10 +15,15 @@ import {
 } from "@waitron/membership";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { readHandoverRestriction, recordHandoverRestrictionTx } from "@waitron/node-db";
+import {
+  readHandoverOperation,
+  readHandoverRestriction,
+  recordHandoverRestrictionTx,
+} from "@waitron/node-db";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { StartedServer, StartServerSeams } from "./boot.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
+import { beginHandover } from "./handover-store.js";
 import { awaitListening, httpsVia } from "./testing/boot-harness.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
@@ -73,13 +78,13 @@ async function boot(
   options: {
     restricted: boolean;
     seams?: StartServerSeams;
-    beforeStart?: () => Promise<void>;
+    beforeStart?: (venue: Venue) => Promise<void>;
     tls?: boolean;
   },
 ): Promise<{ port: number; venue: Venue }> {
   beforeServerStarts();
   const venue = await setupVenue(suite.db);
-  await options.beforeStart?.();
+  await options.beforeStart?.(venue);
   const nodeId = venue.cfg.nodeId;
   const ring = loadKeyRing(KEY_ENV);
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, nodeId);
@@ -434,6 +439,38 @@ describe("a full start's stepdown, through its test seam", () => {
       status: 409,
       code: "handover.destination_not_spare",
     });
+  }, 60_000);
+
+  it("a retry of a handover the start closed gets a refusal with a code, on a real start", async () => {
+    let cookie = "";
+    const operationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const { port, venue } = await boot(suite, {
+      restricted: false,
+      tls: true,
+      beforeStart: async ({ cfg: { nodeId } }) => {
+        cookie = await adminCookie();
+        await beginHandover(
+          { node: suite.node, nodeId },
+          {
+            operationId,
+            scenario: "controlled",
+            venue: { country: "ES", taxId: "B12345678", environment: "preproduction" },
+            sourceNodeId: nodeId,
+            destinationNodeId: "00000000-0000-4000-8000-0000000000cc",
+            membership: { term: 0, digest: "a".repeat(64) },
+          },
+          "source",
+        );
+      },
+    });
+
+    const refused = { status: 409, code: "handover.restarted_before_stepdown" };
+    expect(await startHandoverSecurely(port, cookie)).toEqual(refused);
+    expect(await startHandoverSecurely(port, cookie)).toEqual(refused);
+
+    const nodeId = venue.cfg.nodeId;
+    expect((await readHandoverOperation(suite.node, nodeId, operationId))?.state).toBe("abandoned");
+    expect(await readHandoverRestriction(suite.node, nodeId)).toBeNull();
   }, 60_000);
 
   it("a full start answers a peer's signed query", async () => {

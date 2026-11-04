@@ -55,6 +55,7 @@ import { mountHandoverStatusApi } from "./handover-status-api.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
+import { repairAtStart } from "./start-peer-check.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 
@@ -73,6 +74,7 @@ const OFFER_PATH = "/api/node/handover/offer";
 const QUERY_PATH = "/api/node/peer-status";
 const STRANGER = { nodeId: OTHER_BOX, ...generateNodeKeyPair() };
 const PASSWORD_SIGN_IN = { method: "password", password: "correct horse" };
+const FORGED_TEXT = "<img src=x onerror=alert(1)>\nsecond line";
 
 const migrations = [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS];
 const mainBox = useVenueDb({ migrations });
@@ -117,8 +119,9 @@ function chartNodes(
 async function holdChart(
   nodes: MembershipDocumentBody["nodes"],
   boxes: readonly Database[] = [mainBox.db, spareBox.db],
+  term = 3,
 ): Promise<void> {
-  const body: MembershipDocumentBody = { term: 3, nodes };
+  const body: MembershipDocumentBody = { term, nodes };
   const held = {
     body,
     signerNodeId: self,
@@ -745,7 +748,19 @@ describe("an offer the spare refuses", () => {
       "handover.operation_in_progress",
       { operationId: "x".repeat(65) },
     ],
-    ["has no params", "handover.not_a_spare", undefined],
+    ["names a field in free text", "handover.request_invalid", { field: FORGED_TEXT }],
+    ["names a field of over 64 characters", "handover.request_invalid", { field: "x".repeat(65) }],
+    ["names an operation in free text", "handover.operation_in_progress", { operationId: "x" }],
+    [
+      "names an operation in free text, as a mismatch",
+      "handover.membership_mismatch",
+      { operationId: FORGED_TEXT },
+    ],
+    [
+      "names an operation in free text, as a conflict",
+      "handover.operation_conflict",
+      { operationId: FORGED_TEXT },
+    ],
     ["has a code the offer route never answers", "node.read_only", {}],
     ["has a code that is not text", 7, {}],
     [
@@ -753,16 +768,27 @@ describe("an offer the spare refuses", () => {
       "node.read_only",
       { undefined: "x" },
     ],
-  ])("does not repeat a refusal that %s", async (name, code, params) => {
+  ])("does not repeat a refusal that %s", async (_name, code, params) => {
     exchange = offerAnswers(() => answered(409, { error: { code, params } }));
-    if (name === "has no params") {
-      expect(await start()).toEqual(refusal(409, "handover.not_a_spare"));
-      return;
-    }
     expect(await start()).toEqual(
       refusal(409, "handover.destination_unreachable", { destinationNodeId: spare }),
     );
     await expectAbandoned("handover.destination_unreachable", { destinationNodeId: spare });
+  });
+
+  it("repeats a refusal with no params when its code carries none", async () => {
+    exchange = offerAnswers(() => answered(409, { error: { code: "handover.not_a_spare" } }));
+    expect(await start()).toEqual(refusal(409, "handover.not_a_spare"));
+    await expectAbandoned("handover.not_a_spare");
+  });
+
+  it("repeats a refusal naming a field with a dot in its name", async () => {
+    const params = { field: "membership.term" };
+    exchange = offerAnswers(() =>
+      answered(400, { error: { code: "handover.request_invalid", params } }),
+    );
+    expect(await start()).toEqual(refusal(400, "handover.request_invalid", params));
+    await expectAbandoned("handover.request_invalid", params);
   });
 
   it.each<[string, () => Exchange]>([
@@ -921,11 +947,32 @@ describe("the same operation again", () => {
     await start();
     await holdChart([chartNodes()[0]!], [mainBox.db]);
     stepDownAfterOffer.mockClear();
+    exchanged = [];
 
     expect(await start()).toEqual(
-      refusal(409, "handover.destination_unreachable", { destinationNodeId: spare }),
+      refusal(409, "handover.destination_not_spare", { destinationNodeId: spare }),
     );
 
+    expect(exchanged).toEqual([]);
+    await expectAbandoned("handover.destination_not_spare", { destinationNodeId: spare });
+  });
+
+  it("a `prepared` one whose signing key cannot be read is abandoned, offering nothing", async () => {
+    await start();
+    stepDownAfterOffer.mockClear();
+    exchanged = [];
+    const otherRing = loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x8).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    });
+
+    const answer = await start({}, mount({ ring: otherRing }));
+
+    expect({ answer, state: operations()[0]!.state, exchanged }).toEqual({
+      answer: refusal(409, "handover.destination_unreachable", { destinationNodeId: spare }),
+      state: "abandoned",
+      exchanged: [],
+    });
     await expectAbandoned("handover.destination_unreachable", { destinationNodeId: spare });
   });
 
@@ -942,6 +989,123 @@ describe("the same operation again", () => {
 
     expect(exchanged).toEqual([]);
     expect(stepDownAfterOffer).not.toHaveBeenCalled();
+  });
+});
+
+describe("a `prepared` one whose chart has changed since", () => {
+  /** A first start that reached the seam, so the retry below is the only call to look at. */
+  async function startedThenForgotten(): Promise<void> {
+    await start();
+    stepDownAfterOffer.mockClear();
+    exchanged = [];
+  }
+
+  async function expectRefusedUnsent(
+    answer: { status: number; body: unknown },
+    code: string,
+    params: object = {},
+  ): Promise<void> {
+    // First, so a route that resends prints the seam being called rather than its 200.
+    expect(stepDownAfterOffer).not.toHaveBeenCalled();
+    expect(answer).toEqual(refusal(409, code, params));
+    expect(exchanged).toEqual([]);
+    await expectAbandoned(code, params);
+  }
+
+  it("this box no longer main: abandoned, sending nothing", async () => {
+    await startedThenForgotten();
+    await holdChart(
+      [
+        { nodeId: OTHER_BOX, contactUrl: "https://box-3", standing: "serving-primary" },
+        ...chartNodes({ selfStanding: "serving-secondary" }),
+      ],
+      [mainBox.db],
+    );
+
+    await expectRefusedUnsent(await start(), "handover.not_main_box");
+  });
+
+  it("no chart held any more: abandoned, sending nothing", async () => {
+    await startedThenForgotten();
+    await mainBox.db.run(sql`delete from node_membership`);
+
+    await expectRefusedUnsent(await start(), "handover.not_main_box");
+  });
+
+  it.each(["sell-only", "evicted"] as const)(
+    "the destination now %s: abandoned, sending nothing",
+    async (standing) => {
+      await startedThenForgotten();
+      await holdChart(chartNodes({ standing }), [mainBox.db]);
+
+      await expectRefusedUnsent(await start(), "handover.destination_not_spare", {
+        destinationNodeId: spare,
+      });
+    },
+  );
+
+  it("only the term moved: abandoned, sending nothing", async () => {
+    await startedThenForgotten();
+    await holdChart(chartNodes(), [mainBox.db], 4);
+
+    await expectRefusedUnsent(await start(), "handover.membership_changed");
+  });
+
+  it("only the digest moved, at the same term: abandoned, sending nothing", async () => {
+    await startedThenForgotten();
+    await holdChart(chartNodes({ contactUrl: "https://box-2b" }), [mainBox.db]);
+
+    await expectRefusedUnsent(await start(), "handover.membership_changed");
+  });
+
+  it("the taxpayer changed under the same chart: abandoned, sending nothing", async () => {
+    await startedThenForgotten();
+    await mainBox.db.run(sql`update tenants set tax_id = 'B87654321'`);
+
+    await expectRefusedUnsent(await start(), "handover.membership_changed");
+  });
+
+  it("repeats the same refusal after that, from what it recorded", async () => {
+    await startedThenForgotten();
+    await holdChart(chartNodes(), [mainBox.db], 4);
+    const first = await start();
+    await holdChart(chartNodes(), [mainBox.db], 3);
+
+    expect(await start()).toEqual(first);
+    expect(events().map((row) => row.kind)).toEqual(["offer", "abandoned"]);
+  });
+});
+
+describe("one a restart closed before it stepped down", () => {
+  it("answers a refusal with a code, asking the spare nothing", async () => {
+    await start();
+    stepDownAfterOffer.mockClear();
+    exchanged = [];
+    await repairAtStart({ node: mainBox.node, nodeId: self });
+
+    expect(await start()).toEqual(refusal(409, "handover.restarted_before_stepdown"));
+
+    expect(exchanged).toEqual([]);
+    await expectAbandoned("handover.restarted_before_stepdown");
+  });
+
+  it("a stored abandonment of any other shape is a fault, never a refusal with no code", async () => {
+    await start();
+    await advanceHandover({ node: mainBox.node, nodeId: self }, OP, "abandoned", {
+      reason: "written by a fault",
+    });
+
+    expect(await start()).toEqual({ status: 500, body: { error: { code: "server.internal" } } });
+  });
+
+  it("a stored abandonment whose params are not a record is a fault too", async () => {
+    await start();
+    await advanceHandover({ node: mainBox.node, nodeId: self }, OP, "abandoned", {
+      code: "handover.not_a_spare",
+      params: "text",
+    });
+
+    expect(await start()).toEqual({ status: 500, body: { error: { code: "server.internal" } } });
   });
 });
 

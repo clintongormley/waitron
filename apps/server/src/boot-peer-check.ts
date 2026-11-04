@@ -343,8 +343,8 @@ export async function postToBox(
     new URL(url),
     {
       method: "POST",
-      // Unchecked without a pinned authority: the request carries no credential, and only an answer
-      // whose signed envelope verifies can be taken as a yes.
+      // Unchecked without a pinned authority: only an answer whose signed envelope verifies can be
+      // taken as a yes.
       trust: ca === undefined ? { rejectUnauthorized: false } : { ca, rejectUnauthorized: true },
       signal,
       body,
