@@ -50,13 +50,34 @@
 >   7's declaration and activation. A764's collection owner, which §6.3 left to the switch slice, is
 >   Slice 4b. 3b, 3c, 4c, 4d and 5e are unchanged.
 
-> **A947 slice 3b, 4 November 2026:** the build plan (revision 1, not yet reviewed) cuts 3b into six
-> pull requests and departs from this text in three places: each box's own name is
-> `box-<id>.waitron.local`, not `equipo-<id>` (§4 item 5, under CLAUDE.md's English-only rule); the
-> server carries the TLS between the boxes, and versitygw and Litestream speak only on loopback (§3);
-> and 3b includes one fiscal pull request, because today's code refuses to add a spare to a venue
-> that files with Veri*Factu (§11 says "Not fiscal"; owner question Q1)
-> ([slice 3b plan](../plans/2026-11-04-a947-3b-spare-hosts-store.md), "Decisions made in this plan").
+> **A947 slice 3b, 4 November 2026 (updated for the build plan's revision 3):** the
+> [slice 3b plan](../plans/2026-11-04-a947-3b-spare-hosts-store.md) cuts 3b into eight pull
+> requests. Two are FISCAL and landed by the owner: 3b-G (the start steps that decide whether a box
+> files — what the start check trusts, how the boot reconcile reaches a peer, and a refusal to start
+> for a box that lost its `node.db`) and 3b-F (a venue that files with Veri*Factu can add a spare;
+> owner question Q1). The plan departs from this text in twelve places, each with its reason in the
+> plan's "Departures from the approved design":
+>
+> 1. §11 says 3b is "Not fiscal": it has the two owner-landed pull requests above.
+> 2. §4 item 5: each box's own name is `box-<id>.waitron.local`, not `equipo-<id>` (English-only code).
+> 3. §3: the server carries the TLS between the boxes; versitygw and Litestream speak only on loopback.
+> 4. §3: the store also requires the main box's client certificate, not only the pair's access key.
+> 5. §4 item 5: `waitron.local` is also answered by a box waiting to sell, and by a box in setup mode
+>    while no other box answers it.
+> 6. The exposed-mirror guard is retired: a mirror listens on the venue's network with a listed
+>    surface, and accepts promotion only from its own screen until 4b.
+> 7. A box that lost its `node.db` refuses to start rather than start as a selling box.
+> 8. §4 item 1: no key ring rotation while a spare holds the ring; a spare that finished joining
+>    cannot be removed in this version, so its venue does not rotate.
+> 9. Resetting a box that joined another removes that venue's authority and key ring.
+> 10. §11: the owner measures the first full copy after 3b's pull requests land.
+> 11. §11's "every slice adds its step to the stream loop test": 3b-6's two-box steps run in their
+>     own test file on a venue without Veri*Factu; the stream loop's Veri*Factu box gains its spare
+>     steps in 3b-F.
+> 12. One spare per venue in 3b: a second join is refused while one is joined.
+>
+> Only the first awaits an owner's answer (Q1); the plan states the rest so the owner can refuse
+> any of them.
 
 # A947 — Go-live on two local boxes: a spare box that takes over
 

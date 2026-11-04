@@ -1,35 +1,39 @@
-# A947 slice 3b — the spare hosts the store, and joining brings the data — Implementation Plan (revision 2)
+# A947 slice 3b — the spare hosts the store, and joining brings the data — Implementation Plan (revision 3)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as
 > `subagent_type: "implementer"`.
 
-**Revision 2, 2026-11-04**, answering the fresh-context review of revision 1 (`8e4c20008a`). Written
-against `main` at `6a52e7189c`; line numbers are that commit's (`main` has since gained only
-documentation commits, probe P21). What changed, one line per finding group:
+**Revision 3, 2026-11-04**, answering the third-round claim check of revision 2 (`42e152d846`),
+which found 2 Critical, 5 Important and 16 Minor problems, plus 3 carried over from revision 1.
+Written against `main` at `6a52e7189c`; line numbers are that commit's (`origin/main` is now
+`cbca8c8ba0`, and `git diff --stat 6a52e7189c origin/main -- apps packages deploy scripts .github`
+prints nothing, probe P21). What changed, one line per finding group:
 
-- **C1 (a box finding itself):** every lookup ignores answers carrying the box's own addresses and
-  collects every answer within its limit; a box in setup mode answers `waitron.local` only while it
-  hears no other box; the console also prints the box's own address for a second box (D3, Tasks
-  2.2, 2.3, 2.4, 4.1).
-- **C2 (resets keep the venue authority):** both resets empty `tls/` and remove `secrets.env` on a
-  box that joined another, recorded by a marker file adopt writes first; every `venue-ca` site is
-  named (D9, D13, Tasks 3.1, 3.2).
-- **C3 and the fiscal question:** Q1 rewritten from the facts, with option (c) stated fairly and
-  recommended; part of Task F.0's trace run now (probes P15, P16); 3b-F stays last and owner-landed.
-- **I1, I8 (what a mirror serves):** promotion and its preparation answer only the box itself on a
-  mirror; D8 lists the whole network surface, and a test walks it (Tasks 4.5, 4.6).
-- **I2, I3, I5, I9:** the waiting start answers `waitron.local`; the till merges by the chart's node
-  id; the certificate check also checks the signer; the store listener requires a client
-  certificate, which is a new file because today's leaf cannot serve as one (probe P17).
-- **I4:** every departure from the design is listed below and in the design's dated pointer; the
-  two-box steps extend `stream-loop.e2e.test.ts` instead of a new file.
-- **I6:** `ms` defined; the owner's measurement is a step of its own; 3b's PRs land without it.
-- **I7:** seven PRs and smaller tasks, renumbered: 3b-2 is split into names (3b-2) and the venue
-  authority (3b-3).
-- **Minors, and four found while revising:** listed in "Review response" at the end, each with what
-  was done.
+- **C1 (the two-box test could not pass before 3b-F):** 3b-6's end-to-end test joins a spare to a
+  main box with the Veri*Factu module switched off, in a new file `spare-join.e2e.test.ts`; the
+  stream loop's own box B, which files with Veri*Factu, gains its spare steps in 3b-F, where the
+  join it needs becomes possible (Tasks 6.8a, 6.8b, 6.9, F.2b; departure 11).
+- **C2 (the spare hid the main box's refusals):** new Task 5.6b: `refusalFrom` passes on a short
+  named list of codes, so the person reads each refusal's own words; the existing cases of
+  `mirror-bundle-fetch.test.ts` keep their assertions (fact 27).
+- **I1:** the design's dated 3b pointer is rewritten for this revision in the same commit.
+- **I2:** the "joined" marker is now adopt's first write, before the venue's key ring (D9, Task 3.1).
+- **I3:** D8 gains the plain-HTTP landing listener (a mirror runs it on loopback only) and `OPTIONS`
+  (fact 25, Tasks 4.5a, 4.5b).
+- **I4 (fiscal labelling):** the three tasks that change the start steps deciding whether a box
+  files — the start check's trust, the boot reconcile's reach, and the refusal of a box that lost
+  its `node.db` — move into a new owner-landed PR, **3b-G**, labelled FISCAL (D16). The other six
+  PRs stay autonomous.
+- **I5 (task sizes):** Tasks 2.3, 4.5 and 6.8 are split; the main box learns the spare's store
+  address from the spare's joining request (D15).
+- **Found while revising:** a standby that finished joining cannot be removed
+  (`membership.standby_joined`, fact 26, probe P22), so revision 2's bucket and rotation words sent
+  the person to a choice that refuses; both are rewritten (Tasks 5.9, 5.10, D7).
+- **Minors and the carried-over three:** each is listed in "Review response (revision 2 →
+  revision 3)" at the end. Revision 2's own summary of its changes is kept in the first review
+  table.
 
 **Spec:** [`docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md`](../specs/2026-10-21-a947-two-box-failover-design.md)
 §11 slice 3b; §3 (the shape); §4 items 1, 3, 4, 5 and 6 and the `node.db` paragraph; §5's first
@@ -39,26 +43,37 @@ the slice table (`:776-796`) and "Slice 3 as built" (`:1731-1760`, Rulings R12 a
 
 ## The header facts, for scheduling
 
-- **Seven pull requests**, in order: 3b-1, 3b-2, 3b-3, 3b-4, 3b-5, 3b-6, then **3b-F**. Each leaves
-  `main` green and working on its own (the cut is explained below). 3b-1 depends on nothing and may
-  be built beside 3b-2; 3b-2 and 3b-3 do not depend on each other either.
-- **Fiscal: one of the seven.** 3b-F lets a venue that files with Veri*Factu add a spare, and waits
-  for the owner to land it. Its content depends on the owner's question Q1. The other six change no
-  fiscal code and no fiscal rule.
+- **Eight pull requests**, in order: 3b-1, 3b-2, 3b-3, 3b-4, 3b-5, **3b-G**, 3b-6, then **3b-F**.
+  Each leaves `main` green and working on its own (the cut is explained below). 3b-1 depends on
+  nothing and may be built beside the others. 3b-3 comes after 3b-2: Tasks 3.1 and 3.3 call
+  `boxHostnameFor`, which Task 2.1 creates. 3b-G comes after 3b-4 (Task G.2 calls Task 4.1's
+  lookup) and may be built beside 3b-5. **3b-6 lands only after 3b-G is on `main`**, because 3b-6
+  is what makes a lost `node.db` dangerous (fact 16) and 3b-G holds the refusal for it.
+- **Fiscal: two of the eight, both landed by the owner.** **3b-G** changes the start steps that
+  decide whether a box files: what the start check trusts, how the boot reconcile reaches a peer,
+  and a new start refusal for a box that lost its `node.db` (D16; house precedent: A1018 Slice 3,
+  "decides, before the first filing pass, whether a box may file", landed as FISCAL, #2436). **3b-F**
+  lets a venue that files with Veri*Factu add a spare; its content depends on the owner's question
+  Q1. By their file lists, the other six touch nothing in `packages/fiscal-verifactu`, and none
+  changes a start step that decides whether a box files or adds a start refusal. One judgement the owner may overrule is stated in D16: Task 6.2
+  (in 3b-6) writes the spare's `nodes` row, which the already-landed start check then counts.
 - **Migration: yes, one, in `node.db` only**, in 3b-5: a new table `node_pair_link` in the node
   migration set (`packages/node-db/drizzle`, which holds `0000` and `0001` today). No `venue.db`
-  migration in any of the seven. No venue reset is needed: the table is additive.
-- **Review path: full** for 3b-2 to 3b-6 and 3b-F. They touch trust and authentication (keys,
+  migration in any of the eight. No venue reset is needed: the table is additive.
+- **Review path: full** for 3b-2 to 3b-6, 3b-G and 3b-F. They touch trust and authentication (keys,
   certificates, an access key, who a box believes, what a mirror serves to the network),
   cross-package contracts (`@waitron/node-db`, `@waitron/membership`'s chart minting, the stream's
-  target in `stream-host.ts`, the till's server router) and, in 3b-F, when a fiscal module's spare
-  may exist. 3b-1 (a binary and its licence notices in the image) touches no risk trigger and takes
-  the light path. The Codex run-it seat runs on every branch.
+  target in `stream-host.ts`, the till's server router) and, in 3b-G and 3b-F, whether a box may
+  file and when a fiscal module's spare may exist. 3b-1 (a binary and its licence notices in the
+  image) touches no risk trigger and takes the light path. The Codex run-it seat runs on every
+  branch.
 
 ## Words used here
 
 - **Main box / spare box** (staff words): the box that sells, and the box that keeps a copy. The
-  code says primary and mirror; the setup app says "primary server" and "this server".
+  code says primary and mirror; the setup app says "primary server" and "this server"; the
+  dashboard's Servers screen calls the spare a **Standby** («En espera») and removing it **Remove**
+  («Retirar»), so words a person reads on those screens use those labels.
 - **`venue.db`**: the venue's database, which the main box streams. **`node.db`**: each box's own
   small database, never streamed (slice 3a).
 - **The store**: a small S3-compatible file server — the program **versitygw** — that runs on the
@@ -101,7 +116,7 @@ chart and in its certificate; `waitron.local` is answered by the box that sells 
 and by a box in setup mode only while no other box answers it. The boxes find each other by those
 names, ignoring their own answers, trust each other's certificates and signed answers, and the main
 box writes the spare's `nodes` row, so the spare finishes joining. What 3b does **not** do: the spare
-does not keep following the stream into its own copy (3c), nobody can switch to it yet (4b–4e), and
+does not keep following the stream into its own copy (3c), nobody can switch to it yet (A947 4b–4e), and
 a venue that copies to its own storage bucket cannot add a spare until copy-up exists (5e).
 
 ---
@@ -161,7 +176,12 @@ the end, which gives the command and what it printed.
    `libnss_mdns`, so Node's name lookup — which `fetch` and `node:https` use — fails for a `.local`
    name even while an mDNS responder on the same network answers it, and a direct mDNS query from
    Node gets the answer (probe P5). Inferred, not run against a box: a spare joining by the name
-   `https://waitron.local` fails at the lookup today, and only an address typed as an IP works.
+   `https://waitron.local` fails at the lookup today. A venue's private address typed instead is
+   refused before anything is sent: `assertSafePrimaryUrl` refuses `10/8`, `172.16/12` and
+   `192.168/16` literals over both schemes and lets any name through over https
+   (`apps/server/src/primary-url.ts:17-19,52-56`; the case "rejects http to a 192.168.0.0/16
+   literal" passes, probe P28). So today no address works for a real two-box join; after Task 4.1
+   the name does. (Revision 2 said a typed IP works; that was wrong.)
 8. **A main box holds no key for its spare** (Ruling R13). `peerKeyOf` knows this box's own key, a
    pinned main-box key and keys the held chart's endorsements vouch for
    (`apps/server/src/handover-signing.ts:32-41`); a minted chart carries only its signer's own
@@ -221,7 +241,7 @@ the end, which gives the command and what it printed.
     `venue.db` holds the main box's sales and its own `nodes` row, so the same start would come up as
     a selling, filing primary beside the main box — and the drain files across every invoicing
     installation in the database with no node filter (design §2). **3b makes this reachable**, so
-    3b takes A1274 (Task 6.6).
+    3b takes A1274 (Task G.3, which lands before 3b-6).
 17. **The till ignores the node id the chart gives it.** The till's start read hands it
     `routableServers(held)` (`till-api.ts:1535`), which carries each box's `nodeId`
     (`packages/membership/src/fence.ts:54-60`) into `ServerEntry.nodeId`
@@ -264,7 +284,8 @@ the end, which gives the command and what it printed.
     refused it `INVALID_PURPOSE`; a certificate the same authority signed with `clientAuth` passed;
     one from another authority failed `CERT_SIGNATURE_FAILURE` (probe P17).
 22. **On a mirror, promotion is open to anyone who can reach the box.** The read-only gate refuses
-    every request but `GET`, `HEAD` and the exempt rows (`read-only-gate.ts:33-37`); on a mirror
+    every request but `GET`, `HEAD`, `OPTIONS` (`read-only-gate.ts:17`) and the exempt rows
+    (`read-only-gate.ts:33-37`); on a mirror
     the exempt rows are `POST /management-api/promote` and `/promote/preparation`,
     `/api/node/peer-status` and `/api/node/membership` (`read-only-exemptions.ts:18-53`; retire is
     fenced-only). Promotion takes a manager's password and code, or the break-glass key
@@ -278,6 +299,31 @@ the end, which gives the command and what it printed.
 24. **The setup app's joined screen says the join stalls**, and sends the person to "whoever
     installed this server" (`apps/setup/src/i18n/strings/finish.ts:73-81`). True until the join
     finishes, so its words change in 3b-6, not before.
+25. **Every start also runs a second, plain-HTTP app on the landing port.** `startLandingListener`
+    (`boot.ts:849-880`) serves `buildLandingApp` on `config.landingPort` at `config.httpHost`; the
+    full start, mirrors included, calls it (`boot.ts:3736`), as do the setup, latch, restricted,
+    waiting and fenced starts (`:1674,1738,1796,1873,2177`). It serves `GET /` and `/setup/trust`,
+    `/ca.crt` and `/setup-api/ca.crt` (`landing-app.ts:61,73`), `/setup/connection`
+    (`connection-bootstrap.ts:67`), and `POST /setup-api/connection/repair` and `/continue`
+    (`connection-bootstrap.ts:110`), which take no sign-in: they check the `Origin` and `Host`
+    headers and an empty body, and `repair` runs `repairBoxTls`. The read-only gate is not on this
+    app. Today a mirror's `httpHost` is loopback (fact 6), so this app is off the network on a
+    mirror; with the bind guard retired (D8) it would not be. Read, not run.
+26. **A standby that finished joining cannot be removed.** The Servers screen's Remove
+    (`removeUnjoinedStandby`) refuses `membership.standby_joined` (409) when the main box's
+    `venue.db` holds a `nodes` row for it, and checks again under the write lock
+    (`apps/server/src/membership-removal.ts:73,264`); the dashboard says "This standby finished
+    joining, so it cannot be removed" (`apps/dashboard/src/i18n/codes.ts:1286-1289`). Both cases
+    pass (probe P22). After 3b-6 a joined spare has that row (Task 6.2), so no screen can remove it.
+    The screen calls the spare "Standby" / «En espera» and the action "Remove" / «Retirar»
+    (`apps/dashboard/src/i18n/strings.ts:1811,1814,5593,5596`).
+27. **The spare passes on only one of the main box's refusals.** `refusalFrom`
+    (`apps/server/src/mirror-bundle-fetch.ts:75-89`) rebuilds `password.invalid` and turns every
+    other refusal into `mirror.bundle_fetch_failed`, so the setup screen shows its generic words. The
+    cases pinning this use the codes `totp.invalid`, `person.not_found` and `person.suspended` and
+    four malformed bodies (`mirror-bundle-fetch.test.ts:175-221`; the relay and pass-nothing cases
+    pass, probe P23). The spare's adopt route answers each code by its own table, `ADOPT_STATUS`
+    (`setup-api.ts:290-302`), where `module.operation_invalid` is already 409.
 
 ---
 
@@ -288,44 +334,55 @@ the end, which gives the command and what it printed.
 | **3b-1** | versitygw in the box image, its licence notices, its pin | the binary sits unused | no | no | light |
 | **3b-2** | Each box's own name in its chart row and mDNS answers; the mDNS lookup that ignores the box's own answers; who answers `waitron.local`; the console's second address; tills show one line per box | a one-box venue keeps selling at `waitron.local`; nothing calls the lookup yet | no | no | full |
 | **3b-3** | A joining spare's authority becomes the venue's, installed with its leaf, and marked; both resets empty `tls/` and `secrets.env` on a box that joined; every start checks the leaf's names and signer | no spare finishes joining yet; a main box's files are unchanged but for its leaf's added name | no | no | full |
-| **3b-4** | Boxes reach and trust each other: the lookup in every box-to-box call, the venue authority pinned (R12), the boot reconcile through the same transport, charts that vouch for every listed box (R13), a mirror that listens on the network with its open dashboard on its own screen and its promotion for its own screen | no box has a counted peer before 3b-6, so the start check still proceeds | no | no | full |
-| **3b-5** | The store on the spare and the pair's access key: `node_pair_link`, a joining route that needs no relay and refuses first, the spare running versitygw behind a TLS listener that checks the main box's client certificate, the bucket screen and rotation refusing while a spare is joined | the store runs and receives nothing | no | **yes** (`node.db`) | full |
-| **3b-6** | Joining brings the data: the main box streams to the spare and writes its `nodes` row when the store answers; the spare restores, places and checks its first copy and finishes joining; a box with a lost `node.db` refuses to start (A1274); the stream loop grows its two-box steps; the setup app's and the guide's words | a venue that does not file with Veri*Factu adds a spare end to end; a Veri*Factu venue is still refused before anything is reserved | no | no | full |
-| **3b-F** | A Veri*Factu venue can add a spare (Q1 decides how) | lands last; until then the refusal of 3b-5 stands | **yes — the owner lands it** | no | full |
+| **3b-4** | Boxes reach and trust each other: the lookup in every box-to-box call, charts that vouch for every listed box (R13), a mirror that listens on the network with its open dashboard, its landing pages and its promotion kept to its own screen | no box has a counted peer before 3b-6, so the start check still proceeds | no | no | full |
+| **3b-5** | The store on the spare and the pair's access key: `node_pair_link`, a joining route that needs no relay and refuses first, the spare passing each refusal on in its own words, the spare running versitygw behind a TLS listener that checks the main box's client certificate, the bucket screen and rotation refusing while a spare is joined | the store runs and receives nothing | no | **yes** (`node.db`) | full |
+| **3b-G** | The start steps that decide whether a box files: the start check trusts only the venue authority (R12); the boot reconcile reaches a real box; a box with a lost `node.db` refuses to start (A1274) | no box has a counted peer or a mirror link to a real box before 3b-6, so on a real venue only the A1274 refusal can fire, and only on a box that holds a chart naming it but no mode row | **yes — the owner lands it** (D16) | no | full |
+| **3b-6** | Joining brings the data: the main box streams to the spare and writes its `nodes` row when the store answers; the spare restores, places and checks its first copy and finishes joining; a two-box end-to-end test on a main box without Veri*Factu; the setup app's and the guide's words | a venue that does not file with Veri*Factu adds a spare end to end; a Veri*Factu venue is still refused before anything is reserved | no (D16 states the one judgement) | no | full |
+| **3b-F** | A Veri*Factu venue can add a spare (Q1 decides how); the stream loop's Veri*Factu box B gains its spare steps | lands last; until then the refusal of 3b-5 stands | **yes — the owner lands it** | no | full |
 
-Why this order: names (3b-2) and the authority (3b-3) before trust, because 3b-4 pins `tls/ca.crt`
-and finds boxes by their own names; trust before data, because 3b-6's main box must verify the spare
-and the spare the main box; the store before the stream; the fiscal change last, so six PRs never
-wait for the owner's landing. A non-fiscal venue (the fiscal module disabled, as the existing
-adoption tests already run it, `adoption-allocation-refusal.test.ts:158`) proves 3b-6 end to end
-without 3b-F.
+Why this order: names (3b-2) and the authority (3b-3) before trust, because 3b-4 and 3b-G pin
+`tls/ca.crt` and find boxes by their own names; trust before data, because 3b-6's main box must
+verify the spare and the spare the main box; the store before the stream; 3b-G before 3b-6, because
+3b-6 makes a lost `node.db` dangerous; the Veri*Factu change last. The owner lands two PRs: 3b-G,
+which can be ready as soon as 3b-4 lands, and 3b-F. The other six never wait for the owner, though
+3b-6 waits for 3b-G to be on `main`. A venue with the Veri*Factu module switched off proves 3b-6 end
+to end without 3b-F: the main box's own modules are what the join checks (D12), and with
+`{"fiscal-verifactu": false}` the refusal does not fire, while the stream loop's
+`{"fiscal-none": false}` refuses `module.operation_invalid` (probe P24).
 
 ## Which A1018 slices each 3b PR unblocks
 
-A1018 Slices 0–3 and 9 have landed (Slice 3 is #2436, Slice 9 #2431); Slice 4 is #2442, **open**,
-waiting for the owner (probe P20). "Reachable on real boxes" means: two physical boxes, not the
-one-process simulation A1018's tests use. Read from the A1018 plan, not run.
+A1018 Slices 0, 1, 2, 3, 4b, 5a and 9 have landed: Slice 0 is documentation (`945cdc7963`),
+Slice 1 #2417, Slice 2 #2420, Slice 3 #2436, Slice 4b #2422 ("payments: one collection owner per
+payment (A764)"), Slice 5a #2428 (the relinquished approval) and Slice 9 #2431. Slice 4 is #2442,
+**open**, waiting for the owner (probes P20, P27). The A1018 plan itself says Slices 5–8 and 10–14
+are reachable on real boxes only after A947 3b
+(`docs/superpowers/plans/2026-11-02-a1018-handover-build.md:116-125`). "Reachable on real boxes"
+means: two physical boxes, not the one-process simulation A1018's tests use. "4b" below always says
+whose: A947's slice 4b (switching to the spare) or A1018's Slice 4b (payment collection). Read from
+the A1018 plan, not run.
 
 | A1018 piece | What stops it on real boxes today | Unblocked by |
 | --- | --- | --- |
-| Slice 3 (landed): the start check counts a joined spare | no box has finished joining (fact 2); the main box cannot verify the spare's signed answer (R13) and does not pin its certificate (R12) | 3b-4 (R12, R13), 3b-6 (the `nodes` row) |
+| Slice 3 (landed): the start check counts a joined spare | no box has finished joining (fact 2); the main box cannot verify the spare's signed answer (R13) and does not pin its certificate (R12) | 3b-4 (R13), 3b-G (R12), 3b-6 (the `nodes` row) |
 | Slice 4 (#2442, open): the final copy served to the selected box | M2 asks M1 by a signed query (A1018 plan Task 4.8): it needs M1's own address, the lookup and trust, and M1 must know M2's key | 3b-2 (addresses), 3b-4 (lookup, trust, R13) |
-| Slice 5: controlled handover, server | M1 cannot reach a mirror bound to loopback (fact 6); Task 5.3 refuses `handover.destination_unaddressable` while M2's chart address equals M1's; M1 cannot find M2 by name; M2 never finished joining | 3b-2, 3b-4, 3b-6 for a non-Veri*Factu venue. For a Veri*Factu venue: 3b-F, and — under Q1's default — the activation itself must first write the spare's dormant setup (fact 18), which neither the A1018 plan nor 4b says today |
+| Slice 5: controlled handover, server | M1 cannot reach a mirror bound to loopback (fact 6); Task 5.3 refuses `handover.destination_unaddressable` while M2's chart address equals M1's; M1 cannot find M2 by name; M2 never finished joining | 3b-2, 3b-4, 3b-G, 3b-6 for a non-Veri*Factu venue. For a Veri*Factu venue: 3b-F, and — under Q1's default — the activation itself must first write the spare's dormant setup (fact 18), which neither the A1018 plan nor A947's 4b says today |
 | Slice 6: controlled handover screens | the dashboard opens "M2's own handover page", which needs an address of M2's own | 3b-2 (the address), 3b-3 (its certificate). Whether each till platform finds a two-part `.local` name stays A947 4d's measurement |
 | Slice 7: emergency handover, server | as Slice 5, plus a copy on M2 | as Slice 5; the continuous copy is 3c |
-| Slice 8: emergency declaration page | reached at M2's own address | 3b-2, 3b-3; passkeys at that address are 4d (A1018 decision 9) |
-| Slices 10–11: the return batch | M1 ↔ M2 calls over the venue's network | 3b-4 |
-| Slice 13: becoming the spare | the returning box must join as a spare | 3b-6, 3b-F |
-| Slice 14: a last copy from a selected backup | — | nothing in 3b |
+| Slice 8: emergency declaration page | reached at M2's own address | 3b-2, 3b-3; passkeys there wait for A947 4b/4d (A1018 decision 9, `2026-11-02-a1018-handover-build.md:322-323`) |
+| Slices 10–11: the return batch | M1 ↔ M2 calls over the venue's network, after a handover | 3b-4 for the calls; a handover first needs Slices 5 or 7, so as those |
+| Slices 12a–12b: the reconciliation list and the VAT return line | nothing of their own on the network: they act on what Slice 11 returned | reachable when Slices 10–11 are |
+| Slice 13: becoming the spare | the returning box must join as a spare | 3b-6; for a Veri*Factu venue also 3b-F |
+| Slice 14: a last copy from a selected backup | it places a backup as the copy of a spare (`2026-11-02-a1018-handover-build.md:3705-3713`), so it needs a joined spare | 3b-6; for a Veri*Factu venue also 3b-F |
 
 ## The backlog items this plan was asked to place
 
 | Item | Taken? | Where, or why not |
 | --- | --- | --- |
 | R13, "A947 3b must make the held chart vouch for a joined box's key…" (`docs/backlog.md:5736`) | **yes** | Task 4.4 (endorsements in every chart) and Task 5.4 (the first chart naming the spare carries its endorsement). Own addresses: Task 2.1 |
-| "The boot peer reconcile cannot reach a real box's certificate" (`docs/backlog.md:5746`) | **yes** | Task 4.3 |
+| "The boot peer reconcile cannot reach a real box's certificate" (`docs/backlog.md:5746`) | **yes** | Task G.2 |
 | A1273, key ring rotation | **yes, as a rule** | Decision D7, Task 5.10 |
-| A1274, a lost `node.db` reads as a sole primary | **yes** | Task 6.6 — 3b makes it reachable (fact 16) |
+| A1274, a lost `node.db` reads as a sole primary | **yes** | Task G.3 — 3b makes it reachable (fact 16) |
 | A1275, a Cloud peer's chart is refused | no | Cloud work; no Cloud peer signs charts |
 | A1276, after two promotions in a three-box venue | no | needs three boxes; go-live is two |
 | A1277, a malformed chart signed by a trusted key is copied on | no | 3b does not change how a chart's `nodes` entries are read or copied |
@@ -363,22 +420,35 @@ one-process simulation A1018's tests use. Read from the A1018 plan, not run.
     network where the spare sells and the waiting box cannot reach it, a device can see both
     answers; the waiting box serves only its waiting page, so it never sells beside the spare.
   - A **box in setup mode** answers `waitron.local` only while it hears no other box answer it: it
-    asks once as it starts and again every 30 seconds, and answers only while its last ask heard no
-    answer but its own. The first box of a venue is still reached at the printed
-    `http://waitron.local/setup/trust` (`deploy/waitron.sh:465`), which is why setup mode keeps
-    answering at all. A second box answers nothing (it has no node id, so no own name, yet) and is
-    reached at its own address, which the console now prints too (Task 2.4). Cost: two fresh boxes
-    set up at the same moment can both answer for up to 30 seconds; neither sells.
+    asks once as it starts and again after 30 seconds plus a random delay of up to 10 seconds, each
+    time drawn afresh, and answers only while its last ask heard no answer but its own. The first
+    box of a venue is still reached at the printed `http://waitron.local/setup/trust`
+    (`deploy/waitron.sh:465`), which is why setup mode keeps answering at all. A second box answers
+    nothing of its own (it has no node id, so no own name, yet) and is reached at its own address,
+    which the console now prints too (Task 2.4). The random delay is there because two boxes asking
+    at the same moments stay in step for ever, both answering, then neither, every 30 seconds: in a
+    simulation of the rule (probe P25), two boxes switched on within 2 seconds of each other were
+    still doing that after 10 minutes in 1,909 of 2,000 runs without the delay, and in none of 2,000
+    with it. Cost, from the same simulation, not run on boxes: two fresh boxes switched on together
+    can both answer for a few minutes (the last moment both answered was at most 339 seconds in,
+    median 37); neither sells. A second cost: while the main box is not answering `waitron.local` —
+    restricted, or stopped for an update — a box in setup mode nearby answers it, so a till that
+    reloads then can reach that box's setup pages instead of the main box until its name cache
+    expires. Nothing sells twice; read, not run.
   - **Every other start** — the latch start, a mirror, restricted, fenced — answers only its own
     name.
   - **A lookup ignores answers carrying this box's own addresses** and collects every answer within
     its time limit (2 seconds), so a box never finds itself (review C1, probes P13, P14).
+  - **Tests of the starts' answers bind `0.0.0.0` and inject the socket**: the responder is off on a
+    loopback-only listener (`mdns.ts:55`), so a boot test that binds loopback sees no answers at all
+    (`boot.mirror.test.ts:495` already binds `0.0.0.0`).
 - **D4 — Box-to-box calls use one transport**: `boxExchange` (`mirror-bundle-fetch.ts:117`), with
   the mDNS lookup for `.local` names and the venue authority pinned. Each address the lookup returns
   is tried in turn under the pin, so a false answer from another device costs one failed connection,
   not the call. Every box holds the venue authority as `tls/ca.crt` after Task 3.1, so the pin is
-  unconditional and the unchecked path goes (R12). Cost: a box whose operator supplied certificate
-  files of their own (`config.tls`) cannot verify a peer; no box is set up that way.
+  unconditional and the unchecked path goes (R12; Task 4.1 for `boxExchange`, Task G.1 for the start
+  check's own client). Cost: a box whose operator supplied certificate files of their own
+  (`config.tls`) cannot verify a peer; no box is set up that way.
 - **D5 — The stream to the spare travels through two byte pipes** (fact 12): Litestream and
   versitygw speak plain HTTP on loopback only; Node carries the bytes over TLS between the boxes,
   pinned to the venue authority, with the spare's name as the certificate name. Chosen over
@@ -396,18 +466,23 @@ one-process simulation A1018's tests use. Read from the A1018 plan, not run.
   no counted peer, so the main box does not start waiting at every start for a box that never
   arrived (A1018 Slice 3 counts only boxes with a row). The row is written before the stream starts,
   so the first full copy carries it.
-- **D7 — A1273: a key ring change means re-joining the spare.** `waitron-credentials rotate`
+- **D7 — A1273: no key ring rotation while a spare holds the ring.** `waitron-credentials rotate`
   refuses `credentials.rotation_spare_joined` while this box holds a pair link (Task 5.10), and the
-  rule is written where rotation is already described (`conventions-data.md:928`; fact 15). A ring
-  changed by hand in `secrets.env` cannot be stopped by the command; the pair link records the ring
-  version handed to the spare, so 3c's spare alerts can warn when they differ. Reasons: a rotation
-  is an operator's terminal act with no product screen; pushing a ring needs its own secret channel
-  and a restart of the spare; and go-live does not rotate.
+  rule is written where rotation is already described (`conventions-data.md:928`; fact 15). A spare
+  that never finished joining can be removed under Servers, which deletes the link (Task 5.9), and
+  the ring can then be rotated. A spare that finished joining cannot be removed in this version
+  (fact 26), so while it is joined the ring is not rotated at all; revision 2's "remove the spare,
+  rotate, add it again" was not possible. A ring changed by hand in `secrets.env` cannot be stopped
+  by the command; the pair link records the ring version handed to the spare, so 3c's spare alerts
+  can warn when they differ. Reasons: a rotation is an operator's terminal act with no product
+  screen; pushing a ring needs its own secret channel and a restart of the spare; and go-live does
+  not rotate.
 - **D8 — A mirror listens on the venue's network, and this is everything it serves there.**
   `assertMirrorBindSafe` and `WAITRON_MIRROR_ALLOW_EXPOSED` are retired. From any address that is not
   the box itself (`requestFromBox`, `request-from-box.ts:40`), a mirror serves:
-  1. every `GET` and `HEAD` route a full start mounts, each under its own check (a session cookie, a
-     device token, or none for `/health`, `/api/node`, the guide pages and the certificate
+  1. every `GET`, `HEAD` and `OPTIONS` request the read-only gate lets through
+     (`read-only-gate.ts:17`) to a route a full start mounts, each under its own check (a session
+     cookie, a device token, or none for `/health`, `/api/node`, the guide pages and the certificate
      downloads). The ambient dashboard session attaches only to a request from the box itself, so a
      dashboard read from elsewhere is refused as signed out; there is no sign-in on a mirror, because
      the read-only gate refuses its `POST` (fact 22). A `GET` answered under a till's or a person's
@@ -415,25 +490,36 @@ one-process simulation A1018's tests use. Read from the A1018 plan, not run.
   2. `POST /api/node/peer-status` and `POST /api/node/membership`, which answer only signed
      requests and signed charts (`read-only-exemptions.ts:39-52`);
   3. **not** `POST /management-api/promote` or `/promote/preparation`: on a mirror they answer only
-     the box itself, and anyone else is refused `promotion.from_box_only` (review I1), until 4b and
-     A1018 Slice 7 replace them with the take-over that checks the main box is gone first. Without
+     the box itself, and anyone else is refused `promotion.from_box_only` (review I1), until A947's
+     4b and A1018 Slice 7 replace them with the take-over that checks the main box is gone first. Without
      this, after 3b-6 a manager's password on the venue's network could switch a spare holding a
      join-time copy on beside a live main box (anti-goal 1);
   4. the store's port 7443, to the paired main box's client certificate only (D5);
-  5. mDNS answers for its own name only (D3).
-  Task 4.5's test walks every route a mirror boot mounts from a non-box address and checks it
-  against this list, so the list is run, not only read. The Cloud tunnel, which hands connections to
+  5. mDNS answers for its own name only (D3);
+  6. **nothing on the landing port.** The plain-HTTP landing app (fact 25) is a second listener the
+     read-only gate does not cover, with two unauthenticated `POST` routes, and a repair there would
+     reissue the leaf for the names the landing app hands it, the venue's only (`boot.ts:873`,
+     `box-tls-repair.ts:277,346,352`), dropping the spare's own name until its next start. A mirror's full start runs it on `127.0.0.1` only, so the
+     spare's own screen keeps it and the network reaches none of it. A device trusts the spare
+     through the main box's trust page: since 3b-3 both carry the same authority.
+  Task 4.5b's test walks every route a mirror boot mounts from a non-box address with each method
+  and checks it against this list, and checks the landing listener's bound address, so the list is
+  run, not only read. The Cloud tunnel, which hands connections to
   `127.0.0.1` (`packages/tunnel/src/client.ts:41,89`) and so would count as the box, runs only on
   the one main box (`boot.ts:3291`), never on a mirror.
 - **D9 — The spare's certificate authority becomes the venue's, installed whole and marked.** At
-  joining, adopt first writes `tls/joined.json` (the main box's node id), then the bundle's
-  authority and a leaf it issues from it for this box's names, all four under working names, then a
-  durable `tls/install.json` listing them, then renames each into place (`ca.key`, `ca.crt`,
-  `server.key`, `server.crt`), then removes `install.json`. Every start finishes a listed install
-  before it reads `tls/`, and deletes working files no list names. `tls/venue-ca.*` are no longer
-  written. This makes D4's pin one file on both boxes and retires A1295. Writing the marker first
-  means a crash leaves at worst a marker beside the box's own authority, which a reset then empties
-  harmlessly.
+  joining, adopt's **first write after `beforeFirstWrite`** is `tls/joined.json` (the main box's
+  node id, written durably) — before `stampDeployment` and before the main box's key ring replaces
+  this box's `secrets.env` (`adopt.ts:166-168`). Later in adopt, the bundle's authority and a leaf
+  it issues from it for this box's names are written, all four under working names, then a durable
+  `tls/install.json` listing them, then each is renamed into place (`ca.key`, `ca.crt`,
+  `server.key`, `server.crt`), then `install.json` is removed. Every start finishes a listed
+  install before it reads `tls/`, and deletes working files no list names. `tls/venue-ca.*` are no
+  longer written. This makes D4's pin one file on both boxes and retires A1295. Because the marker
+  comes before the ring, a join that stops at any later point leaves the marker, so both resets
+  remove the old venue's ring and authority (D13); a join that stops before it leaves the box's own
+  ring and authority, which a reset then empties harmlessly. (Revision 2 wrote the marker inside
+  the authority install, after the ring.)
 - **D10 — 3b restores the first full copy once; 3c follows.** In the latch start the spare restores
   the newest point of the stream from its own store into a scratch file, checks it, and the next
   start puts it in place of its `venue.db`. Until 3c, the spare's `venue.db` stays as it was at that
@@ -442,10 +528,12 @@ one-process simulation A1018's tests use. Read from the A1018 plan, not run.
   on the spare's listening address. Nothing in the tree uses 7443 (`git grep -n 7443 -- deploy
   apps/server/src/config.ts` printed nothing).
 - **D12 — The joining route checks a Veri*Factu venue on the main box, before reserving.** Until
-  3b-F lands, the main box refuses with today's code, `module.operation_invalid` (the setup route
-  already answers it with 409, `adoption-allocation-refusal.test.ts:173-197`), so a refused join
-  leaves no chart entry and no reservation. Its words (Task 5.6) say nothing was changed and what
-  Back does.
+  3b-F lands, the main box's own route refuses with today's code, `module.operation_invalid`
+  `{ module }`, answering 409 (a new row in `mirror-bundle-api.ts`'s `STATUS`), so a refused join
+  leaves no chart entry and no reservation. The spare passes the code on (Task 5.6b), and its own
+  adopt route already answers that code with 409 (`setup-api.ts:291`; the existing 409 in
+  `adoption-allocation-refusal.test.ts:173-197` comes from the spare's own check after the fetch,
+  which stays). Its words (Task 5.6) say nothing was changed and what Back does.
 - **D13 — Resetting a box that joined another empties `tls/` and removes `secrets.env`.** Both the
   staged reset and `waitron.sh reset` do this when `tls/joined.json` exists (the staged reset runs
   only after a join, so for it the marker is a check, not a choice). Both files hold the old venue's
@@ -454,35 +542,78 @@ one-process simulation A1018's tests use. Read from the A1018 plan, not run.
   P18). Cost: devices that trusted this box must trust it again before it is set up anew. A box
   that never joined keeps both, as today.
 - **D14 — The first-copy figure is measured by the owner, after 3b-6, and 3b lands without it.**
-  `ms` is the time from Connect being pressed on the spare's setup screen until the spare holds a
-  verified copy. Both ends are read on the spare's own clock, so no difference between the two
-  boxes' clocks enters: the start is the spare's pair link `created_at` (written by adopt, Task 5.5,
-  within the Connect request), the end is the moment Task 6.3's checks pass. `bytes` is the copy's
+  `ms` runs from the spare's pair link `created_at` until the spare holds a verified copy. Adopt
+  writes the link (Task 5.5) inside the Connect request, after the bundle has been fetched
+  (`setup-api.ts:1060` awaits adopt within the request), so `ms` starts a few seconds after Connect
+  is pressed, not at the press. Both ends are read on the spare's own clock, so no difference
+  between the two boxes' clocks enters; the end is the moment Task 6.3's checks pass. `bytes` is the copy's
   size. The spare logs both in `spare.first_copy_ready` and shows them on its box status. The
   backlog entry "Adding a mirror while the internet is down" stays open until the measurement is
   recorded (Task 6.11).
+- **D15 — The spare tells the main box where its store is.** The joining request gains
+  `standbyStoreUrl` beside today's `standbyContactUrl` (`mirror-bundle-fetch.ts`, the request body;
+  `mirror-bundle-api.ts:80-113`, the check). Adopt sends `https://<this box's own name>:<its
+  WAITRON_SPARE_STORE_PORT>` (Task 5.5); the main box refuses `mirror.standby_invalid` (as for a bad
+  contact URL) unless it is an `https` bare origin whose host equals the contact URL's host, and
+  writes it into its pair link (Task 5.4). So the port is the spare's own setting, never assumed by
+  the main box, and three servers in one test process each use their own drawn port (Task 6.8a).
+- **D16 — Which PRs are FISCAL, and the one judgement.** House precedent: A1018 Slice 3, "decides,
+  before the first filing pass, whether a box may file", is FISCAL in its plan
+  (`2026-11-02-a1018-handover-build.md:599`) and landed so, by the owner (`4fd28f1b38`, #2436);
+  Slice 2's restricted start, which stops a filing box, also landed with a FISCAL title (#2420,
+  probe P26). By that rule, a PR that changes a start step deciding
+  whether a box files, or adds a start refusal meant to stop a box filing, is FISCAL and waits for
+  the owner. Three tasks do that, and they form **3b-G**: Task G.1 (what the start check trusts,
+  R12), Task G.2 (the boot reconcile, which can demote a box at start so that it stops filing,
+  `boot.ts:1904-1909`; the round-3 check did not name this one, and it is included by the same
+  rule) and Task G.3 (a lost `node.db` refuses to start, so the box neither sells nor files).
+  Isolating them keeps 3b-4, 3b-5 and 3b-6 autonomous. **The judgement:** Task 6.2, in 3b-6, writes
+  the spare's `nodes` row, after which the landed start check counts the spare, so a main box with
+  a silent spare waits at its start. That is the rule the owner already landed (CLAUDE.md §5: a box
+  "asks it by signed query before selling or filing, and waits while every box it counts is
+  silent"); Task 6.2 changes neither the check's code nor its rule, so 3b-6 is not labelled FISCAL.
+  3b-6's PR body says in its first line that from this PR a main box with a joined spare waits at
+  start while the spare is silent. If the owner reads that as a fiscal change, 3b-6 is relabelled
+  and waits for the owner; nothing else in the cut moves.
+- **D17 — One spare per venue in 3b, and an unfinished join can be cleared.** The pair link holds
+  one row per box (`node_id` is its key), so a second spare would replace the first's link. The
+  joining route refuses `mirror.spare_already_joined` (409) while this box's link is `streaming`,
+  before anything is reserved (Task 5.3). A link still `pending` belongs to a join that never
+  finished; a new join replaces it, as Task 6.2 states, and Remove under Servers deletes it with
+  the standby's chart entry (Task 5.9; Remove accepts a standby with no `nodes` row, fact 26). So
+  a `pending` link never blocks the venue for good. While one exists, Task 6.2 keeps asking the
+  missing store every 5 seconds; that costs one failed connection per ask and stops when the link
+  is replaced or removed. **A limit 3b makes reachable and does not lift:** a spare that finished
+  joining and then dies for good, or loses its `node.db` and is started again (Task G.3), stays a
+  counted standby that no screen can remove (fact 26) and no second spare can replace. Under the
+  landed start-check rule the main box then waits at every start until an administrator carries on
+  for that start (CLAUDE.md §5; read, not run against a dead spare). The session running this plan
+  adds a backlog entry for a way to retire a joined standby (Task 6.10), and the guide says what
+  to do meanwhile.
 
 ## Departures from the approved design
 
-Each is also listed in the design's dated pointer. Only the first awaits the owner; the rest are
-stated here so the owner can refuse any of them.
+Each is also listed, one line each, in the design's dated A947-3b pointer, rewritten for this
+revision in the same commit. Only the first awaits the owner; the rest are stated here so the owner
+can refuse any of them.
 
 | # | Design text | What this plan does instead | Why | Awaits the owner? |
 | --- | --- | --- | --- | --- |
-| 1 | §11: 3b is "Not fiscal" | 3b ends with an owner-landed PR, 3b-F | today's code refuses a spare in a Veri*Factu venue (fact 1) | **yes — Q1**. Under Q1's default (c), §4 item 3 ("No fiscal identity is reserved at joining") holds as written, and the switch-on writes the dormant setup; under (b) §4 item 3 changes |
+| 1 | §11: 3b is "Not fiscal" | 3b has two owner-landed PRs: 3b-G (the start steps that decide whether a box files, D16) and 3b-F | today's code refuses a spare in a Veri*Factu venue (fact 1); 3b-G by the house's labelling of A1018 Slice 3 | **yes — Q1** for 3b-F; 3b-G is FISCAL by precedent, and the owner lands it. Under Q1's default (c), §4 item 3 ("No fiscal identity is reserved at joining") holds as written, and the switch-on writes the dormant setup; under (b) §4 item 3 changes |
 | 2 | §4 item 5: `equipo-<id>.waitron.local` | `box-<id>.waitron.local` (D1) | English-only code (CLAUDE.md §3); the design left the form to the builder | no |
 | 3 | §3: the stream travels "over TLS under the venue's certificate authority" | the TLS is Node's, between two byte pipes; Litestream and versitygw speak only on loopback (D5) | Litestream cannot pin an authority on macOS and logs nothing when it cannot connect (fact 11) | no |
 | 4 | §3: the store "accepts only the access key minted for this pair" | it also requires the main box's client certificate (D5) | the key reads the whole database; nobody else should reach the store at all | no |
 | 5 | §4 item 5: `waitron.local` "answered only by the box that sells" | also by the waiting start, and by a box in setup mode while no other box answers (D3) | a reloaded till must find "Carry on as the main box" (§6.6's anti-goal); the first box's setup is reached at `waitron.local` | no |
-| 6 | (not in the design) the exposed-mirror guard | retired; a mirror listens on the network with the surface D8 lists; promotion on a mirror only from the box itself until 4b | §5 needs the spare reachable; the open dashboard and promotion must not be | no |
-| 7 | (not in the design) a lost `node.db` | the box refuses to start, with recovery words (Task 6.6) | 3b makes a selling spare reachable (fact 16) | no |
-| 8 | §4 item 1: a rotation's previous key travels in the bundle | rotation is refused while a spare is joined (D7) | nothing sends a new ring to a spare | no |
+| 6 | (not in the design) the exposed-mirror guard | retired; a mirror listens on the network with the surface D8 lists; promotion on a mirror only from the box itself until A947's 4b | §5 needs the spare reachable; the open dashboard and promotion must not be | no |
+| 7 | (not in the design) a lost `node.db` | the box refuses to start, with recovery words (Task G.3, in the owner-landed 3b-G) | 3b makes a selling spare reachable (fact 16) | no |
+| 8 | §4 item 1: a rotation's previous key travels in the bundle | rotation is refused while a spare holds the ring; a spare that finished joining cannot be removed in this version, so its venue does not rotate (D7) | nothing sends a new ring to a spare | no |
 | 9 | (not in the design) resets | a box that joined another empties `tls/` and `secrets.env` on reset (D13) | otherwise a reused box keeps the old venue's authority and key ring | no |
 | 10 | §11: the first full copy "measured on 0.5.17 with the internet unplugged" in 3b | the owner measures it after 3b-6 lands; 3b's PRs land without it; the backlog entry stays open until then (D14) | the measurement needs two real boxes, which no implementer has | no |
+| 11 | §11: "every slice adds its step to the stream loop test" | 3b-6's two-box steps run in a new file, `spare-join.e2e.test.ts`, on a main box with the Veri*Factu module switched off; the stream loop's box B gains its spare steps in 3b-F (Task F.2b) | the loop's box B files with Veri*Factu, so its join is refused until 3b-F (probe P24); a test that cannot pass when its PR lands is not planned | no |
+| 12 | (not in the design) how many spares | one spare per venue in 3b: a second join is refused while one is joined (D17) | the pair link holds one row per box | no |
 
 Not a departure: §4 item 5 says joining prints a QR label for each box; §11 places the labels in 4d,
-and 3b leaves them there. §11's "every slice adds its step to the stream loop test" is followed
-(Tasks 6.8, 6.9).
+and 3b leaves them there.
 
 ## Global Constraints
 
@@ -500,11 +631,12 @@ and 3b leaves them there. §11's "every slice adds its step to the stream loop t
   spare to sell; the main box's `backup.stream_behind` rule applies to it unchanged.
 - **Error codes.** New, each registered in `apps/server/src/errors.ts` (or the throwing package's
   `errors.ts`) and imported by the throwing file (`scripts/errors-reachable.test.ts`):
-  `mirror.standby_name_taken`, `mirror.bucket_stream_active`, `backup.spare_stream_active`,
+  `mirror.standby_name_taken`, `mirror.bucket_stream_active`, `mirror.spare_already_joined`,
+  `backup.spare_stream_active`,
   `credentials.rotation_spare_joined`, `node.state_missing`, `promotion.from_box_only`, and the
   log-only `mirror.peer_unresolved`, `spare.join_key_mismatch` (a fault in Waitron) and
   `spare.store_client_refused`. Retired: `mirror.no_relay`, `server.mirror_bind_exposed`
-  (`errors.test.ts:175-177` and `boot.mirror.test.ts:491` change with them; rows in Tasks 4.5, 5.4).
+  (`errors.test.ts:175-177` and `boot.mirror.test.ts:491` change with them; rows in Tasks 4.5a, 5.4).
   Words go where each surface keeps them: the setup app's `ADOPT_ERROR_MESSAGES`
   (`apps/setup/src/setup-app.ts:254-264`) and `i18n/strings/shell.ts`; the dashboard's
   `apps/dashboard/src/i18n/codes.ts` (with `codes.test.ts`); the recovery page's
@@ -531,7 +663,7 @@ and 3b leaves them there. §11's "every slice adds its step to the stream loop t
    waiting, and a second join (new node id) must work. Test: Task 6.2, "a pending spare whose store
    never answers is not a counted peer".
 2. **A spare whose `node.db` is lost after it finished joining** must not start as a selling,
-   filing box (fact 16). Test: Task 6.6, with the control that a first box with no mode row still
+   filing box (fact 16). Test: Task G.3, with the control that a first box with no mode row still
    starts.
 3. **A store that rejects the main box** (wrong key, wrong certificate, no client certificate) must
    show up in the main box's stream status within one minute, not retry silently (probe P7). Test:
@@ -540,12 +672,15 @@ and 3b leaves them there. §11's "every slice adds its step to the stream loop t
    (`packages/stream/src/litestream.ts:79-80`, `retention: 168h`) on the spare's disk beside its own
    copy. A full disk on the spare must stop the store, not the main box's sales. Test: Task 6.1.
 5. **A box whose certificate authority changes** (a connection repair, `box-tls-repair.ts`) while a
-   spare is joined breaks the pair's trust. 3b does not build a repair for this; Task 4.2 makes the
+   spare is joined breaks the pair's trust. 3b does not build a repair for this; Task G.1 makes the
    refusal visible.
 6. **A box that finds itself.** A joining box with its own responder still answering, typing
    `https://waitron.local`, must reach the main box (Tasks 2.2, 4.1).
 7. **A reused box.** After either reset of a box that joined another, no file of the old venue's
-   authority or key ring remains (Task 3.2).
+   authority or key ring remains, including after a join that stopped just after the key ring was
+   written (Tasks 3.1, 3.2).
+8. **A refusal the person cannot read.** Every refusal the main box gives a joining spare reaches
+   the setup screen as its own words, not "couldn't join" (Task 5.6b, through the real fetch).
 
 ---
 
@@ -556,25 +691,32 @@ and 3b leaves them there. §11's "every slice adds its step to the stream loop t
   address; the reset of a joined box), `README.md` (the reset paragraphs).
 - **`scripts/`**: `versitygw-pin.test.ts` (new); `go-binary-notices.mjs` (Litestream's generator,
   taking the program's name); `deploy-image-env.test.ts`; `ci-workflow.test.mjs`
-  (`STREAM_TEST_FILES`, if a new file needs versitygw); `waitron-sh.test.mjs`;
+  (`STREAM_TEST_FILES`: Task 5.7's store case and Task 6.8a's `spare-join.e2e.test.ts`);
+  `waitron-sh.test.mjs`; `personal-log-params.test.ts` (the `mdns.responding` row, Task 2.3a);
   `write-path-tables.json` (`node_pair_link`); `backup-room-note.test.ts` and `spare-space.test.ts`
   hand lists (Task 6.4).
 - **`.github/workflows/`**: `image-smoke.yml` (versitygw's version), `ci.yml` (Task 5.7's store
-  case in the stream job and the server shards' excludes, `ci.yml:1177,1312-1323`).
+  case and Task 6.8a's two-box test in the stream job and the server shards' excludes,
+  `ci.yml:1177,1312-1323`).
 - **`packages/node-db/`**: `src/schema/node-pair-link.ts`, `drizzle/0002_*.sql` (generated),
-  `src/classification.ts`, `src/pair-link.ts` (readers, and the delete helper), `src/index.ts`;
-  delete helpers in `mode.ts`, `mirror-link.ts`, `recovery-key.ts`, `primary-key.ts`.
-- **`packages/credentials/`**: `src/node-pair-link.ts` (the writers, which seal), a delete helper in
-  `src/node-signing-key.ts`, `src/cli.ts` (rotate).
+  `src/classification.ts`, `src/pair-link.ts` (readers only), `src/index.ts`; delete helpers in
+  `mode.ts`, `mirror-link.ts`, `recovery-key.ts`, `primary-key.ts`.
+- **`packages/credentials/`**: `src/node-pair-link.ts` (the writers, which seal, and the pair link's
+  delete helper — the file `write-path-tables.json` names for the table, Task 5.2), a delete helper
+  in `src/node-signing-key.ts`, `src/cli.ts` (rotate).
 - **`apps/server/src/`**: new `box-name.ts`, `box-lookup.ts`, `box-tls-install.ts`,
-  `spare-store.ts`, `spare-pipe.ts`, `spare-join.ts`, `spare-copy.ts`, `spare-copy-placement.ts`;
+  `spare-store.ts`, `spare-pipe.ts`, `spare-join.ts`, `spare-copy.ts`, `spare-copy-placement.ts`,
+  `boot.mirror-surface.test.ts`, `spare-join.e2e.test.ts`, `testing/spare-join-scenario.ts` and
+  `testing/stream-box.ts`;
   changed `adopt.ts`, `mirror-bundle.ts`, `mirror-bundle-api.ts`, `mirror-bundle-fetch.ts`,
   `finish-adoption.ts`, `reserved-identity.ts`, `membership-mint.ts`, `membership-reconcile.ts`,
   `membership-seed.ts` callers, `rebuild-first-start.ts`, `start-peer-check.ts`,
   `boot-peer-check.ts`, `mdns.ts`, `mirror-session.ts`, `promote-api.ts`, `box-secrets.ts`,
   `self-signed-cert.ts`, `backup-optional-state.ts`, `reset-request.ts`, `stream-host.ts`,
   `stream-api.ts`, `membership-removal.ts`, `boot.ts`, `config.ts`, `errors.ts`,
-  `i18n/recovery-page.ts`, `testing/stream-loop-scenario.ts`; `mirror-bind-guard.ts` and its test
+  `i18n/recovery-page.ts`, `setup-api.ts` (`ADOPT_STATUS`), `testing/stream-loop-scenario.ts`
+  (its box provisioning shared with the two-box scenario, Task 6.8a; its spare steps, Task F.2b);
+  `mirror-bind-guard.ts` and its test
   deleted; `guide/en/servers.md` and `guide/es/servers.md`.
 - **`apps/till/src/api/server-router.ts`**; **`apps/setup/src/`** (refusal words, the joined
   screen); **`apps/dashboard/src/i18n/codes.ts`** (the bucket refusal, the promotion refusal).
@@ -597,7 +739,8 @@ under Docker's `amd64`/`arm64` names, `sha256sum -c`, `tar` of `<name>/versitygw
 `.github/workflows/image-smoke.yml` (run `docker exec "$app" versitygw --version` and compare with
 the pin, beside the Litestream step at `:270-285`). Create `scripts/versitygw-pin.test.ts`, as
 `scripts/litestream-pin.test.ts`; `apps/server/src/testing/s3-test-server.ts:20` keeps its copy of
-the version until Task 5.7, and the pin test holds the copies equal.
+the version (`scripts/setup-s3-test-server.test.mjs:234-240` reads that line as text), and the pin
+test holds the copies equal; Task 5.7 adds the server's own copy to it.
 
 - [ ] **Step 1: Write the failing test** `scripts/versitygw-pin.test.ts`: "names one version in the
   setup script, the test server and the box image"; "checks the same Linux checksums in the box
@@ -687,7 +830,7 @@ expected value changes); find them with `git grep -n "advertisedOrigin\|contactU
 ### Task 2.2: The mDNS lookup, which never finds the box itself
 
 **Files:** Create `apps/server/src/box-lookup.ts`. Test `apps/server/src/box-lookup.test.ts`. No
-caller yet (Task 4.1 wires it into `boxExchange`; Task 2.3 uses its query in setup mode).
+caller yet (Task 4.1 wires it into `boxExchange`; Task 2.3b uses its query in setup mode).
 
 **Interfaces — Produces:** `lookupBoxName(hostname: string, opts?: { timeoutMs?: number; makeSocket?: () => MdnsQuerySocket; ownAddresses?: () => string[] }): Promise<string[]>`
 — for a name ending `.local`: one multicast query for its A record; every IPv4 answered within
@@ -695,7 +838,7 @@ caller yet (Task 4.1 wires it into `boxExchange`; Task 2.3 uses its query in set
 `ownAddresses()`** (default: this box's interface addresses, as `request-from-box.ts:14-21` reads
 them, plus loopback); none left refuses `mirror.peer_unresolved` (log-only). Any other name goes to
 `dns.lookup` (all addresses). A literal IP is returned as `[ip]`. `askedAndHeardOthers(hostname, opts)`:
-the same query, answering whether any address but this box's own answered (Task 2.3).
+the same query, answering whether any address but this box's own answered (Task 2.3b).
 
 - [ ] **Step 1: Write the failing tests** with a fake socket: "collects every A record answered
   within the limit"; "ignores an answer for another name"; **"a box in setup mode does not resolve
@@ -706,49 +849,81 @@ the same query, answering whether any address but this box's own answered (Task 
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/box-lookup.test.ts` — FAIL.
 - [ ] **Step 3: Implement**, with the `multicast-dns` package the responder already uses (its
   default loops the box's own answers back, fact 5; filtering, not switching loopback off, is what
-  lets the setup-mode check of Task 2.3 hear other boxes).
+  lets the setup-mode check of Task 2.3b hear other boxes).
 - [ ] **Step 4: Run** it — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "server: a box finds another box's .local name by asking the network, and never finds itself"`.
 
-### Task 2.3: mDNS answers the box's own name, and the venue's name only where D3 says
+### Task 2.3a: mDNS answers the box's own name, and the venue's name only where D3 says
 
 **Files:** Modify `mdns.ts` (`MdnsDeps.hostname` becomes `names: () => readonly string[]`, read per
-query; `buildMdnsAnswers(name, addresses)` unchanged), and the five starts in `boot.ts`: setup
-`[BOX_HOSTNAME]` while `askedAndHeardOthers` last answered no (asked at start and every 30
-seconds), else `[]`; the latch start and the restricted start `[ownHostname]`; the waiting start
+query; `buildMdnsAnswers(name, addresses)` unchanged; the `mdns.responding` log line's field
+becomes `hostnames`), `scripts/personal-log-params.test.ts` (the row `mdns.responding.hostname` at
+`:75` becomes `mdns.responding.hostnames`, "the box's own host names"), and four of the five starts
+in `boot.ts`: the latch start and the restricted start `[ownHostname]`; the waiting start
 `[ownHostname, BOX_HOSTNAME]`; the full start `[ownHostname, ...(acceptingSales ? [BOX_HOSTNAME] : [])]`,
-with `acceptingSales` as `boot.ts:2309` computes it. Test `mdns.test.ts`, `boot.mirror.test.ts`,
-`waiting-start.test.ts`.
+with `acceptingSales` as `boot.ts:2309` computes it. The setup start keeps `[BOX_HOSTNAME]` until
+Task 2.3b. `StartServerSeams` gains `mdnsSocket?` so a boot test can hand the responder a fake
+socket. Tests `mdns.test.ts`, `boot.mirror.test.ts`, `waiting-start.test.ts`.
 
 **Changed checks:** `mdns.test.ts:68` ("answers an A query for its hostname…") and `:84`, `:100`
 take `names` instead of `hostname`; their expected answers stay (same value, new input).
+`scripts/personal-log-params.test.ts:75`: the field's name changes with the log line.
 
 - [ ] **Step 1: Write the failing tests.** "answers each of its names"; "stops answering a name
   dropped from the list on the next query"; "a box that is not selling answers its own name and not
-  the venue's"; "a box in setup mode stops answering the venue's name once another box answers it"
-  (fake socket: a looped-back own answer alone keeps it answering; another box's answer stops it at
-  the next ask); in `boot.mirror.test.ts` with an injected socket: "a mirror start answers only its
-  own name"; in `waiting-start.test.ts`: "a waiting box answers the venue's name and its own".
+  the venue's"; in `boot.mirror.test.ts`, binding `0.0.0.0` (the responder is off on a loopback
+  listener, `mdns.ts:55`; `boot.mirror.test.ts:495` already binds `0.0.0.0`) with the injected
+  socket: "a mirror start answers only its own name"; in `waiting-start.test.ts`, the same way: "a
+  waiting box answers the venue's name and its own".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/mdns.test.ts` — FAIL.
-- [ ] **Step 3: Implement.** The 30-second ask is a timer the setup start stops on close.
-- [ ] **Step 4: Run** it — PASS; then `src/boot.mirror.test.ts src/waiting-start.test.ts`.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** it — PASS; then `src/boot.mirror.test.ts src/waiting-start.test.ts` and root
+  `scripts/personal-log-params.test.ts`.
 - [ ] **Step 5: Commit** `git commit -s -m "server: only the box that sells or waits to sell answers waitron.local"`.
+
+### Task 2.3b: A box in setup mode stops answering the venue's name once another box does
+
+**Files:** Modify `boot.ts`'s setup start: `[BOX_HOSTNAME]` while `askedAndHeardOthers` (Task 2.2)
+last answered no, else `[]`; asked at start and then after 30 seconds plus a random 0–10 seconds,
+drawn afresh each time (D3); the timer stops on close. `StartServerSeams` gains `setupAskRandom?`
+(the random source) for tests. Test `mdns.test.ts` (the rule as a function with a fake clock) and
+`boot.setup-routes.test.ts` or the setup start's existing suite for the timer's stop.
+
+- [ ] **Step 1: Write the failing tests.** "a box in setup mode stops answering the venue's name
+  once another box answers it" (fake socket: a looped-back own answer alone keeps it answering;
+  another box's answer stops it at the next ask); "asks again after 30 seconds plus the random
+  delay" (fake clock and random source: the second ask at 30 s + the drawn delay, not at 30 s);
+  "the setup start's ask timer stops when the server closes".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/mdns.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** it — PASS; then the setup start's suite.
+- [ ] **Step 5: Commit** `git commit -s -m "server: a box in setup mode leaves waitron.local to a box that already answers it"`.
 
 ### Task 2.4: The console also gives the box's own address
 
 **Files:** Modify `deploy/waitron.sh` (`print_links`, `:460-477`: after "Start here", one line per
-IPv4 the host lists, `http://<address>/setup/trust`, under the words below; the QR code stays the
-`waitron.local` one), `scripts/waitron-sh.test.mjs` (a stubbed `hostname -I`), `deploy/README.md`
-(the paragraph that quotes the printed links). Console text is English only, as today.
+address, `http://<address>/setup/trust`, under the words below; the QR code stays the
+`waitron.local` one), `scripts/waitron-sh.test.mjs` (a stubbed `ip`), `deploy/README.md` (the
+paragraph that quotes the printed links). Console text is English only, as today. **Which
+addresses:** the ones the server itself advertises (`listBoxIpv4`, `box-reach.ts:75-91`): the
+IPv4 addresses of the interface carrying the default route, read from `/proc/net/route` as
+`defaultRouteIface` does (`box-reach.ts:40-52`), and when there is none, every non-loopback IPv4
+except on interfaces whose names start with the prefixes in `VIRTUAL_IFACE_PREFIXES`
+(`box-reach.ts:30`: `docker`, `br-`, `veth`, `virbr`, `cni`, `flannel`, `cali`). Addresses come from
+`ip -4 -o addr show`, which names each address's interface. Not `hostname -I`: it lists every
+interface, Docker's bridge included, without saying which (revision 2 used it).
 
 The words: "If this venue already has a Waitron box, waitron.local reaches that box instead. Use
 this box's own address:" followed by the addresses.
 
 - [ ] **Step 1: Write the failing test** in `waitron-sh.test.mjs`: "the ready message gives the box's
-  own setup address for each address the host lists" (stub `hostname -I` printing two addresses;
-  control: with the stub printing nothing, no extra lines and the script still succeeds).
+  own setup address on the default-route interface" (stub `ip` listing `eth0` and `docker0`, and a
+  route file naming `eth0`: only `eth0`'s address is printed); "without a default route, it skips
+  Docker's and other virtual interfaces"; control: with `ip` missing or printing nothing, no extra
+  lines and the script still succeeds.
 - [ ] **Step 2: Run** `pnpm exec vitest run scripts/waitron-sh.test.mjs -t "own setup address"` — FAIL.
-- [ ] **Step 3: Implement**, under `set -u`, with `hostname -I` failing quietly.
+- [ ] **Step 3: Implement**, under `set -u`, with `ip` failing quietly. The route file's path is a
+  variable the test points at its own file.
 - [ ] **Step 4: Run** the whole file — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "box: the console says how to reach a second box's setup"`.
 
@@ -770,15 +945,18 @@ there if it chooses by the same rule. Test `apps/till/src/api/server-router.test
   — the first FAILS; the pins pass on today's code (say so in the commit).
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it — PASS; then `pnpm --filter @waitron/till typecheck` and, if changed,
-  `pnpm --filter @waitron/print-agent exec vitest run src/router.test.ts`. Open the till's lock
-  screen once (`wa-wt demo <worktree>`) and look: no server line on a one-box venue.
+  `pnpm --filter @waitron/print-agent exec vitest run src/router.test.ts`. No look at the dev
+  stack's lock screen: its origin is `http://localhost:<port>`, which D1 leaves as configured, so
+  its chart never holds a `box-…` entry and the screen looks the same with or without the change.
+  The unit tests above are the evidence.
 - [ ] **Step 5: Commit** `git commit -s -m "till: a box listed under its own name is the same server as the page's"`.
 
 ### Task 2.6: Final checks for 3b-2
 
 - [ ] `pnpm --filter @waitron/server typecheck`, `pnpm --filter @waitron/till typecheck`,
   `pnpm format:check`; from the root `scripts/deploy-image-env.test.ts` (BOX_HOSTNAME pins
-  unchanged), `scripts/errors-reachable.test.ts`, `scripts/waitron-sh.test.mjs`. PR first line:
+  unchanged), `scripts/errors-reachable.test.ts`, `scripts/waitron-sh.test.mjs`,
+  `scripts/personal-log-params.test.ts`. PR first line:
   "Each box names itself (`box-<id>.waitron.local`) in the chart and its mDNS answers, never finds
   itself by name, and only the box that sells or waits to sell answers waitron.local." Then
   `/finish-branch` on the full path.
@@ -787,21 +965,26 @@ there if it chooses by the same rule. Test `apps/till/src/api/server-router.test
 
 ## PR 3b-3 — a spare's certificate authority is the venue's
 
-Full review path. Retires A1295; closes C2.
+Full review path. Retires A1295; closes C2. Built after 3b-2 lands: Tasks 3.1 and 3.3 call Task
+2.1's `boxHostnameFor`.
 
 ### Task 3.1: Joining installs the venue authority whole, and `venue-ca` goes
 
 **Files:** Create `apps/server/src/box-tls-install.ts`; modify `box-secrets.ts`
-(`writeVenueAuthority` removed), `adopt.ts:169-172` (the call: `installVenueAuthority`),
+(`writeVenueAuthority` removed), `adopt.ts` (right after `hooks.beforeFirstWrite()` at `:166` and
+before `stampDeployment` and `persistCredentialsRing` at `:167-168`: `markJoined`; at `:169-172`:
+`installVenueAuthority`),
 `boot.ts` (before any start reads `tls/`: `finishTlsInstall(stateDir)`),
 `backup-optional-state.ts:14-15` (drop `tls/venue-ca.*`). Tests `box-tls-install.test.ts` (new),
 `adopt.test.ts`, `archive-entries.test.ts`, `backup-data-placement.test.ts`,
 `backup-verification.installed.test.ts`, `backup-optional-state.test.ts`.
 
-**Interfaces — Produces:** `installVenueAuthority(deps: { stateDir; authority: { certPem; keyPem }; originNodeId; hostnames: string[]; listIpv4; now }): Promise<void>`
-— D9's order: `tls/joined.json` first (`{ originNodeId }`, durable), then four working files (the
-authority and a leaf it issues with `reissueServerLeaf` for `hostnames`), then durable
-`tls/install.json` naming them, then the renames, then `install.json` removed;
+**Interfaces — Produces:** `markJoined(stateDir: string, originNodeId: string): Promise<void>` —
+writes `tls/joined.json` (`{ originNodeId }`) durably (written, synced, renamed into place);
+`installVenueAuthority(deps: { stateDir; authority: { certPem; keyPem }; hostnames: string[]; listIpv4; now }): Promise<void>`
+— D9's order: four working files (the authority and a leaf it issues with `reissueServerLeaf` for
+`hostnames`), then durable `tls/install.json` naming them, then the renames, then `install.json`
+removed;
 `finishTlsInstall(stateDir): Promise<"none" | "finished" | "discarded">` — finishes the renames a
 listed install left, or deletes working files no list names; `joinedAnotherBox(stateDir): Promise<boolean>`.
 
@@ -815,11 +998,18 @@ no longer exist); each is a changed expected value.
   did: "a joined box's leaf verifies under the main box's authority" (a `node:tls` connect with
   `servername` the own name and `ca` the main box's authority); "a crash after the list finishes at
   the next start" (stop after each rename in turn: `finishTlsInstall` leaves a matching authority
-  and leaf every time); "working files with no list are deleted"; "the marker is written before any
-  authority file" (a crash before the list leaves the marker and the box's own authority, and the
-  next start serves the old leaf). `adopt.test.ts`: the changed row above.
+  and leaf every time); "working files with no list are deleted"; "a crash before the list leaves
+  the box's own authority, and the next start serves the old leaf". `adopt.test.ts`: the changed
+  row above; **"the joined marker is written before the main box's key ring"** (a
+  `persistCredentialsRing` stub that records whether `tls/joined.json` exists when it is called:
+  it does); **"a join stopped just after the key ring was written leaves the marker, so the staged
+  reset removes the ring"** (the authority install made to throw after `persistCredentialsRing`
+  wrote `secrets.env`; then Task 3.2's staged reset: `secrets.env` and `tls/` are gone; control: a
+  join that stopped before `beforeFirstWrite` leaves no marker and the reset is not offered, as
+  today).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/box-tls-install.test.ts src/adopt.test.ts`
-  — FAIL.
+  — FAIL. (The reset half of the stopped-join case runs once Task 3.2 lands; write it in Task 3.2's
+  commit if Task 3.1 is committed first, and say so.)
 - [ ] **Step 3: Implement.** Do not delete the leaf and rely on a later issue: no trading start
   mints, and a reissue needs the old leaf (fact 20).
 - [ ] **Step 4: Run** them — PASS; then `src/archive-entries.test.ts src/backup-data-placement.test.ts
@@ -887,7 +1077,8 @@ start included). Test `apps/server/src/box-leaf-names.test.ts` (new).
 
 ## PR 3b-4 — the boxes reach and trust each other
 
-Full review path. Unblocks R12, R13, A1018 fact 4 and the reconcile entry.
+Full review path. Unblocks R13 and A1018 fact 4. The start check's trust (R12) and the boot
+reconcile moved to 3b-G in revision 3 (D16); Task numbers 4.2 and 4.3 are not reused.
 
 ### Task 4.1: Box-to-box calls use the lookup, and try each answer under the pin
 
@@ -905,43 +1096,11 @@ failure). Test `mirror-bundle-fetch.test.ts`.
   through Task 2.2's filter).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/mirror-bundle-fetch.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** it — PASS; then `src/setup-api.test.ts src/adopt.test.ts`.
+- [ ] **Step 4: Run** it — PASS; then `src/setup-api.test.ts src/adopt.test.ts src/primary-url.test.ts`.
+  `assertSafePrimaryUrl` still runs on the typed address before the lookup and is not changed: it
+  refuses private literals and lets names through, and its header already says it does not
+  defend a name that resolves to a private address (`primary-url.ts:1-7`).
 - [ ] **Step 5: Commit** `git commit -s -m "server: box-to-box calls find a .local box by asking the network, and try each answer"`.
-
-### Task 4.2: Every peer call trusts the venue authority and nothing else
-
-**Files:** Modify `start-peer-check.ts:191-196` (`authorityOf` returns this box's `tls/ca.crt` for
-every peer), `boot-peer-check.ts:346-353` (the `rejectUnauthorized: false` branch and its comment
-go; a TLS refusal records the silent reason `certificate`). Tests `boot-peer-check.test.ts`,
-`start-peer-check.test.ts`.
-
-**Changed checks:** the cases that ask a peer serving a certificate no authority signed and expect
-an answer (`git grep -n "rejectUnauthorized\|authorityOf" -- 'apps/server/src/*.test.ts'`) now
-expect silence with `certificate` (the expected value changes).
-
-- [ ] **Step 1: Write the failing tests.** "a main box verifies its spare's certificate under the
-  venue authority" (two local HTTPS servers under one authority); "a peer whose certificate another
-  authority signed is silent, with the reason certificate" (Review Focus 5).
-- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/boot-peer-check.test.ts src/start-peer-check.test.ts` — FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** them — PASS; then `src/boot.start-check.test.ts src/waiting-start.test.ts`.
-- [ ] **Step 5: Commit** `git commit -s -m "server: a box trusts another box's certificate only under the venue's authority"`.
-
-### Task 4.3: The boot reconcile uses the same transport
-
-**Files:** Modify `membership-reconcile.ts:60-78` (`fetchPeerMembershipDocument` sends through
-`boxExchange` with the venue authority and a 5-second limit; its "unreachable → `null`" answers
-stay), `boot.ts:1914-1935` (the peer address: the origin box's `contactUrl` from the held chart when
-it lists one, else the mirror link's address). Tests `membership-reconcile.test.ts`,
-`boot.reconcile.test.ts`.
-
-- [ ] **Step 1: Write the failing tests.** "fetches a peer's chart from a box under the venue
-  authority" (fails today: the global `fetch` refuses the leaf); "answers null for a peer that does
-  not answer within 5 seconds"; "answers null for a peer under another authority".
-- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/membership-reconcile.test.ts` — FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** it — PASS; then `src/boot.reconcile.test.ts`.
-- [ ] **Step 5: Commit** `git commit -s -m "server: the start's chart check reaches a real box, and gives up after five seconds"`.
 
 ### Task 4.4: Every chart vouches for every listed box's key (R13)
 
@@ -967,34 +1126,50 @@ none") — unchanged if its chart lists no other endorsed box; check before edit
   src/membership-removal-api.test.ts src/promote.test.ts`; and `pnpm --filter @waitron/membership exec vitest run`.
 - [ ] **Step 5: Commit** `git commit -s -m "membership: each chart vouches for the key of every box it lists"`.
 
-### Task 4.5: A mirror listens on the venue's network; its open dashboard stays on its own screen
+### Task 4.5a: A mirror listens on the venue's network; its open dashboard stays on its own screen
 
 **Files:** Delete `mirror-bind-guard.ts` and its test; modify `boot.ts:2002-2005` (the call and its
 comment), `mirror-session.ts` (`mirrorSession` takes `isFromBox: (c) => boolean`, default
 `requestFromBox`, and attaches nothing — no cookie, no keep-alive write — to any other request),
 `errors.ts` (retire `server.mirror_bind_exposed` and its doc comment at `:214`). Tests
-`mirror-session.test.ts`, `boot.mirror.test.ts`, new `boot.mirror-surface.test.ts`.
+`mirror-session.test.ts`, `boot.mirror.test.ts`.
 
 **Changed checks:** `boot.mirror.test.ts:475-505` ("refuses a mirror boot binding a non-loopback
 host without the … opt-in" and its opted-in twin) — replaced by "a mirror boot listens on a
 non-loopback host". `mirror-bind-guard.test.ts` (6 cases) — deleted with the guard; D8 retires its
-behaviour, and the new cases below carry the protection it gave.
+behaviour, and the new cases here and in Task 4.5b carry the protection it gave.
 
 - [ ] **Step 1: Write the failing tests.** "gives the ambient viewer to a request from the box
   itself"; "gives a request from another address no session and writes nothing" (the
   `managementSessions` row's `last_seen_at` unchanged); "a dashboard read from another address is
   refused as signed out" (401 through a real route); boot: "a mirror boot listens on a non-loopback
-  host". `boot.mirror-surface.test.ts`: **"a mirror serves the network only what D8 lists"** — boot
-  a mirror, walk every route Hono's `app.routes` lists, send each from a non-box address with no
-  credentials, and check: each non-`GET` answers 403 `node.read_only` except the two signed routes
-  and the two promotion routes (Task 4.6); each `GET` answers 401 or 403 unless it is on the test's
-  own short list of open reads, which the test file names and Task 4.7's PR body copies.
-- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/mirror-session.test.ts src/boot.mirror.test.ts src/boot.mirror-surface.test.ts` — FAIL.
+  host".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/mirror-session.test.ts src/boot.mirror.test.ts` — FAIL.
 - [ ] **Step 3: Implement.** Trace every consumer of the viewer first (global CLAUDE.md):
-  `git grep -n "MIRROR_VIEWER\|mirrorSession\|ensureMirrorViewer" -- apps packages`. If the surface
-  test finds an open read D8 does not name, STOP and report it rather than adding it to the list.
+  `git grep -n "MIRROR_VIEWER\|mirrorSession\|ensureMirrorViewer" -- apps packages`.
 - [ ] **Step 4: Run** them — PASS; then `src/request-from-box.test.ts src/till-reroute-e2e.test.ts`.
 - [ ] **Step 5: Commit** `git commit -s -m "server: a spare can be reached from the venue's network; its open dashboard is for its own screen"`.
+
+### Task 4.5b: What a mirror serves the network, walked; its landing pages stay on its own screen
+
+**Files:** Modify `boot.ts:3736` (on a mirror, `startLandingListener` is given `httpHost:
+"127.0.0.1"`; every other start unchanged, D8 item 6). Create `boot.mirror-surface.test.ts`.
+
+- [ ] **Step 1: Write the failing tests.** `boot.mirror-surface.test.ts`: **"a mirror serves the
+  network only what D8 lists"** — boot a mirror on `0.0.0.0`, walk every route Hono's `app.routes`
+  lists, send each from a non-box address with no credentials, with its own method and with
+  `OPTIONS`, and check: each non-`GET`/`HEAD`/`OPTIONS` request answers 403 `node.read_only` except
+  the two signed routes and the two promotion routes (Task 4.6 makes those answer
+  `promotion.from_box_only`; until it lands, list them as the test's known gap and say so); each
+  `GET` answers 401 or 403 unless it is on the test's own short list of open reads, which the test
+  file names and Task 4.7's PR body copies; **"a mirror's landing listener is on loopback only"**
+  (its bound address is `127.0.0.1`; control: a primary's full start binds the configured host).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/boot.mirror-surface.test.ts` — FAIL.
+- [ ] **Step 3: Implement.** If the walk finds an open read or an open write D8 does not name,
+  STOP and report it rather than adding it to the list.
+- [ ] **Step 4: Run** it — PASS; then `src/boot.mirror.test.ts`; and the landing suites
+  (`git grep -ln "startLandingListener\|buildLandingApp" -- 'apps/server/src/*.test.ts'`).
+- [ ] **Step 5: Commit** `git commit -s -m "server: a spare's network surface is walked by a test, and its landing pages stay on its own screen"`.
 
 ### Task 4.6: On a mirror, promotion answers only the box itself
 
@@ -1005,10 +1180,11 @@ behaviour, and the new cases below carry the protection it gave.
 route suite that mounts it), `read-only-exemptions.test.ts`, `apps/dashboard/src/i18n/codes.test.ts`.
 
 The words (dashboard; no screen sends this request today, `git grep -n "management-api/promote" --
-apps` finds only the server):
-- EN: "In this version a spare box can be switched on only from its own screen. Nothing was changed."
-- ES: "En esta versión, un equipo de reserva solo se puede activar desde su propia pantalla. No se ha
-  cambiado nada."
+apps` finds only the server; "Standby" / «servidor en espera» as the Servers screen says, fact 26):
+- EN: "In this version a standby server can be switched on only from its own screen. Nothing was
+  changed."
+- ES: "En esta versión, un servidor en espera solo se puede activar desde su propia pantalla. No se
+  ha cambiado nada."
 
 **Changed checks:** `read-only-exemptions.test.ts`'s pinned rows (the `authenticates` text of the
 two promotion rows changes).
@@ -1020,15 +1196,16 @@ two promotion rows changes).
   `/promote/preparation`; control: "a fenced box's promotion refusal is unchanged".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/promote-api.test.ts src/read-only-exemptions.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** them — PASS; then `src/boot.mirror-surface.test.ts src/promote.test.ts`,
+- [ ] **Step 4: Run** them — PASS; then `src/boot.mirror-surface.test.ts` (its two promotion routes
+  now answer `promotion.from_box_only`; remove the known-gap note), `src/promote.test.ts`,
   `pnpm --filter @waitron/dashboard exec vitest run src/i18n/codes.test.ts`.
 - [ ] **Step 5: Commit** `git commit -s -m "server: a spare is switched on only from its own screen until the take-over lands"`.
 
 ### Task 4.7: Final checks for 3b-4
 
 - [ ] Typecheck `@waitron/server`, `@waitron/membership`, `@waitron/dashboard`; `pnpm format:check`;
-  root `scripts/errors-reachable.test.ts`, `scripts/write-path-tables.test.ts`. The two backlog
-  entries' text is the session running this plan's, at landing. PR first line names R12, R13, the
+  root `scripts/errors-reachable.test.ts`, `scripts/write-path-tables.test.ts`. The R13 backlog
+  entry's text is the session running this plan's, at landing. PR first line names R13, the
   retired opt-in, and D8's surface list. `/finish-branch`, full path.
 
 ---
@@ -1097,18 +1274,22 @@ what a box did, and Slice 13 decides when they go.
 ### Task 5.3: The joining route refuses first
 
 **Files:** Modify `mirror-bundle-api.ts`: after the credential, **before the reservation**: refuse
-`mirror.bucket_stream_active` (409) when `readStreamSettings` finds bucket settings; refuse
-`module.operation_invalid` when an enabled module fails `assertAdoptionModules` (D12; until 3b-F);
-refuse `mirror.standby_name_taken` (409) when `sameBoxName` matches a listed box (D1); refuse
-repeated ids in the held chart's `revoked` list with `membership.revoked_duplicate` (A1278). Tests
-`mirror-bundle-api.test.ts`.
+`mirror.spare_already_joined` (409) when this box's pair link is `streaming` (D17; in 3b-5 no link
+reaches `streaming` yet, so the test writes one); refuse `mirror.bucket_stream_active` (409) when
+`readStreamSettings` finds bucket settings; refuse `module.operation_invalid` `{ module }` (409)
+when an enabled module fails `assertAdoptionModules` (D12; until 3b-F); refuse
+`mirror.standby_name_taken` (409) when `sameBoxName` matches a listed box (D1); refuse repeated ids
+in the held chart's `revoked` list with `membership.revoked_duplicate` (A1278). Each gets its row in
+the route's `STATUS` (`mirror-bundle-api.ts:60-70`). Tests `mirror-bundle-api.test.ts`.
 
 **Changed checks:** `adoption-allocation-refusal.test.ts:141` — the same code, now also from the main
 box's route before any reservation: the test that checks the spare wrote nothing stays, and the new
 route test checks the main box reserved nothing and listed nobody.
 
-- [ ] **Step 1: Write the failing tests.** "refuses a join while the venue streams to a bucket,
-  reserving nothing and listing nobody"; "refuses a Veri*Factu venue's join before reserving";
+- [ ] **Step 1: Write the failing tests.** "refuses a second spare while one is joined, reserving
+  nothing" (control: a `pending` link does not refuse); "refuses a join while the venue streams to
+  a bucket, reserving nothing and listing nobody"; "refuses a Veri*Factu venue's join before
+  reserving";
   "refuses a spare whose name a listed box already has"; "refuses a chart with a repeated revoked id
   before reserving" (reservations snapshot before and after: equal).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/mirror-bundle-api.test.ts` — FAIL.
@@ -1119,12 +1300,16 @@ route test checks the main box reserved nothing and listed nobody.
 ### Task 5.4: The joining route needs no relay, and hands out the pair's key
 
 **Files:** Modify `mirror-bundle.ts` (`MirrorBundle` gains `primaryUrl` — the main box's own contact
-URL — and `store: { url; accessKeyId; secretAccessKey; venueId }`; `relayUrl` becomes optional,
+URL — and `store: { accessKeyId; secretAccessKey; venueId }`; `relayUrl` becomes optional,
 carried only when a tunnel is configured; the doc comment's list of secrets gains the pair's key),
-`mirror-bundle-fetch.ts` (`isMirrorBundle`), `mirror-bundle-api.ts` (mint the access key:
+`mirror-bundle-fetch.ts` (`isMirrorBundle`; `fetchMirrorBundle`'s `standby` argument gains
+`storeUrl`, sent as `standbyStoreUrl`, D15), `mirror-bundle-api.ts` (read and screen
+`standbyStoreUrl` beside `standbyContactUrl` at `:100-113`: an `https` bare origin whose host is the
+contact URL's host, else `mirror.standby_invalid`; mint the access key:
 `access_key_id` = `waitron` + 16 random hex characters, as `s3-test-server.ts:177`; secret = 32
 random bytes, hex; the chart append passes the spare's endorsement in `extraEndorsements`; after the
-append, this box's pair link `{ role: "streams", state: "pending", … }` in one node transaction —
+append, this box's pair link `{ role: "streams", state: "pending", storeUrl: <standbyStoreUrl>, … }`
+in one node transaction —
 venue first, node after: a crash between leaves a chart entry and no link, which a second join
 replaces), `errors.ts` (retire `mirror.no_relay`), the route's `STATUS`. Tests
 `mirror-bundle-api.test.ts`, `mirror-bundle.test.ts`, `mirror-bundle-fetch.test.ts`, `errors.test.ts`.
@@ -1134,7 +1319,8 @@ configured") — becomes "hands out a bundle with no relay configured, naming th
 address"; `errors.test.ts:175-177` ("constructs mirror.no_relay…") — deleted with the code.
 
 - [ ] **Step 1: Write the failing tests.** "hands out a bundle with no relay, carrying the main box's
-  address and the pair's key"; "writes a pending pair link naming the spare's store"; "the first
+  address and the pair's key"; "writes a pending pair link naming the store address the spare
+  sent"; "refuses a store address at another host than the spare's contact address"; "the first
   chart naming the spare vouches for its key".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/mirror-bundle-api.test.ts src/mirror-bundle.test.ts src/mirror-bundle-fetch.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
@@ -1148,7 +1334,10 @@ address"; `errors.test.ts:175-177` ("constructs mirror.no_relay…") — deleted
 `NODE_CLASSIFICATION` that has a delete helper (Task 5.2), delete every row keyed by another node
 id — A1280; then `writePairLinkTx({ role: "serves", state: "awaiting_copy", peerNodeId:
 designated.nodeId, peerPublicKey: bundle.primaryPublicKey, … })`; the mirror link's address is
-`bundle.primaryUrl`), `packages/node-db/src/mirror-link.ts` (the TypeScript field `relayUrl` becomes
+`bundle.primaryUrl`; the bundle request sends `storeUrl` = `https://<own name>:<config.spareStorePort>`,
+D15 — so `AdoptDeps` gains `spareStorePort`), `config.ts` (`WAITRON_SPARE_STORE_PORT`, default 7443,
+D11; Task 5.8's listener reads the same setting), `boot.ts` (the setup start passes it to adopt),
+`packages/node-db/src/mirror-link.ts` (the TypeScript field `relayUrl` becomes
 `originUrl`; the column `relay_url` keeps its name, so no migration). Tests `adopt.test.ts`,
 `packages/node-db/src/mirror-link.test.ts`.
 
@@ -1156,7 +1345,8 @@ designated.nodeId, peerPublicKey: bundle.primaryPublicKey, … })`; the mirror l
 'apps/server/src/*.test.ts' 'packages/node-db/src/*.test.ts'`) — the field is renamed, same value.
 
 - [ ] **Step 1: Write the failing tests.** "keeps the pair's key sealed in node.db, opening under the
-  venue's ring"; "a second join under a new id removes the first attempt's node.db rows" (control:
+  venue's ring"; "sends its own store address with the joining request"; "a second join under a new
+  id removes the first attempt's node.db rows" (control:
   the new id's rows are all there); **"every node.db table is either swept by adopt or named as
   kept"** (walks `NODE_CLASSIFICATION`: each table has a helper or is one of the three handover
   tables; a new table with neither fails).
@@ -1168,10 +1358,12 @@ designated.nodeId, peerPublicKey: bundle.primaryPublicKey, … })`; the mirror l
 
 ### Task 5.6: The setup app explains the new refusals
 
-**Files:** Modify `apps/setup/src/setup-app.ts:254-264` (`ADOPT_ERROR_MESSAGES` gains the three
+**Files:** Modify `apps/setup/src/setup-app.ts:254-264` (`ADOPT_ERROR_MESSAGES` gains the four
 codes), `apps/setup/src/i18n/strings/shell.ts` (English and Spanish). Test
 `apps/setup/src/setup-app.test.ts`. The words use the setup app's own terms ("primary server", "this
-server", Connect, Back).
+server", Connect, Back) and, for the spare, the Servers screen's ("standby" / «servidor en espera»,
+Remove / «Retirar», fact 26). These words reach the person only once Task 5.6b passes the codes
+on; this task's tests stub the API.
 
 - `mirror.bucket_stream_active`
   - EN: "The primary server copies the restaurant's data to its own storage bucket, and it can copy
@@ -1194,30 +1386,82 @@ server", Connect, Back).
     nada en ninguno de los dos servidores. Vuelve a pulsar Conectar: elegirá un nombre nuevo."
 - `module.operation_invalid` on the adopt path (until 3b-F)
   - EN: "The restaurant files its invoices with Veri*Factu, and this version of Waitron cannot yet
-    add a spare server to a restaurant that does. Nothing was changed on either server, and the
+    add a standby server to a restaurant that does. Nothing was changed on either server, and the
     primary keeps working as before. Back returns to the start of setup. You can leave this server
     switched off and join it after an update that adds this."
   - ES: "El restaurante presenta sus facturas con Veri*Factu, y esta versión de Waitron aún no puede
-    añadir un servidor de reserva a un restaurante que lo hace. No se ha cambiado nada en ninguno de
+    añadir un servidor en espera a un restaurante que lo hace. No se ha cambiado nada en ninguno de
     los dos servidores, y el principal sigue funcionando como antes. Volver te lleva al inicio de la
     configuración. Puedes dejar este servidor apagado y unirlo después de una actualización que lo
     permita."
+- `mirror.spare_already_joined`
+  - EN: "The primary server already has a standby server that finished joining, and this version of
+    Waitron keeps one standby per restaurant. A standby that finished joining cannot be removed in
+    this version. Nothing was changed on either server. Back returns to the start of setup, where
+    this server can be set up for another restaurant; or leave it switched off."
+  - ES: "El servidor principal ya tiene un servidor en espera que terminó de unirse, y esta versión
+    de Waitron admite un solo servidor en espera por restaurante. Un servidor en espera que terminó
+    de unirse no se puede retirar en esta versión. No se ha cambiado nada en ninguno de los dos
+    servidores. Volver te lleva al inicio de la configuración, donde puedes configurar este servidor
+    para otro restaurante; o déjalo apagado."
 
 - [ ] **Step 1: Write the failing tests.** "shows the bucket refusal's words with both choices";
-  "shows the name refusal and leaves Connect working"; "shows the Veri*Factu refusal and Back"; the
-  same three in Spanish (the screen tests read expected strings, CLAUDE.md §3).
+  "shows the name refusal and leaves Connect working"; "shows the Veri*Factu refusal and Back";
+  "shows the second-standby refusal and Back"; the same four in Spanish (the screen tests read
+  expected strings, CLAUDE.md §3).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/setup exec vitest run src/setup-app.test.ts` — FAIL.
 - [ ] **Step 3: Implement.** Open each refusal in both themes and at phone width, and look.
 - [ ] **Step 4: Run** it — PASS; `pnpm --filter @waitron/setup typecheck`.
-- [ ] **Step 5: Commit** `git commit -s -m "setup: words for a join refused by a bucket copy, a name in use, or Veri*Factu"`.
+- [ ] **Step 5: Commit** `git commit -s -m "setup: words for a join refused by a bucket copy, a name in use, a joined standby, or Veri*Factu"`.
+
+### Task 5.6b: The spare passes each of the main box's new refusals on, in its own words
+
+**Files:** Modify `apps/server/src/mirror-bundle-fetch.ts` (`refusalFrom`, `:75-89`: besides
+`password.invalid`, it rebuilds a short named list — `mirror.bucket_stream_active`,
+`mirror.standby_name_taken`, `mirror.spare_already_joined` with no parameters, and
+`module.operation_invalid` with `{ module }` only when `module` is the name of a module in
+`ALL_MODULES`, else no relay; every other code, and every parameter not named here, still becomes
+`mirror.bundle_fetch_failed`. The doc comment says so; the file's rule that nothing the main box
+wrote travels on stays: each relayed error is built here from the list, not copied),
+`apps/server/src/setup-api.ts` (`ADOPT_STATUS`, `:290-302`: the three new codes at 409;
+`module.operation_invalid` is already 409 at `:291`). `membership.revoked_duplicate` is not on the
+list: a repeated id comes only from a faulty chart, and the generic words stay for it. Tests
+`mirror-bundle-fetch.test.ts`, `adoption-allocation-refusal.test.ts` (or a new
+`adopt-refusal-relay.test.ts`).
+
+**Changed checks: none.** The existing cases that pin today's mapping keep every assertion: they
+use `totp.invalid`, `person.not_found`, `person.suspended` and four malformed bodies
+(`mirror-bundle-fetch.test.ts:175-221`), none of them on the list, so "a code other than
+password.invalid" stays as the control for codes not on it. Only new cases are added. If an
+existing assertion turns out to need changing, STOP and report.
+
+- [ ] **Step 1: Write the failing tests.** In `mirror-bundle-fetch.test.ts`: "passes on
+  mirror.bucket_stream_active, carrying none of its parameters"; the same for
+  `mirror.standby_name_taken` and `mirror.spare_already_joined`; "passes on module.operation_invalid
+  with a known module's name, and nothing else" (the main box sends `{ module: "fiscal-verifactu",
+  detail: "https://primary.internal" }`: the error's params are `{ module: "fiscal-verifactu" }`);
+  "does not pass on module.operation_invalid naming an unknown module" (→
+  `mirror.bundle_fetch_failed`). **Route-level, through the real `fetchMirrorBundle`:** the spare's
+  `POST /setup-api/adopt` (`mountSetup` with `adoptFromPrimary` whose `fetchBundle` is the real
+  `fetchMirrorBundle`, as `adoption-allocation-refusal.test.ts:173-197` mounts it) against a local
+  main box route answering each code: the setup route answers 409 with that code and its
+  parameters, writes nothing, and does not restart.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/mirror-bundle-fetch.test.ts src/adoption-allocation-refusal.test.ts`
+  — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** them — PASS; then `src/setup-api.test.ts src/adopt.test.ts`; root
+  `scripts/errors-reachable.test.ts`.
+- [ ] **Step 5: Commit** `git commit -s -m "joining: the spare shows each of the main box's refusals in its own words"`.
 
 ### Task 5.7: The spare runs the store
 
 **Files:** Create `apps/server/src/spare-store.ts`. Modify `config.ts` (`WAITRON_VERSITYGW_BIN`,
 default `versitygw`), `boot.ts` (start the store in the latch start and in a mirror's full start when
 `readPairLink` gives `role: "serves"`; in the full start register it in `background-duties.ts` with
-a reason), `apps/server/src/testing/s3-test-server.ts:20` (import `VERSITYGW_VERSION` from
-`spare-store.ts`; Task 1.1's pin test then reads it there). Test `spare-store.test.ts`.
+a reason), `scripts/versitygw-pin.test.ts` (one more case: "the spare's store names the same
+version", reading `spare-store.ts` as text). `apps/server/src/testing/s3-test-server.ts:20` is
+**not** changed: `scripts/setup-s3-test-server.test.mjs:234-240` expects that exact line, and
+revision 2's import would have broken it. Test `spare-store.test.ts`.
 
 **Interfaces — Produces:** `VERSITYGW_VERSION = "1.8.0"`; `SPARE_STORE_BUCKET = "waitron"`;
 `SPARE_STORE_REGION = "us-east-1"` (as `s3-test-server.ts:176`);
@@ -1236,7 +1480,8 @@ supervisor's backoff; `SpareStore = { loopbackUrl: string; stop(): Promise<void>
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it — PASS, with the binaries installed
   (`node scripts/setup-s3-test-server.mjs`); then `src/boot.mirror.test.ts src/boot.failed-start.test.ts
-  src/handover-stepdown.test.ts` and root `scripts/ci-workflow.test.mjs scripts/versitygw-pin.test.ts`.
+  src/handover-stepdown.test.ts` and root `scripts/ci-workflow.test.mjs scripts/versitygw-pin.test.ts
+  scripts/setup-s3-test-server.test.mjs`.
 - [ ] **Step 5: Commit** `git commit -s -m "server: a spare runs the store the main box will stream to"`.
 
 ### Task 5.8: The store's listener, which admits the paired main box only
@@ -1244,8 +1489,8 @@ supervisor's backoff; `SpareStore = { loopbackUrl: string; stop(): Promise<void>
 **Files:** Create `apps/server/src/spare-pipe.ts` (the listener half). Modify `self-signed-cert.ts`
 (a client-certificate issuer: `extKeyUsage` `clientAuth` only, the box's own name as its one name),
 `box-secrets.ts` (`ensureLeaf` also keeps `tls/client.crt` and `tls/client.key` present, named for
-this box, under the current authority), `config.ts` (`WAITRON_SPARE_STORE_PORT`, default 7443),
-`boot.ts` (beside the store). Test `spare-pipe.test.ts`, `box-leaf-names.test.ts`.
+this box, under the current authority), `boot.ts` (beside the store, on `config.spareStorePort`
+from Task 5.5). Test `spare-pipe.test.ts`, `box-leaf-names.test.ts`.
 
 **Interfaces — Produces:** `startStoreListener(deps: { port; host; certFile; keyFile; caFile; peerHostname: string; upstreamPort; log }): Promise<{ close() }>`
 — a `node:tls` server with `requestCert: true`, `rejectUnauthorized: true` and `ca` the venue
@@ -1265,31 +1510,40 @@ shape); a refused one is logged `spare.store_client_refused` with its reason.
 - [ ] **Step 4: Run** them — PASS; then `src/boot.mirror.test.ts src/box-secrets.test.ts`.
 - [ ] **Step 5: Commit** `git commit -s -m "server: the spare's store admits only its main box's certificate"`.
 
-### Task 5.9: A joined spare stops a bucket copy, and removing it lifts the stop
+### Task 5.9: A spare stops a bucket copy; removing one that never finished joining lifts the stop
 
 **Files:** Modify `stream-api.ts:227-250` (`PUT /api/backup/stream` refuses
 `backup.spare_stream_active`, 409, when this box holds a pair link, before the probe),
 `apps/dashboard/src/i18n/codes.ts` (words below), `apps/server/src/membership-removal.ts` (removing
 the box a pair link names deletes this box's pair link, in a node transaction after the chart is
-saved, then reloads the stream — the refusal's words send the person there, so it must work).
-Tests `stream-api.route.test.ts`, `membership-removal-api.test.ts`,
-`apps/dashboard/src/i18n/codes.test.ts`, the backup screen's test.
+saved, then reloads the stream — the refusal's words offer this, so it must work). Remove accepts
+only a standby with no `nodes` row (fact 26), so this lifts the stop for a spare that never
+finished joining (D17), and not for a joined one. Tests `stream-api.route.test.ts`,
+`membership-removal-api.test.ts`, `apps/dashboard/src/i18n/codes.test.ts`, the backup screen's test.
 
-The words:
-- EN: "This venue's spare box receives the venue's copy, and a venue copies to one place at a time.
-  Nothing was saved. To copy to your bucket instead, remove the spare box under Servers first; the
-  spare then stops receiving the copy."
-- ES: "El equipo de reserva de este local recibe la copia del local, y un local copia en un solo
-  sitio a la vez. No se ha guardado nada. Para copiar en tu bucket en su lugar, quita primero el
-  equipo de reserva en Servidores; el equipo de reserva deja entonces de recibir la copia."
+The words use the Servers screen's labels, "Standby" / «En espera» and "Remove" / «Retirar»
+(fact 26; revision 2 said "spare box" and «quita»):
+- EN: "This venue has a standby server, listed under Servers, which receives the venue's copy or is
+  about to, and a venue copies its data to one place at a time. Nothing was saved. If the standby
+  never finished joining, choose Remove on its row under Servers; the bucket can then be saved
+  here. A standby that finished joining cannot be removed in this version, so the copy stays with
+  it until an update lets the standby pass it on to a bucket."
+- ES: "Este local tiene un servidor en espera, en la lista de Servidores, que recibe la copia del
+  local o está a punto de recibirla, y un local copia sus datos en un solo sitio a la vez. No se ha
+  guardado nada. Si el servidor en espera no terminó de unirse, elige Retirar en su fila de
+  Servidores; después se puede guardar aquí el bucket. Un servidor en espera que terminó de unirse
+  no se puede retirar en esta versión, así que la copia sigue yendo a él hasta que una
+  actualización le permita pasarla a un bucket."
 
-- [ ] **Step 1: Write the failing tests.** "refuses bucket settings while a spare is joined, saving
-  nothing" (no `backup.stream` vault row afterwards); "removing the spare deletes the pair link, and
-  bucket settings can then be saved"; the screen shows the words in both languages.
+- [ ] **Step 1: Write the failing tests.** "refuses bucket settings while a pair link exists,
+  saving nothing" (no `backup.stream` vault row afterwards); "removing a standby that never
+  finished joining deletes the pair link, and bucket settings can then be saved"; "a standby with
+  a `nodes` row is still refused removal, and its pair link stays" (fact 26's rule, now with a
+  link); the screen shows the words in both languages.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/stream-api.route.test.ts src/membership-removal-api.test.ts` — FAIL.
 - [ ] **Step 3: Implement.** Look at the refusal on the backup screen in both themes and at phone width.
 - [ ] **Step 4: Run** them — PASS; the dashboard tests.
-- [ ] **Step 5: Commit** `git commit -s -m "server: a venue with a spare copies to it alone, until the spare is removed"`.
+- [ ] **Step 5: Commit** `git commit -s -m "server: a venue with a standby copies to it alone; removing an unfinished standby lifts that"`.
 
 ### Task 5.10: No key ring rotation under a joined spare (A1273)
 
@@ -1298,10 +1552,13 @@ The words:
 re-seal), `packages/credentials/src/errors.ts`, `docs/developers/conventions-data.md:928` (D7's
 rule beside what a rotation reaches). Test `packages/credentials/src/cli.test.ts`.
 
-The message (terminal, English, as the command's others): "This box has a spare box joined, which
-holds this key ring too. Rotating here would leave the spare unable to open the venue's keys.
-Nothing was changed. To rotate, remove the spare in the dashboard under Servers, rotate, then add
-the spare again."
+The message (terminal, English, as the command's others; the dashboard's labels, fact 26): "This
+box has a standby server, which holds this key ring too. Rotating here would leave the standby
+unable to open the venue's keys. Nothing was changed. If the standby never finished joining,
+remove it in the dashboard (Servers, then Remove on its row) and rotate again. A standby that
+finished joining cannot be removed in this version, so this key ring cannot be rotated while it is
+joined." (Revision 2 offered "remove the spare, rotate, add it again", which fact 26 rules out for
+a joined spare.)
 
 - [ ] **Step 1: Write the failing tests.** "rotate refuses while a spare is joined and re-seals
   nothing" (every row's `key_version` unchanged); control: "rotate runs with no pair link".
@@ -1321,9 +1578,118 @@ the spare again."
 
 ---
 
+## PR 3b-G — the start steps that decide whether a box files (FISCAL — the owner lands it)
+
+Full review path. **FISCAL** (D16): it changes what the start check trusts (R12) and how the boot
+reconcile reaches a peer — the two start steps that can stop a box filing — and adds a start
+refusal for a box that lost its `node.db`, so that box neither sells nor files. Built after 3b-4
+(Task G.2 uses Task 4.1's lookup), beside 3b-5; **landed before 3b-6**, which makes a lost
+`node.db` dangerous (fact 16). The fiscal suites run unedited. PR first line: "FISCAL — a box
+trusts only the venue's authority when it asks another box at start, its start-time chart check
+reaches a real box, and a box that lost its own record does not start selling or filing (A947 3b-G)."
+
+### Task G.1: Every peer call trusts the venue authority and nothing else (was Task 4.2)
+
+**Files:** Modify `start-peer-check.ts:191-196` (`authorityOf` returns this box's `tls/ca.crt` for
+every peer), `boot-peer-check.ts:346-353` (the `rejectUnauthorized: false` branch and its comment
+go; a TLS refusal records the silent reason `certificate`). Tests `boot-peer-check.test.ts`,
+`start-peer-check.test.ts`.
+
+**Changed checks:** the cases that ask a peer serving a certificate no authority signed and expect
+an answer (`git grep -n "rejectUnauthorized\|authorityOf" -- 'apps/server/src/*.test.ts'`) now
+expect silence with `certificate` (the expected value changes).
+
+- [ ] **Step 1: Write the failing tests.** "a main box verifies its spare's certificate under the
+  venue authority" (two local HTTPS servers under one authority); "a peer whose certificate another
+  authority signed is silent, with the reason certificate" (Review Focus 5).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/boot-peer-check.test.ts src/start-peer-check.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** them — PASS; then `src/boot.start-check.test.ts src/waiting-start.test.ts`, and
+  every suite naming the start check's client, unedited: `git grep -ln "boot-peer-check\|start-peer-check" -- 'apps/server/src/*.test.ts'`.
+- [ ] **Step 5: Commit** `git commit -s -m "server: a box trusts another box's certificate only under the venue's authority"`.
+
+### Task G.2: The boot reconcile uses the same transport (was Task 4.3)
+
+**Files:** Modify `membership-reconcile.ts:60-78` (`fetchPeerMembershipDocument` sends through
+`boxExchange` with the venue authority and a 5-second limit; its "unreachable → `null`" answers
+stay), `boot.ts:1914-1935` (the peer address: the origin box's `contactUrl` from the held chart when
+it lists one, else the mirror link's address). Tests `membership-reconcile.test.ts`,
+`boot.reconcile.test.ts`. Uses Task 4.1's lookup in `boxExchange`, so it is built after 3b-4.
+
+- [ ] **Step 1: Write the failing tests.** "fetches a peer's chart from a box under the venue
+  authority" (fails today: the global `fetch` refuses the leaf); "answers null for a peer that does
+  not answer within 5 seconds"; "answers null for a peer under another authority".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/membership-reconcile.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** it — PASS; then `src/boot.reconcile.test.ts`.
+- [ ] **Step 5: Commit** `git commit -s -m "server: the start's chart check reaches a real box, and gives up after five seconds"`.
+
+### Task G.3: A box that lost its `node.db` does not start as a selling box (A1274; was Task 6.6)
+
+**Files:** Modify `boot.ts` (before the role holders are built: when `readNodeMode` finds no row for
+this node id and the held chart lists this node in any standing but `serving-primary`, or lists it
+with another box as `serving-primary`, throw `node.state_missing`), `boot-failure.ts`, the recovery
+page's words (`apps/server/src/i18n/recovery-page.ts`), `errors.ts`. Tests
+`boot.node-state-missing.test.ts` (new), `recovery-surface.test.ts`.
+
+The words (the recovery page's buttons are "Retry a normal boot" / «Reintentar un arranque normal»
+and «Empezar de nuevo» for Start again, `recovery-page.ts:69,92,384-390`):
+- Title EN: "This box has lost its record of which box it is". ES: "Este equipo ha perdido el
+  registro de qué equipo es".
+- Action EN: "It holds a copy of the venue's data but not its own role, so it does not sell or send
+  anything to the tax agency, in case it is the venue's spare. The main box keeps selling. Retry a
+  normal boot starts this box once more, and stops here again while the record is missing. Start
+  again empties this box, after an administrator signs in. In this version it cannot then join this
+  venue again as its spare, because the main box still counts it as its standby; it can be set up
+  for another venue. The venue's data stays on the main box."
+- Action ES: "Guarda una copia de los datos del local, pero no su propio papel, así que no vende ni
+  envía nada a Hacienda, por si es el equipo de reserva del local. El equipo principal sigue
+  vendiendo. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo
+  mientras falte el registro. «Empezar de nuevo» vacía este equipo, después de que un administrador
+  inicie sesión. En esta versión no puede volver a unirse a este local como equipo de reserva,
+  porque el equipo principal lo sigue contando como su servidor en espera; se puede configurar para
+  otro local. Los datos del local siguen en el equipo principal."
+- Revision 3 changed both: revision 2 promised the box could be added as a spare again, which D17's
+  one-spare refusal and fact 26 now rule out, and said the main box was not affected, though it
+  waits for this silent standby at its next start (D17).
+
+- [ ] **Step 0:** The recovery page offers Start again only when a first-setup admission refusal
+  carries a survey (`node-entry.ts:509-519`). Find, by a test, whether this refusal can carry one
+  through the same path (its administrator sign-in over HTTPS and its Stop unchanged). If it cannot,
+  STOP and report: the words above then name a choice the page does not offer, and the refusal rule
+  (CLAUDE.md §3) needs a self-service way out that is not built.
+- [ ] **Step 1: Write the failing tests.** "a spare whose node.db is lost refuses to start with
+  node.state_missing and files nothing" (a joined spare's folder with `node.db` deleted, built as a
+  fixture — a held chart listing this node as a standby and a `venue.db` holding its row — since no
+  join brings data before 3b-6; the drain's stand-in is never called); control: "a first box with
+  no mode row still starts as the sole primary" (the chart names it serving primary); "the recovery page shows the title, the action and
+  Start again in both languages".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/boot.node-state-missing.test.ts src/recovery-surface.test.ts` — FAIL.
+- [ ] **Step 3: Implement.** Render the page to a file and open it in both themes and at phone
+  width (CLAUDE.md §4: string-rendered pages have no harness).
+- [ ] **Step 4: Run** them — PASS; then `src/node-db-copy.test.ts` (its "reads as a sole primary
+  once its node.db is lost" case stays: it reads the reader, not the start) and
+  `src/boot.failed-start.test.ts`.
+- [ ] **Step 5: Commit** `git commit -s -m "server: a box that lost its own record does not start selling beside the main box"`.
+
+### Task G.4: Final checks for 3b-G
+
+- [ ] Typecheck `@waitron/server`; `pnpm format:check`; root `scripts/errors-reachable.test.ts`,
+  `scripts/alert-codes.test.ts`, `scripts/personal-log-params.test.ts`. `git diff origin/main --stat
+  -- packages/fiscal-verifactu` prints nothing, quoted in the PR body. The reconcile backlog entry's
+  text is the session running this plan's, at landing. `/finish-branch`, full path; then wait for
+  the owner to land it.
+
+---
+
 ## PR 3b-6 — joining brings the data
 
 Full review path. Unblocks "finished joining" for a venue that does not file with Veri*Factu.
+Lands only after 3b-G is on `main` (fact 16). Not labelled FISCAL; D16 states why, and the PR
+body's first line says: "From this PR, a main box with a joined spare asks it at start and waits
+while it is silent (the landed A1018 Slice 3 rule), and a venue that does not file with Veri*Factu
+can add a spare that receives its data over the venue's network." Task number 6.6 moved to 3b-G
+(Task G.3) and is not reused.
 
 ### Task 6.1: The main box streams to the spare
 
@@ -1374,7 +1740,8 @@ refuse and log `spare.join_key_mismatch`.
   the next run"; "a second join's link replaces a pending one".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/spare-join.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** it — PASS; then `src/handover-stepdown.test.ts src/boot.start-check.test.ts`.
+- [ ] **Step 4: Run** it — PASS; then `src/handover-stepdown.test.ts src/boot.start-check.test.ts`,
+  unedited: Task 6.2 changes neither the start check's code nor its tests (D16).
 - [ ] **Step 5: Commit** `git commit -s -m "server: the main box records its spare once the spare's store answers"`.
 
 ### Task 6.3: The spare takes its first full copy
@@ -1449,48 +1816,6 @@ this box's `nodes` row exists with its own public key — else keeps the latch a
   src/reserved-identity.test.ts src/allocated-standby-host.test.ts`.
 - [ ] **Step 5: Commit** `git commit -s -m "server: a spare whose copy holds its own row finishes joining"`.
 
-### Task 6.6: A box that lost its `node.db` does not start as a selling box (A1274)
-
-**Files:** Modify `boot.ts` (before the role holders are built: when `readNodeMode` finds no row for
-this node id and the held chart lists this node in any standing but `serving-primary`, or lists it
-with another box as `serving-primary`, throw `node.state_missing`), `boot-failure.ts`, the recovery
-page's words (`apps/server/src/i18n/recovery-page.ts`), `errors.ts`. Tests
-`boot.node-state-missing.test.ts` (new), `recovery-surface.test.ts`.
-
-The words (the recovery page's buttons are "Retry a normal boot" / «Reintentar un arranque normal»
-and «Empezar de nuevo» for Start again, `recovery-page.ts:69,92,384-390`):
-- Title EN: "This box has lost its record of which box it is". ES: "Este equipo ha perdido el
-  registro de qué equipo es".
-- Action EN: "It holds a copy of the venue's data but not its own role, so it does not sell or send
-  anything to the tax agency, in case it is the venue's spare. The main box is not affected. Retry a
-  normal boot starts this box once more, and stops here again while the record is missing. Start
-  again empties this box, after an administrator signs in, so it can be added as a spare again from
-  its own setup page; the venue's data stays on the main box."
-- Action ES: "Guarda una copia de los datos del local, pero no su propio papel, así que no vende ni
-  envía nada a Hacienda, por si es el equipo de reserva del local. El equipo principal no se ve
-  afectado. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo
-  mientras falte el registro. «Empezar de nuevo» vacía este equipo, después de que un administrador
-  inicie sesión, para que se pueda volver a añadir como equipo de reserva desde su propia página de
-  configuración; los datos del local siguen en el equipo principal."
-
-- [ ] **Step 0:** The recovery page offers Start again only when a first-setup admission refusal
-  carries a survey (`node-entry.ts:509-519`). Find, by a test, whether this refusal can carry one
-  through the same path (its administrator sign-in over HTTPS and its Stop unchanged). If it cannot,
-  STOP and report: the words above then name a choice the page does not offer, and the refusal rule
-  (CLAUDE.md §3) needs a self-service way out that is not built.
-- [ ] **Step 1: Write the failing tests.** "a spare whose node.db is lost refuses to start with
-  node.state_missing and files nothing" (a joined spare's folder with `node.db` deleted; the drain's
-  stand-in is never called); control: "a first box with no mode row still starts as the sole
-  primary" (the chart names it serving primary); "the recovery page shows the title, the action and
-  Start again in both languages".
-- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/boot.node-state-missing.test.ts src/recovery-surface.test.ts` — FAIL.
-- [ ] **Step 3: Implement.** Render the page to a file and open it in both themes and at phone
-  width (CLAUDE.md §4: string-rendered pages have no harness).
-- [ ] **Step 4: Run** them — PASS; then `src/node-db-copy.test.ts` (its "reads as a sole primary
-  once its node.db is lost" case stays: it reads the reader, not the start) and
-  `src/boot.failed-start.test.ts`.
-- [ ] **Step 5: Commit** `git commit -s -m "server: a box that lost its own record does not start selling beside the main box"`.
-
 ### Task 6.7: The setup app's joined screen tells the truth
 
 **Files:** Modify `apps/setup/src/i18n/strings/finish.ts` (the `done.stalled.*` keys,
@@ -1501,12 +1826,12 @@ The words:
 - Heading EN: "This server is joining". ES: "Este servidor se está uniendo".
 - Body EN: "The sign-in to the restaurant's primary worked. This server now takes its first copy of
   the restaurant's data from the primary, over the restaurant's network; no internet is needed. This
-  can take a few minutes. It restarts by itself when it has the copy, and then waits as the spare.
-  The primary keeps selling throughout."
+  can take a few minutes. It restarts by itself when it has the copy, and then waits as the
+  standby. The primary keeps selling throughout."
 - Body ES: "El inicio de sesión en el servidor principal del restaurante ha funcionado. Este servidor
   recibe ahora su primera copia de los datos del restaurante desde el principal, por la red del
   restaurante; no hace falta internet. Puede tardar unos minutos. Se reinicia solo cuando tiene la
-  copia y después espera como servidor de reserva. El principal sigue vendiendo todo el tiempo."
+  copia y después espera como servidor en espera. El principal sigue vendiendo todo el tiempo."
 
 **Changed checks:** every case reading `done.stalled.*` or `join_stalled` (`git grep -n
 "stalled" -- apps/setup/src`) — the words they expect change.
@@ -1518,51 +1843,92 @@ The words:
 - [ ] **Step 4: Run** it — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "setup: the joined screen says the spare is taking its copy"`.
 
-### Task 6.8: The stream loop grows its two-box steps — joining
+### Task 6.8a: A two-box test file, and what a third in-process server needs
 
-**Files:** Modify `apps/server/src/testing/stream-loop-scenario.ts` (new phases after
-`restore-compare`, added to `STREAM_LOOP_PHASES` and to `STREAM_LOOP_SCENARIO_MS`'s sum) and, if
-the scenario file passes about 900 lines, put the new phases in `testing/stream-loop-spare.ts`
-called from it. The test file `stream-loop.e2e.test.ts` and its stream-job entry are unchanged but
-for its title. Why extend rather than add a file: §11 asks it, and the loop's box B already sells and
-streams to a bucket, so the spare's steps walk the documented way in: refused while the bucket
-streams, the bucket stopped, then the join.
+**Why a new file** (departure 11, C1): the stream loop's box B files with Veri*Factu — box A's
+`modules.json` is `{"fiscal-none": false}` (`testing/stream-loop-scenario.ts:359-362`) and B is a
+bucket restore of A with a Veri*Factu paper allocation (`:470-496`) — and the main box checks its
+own modules (D12), so B refuses every join until 3b-F (probe P24). 3b-6's two-box steps therefore
+run on a main box whose `modules.json` is `{"fiscal-verifactu": false}`, which does not refuse.
+The loop's own box B gains its spare steps in 3b-F (Task F.2b).
 
-The phases, with box C a third server folder (the fiscal module disabled, its own name resolved to
-`127.0.0.1` by an injected lookup, its store on its own ports):
-1. `spare-refused`: C's `POST /setup-api/adopt` against B answers `mirror.bucket_stream_active`; B's
-   chart and reservations are unchanged.
-2. `bucket-stopped`: `DELETE /api/backup/stream` on B.
-3. `spare-join`: C adopts with a confirmed authority; B's pair link reaches `streaming`.
-4. `spare-copy`: C logs `spare.first_copy_ready`, restarts, and starts as a mirror; its `venue.db`
-   holds B's sales of the earlier phases and its own `nodes` row; B's `nodes` table holds C's row.
+**Files:** Create `apps/server/src/spare-join.e2e.test.ts` and `testing/spare-join-scenario.ts`
+(the phases, run as the loop runs its own: a phase list, a summed time limit, an abort signal);
+move the stream loop's box provisioning (its step 2, the state folder, venue, node key and term-0
+chart) into an exported helper in `testing/stream-box.ts` taking the `modules.json` contents, called
+by both scenarios — the loop's behaviour and its test file unchanged. Modify `boot.ts`
+(`StartServerSeams` gains `boxLookup?`, handed to every `lookupBoxName` call — `boxExchange`, the
+store pipe, the start check — and `restart?`, which every restart request in the setup, latch and
+full starts goes through; today they send `SIGTERM` to this process, `boot.ts:946-947,1648,2154`,
+so a test that let them run would stop its own runner). Add the new file to `STREAM_TEST_FILES`
+(`scripts/ci-workflow.test.mjs:62-74`), to the stream job's list (`ci.yml:1312-1323`) and to the
+server shards' excludes (`ci.yml:1177`).
+
+What the harness sets up, for three servers in one process (main box M, spare S, and the S3 test
+server the file starts for the bucket step):
+- every port from **one** `freePorts(n)` draw (CLAUDE.md §4): M's and S's HTTPS ports, S's store
+  port (`WAITRON_SPARE_STORE_PORT`, Task 5.5; S sends it in its store address, D15, so nothing
+  assumes 7443) and S's versitygw loopback port;
+- `WAITRON_ADVERTISED_ORIGIN` = `https://waitron.local:<port>` for each, so each box makes its own
+  name (D1 leaves any other host as configured, and a `localhost` origin would test nothing);
+- a `boxLookup` that answers `127.0.0.1` for every `.local` name;
+- S started from an empty state folder, so it boots in setup mode.
+
+- [ ] **Step 1: Write the failing test** `spare-join.e2e.test.ts` with its first phase only:
+  `probe` — M is provisioned (`{"fiscal-verifactu": false}`) and started selling; S is booted from
+  an empty state folder and answers `POST /setup-api/primary-certificate` for M's address with M's
+  authority. If S cannot boot in setup mode inside the test process, STOP and report: the two-box
+  steps then need child processes, which is a different task.
+- [ ] **Step 2: Run** `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`,
+  then `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run src/spare-join.e2e.test.ts`
+  — FAIL (no seams yet); read the `Tests` count.
+- [ ] **Step 3: Implement** the seams, the helper move and the harness.
+- [ ] **Step 4: Run** it — PASS; then `src/stream-loop.e2e.test.ts` (unchanged, still PASS) and root
+  `scripts/ci-workflow.test.mjs`.
+- [ ] **Step 5: Commit** `git commit -s -m "test: a two-box test file, with the seams a third in-process server needs"`.
+
+### Task 6.8b: The two-box test — refused, then joined, then copied
+
+**Files:** `testing/spare-join-scenario.ts`, `spare-join.e2e.test.ts`.
+
+The phases after `probe`:
+1. `spare-refused`: M streams to the S3 test server's bucket; S's `POST /setup-api/adopt` against M
+   answers 409 `mirror.bucket_stream_active` — through the real `fetchMirrorBundle`, so this is also
+   Task 5.6b's relay end to end; M's chart and reservations are unchanged.
+2. `bucket-stopped`: `DELETE /api/backup/stream` on M.
+3. `spare-join`: S adopts with a confirmed authority; M's pair link reaches `streaming`.
+4. `spare-copy`: S logs `spare.first_copy_ready`, restarts (through the seam), puts the copy in
+   place, finishes joining and starts as a mirror; its `venue.db` holds M's sales of the earlier
+   phases and its own `nodes` row; M's `nodes` table holds S's row.
 
 - [ ] **Step 1: Write the phases** and their checks.
-- [ ] **Step 2: Run** `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`,
-  then `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run src/stream-loop.e2e.test.ts`
-  — PASS, with the phase log showing the four new phases `ok`. Control: comment out Task 6.2's row
-  write, see `spare-copy` fail for that reason, restore it.
-- [ ] **Step 3: Commit** `git commit -s -m "test: the stream loop adds a spare over the venue's network"`.
+- [ ] **Step 2: Run** the file — PASS, with the phase log showing the four phases `ok`. Control:
+  comment out Task 6.2's row write, see `spare-copy` fail for that reason (the copy lacks S's row and
+  is discarded), restore it.
+- [ ] **Step 3: Commit** `git commit -s -m "test: a spare joins a main box over the venue's network and takes its copy"`.
 
-### Task 6.9: The stream loop — the spare is counted, and nothing left loopback
+### Task 6.9: The two-box test — the spare is counted, and nothing left loopback
 
-**Files:** as Task 6.8.
+**Files:** as Task 6.8b.
 
 The phases:
-5. `start-check`: B restarts; its start check asks C at `box-<C>` and counts its verified answer (R13
-   end to end), with no `own_address`.
+5. `start-check`: M restarts; its start check asks S at `box-<S>` and counts its verified answer
+   (R13 end to end, under 3b-G's pin), with no `own_address`.
 6. `loopback-only`: no socket the servers in this process opened went to an address other than
-   loopback (a `net.Socket.prototype.connect` spy installed for the new phases; Litestream's and
+   loopback (a `net.Socket.prototype.connect` spy installed for the two-box phases; Litestream's and
    versitygw's addresses are loopback by configuration). The test prints the copy's `bytes` and `ms`
    as numbers for the PR, not as a bound.
 
 - [ ] **Step 1: Write the phases.**
-- [ ] **Step 2: Run** the file — PASS. Control: point C's injected lookup at a non-loopback address
-  and see `loopback-only` fail. Then root `scripts/ci-workflow.test.mjs`.
+- [ ] **Step 2: Run** the file — PASS. Control: bind both servers to `0.0.0.0` and point the
+  injected lookup at **one of this machine's own non-loopback addresses** (from
+  `os.networkInterfaces()`), so the join still succeeds over it, and see `loopback-only` fail naming
+  that address. (An address that is not this machine's would make `spare-join` fail first, which
+  proves nothing about the spy.) Then root `scripts/ci-workflow.test.mjs`.
 - [ ] **Step 3: Check the stream job's time on CI** after the push: it ran 148–160 seconds on recent
   green runs (probe P19). If it passes about 4 minutes, split by the cause, never cut a check
   (CLAUDE.md §2).
-- [ ] **Step 4: Commit** `git commit -s -m "test: the stream loop's main box counts its spare, and joining stays on the venue's network"`.
+- [ ] **Step 4: Commit** `git commit -s -m "test: the main box counts its spare, and joining stays on the venue's network"`.
 
 ### Task 6.10: The guide, the docs, and final checks
 
@@ -1570,7 +1936,12 @@ The phases:
 box" / «Añadir un equipo de reserva» with the shared `{#adding-a-spare}` heading id — A1283: what
 each box must have; that no internet is needed; that the second box's setup is opened at the address
 its console prints; the fingerprint comparison; that a venue copying to its own bucket cannot add a
-spare yet, and what to do; that a key ring is not rotated while a spare is joined);
+spare yet, and what to do; that a key ring is not rotated while a spare is joined; that a standby
+that finished joining cannot be removed in this version, and one that never finished can, under
+Servers; and that while a joined standby is off, the main box waits at each start until an
+administrator carries on, linking the existing `{#carry-on}` section); the session running this
+plan adds the backlog entry D17 names ("a joined standby cannot be retired, so a dead spare makes
+the main box wait at every start"), in the A947 area;
 `docs/developers/conventions-data.md` (one entry: the pair link and the store). Final checks:
 typecheck every touched package, `pnpm format:check`, root `scripts/guide-links.test.ts`,
 `apps/server` `src/guide-content.test.ts`, `scripts/errors-reachable.test.ts`,
@@ -1624,7 +1995,7 @@ Waits for Q1. Full review path; the fiscal suites run unedited unless a row says
   and that a series the main box adds later would make the switch-on refuse: suggested by
   "refuses an incomplete base set instead of dropping a configured series"
   (`hour-standby-activation.test.ts:270`), not run with a later-added series;
-- that neither the A1018 plan nor 4b says who writes the setup before an activation (a search of the
+- that neither the A1018 plan nor A947's 4b says who writes the setup before an activation (a search of the
   A1018 plan for "dormant" and "establish" finds no such step).
 
 Task F.1 runs the first of these under the option the owner picks.
@@ -1651,8 +2022,32 @@ Task F.1 runs the first of these under the option the owner picks.
   `module.operation_invalid` on the adopt path go (Task 5.6), and their test with them. Every fiscal
   suite runs unedited, or each changed check has a row marked FISCAL — owner rules. Run F.1 — PASS;
   then `pnpm --filter @waitron/fiscal-verifactu exec vitest run` and the golden and immutability
-  suites. One line in the backlog's 4b entry and the A1018 plan's Slice 5 and 7 notes, by the
+  suites. One line in the backlog's A947 4b entry and the A1018 plan's Slice 5 and 7 notes, by the
   session running this plan: the activation writes the spare's dormant setup first.
+
+### Task F.2b: The stream loop's Veri*Factu box gains its spare steps
+
+**Files:** `apps/server/src/testing/stream-loop-scenario.ts` (new phases after `restore-compare`,
+added to `STREAM_LOOP_PHASES` and to `STREAM_LOOP_SCENARIO_MS`'s sum; if the file passes about 900
+lines, the phases go in `testing/stream-loop-spare.ts`, called from it), using Task 6.8a's seams and
+`testing/stream-box.ts`. This is where §11's "every slice adds its step to the stream loop test"
+lands for 3b (departure 11): the loop's box B files with Veri*Factu, so its join can pass only once
+F.2 lets it through.
+
+The phases, with box C a third server folder booted in setup mode:
+1. `spare-refused`: B streams to the loop's bucket; C's `POST /setup-api/adopt` against B answers 409
+   `mirror.bucket_stream_active`; B's chart and reservations are unchanged.
+2. `bucket-stopped`: `DELETE /api/backup/stream` on B.
+3. `spare-join`: C adopts; B's pair link reaches `streaming`; no fiscal row and no dormant setup is
+   written on either box (under (c)).
+4. `spare-copy`: C restarts as a mirror holding B's sales and its own `nodes` row.
+5. `start-check`: B restarts and counts C's verified answer.
+
+- [ ] **Step 1: Write the phases.** Before F.2, phase 3 fails with `module.operation_invalid`
+  `{ module: "fiscal-verifactu" }`: run it once and record that as the failing state.
+- [ ] **Step 2: Run** `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run src/stream-loop.e2e.test.ts`
+  with F.2 in place — PASS, every new phase `ok`; check the stream job's time on CI as Task 6.9.
+- [ ] **Step 3: Commit** `git commit -s -m "test: the stream loop's Veri*Factu box adds a spare"`.
 
 ### Task F.3: Final checks
 
@@ -1664,12 +2059,22 @@ Task F.1 runs the first of these under the option the owner picks.
 
 ## What CI and the simulation prove, and what needs the owner's two boxes
 
-**Proved in CI** (the stream job runs Linux with both binaries): the store, the pipes, the pair's key,
-the client certificate and the authority pin, end to end on loopback; the refusal while a bucket
-streams and the join after it is stopped; the first full copy, the placement, finishing joining, the
-main box's start check counting and verifying the spare; that the servers in the test opened no
-socket off loopback. This is a simulation: servers on one machine, names resolved by an injected
-lookup, one network interface. The mDNS lookup's own-address filter is proved with fake sockets
+**Proved in CI** (the stream job runs Linux with both binaries), **by PR:**
+- **3b-6**, `spare-join.e2e.test.ts`, on a main box with the Veri*Factu module switched off: the
+  store, the pipes, the pair's key, the client certificate and the authority pin, end to end on
+  loopback; the refusal while a bucket streams, reaching the spare's setup route in its own code,
+  and the join after the bucket is stopped; the first full copy, the placement, finishing joining,
+  the main box's start check counting and verifying the spare; that the servers in the test opened
+  no socket off loopback. It does **not** prove a join to a main box that files with Veri*Factu —
+  that is refused until 3b-F, and Task 5.3's route test and Task 5.6b's relay test prove the
+  refusal — nor anything about the stream loop's box B.
+- **3b-F**, the stream loop (Task F.2b): the same join, copy and start check on the loop's box B,
+  which files with Veri*Factu and was rebuilt from a bucket; and, under (c), that the join writes no
+  fiscal row and no dormant setup.
+- **3b-G** has no end-to-end step of its own: its three changes are proved by their own suites
+  (Tasks G.1–G.3), and 3b-6's `start-check` phase runs under G.1's pin.
+This is a simulation: servers on one machine, names resolved by an injected lookup, one network
+interface. The mDNS lookup's own-address filter is proved with fake sockets
 (Task 2.2) and was measured with two Linux containers (probe P14), not on the box image.
 
 **Not provable in CI, and why:** that two real boxes find each other by mDNS on a real switch (CI has
@@ -1702,8 +2107,10 @@ manager on shift switches to the spare from a till, signing in as herself.
   it holds, under the manager's sign-in, then names its installation. 3b-F is small: it lets the join
   through for this module and proves that a spare without the setup cannot be switched on and writes
   nothing (probe P15). The setup records the series as they are on Saturday, not Friday. Cost: the
-  switch-on slices (4b, and A1018 Slices 5 and 7's activation) gain this one step, which neither plan
-  names today; until one lands, nothing can switch the spare on anyway.
+  switch-on slices (A947's 4b, and A1018 Slices 5 and 7's activation) gain this one step, which
+  neither plan names today; until one lands, nothing can switch the spare on anyway. Whether the
+  spare can write the setup from its copy under the manager's sign-in is read from the code, not
+  yet run; Task F.1 runs it.
 - **(b) At joining.** On Friday, when the spare's copy arrives a few minutes after Connect, its setup
   page asks you to sign in once more ("Finish joining"), and the spare writes its setup then. If you
   walk away first, the spare keeps asking, and until you sign in it cannot be switched on. This
@@ -1714,15 +2121,16 @@ manager on shift switches to the spare from a till, signing in as herself.
 Revision 1's alternative, "the main box writes it and the copy carries it", cannot work: the copy
 does not carry that file.
 
-**Recommended default: (c).** Either way 3b-F lands last and you land it, so the six other pull
-requests never wait for you.
+**Recommended default: (c).** Either way 3b-F lands last and you land it. You also land 3b-G (the
+start steps that decide whether a box files, D16); the other six pull requests never wait for you.
 
 ---
 
 ## Probes
 
 Revision 1's probes' scratch files are under `/tmp/a947-3b-*`; revision 2's under
-`/tmp/a947-3b-r2.Jztr/`, outside the worktree.
+`/tmp/a947-3b-r2.Jztr/`; revision 3's under `/tmp/a947-3b-r4/`, with the third claim check's own
+under `/tmp/a947-3b-r3.Iv7F/` — all outside the worktree.
 
 | # | Command | What it printed | Decides |
 | --- | --- | --- | --- |
@@ -1746,17 +2154,29 @@ Revision 1's probes' scratch files are under `/tmp/a947-3b-*`; revision 2's unde
 | P18 | (from `apps/server`) `pnpm exec tsx /tmp/a947-3b-r2.Jztr/ensure.mts`: `ensureBoxSecrets` on a state folder with (1) `tls/` empty and `secrets.env` kept, (2) `tls/ca.*` kept and no leaf, (3) both gone | (1) `refused setup.not_ready`; (2) `refused setup.not_ready`; (3) `minted: ca.crt,ca.key,server.crt,server.key` | fact 20, D9, D13, Tasks 3.1, 3.2 (C2) |
 | P19 | `gh run list --workflow ci.yml --status success --limit 25`, then each run's `test-server-stream` job start and end | four recent runs: 148 s, 160 s, 151 s, 155 s | Task 6.9 |
 | P20 | `gh pr view 2442 --json state,mergedAt` | `"state":"OPEN"`, `"mergedAt":null` | the A1018 table |
-| P21 | `git fetch origin main && git log --oneline 6a52e7189c..origin/main` | two commits, both plans (`A1301 S18 …`); `git diff --stat` of `apps/server/src packages deploy scripts apps/till apps/setup` printed nothing | line numbers |
+| P21 | `git fetch origin main && git log --oneline 6a52e7189c..origin/main`; on 2026-11-04 for revision 3, `git fetch` then `git diff --stat 6a52e7189c origin/main -- apps packages deploy scripts .github` with `origin/main` at `cbca8c8ba0` | plan commits only (`A1301 S18 …`); the diff printed nothing | line numbers |
+| P22 | `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run src/membership-removal-api.test.ts -t "standby_joined"` | `Tests 2 passed \| 37 skipped`: "refuses a standby this database holds a node row for as membership.standby_joined (409)" and the under-the-lock twin; if a joined standby could be removed, both would fail | fact 26, D7, D17, Tasks 5.9, 5.10 |
+| P23 | `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run src/mirror-bundle-fetch.test.ts -t "passes no\|a code other than\|relays the primary"` | `Tests 4 passed \| 75 skipped` | fact 27, Task 5.6b |
+| P24 | (from `apps/server`) `pnpm exec tsx /tmp/a947-3b-r3.Iv7F/loopmods.mts` (the third claim check's script, re-run): the real `ALL_MODULES` through `enabledModules` and `assertAdoptionModules` | `{"fiscal-none":false} enabled fiscal: [ 'fiscal-verifactu' ] -> module.operation_invalid {"module":"fiscal-verifactu"}`; `{"fiscal-verifactu":false} enabled fiscal: [ 'fiscal-none' ] -> no refusal` | C1, D12, Tasks 6.8a, F.2b |
+| P25 | `node /tmp/a947-3b-r4/flap-jitter.mjs`: D3's setup-mode rule, two boxes switched on within 2 s of each other, 0.1 s steps for 10 minutes, 2,000 runs with and without the random delay; an ask is answered only by a box answering when it is sent. A first version also let a box hear answers that began after its ask; its no-delay control then never showed the known fault, so it was corrected before use | without the delay: `still-both-at-10-min=1909` of 2000; with 0–10 s: `still-both-at-10-min=0`, last moment both answered median `37.3s`, p99 `183.5s`, max `339.3s` | D3, Task 2.3b (M2) |
+| P26 | `git log origin/main --oneline \| grep -i a1018` | `4fd28f1b38 FISCAL — A1018 Slice 3: a box asks the other box before it sells…(#2436)`; `fcc6f1a390 FISCAL: a box that has stepped down stays down (A1018 Slice 2) (#2420)`; `4aeb14613c … (A1018 slice 1) (#2417)`; `945cdc7963 docs(backlog): A1018 slices 0 and 1 are built …`; `7d183efe2c Bench: S2 … (#2431)` | D16, the A1018 table |
+| P27 | `gh pr view 2442`, `2422`, `2428 --json state,title,mergedAt` | #2442 `OPEN` ("FISCAL … A1018 Slice 4: …"); #2422 `MERGED` 2026-11-03 ("payments: one collection owner per payment (A764) …"); #2428 `MERGED` 2026-11-03 ("FISCAL — a promotion whose old box relinquished filing stores a version 2 approval …") | the A1018 table |
+| P28 | `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run src/primary-url.test.ts -t "192.168"` | `Tests 1 passed \| 32 skipped` | fact 7 |
 
 **Claims that rest on reading only:** the till router's list and lock-screen lines (fact 17); the
-mirror's ambient viewer and who reaches it today (fact 6) — Task 4.5's surface test turns D8 into a
+mirror's ambient viewer and who reaches it today (fact 6) — Task 4.5b's surface test turns D8 into a
 run; every boot line number; that a join by name fails at the lookup today (inferred from P5); that
 macOS's Go ignores `SSL_CERT_FILE` (P8 shows the result, not the reason); the placement rules Task
 6.4 follows; in fact 18, where the setup is written and read (P15 runs the refusal and the no-op, not
-the file paths); Task F.0's "read only" list; that `hostname -I` exists on the box's host (Task 2.4's
-test stubs it); that a browser accepts the unchanged server leaf (3b adds a separate client
-certificate rather than changing the leaf, so no browser sees a new certificate kind); that the
-waiting start's page at `/` is what a reloading till reaches (`waiting-page.ts:95`).
+the file paths); Task F.0's "read only" list; that `ip` exists on the box's host (Task 2.4's test
+stubs it, and the script prints no extra line without it); that the server leaf's kind is
+unchanged (its extended key use stays `serverAuth`; 3b does issue new leaves — Task 3.1 installs
+one and Task 3.3 adds names — and adds a separate client certificate); that the waiting start's
+page at `/` is what a reloading till reaches (`waiting-page.ts:95`); the landing listener's routes
+and who reaches them (fact 25 — Task 4.5b turns the mirror's case into a run); that a box in setup
+mode answering `waitron.local` while the main box is restricted or stopped sends a reloading till
+to its setup pages (D3); and that Task G.2's boot reconcile can demote a box at start
+(`boot.ts:1904-1935`, read).
 
 ---
 
@@ -1768,7 +2188,7 @@ waiting start's page at `/` is what a reloading till reaches (`waiting-page.ts:9
 | C2, resets keep the venue authority | fixed, wider | Both resets empty `tls/` **and** remove `secrets.env` on a joined box (D13, Task 3.2): `secrets.env` holds the venue's ring since 3a (fact 19), and setup refuses to mint beside it (P18). Every `venue-ca` site named (fact 10) |
 | C3, Q1's premise | fixed | Fact 18 from the code; option (c) stated fairly and recommended; §4 item 3 cited; F.0's trace run in part (P15, P16) with the read-only remainder listed |
 | I1, promotion on the network | fixed | Task 4.6, `promotion.from_box_only`; D8 lists the whole surface and Task 4.5 walks it |
-| I2, waiting start unreachable | fixed | The waiting start answers `waitron.local` (D3); no reason in the code not to — its page is at `/` |
+| I2, waiting start unreachable | fixed | The waiting start answers `waitron.local` (D3); read: its page is at `/` (`waiting-page.ts:95`). Revision 3 narrowed this row: the cost when the main box is not answering is stated in D3 |
 | I3, unreachable own-name line | fixed | Task 2.5 merges by the chart's `nodeId`, with the reviewer's named test |
 | I4, departures unlisted | fixed | "Departures from the approved design" table and the design's pointer; the stream loop is extended (Tasks 6.8, 6.9), no new e2e file |
 | I5, names but not signer | fixed | Task 3.3 reissues a leaf that does not verify under `tls/ca.crt`; and Task 3.1 installs a leaf with the authority, since rev 1's "remove the leaf" could not work (fact 20) |
@@ -1792,3 +2212,40 @@ waiting start's page at `/` is what a reloading till reaches (`waiting-page.ts:9
 | Found: a second box's setup unreachable once C1 is fixed | fixed | Fact 23, Task 2.4 |
 | Found: rev 1 changed the joined screen's words in 3b-4, while joining still stalled | fixed | Fact 24, Task 6.7 in 3b-6 |
 | Found: no plan writes the dormant setup before an A1018 activation | raised | Q1 (c)'s cost, the A1018 table, Task F.2's notes |
+
+## Review response (revision 2 → revision 3)
+
+The third-round claim check is `/Users/clintongormley/waitron-campaign/item-a947-3b-round3.md`.
+
+| Finding | Done | One line |
+| --- | --- | --- |
+| C1, the loop's box B files with Veri*Factu, so 3b-6's two-box steps could not pass | fixed | 3b-6's steps run in a new `spare-join.e2e.test.ts` on a main box with `{"fiscal-verifactu": false}`, which does not refuse (P24); the loop's box B gains its steps in 3b-F (Task F.2b). Tasks 6.8a, 6.8b, 6.9; departure 11 records the change from "extend the loop"; "What CI … prove" says what each PR's test does and does not prove |
+| C2, every refusal but `password.invalid` reached the spare as `mirror.bundle_fetch_failed` | fixed | New Task 5.6b in 3b-5 (the PR adding the refusals), failing tests first: `refusalFrom` rebuilds a named list, `module.operation_invalid` only with a known module's name; `ADOPT_STATUS` gains the codes; a route test runs the real `fetchMirrorBundle`. The existing cases keep every assertion — their codes are not on the list (fact 27, P23) — so no changed check; a needed change is a STOP |
+| I1, the design's pointer not updated | fixed | The design's dated A947-3b pointer is rewritten in this commit: eight PRs, two owner-landed, twelve departures in one line each |
+| I2, the marker came after the key ring | fixed | D9: `markJoined` is adopt's first write after `beforeFirstWrite`, before `stampDeployment` and the ring (`adopt.ts:166-168`); Task 3.1 tests the order and a join stopped right after the ring write, whose staged reset removes the ring |
+| I3, D8 left out the landing listener and `OPTIONS` | fixed | Fact 25 (read); D8 item 6: a mirror runs the landing app on `127.0.0.1` only; `OPTIONS` in fact 22 and D8 item 1; Task 4.5b checks the landing listener's address and walks each route with `OPTIONS` too |
+| I4, "no fiscal rule" stated as fact | fixed | D16 and new PR 3b-G, labelled FISCAL and owner-landed, holding Tasks G.1 (was 4.2), G.2 (was 4.3) and G.3 (was 6.6). G.2 was not named by the check; it is included by the same rule, because the boot reconcile can demote a box at start (`boot.ts:1904-1909`). Task 6.2 stays in 3b-6 with its reasoning stated so the owner can overrule it. Header facts and the A1018 table updated |
+| I5, task sizes | fixed | 6.8 → 6.8a (the seams a third in-process server needs: `boxLookup`, `restart`, one port draw, the provisioning helper) and 6.8b; 4.5 → 4.5a and 4.5b; 2.3 → 2.3a and 2.3b, whose boot tests bind `0.0.0.0` with an injected socket (D3). The store address: D15 |
+| M1, 3b-3 depends on 3b-2 | fixed | Header facts and the 3b-3 heading |
+| M2, setup-mode boxes can stay in step for ever | fixed | D3 and Task 2.3b: a random 0–10 s delay on each ask; the cost sentence is now P25's simulated figures, marked as a simulation |
+| M3, the A1018 table | fixed | Landed slices from P26 and P27 (0, 1, 2, 3, 4b, 5a, 9); the A1018 plan's own "after 3b" line cited; Slices 12a/12b added; Slice 14 needs a joined spare; decision 9 is "A947 4b/4d"; every "4b" says whose |
+| M4, the header's "I1, I8" | fixed | The revision header is rewritten for revision 3; revision 2's own summary stays only in the first review table, whose I8 row already names Tasks 5.2 and 5.5 |
+| M5, the file list put the pair-link delete helper in `node-db` | fixed | File structure now says `packages/credentials/src/node-pair-link.ts`, as Task 5.2 does |
+| M6, `hostname -I` lists Docker's bridge | fixed | Task 2.4 prints the addresses the server itself picks (`box-reach.ts:30,40-52,75-91`), from `ip -4 -o addr show` and `/proc/net/route`; tests with a stubbed `docker0` |
+| M7, Task 2.5's look could not show the fix | fixed | The look is removed, with the reason; the unit tests are the evidence |
+| M8, the `mdns.responding` log field | fixed | Task 2.3a changes the field and its row in `scripts/personal-log-params.test.ts:75`, and runs the guard; Task 2.6 too |
+| M9, words not using the dashboard's labels | fixed | Tasks 5.9 and 5.10 (and 4.6, 5.6, 6.7 for the same reason) say "standby" / «servidor en espera» and Remove / «Retirar» (fact 26) |
+| M10, Q1 (c) without its hedge | fixed | Q1 (c) says the spare's write is read from the code, not run, and Task F.1 runs it |
+| M11, two untested claims | fixed | D3 states the restricted-main-box cost as read; the I2 row in the first table is narrowed; "a browser accepts the unchanged leaf" became "the server leaf's kind is unchanged" |
+| M12, an abandoned join's `pending` link | fixed | D17: a new join replaces it, and Remove under Servers deletes it (Remove accepts a standby with no `nodes` row, fact 26); Task 5.9's words fit a standby that never finished |
+| M13, D14's starting point | fixed | D14 names the pair link's `created_at`, written inside the Connect request after the bundle fetch |
+| M14, the store's address | fixed | D15: the spare sends `standbyStoreUrl`; the main box checks its host and stores it (Tasks 5.4, 5.5) |
+| M15, Task 6.9's control could fail at the wrong step | fixed | Its control binds both servers to `0.0.0.0` and uses one of this machine's own non-loopback addresses |
+| M16, D12's 409 | fixed | D12: the main box's route answers 409 (a new `STATUS` row); the spare's existing 409 stays and is named as the spare's |
+| Carried: fact 7's "an IP works" | fixed | Fact 7 now says a private IP is refused before anything is sent (P28), so no address works today |
+| Carried: Task 5.7's import broke `setup-s3-test-server.test.mjs` | fixed | `s3-test-server.ts:20` is left as it is; the server's own copy is held equal by the pin test (Tasks 1.1, 5.7) |
+| Carried: a third box's join replaces a `streaming` link | fixed | D17 and Task 5.3: `mirror.spare_already_joined`, before anything is reserved, with words in Task 5.6 and the relay in Task 5.6b |
+| Found: a joined standby cannot be removed | fixed | Fact 26 (P22). Revision 2's bucket words ("remove the spare box under Servers") and rotation message ("remove, rotate, add again") offered a choice that refuses for a joined spare; D7, Tasks 5.9 and 5.10 rewritten; departure 8 updated; the guide section says so |
+| Found: Task 4.5's walk could not see the promotion change before Task 4.6 | fixed | Task 4.5b lists the two promotion routes as a known gap until Task 4.6 removes it |
+| Found: G.3's recovery words promised the box could join again | fixed | With one spare per venue (D17) and no removal of a joined standby (fact 26), it cannot; the words now say so and that the main box keeps selling |
+| Found: no way to retire a joined standby | raised, not built | 3b-6 makes it reachable: a dead spare leaves the main box waiting at every start until an administrator carries on. D17 states it; Task 6.10 adds the guide's words and a backlog entry. Not built in 3b; the owner may want it before go-live |
