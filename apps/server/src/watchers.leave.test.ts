@@ -24,7 +24,7 @@ import "./errors.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
-async function cocina(v: PartyVenue): Promise<string> {
+async function kitchenStationId(v: PartyVenue): Promise<string> {
   const [station] = await inTx(v, (tx) =>
     tx
       .select({ id: kitchenStations.id })
@@ -53,7 +53,7 @@ async function onPassScreen(v: PartyVenue, billId: string): Promise<boolean> {
 describe("what takes a paid table bill's dishes off today's kitchen screens", () => {
   it("leaves a table bill paid at the till on the station queue and pass until collection", async () => {
     const v = await setupPartyVenue(suite.db);
-    const stationId = await cocina(v);
+    const stationId = await kitchenStationId(v);
     await seedSessionDevice(suite.db);
     const { partyId, tabId } = await seat(v, await v.table("Mesa 1"));
     await orderForParty(v, partyId, ["Burger"], tabId);
@@ -74,7 +74,7 @@ describe("what takes a paid table bill's dishes off today's kitchen screens", ()
 
   it("leaves a table bill paid through a full bill payment on both until collection", async () => {
     const v = await setupPartyVenue(suite.db);
-    const stationId = await cocina(v);
+    const stationId = await kitchenStationId(v);
     await seedSessionDevice(suite.db);
     const { partyId, tabId } = await seat(v, await v.table("Mesa 2"));
     await orderForParty(v, partyId, ["Burger"], tabId);
