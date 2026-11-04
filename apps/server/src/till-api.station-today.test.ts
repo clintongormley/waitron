@@ -350,7 +350,7 @@ describe("the till's station day", () => {
     expect(after!.stationId).toBe(grill);
     expect(after!.firedAt).not.toBeNull();
   });
-  it.each(["served", "collected", "abandoned", "made_here", "partly_served"] as const)(
+  it.each(["queued", "served", "collected", "abandoned", "made_here", "partly_served"] as const)(
     "sending at closure moves only queued unserved work: %s",
     async (kind) => {
       const excluded = await stationDish();
@@ -366,7 +366,7 @@ describe("the till's station day", () => {
           .update(workingOrderLines)
           .set({ servedQuantity: kind === "served" ? 1000 : 500 })
           .where(eq(workingOrderLines.id, excluded.workingOrderLineId));
-      else
+      else if (kind === "collected" || kind === "abandoned")
         await suite.db
           .update(workingOrders)
           .set(kind === "collected" ? { collectedAt: at } : { status: "abandoned" })
@@ -378,7 +378,16 @@ describe("the till's station day", () => {
       expect((await call("PUT", today(), { ...close(), openDishes: "send" })).status).toBe(204);
       expect(
         (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, excluded.id)))[0],
-      ).toEqual(before);
+      ).toEqual(
+        kind === "queued"
+          ? {
+              ...before,
+              stationId: bar,
+              queuedAt: expect.any(String),
+              stationChosenAt: expect.any(String),
+            }
+          : before,
+      );
       expect(
         (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, moving.id)))[0]!
           .stationId,
