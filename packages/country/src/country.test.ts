@@ -554,7 +554,7 @@ describe("holiday calendar", () => {
 });
 
 describe("demo geography", () => {
-  it("overlays only a regional dataset and location while retaining the legal identity", async () => {
+  it("overlays only a regional dataset and venue name while retaining the legal identity", async () => {
     const country = await import("./index.js");
     expect(country).toHaveProperty("resolveCountryDemoIdentity", expect.any(Function));
     const demo = {

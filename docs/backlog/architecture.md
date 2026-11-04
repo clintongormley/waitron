@@ -1074,9 +1074,9 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
     S25 still needs to drop the node's venue foreign key (S4, #2388). Calendar rows still written
     with a `location_id` take `venueLocationId` (S8, #2405). `saveHolidayArea` reads the venue row
     twice (for the address, then for its id) because `readVenue`'s `Venue` carries no id; the
-    second read goes with `holiday_geographies.location_id` (S8, #2405). Until the schema slices drop the
-    columns, the configuration import sets every column whose foreign key points at `locations`
-    to the importing venue's row (`venueLocationId`); the export no longer carries
+    second read goes with `holiday_geographies.location_id` (S8, #2405). Until the schema slices
+    drop the columns, the configuration import sets every column whose foreign key points at
+    `locations` to the importing venue's row (`venueLocationId`); the export no longer carries
     `fire_control`, whose column A773-2 removes (S17, #2415). Two raw
     `insert into working_orders` statements (`working-order.test.ts`'s `seedForeignNodeOrder`,
     `station-order-migration.test.ts`): the schema slice that drops `working_orders.location_id`
