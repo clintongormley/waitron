@@ -184,7 +184,7 @@ describe("pass screen", () => {
     expect(await orderIds()).toEqual([]);
   });
 
-  it("A773 no dispatch state: splitting keeps the source mark without copying it or hiding food", async () => {
+  it("A773 no dispatch state: splitting a dish keeps both its kitchen items on the pass", async () => {
     const v = await setupPartyVenue(suite.db);
     const party = await seat(v, await v.table("Split table"));
     await orderForParty(v, party.partyId, ["Burger"], party.tabId);
@@ -231,24 +231,6 @@ describe("a pass's sections", () => {
     ]);
     expect(groupCards(everything).map(dishes)).toEqual([[["BURG", true]], [["CANA", true]]]);
     expect(boardCards(everything)).toHaveLength(3);
-  });
-
-  it("a pass monitor keeps both of a bill's dishes after a legacy Away stamp", async () => {
-    const { v, grill, counterId } = await twoSectionVenue();
-    const counterItems = await inTx(v, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, counterId)),
-    );
-    const starter = counterItems.find((item) => item.stationId !== grill)!;
-    await inTx(v, (tx) =>
-      tx
-        .update(ticketItems)
-        .set({ awayAt: new Date().toISOString() })
-        .where(eq(ticketItems.id, starter.id)),
-    );
-    expect(dishes(billCard(await read(v, EVERY), counterId))).toEqual([
-      ["CANA", true],
-      ["BURG", true],
-    ]);
   });
 });
 
@@ -317,7 +299,7 @@ describe("retired pass completion", () => {
 });
 
 describe("pass monitor", () => {
-  it("lists its scoped dishes independently of legacy Away stamps", async () => {
+  it("lists its scoped dishes", async () => {
     const { v, grill, terrace, outside, inside, counterId } = await terraceVenue();
     const grillOnly: PassScope = { stationIds: [grill], zoneIds: null };
     const before = await read(v, grillOnly);
@@ -338,12 +320,6 @@ describe("pass monitor", () => {
         ),
     );
 
-    await inTx(v, (tx) =>
-      tx
-        .update(ticketItems)
-        .set({ awayAt: new Date().toISOString() })
-        .where(eq(ticketItems.id, burger!.id)),
-    );
     expect(boardOrderIds(await read(v, EVERY))).toContain(outside.tabId);
     expect(boardOrderIds(await read(v, grillOnly), { inView: true })).toEqual(
       [outside.tabId, inside.tabId, counterId].sort(),

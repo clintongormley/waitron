@@ -651,7 +651,7 @@ describe("passScreensDark", () => {
     ]);
   });
 
-  it("A773 no dispatch state: legacy Done marks do not silence a dark pass, but full serving does", async () => {
+  it("A773 no dispatch state: a dark pass is listed while its waiting dish is unserved, and not once it is fully served", async () => {
     const f = await passFixture();
     const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     const pass = await passDevice(f, "pass", { label: "Pass" });

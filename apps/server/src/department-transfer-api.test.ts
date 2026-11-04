@@ -604,7 +604,7 @@ describe("department transfer till writes", () => {
     expect(before.lineRows).toHaveLength(1);
     expect(before.contexts).toHaveLength(1);
     expect(before.kitchen.length).toBeGreaterThan(0);
-    expect(before.kitchen[0]).toMatchObject({ state: "queued", awayAt: null });
+    expect(before.kitchen[0]).toMatchObject({ state: "queued" });
     expect(before.recordedSales).toHaveLength(1);
     expect(before.recordedLines).toHaveLength(1);
     expect(before.fiscal.length).toBeGreaterThan(0);
@@ -1076,7 +1076,7 @@ describe("department transfer read boundaries", () => {
       body: { receiving: true, count: 1, requests: [{ id }] },
     });
   });
-  it("keeps ready work with a legacy Away stamp outstanding and excludes made-here work", async () => {
+  it("keeps ready work outstanding and excludes made-here work", async () => {
     const f = await ready();
     f.tab = await counterOrder(v, "Burger");
     await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
@@ -1096,7 +1096,7 @@ describe("department transfer read boundaries", () => {
     ).toEqual([expect.objectContaining({ id: ticket!.id })]);
     await suite.db
       .update(ticketItems)
-      .set({ state: "ready", readyAt: new Date().toISOString(), awayAt: new Date().toISOString() })
+      .set({ state: "ready", readyAt: new Date().toISOString() })
       .where(eq(ticketItems.id, ticket!.id));
     const before = await suite.db.select().from(ticketItems).where(eq(ticketItems.id, ticket!.id));
     const detail = await get(f.desk.cookie, `/api/department-transfers/${id}`);
@@ -1110,7 +1110,7 @@ describe("department transfer read boundaries", () => {
     );
     await suite.db
       .update(ticketItems)
-      .set({ awayAt: null, madeHere: true })
+      .set({ madeHere: true })
       .where(eq(ticketItems.id, ticket!.id));
     expect(
       (await get(f.desk.cookie, `/api/department-transfers/${id}`)).body.outstandingWork,

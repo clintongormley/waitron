@@ -3616,7 +3616,6 @@ async function groupTickets(groupId: string) {
       state: ticketItems.state,
       firedAt: ticketItems.firedAt,
       readyAt: ticketItems.readyAt,
-      awayAt: ticketItems.awayAt,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
@@ -3655,22 +3654,13 @@ async function specExampleOnTwoBills(v: Venue) {
 
 describe("A773 no dispatch state — group readiness", () => {
   it.each([false, true])(
-    "keeps readiness independent of legacy Away stamps (ready=%s)",
+    "reads a split group's readiness across both bills (ready=%s)",
     async (isReady) => {
       const v = await setupVenue();
       const s = await specExampleOnTwoBills(v);
       const items = await groupTickets(s.cold);
       expect(new Set(items.map((item) => item.workingOrderId)).size).toBe(2);
       if (isReady) await ready(v, s.partyId, s.cold);
-      await db
-        .update(ticketItems)
-        .set({ awayAt: "2026-10-20T12:01:00.000Z" })
-        .where(
-          inArray(
-            ticketItems.id,
-            items.map((item) => item.id),
-          ),
-        );
       const before = await snapshot(v, s.partyId);
 
       const group = (await groupsOf(s.partyId)).groups.find((row) => row.id === s.cold)!;
@@ -3750,7 +3740,7 @@ describe("A773 no dispatch state — group readiness", () => {
         .where(eq(ticketItems.workingOrderLineId, steak.id));
       await db
         .update(ticketItems)
-        .set({ quantity: kitchenQuantity, madeHere, awayAt: "2026-10-20T12:01:00.000Z" })
+        .set({ quantity: kitchenQuantity, madeHere })
         .where(eq(ticketItems.workingOrderLineId, fish.id));
       await db
         .update(workingOrderLines)
@@ -3826,9 +3816,7 @@ describe("the pass by group (D1)", () => {
 
     expect(readied).toEqual({ revision: await revisionOf(s.partyId) });
     const coldReady = await groupTickets(s.cold);
-    expect(coldReady.map((item) => [item.state, item.awayAt])).toEqual(
-      cold.map(() => ["ready", null]),
-    );
+    expect(coldReady.map((item) => item.state)).toEqual(cold.map(() => "ready"));
     expect(coldReady.every((item) => item.readyAt !== null)).toBe(true);
     expect(await groupTickets(s.drinks)).toEqual(drinksBefore);
     expect(await groupTickets(s.warm)).toEqual(warmBefore);
@@ -3869,16 +3857,12 @@ describe("the pass by group (D1)", () => {
     expect(await readyOf(s.warm)).toBe(false);
   });
 
-  it("keeps a partially stamped group ready across both bills without a dispatch state", async () => {
+  it("keeps a group ready across both bills without a dispatch state", async () => {
     const v = await setupVenue();
     const s = await specExampleOnTwoBills(v);
     await ready(v, s.partyId, s.cold);
     const [first, ...rest] = await groupTickets(s.cold);
     expect(rest.some((item) => item.workingOrderId !== first!.workingOrderId)).toBe(true);
-    await db
-      .update(ticketItems)
-      .set({ awayAt: "2026-10-20T12:01:00.000Z" })
-      .where(eq(ticketItems.id, first!.id));
     const before = await snapshot(v, s.partyId);
 
     const groups = (await groupsOf(s.partyId)).groups;
@@ -4110,19 +4094,10 @@ describe("the kitchen and the pass read a party's groups", () => {
     ]);
   });
 
-  it("keeps a split group visible on both bills after legacy Away stamps", async () => {
+  it("keeps a split group visible on both bills", async () => {
     const v = await setupVenue();
     const s = await specExampleOnTwoBills(v);
     await ready(v, s.partyId, s.cold);
-    await db
-      .update(ticketItems)
-      .set({ awayAt: "2026-10-20T12:01:00.000Z" })
-      .where(
-        inArray(
-          ticketItems.id,
-          (await groupTickets(s.cold)).map((item) => item.id),
-        ),
-      );
 
     const board = await passBoard(v);
     const cold = cardOf(board, (card) => groupIdOf(card) === s.cold);

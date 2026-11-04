@@ -165,7 +165,7 @@ describe("saved kitchen note corrections", () => {
     expect(await v.db.select().from(printJobs)).toEqual([]);
   });
 
-  it.each(["served", "away", "made-here", "collected"] as const)(
+  it.each(["served", "made-here", "collected"] as const)(
     "corrects only remaining service work: %s",
     async (kind) => {
       const p = await sent();
@@ -175,11 +175,6 @@ describe("saved kitchen note corrections", () => {
             .update(workingOrderLines)
             .set({ servedAt: new Date().toISOString(), servedQuantity: 1000 })
             .where(eq(workingOrderLines.workingOrderId, p.tabId));
-        if (kind === "away")
-          await tx
-            .update(ticketItems)
-            .set({ awayAt: new Date().toISOString() })
-            .where(eq(ticketItems.workingOrderId, p.tabId));
         if (kind === "made-here")
           await tx
             .update(ticketItems)
@@ -196,16 +191,7 @@ describe("saved kitchen note corrections", () => {
         );
       }
       await set({ partyId: p.partyId }, "New time");
-      expect(await v.db.select().from(kitchenNotices)).toEqual(
-        kind === "away"
-          ? [
-              expect.objectContaining({
-                kind: "changed",
-                orderNoteChange: { before: "Old time", after: "New time" },
-              }),
-            ]
-          : [],
-      );
+      expect(await v.db.select().from(kitchenNotices)).toEqual([]);
     },
   );
 
@@ -221,7 +207,7 @@ describe("saved kitchen note corrections", () => {
       await inTx(v, async (tx) => {
         await tx
           .update(ticketItems)
-          .set({ state: "ready", quantity: active, awayAt: new Date().toISOString() })
+          .set({ state: "ready", quantity: active })
           .where(eq(ticketItems.workingOrderId, p.tabId));
         await tx
           .update(workingOrderLines)

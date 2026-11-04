@@ -396,10 +396,6 @@ describe("show the rest of the order", () => {
         .update(workingOrderLines)
         .set({ servedAt: null, servedQuantity: 0 })
         .where(eq(workingOrderLines.id, chipsLine!.id));
-      await tx
-        .update(ticketItems)
-        .set({ awayAt: nowIso() })
-        .where(eq(ticketItems.workingOrderLineId, chipsLine!.id));
       const beforeAway = new Set((await printJobsFor(tx)).map((job) => job.id));
       await reprintOrderTickets(tx, cfg, orderId);
       const away = (await printJobsFor(tx)).filter((job) => !beforeAway.has(job.id));

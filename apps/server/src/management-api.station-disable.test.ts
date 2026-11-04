@@ -187,13 +187,11 @@ it.each(["queued", "preparing", "ready", "held"] as const)(
     expect(await active()).toBe(true);
   },
 );
-it.each(["away", "served", "collected", "abandoned", "made_here", "another_station"] as const)(
+it.each(["served", "collected", "abandoned", "made_here", "another_station"] as const)(
   "Delete impact follows remaining preparation work: %s",
   async (kind) => {
     const item = await dish(kind === "another_station" ? pastry : grill);
     const at = new Date().toISOString();
-    if (kind === "away")
-      await suite.db.update(ticketItems).set({ awayAt: at }).where(eq(ticketItems.id, item.id));
     if (kind === "made_here")
       await suite.db.update(ticketItems).set({ madeHere: true }).where(eq(ticketItems.id, item.id));
     if (kind === "served")
@@ -210,16 +208,7 @@ it.each(["away", "served", "collected", "abandoned", "made_here", "another_stati
     expect(answer.status).toBe(200);
     expect(await answer.json()).toEqual({
       target: { id: grill, name: "Grill" },
-      refusals:
-        kind === "away"
-          ? [
-              {
-                code: "station.work_in_progress",
-                params: { stationId: grill, count: 1 },
-                targets: [{ id: item.workingOrderId, name: item.tableName }],
-              },
-            ]
-          : [],
+      refusals: [],
       ends: [],
       removes:
         kind === "another_station" ? [] : [{ key: "station_routing_cells", count: 1, targets: [] }],
