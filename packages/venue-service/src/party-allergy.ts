@@ -341,7 +341,7 @@ export async function splitPartyAllergies(
   tx: Transaction,
   from: string,
   into: string,
-  billId: string | null,
+  billIds: readonly string[],
   operatorId: string,
 ): Promise<void> {
   const source = await readPartyAllergy(tx, from);
@@ -349,31 +349,25 @@ export async function splitPartyAllergies(
   await tx
     .insert(partyAllergy)
     .values({ partyId: into, answer: source.answer, changedBy: operatorId, changedAt: nowIso() });
-  await copyGuestsAndBillTicks(tx, source.guests, into, billId, 0);
+  await copyGuestsAndBillTicks(tx, source.guests, into, billIds, 0);
 }
 
 async function copyGuestsAndBillTicks(
   tx: Transaction,
   guests: PartyAllergySnapshot["guests"],
   into: string,
-  billId: string | null,
+  billIds: readonly string[],
   offset: number,
 ): Promise<void> {
-  const moving =
-    billId === null
-      ? []
-      : await tx
-          .select({ id: workingOrderLines.id })
-          .from(workingOrderLines)
-          .where(eq(workingOrderLines.workingOrderId, billId));
-  const drafts =
-    billId === null
-      ? []
-      : await tx
-          .select({ id: orderDraftLines.id })
-          .from(orderDraftLines)
-          .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftLines.draftId))
-          .where(and(eq(orderDrafts.billId, billId), eq(orderDrafts.state, "open")));
+  const moving = await tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(inArray(workingOrderLines.workingOrderId, billIds));
+  const drafts = await tx
+    .select({ id: orderDraftLines.id })
+    .from(orderDraftLines)
+    .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftLines.draftId))
+    .where(and(inArray(orderDrafts.billId, billIds), eq(orderDrafts.state, "open")));
   for (const [position, guest] of guests.entries()) {
     const id = newId();
     await tx
@@ -424,7 +418,7 @@ export async function moveBillAllergies(
     tx,
     source.guests,
     into,
-    billId,
+    [billId],
     (target.guests.at(-1)?.position ?? -1) + 1,
   );
 }

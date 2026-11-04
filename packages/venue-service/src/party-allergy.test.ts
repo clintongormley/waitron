@@ -403,7 +403,9 @@ it("split copies every guest, moving only the leaving bill's ticks to new ids", 
       { guestId: state.guests[1]!.id, workingLineId: leaving },
     ]),
   );
-  await tx((t) => allergy.splitPartyAllergies(t, partyId, other!.id, line!.workingOrderId, actor));
+  await tx((t) =>
+    allergy.splitPartyAllergies(t, partyId, other!.id, [line!.workingOrderId], actor),
+  );
   const source = await read();
   const target = await read(other!.id);
   expect(source.guests).toEqual(state.guests);
@@ -418,6 +420,76 @@ it("split copies every guest, moving only the leaving bill's ticks to new ids", 
   expect(target.ticks).toEqual([
     { guestId: target.guests[1]!.id, draftLineId: null, workingLineId: leaving },
   ]);
+});
+
+async function billOfLine(lineId: string) {
+  const [line] = await suite.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.id, lineId));
+  return line!.workingOrderId;
+}
+
+it("A803 split: guests are copied once and the ticks of every listed bill move to the copies", async () => {
+  const [other] = await suite.db.insert(parties).values({ openedBy: actor }).returning();
+  const state = await save({
+    answer: "allergies",
+    guests: [guest, { who: "Guest B", allergens: { eggs: {} } }],
+  });
+  const g = state.guests[0]!.id;
+  const onBill1 = await workingLine();
+  const onBill2 = await workingLine();
+  const onBill3 = await workingLine();
+  const bill1 = await billOfLine(onBill1);
+  const bill2 = await billOfLine(onBill2);
+  const draftOnBill2 = await draftLine();
+  const [draftRow] = await suite.db
+    .select()
+    .from(orderDraftLines)
+    .where(eq(orderDraftLines.id, draftOnBill2));
+  await suite.db
+    .update(orderDrafts)
+    .set({ billId: bill2 })
+    .where(eq(orderDrafts.id, draftRow!.draftId));
+  await tx((t) =>
+    allergy.setAllergyLineTicks(t, partyId, [
+      { guestId: g, workingLineId: onBill1 },
+      { guestId: g, workingLineId: onBill2 },
+      { guestId: g, workingLineId: onBill3 },
+      { guestId: g, draftLineId: draftOnBill2 },
+    ]),
+  );
+
+  await tx((t) => allergy.splitPartyAllergies(t, partyId, other!.id, [bill1, bill2], actor));
+
+  const source = await read();
+  const target = await read(other!.id);
+  expect(source.guests).toEqual(state.guests);
+  expect(target.guests.map((row) => row.who)).toEqual(["Seat three", "Guest B"]);
+  const copy = target.guests[0]!.id;
+  expect(copy).not.toBe(g);
+  const byLine = (a: { workingLineId: string | null }, b: { workingLineId: string | null }) =>
+    (a.workingLineId ?? "").localeCompare(b.workingLineId ?? "");
+  expect([...target.ticks].sort(byLine)).toEqual(
+    [
+      { guestId: copy, draftLineId: null, workingLineId: onBill1 },
+      { guestId: copy, draftLineId: null, workingLineId: onBill2 },
+      { guestId: copy, draftLineId: draftOnBill2, workingLineId: null },
+    ].sort(byLine),
+  );
+  expect(source.ticks).toEqual([{ guestId: g, draftLineId: null, workingLineId: onBill3 }]);
+});
+
+it("A803 split: no answer at the source copies nothing, whatever bills are named", async () => {
+  const [other] = await suite.db.insert(parties).values({ openedBy: actor }).returning();
+  const bill1 = await billOfLine(await workingLine());
+
+  await tx((t) => allergy.splitPartyAllergies(t, partyId, other!.id, [bill1], actor));
+
+  const target = await read(other!.id);
+  expect(target.answer).toBeNull();
+  expect(target.guests).toEqual([]);
+  expect(target.ticks).toEqual([]);
 });
 
 it.each([-1, 0.5, NaN, Infinity])(
@@ -560,7 +632,7 @@ it.each([null, "none", "allergies"] as const)(
     const before = await read();
     await tx((t) => allergy.mergePartyAllergies(t, partyId, partyId, actor));
     expect(await read()).toEqual(before);
-    await tx((t) => allergy.splitPartyAllergies(t, partyId, other!.id, null, actor));
+    await tx((t) => allergy.splitPartyAllergies(t, partyId, other!.id, [], actor));
     expect((await read(other!.id)).answer).toBe(answer);
     expect((await read(other!.id)).ticks).toEqual([]);
   },

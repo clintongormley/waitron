@@ -1354,7 +1354,7 @@ export interface VenueServiceContribution {
     tx: Transaction,
     from: string,
     into: string,
-    billId: string | null,
+    billIds: readonly string[],
     operatorId: string,
   ): Promise<void>;
   /** Give a bill the party's next number; a number the party has given and committed is never given again. */

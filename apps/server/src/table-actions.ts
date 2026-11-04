@@ -332,7 +332,13 @@ export async function splitTable(
       tableId,
     });
     await inheritKitchenNote(tx, cfg, { partyId }, { partyId: newParty }, "copy");
-    await VENUE_SERVICE.splitPartyAllergies(tx, partyId, newParty, billId, options.operatorId);
+    await VENUE_SERVICE.splitPartyAllergies(
+      tx,
+      partyId,
+      newParty,
+      billId === null ? [] : [billId],
+      options.operatorId,
+    );
     let taken: string;
     if (billId === null) {
       taken = await insertPartyBill(tx, cfg, newParty);
