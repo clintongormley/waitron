@@ -30,7 +30,13 @@ const suite = useVenueDb({
       await applyMigrationSet(
         db,
         set.migrationsTable === FISCAL_MIGRATIONS.migrationsTable
-          ? { ...set, migrationsFolder: directory }
+          ? {
+              ...set,
+              migrationsFolder: directory,
+              appendOnlyTables: set.appendOnlyTables?.filter(
+                (table) => !["fiscal_lookup_conflicts", "fiscal_series_conflicts"].includes(table),
+              ),
+            }
           : set,
       );
     }
@@ -80,6 +86,8 @@ it("adds an empty replacement link while preserving every populated row and fisc
   await applyMigrationSet(suite.db, FISCAL_MIGRATIONS);
   const expected = {
     ...before,
+    fiscal_lookup_conflicts: [],
+    fiscal_series_conflicts: [],
     registros_facturacion: before.registros_facturacion!.map((row) => ({
       ...row,
       corrects_registro_id: null,

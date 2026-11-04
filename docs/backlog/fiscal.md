@@ -1520,3 +1520,10 @@ inaccurate. Evidence inspection and persistent-repair policy remain separate A10
 The initial reports are retained with their findings and qualification limits. This candidate
 still needs the normal hook and exact-head CI before owner fiscal review; no automatic landing is
 authorized for this item.
+
+The first pull-request CI run reached an older-schema fixture in
+`record-replacement-upgrade.test.ts` that installed the new tables' triggers before their
+migrations. Its predecessor descriptor now omits those two tables; its full post-upgrade
+comparison adds only their empty rows. Every earlier expected row and fiscal refusal remains.
+The fixture failed locally before both additions; all three predecessor-upgrade cases and the
+unedited write-path/immutability pair then passed 23 cases. Exact-head package CI remains required.
