@@ -6,13 +6,7 @@ import { setLocale } from "./i18n/t.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { initial } from "../test/first-setup-browser.js";
-import {
-  click,
-  namedSummary,
-  q,
-  stoppedActivity,
-  stoppedSummary,
-} from "../test/missing-database-browser.js";
+import { click, namedSummary, q } from "../test/missing-database-browser.js";
 import { refusedCause, settled } from "../test/held-database-browser.js";
 import { text, wipeFixture } from "../test/wipe-browser.js";
 import { cleanupWidgets, expectNoA11yViolations } from "./widgets/test-helpers.js";
@@ -30,16 +24,6 @@ const box = { wiped: false };
 const fixtures: Record<string, () => Options> = {
   "recover-confirmation": () => ({ summary: () => Response.json(namedSummary) }),
   "recover-missing": () => ({ inspection: { database: "missing" } }),
-  "recover-stopped-present": () => ({
-    activity: stoppedActivity,
-    summary: () => Response.json(stoppedSummary),
-  }),
-  "recover-stopped-missing": () => ({
-    inspection: { database: "missing" },
-    backupPhase: "prepared",
-    activity: stoppedActivity,
-    summary: () => Response.json(stoppedSummary),
-  }),
   "refused-fault": () => ({ summary: () => refusedCause("kept-records") }),
   "join-or-recover": () => ({
     startAgain: () => {

@@ -4,12 +4,7 @@ import type { WtButton } from "@waitron/ui";
 import "../src/setup-app.js";
 import type { SetupApp } from "../src/setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "../src/first-setup-session.js";
-import type {
-  BackupRepairActivity,
-  FirstSetupInspection,
-  StartAgainRecoveryShown,
-  StartAgainSummary,
-} from "../src/api/first-setup-types.js";
+import type { FirstSetupInspection, StartAgainSummary } from "../src/api/first-setup-types.js";
 import { initial, wizardApi } from "./first-setup-browser.js";
 import { mountWidget } from "../src/widgets/test-helpers.js";
 
@@ -20,31 +15,6 @@ export async function click(app: SetupApp, name: string) {
 }
 export const namedSummary: StartAgainSummary = { reached: "named" };
 export const damagedSummary: StartAgainSummary = { ...namedSummary, recoveryRecordDamaged: true };
-/** 25 Oct 2026 at 14:35 and 14:41 in the browser's own zone, so the shown times are fixed. */
-export const recoveryStartedAt = new Date(2026, 9, 25, 14, 35).toISOString();
-export const recoveryLastActiveAt = new Date(2026, 9, 25, 14, 41).toISOString();
-export const shownTimes = {
-  en: { started: "25 Oct 2026, 14:35", last: "25 Oct 2026, 14:41" },
-  es: { started: "25 oct 2026, 14:35", last: "25 oct 2026, 14:41" },
-} as const;
-export const stoppedActivity: Extract<BackupRepairActivity, { state: "stopped" }> = {
-  state: "stopped",
-  startedAt: recoveryStartedAt,
-  lastActiveSource: "memory",
-  lastActiveAt: recoveryLastActiveAt,
-  phase: "prepared",
-  recoveryId: "r".repeat(32),
-  failed: false,
-  cloud: false,
-};
-export const stoppedRecovery: StartAgainRecoveryShown = {
-  startedAt: recoveryStartedAt,
-  lastActiveAt: recoveryLastActiveAt,
-  lastActiveSource: "memory",
-  failed: false,
-  cloud: false,
-};
-export const stoppedSummary: StartAgainSummary = { ...namedSummary, recovery: stoppedRecovery };
 export async function missingDatabaseFixture(
   options: {
     intercept?: NonNullable<Parameters<typeof wizardApi>[0]>["intercept"];

@@ -111,7 +111,7 @@ it.each<{
     confirm: { confirmUnreadableDatabase: { shown: unreadable } },
   },
   {
-    name: "a readable held database with no stopped recovery",
+    name: "a readable held database",
     database: "occupied",
     summary: shown,
     confirm: {},

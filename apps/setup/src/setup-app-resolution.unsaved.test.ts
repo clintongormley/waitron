@@ -53,8 +53,6 @@ it("Recover from backup opens its confirmation in place, keeping an entered setu
   const { api, requests } = wizardApi({
     claimed: true,
     intercept(path) {
-      if (path.endsWith("/backup/status"))
-        return Response.json({ phase: "unstarted", proofRequired: true });
       if (path.endsWith("/start-again/summary")) return Response.json({ reached: "claimed" });
     },
   });

@@ -290,10 +290,6 @@ it.each(["occupied", "unknown", "corrupt"] as const)(
 it("offers Start again beside a missing database, and pressing it draws what the setup reached", async () => {
   const { app, requests } = await mount({
     inspection: { database: "missing", emptyDatabase: false },
-    intercept(path) {
-      if (path.endsWith("/backup/status"))
-        return Response.json({ phase: "unstarted", proofRequired: true });
-    },
   });
   expect(q<WtButton>(app, "start-again").disabled).toBe(false);
   expect(q(app, "resume")).toBeNull();
@@ -740,8 +736,6 @@ async function damagedRecord(
   let sent = false;
   const fixture = await mount({
     intercept(path) {
-      if (path.endsWith("/backup/status"))
-        return Response.json({ phase: "unstarted", proofRequired: true });
       if (path.endsWith("/start-again/summary"))
         return Response.json({ reached: "named", recoveryRecordDamaged: true });
       if (path.endsWith("/resolution/start-again")) {
@@ -1254,8 +1248,6 @@ it("with the database present, a summary read refused storage.disk_full without 
 it("a damaged record's Start again refused storage.disk_full says the disk is full and keeps the confirmation open", async () => {
   const { app, requests } = await mount({
     intercept(path) {
-      if (path.endsWith("/backup/status"))
-        return Response.json({ phase: "unstarted", proofRequired: true });
       if (path.endsWith("/start-again/summary"))
         return Response.json({ reached: "named", recoveryRecordDamaged: true });
       if (path.endsWith("/resolution/start-again")) return diskFull();

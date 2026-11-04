@@ -3,20 +3,12 @@ import "../src/setup-app.js";
 import type { SetupApp } from "../src/setup-app.js";
 import { initialOwnerStrings } from "../src/screens/initial-owner-strings.js";
 import type {
-  BackupRepairActivity,
-  BackupRepairStatus,
   FirstSetupInspection,
   StartAgainConfirm,
   StartAgainSummary,
 } from "../src/api/first-setup-types.js";
 import { wizardApi } from "./first-setup-browser.js";
-import {
-  damagedSummary,
-  namedSummary,
-  q,
-  stoppedActivity,
-  stoppedSummary,
-} from "./missing-database-browser.js";
+import { damagedSummary, namedSummary, q } from "./missing-database-browser.js";
 import { settled } from "./held-database-browser.js";
 import { mountWidget } from "../src/widgets/test-helpers.js";
 
@@ -61,10 +53,8 @@ export async function wipeFixture(
     inspection?: Partial<FirstSetupInspection>;
     /** Merged into each inspection read after `inspection`, counted from 0. */
     inspectionAt?: (read: number) => Partial<FirstSetupInspection>;
-    activity?: BackupRepairActivity | null | (() => BackupRepairActivity | null);
     summary?: () => Response | Promise<Response>;
     startAgain?: () => Response;
-    backupPhase?: BackupRepairStatus["phase"];
     /** Answers `/first-setup/status` before the fixture's own answer, when it returns a response. */
     status?: (path: string, headers: Headers) => Response | undefined;
     locale?: "en-GB" | "es-ES";
@@ -83,18 +73,6 @@ export async function wipeFixture(
         const answer = options.status?.(path, headers);
         if (answer !== undefined) return answer;
       }
-      if (path.endsWith("/backup/activity"))
-        return Response.json({
-          activity:
-            typeof options.activity === "function"
-              ? options.activity()
-              : (options.activity ?? null),
-        });
-      if (path.endsWith("/backup/status"))
-        return Response.json({
-          phase: options.backupPhase ?? "unstarted",
-          proofRequired: true,
-        } satisfies BackupRepairStatus);
       if (path.endsWith("/start-again/summary"))
         return options.summary?.() ?? Response.json(namedSummary);
       if (path.endsWith("/resolution/start-again"))
@@ -134,49 +112,36 @@ export const sends = (requests: Sent[]) =>
 export const cases: {
   name: string;
   inspection: Partial<FirstSetupInspection>;
-  activity: BackupRepairActivity | null;
   summary: StartAgainSummary;
   sent: StartAgainConfirm;
 }[] = [
   {
     name: "an empty unused setup database",
     inspection: { database: "no-venue-rows", emptyDatabase: true },
-    activity: null,
     summary: { reached: "claimed" },
     sent: {},
   },
   {
-    name: "a setup database holding records, with no stopped recovery",
+    name: "a setup database holding records",
     inspection: { database: "occupied" },
-    activity: null,
     summary: namedSummary,
     sent: {},
   },
   {
-    name: "a setup database holding records beside a stopped recovery",
-    inspection: { database: "occupied" },
-    activity: stoppedActivity,
-    summary: stoppedSummary,
-    sent: { confirmRecoveryDiscard: { shown: stoppedSummary } },
-  },
-  {
     name: "a damaged recovery-key record",
     inspection: { database: "occupied" },
-    activity: null,
     summary: damagedSummary,
     sent: { recoveryRecordDamagedShown: true },
   },
   {
     name: "a missing setup database",
     inspection: { database: "missing" },
-    activity: null,
     summary: namedSummary,
     sent: { confirmMissingDatabase: { nothingFiledOrSold: true, shown: namedSummary } },
   },
   {
     name: "a setup database the box cannot read all of",
     inspection: { database: "occupied" },
-    activity: null,
     summary: { ...namedSummary, databaseUnreadable: true },
     sent: { confirmUnreadableDatabase: { shown: { ...namedSummary, databaseUnreadable: true } } },
   },

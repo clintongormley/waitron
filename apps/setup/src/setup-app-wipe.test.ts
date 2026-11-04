@@ -5,15 +5,8 @@ import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { setLocale } from "./i18n/t.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { shellEn } from "./i18n/strings/shell.js";
-import type { BackupRepairActivity } from "./api/first-setup-types.js";
 import { initial, wizardApi } from "../test/first-setup-browser.js";
-import {
-  click,
-  namedSummary,
-  q,
-  stoppedActivity,
-  stoppedSummary,
-} from "../test/missing-database-browser.js";
+import { click, damagedSummary, namedSummary, q } from "../test/missing-database-browser.js";
 import { refusedCause, settled } from "../test/held-database-browser.js";
 import {
   OLD_RECOVERY_ROUTE,
@@ -43,7 +36,6 @@ for (const c of cases)
   it(`${c.name}: Start again asks for no password, reads the summary with no owner tab, and sends what was shown`, async () => {
     const { app, requests } = await wipeFixture({
       inspection: c.inspection,
-      activity: c.activity,
       summary: () => Response.json(c.summary),
     });
     await click(app, "start-again");
@@ -67,7 +59,7 @@ for (const c of cases)
     await expect.poll(() => text(app)).toContain(t.restarting);
   });
 
-it("the repair page sends nothing under /resolution/backup/: on load, on Start again, on Recover from backup, with the setup database present and missing, and for an ordinary first setup resumed in a tab that holds its session", async () => {
+it("the repair page sends nothing under /resolution/backup/: on load, on Start again, on Recover from backup, on Reconnect, with the setup database present, missing and damaged, and for an ordinary first setup resumed in a tab that holds its session", async () => {
   const oldRoutes = (requests: Sent[]) =>
     requests.filter((r) => OLD_RECOVERY_ROUTE.test(r.path)).map((r) => r.path);
   const reset = async () => {
@@ -75,7 +67,7 @@ it("the repair page sends nothing under /resolution/backup/: on load, on Start a
     sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
     await navigator.locks.request(`waitron:first-setup:attempt:${initial.attemptId}`, () => {});
   };
-  for (const database of ["occupied", "missing"] as const)
+  for (const database of ["occupied", "missing", "corrupt"] as const)
     for (const [press, confirm] of [
       ["start-again", "confirm-start-again"],
       ["recover-backup", "confirm-recover"],
@@ -87,6 +79,11 @@ it("the repair page sends nothing under /resolution/backup/: on load, on Start a
       await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
       await click(app, confirm);
       await expect.poll(() => sends(requests).length).toBe(1);
+      expect(oldRoutes(requests)).toEqual([]);
+      const before = requests.length;
+      await click(app, "reconnect-first");
+      await expect.poll(() => requests.length).toBeGreaterThan(before);
+      await settled(app);
       expect(oldRoutes(requests)).toEqual([]);
       await reset();
     }
@@ -180,21 +177,6 @@ it("pressing Start again reads the setup again before reading the summary", asyn
   expect(inspected).toBeLessThan(after.findIndex((p) => p.endsWith("/start-again/summary")));
 });
 
-it("a recovery found running when Start again is pressed draws the running recovery and no confirmation", async () => {
-  let activity: BackupRepairActivity | null = null;
-  const { app, requests } = await wipeFixture({ activity: () => activity });
-  activity = {
-    state: "running",
-    startedAt: stoppedActivity.startedAt,
-    lastActiveAt: stoppedActivity.lastActiveAt,
-  };
-  await click(app, "start-again");
-  await expect.poll(() => q(app, "recovery-running")).not.toBeNull();
-  await app.updateComplete;
-  expect(q(app, "retire-confirmed")).toBeNull();
-  expect(summaryReads(requests)).toEqual([]);
-});
-
 it("a send refused kept-records closes the confirmation, says the setup changed, and offers Start again again", async () => {
   const { app } = await wipeFixture({ startAgain: () => refusedCause("kept-records") });
   await click(app, "start-again");
@@ -229,31 +211,7 @@ it("a summary answered after the page has left and been read again draws no conf
   expect(q(app, "retire-confirmed")).toBeNull();
 });
 
-it("beside a stopped recovery, a summary read refused storage.disk_full says so and offers Check again, which reads it again", async () => {
-  let full = true;
-  const { app, requests } = await wipeFixture({
-    activity: stoppedActivity,
-    summary: () =>
-      full
-        ? Response.json(
-            { error: { code: "storage.disk_full", params: { restartDeletesLogs: true } } },
-            { status: 507 },
-          )
-        : Response.json(stoppedSummary),
-  });
-  await click(app, "start-again");
-  await expect.poll(() => q(app, "check-again")).not.toBeNull();
-  await settled(app);
-  expect(formErrors(app)).toContain(shellEn["shell.first_setup.disk_full"]);
-  expect(q(app, "recovery-stopped")).not.toBeNull();
-  expect(q(app, "retire-confirmed")).toBeNull();
-  full = false;
-  await click(app, "check-again");
-  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
-  expect(summaryReads(requests).length).toBe(2);
-});
-
-it("with no stopped recovery, a summary read that fails draws the error beside Start again, still offered", async () => {
+it("a summary read that fails draws the error beside Start again, still offered", async () => {
   let fail = true;
   const { app } = await wipeFixture({
     summary: () =>
@@ -356,7 +314,7 @@ for (const [locale, lang] of locales)
 it("a summary that changed after the confirmation was drawn closes it, says the setup changed, and Start again then opens on the new summary", async () => {
   let reads = 0;
   const { app, requests } = await wipeFixture({
-    summary: () => Response.json(reads++ === 0 ? namedSummary : stoppedSummary),
+    summary: () => Response.json(reads++ === 0 ? namedSummary : damagedSummary),
   });
   await click(app, "start-again");
   await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
@@ -370,7 +328,7 @@ it("a summary that changed after the confirmation was drawn closes it, says the 
   await expect.poll(() => app.shadowRoot!.activeElement).toBe(q(app, "start-again"));
   await click(app, "start-again");
   await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
-  expect(q(app, "recovery-stopped")).not.toBeNull();
+  expect(q(app, "recovery-record-damaged")).not.toBeNull();
 });
 
 for (const [name, refusal, words] of [
@@ -423,17 +381,6 @@ it("where the setup as read on pressing can no longer be deleted, no summary is 
   expect(q(app, "start-again-refused")!.textContent).toBe(t.wipeUnavailable);
   expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
   expect(summaryReads(requests)).toEqual([]);
-});
-
-it("with the setup database missing and a recovery journal the summary does not name, pressing Start again opens no confirmation", async () => {
-  const { app } = await wipeFixture({
-    inspection: { database: "missing" },
-    backupPhase: "uncertain",
-  });
-  await click(app, "start-again");
-  await expect.poll(() => q(app, "missing-reached")).not.toBeNull();
-  await settled(app);
-  expect(q(app, "retire-confirmed")).toBeNull();
 });
 
 it("pressing Start again moves focus to the confirmation's tick box", async () => {

@@ -4,7 +4,7 @@ import type { WtButton } from "@waitron/ui";
 import { setLocale } from "./i18n/t.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { initial } from "../test/first-setup-browser.js";
-import { q, click, stoppedSummary } from "../test/missing-database-browser.js";
+import { q, click, namedSummary } from "../test/missing-database-browser.js";
 import { cleanupWidgets, expectNoA11yViolations } from "./widgets/test-helpers.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { heldFixture, refusedCause, settled, tradingEnv } from "../test/held-database-browser.js";
@@ -16,10 +16,10 @@ afterEach(async () => {
   setLocale("en-GB");
 });
 const summaries = {
-  offered: () => Response.json(stoppedSummary),
-  confirmation: () => Response.json(stoppedSummary),
+  offered: () => Response.json(namedSummary),
+  confirmation: () => Response.json(namedSummary),
   "refused-fault": () => refusedCause("kept-records"),
-  unreadable: () => Response.json({ ...stoppedSummary, databaseUnreadable: true }),
+  unreadable: () => Response.json({ ...namedSummary, databaseUnreadable: true }),
 } as const;
 /** What each state draws once it is reached, and the control left to focus there. */
 const reached = {
@@ -32,7 +32,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
   for (const theme of ["light", "dark"] as const)
     for (const width of [390, 1280])
       for (const state of ["offered", "confirmation", "refused-fault", "unreadable"] as const)
-        it(`${locale} ${theme} ${width} ${state}: accessible Start again beside a stopped recovery and a setup database holding records`, async () => {
+        it(`${locale} ${theme} ${width} ${state}: accessible Start again with a setup database holding records`, async () => {
           const previous = [innerWidth, innerHeight];
           try {
             await page.viewport(width, 1200);
@@ -74,7 +74,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
 for (const locale of ["en-GB", "es-ES"] as const)
   for (const theme of ["light", "dark"] as const)
     for (const view of ["trading-saved", "setup-finished"] as const)
-      it(`${locale} ${theme} ${view}: accessible refusal beside a stopped recovery and a setup database holding records`, async () => {
+      it(`${locale} ${theme} ${view}: accessible refusal with a setup database holding records`, async () => {
         const { app, host } = await heldFixture({
           locale,
           theme,
