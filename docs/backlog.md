@@ -645,8 +645,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/setup.md#a-waitron-cloud-recovery-whose-download-takes-more-than-30-seconds-may-be-refused-its-series-name)
 
 - **A1131c: Recover from backup first wipes the failed setup, and Start again's page drops the item counts**
-  Slices 2 and 3 landed; slice 4 (deleting the old recovery code, including the old routes' `open`)
-  is still to come.
+  Slices 2 and 3 landed. Slice 4's setup-page half landed (#2456); its server and provisioning half
+  (deleting the old recovery code, including the old routes' `open`) is still to come.
   [Detail](backlog/setup.md#a1131c-recover-from-backup-first-wipes-the-failed-setup-and-start-agains-page-drops-the-item-counts).
 
 - **A1131: Start again beside a recovery record that cannot be read, with the setup database missing.**
