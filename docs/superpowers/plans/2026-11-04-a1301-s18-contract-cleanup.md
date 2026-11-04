@@ -903,6 +903,30 @@ them first: S18e, if it lands first, moves `boot.ts`.
 
 ### Task S18f-1: `ProvisionedNode` and the identity it is built from
 
+**Re-sized 2026-11-05 (lane B), from a dry run at main `48681368d0`.** The owner chose the cheaper
+schedule (2026-11-04 ~06:05), so S18f does not wait for S18e. The run
+`--drop-property ProvisionedNode.locationId --drop-property AdoptResult.locationId
+--drop-property VenueResult.locationId --dry-run` edits 47 files itself and reports 273 reads of
+the dropped property (71 files, nearly all tests) and 150 object literals with no contextual type
+(126 files). The task is built as four, in this order, so that every commit before S18f-1c
+compiles:
+
+- **S18f-1a:** tests and test helpers in `packages/`, `apps/server/scripts/`, and the three
+  largest server suites (`configuration-transfer.test.ts`, `provision.test.ts`,
+  `management-api.test.ts`) stop reading `locationId` off a `ProvisionedNode`, `AdoptResult` or
+  `VenueResult`. Each read becomes an independent read of the same id, normally
+  `await venueLocationId(db)` on the database that venue was set up in. The property still exists,
+  so nothing else changes and every suite passes as before.
+- **S18f-1b:** the same, for the rest of `apps/server`'s tests and helpers.
+- **S18f-1c:** Steps 1–4 below: delete the scope-blind cases, run the codemod, make the production
+  edits and Step 3's backup-verification change. Under the cheaper schedule,
+  `backup-data-placement.ts` and `backup-verification-secrets.ts` hand `loadBackupConfig` the id of
+  the copy's own single `locations` row, read from the copy as `readArtifactNode` does today
+  (`restore.ts`), each with a one-line note that S18e or S28 removes it.
+- **S18f-1d:** the reported literals with no contextual type. Delete the `locationId` key where
+  nothing reads it afterwards (typecheck plus the file's suite decide); keep it where the value is
+  read, for example to fill a `location_id` column.
+
 **To be re-sized before dispatch.** It is the largest task here: production files in five
 packages, the test helpers below, and about 125 test literals. Once S18a–S18d have landed, the
 watcher splits it, if its dry run says so, into production edits and test-literal edits.
