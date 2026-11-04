@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "bcdf0163-314d-4290-88e5-f9974581de3c",
+  "id": "3d012ef3-4364-468b-8ae4-fc79d49c5053",
   "prevId": "6f346c58-63da-4cbe-9edf-9de66cabbd53",
   "tables": {
     "locations": {
@@ -11203,6 +11203,15 @@
             "acknowledged"
           ],
           "isUnique": false
+        },
+        "document_delivery_requests_acceptance_order_idx": {
+          "name": "document_delivery_requests_acceptance_order_idx",
+          "columns": [
+            "node_id",
+            "recovery_epoch",
+            "acceptance_order"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {},
@@ -11225,6 +11234,10 @@
         "document_delivery_requests_document_ck": {
           "name": "document_delivery_requests_document_ck",
           "value": "\"document_delivery_requests\".\"document\" in ('receipt', 'invoice')"
+        },
+        "document_delivery_requests_outcome_ck": {
+          "name": "document_delivery_requests_outcome_ck",
+          "value": "(\"document_delivery_requests\".\"status\" = 'accepted' and \"document_delivery_requests\".\"accepted_result\" is not null and \"document_delivery_requests\".\"acceptance_order\" is not null) or (\"document_delivery_requests\".\"status\" <> 'accepted' and \"document_delivery_requests\".\"accepted_result\" is null and \"document_delivery_requests\".\"acceptance_order\" is null)"
         },
         "document_delivery_requests_order_ck": {
           "name": "document_delivery_requests_order_ck",

@@ -19,10 +19,12 @@ CREATE TABLE `document_delivery_requests` (
 	PRIMARY KEY(`node_id`, `recovery_epoch`, `request_key`),
 	CONSTRAINT "document_delivery_requests_status_ck" CHECK("document_delivery_requests"."status" in ('prepared', 'accepted', 'refused', 'fenced')),
 	CONSTRAINT "document_delivery_requests_document_ck" CHECK("document_delivery_requests"."document" in ('receipt', 'invoice')),
+	CONSTRAINT "document_delivery_requests_outcome_ck" CHECK(("document_delivery_requests"."status" = 'accepted' and "document_delivery_requests"."accepted_result" is not null and "document_delivery_requests"."acceptance_order" is not null) or ("document_delivery_requests"."status" <> 'accepted' and "document_delivery_requests"."accepted_result" is null and "document_delivery_requests"."acceptance_order" is null)),
 	CONSTRAINT "document_delivery_requests_order_ck" CHECK("document_delivery_requests"."acceptance_order" is null or ("document_delivery_requests"."acceptance_order" between 1 and 9007199254740991 and "document_delivery_requests"."acceptance_order" = cast("document_delivery_requests"."acceptance_order" as integer)))
 );
 --> statement-breakpoint
 CREATE INDEX `document_delivery_requests_recovery_idx` ON `document_delivery_requests` (`node_id`,`recovery_epoch`,`sale_id`,`acknowledged`);--> statement-breakpoint
+CREATE UNIQUE INDEX `document_delivery_requests_acceptance_order_idx` ON `document_delivery_requests` (`node_id`,`recovery_epoch`,`acceptance_order`);--> statement-breakpoint
 CREATE TABLE `document_delivery_sequences` (
 	`node_id` text NOT NULL,
 	`recovery_epoch` text NOT NULL,

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { claimInvoiceDelivery, reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
@@ -442,4 +443,24 @@ it("an ended management session cannot distinguish an existing sale from an abse
       code: "management_session.required",
     });
   }
+});
+
+it("review L1: offers expire a lapsed claim before deciding whether Print is available", async () => {
+  const id = await fullSale();
+  const delivery = await withTransaction(suite.db, (tx) =>
+    reserveInvoiceDelivery(tx, id, {
+      medium: "email",
+      personId: venue.adminId,
+      requestKey: randomUUID(),
+      recipient: "customer@example.test",
+    }),
+  );
+  expect(
+    await withTransaction(suite.db, (tx) =>
+      claimInvoiceDelivery(tx, delivery.id, "server-one", frozen),
+    ),
+  ).toBeDefined();
+  expect((await offers(dashboard, "invoice", id)).actions.print).toBe(false);
+  vi.setSystemTime(new Date(frozen.getTime() + 120_000));
+  expect((await offers(dashboard, "invoice", id)).actions.print).toBe(true);
 });

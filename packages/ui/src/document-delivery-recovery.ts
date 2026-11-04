@@ -14,6 +14,7 @@ export type RetainedDocumentOperation = {
   operation: OperationIdentity;
   subjectId: string;
   fingerprint: string;
+  rememberPreference?: boolean;
 };
 export type RecoveryOutcome = OperationResult<DeliveryResult | InvoiceSaveResult>;
 export type RecoveryEntry = {
@@ -21,6 +22,7 @@ export type RecoveryEntry = {
   subjectId: string;
   fingerprint: string;
   outcome: RecoveryOutcome;
+  rememberPreference?: boolean;
 };
 export type RecoveredDocumentOperation = RetainedDocumentOperation & { outcome: RecoveryOutcome };
 export interface DocumentRecoveryApi {
@@ -87,6 +89,7 @@ function retained(value: RetainedDocumentOperation): StoredOperation {
     operation: { origin: originCopy(value.operation.origin), key: value.operation.key },
     subjectId: value.subjectId,
     fingerprint: value.fingerprint,
+    rememberPreference: value.kind === "delivery" && value.rememberPreference === true,
   };
 }
 function sameIdentity(a: RetainedDocumentOperation, b: RetainedDocumentOperation): boolean {
@@ -94,6 +97,7 @@ function sameIdentity(a: RetainedDocumentOperation, b: RetainedDocumentOperation
     a.kind === b.kind &&
     a.subjectId === b.subjectId &&
     a.fingerprint === b.fingerprint &&
+    (a.rememberPreference === true) === (b.rememberPreference === true) &&
     a.operation.key === b.operation.key &&
     sameOrigin(a.operation.origin, b.operation.origin)
   );
@@ -163,6 +167,7 @@ export class DocumentDeliveryRecovery extends EventTarget {
   #pending = new Map<string, Set<string>>();
   #recoveryGeneration = new Map<string, number>();
   #recovering = new Set<string>();
+  #originGeneration = 0;
 
   private constructor(applianceId: string, db: IDBDatabase | null) {
     super();
@@ -175,8 +180,11 @@ export class DocumentDeliveryRecovery extends EventTarget {
       event: MessageEvent<{ applianceId: string; subject?: RecoverySubject }>,
     ) => {
       if (event.data.applianceId !== this.#applianceId) return;
-      if (event.data.subject) this.#ready.delete(subjectKey(event.data.subject));
-      else {
+      if (event.data.subject) {
+        const key = subjectKey(event.data.subject);
+        this.#ready.delete(key);
+        this.#recoveryGeneration.set(key, (this.#recoveryGeneration.get(key) ?? 0) + 1);
+      } else {
         if (!this.preferenceWarning) this.#preferences.clear();
         this.dispatchEvent(new Event("preference-change"));
       }
@@ -217,6 +225,7 @@ export class DocumentDeliveryRecovery extends EventTarget {
   ): Promise<void> {
     if (origin.applianceId !== this.#applianceId) throw new Error("foreign origin");
     this.#ready.clear();
+    this.#originGeneration++;
     if (this.#db) {
       const tx = this.#db.transaction("operations", "readwrite");
       const done = transactionDone(tx);
@@ -231,6 +240,7 @@ export class DocumentDeliveryRecovery extends EventTarget {
       await done;
     }
     this.#origin = originCopy(origin);
+    this.#ready.clear();
   }
   #requireOrigin(origin?: RoutingOrigin): RoutingOrigin {
     if (!this.#origin || (origin && !sameOrigin(this.#origin, origin)))
@@ -356,7 +366,7 @@ export class DocumentDeliveryRecovery extends EventTarget {
       this.identityWarning = true;
       throw error;
     }
-    if (checked.state === "accepted" && "requestKey" in checked.result)
+    if (clean.rememberPreference && checked.state === "accepted" && "requestKey" in checked.result)
       await this.rememberAccepted(checked.result);
     return { ...clean, outcome: checked };
   }
@@ -370,6 +380,7 @@ export class DocumentDeliveryRecovery extends EventTarget {
     const generation = (this.#recoveryGeneration.get(key) ?? 0) + 1;
     this.#recoveryGeneration.set(key, generation);
     const origin = this.#requireOrigin();
+    const originGeneration = this.#originGeneration;
     try {
       const tx = this.#database().transaction("operations");
       const done = transactionDone(tx);
@@ -414,6 +425,7 @@ export class DocumentDeliveryRecovery extends EventTarget {
       }
       if (
         this.#recoveryGeneration.get(key) === generation &&
+        this.#originGeneration === originGeneration &&
         sameOrigin(this.#requireOrigin(), origin)
       ) {
         this.identityWarning = false;
@@ -438,6 +450,7 @@ export class DocumentDeliveryRecovery extends EventTarget {
     const subject = subjectOf(value);
     const key = subjectKey(subject);
     const generation = this.#recoveryGeneration.get(key);
+    const originGeneration = this.#originGeneration;
     this.#hold(subject);
     const checked = await this.recordOutcome(value, value.outcome);
     await api.acknowledge(checked.operation, subject);
@@ -447,7 +460,11 @@ export class DocumentDeliveryRecovery extends EventTarget {
       tx.objectStore("operations").delete(operationKey(value.operation));
       await done;
       this.#pending.get(subjectKey(subject))?.delete(value.operation.key);
-      if (generation === this.#recoveryGeneration.get(key) && !this.#recovering.has(key))
+      if (
+        generation === this.#recoveryGeneration.get(key) &&
+        originGeneration === this.#originGeneration &&
+        !this.#recovering.has(key)
+      )
         this.#ready.add(key);
     } catch (error) {
       this.identityWarning = true;

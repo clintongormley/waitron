@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, primaryKey } from "drizzle-orm/sqlite-core";
+import { check, index, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import type { DeliveryContext, DeliveryResult } from "@waitron/shared";
 import {
   count,
@@ -49,6 +49,15 @@ export const documentDeliveryRequests = table(
     ),
     check("document_delivery_requests_status_ck", enumCheck(t.status)),
     check("document_delivery_requests_document_ck", enumCheck(t.document)),
+    uniqueIndex("document_delivery_requests_acceptance_order_idx").on(
+      t.nodeId,
+      t.recoveryEpoch,
+      t.acceptanceOrder,
+    ),
+    check(
+      "document_delivery_requests_outcome_ck",
+      sql`(${t.status} = 'accepted' and ${t.acceptedResult} is not null and ${t.acceptanceOrder} is not null) or (${t.status} <> 'accepted' and ${t.acceptedResult} is null and ${t.acceptanceOrder} is null)`,
+    ),
     check(
       "document_delivery_requests_order_ck",
       sql`${t.acceptanceOrder} is null or (${t.acceptanceOrder} between 1 and 9007199254740991 and ${t.acceptanceOrder} = cast(${t.acceptanceOrder} as integer))`,

@@ -32,6 +32,7 @@ function result(overrides: Partial<DeliveryResult> = {}): DeliveryResult {
 function operation(): RetainedDocumentOperation {
   return {
     kind: "delivery",
+    rememberPreference: true,
     operation: { origin, key: crypto.randomUUID() },
     subjectId: subject.id,
     fingerprint: "a".repeat(64),
@@ -203,6 +204,7 @@ describe("unanswered document operations", () => {
           operation: pending.operation,
           subjectId: subject.id,
           fingerprint: pending.fingerprint,
+          rememberPreference: true,
           outcome: { state: "accepted", result: accepted },
         },
       ],
@@ -703,4 +705,82 @@ it("a blocked opening reports identity loss and closes a handle that arrives aft
   const store = await open();
   expect(store.identityWarning).toBe(true);
   expect(store.preferenceWarning).toBe(true);
+});
+
+describe("review: cross-tab holds during waits", () => {
+  it("H5: a hold broadcast during inventory cannot be released by that older inventory", async () => {
+    const a = await qualified();
+    const b = await qualified();
+    let release!: (value: []) => void;
+    const reading = b.recoverOutstanding(
+      subject,
+      api({
+        inventory: async () =>
+          new Promise<[]>((resolve) => {
+            release = resolve;
+          }),
+      }),
+    );
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    await a.retainOperation(operation());
+    const published = new Promise<void>((resolve) =>
+      b.addEventListener("preference-change", () => resolve(), { once: true }),
+    );
+    await a.rememberAccepted(result());
+    await published;
+    release([]);
+    await reading;
+    expect(b.canSubmit(subject)).toBe(false);
+  });
+  it("H5: a hold broadcast during acknowledgement cannot be released by that older acknowledgement", async () => {
+    const a = await qualified();
+    const b = await qualified();
+    const pending = operation();
+    await b.retainOperation(pending);
+    const recovered = await b.recordOutcome(pending, {
+      state: "accepted",
+      result: result({ requestKey: pending.operation.key }),
+    });
+    let release!: () => void;
+    const ack = b.acknowledgeRecovered(
+      recovered,
+      api({
+        acknowledge: async () =>
+          new Promise<void>((resolve) => {
+            release = resolve;
+          }),
+      }),
+    );
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    await a.retainOperation(operation());
+    const published = new Promise<void>((resolve) =>
+      b.addEventListener("preference-change", () => resolve(), { once: true }),
+    );
+    await a.rememberAccepted(result({ acceptanceOrder: "2" }));
+    await published;
+    release();
+    await ack;
+    expect(b.canSubmit(subject)).toBe(false);
+  });
+  it("L5: an origin qualification cannot leave a readiness gate from the prior origin", async () => {
+    const store = await qualified();
+    let release!: (value: []) => void;
+    const reading = store.recoverOutstanding(
+      subject,
+      api({
+        inventory: async () =>
+          new Promise<[]>((resolve) => {
+            release = resolve;
+          }),
+      }),
+    );
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    const moving = store.qualifyOrigin(
+      { ...origin, recoveryEpoch: second },
+      { previousOriginResolved: true },
+    );
+    release([]);
+    await Promise.allSettled([moving, reading]);
+    expect(store.canSubmit(subject)).toBe(false);
+  });
 });

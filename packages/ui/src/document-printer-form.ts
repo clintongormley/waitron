@@ -1,5 +1,6 @@
 import {
   canonicalDeliveryIntent,
+  parseInvoiceSave,
   type DeliveryIntent,
   type DeliveryResult,
   type DocumentChoice,
@@ -94,11 +95,14 @@ export class DocumentPrinterForm {
   get canPrint(): boolean {
     return (
       this.state === "ready" &&
-      this.printerId !== null &&
+      this.#eligible(this.printerId) &&
       this.#offers?.actions.print === true &&
       this.#offers.documents.includes(this.#document) &&
       this.#recoveredGeneration === this.#generation &&
       !this.#saveUncertain &&
+      (this.#document !== "invoice" ||
+        this.#offers.context.deviceId === null ||
+        this.#recovery.canSubmit(this.#device())) &&
       this.#recovery.canSubmit(this.#subject())
     );
   }
@@ -125,7 +129,15 @@ export class DocumentPrinterForm {
         : eligible(offers.defaultPrinterId)
           ? offers.defaultPrinterId
           : null;
-    } else this.printerId = eligible(offers.chosenPrinterId) ? offers.chosenPrinterId : null;
+    } else
+      this.printerId =
+        offers.chosenPrinterId === null
+          ? eligible(offers.defaultPrinterId)
+            ? offers.defaultPrinterId
+            : null
+          : eligible(offers.chosenPrinterId)
+            ? offers.chosenPrinterId
+            : null;
     this.state = offers.printers.length === 0 ? "empty" : "ready";
     this.#saveUncertain = device && this.#document === "invoice";
     this.#priorPrinter = this.printerId;
@@ -138,6 +150,11 @@ export class DocumentPrinterForm {
       this.#recoveredGeneration = -1;
       this.printerId = null;
       this.selectionWithdrawn = true;
+      this.state = offers.printers.length === 0 ? "empty" : "ready";
+      this.#intent = null;
+      this.#saved = false;
+      this.#saveUncertain = this.#document === "invoice" && offers.context.deviceId !== null;
+      this.#priorPrinter = null;
     }
     this.#offers = structuredClone(offers);
     if (
@@ -212,7 +229,8 @@ export class DocumentPrinterForm {
             { state: "accepted", result: entry.outcome.result as DeliveryResult },
             generation,
           );
-          await this.#recovery.acknowledgeRecovered(entry, api);
+          if (generation === this.#generation)
+            await this.#recovery.acknowledgeRecovered(entry, api);
         }
       }
       if (generation !== this.#generation) return;
@@ -241,6 +259,8 @@ export class DocumentPrinterForm {
         operation,
         subjectId: intent.saleId,
         fingerprint: await fingerprint(canonicalDeliveryIntent(intent, { printerKind })),
+        rememberPreference:
+          intent.context.surface === "dashboard" && intent.context.deviceId === null,
       };
       await this.#recovery.retainOperation(pending);
       let outcome = await api.prepare(operation, intent);
@@ -248,13 +268,13 @@ export class DocumentPrinterForm {
       if (outcome.state === "prepared") outcome = await api.accept(operation);
       const recovered = await this.#recovery.recordOutcome(pending, outcome);
       await this.applyResult(outcome, generation);
-      if (outcome.state !== "prepared") await this.#recovery.acknowledgeRecovered(recovered, api);
+      if (generation === this.#generation && outcome.state !== "prepared")
+        await this.#recovery.acknowledgeRecovered(recovered, api);
     } catch {
       if (generation === this.#generation && !this.#isAccepted()) this.state = "unknown";
     }
   }
   async applyResult(outcome: OperationResult<DeliveryResult>, generation: number): Promise<void> {
-    if (outcome.state === "accepted") await this.#recovery.rememberAccepted(outcome.result);
     if (generation !== this.#generation) return;
     if (outcome.state === "accepted") this.state = "accepted";
     else if (outcome.state === "prepared") this.state = "unknown";
@@ -269,9 +289,17 @@ export class DocumentPrinterForm {
   statusUnavailable(): void {
     if (this.state === "accepted") this.state = "status-unavailable";
   }
+  #eligible(id: string | null): boolean {
+    return id !== null && this.#offers?.printers.some((printer) => printer.id === id) === true;
+  }
   #applySave(result: InvoiceSaveResult): void {
     if (!this.#offers || result.deviceId !== this.#offers.context.deviceId)
       throw new Error("save device changed");
+    if (result.revision < (this.#offers.invoiceRevision ?? 0)) {
+      this.#saveUncertain = false;
+      this.state = this.#offers.printers.length === 0 ? "empty" : "ready";
+      return;
+    }
     this.#offers.invoiceRevision = result.revision;
     this.#offers.chosenPrinterId = result.chosenId;
     this.printerId = this.#offers.printers.some((printer) => printer.id === result.resolvedId)
@@ -317,22 +345,24 @@ export class DocumentPrinterForm {
         kind: "invoice-save",
         operation: { origin: save.origin, key: save.saveId },
         subjectId: subject.id,
-        fingerprint: await fingerprint(JSON.stringify(save)),
+        fingerprint: await fingerprint(JSON.stringify(parseInvoiceSave(save))),
       };
       await this.#recovery.retainOperation(pending);
       let outcome = await api.prepare(save);
+      if (outcome.state === "prepared" && generation !== this.#generation) return;
       if (outcome.state === "prepared") outcome = await api.accept(pending.operation);
       const recovered = await this.#recovery.recordOutcome(pending, outcome);
       if (generation === this.#generation) {
         if (outcome.state === "accepted") this.#applySave(outcome.result);
         else if (outcome.state !== "prepared") {
-          this.printerId = previous;
+          this.printerId = this.#eligible(previous) ? previous : null;
           this.refusal = outcome.code;
           this.state = "ready";
           this.#saveUncertain = false;
         } else this.state = "unknown";
       }
-      if (outcome.state !== "prepared") await this.#recovery.acknowledgeRecovered(recovered, api);
+      if (generation === this.#generation && outcome.state !== "prepared")
+        await this.#recovery.acknowledgeRecovered(recovered, api);
     } catch {
       if (generation === this.#generation && !this.#saved) this.state = "unknown";
     }
@@ -345,13 +375,15 @@ export class DocumentPrinterForm {
         if (entry.outcome.state === "accepted") {
           if (generation === this.#generation)
             this.#applySave(entry.outcome.result as InvoiceSaveResult);
-          await this.#recovery.acknowledgeRecovered(entry, api);
+          if (generation === this.#generation)
+            await this.#recovery.acknowledgeRecovered(entry, api);
         }
       }
       if (generation === this.#generation && this.#recovery.canSubmit(this.#device())) {
-        this.#saveUncertain = false;
+        this.#saveUncertain = this.printerId !== this.#priorPrinter;
         if (this.state === "unknown") {
-          this.printerId = this.#priorPrinter;
+          this.printerId = this.#eligible(this.#priorPrinter) ? this.#priorPrinter : null;
+          this.#saveUncertain = false;
           this.state = this.#offers!.printers.length === 0 ? "empty" : "ready";
         }
       }
