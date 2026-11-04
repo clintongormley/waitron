@@ -269,8 +269,8 @@ it("explains each refusal about a table's party, in both languages", () => {
       "Hay una cuenta de esta mesa sin pagar. Cóbrala antes de cerrar la mesa",
     ],
     [
-      "Items still on hold cannot move to another table until their group is fired",
-      "Los artículos en espera no se pueden pasar a otra mesa hasta que se marche su grupo",
+      "Items still on hold cannot move to the counter until their group is fired. They can move to another table.",
+      "Los artículos en espera no se pueden pasar al mostrador hasta que se marche su grupo. Sí se pueden pasar a otra mesa.",
     ],
   ]);
 });

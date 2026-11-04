@@ -336,8 +336,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esos artículos ya no están en esta mesa. Revisa la mesa antes de volver a intentarlo",
   },
   "group.held_leaves_party": {
-    en: "Items still on hold cannot move to another table until their group is fired",
-    es: "Los artículos en espera no se pueden pasar a otra mesa hasta que se marche su grupo",
+    en: "Items still on hold cannot move to the counter until their group is fired. They can move to another table.",
+    es: "Los artículos en espera no se pueden pasar al mostrador hasta que se marche su grupo. Sí se pueden pasar a otra mesa.",
   },
   "group.line_held": {
     en: "This item is on hold and cannot be sent or served yet",
