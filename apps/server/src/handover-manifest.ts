@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { KeyRing } from "@waitron/credentials";
 import {
@@ -74,6 +74,16 @@ export async function readOfferSettings(
   ring: KeyRing,
   unreadable: "handover.settings_unreadable" | "handover.destination_settings_unreadable",
 ): Promise<OfferSettings> {
+  // A manifest read from a missing folder would say every file is absent, the same as a box with
+  // no settings. `file` must name a state row: the first stands for all of them.
+  const folder = await stat(stateDir).catch(() => null);
+  if (folder === null || !folder.isDirectory()) {
+    throw new AppError(
+      unreadable,
+      { file: BACKUP_SETTINGS },
+      { reason: "the state folder cannot be read" },
+    );
+  }
   let backupSettings: string | null = null;
   let moduleSettings: string | null = null;
   for (const row of NODE_LOCAL_MANIFEST) {

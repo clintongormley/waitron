@@ -65,12 +65,25 @@ afterEach(async () => {
 });
 
 /** The old box, reduced to its signed status: it reports every operation it is asked of abandoned. */
-async function startMainBox(self: () => string): Promise<{ url: string; asked: string[] }> {
+async function startMainBox(
+  self: () => string,
+  state: string,
+): Promise<{ url: string; asked: string[] }> {
   const asked: string[] = [];
   mainBox = createServer((req, res) => {
     let raw = "";
     req.on("data", (chunk: Buffer) => (raw += chunk.toString()));
     req.on("end", () => {
+      if (req.url!.endsWith("/indicator")) {
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify(signEnvelope("final-state", { not: "an indicator" }, MAIN_BOX)));
+        return;
+      }
+      if (req.url!.endsWith("/final-copy")) {
+        res.setHeader("content-length", "1");
+        res.end("x");
+        return;
+      }
       const { nonce, operationId } = (
         JSON.parse(raw) as { body: { nonce: string; operationId: string } }
       ).body;
@@ -83,7 +96,7 @@ async function startMainBox(self: () => string): Promise<{ url: string; asked: s
           operationId,
           role: "source",
           scenario: "controlled",
-          state: "abandoned",
+          state,
           sourceNodeId: MAIN_BOX.nodeId,
           destinationNodeId: self(),
         },
@@ -97,7 +110,7 @@ async function startMainBox(self: () => string): Promise<{ url: string; asked: s
   return { url: `http://127.0.0.1:${(mainBox.address() as AddressInfo).port}`, asked };
 }
 
-async function boot(mode: "mirror" | "primary") {
+async function boot(mode: "mirror" | "primary", mainBoxState = "abandoned") {
   beforeServerStarts();
   const venue = await setupVenue(suite.db);
   const nodeId = venue.cfg.nodeId;
@@ -105,7 +118,7 @@ async function boot(mode: "mirror" | "primary") {
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, nodeId);
   const own = await readNodeIdentityKey(suite.node, ring, nodeId);
   await pinMainBoxKey(suite.node, nodeId, MAIN_BOX);
-  const { url, asked } = await startMainBox(() => nodeId);
+  const { url, asked } = await startMainBox(() => nodeId, mainBoxState);
   const body: MembershipDocumentBody = {
     term: 3,
     nodes: [
@@ -215,6 +228,17 @@ describe("the spare's handover duty in a full start", () => {
       { timeout: 15_000 },
     );
     expect(asked).toEqual([OP, LATER_OP]);
+  }, 120_000);
+
+  it("a real start compares what it fetches, and waits on a refusal", async () => {
+    const { nodeId } = await boot("mirror", "source_stepped_down");
+    // Failing case, with boot passing no comparison: the row stays with no reason.
+    await vi.waitFor(
+      async () =>
+        expect((await operation(nodeId, OP))?.waitingReason).toBe("handover.indicator_mismatch"),
+      { timeout: 15_000 },
+    );
+    expect((await operation(nodeId, OP))?.state).toBe("prepared");
   }, 120_000);
 
   it("a box that is not a mirror leaves the same operation alone and asks nothing", async () => {

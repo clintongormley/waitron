@@ -8,6 +8,7 @@ import type { AppError } from "@waitron/shared";
 import type { OperationBinding } from "@waitron/module";
 import {
   createModulePreparationState,
+  modulePreparationMergeFits,
   readModulePreparationHistory,
   readModulePreparationRevisions,
 } from "./module-preparation-state.js";
@@ -424,5 +425,96 @@ describe("a damaged file names itself in the log", () => {
     const f = await fixture();
     await fs.writeFile(join(f.stateDir, FILE), JSON.stringify({ version: 1, revisions: [] }));
     expect(await readModulePreparationRevisions({ stateDir: f.stateDir })).toEqual([]);
+  });
+});
+
+describe("modulePreparationMergeFits", () => {
+  const LIMIT = 1024 * 1024;
+  const fileBytes = (revisions: unknown[]) =>
+    Buffer.byteLength(JSON.stringify({ version: 1, revisions }));
+  const stored = (over: Partial<OperationBinding>, text: string) => ({
+    binding: { ...binding, ...over },
+    value: { text },
+  });
+  /** Padding that brings a file holding `revisions` plus one more with `text: ""` to `total` bytes. */
+  const paddingFor = (total: number, revisions: unknown[], last: ReturnType<typeof stored>) =>
+    "x".repeat(total - fileBytes([...revisions, last]));
+
+  it("takes revisions into a box with no file", async () => {
+    const { options } = await fixture();
+    const fits = (incoming: ReturnType<typeof stored>[]) =>
+      modulePreparationMergeFits({ stateDir: options.stateDir }, incoming);
+    expect(await fits([])).toBe(true);
+    expect(await fits([stored({}, "a")])).toBe(true);
+  });
+
+  it("the file's own limit is the limit: its last byte fits, and the next does not", async () => {
+    const { options } = await fixture();
+    const empty = stored({}, "");
+    const exact = stored({}, paddingFor(LIMIT, [], empty));
+    const over = stored({}, `${exact.value.text}x`);
+    expect(fileBytes([exact])).toBe(LIMIT);
+    const fits = (incoming: ReturnType<typeof stored>[]) =>
+      modulePreparationMergeFits({ stateDir: options.stateDir }, incoming);
+    expect(await fits([exact])).toBe(true);
+    expect(await fits([over])).toBe(false);
+  });
+
+  it("counts this box's own revisions with the incoming ones", async () => {
+    const { options } = await fixture();
+    const half = "x".repeat(LIMIT / 2 + 1);
+    await createModulePreparationState(options).withState(binding, (s) =>
+      s.replace({ text: half }),
+    );
+    expect(
+      await modulePreparationMergeFits({ stateDir: options.stateDir }, [
+        stored({ eventId: "another" }, half),
+      ]),
+    ).toBe(false);
+  });
+
+  it("counts once a revision both boxes hold, whatever order its value's keys are in", async () => {
+    const { options } = await fixture();
+    const half = "x".repeat(LIMIT / 2 + 1);
+    await createModulePreparationState(options).withState(binding, (s) =>
+      s.replace({ text: half, other: 1 }),
+    );
+    expect(
+      await modulePreparationMergeFits({ stateDir: options.stateDir }, [
+        { binding, value: { other: 1, text: half } },
+      ]),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["another value", { binding, value: { text: "y".repeat(LIMIT / 2 + 1) } }],
+    [
+      "another binding",
+      { binding: { ...binding, action: "other" }, value: { text: "x".repeat(LIMIT / 2 + 1) } },
+    ],
+  ])("the same revision but for %s counts as its own", async (_label, revision) => {
+    const { options } = await fixture();
+    await createModulePreparationState(options).withState(binding, (s) =>
+      s.replace({ text: "x".repeat(LIMIT / 2 + 1) }),
+    );
+    expect(await modulePreparationMergeFits({ stateDir: options.stateDir }, [revision])).toBe(
+      false,
+    );
+  });
+
+  it("a revision listed twice in one list counts once", async () => {
+    const { options } = await fixture();
+    const half = stored({}, "x".repeat(LIMIT / 2 + 1));
+    expect(await modulePreparationMergeFits({ stateDir: options.stateDir }, [half, half])).toBe(
+      true,
+    );
+  });
+
+  it("a damaged file of its own refuses, as every read of it does", async () => {
+    const { options } = await fixture();
+    await fs.writeFile(join(options.stateDir, "module-preparation-state.json"), "{not json");
+    await expect(
+      modulePreparationMergeFits({ stateDir: options.stateDir }, []),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
   });
 });

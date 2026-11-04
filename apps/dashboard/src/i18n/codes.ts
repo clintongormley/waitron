@@ -1429,6 +1429,42 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This box's settings changed after this handover was started, so it was cancelled and this box keeps selling. Start a new handover to try again.",
     es: "Los ajustes de este equipo han cambiado después de empezar este traspaso, así que se ha cancelado y este equipo sigue vendiendo. Empieza un traspaso nuevo para volver a intentarlo.",
   },
+  "handover.indicator_untrusted": {
+    en: "The description of the final copy was not signed by the box handing over, so the spare did not accept it. The old box stays stopped.",
+    es: "La descripción de la copia final no está firmada por el equipo que hace el traspaso, así que el equipo de reserva no la ha aceptado. El equipo antiguo sigue detenido.",
+  },
+  "handover.copy_mismatch": {
+    en: "The copy the spare received is not the one the old box described, so the spare is fetching it again. The old box stays stopped.",
+    es: "La copia que ha recibido el equipo de reserva no es la que describió el equipo antiguo, así que la está pidiendo de nuevo. El equipo antiguo sigue detenido.",
+  },
+  "handover.copy_damaged": {
+    en: "The copy the spare received is damaged, so the spare is fetching it again. The old box stays stopped.",
+    es: "La copia que ha recibido el equipo de reserva está dañada, así que la está pidiendo de nuevo. El equipo antiguo sigue detenido.",
+  },
+  "handover.chain_broken": {
+    en: "The records in the copy the spare received fail their own check, so the spare did not accept it. The old box stays stopped.",
+    es: "Los registros de la copia que ha recibido el equipo de reserva no superan su propia comprobación, así que no la ha aceptado. El equipo antiguo sigue detenido.",
+  },
+  "handover.preparation_state_too_large": {
+    en: "The two boxes' saved preparations would not fit in one file, so the spare did not accept this handover. The old box stays stopped.",
+    es: "Los preparativos guardados de los dos equipos no cabrían en un solo archivo, así que el equipo de reserva no ha aceptado este traspaso. El equipo antiguo sigue detenido.",
+  },
+  "handover.summary_mismatch": {
+    en: "The copy the spare received does not hold what the old box said it holds, so the spare did not accept it. The old box stays stopped.",
+    es: "La copia que ha recibido el equipo de reserva no contiene lo que el equipo antiguo dijo que contenía, así que no la ha aceptado. El equipo antiguo sigue detenido.",
+  },
+  "handover.summary_unreadable": {
+    en: "The spare could not read the copy it received to check what it holds, so it did not accept it. The old box stays stopped.",
+    es: "El equipo de reserva no ha podido leer la copia que ha recibido para comprobar su contenido, así que no la ha aceptado. El equipo antiguo sigue detenido.",
+  },
+  "handover.copy_lacks_destination": {
+    en: "The copy the spare received has no usable record of the spare, so the spare could not start from it and did not accept it. The old box stays stopped.",
+    es: "La copia que ha recibido el equipo de reserva no tiene un registro válido de ese equipo, así que no podría arrancar con ella y no la ha aceptado. El equipo antiguo sigue detenido.",
+  },
+  "handover.authoriser_not_permitted": {
+    en: "According to the copy the spare received, the person who authorised this handover may not move the venue to another box, so the spare did not accept it. The old box stays stopped.",
+    es: "Según la copia que ha recibido el equipo de reserva, la persona que autorizó este traspaso no puede pasar el local a otro equipo, así que no la ha aceptado. El equipo antiguo sigue detenido.",
+  },
   "handover.summary_failed": {
     en: "The old box could not read part of the venue's data from its final copy, so it sent neither the copy nor its description. Its venue data is unchanged. Asking again makes it take a new copy and read that.",
     es: "El equipo antiguo no ha podido leer parte de los datos del local en su copia final, así que no ha enviado ni la copia ni su descripción. Sus datos del local no han cambiado. Si se vuelve a pedir, hará una copia nueva y la leerá.",

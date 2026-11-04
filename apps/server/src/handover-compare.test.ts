@@ -1,0 +1,956 @@
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  open,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { createServer, type Server, type RequestListener } from "node:http";
+import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { getRequestListener } from "@hono/node-server";
+import { eq, sql } from "drizzle-orm";
+import { Hono } from "hono";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nodes, stampDeployment, withNodeTransaction, writeNodeMembership } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
+import { appendToChain } from "@waitron/fiscal-verifactu/src/chain.js";
+import {
+  altaFor,
+  seedNode,
+  seedSale,
+  type SeededNode,
+} from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import {
+  sha256Hex,
+  signEnvelope,
+  type FinalStateIndicator,
+  type HandoverBinding,
+  type SignedHandoverEnvelope,
+} from "@waitron/handover";
+import { persons } from "@waitron/identity";
+import {
+  endorseKey,
+  signDocumentBody,
+  type CanonicalValue,
+  type MembershipDocumentBody,
+} from "@waitron/membership";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import type { WaitronModule } from "@waitron/module";
+import {
+  readHandoverOperation,
+  readHandoverRestriction,
+  recordHandoverRestrictionTx,
+  setNodeMode,
+  writeMirrorLink,
+  type HandoverOperation,
+} from "@waitron/node-db";
+import { captureFinalCopy, finalCopyPath, type CaptureDeps } from "./handover-capture.js";
+import { compareFinalCopy, type CompareDeps } from "./handover-compare.js";
+import {
+  receivedCopyPath,
+  startHandoverDestinationDuty,
+  type DestinationDutyDeps,
+} from "./handover-destination-duty.js";
+import { mountHandoverSourceApi } from "./handover-source-api.js";
+import { advanceHandover, beginHandover, beginHandoverFromOffer } from "./handover-store.js";
+import type { Logger } from "./logger.js";
+import { boxDownload } from "./mirror-bundle-fetch.js";
+import { ALL_MODULES } from "./modules.js";
+import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import { mountPeerStatusApi } from "./peer-status-api.js";
+import { pinMainBoxKey } from "./testing/pinned-main-box.js";
+
+const RING: KeyRing = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x7).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
+const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const OTHER_OP = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const FISCAL = "fiscal-verifactu";
+const SETTINGS = "WAITRON_BACKUP_RECOVERY_KEY=one\n";
+
+const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+
+let scratch: string;
+const closers: (() => Promise<unknown>)[] = [];
+beforeEach(async () => {
+  scratch = await mkdtemp(join(tmpdir(), "waitron-handover-compare-"));
+});
+afterEach(async () => {
+  while (closers.length > 0) await closers.pop()!();
+  await rm(scratch, { recursive: true, force: true });
+});
+
+async function appendRecord(node: SeededNode, number: number): Promise<void> {
+  const sale = await seedSale(suite.db, node, number);
+  const [sif] = suite.db.all<{ nif: string; numero_instalacion: string }>(
+    sql`select nif, numero_instalacion from registro_sif where node_id = ${node.nodeId} and revocado_en is null`,
+  );
+  const pending = altaFor(node, sale, number, number);
+  pending.input.SistemaInformatico = {
+    ...pending.input.SistemaInformatico,
+    IDOtro: undefined,
+    NIF: sif!.nif,
+    NumeroInstalacion: sif!.numero_instalacion,
+  };
+  pending.input.IDEmisorFactura = sif!.nif;
+  pending.input.NumSerieFactura = `${node.nodeId}/${number}`;
+  pending.input.DescripcionOperacion = "Fixture meal";
+  await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, pending));
+}
+
+/** Writes to a copy as a box never does: past the triggers that keep its records from changing. */
+function alter(path: string, statement: string): void {
+  const db = new DatabaseSync(path);
+  try {
+    db.exec("pragma foreign_keys = off");
+    const triggers = db.prepare("select name from sqlite_schema where type = 'trigger'").all() as {
+      name: string;
+    }[];
+    for (const { name } of triggers) db.exec(`drop trigger "${name.replaceAll('"', '""')}"`);
+    db.exec(statement);
+  } finally {
+    db.close();
+  }
+}
+
+type Envelope = SignedHandoverEnvelope<FinalStateIndicator>;
+
+/**
+ * A real three-record chain and a real capture by M1, its file already at M2's received path. Both
+ * boxes share one database, as `handover-fetch.test.ts`'s do: every row is keyed by its box.
+ */
+async function rig() {
+  const db = suite.db;
+  const m1 = await seedNode(db, "First");
+  const m2 = await seedNode(db, "Second");
+  for (const number of [1, 2, 3]) await appendRecord(m1, number);
+  for (const { nodeId } of [m1, m2]) {
+    await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
+  }
+  const m1Key = await readNodeIdentityKey(suite.node, RING, m1.nodeId);
+  const m2Key = await readNodeIdentityKey(suite.node, RING, m2.nodeId);
+  await pinMainBoxKey(suite.node, m2.nodeId, {
+    nodeId: m1.nodeId,
+    publicKey: nodeSigningPublicKey(m1Key),
+  });
+  const [person] = await db
+    .insert(persons)
+    .values({ displayName: "Owner", role: "admin", status: "active" })
+    .returning({ id: persons.id });
+  const authorisedBy = person!.id;
+
+  const binding: HandoverBinding = {
+    operationId: OP,
+    scenario: "controlled",
+    venue: { country: "ES", taxId: "B12345678", environment: "preproduction" },
+    sourceNodeId: m1.nodeId,
+    destinationNodeId: m2.nodeId,
+    membership: { term: 3, digest: "a".repeat(64) },
+  };
+  const m1Store = { node: suite.node, nodeId: m1.nodeId };
+  const m2Store = { node: suite.node, nodeId: m2.nodeId };
+  await beginHandover(m1Store, binding, "source");
+  await advanceHandover(m1Store, OP, "source_stepped_down", {});
+  await withNodeTransaction(suite.node, (tx) =>
+    recordHandoverRestrictionTx(tx, {
+      nodeId: m1.nodeId,
+      operationId: OP,
+      kind: "handed-over",
+      successorNodeId: m2.nodeId,
+      membershipTerm: 3,
+    }),
+  );
+  const offer = signEnvelope(
+    "stepdown",
+    { binding: binding as unknown as CanonicalValue, authorisedBy },
+    { nodeId: m1.nodeId, privateKey: m1Key },
+  );
+  await beginHandoverFromOffer(m2Store, binding, "destination", offer);
+
+  const m1State = join(scratch, "m1");
+  const m2State = join(scratch, "m2");
+  await mkdir(m1State, { recursive: true });
+  await mkdir(m2State, { recursive: true });
+  const captureDeps: CaptureDeps = {
+    venue: db,
+    node: suite.node,
+    stateDir: m1State,
+    ring: RING,
+    nodeId: m1.nodeId,
+    modules: ALL_MODULES,
+  };
+  const indicator = await captureFinalCopy(captureDeps, OP);
+  const path = receivedCopyPath(m2State, OP);
+  await mkdir(dirname(path), { recursive: true });
+  await copyFile(finalCopyPath(m1State, OP), path);
+
+  const signer = { nodeId: m1.nodeId, privateKey: m1Key };
+  const deps: CompareDeps = {
+    db,
+    node: suite.node,
+    ring: RING,
+    nodeId: m2.nodeId,
+    stateDir: m2State,
+    modules: ALL_MODULES,
+    migrationsRoot: null,
+  };
+  const row = async (): Promise<HandoverOperation> =>
+    (await readHandoverOperation(suite.node, m2.nodeId, OP))!;
+
+  /** The captured body with `change` made, signed again by M1, as an old box that lied would. */
+  const resigned = (
+    change: (body: Mutable) => void,
+    by: { nodeId: string; privateKey: string } = signer,
+  ): Envelope => {
+    const body = structuredClone(indicator.body) as unknown as Mutable;
+    change(body);
+    return signEnvelope(
+      "final-state",
+      body as unknown as CanonicalValue,
+      by,
+    ) as unknown as Envelope;
+  };
+
+  /** An indicator telling the truth about the file's bytes as they now are. */
+  const resignedForFile = async (change: (body: Mutable) => void = () => {}): Promise<Envelope> => {
+    const bytes = await readFile(path);
+    return resigned((body) => {
+      body.snapshot.sha256 = sha256Hex(bytes);
+      body.snapshot.bytes = bytes.length;
+      change(body);
+    });
+  };
+
+  const compareRow = async (envelope: unknown = indicator, overrides: Partial<CompareDeps> = {}) =>
+    compareFinalCopy({ ...deps, ...overrides }, await row(), envelope, path);
+
+  return {
+    db,
+    m1,
+    m2,
+    m1Key,
+    m2Key,
+    m1Store,
+    m2Store,
+    m1State,
+    m2State,
+    binding,
+    authorisedBy,
+    indicator,
+    path,
+    signer,
+    deps,
+    captureDeps,
+    row,
+    resigned,
+    resignedForFile,
+    compareRow,
+  };
+}
+
+interface Mutable {
+  binding: { [key: string]: unknown; venue: { taxId: string }; membership: { term: number } };
+  snapshot: {
+    sha256: string;
+    bytes: number;
+    schema: unknown[];
+    modules: { name: string; version: string }[];
+  };
+  nodeLocal: {
+    item: string;
+    sha256?: string | null;
+    ringVersions?: number[];
+    revisions?: { binding: Record<string, string>; value: unknown }[];
+  }[];
+  modulesSummary: Record<string, unknown>;
+}
+
+const refused = (reason: string, detail: unknown = {}) => ({ ok: false, reason, detail });
+
+const FIRST_CHAIN = (m1: SeededNode) => `node_id = '${m1.nodeId}' and secuencia = 2`;
+
+const revisionOf = (text: string, eventId = "event-1") => ({
+  binding: {
+    module: FISCAL,
+    action: "select",
+    eventId,
+    sourceId: "source-1",
+    targetNodeId: "target-1",
+  },
+  value: { text },
+});
+
+describe("compareFinalCopy", () => {
+  it("control: an untouched real capture is accepted, and comparing changes no byte", async () => {
+    const r = await rig();
+    const before = await readFile(r.path);
+    expect(await r.compareRow()).toEqual({ ok: true });
+    expect(sha256Hex(await readFile(r.path))).toBe(sha256Hex(before));
+    expect(await readdir(dirname(r.path))).toEqual(["received.db"]);
+  });
+
+  describe("the indicator's shape comes first", () => {
+    it.each([
+      ["no envelope at all", null, "indicator"],
+      ["an envelope with no body", {}, "indicator"],
+      ["a body with no binding", { body: { snapshot: {} } }, "binding"],
+    ])("%s is refused naming the field", async (_label, envelope, field) => {
+      const r = await rig();
+      expect(await r.compareRow(envelope)).toEqual(
+        refused("handover.indicator_mismatch", { field }),
+      );
+    });
+
+    it("a wrong shape, however signed, is refused before its signature is read", async () => {
+      const r = await rig();
+      const envelope = r.resigned((body) => {
+        delete (body as Partial<Mutable>).modulesSummary;
+      });
+      expect(await r.compareRow({ ...envelope, signature: "not a signature" })).toEqual(
+        refused("handover.indicator_mismatch", { field: "modulesSummary" }),
+      );
+    });
+
+    it("a fault that is not a wrong shape is not read as a refusal", async () => {
+      const r = await rig();
+      const poison = new Proxy(
+        {},
+        {
+          get() {
+            throw new Error("a fault in Waitron");
+          },
+        },
+      );
+      await expect(r.compareRow(poison)).rejects.toThrow("a fault in Waitron");
+    });
+  });
+
+  describe("the signature", () => {
+    it("the same body signed by the spare is refused", async () => {
+      const r = await rig();
+      const envelope = r.resigned(() => {}, { nodeId: r.m2.nodeId, privateKey: r.m2Key });
+      expect(await r.compareRow(envelope)).toEqual(refused("handover.indicator_untrusted"));
+    });
+
+    it("a signer nobody vouches for is refused", async () => {
+      const r = await rig();
+      const envelope = r.resigned(() => {}, { nodeId: OTHER_OP, privateKey: r.m1Key });
+      expect(await r.compareRow(envelope)).toEqual(refused("handover.indicator_untrusted"));
+    });
+
+    it("a signature of another body is refused", async () => {
+      const r = await rig();
+      const envelope = {
+        ...r.indicator,
+        body: { ...r.indicator.body, capturedAtMs: r.indicator.body.capturedAtMs + 1 },
+      };
+      expect(await r.compareRow(envelope)).toEqual(refused("handover.indicator_untrusted"));
+    });
+
+    it("the old box's signature for another purpose is refused", async () => {
+      const r = await rig();
+      const envelope = signEnvelope(
+        "status",
+        r.indicator.body as unknown as CanonicalValue,
+        r.signer,
+      );
+      expect(await r.compareRow(envelope)).toEqual(refused("handover.indicator_untrusted"));
+    });
+  });
+
+  describe("the binding", () => {
+    it.each<[string, (body: Mutable) => void]>([
+      ["another operation", (body) => void (body.binding.operationId = OTHER_OP)],
+      ["another taxpayer", (body) => void (body.binding.venue.taxId = "B87654321")],
+      ["another term", (body) => void (body.binding.membership.term = 4)],
+    ])("an indicator for %s, properly signed, is refused", async (_label, change) => {
+      const r = await rig();
+      expect(await r.compareRow(r.resigned(change))).toEqual(
+        refused("handover.indicator_mismatch", { field: "binding" }),
+      );
+    });
+  });
+
+  describe("the digest and the size", () => {
+    it("one row written after capture is refused", async () => {
+      const r = await rig();
+      alter(r.path, `update persons set display_name = 'Late' where id = '${r.authorisedBy}'`);
+      expect(await r.compareRow()).toEqual(refused("handover.copy_mismatch"));
+    });
+
+    it("a digest that differs with the size right is refused", async () => {
+      const r = await rig();
+      const envelope = r.resigned((body) => void (body.snapshot.sha256 = "0".repeat(64)));
+      expect(await r.compareRow(envelope)).toEqual(refused("handover.copy_mismatch"));
+    });
+
+    it("a size that differs with the digest right is refused", async () => {
+      const r = await rig();
+      const envelope = r.resigned((body) => void (body.snapshot.bytes += 1));
+      expect(await r.compareRow(envelope)).toEqual(refused("handover.copy_mismatch"));
+    });
+
+    it("a file that is gone is refused the same way, so it is fetched again", async () => {
+      const r = await rig();
+      await rm(r.path);
+      expect(await r.compareRow()).toEqual(refused("handover.copy_mismatch"));
+    });
+
+    it("a path that cannot be read for another reason is a fault, not a refusal", async () => {
+      const r = await rig();
+      await rm(r.path);
+      await mkdir(r.path);
+      await expect(r.compareRow()).rejects.toMatchObject({ code: "EISDIR" });
+    });
+  });
+
+  describe("the database's own integrity check", () => {
+    it("a page overwritten in a file the indicator describes is refused", async () => {
+      const r = await rig();
+      const { size } = await stat(r.path);
+      const file = await open(r.path, "r+");
+      const page = 4096;
+      await file.write(
+        Buffer.alloc(page * 4, 0xff),
+        0,
+        page * 4,
+        Math.floor(size / page / 2) * page,
+      );
+      await file.close();
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("handover.copy_damaged"),
+      );
+    });
+
+    it("a file that is not a database at all is refused", async () => {
+      const r = await rig();
+      await writeFile(r.path, "x".repeat(8192));
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("handover.copy_damaged"),
+      );
+    });
+  });
+
+  describe("the schema is checked before any module's code reads the copy", () => {
+    const AHEAD = "insert into __drizzle_migrations_db (hash, created_at) values ('from-later', 1)";
+
+    it("a journal naming a migration this image does not ship is refused", async () => {
+      const r = await rig();
+      alter(r.path, AHEAD);
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("provisioning.database_ahead", { set: "core", unknownMigrations: ["from-later"] }),
+      );
+    });
+
+    it("a set this box does not switch on is read too: a start would refuse it", async () => {
+      const r = await rig();
+      const off = manifestSets()
+        .filter((set) => set.database !== "node")
+        .at(-1)!;
+      alter(r.path, `insert into ${off.table} (hash, created_at) values ('from-later', 1)`);
+      const envelope = await r.resignedForFile();
+      expect(
+        await r.compareRow(envelope, {
+          modules: ALL_MODULES.filter((module) => module.name !== off.name),
+        }),
+      ).toEqual(
+        refused("provisioning.database_ahead", {
+          set: off.name,
+          unknownMigrations: ["from-later"],
+        }),
+      );
+    });
+
+    it("a set with no journal in the copy is not ahead", async () => {
+      const r = await rig();
+      const set = manifestSets()
+        .filter((one) => one.database !== "node")
+        .at(-1)!;
+      alter(r.path, `drop table ${set.table}`);
+      expect(await r.compareRow(await r.resignedForFile())).toEqual({ ok: true });
+    });
+
+    it("a node.db set is not looked for in the copy, even with a table of its name", async () => {
+      const r = await rig();
+      const set = manifestSets().find((one) => one.database === "node")!;
+      alter(
+        r.path,
+        `create table ${set.table} (hash text, created_at integer);
+         insert into ${set.table} values ('from-later', 1)`,
+      );
+      expect(await r.compareRow(await r.resignedForFile())).toEqual({ ok: true });
+    });
+
+    it("a copy both ahead and broken reports ahead: no module read it", async () => {
+      const r = await rig();
+      alter(
+        r.path,
+        `${AHEAD}; update registros_facturacion set importe_total = '1.00' where ${FIRST_CHAIN(r.m1)}`,
+      );
+      const summarise = vi.fn(async () => ({}));
+      const checkCopy = vi.fn(async () => "ok" as const);
+      const spy: WaitronModule = {
+        ...ALL_MODULES[0]!,
+        name: "spy",
+        handover: { summarise, checkCopy },
+      };
+      const result = await r.compareRow(await r.resignedForFile(), {
+        modules: [...ALL_MODULES, spy],
+      });
+      expect(result).toMatchObject({ reason: "provisioning.database_ahead" });
+      expect(checkCopy).not.toHaveBeenCalled();
+      expect(summarise).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("the modules", () => {
+    it.each<[string, (body: Mutable) => void]>([
+      ["one fewer", (body) => void body.snapshot.modules.pop()],
+      ["another version", (body) => void (body.snapshot.modules[0]!.version = "99.0.0")],
+      ["another name", (body) => void (body.snapshot.modules[0]!.name = "another")],
+      [
+        "one more",
+        (body) => void body.snapshot.modules.push({ name: "zzz-later", version: "1.0.0" }),
+      ],
+    ])("an old box listing %s is refused", async (_label, change) => {
+      const r = await rig();
+      expect(await r.compareRow(r.resigned(change))).toEqual(refused("handover.modules_differ"));
+    });
+
+    it("the order this box holds its modules in does not matter", async () => {
+      const r = await rig();
+      const result = await r.compareRow(r.indicator, { modules: [...ALL_MODULES].reverse() });
+      expect(result).toEqual({ ok: true });
+    });
+  });
+
+  describe("each module's own check of the copy", () => {
+    it("one record's amount changed, with a re-signed indicator, is refused naming the module", async () => {
+      const r = await rig();
+      alter(
+        r.path,
+        `update registros_facturacion set importe_total = printf('%.2f', importe_total + 1) where ${FIRST_CHAIN(r.m1)}`,
+      );
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("handover.chain_broken", { module: FISCAL }),
+      );
+    });
+
+    it("a check that throws is refused naming the module", async () => {
+      const r = await rig();
+      const thrower: WaitronModule = {
+        ...ALL_MODULES[0]!,
+        name: "thrower",
+        handover: {
+          summarise: async () => ({}),
+          checkCopy: async () => {
+            throw new Error("no such table");
+          },
+        },
+      };
+      const modules = [...ALL_MODULES, thrower];
+      const envelope = r.resigned((body) => {
+        body.snapshot.modules.push({ name: "thrower", version: thrower.version });
+      });
+      expect(await r.compareRow(envelope, { modules })).toEqual(
+        refused("handover.copy_check_failed", { module: "thrower" }),
+      );
+    });
+  });
+
+  describe("this box's own settings", () => {
+    const write = (dir: string, file: string, text: string) => writeFile(join(dir, file), text);
+    const row = (body: Mutable, item: string) => body.nodeLocal.find((one) => one.item === item)!;
+
+    it("a spare's backup settings changed after the offer are refused", async () => {
+      const r = await rig();
+      await write(r.m2State, "backup.env", SETTINGS);
+      expect(await r.compareRow()).toEqual(refused("handover.backup_settings_differ"));
+    });
+
+    it("control: the same settings in another order and spacing are accepted", async () => {
+      const r = await rig();
+      const text = "A=1\nB=2\n";
+      await write(r.m1State, "backup.env", text);
+      await write(r.m2State, "backup.env", "\nB=2\n\nA=1\n");
+      const m1Digest = sha256Hex('{"A":"1","B":"2"}');
+      const envelope = r.resigned((body) => void (row(body, "backup.env").sha256 = m1Digest));
+      expect(await r.compareRow(envelope)).toEqual({ ok: true });
+    });
+
+    it("a spare's module settings changed after the offer are refused", async () => {
+      const r = await rig();
+      await write(r.m2State, "modules.json", JSON.stringify({ modules: { "fiscal-none": false } }));
+      expect(await r.compareRow()).toEqual(refused("handover.modules_differ"));
+    });
+
+    it("an old box listing a key version the spare does not hold is refused", async () => {
+      const r = await rig();
+      const envelope = r.resigned((body) => void (row(body, "secrets.env").ringVersions = [1, 9]));
+      expect(await r.compareRow(envelope)).toEqual(refused("handover.key_ring_mismatch"));
+    });
+
+    it("a state folder that is gone does not read as a box with no settings", async () => {
+      const r = await rig();
+      const path = join(scratch, "elsewhere.db");
+      await copyFile(r.path, path);
+      await rm(r.m2State, { recursive: true });
+      expect(await compareFinalCopy(r.deps, await r.row(), r.indicator, path)).toEqual(
+        refused("handover.destination_settings_unreadable", { file: "backup.env" }),
+      );
+    });
+
+    it("a spare's own file that cannot be read is refused naming it", async () => {
+      const r = await rig();
+      await write(r.m2State, "modules.json", "{not json");
+      expect(await r.compareRow()).toEqual(
+        refused("handover.destination_settings_unreadable", { file: "modules.json" }),
+      );
+    });
+  });
+
+  describe("the retained selections", () => {
+    const revisions = (body: Mutable, list: ReturnType<typeof revisionOf>[]) => {
+      body.nodeLocal.find((one) => one.item === "module-preparation-state.json")!.revisions = list;
+    };
+    const LIMIT = 1024 * 1024;
+
+    it("an old box's selections alone over the file's limit are refused", async () => {
+      const r = await rig();
+      const envelope = r.resigned((body) => revisions(body, [revisionOf("x".repeat(LIMIT))]));
+      expect(await r.compareRow(envelope)).toEqual(refused("handover.preparation_state_too_large"));
+    });
+
+    it("each box's selections fit but together they do not, so they are refused", async () => {
+      const r = await rig();
+      const half = "x".repeat(LIMIT / 2 + 1);
+      await writeFile(
+        join(r.m2State, "module-preparation-state.json"),
+        JSON.stringify({ version: 1, revisions: [revisionOf(half, "own")] }),
+      );
+      const envelope = r.resigned((body) => revisions(body, [revisionOf(half, "theirs")]));
+      expect(await r.compareRow(envelope)).toEqual(refused("handover.preparation_state_too_large"));
+    });
+
+    it("control: a selection both boxes hold is counted once", async () => {
+      const r = await rig();
+      const half = "x".repeat(LIMIT / 2 + 1);
+      await writeFile(
+        join(r.m2State, "module-preparation-state.json"),
+        JSON.stringify({ version: 1, revisions: [revisionOf(half)] }),
+      );
+      const envelope = r.resigned((body) => revisions(body, [revisionOf(half)]));
+      expect(await r.compareRow(envelope)).toEqual({ ok: true });
+    });
+  });
+
+  describe("the summaries, worked out from the received bytes", () => {
+    it("bytes that match, with an indicator listing one fewer record in a chain, are refused", async () => {
+      const r = await rig();
+      const envelope = r.resigned((body) => {
+        const chains = body.modulesSummary[FISCAL] as { count: number }[];
+        expect(chains[0]!.count).toBe(3);
+        chains[0]!.count = 2;
+      });
+      expect(await r.compareRow(envelope)).toEqual(
+        refused("handover.summary_mismatch", { module: FISCAL }),
+      );
+    });
+
+    it("an indicator with no summary from a module that gives one is refused", async () => {
+      const r = await rig();
+      const envelope = r.resigned((body) => {
+        delete body.modulesSummary[FISCAL];
+      });
+      expect(await r.compareRow(envelope)).toEqual(
+        refused("handover.summary_mismatch", { module: FISCAL }),
+      );
+    });
+
+    it("an indicator with a summary from a module that gives none is refused", async () => {
+      const r = await rig();
+      const envelope = r.resigned((body) => {
+        body.modulesSummary.core = {};
+      });
+      expect(await r.compareRow(envelope)).toEqual(
+        refused("handover.summary_mismatch", { module: "core" }),
+      );
+    });
+
+    it("a summary this box cannot work out has its own code, not the old box's", async () => {
+      const r = await rig();
+      alter(r.path, "drop table acks");
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("handover.summary_unreadable", { module: FISCAL }),
+      );
+    });
+  });
+
+  describe("the spare could start from the copy", () => {
+    it("a copy with no row for this box is refused", async () => {
+      const r = await rig();
+      alter(
+        r.path,
+        `delete from cadenas where node_id = '${r.m2.nodeId}';
+         delete from registro_sif where node_id = '${r.m2.nodeId}';
+         delete from nodes where id = '${r.m2.nodeId}'`,
+      );
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("handover.copy_lacks_destination"),
+      );
+    });
+
+    it("a copy holding another key for this box is refused", async () => {
+      const r = await rig();
+      alter(r.path, `update nodes set public_key = 'another' where id = '${r.m2.nodeId}'`);
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("handover.copy_lacks_destination"),
+      );
+    });
+
+    it("a copy whose row for this box names no existing location is refused", async () => {
+      const r = await rig();
+      alter(r.path, `update nodes set location_id = 'gone' where id = '${r.m2.nodeId}'`);
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("handover.copy_lacks_destination"),
+      );
+    });
+
+    it("control: the live venue's row has this box's own key", async () => {
+      const r = await rig();
+      const [row] = await r.db.select().from(nodes).where(eq(nodes.id, r.m2.nodeId));
+      expect(row!.publicKey).toBe(nodeSigningPublicKey(r.m2Key));
+    });
+  });
+
+  describe("the person who authorised the handover, according to the copy", () => {
+    it.each([
+      ["suspended", "status = 'suspended'"],
+      ["pending", "status = 'pending'"],
+      ["only a member of staff", "role = 'staff'"],
+      ["only a supervisor", "role = 'supervisor'"],
+      ["only a manager", "role = 'manager'"],
+    ])("someone %s is refused", async (_label, change) => {
+      const r = await rig();
+      alter(r.path, `update persons set ${change} where id = '${r.authorisedBy}'`);
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("handover.authoriser_not_permitted"),
+      );
+    });
+
+    it("someone with no row in the copy is refused", async () => {
+      const r = await rig();
+      alter(r.path, `delete from persons where id = '${r.authorisedBy}'`);
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("handover.authoriser_not_permitted"),
+      );
+    });
+
+    it("a copy with no table of people is refused", async () => {
+      const r = await rig();
+      alter(r.path, "drop table persons");
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("handover.authoriser_not_permitted"),
+      );
+    });
+
+    it("a role this box does not know is refused, not a crash", async () => {
+      const r = await rig();
+      alter(
+        r.path,
+        `pragma ignore_check_constraints = on; update persons set role = 'later' where id = '${r.authorisedBy}'`,
+      );
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("handover.authoriser_not_permitted"),
+      );
+    });
+
+    it("an operation stored with no offer is a fault in Waitron, not a refusal", async () => {
+      const r = await rig();
+      const without = { ...(await r.row()), operationId: OTHER_OP };
+      await expect(compareFinalCopy(r.deps, without, r.indicator, r.path)).rejects.toThrow(
+        OTHER_OP,
+      );
+    });
+  });
+
+  describe("the order of the checks", () => {
+    it("each earlier check is reported before a later one that would also refuse", async () => {
+      const r = await rig();
+      // Everything wrong at once, then each put right in the order the checks run.
+      await writeFile(join(r.m2State, "backup.env"), SETTINGS);
+      alter(
+        r.path,
+        `insert into __drizzle_migrations_db (hash, created_at) values ('from-later', 1);
+         update registros_facturacion set importe_total = '1.00' where ${FIRST_CHAIN(r.m1)}`,
+      );
+      const lying = await r.resignedForFile((body) => {
+        (body.modulesSummary[FISCAL] as { count: number }[])[0]!.count = 2;
+        body.snapshot.modules.pop();
+      });
+      const reasons = [
+        await r.compareRow({ ...lying, signature: Buffer.alloc(64).toString("base64") }),
+        await r.compareRow(lying),
+      ].map((result) => (result as { reason: string }).reason);
+      expect(reasons).toEqual(["handover.indicator_untrusted", "provisioning.database_ahead"]);
+
+      await copyFile(finalCopyPath(r.m1State, OP), r.path);
+      alter(
+        r.path,
+        `update registros_facturacion set importe_total = '1.00' where ${FIRST_CHAIN(r.m1)}`,
+      );
+      const stillLying = await r.resignedForFile((body) => {
+        (body.modulesSummary[FISCAL] as { count: number }[])[0]!.count = 2;
+      });
+      const noModule = await r.resignedForFile((body) => {
+        (body.modulesSummary[FISCAL] as { count: number }[])[0]!.count = 2;
+        body.snapshot.modules.pop();
+      });
+      expect(await r.compareRow(noModule)).toMatchObject({ reason: "handover.modules_differ" });
+      expect(await r.compareRow(stillLying)).toMatchObject({ reason: "handover.chain_broken" });
+
+      await copyFile(finalCopyPath(r.m1State, OP), r.path);
+      const summaryAlso = r.resigned((body) => {
+        (body.modulesSummary[FISCAL] as { count: number }[])[0]!.count = 2;
+      });
+      expect(await r.compareRow(summaryAlso)).toMatchObject({
+        reason: "handover.backup_settings_differ",
+      });
+      await rm(join(r.m2State, "backup.env"));
+      expect(await r.compareRow(summaryAlso)).toMatchObject({
+        reason: "handover.summary_mismatch",
+      });
+    });
+  });
+});
+
+describe("the spare's duty runs the real comparison", () => {
+  const log: Logger = () => {};
+
+  async function dutyRig() {
+    const r = await rig();
+    const app = new Hono();
+    const peer = { db: r.db, node: suite.node, ring: RING, nodeId: r.m1.nodeId };
+    mountPeerStatusApi(app, peer, () => {});
+    mountHandoverSourceApi(app, r.captureDeps, () => {});
+    const requests: string[] = [];
+    const real = getRequestListener(app.fetch) as RequestListener;
+    const server: Server = createServer((req, res) => {
+      requests.push(`${req.method} ${req.url}`);
+      real(req, res);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    closers.push(
+      () =>
+        new Promise((resolve) => {
+          server.closeAllConnections();
+          server.close(resolve);
+        }),
+    );
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const body: MembershipDocumentBody = {
+      term: 3,
+      nodes: [
+        { nodeId: r.m1.nodeId, contactUrl: url, standing: "serving-primary" },
+        { nodeId: r.m2.nodeId, contactUrl: "https://box-1", standing: "serving-secondary" },
+      ],
+    };
+    await writeNodeMembership(r.db, {
+      body,
+      signerNodeId: r.m1.nodeId,
+      signature: signDocumentBody(body, r.m1Key),
+      endorsements: [endorseKey(r.m2.nodeId, nodeSigningPublicKey(r.m2Key), r.m1.nodeId, r.m1Key)],
+    });
+    await stampDeployment(r.db, "preproduction");
+    await setNodeMode({ venue: r.db, node: suite.node }, r.m2.nodeId, "mirror");
+    await writeMirrorLink(suite.node, r.m2.nodeId, {
+      relayUrl: "http://127.0.0.1:1/",
+      boxHostname: "box.local",
+      boxCaPem: "no certificate",
+      originNodeId: r.m1.nodeId,
+    });
+    await rm(r.path);
+    const start = async (overrides: Partial<DestinationDutyDeps> = {}) => {
+      const duty = await startHandoverDestinationDuty({
+        db: r.db,
+        node: suite.node,
+        ring: RING,
+        nodeId: r.m2.nodeId,
+        stateDir: r.m2State,
+        log,
+        tickMs: 20,
+        compare: (operation, indicator, path) =>
+          compareFinalCopy(r.deps, operation, indicator, path),
+        ...overrides,
+      });
+      closers.push(() => duty!.stop());
+      return duty;
+    };
+    const m1Row = async () => (await readHandoverOperation(suite.node, r.m1.nodeId, OP))!;
+    const copyReads = () => requests.filter((line) => line.endsWith("/final-copy")).length;
+    return { ...r, start, requests, m1Row, copyReads };
+  }
+
+  it("a copy differing by one late row is refused, M1 stays stepped down, and it is fetched again", async () => {
+    const r = await dutyRig();
+    let late = true;
+    const compare = vi.fn((operation: HandoverOperation, indicator: unknown, path: string) =>
+      compareFinalCopy(r.deps, operation, indicator, path),
+    );
+    const download = vi.fn(async (...args: Parameters<typeof boxDownload>) => {
+      const answer = await boxDownload(...args);
+      if (late) {
+        alter(args[2], `update persons set display_name = 'Late' where id = '${r.authorisedBy}'`);
+      }
+      return answer;
+    });
+    await r.start({ compare, download });
+    await vi.waitFor(
+      async () => expect((await r.row()).waitingReason).toBe("handover.copy_mismatch"),
+      { timeout: 15_000 },
+    );
+    // Failing case: a state past `prepared`, or anything M1 was told beyond the three reads.
+    expect((await r.row()).state).toBe("prepared");
+    expect((await r.m1Row()).state).toBe("source_stepped_down");
+    expect(await readHandoverRestriction(suite.node, r.m1.nodeId)).toMatchObject({
+      kind: "handed-over",
+    });
+    const asked = new Set(r.requests.map((line) => line.split("/").pop()));
+    expect([...asked].sort()).toEqual(["final-copy", "indicator", "peer-status"]);
+
+    late = false;
+    await vi.waitFor(async () => expect((await r.row()).waitingReason).toBeNull(), {
+      timeout: 15_000,
+    });
+    expect(await compare.mock.results.at(-1)!.value).toEqual({ ok: true });
+    expect(r.copyReads()).toBeGreaterThan(1);
+    expect(existsSync(r.path)).toBe(true);
+    expect((await r.row()).state).toBe("prepared");
+  }, 60_000);
+
+  it("a setting that differs keeps the file, and a person's fix lets a later compare accept it", async () => {
+    const r = await dutyRig();
+    await writeFile(join(r.m2State, "backup.env"), SETTINGS);
+    await r.start({ compareRetryMs: 50 });
+    await vi.waitFor(
+      async () => expect((await r.row()).waitingReason).toBe("handover.backup_settings_differ"),
+      { timeout: 15_000 },
+    );
+    expect(existsSync(r.path)).toBe(true);
+    await rm(join(r.m2State, "backup.env"));
+    await vi.waitFor(async () => expect((await r.row()).waitingReason).toBeNull(), {
+      timeout: 15_000,
+    });
+    expect(r.copyReads()).toBe(1);
+  }, 60_000);
+});

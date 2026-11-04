@@ -208,6 +208,7 @@ import { createHandoverGate } from "./handover-gate.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
+import { compareFinalCopy } from "./handover-compare.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
 import { startHandoverDestinationDuty } from "./handover-destination-duty.js";
 import { mountHandoverSourceStartApi } from "./handover-source-start-api.js";
@@ -2300,6 +2301,21 @@ async function bootServer(
     nodeId: tradingContext.nodeId,
     stateDir: config.stateDir,
     log,
+    compare: (operation, indicator, copyPath) =>
+      compareFinalCopy(
+        {
+          db,
+          node: store.node,
+          ring,
+          nodeId: tradingContext.nodeId,
+          stateDir: config.stateDir,
+          modules: setsToMigrate,
+          migrationsRoot: config.migrationsRoot,
+        },
+        operation,
+        indicator,
+        copyPath,
+      ),
   });
   if (handoverDestinationDuty !== undefined) {
     undoOnFailure.push(() => handoverDestinationDuty.stop());

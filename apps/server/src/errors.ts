@@ -241,6 +241,24 @@ declare module "@waitron/shared" {
      * offer signed, so this box closed it rather than offer it again.
      */
     "handover.settings_changed": Record<string, never>;
+    /** A final-state indicator's signature is not the handing-over box's own. */
+    "handover.indicator_untrusted": Record<string, never>;
+    /** The copy a spare received is not the file the old box's indicator describes. */
+    "handover.copy_mismatch": Record<string, never>;
+    /** The copy a spare received fails the database's own integrity check. */
+    "handover.copy_damaged": Record<string, never>;
+    /** `module`'s records in the copy a spare received fail that module's own check. */
+    "handover.chain_broken": { module: string };
+    /** The old box's retained selections and the spare's own would not fit one file. */
+    "handover.preparation_state_too_large": Record<string, never>;
+    /** `module`'s summary, worked out from the received copy, is not the one the old box signed. */
+    "handover.summary_mismatch": { module: string };
+    /** The spare could not work out `module`'s summary from the copy it received. */
+    "handover.summary_unreadable": { module: string };
+    /** The copy has no usable record of the spare that would have to start from it. */
+    "handover.copy_lacks_destination": Record<string, never>;
+    /** The person who authorised the handover may not move the venue, according to the copy. */
+    "handover.authoriser_not_permitted": Record<string, never>;
     /**
      * A node booting as primary found, by reconciling with its cloud peer, a higher-term membership
      * document that fences it, so it boots read-only rather than sell beside the promoted primary

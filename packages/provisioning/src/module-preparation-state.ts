@@ -95,6 +95,35 @@ export async function readModulePreparationRevisions(options: {
   const file = await readStateFile(options.stateDir);
   return file.revisions;
 }
+function bindingKey({ module, action, eventId, sourceId, targetNodeId }: OperationBinding): string {
+  return JSON.stringify([module, action, eventId, sourceId, targetNodeId]);
+}
+/** `incoming`, then `own`, each revision once: an equal value under an equal binding is one. */
+function mergedRevisions(own: readonly Revision[], incoming: readonly Revision[]): Revision[] {
+  const seen = new Map<string, Revision[]>();
+  const merged: Revision[] = [];
+  for (const revision of [...incoming, ...own]) {
+    const key = bindingKey(revision.binding);
+    const same = seen.get(key) ?? [];
+    if (same.some((row) => isDeepStrictEqual(row.value, revision.value))) continue;
+    same.push(revision);
+    seen.set(key, same);
+    merged.push(revision);
+  }
+  return merged;
+}
+/**
+ * Whether this box's file could take `incoming`: a file over its limit makes every later module
+ * operation refuse `setup.attempt_invalid`.
+ */
+export async function modulePreparationMergeFits(
+  options: { stateDir: string },
+  incoming: readonly { binding: OperationBinding; value: unknown }[],
+): Promise<boolean> {
+  const own = await readStateFile(options.stateDir);
+  const merged: File = { version: 1, revisions: mergedRevisions(own.revisions, incoming) };
+  return Buffer.byteLength(JSON.stringify(merged)) <= LIMIT;
+}
 export function createModulePreparationState(options: Options) {
   return {
     async withState<T>(

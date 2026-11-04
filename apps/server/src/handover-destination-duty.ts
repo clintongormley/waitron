@@ -14,6 +14,7 @@ import {
 } from "@waitron/node-db";
 import type { ErrorCode } from "@waitron/shared";
 import { askPeerStatus, isOperationStatus } from "./boot-peer-check.js";
+import type { CompareOutcome } from "./handover-compare.js";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { advanceHandover, waitHandover } from "./handover-store.js";
 import type { Logger } from "./logger.js";
@@ -26,6 +27,12 @@ const TICK_MS = 5000;
 
 // A compare that fails may need a person to fix a setting, and it reads a whole venue's copy.
 const COMPARE_RETRY_MS = 60_000;
+
+/** The refusals another copy of the same file could cure: every other waits on the same file. */
+const REFUSALS_FETCHED_AGAIN: ReadonlySet<ErrorCode> = new Set<ErrorCode>([
+  "handover.copy_mismatch",
+  "handover.copy_damaged",
+]);
 
 // Room for what else a signed indicator holds beside the old box's retained selections, which come
 // from a file limited to 1 MiB (`module-preparation-state.ts`).
@@ -57,9 +64,18 @@ export interface DestinationDutyDeps {
   tickMs?: number;
   /** How long a download may go without a byte before it is given up on. */
   silenceLimitMs?: number;
-  /** Told of a file fetched whole. A throw has it told again of the same file, after `compareRetryMs`. */
-  compare?: (operation: HandoverOperation, indicator: unknown, copyPath: string) => Promise<void>;
+  /**
+   * Told of a file fetched whole. A throw or a refusal has it told again of the same file, after
+   * `compareRetryMs`, except a refusal in `REFUSALS_FETCHED_AGAIN`.
+   */
+  compare?: (
+    operation: HandoverOperation,
+    indicator: unknown,
+    copyPath: string,
+  ) => Promise<CompareOutcome>;
   compareRetryMs?: number;
+  /** A clock that only runs forward, for the limit on comparing again. */
+  monotonicNow?: () => number;
   download?: typeof boxDownload;
 }
 
@@ -110,6 +126,11 @@ interface HeldCopy {
   compareDueAt: number;
 }
 
+async function discardCopy(path: string): Promise<void> {
+  await rm(path, { force: true });
+  await rm(`${path}.partial`, { force: true });
+}
+
 function refusalReason(text: string): ErrorCode {
   try {
     const code = (JSON.parse(text) as { error?: { code?: unknown } }).error?.code;
@@ -149,6 +170,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
   const tickMs = deps.tickMs ?? TICK_MS;
   const download = deps.download ?? boxDownload;
   const compareRetryMs = deps.compareRetryMs ?? COMPARE_RETRY_MS;
+  const monotonicNow = deps.monotonicNow ?? (() => performance.now());
   let woken = false;
   let rouse: () => void = () => {};
   let held: HeldCopy | undefined;
@@ -261,10 +283,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     const path = receivedCopyPath(deps.stateDir, operationId);
     const trust = { ca, rejectUnauthorized: true };
     const routes = `${base}/api/node/handover/${operationId}`;
-    const discard = async () => {
-      await rm(path, { force: true });
-      await rm(`${path}.partial`, { force: true });
-    };
+    const discard = () => discardCopy(path);
     let indicator: unknown;
     try {
       await mkdir(dirname(path), { recursive: true, mode: 0o700 });
@@ -307,14 +326,28 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     if (current === null) return discard();
     held = { operationId, indicator, path, compared: false, compareDueAt: 0 };
     if (current.waitingReason !== null) await waitHandover(deps, operationId, null);
-    await compareHeld(held, { ...current, waitingReason: null });
+    // Another writer may have closed the operation while the reason was being cleared.
+    const cleared = await stillWorkingOn(operation);
+    if (cleared === null) return discard();
+    await compareHeld(held, cleared);
   }
 
   async function compareHeld(copy: HeldCopy, operation: HandoverOperation): Promise<void> {
-    if (copy.compared || performance.now() < copy.compareDueAt) return;
-    copy.compareDueAt = performance.now() + compareRetryMs;
-    await deps.compare?.(operation, copy.indicator, copy.path);
+    if (copy.compared || monotonicNow() < copy.compareDueAt) return;
+    copy.compareDueAt = monotonicNow() + compareRetryMs;
+    const outcome = await deps.compare?.(operation, copy.indicator, copy.path);
+    if (outcome !== undefined && !outcome.ok) {
+      if (REFUSALS_FETCHED_AGAIN.has(outcome.reason)) {
+        held = undefined;
+        await discardCopy(copy.path);
+      }
+      return waitOn(operation, outcome.reason, { detail: outcome.detail });
+    }
     copy.compared = true;
+    const current = await stillWorkingOn(operation);
+    if (current !== null && current.waitingReason !== null) {
+      await waitHandover(deps, operation.operationId, null);
+    }
   }
 
   /** Whether this operation still has work a later tick must do. */

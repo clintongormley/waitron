@@ -635,6 +635,15 @@ describe("POST /api/node/handover/offer", () => {
         await expectNothingRecorded();
       });
 
+      it("a state folder that is gone refuses and records nothing", async () => {
+        const envelope = envelopeOf();
+        await rm(stateDir, { recursive: true });
+        expect(await post(envelope)).toEqual(
+          refusal(409, "handover.destination_settings_unreadable", { file: "backup.env" }),
+        );
+        await expectNothingRecorded();
+      });
+
       it.each(["backup.env", "modules.json", "module-preparation-state.json"])(
         "%s being a folder rather than a file refuses and records nothing",
         async (file) => {

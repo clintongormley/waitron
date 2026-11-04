@@ -45,7 +45,9 @@ import {
   setNodeMode,
   writeMirrorLink,
 } from "@waitron/node-db";
+import type { ErrorCode } from "@waitron/shared";
 import type { CaptureDeps } from "./handover-capture.js";
+import type { CompareOutcome } from "./handover-compare.js";
 import {
   receivedCopyPath,
   startHandoverDestinationDuty,
@@ -268,7 +270,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, SEVERAL_TICKS_
 describe("the spare fetches the old box's final copy", () => {
   it("fetches once M1's restricted start answers, through the real routes", async () => {
     const r = await rig();
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     await r.start({ compare });
     await vi.waitFor(async () =>
       expect((await r.m2Row()).waitingReason).toBe("handover.source_unreachable"),
@@ -296,7 +298,7 @@ describe("the spare fetches the old box's final copy", () => {
 
   it("a fetched file is not fetched again, and M1's status is still read", async () => {
     const r = await rig();
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     await r.stepDownM1();
     await r.listen(r.m1App({ restricted: true }));
     await r.start({ compare });
@@ -332,7 +334,7 @@ describe("the spare fetches the old box's final copy", () => {
 
   it("a partial download is discarded and fetched again", async () => {
     const r = await rig();
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     await r.stepDownM1();
     let cut = 0;
     await r.listen(r.m1App({ restricted: true }), (url, real) =>
@@ -355,7 +357,7 @@ describe("the spare fetches the old box's final copy", () => {
 
   it("a server that goes silent mid-file is given up on and fetched again", async () => {
     const r = await rig();
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     await r.stepDownM1();
     let stalled = 0;
     await r.listen(r.m1App({ restricted: true }), (url, real) =>
@@ -373,7 +375,7 @@ describe("the spare fetches the old box's final copy", () => {
 
   it("a download thrown after the file reached its final name counts as no file", async () => {
     const r = await rig();
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     await r.stepDownM1();
     let gone = false;
     await r.listen(r.m1App({ restricted: true }), (_url, real) =>
@@ -397,7 +399,7 @@ describe("the spare fetches the old box's final copy", () => {
 
   it("after such a throw the next attempt fetches the file again", async () => {
     const r = await rig();
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     await r.stepDownM1();
     await r.listen(r.m1App({ restricted: true }));
     let first = true;
@@ -417,7 +419,7 @@ describe("the spare fetches the old box's final copy", () => {
 
   it("runs one download at a time, however often it is woken", async () => {
     const r = await rig();
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     await r.stepDownM1();
     let release: () => void = () => {};
     const held = new Promise<void>((resolve) => (release = resolve));
@@ -489,7 +491,7 @@ describe("the spare trusts only the box its link pins", () => {
     });
     await r.stepDownM1();
     await tlsBox(r, r.m1App({ restricted: true }), material);
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     await r.start({ compare });
     await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(1), { timeout: 30_000 });
     expect(existsSync(r.received())).toBe(true);
@@ -505,7 +507,7 @@ describe("the spare trusts only the box its link pins", () => {
     });
     await r.stepDownM1();
     await tlsBox(r, r.m1App({ restricted: true }), mint());
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     await r.start({ compare });
     await vi.waitFor(async () =>
       expect((await r.m2Row()).waitingReason).toBe("handover.source_unreachable"),
@@ -555,7 +557,7 @@ describe("the spare trusts only the box its link pins", () => {
       await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
       closers.push(() => closeServer(server as unknown as Server));
       await r.holdChart(`https://localhost:${(server.address() as AddressInfo).port}`);
-      const compare = vi.fn(async () => {});
+      const compare = vi.fn(async () => ({ ok: true as const }));
       await r.start({ compare });
       await vi.waitFor(() => expect(r.requests.at(-1)).toContain(lastSeen), { timeout: 30_000 });
       await settle();
@@ -665,7 +667,7 @@ describe("M1's status decides whether the spare stays", () => {
 
   it("a read landing between M1's prepared and its stepdown keeps M2 waiting, and the fetch then succeeds", async () => {
     const r = await rig();
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     await r.listen(r.m1App({ restricted: false }));
     await r.start({ compare });
     await vi.waitFor(async () =>
@@ -759,7 +761,7 @@ describe("M1's status decides whether the spare stays", () => {
         ? (_req, res) => void res.end(JSON.stringify("x".repeat(size)))
         : real,
     );
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     await r.start({ compare });
     await vi.waitFor(async () =>
       expect((await r.m2Row()).waitingReason).toBe("handover.source_unreachable"),
@@ -821,7 +823,7 @@ describe("M1's status decides whether the spare stays", () => {
       destinationNodeId: r.m2,
       ...parts,
     };
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     await r.listen(r.m1App({ restricted: true }), (url, real) =>
       url === "/api/node/peer-status"
         ? statusFor(r, { requestedOperation: reported as unknown as CanonicalValue })
@@ -1003,6 +1005,7 @@ describe("what the duty works on", () => {
         first = false;
         throw new Error("a stand-in failure");
       }
+      return { ok: true as const };
     });
     await r.stepDownM1();
     await r.listen(r.m1App({ restricted: true }));
@@ -1047,7 +1050,7 @@ describe("a stop or a changed row while a request is out", () => {
 
   it("a compare is handed the row as it stands, not as the pass first read it", async () => {
     const r = await rig();
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     await r.start({ compare });
     await vi.waitFor(async () =>
       expect((await r.m2Row()).waitingReason).toBe("handover.source_unreachable"),
@@ -1090,7 +1093,7 @@ describe("a stop or a changed row while a request is out", () => {
     const r = await rig();
     await r.stepDownM1();
     await r.listen(r.m1App({ restricted: true }));
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     const download = downloadThen(() => advanceHandover(r.m2Store, OP, "replaced", {}));
     await r.start({ compare, download });
     await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(1), { timeout: 10_000 });
@@ -1106,7 +1109,7 @@ describe("a stop or a changed row while a request is out", () => {
     const r = await rig();
     await r.stepDownM1();
     await r.listen(r.m1App({ restricted: true }));
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     const download = downloadThen(() =>
       setNodeMode({ venue: r.db, node: suite.node }, r.m2, "primary"),
     );
@@ -1121,7 +1124,7 @@ describe("a stop or a changed row while a request is out", () => {
     const r = await rig();
     await r.stepDownM1();
     await r.listen(r.m1App({ restricted: true }));
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     let stopping: Promise<void> | undefined;
     const duty = (await r.start({
       compare,
@@ -1166,7 +1169,7 @@ describe("the folder of an operation that closed", () => {
     const r = await rig();
     await r.stepDownM1();
     await r.listen(r.m1App({ restricted: true }));
-    const compare = vi.fn(async () => {});
+    const compare = vi.fn(async () => ({ ok: true as const }));
     await r.start({ compare });
     await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(1), { timeout: 10_000 });
     await settle();
@@ -1221,6 +1224,7 @@ describe("a compare that throws", () => {
     let failures = 2;
     const compare = vi.fn(async () => {
       if (failures-- > 0) throw new Error("a stand-in failure");
+      return { ok: true as const };
     });
     await r.start({ compare, compareRetryMs: TICK_MS });
     await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(3), { timeout: 10_000 });
@@ -1249,6 +1253,178 @@ describe("a compare that throws", () => {
     await settle();
     expect(compare).toHaveBeenCalledTimes(1);
     expect(r.copyReads()).toBe(1);
+  });
+
+  const refusing = (reason: ErrorCode, detail: CanonicalValue = {}) =>
+    ({ ok: false, reason, detail }) as const;
+
+  it("a refusal the limit holds comes round again at sixty seconds, and not a moment before", async () => {
+    const r = await rig();
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    let clock = 1000;
+    const compare = vi.fn(async () => refusing("handover.backup_settings_differ"));
+    await r.start({ compare, monotonicNow: () => clock });
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    clock += 59_999;
+    await settle();
+    expect(compare).toHaveBeenCalledTimes(1);
+    clock += 1;
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(2));
+    await settle();
+    expect(compare).toHaveBeenCalledTimes(2);
+    expect(r.copyReads()).toBe(1);
+  });
+
+  it("a throw is held to the same sixty seconds", async () => {
+    const r = await rig();
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    let clock = 1000;
+    const compare = vi.fn(async () => {
+      throw new Error("a stand-in failure");
+    });
+    await r.start({ compare, monotonicNow: () => clock });
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    clock += 59_999;
+    await settle();
+    expect(compare).toHaveBeenCalledTimes(1);
+    clock += 1;
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(2));
+  });
+
+  it.each(["handover.copy_mismatch", "handover.copy_damaged"] as const)(
+    "%s discards the file and fetches again on the next tick, whatever the limit",
+    async (reason) => {
+      const r = await rig();
+      await r.stepDownM1();
+      await r.listen(r.m1App({ restricted: true }));
+      let refuseAgain = true;
+      const held: boolean[] = [];
+      const compare = vi.fn(async (_operation: unknown, _indicator: unknown, path: string) => {
+        held.push(existsSync(path));
+        return refuseAgain ? refusing(reason) : { ok: true as const };
+      });
+      await r.start({ compare, monotonicNow: () => 1000 });
+      await vi.waitFor(async () => expect((await r.m2Row()).waitingReason).toBe(reason), {
+        timeout: 10_000,
+      });
+      expect(existsSync(r.received())).toBe(false);
+      await vi.waitFor(() => expect(r.copyReads()).toBeGreaterThan(1), { timeout: 10_000 });
+      await vi.waitFor(() => expect(compare.mock.calls.length).toBeGreaterThan(1));
+      refuseAgain = false;
+      await vi.waitFor(async () => expect((await r.m2Row()).waitingReason).toBeNull(), {
+        timeout: 10_000,
+      });
+      expect(held.every(Boolean)).toBe(true);
+      await vi.waitFor(() => expect(existsSync(r.received())).toBe(true));
+    },
+  );
+
+  it.each([
+    "handover.indicator_untrusted",
+    "handover.indicator_mismatch",
+    "provisioning.database_ahead",
+    "handover.modules_differ",
+    "handover.chain_broken",
+    "handover.copy_check_failed",
+    "handover.backup_settings_differ",
+    "handover.key_ring_mismatch",
+    "handover.destination_settings_unreadable",
+    "handover.preparation_state_too_large",
+    "handover.summary_mismatch",
+    "handover.summary_unreadable",
+    "handover.copy_lacks_destination",
+    "handover.authoriser_not_permitted",
+  ] as const)("%s keeps the file and writes its reason once", async (reason) => {
+    vi.mocked(waitHandover).mockClear();
+    const r = await rig();
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    const compare = vi.fn(async () => refusing(reason, { field: "a detail" }));
+    await r.start({ compare, compareRetryMs: TICK_MS });
+    await vi.waitFor(() => expect(compare.mock.calls.length).toBeGreaterThan(3), {
+      timeout: 10_000,
+    });
+    expect(await r.m2Row()).toMatchObject({ state: "prepared", waitingReason: reason });
+    expect(existsSync(r.received())).toBe(true);
+    expect(r.copyReads()).toBe(1);
+    const writes = vi.mocked(waitHandover).mock.calls.filter(([, , written]) => written === reason);
+    expect(writes).toHaveLength(1);
+    expect(JSON.stringify(logLines)).toContain("a detail");
+  });
+
+  it("a refusal that gives way to another writes the new reason, and success clears it", async () => {
+    vi.mocked(waitHandover).mockClear();
+    const r = await rig();
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    const answers: CompareOutcome[] = [
+      refusing("handover.backup_settings_differ"),
+      refusing("handover.modules_differ"),
+      { ok: true },
+    ];
+    const compare = vi.fn(async () => answers.shift()!);
+    await r.start({ compare, compareRetryMs: TICK_MS });
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(3), { timeout: 10_000 });
+    await vi.waitFor(async () => expect((await r.m2Row()).waitingReason).toBeNull());
+    await settle();
+    expect(compare).toHaveBeenCalledTimes(3);
+    expect(r.copyReads()).toBe(1);
+    expect(existsSync(r.received())).toBe(true);
+    expect(vi.mocked(waitHandover).mock.calls.map(([, , written]) => written)).toEqual([
+      "handover.backup_settings_differ",
+      "handover.modules_differ",
+      null,
+    ]);
+  });
+
+  it("a copy accepted with no reason standing writes no reason", async () => {
+    vi.mocked(waitHandover).mockClear();
+    const r = await rig();
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    const compare = vi.fn(async () => ({ ok: true as const }));
+    await r.start({ compare });
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    await settle();
+    expect(vi.mocked(waitHandover)).not.toHaveBeenCalled();
+  });
+
+  it("an operation closed while its reason is being cleared is not compared, and keeps no file", async () => {
+    const r = await rig();
+    const compare = vi.fn(async () => ({ ok: true as const }));
+    await r.start({ compare });
+    await vi.waitFor(async () =>
+      expect((await r.m2Row()).waitingReason).toBe("handover.source_unreachable"),
+    );
+    // Failing case: compare is told `prepared` while the stored row says `replaced`.
+    vi.mocked(waitHandover).mockImplementationOnce(async (deps, operationId, reason) => {
+      expect(reason).toBeNull();
+      await advanceHandover(deps, operationId, "replaced", {});
+    });
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    await vi.waitFor(async () => expect((await r.m2Row()).state).toBe("replaced"), {
+      timeout: 10_000,
+    });
+    await settle();
+    expect(compare).not.toHaveBeenCalled();
+    expect(existsSync(r.received())).toBe(false);
+  });
+
+  it("an operation closed during a compare that refuses gets no reason", async () => {
+    const r = await rig();
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    const compare = vi.fn(async () => {
+      await advanceHandover(r.m2Store, OP, "replaced", {});
+      return refusing("handover.modules_differ");
+    });
+    await r.start({ compare });
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    await settle();
+    expect(await r.m2Row()).toMatchObject({ state: "replaced", waitingReason: null });
   });
 
   it("M1's abandoned still closes the operation while a compare keeps failing", async () => {

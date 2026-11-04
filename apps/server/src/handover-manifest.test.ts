@@ -9,7 +9,7 @@ import { canonicalize } from "@waitron/membership";
 import { isAppError } from "@waitron/shared";
 import { resolveBackupConfig } from "./backup-config.js";
 import { loadBoxEnv } from "./box-env.js";
-import { buildNodeLocalManifest } from "./handover-manifest.js";
+import { buildNodeLocalManifest, readOfferSettings } from "./handover-manifest.js";
 import { ALL_MODULES } from "./modules.js";
 
 const CURRENT_KEY = randomBytes(32);
@@ -359,5 +359,41 @@ describe("buildNodeLocalManifest", () => {
     await expect(buildNodeLocalManifest(stateDir, ringWithRotation())).rejects.toMatchObject({
       code: "ENOTDIR",
     });
+  });
+});
+
+describe("readOfferSettings", () => {
+  let stateDir: string;
+  beforeEach(async () => {
+    stateDir = await mkdtemp(join(tmpdir(), "handover-offer-settings-"));
+  });
+  afterEach(async () => {
+    await rm(stateDir, { recursive: true, force: true });
+  });
+
+  it.each(["handover.settings_unreadable", "handover.destination_settings_unreadable"] as const)(
+    "a state folder that is gone refuses %s, rather than reading as a box with no settings",
+    async (code) => {
+      const gone = join(stateDir, "gone");
+      await expect(readOfferSettings(gone, ringWithRotation(), code)).rejects.toMatchObject({
+        code,
+        params: { file: "backup.env" },
+        reason: "the state folder cannot be read",
+      });
+    },
+  );
+
+  it("a file where the state folder should be refuses the same way", async () => {
+    const notFolder = join(stateDir, "a-file");
+    await writeFile(notFolder, "");
+    await expect(
+      readOfferSettings(notFolder, ringWithRotation(), "handover.settings_unreadable"),
+    ).rejects.toMatchObject({ code: "handover.settings_unreadable" });
+  });
+
+  it("control: a folder holding none of the files is a box with no settings", async () => {
+    expect(
+      await readOfferSettings(stateDir, ringWithRotation(), "handover.settings_unreadable"),
+    ).toEqual({ backupSettings: null, moduleSettings: null, ringVersions: [2, 3] });
   });
 });

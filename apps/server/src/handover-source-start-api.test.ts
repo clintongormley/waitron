@@ -1324,6 +1324,11 @@ describe("the settings the offer carries", () => {
       await expectNothingRecorded(on);
     }
 
+    it("a state folder that is gone refuses before any offer", async () => {
+      await rm(mainState, { recursive: true });
+      await expectStillSellingNoOfferNoCopy(realBox(), "backup.env");
+    });
+
     it.each(DAMAGED)(
       "a damaged %s holding %s refuses before any offer",
       async (file, _name, text) => {
