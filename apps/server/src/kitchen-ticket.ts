@@ -41,7 +41,7 @@ export interface KitchenTicketItem {
   groupLabel?: string;
   /** The dish's own course, named on its group's heading. */
   course?: { name: string; order: number };
-  /** The stations holding its group's dishes for the pass, while this dish is not pass-controlled. */
+  /** The stations holding its group's dishes for the pass. */
   goesWith?: readonly string[];
   /** Printed as sold, never merged or split. */
   printedAsSold?: boolean;
@@ -274,7 +274,7 @@ function onlyGroupOf(items: readonly KitchenTicketItem[]): KitchenTicketItem | u
 }
 
 /** The distinct courses of `items`, in course order then name, upper-cased for the heading. */
-export function headingCourses(items: readonly KitchenTicketItem[], locale: string): string[] {
+function headingCourses(items: readonly KitchenTicketItem[], locale: string): string[] {
   const courses = new Map<string, number>();
   for (const { course } of items) if (course !== undefined) courses.set(course.name, course.order);
   const language = ticketLanguage(locale);
