@@ -1325,10 +1325,7 @@ The owner's four answers: no reserved
   the staging turn (A798-B slice 7); where the lock cannot be taken for another reason (measured on a full disk with
   no other holder), the holder file's heartbeat decides, so a holder that died less than 30 s
   before keeps it until a later start (`docs/developers/conventions-data.md`, "Every start takes
-  the venue lock"); a box reset also deletes it (`wipe_box`, `deploy/waitron.sh`). On a box where a
-  backup recovery from the setup repair page has selected its own folders, the start deletes them
-  in that recovery's state folder instead (`runEntry`, `apps/server/src/node-entry.ts`; read, not
-  run).
+  the venue lock"); a box reset also deletes it (`wipe_box`, `deploy/waitron.sh`).
 
 - **Guided Cloud snapshot recovery for test venues is built.** Cloud approval alone does not
   authorize trading or stop another server.

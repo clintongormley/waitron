@@ -15,6 +15,10 @@ _2026-11-01, A1008: the one-sale operator command and its command-only tests are
 > page's memory, so a reload opens the page's first screen, which on a box with its own certificate
 > file asks "Is this page secure?" first (plan D5, D6, OQ2); §7's `box-folders.ts` was deleted by
 > A1206; Recover from backup is offered beside a stopped old recovery (plan OQ1).
+>
+> 2026-11-04, slice 4 plan: built in two pull requests, the setup page first (the page read the old
+> routes on every open); a box that discarded an old recovery also shows the reinstall page, because
+> Start again kept the folder.
 
 # A1131b and A1131c: Recover from backup first deletes the failed setup, then restores into the box's usual folders
 

@@ -1101,8 +1101,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
     adoption, promotion, mirror or break-glass key names (the `boot.*` suites the F3c
     commit lists,
     `adoption-allocation-refusal`, `allocated-standby-host`, `backup-data-placement`,
-    `backup-verification`, `first-fiscal-mode`, `first-setup-backup-recovery`,
-    `first-setup-backup-source`), a raw insert on `backup-verification-compatibility`'s
+    `backup-verification`, `first-fiscal-mode`), a raw insert on `backup-verification-compatibility`'s
     fixture-migrated copy, devices sharing one token hash (`device-session`), a case needing no
     taxpayer row (`department-receipt-languages`), and second-location cases whose code slice
     deletes them (`alerts-api`, `boot.test`, `device-api.pass`).

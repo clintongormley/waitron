@@ -1182,9 +1182,8 @@ these, which it did not build (local figures, 2 November 2026):
   about 0.85 s of migration per file, across several hundred suites.
 - **The `zone-process-matrix.*` files** run other test files in nested Vitest runs; child processes
   were 47–54 s of their 49–57 s locally. Not investigated further.
-- **The remaining random salts in test setup:** `src/testing/staged-hour-restore.ts`,
-  `src/testing/staged-hour-crash.ts` and the re-seal at `setup-first-backup-api.test.ts:84` still draw
-  one per call. Sharing `apps/server/test/fixture-salt.ts` with `src/testing/` would mean moving it
+- **The remaining random salts in test setup:** `src/testing/staged-hour-restore.ts` and
+  `src/testing/staged-hour-crash.ts` still draw one per call. Sharing `apps/server/test/fixture-salt.ts` with `src/testing/` would mean moving it
   there, under coverage and mutation.
 - **The recovery-key memo lives in `apps/server/test/hour-recovery-host.ts` only.** Files that do not
   load the host still pay the full derivation per check; moving the memo into a wider test setup

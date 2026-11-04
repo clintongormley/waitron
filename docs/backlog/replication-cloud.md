@@ -817,8 +817,6 @@ restructuring wider than a review fix:
 - The venue and node handles travel as separate fields under four names (`nodeDb`, `node`,
   `ownerNode`, `nodeDatabase()`), with three near-identical pair types (`VenueDatabase`,
   `VenueAndNodeHandles`, `MigrationFiles`). Pass one pair type.
-- The staged node copy is hashed twice in the staging digest
-  (`apps/server/src/first-setup-backup-recovery.ts`, `fingerprint()`).
 - "Opening a staged folder must not create an empty `node.db`" is enforced by about fifteen
   callers (`writeStagedNodeCopy`, `openStagedCopy`, `assertStagedNodeCopy`, and a hand-rolled
   `lstat` in `first-setup-publication.ts`). Let `validateDatabaseEntries` write the copy, and give

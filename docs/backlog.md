@@ -527,7 +527,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Audit](backlog/self-service-refusals.md#a1159-some-setup-databases-the-box-cannot-read-still-refuse-start-again).
 
 - **A1161: with the database present, a public record or documents file still dead-ends Start
-  again**, damaged or intact, and since A1206 so does the summary beside a stopped recovery. Left
+  again**, damaged or intact, and since A1206 so does the summary. Left
   open by A1099; needs an owner decision.
   [Audit](backlog/self-service-refusals.md#a1161-with-the-database-present-a-public-record-or-documents-file-still-dead-ends-start-again).
 
@@ -556,15 +556,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   For the owner. Left open by A1127.
   [Detail](backlog/setup.md#other-full-disk-words-still-send-the-person-elsewhere-or-end-with-the-short-reinstall-sentence).
 
-- **A start from a selected backup recovery cleans the recovery's own logs, not the box's**, so on a
-  full disk it frees no log space in the box's log folder, and the repair page makes no promise
-  there. Believed to predate A1127 (#2043).
-  [Detail](backlog/setup.md#a-start-from-a-selected-backup-recovery-cleans-the-recoverys-own-logs-not-the-boxs)
-
-- **A resume can use the room the spare file gave.** Accepted limits of A1127's release beside a
-  stopped recovery, read not run. Left open by A1127.
-  [Detail](backlog/setup.md#a-resume-can-use-the-room-the-spare-file-gave)
-
 - **The spare file's size is measured on HFS+ and Linux tmpfs only** — not ext4, copy-on-write
   filesystems, or a `logs` volume on another disk. Left open by A1127.
   [Detail](backlog/setup.md#the-spare-files-size-is-measured-on-hfs-and-linux-tmpfs-only)
@@ -584,10 +575,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A boot test's disk assertion reads the checkout's path**, so it fails in a worktree whose path
   holds "disk". [Detail](backlog/setup.md#a-boot-tests-disk-assertion-reads-the-checkouts-path)
-
-- **A discarded recovery whose files cannot be deleted brings the repair page back after each Start again.**
-  Each press answers "Deletion interrupted" and restarts the box. Left open by A1042.
-  [Detail](backlog/setup.md#a-discarded-recovery-whose-files-cannot-be-deleted-brings-the-repair-page-back-after-each-start-again).
 
 - **A1142: a cut-off Start again beside found files the Move cannot handle gets only the explanation.**
   Left open by A1098.
@@ -629,42 +616,18 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   arrives.** Give it the once-only restart the Move got in #2131. Read, not run. Left open by A1098.
   [Detail](backlog/setup.md#a1153-the-recovery-pages-retry-restarts-nothing-if-the-browser-disconnects-before-the-answer-arrives)
 
-- **A stale signed-in setup tab's activation request is not refused while a Waitron Cloud recovery
-  waits.** `/setup-api/provision` is outside the recovery's write fence. Read, not run. Left open by
-  A1042.
-  [Detail](backlog/setup.md#a-stale-signed-in-setup-tabs-activation-request-is-not-refused-while-a-waitron-cloud-recovery-waits)
-
-- **A recovery that Start again recorded as discarded can still be resumed after a power cut.** A
-  hand-made `open` or `resume` after a cut before the `abandoned` record; no page offers it. Left
-  open by A1042.
-  [Detail](backlog/setup.md#a-recovery-that-start-again-recorded-as-discarded-can-still-be-resumed-after-a-power-cut)
-
 - **A Waitron Cloud recovery whose download takes more than 30 seconds may be refused its series
-  name.** In a test host, a commit held 31 seconds failed `second_clock_missing`; same on main. Not
-  measured on a box. Left open by A1042.
+  name.** Measured only on the old recovery from backup, now deleted; the fresh-box Cloud restore
+  has not been measured the same way. Left open by A1042.
   [Detail](backlog/setup.md#a-waitron-cloud-recovery-whose-download-takes-more-than-30-seconds-may-be-refused-its-series-name)
 
-- **A1131c: Recover from backup first wipes the failed setup, and Start again's page drops the item counts**
-  Slices 2 and 3 landed. Slice 4's setup-page half landed (#2456); its server and provisioning half
-  (deleting the old recovery code, including the old routes' `open`) is still to come.
-  [Detail](backlog/setup.md#a1131c-recover-from-backup-first-wipes-the-failed-setup-and-start-agains-page-drops-the-item-counts).
-
-- **A1131: Start again beside a recovery record that cannot be read, with the setup database missing.**
-  Only Reconnect is enabled today.
-  [Detail](backlog/setup.md#a1131-start-again-beside-a-recovery-record-that-cannot-be-read-with-the-setup-database-missing).
-
-- **On a full disk, Start again's summary may need room for a copy of the setup database.** Beside
-  a held setup database with no recovery the box keeps its spare, so Start again answers that the
-  disk is full. Left open by A1131 and A1131bc slice 2.
+- **On a full disk, Start again's summary may need room for a copy of the setup database.** The box
+  keeps its spare beside a held setup database, so Start again answers that the disk is full. Left open by A1131 and A1131bc slice 2.
   [Detail](backlog/setup.md#on-a-full-disk-start-agains-summary-may-need-room-for-a-copy-of-the-setup-database)
 
 - **Start again over plain HTTP says only that deleting is not safe.** Wanted: words saying a
   secure connection is needed. Left open by A1131bc slice 2.
   [Detail](backlog/setup.md#start-again-over-plain-http-says-only-that-deleting-is-not-safe)
-
-- **A developer note still counts four requests in the Start-again flow.** Left open by A1131bc
-  slice 2.
-  [Detail](backlog/setup.md#a-developer-note-still-counts-four-requests-in-the-start-again-flow)
 
 - **No Recover from backup when the setup's own record cannot be read or needs repair.** The only
   way out is a reinstall, unless the setup had saved nothing yet. Left open by A1131bc slice 3.
@@ -673,6 +636,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **The bucket and Waitron Cloud restores have not been run after Start again's deletion.** Left
   open by A1131bc slice 3.
   [Detail](backlog/setup.md#the-bucket-and-waitron-cloud-restores-have-not-been-run-after-start-agains-deletion)
+
+- **`restoreFromArtifact` has no production caller.** Only tests call it since A1131bc slice 4;
+  decide whether they should place archives through `runStagedRestore`, then delete it.
+  [Detail](backlog/setup.md#restorefromartifact-has-no-production-caller)
 
 - **"The saved setup cannot be read. Contact support."** sends the person to somebody else. Left
   open by A1131bc slice 3.
@@ -738,8 +705,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **The setup route `GET /setup-api/venue-defaults` has no production reader** — left open by
   A1315 PR 5, which took setup's only call to it away (`apps/server/src/setup-api.ts`). Retiring it
-  means moving `apps/server/src/first-setup-backup-handoff.test.ts`'s paused-API probe to another
-  setup GET and removing the route's two direct cases in `apps/server/src/setup-api.test.ts`.
+  means removing the route's two direct cases in `apps/server/src/setup-api.test.ts`.
 
 - **Setup's refusal text for the operation description asks for an edit nobody can make** — left
   open by A1315 PR 5 (#2441). Setup no longer sends the value; the server fills the filing module's
@@ -6103,11 +6069,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 - **The shared logo primitive's retry checks still count a bounded timing list** (left open by
   A1332, #2458). Apply the till check's scoped observation after reproducing the same failure there.
   [Detail](backlog/ci.md#shared-logo-retry-checks-use-the-retained-timing-list).
-
-- **The resume-authority test's ciphertext damage can leave the value unchanged** (left open by
-  A1314). In `apps/server/src/first-setup-backup-resume-authority.test.ts`, `slice(0, -4) + "AAAA"`
-  changes nothing when the ciphertext decodes to a multiple of three bytes ending in three zero
-  bytes. A fix decodes it, flips a bit and re-encodes it, as `tamper` in identity's backup test does.
 
 - **`scripts/ci-diff-paths.sh` never looks for `gnutimeout` for its `-k` bound** (left open by
   A1310, #2400). On ubuntu-26.04 runners it gets uutils' `timeout`, whose forced kill reaches only
