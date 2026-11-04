@@ -1,5 +1,10 @@
 # The dashboard's Orders screen — design
 
+> **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
+> Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
+> `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)
+> carries the reporting example. References below describe the earlier scripts.
+
 _2026-10-22, A973: the invoice-first settlement operator script and its test are retired by owner decision. References to that command below record the earlier tree; current build plans omit it._
 
 > **2026-10-16, A737 Part 1:** [The page plan](../plans/2026-10-15-a737-find-bill-page.md) supersedes

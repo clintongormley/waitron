@@ -1348,9 +1348,9 @@ file under `packages/provisioning/src` calls `applyMigrations` at all (the one c
 `schema-ahead.migrate.test.ts`, which migrates its own fixture). The two dev scripts,
 `apps/server/scripts/dev-setup.ts` and `apps/server/scripts/dev-onboard.ts`, are converted: each
 calls `applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null))`, so each installs the
-triggers the way everything else does. The five demo scripts beside them (`allergens-demo.ts`,
-`daily-close-demo.ts`, `daily-close-z-demo.ts`, `modelo-303-demo.ts`, `recipes-demo.ts`) call it the
-same way with their own set list.
+triggers the way everything else does. The retired fake-backend demos now run as ordinary server
+integration tests in `catalogue-allergen-workflow.test.ts` and `reporting-write-workflows.test.ts`;
+`useVenueDb` applies their migration sets.
 
 **2026-09-22: the names do NOT come from the `ledger` class, and for one step group they were
 going to.** The first design said "every table the modules classify `ledger`", and the guard that

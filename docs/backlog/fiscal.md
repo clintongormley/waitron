@@ -983,8 +983,7 @@ a basket VAT split (`vatBreakdown`, `apps/till/src/state/working-order.ts`) that
 `recordCorrection` exists
 (`packages/core/src/record-correction.ts`; the Verifactu backend corrects only an F2, as an R5);
 the whole-order cancel route calls it for a credit of the whole invoice. No route issues a
-correction for part of one. The remaining script callers are `daily-close-demo.ts` and
-`modelo-303-demo.ts` under `apps/server/scripts/`. The owner also needs a way to
+correction for part of one. The owner also needs a way to
 correct an issued invoice when a customer spots an error after payment, regardless of the future
 Tabs · Bill choice (2026-10-04, A261 step 2 decision). **The owner's points for when this is
 designed (2026-09-29):** (1) the amount staff enter is what the customer gets back,

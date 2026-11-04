@@ -1,5 +1,10 @@
 > 2026-10-29, A1206: the start-again note is retired; §"The start-again floor must survive a rollback" no longer applies.
 
+> **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
+> Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
+> `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)
+> carries the reporting example. References below describe the earlier scripts.
+
 **Execution authority, 29 October 2026:** the owner subsequently approved the complete implementation plan (option A), one eligible cut per pull request. This supersedes the pending-plan statements below; every prerequisite and real qualification gate remains. See the [plan](../plans/2026-10-29-a950-automatic-upgrades.md).
 
 <a id="a950-automatic-app-upgrades-with-a-recoverable-trial"></a>

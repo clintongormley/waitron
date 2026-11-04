@@ -1,5 +1,10 @@
 # A802 Partial Paid Invoice Correction Implementation Plan
 
+> **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
+> Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
+> `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)
+> carries the reporting example. References below describe the earlier scripts.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans. Implement inline, task by task. Read superpowers:test-driven-development before writing any implementation or test code. Do not dispatch implementation or review subagents for individual tasks.
 
 > **2026-10-22 A758-6 update:** `cashConfirmed` is gone from the refund request; cancel results now

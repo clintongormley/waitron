@@ -1,5 +1,10 @@
 # A495: change the business-day start without regrouping history
 
+> **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
+> Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
+> `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)
+> carries the reporting example. References below describe the earlier scripts.
+
 > 2026-10-18, A788: dated scheduling, Replace, Cancel and `hours.clock_change_pending` are replaced: a new start takes effect at the next changeover — see `docs/superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md`.
 
 You can schedule a new business-day start for a future date. Reports use the start belonging to each date, rather than applying today's setting to every sale. The preceding day becomes shorter or longer once; existing historical windows and recorded closes stay unchanged.

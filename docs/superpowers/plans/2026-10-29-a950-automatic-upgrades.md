@@ -1,5 +1,10 @@
 > 2026-10-29, A1206: the start-again note and its floor are retired, so the note-floor overlay this plan builds (`floor.mjs`, `upgrade-floor-entry.ts`) must be re-planned before anyone builds it.
 
+> **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
+> Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
+> `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)
+> carries the reporting example. References below describe the earlier scripts.
+
 **Execution authority, 29 October 2026:** the owner approved option A: build each eligible cut in its own pull request, respecting every named prerequisite and existing experiment, fiscal and hardware boundary. This supersedes the planning-only approval statements below. Cut 1 supplies pure policy libraries; application and real-platform qualification remain separate.
 
 # A950 Automatic Upgrades Implementation Plan

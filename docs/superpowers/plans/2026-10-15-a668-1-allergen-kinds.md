@@ -1,5 +1,10 @@
 # Lane G A668-1: allergen kinds implementation plan
 
+> **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
+> Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
+> `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)
+> carries the reporting example. References below describe the earlier scripts.
+
 > **Execution:** implement inline with `superpowers:executing-plans`. Before writing implementation or test code, read `superpowers:test-driven-development`. Complete all four tasks in one slice-1 PR; use one Claude whole-branch run-it review during `finish-branch`, after its initial rebase. No per-task agents or extra review wave.
 
 **Goal:** replace allergen declarations with `{ kinds?: Kind[] }` throughout storage, validation, derivation, authoring and existing readers, without inventing cereal or nut kinds.

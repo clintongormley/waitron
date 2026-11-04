@@ -1,5 +1,10 @@
 # A788: the business day's start changes at the next changeover
 
+> **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
+> Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
+> `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)
+> carries the reporting example. References below describe the earlier scripts.
+
 **Status:** built on branch `feat/a788-business-day-next-changeover` (2026-10-18), to the plan
 `docs/superpowers/plans/2026-10-18-a788-business-day-next-changeover.md`; answered by the owner on
 2026-10-18 (all four questions answered A; section 9). No product code is changed by this document.

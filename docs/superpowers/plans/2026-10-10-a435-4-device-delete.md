@@ -1,5 +1,10 @@
 # A435 step 4: Device Delete Implementation Plan
 
+> **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
+> Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
+> `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)
+> carries the reporting example. References below describe the earlier scripts.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. An implementer that passes about 150 tool calls with its task unfinished stops at a passing (or cleanly red) point, commits, and returns a handover: what is done, what is left, the files, and each check's state. A fresh implementer continues from it.
 
 **Goal:** Add a permanent Delete beside Disable for devices. Delete refuses while a payment is in progress on the device, signs everyone out of it and ends the rest of its live work, removes its settings, and keeps the device row so history still names it. It reuses step 2's impact read, delete shape and confirmation dialog.

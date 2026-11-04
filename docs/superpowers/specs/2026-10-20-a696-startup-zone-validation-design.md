@@ -1,5 +1,10 @@
 # A696: validate the saved venue zone before admitting trading
 
+> **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
+> Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
+> `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)
+> carries the reporting example. References below describe the earlier scripts.
+
 > **Implementation landed, 1 November 2026:** [#2369](https://github.com/clintongormley/waitron/pull/2369).
 > Earlier approval, build and landing status below records its stated date.
 

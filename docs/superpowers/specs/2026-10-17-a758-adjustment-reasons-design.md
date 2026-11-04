@@ -1,5 +1,10 @@
 # A758 — Voids and comps: the rules, the owner's answers, and a page of their own
 
+> **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
+> Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
+> `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)
+> carries the reporting example. References below describe the earlier scripts.
+
 > **2026-10-22 A758-7 update:** §3.8 item 4 is built as Finish table's counter collection
 > ([plan](../plans/2026-10-22-a758-7-collect-at-counter.md)); the database's settled-order freeze
 > gained the one exception it needed. A758 is finished: its backlog entry and its detail in
