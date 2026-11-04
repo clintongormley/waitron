@@ -95,6 +95,27 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     treatment: "inside the copy; keyed by M1's node id; M2 reads its own or none",
   },
   {
+    item: "document_delivery_requests",
+    where: "venue.db",
+    class: "source-only",
+    treatment:
+      "inside the copy; retains the originating node and recovery epoch; routing must not adopt these rows under another origin",
+  },
+  {
+    item: "document_delivery_sequences",
+    where: "venue.db",
+    class: "source-only",
+    treatment:
+      "inside the copy; retains the originating node and recovery epoch; routing must not adopt these rows under another origin",
+  },
+  {
+    item: "device_invoice_save_operations",
+    where: "venue.db",
+    class: "source-only",
+    treatment:
+      "inside the copy; retains the originating node and recovery epoch; routing must not adopt these rows under another origin",
+  },
+  {
     item: "fiscal_certificate_installs",
     where: "venue.db",
     class: "transferred",

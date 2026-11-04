@@ -59,7 +59,7 @@ function api(overrides: Partial<DocumentRecoveryApi> = {}): DocumentRecoveryApi 
 }
 afterEach(async () => {
   vi.restoreAllMocks();
-  for (const instance of instances.splice(0)) instance.close();
+  for (const instance of instances.splice(0)) instance?.close();
   await new Promise<void>((resolve, reject) => {
     const request = indexedDB.deleteDatabase("waitron-document-routing-v1");
     request.onsuccess = () => resolve();
