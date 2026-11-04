@@ -4,6 +4,9 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  orderDraftLines,
+  orderDraftRecalledLines,
+  orderDrafts,
   orderGroupEvents,
   orderGroupHoldStations,
   orderGroups,
@@ -16,6 +19,7 @@ import { createPrinter } from "@waitron/printing";
 import { setRoutingCell } from "@waitron/venue-service";
 import { createCourse, createStation } from "./kitchen.js";
 import { copyHeldGroups, snoozeReminder } from "./order-groups.js";
+import { saveDraft } from "./order-drafts.js";
 import { insertPartyBill } from "./parties.js";
 import { readBillEditState } from "./bill-editing.js";
 import { recallToDraft } from "./draft-recall.js";
@@ -410,5 +414,216 @@ describe("A803 waiting copy: copyHeldGroups", () => {
 
     expect((await groupRow(copies.get(g)!)).remindAt).toBeNull();
     expect((await groupRow(g)).remindAt).toBe(snoozed);
+  });
+});
+
+/** Recalls the dish into its bill's open draft with the real `recallToDraft`; returns the draft. */
+async function recall(partyId: string, billId: string, lineId: string): Promise<string> {
+  const settings = await inTx(v, (tx) => readChangesAfterSending(tx));
+  const command = await commandFor(v, partyId);
+  try {
+    const recalled = await inTx(v, async (tx) => {
+      await setChangesAfterSending(tx, "held-or-waiting");
+      return recallToDraft(tx, v.cfg, partyId, lineId, {
+        ...command,
+        operatorId: adminId(),
+        expectedEdit: await readBillEditState(tx, billId),
+        submissionId: randomUUID(),
+      });
+    });
+    return recalled.draft.id;
+  } finally {
+    await inTx(v, async (tx) => {
+      for (const [stationId, value] of settings)
+        await setChangesAfterSending(tx, value, [stationId]);
+    });
+  }
+}
+
+/** An open draft on the bill, made by hand. */
+async function openDraft(partyId: string, billId: string): Promise<string> {
+  const [draft] = await inTx(v, (tx) =>
+    tx
+      .insert(orderDrafts)
+      .values({ partyId, billId, ownerId: OPERATOR })
+      .returning({ id: orderDrafts.id }),
+  );
+  return draft!.id;
+}
+
+/** A fresh Agua in the draft, placed by `place`. */
+async function draftLine(
+  draftId: string,
+  position: number,
+  place: { slot: number; joinGroupId?: string; afterGroupId?: string },
+): Promise<string> {
+  const [line] = await inTx(v, (tx) =>
+    tx
+      .insert(orderDraftLines)
+      .values({
+        draftId,
+        position,
+        menuItemId: v.item("Agua"),
+        options: [],
+        extras: [],
+        quantity: 1000,
+        slot: place.slot,
+        joinGroupId: place.joinGroupId ?? null,
+        afterGroupId: place.afterGroupId ?? null,
+      })
+      .returning({ id: orderDraftLines.id }),
+  );
+  return line!.id;
+}
+
+function draftLineRows(draftId: string) {
+  return v.db
+    .select()
+    .from(orderDraftLines)
+    .where(eq(orderDraftLines.draftId, draftId))
+    .orderBy(asc(orderDraftLines.position));
+}
+
+function recalledRows(draftId: string) {
+  return v.db
+    .select()
+    .from(orderDraftRecalledLines)
+    .where(eq(orderDraftRecalledLines.draftId, draftId))
+    .orderBy(asc(orderDraftRecalledLines.position));
+}
+
+/** Replaces `from` by `to` in the row's two group references. */
+function pointedAt<T extends { joinGroupId: string | null; afterGroupId: string | null }>(
+  row: T,
+  from: string,
+  to: string,
+): T {
+  return {
+    ...row,
+    joinGroupId: row.joinGroupId === from ? to : row.joinGroupId,
+    afterGroupId: row.afterGroupId === from ? to : row.afterGroupId,
+  };
+}
+
+describe("A803 waiting copy: copyHeldGroups and drafts", () => {
+  it("A803 waiting copy: copyHeldGroups points the moving bill's draft at the copy", async () => {
+    const a = await seatWith([{ names: ["Tarta", "Flan", "Paella"], release: "hold" }]);
+    const tarta = await lineOf(a.billId, "Tarta");
+    const flan = await lineOf(a.billId, "Flan");
+    const paella = await lineOf(a.billId, "Paella");
+    const g = tarta.groupId!;
+    const draftId = await recall(a.partyId, a.billId, flan.id);
+    const [recalledFlan] = await recalledRows(draftId);
+    expect(recalledFlan).toMatchObject({ sourceLineId: flan.id, joinGroupId: g, slot: 0 });
+    const next =
+      Math.max(
+        recalledFlan!.position,
+        ...(await draftLineRows(draftId)).map((row) => row.position),
+      ) + 1;
+    await draftLine(draftId, next, { slot: 0, joinGroupId: g });
+    await draftLine(draftId, next + 1, { slot: 2, afterGroupId: g });
+    await inTx(v, (tx) =>
+      tx.insert(orderDraftRecalledLines).values({
+        draftId,
+        sourceLineId: paella.id,
+        position: next + 2,
+        slot: 2,
+        afterGroupId: g,
+      }),
+    );
+    const linesBefore = await draftLineRows(draftId);
+    const recalledBefore = await recalledRows(draftId);
+    expect(
+      linesBefore.filter((row) => row.joinGroupId === g || row.afterGroupId === g),
+    ).toHaveLength(2);
+    expect(
+      recalledBefore.filter((row) => row.joinGroupId === g || row.afterGroupId === g),
+    ).toHaveLength(2);
+    const b = await otherParty();
+
+    const copies = await copy(a.billId, a.partyId, b, [tarta.id]);
+
+    const copyId = copies.get(g)!;
+    expect((await groupRow(g)).state).toBe("held");
+    expect(await draftLineRows(draftId)).toEqual(
+      linesBefore.map((row) => pointedAt(row, g, copyId)),
+    );
+    expect(await recalledRows(draftId)).toEqual(
+      recalledBefore.map((row) => pointedAt(row, g, copyId)),
+    );
+  });
+
+  it("A803 waiting copy: copyHeldGroups leaves a staying bill's draft on the source group", async () => {
+    const a = await seatWith([{ names: ["Flan", "Tarta"], release: "hold" }]);
+    const g = (await lineOf(a.billId, "Flan")).groupId!;
+    const bill2 = await moveToNewBill(a.partyId, a.billId, [(await lineOf(a.billId, "Tarta")).id]);
+    const staying = await openDraft(a.partyId, a.billId);
+    await draftLine(staying, 0, { slot: 0, joinGroupId: g });
+    await draftLine(staying, 1, { slot: 1, afterGroupId: g });
+    const before = await draftLineRows(staying);
+    const b = await otherParty();
+
+    const copies = await copy(bill2, a.partyId, b, [(await lineOf(bill2, "Tarta")).id]);
+
+    expect(copies.has(g)).toBe(true);
+    expect(await draftLineRows(staying)).toEqual(before);
+  });
+
+  it("A803 waiting copy: copyHeldGroups leaves a reference to a group that got no copy as it was", async () => {
+    const a = await seatWith([
+      { names: ["Tarta"], release: "hold" },
+      { names: ["Flan"], release: "hold" },
+    ]);
+    const tarta = await lineOf(a.billId, "Tarta");
+    const g3 = (await lineOf(a.billId, "Flan")).groupId!;
+    const draftId = await openDraft(a.partyId, a.billId);
+    await draftLine(draftId, 0, { slot: 0, joinGroupId: g3 });
+    await draftLine(draftId, 1, { slot: 1, afterGroupId: g3 });
+    const before = await draftLineRows(draftId);
+    const b = await otherParty();
+
+    const copies = await copy(a.billId, a.partyId, b, [tarta.id]);
+
+    expect([...copies.keys()]).toEqual([tarta.groupId]);
+    expect(await draftLineRows(draftId)).toEqual(before);
+  });
+
+  it("A803 waiting copy: copyHeldGroups: a staying bill's draft naming a source group the copy removed is refused at its next save, as for any emptied held group", async () => {
+    const a = await seatWith([{ names: ["Tarta"], release: "hold" }]);
+    const g = (await lineOf(a.billId, "Tarta")).groupId!;
+    const bill2 = await moveToNewBill(a.partyId, a.billId, [(await lineOf(a.billId, "Tarta")).id]);
+    const save = (lines: unknown[]) =>
+      inTx(v, async (tx) => {
+        const edit = await readBillEditState(tx, a.billId);
+        return saveDraft(tx, v.cfg, a.partyId, OPERATOR, {
+          expectedEdit: edit,
+          billId: a.billId,
+          draftId: edit.draftId,
+          revision: edit.draftRevision ?? 0,
+          lines,
+        });
+      });
+    const saved = await save([
+      { menuItemId: v.item("Agua"), quantity: "1", slot: 0, joinGroupId: g, courseId: null },
+    ]);
+    const [line] = saved.draft!.lines;
+    expect(line).toMatchObject({ joinGroupId: g });
+    const b = await otherParty();
+
+    await copy(bill2, a.partyId, b, [(await lineOf(bill2, "Tarta")).id]);
+
+    expect((await groupRow(g)).state).toBe("removed");
+    await expect(
+      save([
+        {
+          id: line!.id,
+          menuItemId: v.item("Agua"),
+          quantity: "1",
+          slot: 0,
+          joinGroupId: g,
+          courseId: null,
+        },
+      ]),
+    ).rejects.toMatchObject({ code: "group.not_held", params: { groupId: g } });
   });
 });

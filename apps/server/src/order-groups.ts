@@ -21,7 +21,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import type { SQL } from "drizzle-orm";
+import type { Column, SQL } from "drizzle-orm";
 import { staffPresentationName } from "@waitron/catalogue";
 import {
   devices,
@@ -32,6 +32,7 @@ import {
   orderGroupEvents,
   orderGroupHoldStations,
   orderGroups,
+  orderDraftLines,
   orderDraftRecalledLines,
   orderDrafts,
   ticketItems,
@@ -763,6 +764,7 @@ export async function copyHeldGroups(
   const rows = await tx
     .select({
       lineId: workingOrderLines.id,
+      billId: workingOrderLines.workingOrderId,
       groupId: orderGroups.id,
       submittedBy: orderGroups.submittedBy,
       holdPrintedAt: orderGroups.holdPrintedAt,
@@ -866,8 +868,66 @@ export async function copyHeldGroups(
       attendance,
     );
   }
+  await pointDraftsAtCopies(tx, new Set(rows.map((row) => row.billId)), copies);
   await removeEmptiedHeldGroups(tx, fromPartyId, [...sources.keys()], operatorId, attendance);
   return copies;
+}
+
+/**
+ * Rewrites the open drafts of `billIds` from each source group to its copy. A staying bill's
+ * draft is left alone: `validateDraftPlaces` holds a draft to its own party's groups.
+ */
+async function pointDraftsAtCopies(
+  tx: Transaction,
+  billIds: ReadonlySet<string>,
+  copies: ReadonlyMap<string, string>,
+): Promise<void> {
+  const drafts = tx
+    .select({ id: orderDrafts.id })
+    .from(orderDrafts)
+    .where(and(inArray(orderDrafts.billId, [...billIds]), eq(orderDrafts.state, "open")));
+  const sourceIds = [...copies.keys()];
+  const toCopy = (column: Column) =>
+    sql`case ${column} ${sql.join(
+      [...copies].map(([sourceId, copyId]) => sql`when ${sourceId} then ${copyId}`),
+      sql` `,
+    )} else ${column} end`;
+  await tx
+    .update(orderDraftLines)
+    .set({ joinGroupId: toCopy(orderDraftLines.joinGroupId) })
+    .where(
+      and(
+        inArray(orderDraftLines.draftId, drafts),
+        inArray(orderDraftLines.joinGroupId, sourceIds),
+      ),
+    );
+  await tx
+    .update(orderDraftLines)
+    .set({ afterGroupId: toCopy(orderDraftLines.afterGroupId) })
+    .where(
+      and(
+        inArray(orderDraftLines.draftId, drafts),
+        inArray(orderDraftLines.afterGroupId, sourceIds),
+      ),
+    );
+  await tx
+    .update(orderDraftRecalledLines)
+    .set({ joinGroupId: toCopy(orderDraftRecalledLines.joinGroupId) })
+    .where(
+      and(
+        inArray(orderDraftRecalledLines.draftId, drafts),
+        inArray(orderDraftRecalledLines.joinGroupId, sourceIds),
+      ),
+    );
+  await tx
+    .update(orderDraftRecalledLines)
+    .set({ afterGroupId: toCopy(orderDraftRecalledLines.afterGroupId) })
+    .where(
+      and(
+        inArray(orderDraftRecalledLines.draftId, drafts),
+        inArray(orderDraftRecalledLines.afterGroupId, sourceIds),
+      ),
+    );
 }
 
 /**
