@@ -216,11 +216,13 @@ export class DocumentPrinterForm {
         }
       }
       if (generation !== this.#generation) return;
-      this.#recoveredGeneration = generation;
-      if (this.state === "unknown")
+      const resolved = this.#recovery.canSubmit(subject) && !this.#saveUncertain;
+      this.#recoveredGeneration = resolved ? generation : -1;
+      if (!resolved && !this.#isAccepted()) this.state = "unknown";
+      else if (resolved && this.state === "unknown")
         this.state = this.#offers!.printers.length === 0 ? "empty" : "ready";
     } catch {
-      if (generation === this.#generation) this.state = "unknown";
+      if (generation === this.#generation && !this.#isAccepted()) this.state = "unknown";
     }
   }
   async submit(api: DocumentDeliveryApi): Promise<void> {

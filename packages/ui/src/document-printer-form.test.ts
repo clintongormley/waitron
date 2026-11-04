@@ -714,3 +714,42 @@ describe("offer refresh and unavailable protocol states", () => {
     expect(model.canPrint).toBe(false);
   });
 });
+
+it("a reconciliation that is still prepared stays visibly unknown and cannot release Print", async () => {
+  const { model } = await form();
+  const api = seat({
+    accept: async () => ({ state: "prepared" }),
+    recover: async () => ({ state: "prepared" }),
+  });
+  model.open(offers(), a);
+  await model.recover(api);
+  await model.submit(api);
+  expect(model.state).toBe("unknown");
+  await model.recover(api);
+  expect(model.state).toBe("unknown");
+  expect(model.canPrint).toBe(false);
+});
+
+it("known acceptance recovered from inventory stays accepted when its acknowledgement is offline", async () => {
+  const { model, recovery } = await form();
+  const operation = { origin, key: crypto.randomUUID() };
+  const accepted = result(operation.key);
+  const api = seat({
+    inventory: async () => [
+      {
+        operation,
+        subjectId: saleId,
+        fingerprint: "a".repeat(64),
+        outcome: { state: "accepted", result: accepted },
+      },
+    ],
+    acknowledge: async () => {
+      throw new Error("offline");
+    },
+  });
+  model.open(offers(), a);
+  await model.recover(api);
+  expect(model.state).toBe("accepted");
+  expect(model.canPrint).toBe(false);
+  expect(await recovery.readPreference("receipt")).toBe(a);
+});
