@@ -18,7 +18,7 @@ import { damagePages, checkpointed } from "../test/damaged-database.js";
 import { foreignHotJournal, foreignWal } from "../test/foreign-journal.js";
 
 it("reports a file that is not a database as damaged with errcode 26, nothing counted", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   await writeFile(join(held.roots.venueDir, "venue.db"), "not a database");
   expect(await readDatabase(held)).toEqual({
     kind: "damaged",
@@ -28,7 +28,7 @@ it("reports a file that is not a database as damaged with errcode 26, nothing co
 });
 
 it("reports damage in one table with errcode 11, keeping every other table's counts", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   damagePages(venueDb(held), "department_days");
   const answer = await readDatabase(held);
   expect(answer).toMatchObject({ kind: "damaged", code: "errcode 11" });
@@ -39,7 +39,7 @@ it("reports damage in one table with errcode 11, keeping every other table's cou
 });
 
 it("reports damage in tenants beside an invoice, still counting the kept rows and the invoice record", async () => {
-  const held = await heldSetup({ invoices: 1, recovery: false });
+  const held = await heldSetup({ invoices: 1 });
   damagePages(venueDb(held), "tenants");
   const answer = await readDatabase(held);
   expect(answer).toMatchObject({ kind: "damaged", code: "errcode 11" });
@@ -49,7 +49,7 @@ it("reports damage in tenants beside an invoice, still counting the kept rows an
 });
 
 it("reports a damaged invoice table with no sale as damaged, with nothing kept and no records seen", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   damagePages(venueDb(held), "registros_facturacion");
   expect(await readDatabase(held)).toMatchObject({
     kind: "damaged",
@@ -59,7 +59,7 @@ it("reports a damaged invoice table with no sale as damaged, with nothing kept a
 });
 
 it("marks the read damaged when a module seat fails with code 11", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   const modules = withHoldings(held, async () => {
     throw Object.assign(new Error("x"), { errcode: 11 });
   });
@@ -71,7 +71,7 @@ it("marks the read damaged when a module seat fails with code 11", async () => {
 });
 
 it("reports a damaged first page with errcode 26 and nothing counted", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   damagePages(venueDb(held), null);
   expect(await readDatabase(held)).toEqual({
     kind: "damaged",
@@ -81,7 +81,7 @@ it("reports a damaged first page with errcode 26 and nothing counted", async () 
 });
 
 it("is not ready, never damaged, for an intact database with another database's hot journal beside it", async () => {
-  const held = await heldSetup({ invoices: 1, recovery: false });
+  const held = await heldSetup({ invoices: 1 });
   checkpointed(venueDb(held));
   const before = await readFile(venueDb(held));
   foreignHotJournal(`${venueDb(held)}-journal`, "rolls-back");
@@ -93,13 +93,13 @@ it("is not ready, never damaged, for an intact database with another database's 
 });
 
 it("reads the same intact database without the journal, with its invoice record", async () => {
-  const held = await heldSetup({ invoices: 1, recovery: false });
+  const held = await heldSetup({ invoices: 1 });
   checkpointed(venueDb(held));
   expect(await readDatabase(held)).toMatchObject({ kind: "read", holdings: { records: 1 } });
 });
 
 it("is not ready, never damaged, for a database the box may not open", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   checkpointed(venueDb(held));
   await chmod(venueDb(held), 0o000);
   try {
@@ -119,7 +119,7 @@ it.each([
 ] as const)(
   "an opening that fails at %s with code %i answers %o",
   async (stage, errcode, answer) => {
-    const held = await heldSetup({ recovery: false });
+    const held = await heldSetup();
     vi.mocked(provisioning.openImmutableWhenWalEmpty).mockResolvedValueOnce({
       kind: "failed",
       stage,
@@ -135,7 +135,7 @@ it.each([
 );
 
 it("reports a 0-byte venue.db as damaged (no such table), nothing counted", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   await writeFile(venueDb(held), "");
   expect(await readDatabase(held)).toEqual({
     kind: "damaged",
@@ -145,13 +145,13 @@ it("reports a 0-byte venue.db as damaged (no such table), nothing counted", asyn
 });
 
 it("marks the read damaged when a module seat finds its table missing", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   write(held, ["drop table registros_facturacion"]);
   expect(await readDatabase(held)).toMatchObject({ kind: "damaged", code: "no such table" });
 });
 
 it("is not ready, never damaged, when a module seat fails with code 1 for another reason", async () => {
-  const held = await heldSetup({ recovery: false });
+  const held = await heldSetup();
   const modules = withHoldings(held, async () => {
     throw Object.assign(new Error('near "x": syntax error'), {
       code: "ERR_SQLITE_ERROR",
@@ -165,7 +165,7 @@ it("is not ready, never damaged, when a module seat fails with code 1 for anothe
 });
 
 it("is not ready, never damaged, for an intact database holding an invoice with an empty-original journal from another database beside it", async () => {
-  const held = await heldSetup({ invoices: 1, recovery: false });
+  const held = await heldSetup({ invoices: 1 });
   checkpointed(venueDb(held));
   const before = await readFile(venueDb(held));
   foreignHotJournal(`${venueDb(held)}-journal`, "empty-original");
@@ -182,7 +182,7 @@ it.each([
 ] as const)(
   "an intact database holding an invoice, with another database's -wal beside it %s, is damaged and still counts the invoice its main file holds",
   async (_label, shape, code) => {
-    const held = await heldSetup({ invoices: 1, recovery: false });
+    const held = await heldSetup({ invoices: 1 });
     checkpointed(venueDb(held));
     foreignWal(`${venueDb(held)}-wal`, shape);
     const before = await files(held.roots.venueDir);
@@ -195,7 +195,7 @@ it.each([
 );
 
 it("a damaged database with no invoice and its own pending -wal still reads as damaged with nothing kept", async () => {
-  const held = await heldSetup({ pendingWal: true, recovery: false });
+  const held = await heldSetup({ pendingWal: true });
   const wal = await readFile(`${venueDb(held)}-wal`);
   damagePages(venueDb(held), "department_days");
   await writeFile(`${venueDb(held)}-wal`, wal);
@@ -212,7 +212,7 @@ it.each([
 ])(
   "is not ready when a module seat fails on the main file read alone (%s)",
   async (failure, code) => {
-    const held = await heldSetup({ pendingWal: true, recovery: false });
+    const held = await heldSetup({ pendingWal: true });
     const modules = withHoldings(held, async (db) => {
       if (!PRIVATE_COPY.test(await mainFile(db))) throw failure;
       return { records: 0, accepted: 0 };

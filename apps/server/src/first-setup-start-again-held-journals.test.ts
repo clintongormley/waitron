@@ -23,14 +23,14 @@ import { foreignHotJournal, foreignWal } from "../test/foreign-journal.js";
 import { checkpointed, damagePages } from "../test/damaged-database.js";
 
 it("an intact held database with an invoice and another database's hot journal beside it is refused setup.not_ready, and nothing changes", async () => {
-  const f = await heldSetup({ invoices: 1, recovery: false });
+  const f = await heldSetup({ invoices: 1 });
   foreignHotJournal(`${venueDb(f)}-journal`, "rolls-back");
   expect(await labelOf(f)).toBe("unknown");
   await expectHeldRefused(f, { code: "setup.not_ready" });
 });
 
 it("an intact held database with an invoice and an empty-original journal from another database beside it is refused setup.not_ready, and nothing changes", async () => {
-  const f = await heldSetup({ invoices: 1, recovery: false });
+  const f = await heldSetup({ invoices: 1 });
   checkpointed(venueDb(f));
   foreignHotJournal(`${venueDb(f)}-journal`, "empty-original");
   await expectHeldRefused(f, {
@@ -40,7 +40,7 @@ it("an intact held database with an invoice and an empty-original journal from a
 });
 
 it("a held database missing its invoice table: the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
-  const f = await heldSetup({ recovery: false });
+  const f = await heldSetup();
   dropTables(f, [invoiceTable]);
   const shown = await unreadableSummary(f);
   expect(shown).toEqual({ reached: "fiscal-finished", databaseUnreadable: true });
@@ -48,7 +48,7 @@ it("a held database missing its invoice table: the summary says it cannot be rea
 });
 
 it("a held database missing a table beside a readable sale refuses kept-records, and deletes nothing", async () => {
-  const f = await heldSetup({ invoices: 1, recovery: false });
+  const f = await heldSetup({ invoices: 1 });
   dropTables(f, ["department_days"]);
   await expectHeldRefused(f, keptRecords);
 });
@@ -59,7 +59,7 @@ it.each([
 ] as const)(
   "an intact held database with an invoice and another database's -wal beside it (%s, labelled %s) refuses kept-records, and deletes nothing",
   async (shape, label) => {
-    const f = await heldSetup({ invoices: 1, recovery: false });
+    const f = await heldSetup({ invoices: 1 });
     checkpointed(venueDb(f));
     foreignWal(`${venueDb(f)}-wal`, shape);
     expect(await labelOf(f)).toBe(label);
@@ -68,7 +68,7 @@ it.each([
 );
 
 it("a damaged held database with no invoice and its own pending -wal: the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
-  const f = await heldSetup({ pendingWal: true, recovery: false });
+  const f = await heldSetup({ pendingWal: true });
   const wal = await readFile(`${venueDb(f)}-wal`);
   damagePages(venueDb(f), "department_days");
   await writeFile(`${venueDb(f)}-wal`, wal);
@@ -82,7 +82,7 @@ it("an invoice record with the envios table missing refuses kept-records even wh
     "fiscal-verifactu",
     manifestSets().flatMap((set) => set.appendOnlyTables),
   );
-  const f = await heldSetup({ invoices: 1, recovery: false });
+  const f = await heldSetup({ invoices: 1 });
   dropTables(f, ["envios"]);
   await expectHeldRefused(f, {
     ...keptRecords,
@@ -91,18 +91,18 @@ it("an invoice record with the envios table missing refuses kept-records even wh
 });
 
 it("with a readable held venue.db, a damaged node.db refuses the summary and Start again setup.not_ready, and nothing changes", async () => {
-  const f = await heldSetup({ recovery: false });
+  const f = await heldSetup();
   await writeFile(join(f.roots.venueDir, "node.db"), "not a database");
   await expectHeldRefused(f, { code: "setup.not_ready", reason: "node.db unreadable" });
 });
 
 it("control: without the journal, the same held database refuses kept-records", async () => {
-  const f = await heldSetup({ invoices: 1, recovery: false });
+  const f = await heldSetup({ invoices: 1 });
   await expectHeldRefused(f, keptRecords);
 });
 
 it("a damaged held database whose private copy fails is refused setup.not_ready, and nothing changes", async () => {
-  const f = await heldSetup({ pendingWal: true, recovery: false });
+  const f = await heldSetup({ pendingWal: true });
   const wal = await readFile(`${venueDb(f)}-wal`);
   damagePages(venueDb(f), "department_days");
   // The damage is written with the -wal checkpointed; putting it back keeps the copy path.
@@ -113,7 +113,7 @@ it("a damaged held database whose private copy fails is refused setup.not_ready,
 });
 
 it("a venue.db the box may not open is refused setup.not_ready, and nothing changes", async () => {
-  const f = await heldSetup({ recovery: false });
+  const f = await heldSetup();
   const before = await snapshot(f);
   await chmod(venueDb(f), 0o000);
   try {
@@ -137,7 +137,7 @@ it.each([
 ] as const)(
   "a readable held database labelled corrupt %s refuses as its contents say, and nothing changes",
   async (_label, options, refusal) => {
-    const f = await heldSetup({ ...options, recovery: false });
+    const f = await heldSetup({ ...options });
     const inspect = f.host.resolution.inspectFirstSetupResolution;
     const host = {
       ...f.host,
@@ -159,7 +159,7 @@ it.each([
 ] as const)(
   "%s beside a damaged database refuse %s, and nothing changes",
   async (_label, options, cause) => {
-    const f = await heldSetup({ ...options, recovery: false });
+    const f = await heldSetup({ ...options });
     damagePages(venueDb(f), "department_days");
     await expectHeldRefused(f, { code: "setup.start_again_refused", params: { cause } });
   },

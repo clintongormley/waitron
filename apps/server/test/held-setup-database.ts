@@ -1,18 +1,17 @@
 // Imported first: its `vi.mock` of the internet clock must be in place before any fiscal module loads.
-import { archiveHost, clock, key, root } from "./hour-recovery-host.js";
+import { archiveHost, clock, root } from "./hour-recovery-host.js";
 import { randomBytes } from "node:crypto";
 import { copyFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { sql, eq, and } from "drizzle-orm";
-import { afterAll, afterEach, expect } from "vitest";
+import { afterAll, expect } from "vitest";
 import { invoiceSeries, openVenueDatabase, withTransaction } from "@waitron/db";
 import { applyMigrationSet } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { parseModuleConfig } from "@waitron/module";
 import { loadKeyRing } from "@waitron/credentials";
-import { createFirstSetupBackupWorkspace } from "@waitron/provisioning";
 import { recordSale } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { nodeId, seriesId } from "@waitron/shared";
@@ -22,10 +21,6 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { hourFirstFiscalFixture } from "./hour-first-fiscal.js";
 import { keepHourRecoveryDocument } from "./hour-recovery-delivery.js";
 import { MODULE, PASSWORD } from "./first-fiscal.js";
-import { createFirstSetupBackupRecovery } from "../src/first-setup-backup-recovery.js";
-import { decryptArtifact } from "../src/artifact-cipher.js";
-import { sealFixtureArtifact } from "./fixture-salt.js";
-import { packArchive, unpackArchive } from "../src/backup-archive.js";
 import { establishNodeIdentity } from "../src/node-identity.js";
 import { seedTermZeroMembership } from "../src/membership-seed.js";
 import { publicFirstSetupState } from "../src/first-setup-owner.js";
@@ -42,16 +37,11 @@ export interface HeldSetupOptions {
   tradingSettings?: boolean;
   /** One committed row left in `venue.db-wal` and not in `venue.db`. */
   pendingWal?: boolean;
-  /** `false`: no backup recovery is started beside the held database. */
-  recovery?: boolean;
 }
 
-type BackupRecovery = ReturnType<typeof createFirstSetupBackupRecovery>;
 interface HeldSetup {
   roots: { stateDir: string; venueDir: string };
   host: Awaited<ReturnType<typeof hourFirstFiscalFixture>>["host"];
-  workspace: ReturnType<typeof createFirstSetupBackupWorkspace>;
-  service: BackupRecovery | undefined;
   signIn(): Promise<{
     owner: { attemptId: string; revision: number; ownerGeneration: number; capability: string };
     ids: { inspectionId: string; revision: number; ownerGeneration: number };
@@ -60,11 +50,6 @@ interface HeldSetup {
   /** `archiveHost()`'s backup. A wipe deletes its hour choice, so a restore after one chooses again. */
   archive: Awaited<ReturnType<typeof archiveHost>>;
 }
-
-const services: { dispose(): Promise<void> }[] = [];
-afterEach(async () => {
-  for (const service of services.splice(0)) await service.dispose();
-});
 
 const ACCOUNT_KEY = Buffer.alloc(32, 8).toString("base64");
 
@@ -98,17 +83,10 @@ function migratedTemplate(): Promise<string> {
 }
 
 /**
- * A first setup activated for real into `<venue>/venue.db` with every module, then a backup
- * recovery opened, prepared and stopped beside it.
+ * A first setup activated for real into `<venue>/venue.db` with every module.
  * Call it once per test: it reuses `archiveHost()`'s single root. Importing this file brings in
  * `hour-recovery-host.ts`'s database suite, hooks and mocks.
  */
-export function heldSetup(
-  options: HeldSetupOptions & { recovery: false },
-): Promise<HeldSetup & { service: undefined }>;
-export function heldSetup(
-  options?: HeldSetupOptions & { recovery?: true },
-): Promise<HeldSetup & { service: BackupRecovery }>;
 export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSetup> {
   const status = options.status ?? "committed";
   const f = await archiveHost();
@@ -279,54 +257,6 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
       await held.close();
     }
 
-    const workspace = createFirstSetupBackupWorkspace(f.roots);
-    let service: BackupRecovery | undefined;
-    if (options.recovery !== false) {
-      const entries = unpackArchive(decryptArtifact(f.restore.artifact, f.restore.recoveryKey));
-      entries.push({
-        name: "secrets/module-evidence/fiscal-verifactu/hour-history.json",
-        bytes: Buffer.from(
-          JSON.stringify({ reference: "prepared-hours", complete: true, records: [] }),
-        ),
-      });
-      const artifact = sealFixtureArtifact(packArchive(entries), f.restore.recoveryKey);
-      service = createFirstSetupBackupRecovery({
-        ...f.roots,
-        environment: "preproduction",
-        modules: ALL_MODULES,
-        host,
-        workspace,
-        sources: {
-          ...f.restore,
-          bucket: { litestreamBin: "/unused", now: () => new Date(), log: () => {} },
-        },
-        log: () => {},
-      });
-      services.push(service);
-      await host.resolution.withVenueExclusion(async () => {});
-      const inspected = await host.resolution.inspectFirstSetupResolution();
-      const session = await service.open(
-        {
-          observation: {
-            inspectionId: inspected.inspectionId,
-            revision: inspected.revision,
-            ownerGeneration: inspected.ownerGeneration,
-          },
-          source: {
-            kind: "archive",
-            artifact: Uint8Array.from(artifact),
-            recoveryKey: f.restore.recoveryKey,
-            environment: "preproduction",
-          },
-          nodeRecoverySecret: key.secret,
-          context: { oldBoxGone: true, soleRecovery: true },
-        },
-        { onBox: false },
-      );
-      await service.prepare(session.sessionId, { action: "clock-challenge" }, { onBox: false });
-      await service.close(session.sessionId);
-    }
-
     /** The setup owner signed in again with the setup password, and the ids of a fresh inspection. */
     const signIn = async () => {
       const before = await host.resolution.inspectFirstSetupResolution();
@@ -352,7 +282,7 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
         },
       };
     };
-    return { roots: f.roots, host, workspace, service, signIn, installationName, archive: f };
+    return { roots: f.roots, host, signIn, installationName, archive: f };
   } finally {
     if (open) await held.close();
   }

@@ -96,13 +96,11 @@ export async function heldConfirmationRecords(stateDir: string) {
   );
 }
 
-/** Sends Start again, and checks the refusal changed nothing: files, journal, records. */
+/** Sends Start again, and checks the refusal changed nothing: files, marker, records. */
 export async function expectStartAgainRefused(f: Held, send: () => Promise<void>, refusal: object) {
   const before = await snapshot(f);
-  const last = (await f.workspace.readChain()).at(-1);
   await expect(send()).rejects.toMatchObject(refusal);
   expect(await snapshot(f)).toEqual(before);
-  expect((await f.workspace.readChain()).at(-1)).toEqual(last);
   expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
   await expect(access(join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR))).rejects.toMatchObject(
     { code: "ENOENT" },

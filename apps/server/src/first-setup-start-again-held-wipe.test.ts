@@ -1,6 +1,5 @@
 import {
   holdingsRead,
-  askStartAgain,
   withoutSignIn,
   missingHeldDatabase,
   startAgainMissing,
@@ -29,7 +28,6 @@ import {
   writeStartAgainMarker,
   readStartAgainMarker,
   resolveFirstSetupBackupWorkspace,
-  assertFirstSetupBackupBootTarget,
 } from "@waitron/provisioning";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
@@ -41,7 +39,7 @@ import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
 import { runStagedRestore } from "./restore-request.js";
 
 it("a held setup database with no recovery: the summary answers and Start again deletes it with no password", async () => {
-  const f = await heldSetup({ recovery: false });
+  const f = await heldSetup();
   const { ids, actions } = await withoutSignIn(f);
   await expect(actions.startAgainSummary(ids)).resolves.toEqual({ reached: "fiscal-finished" });
   await expect(actions.startAgainFirstSetup(ids)).resolves.toBeUndefined();
@@ -50,7 +48,7 @@ it("a held setup database with no recovery: the summary answers and Start again 
 });
 
 it("a held setup database with no recovery, when the box knows no modules, refuses the summary and Start again setup.not_ready before reading what it holds, and nothing changes", async () => {
-  const f = await heldSetup({ recovery: false });
+  const f = await heldSetup();
   const host = { ...f.host, modules: undefined } as unknown as Held["host"];
   const { ids, actions } = await withoutSignIn(f, host);
   holdingsRead.calls = 0;
@@ -64,7 +62,7 @@ it("a held setup database with no recovery, when the box knows no modules, refus
 });
 
 it("a held setup database with no recovery, its venue.db missing and trading settings saved, refuses the summary and Start again setup.not_ready for state/trading.env, and nothing changes", async () => {
-  const f = await heldSetup({ recovery: false, tradingSettings: true });
+  const f = await heldSetup({ tradingSettings: true });
   for (const name of ["venue.db", "venue.db-wal", "venue.db-shm"])
     await rm(join(f.roots.venueDir, name), { force: true });
   const { ids, actions } = await withoutSignIn(f);
@@ -94,7 +92,7 @@ it("with the setup database missing and no journal, Start again's wipe deletes t
 });
 
 it("a held setup database, wiped, then the fresh-box restore writes into the usual folders", async () => {
-  const f = await heldSetup({ recovery: false });
+  const f = await heldSetup();
   const { ids, actions } = await withoutSignIn(f);
   await actions.startAgainFirstSetup(ids);
   // The backup's hour is chosen after the wipe, as on a box: the wipe deletes an earlier choice.
@@ -113,7 +111,7 @@ it("a held setup database, wiped, then the fresh-box restore writes into the usu
 }, 180_000);
 
 it("control: the same fresh-box restore beside a held setup database that was not wiped is refused, and places nothing", async () => {
-  const f = await heldSetup({ recovery: false });
+  const f = await heldSetup();
   await stageFreshRestore(f);
   const venue = (await diskSnapshot(f.roots)).venue;
   await expect(runStagedRestore(f.archive.restore)).rejects.toMatchObject({
@@ -151,22 +149,8 @@ it("control: the same fresh-box restore beside a missing setup database that was
   expect(await exists(join(f.roots.stateDir, "trading.env"))).toBe(false);
 }, 180_000);
 
-it("a held setup database beside a stopped recovery, wiped (discarding the recovery), then the fresh-box restore writes into the usual folders", async () => {
-  const f = await heldSetup();
-  await (await askStartAgain(f)).run();
-  await stageFreshRestore(f, { ...f.archive, outcome: await hourAfterWipe(f) });
-  await expect(runStagedRestore(f.archive.restore)).resolves.toBe(true);
-  expect(await exists(join(f.roots.venueDir, "venue.db"))).toBe(true);
-  expect(await exists(join(f.roots.stateDir, "trading.env"))).toBe(true);
-  expect(await exists(join(f.roots.venueDir, "first-setup-resolutions"))).toBe(false);
-  // Start again keeps the discarded recovery's record folder in the state folder.
-  expect(await exists(join(f.roots.stateDir, "first-setup-resolutions"))).toBe(true);
-  expect((await resolveFirstSetupBackupWorkspace(f.roots)).kind).toBe("absent");
-  await expect(assertFirstSetupBackupBootTarget(f.roots)).resolves.toBeUndefined();
-}, 180_000);
-
 it("a power cut during a held wipe with no recovery: the next start finishes the deletion", async () => {
-  const f = await heldSetup({ recovery: false });
+  const f = await heldSetup();
   const { ids } = await withoutSignIn(f);
   let removed = 0;
   const actions = createFirstSetupResolutionActions({
@@ -187,7 +171,7 @@ it("a power cut during a held wipe with no recovery: the next start finishes the
 });
 
 it("a deletion already marked: Start again answers setup.start_again_incomplete and the route asks for a restart", async () => {
-  const f = await heldSetup({ recovery: false });
+  const f = await heldSetup();
   const state = (await f.host.store.read())!;
   await writeStartAgainMarker(
     f.roots,

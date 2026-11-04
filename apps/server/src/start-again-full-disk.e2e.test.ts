@@ -249,44 +249,9 @@ it("without a spare file, the password step of the Start-again flow on a full di
   });
 });
 
-it("in the held state, with the box's spare file, the summary answers and Start again completes on a full disk", async (ctx) => {
-  const small = needDisk(ctx);
-  const f = await heldSetup();
-  expect(realpathSync(f.roots.venueDir).startsWith(`${process.env.TMPDIR}/`)).toBe(true);
-  vi.mocked(backupEntry.firstSetupBackupRecoveryFor).mockReturnValue(f.service);
-  const spare = join(f.roots.stateDir, SPARE_SPACE_FILE);
-  await writeFile(spare, Buffer.alloc(SPARE_SPACE_BYTES, 1));
-  const entry = await resolveFirstSetupEntry(
-    f.roots,
-    { WAITRON_ENV: "preproduction" },
-    undefined,
-    () => {},
-    spareOption(f.roots),
-  );
-  if (entry.kind !== "resolution") throw new Error("repair app missing");
-  const recoveryId = (await f.workspace.read()).at(-1)!.target.recoveryId;
-  small.fill();
-  expect(small.free()).toBeLessThan(65_536);
-
-  await startAgainOverRoutes(entry.app, "confirmRecoveryDiscard");
-
-  await expect(stat(spare)).rejects.toMatchObject({ code: "ENOENT" });
-  for (const gone of [
-    join(f.roots.venueDir, "venue.db"),
-    join(f.roots.stateDir, "modules.json"),
-    join(f.roots.stateDir, "first-setup.json"),
-  ])
-    await expect(access(gone)).rejects.toMatchObject({ code: "ENOENT" });
-  expect((await f.workspace.read()).at(-1)).toMatchObject({
-    phase: "abandoned",
-    target: { recoveryId },
-  });
-  expect(await isEmptiedTombstone(f.roots, recoveryId)).toBe(true);
-});
-
 it("in the held state with no recovery, on a full disk with the box's spare file, the spare is not released, and the summary and Start again answer 507 storage.disk_full, deleting nothing", async (ctx) => {
   const small = needDisk(ctx);
-  const f = await heldSetup({ recovery: false });
+  const f = await heldSetup();
   expect(realpathSync(f.roots.venueDir).startsWith(`${process.env.TMPDIR}/`)).toBe(true);
   vi.mocked(backupEntry.firstSetupBackupRecoveryFor).mockReset();
   const spare = join(f.roots.stateDir, SPARE_SPACE_FILE);

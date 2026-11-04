@@ -1333,6 +1333,9 @@ with the repair page's old recovery.
 | same | 50 | discard key dropped; "one record, database present" → "no record"; journal assertion deleted | a present database writes no record without a discard (`first-setup-resolution.ts:470`) | B1 |
 | same | the `it.each` "in the held state, %s, is refused setup.attempt_conflict…" (70-91), 92, 118, 203, 217 | discard key dropped from the send | refusals unchanged | B1 |
 | same | 231 | retitled "…the Start again route starts again over HTTPS with only the inspection ids"; body loses the discard; journal assertion deleted | no summary is sent for a held present database | B1 |
+| same | 166, 179, 187, 195 (kept-records twice, trading-settings, setup-finished) | `handMade` sends only the inspection ids, no discard key; refusal kept | found red in B1: with no recovery a discard key is refused `setup.attempt_conflict` before the cause | B1 |
+| same | "the Start again route answers a refusal HTTP 409 with its cause" (262) | body loses the discard key and its hand-made summary; 409 and cause kept | found red in B1, same reason | B1 |
+| `apps/server/src/first-setup-start-again-held.test.ts` | it.each "%s with no recovery started refuses…" (155); it.each "a database read as %s beside a stopped recovery (%o)…" (172) | retitled without the recovery; assertions kept | the titles named a recovery the fixture no longer builds | B1 |
 | `apps/server/src/first-setup-start-again-held-damaged.test.ts` | 80, 109; the `it.each` "finishing a recovery abandoned over %s database…" (124) | deleted | old path (124 needs `abandonUnemptied` and the default recovery) | B1 |
 | `apps/server/src/first-setup-start-again-held-wipe.test.ts` | 154 | deleted | old path | B1 |
 | `apps/server/src/start-again-full-disk.e2e.test.ts` | 252 | deleted | the release it tested is deleted | B1 |

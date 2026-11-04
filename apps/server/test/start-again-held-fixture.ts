@@ -76,9 +76,7 @@ afterEach(() => {
   copyFails.calls = 0;
 });
 
-type WithRecovery = Awaited<ReturnType<typeof heldSetup>>;
-
-type Held = Omit<WithRecovery, "service"> & { service: WithRecovery["service"] | undefined };
+type Held = Awaited<ReturnType<typeof heldSetup>>;
 
 /**
  * Signs the setup owner in, then answers a call that asks for the summary. A setup whose
@@ -96,12 +94,9 @@ async function signedIn(f: Held, host: Held["host"] = f.host, signIn = true) {
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
     host,
-    ...(f.service === undefined ? {} : { backupRecovery: f.service }),
   });
   return () => actions.startAgainSummary(request);
 }
-
-const summary = async (f: Held) => (await signedIn(f))();
 
 /** Asks for the summary, and checks the refusal changed nothing on disk. */
 async function expectRefused(
@@ -121,7 +116,6 @@ async function keptRecordsLogReason(f: Held) {
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
     host: f.host,
-    ...(f.service === undefined ? {} : { backupRecovery: f.service }),
   });
   const lines: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
   const app = new Hono();
@@ -166,14 +160,13 @@ async function askStartAgain(f: Held, host: Held["host"] = f.host) {
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
     host,
-    ...(f.service === undefined ? {} : { backupRecovery: f.service }),
   });
   const shown = await actions.startAgainSummary({ ...ids });
   return {
     shown,
     ids,
     actions,
-    run: (extra: Partial<StartAgainFirstSetupRequest> = { confirmRecoveryDiscard: { shown } }) =>
+    run: (extra: Partial<StartAgainFirstSetupRequest> = {}) =>
       actions.startAgainFirstSetup({ ...ids, ...extra }),
   };
 }
@@ -189,8 +182,8 @@ const damageRecoveryRecord = (f: Held) =>
     "{}",
   );
 
-/** A request for a setup whose summary is refused, so `shown` is the one a page would last have. */
-async function handMade(f: Held, signIn: boolean, confirm = true) {
+/** Start again sent with only the inspection ids, for a setup whose summary is refused. */
+async function handMade(f: Held, signIn: boolean) {
   const ids = signIn
     ? await f.signIn()
     : {
@@ -203,14 +196,8 @@ async function handMade(f: Held, signIn: boolean, confirm = true) {
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
     host: f.host,
-    ...(f.service === undefined ? {} : { backupRecovery: f.service }),
   });
-  const shown: StartAgainSummary = { reached: "fiscal-finished" };
-  return () =>
-    actions.startAgainFirstSetup({
-      ...ids.ids,
-      ...(confirm && { confirmRecoveryDiscard: { shown } }),
-    });
+  return () => actions.startAgainFirstSetup(ids.ids);
 }
 
 /** The ids a page holds after reading the inspection, with nobody signed in. */
@@ -226,8 +213,8 @@ async function withoutSignIn(f: Held, host: Held["host"] = f.host) {
 }
 
 /** A held setup with its venue.db gone, and the modules.json activation wrote, which the missing path refuses. */
-async function missingHeldDatabase(): Promise<Held & { service: undefined }> {
-  const f = await heldSetup({ recovery: false });
+async function missingHeldDatabase(): Promise<Held> {
+  const f = await heldSetup();
   for (const name of ["venue.db", "venue.db-wal", "venue.db-shm"])
     await rm(join(f.roots.venueDir, name), { force: true });
   await rm(join(f.roots.stateDir, "modules.json"));
@@ -341,41 +328,6 @@ function recordingFiscalSeat(f: Held) {
   return { host: { ...f.host, modules } as Held["host"], answers };
 }
 
-/** The actions with the backup service, and a lock that refuses when `lockRefused` is set. */
-function heldActions(f: Held, lockRefused = false) {
-  return createFirstSetupResolutionActions({
-    ...f.roots,
-    host: f.host,
-    ...(f.service === undefined ? {} : { backupRecovery: f.service }),
-    ...(lockRefused && {
-      lock: async () => {
-        throw new Error("lock refused");
-      },
-    }),
-  });
-}
-
-async function currentIds(f: Held) {
-  const current = await f.host.resolution.inspectFirstSetupResolution();
-  return {
-    inspectionId: current.inspectionId,
-    revision: current.revision!,
-    ownerGeneration: current.ownerGeneration!,
-  };
-}
-
-/** Start again discards the stopped recovery, then fails to empty it. */
-async function abandonUnemptied(f: Held) {
-  const ids = await currentIds(f);
-  const failing = heldActions(f, true);
-  const shown = await failing.startAgainSummary(ids);
-  await expect(
-    failing.startAgainFirstSetup({ ...ids, confirmRecoveryDiscard: { shown } }),
-  ).rejects.toMatchObject({ code: "setup.start_again_incomplete" });
-  expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
-  return shown;
-}
-
 /** Drops tables beside the reader, with foreign keys off, as a part-applied setup leaves them. */
 function dropTables(f: Pick<Held, "roots">, tables: readonly string[]) {
   const db = new DatabaseSync(venueDb(f));
@@ -390,7 +342,6 @@ export {
   extraDeletable,
   holdingsRead,
   copyFails,
-  summary,
   expectRefused,
   keptRecordsLogReason,
   notReady,
@@ -411,9 +362,6 @@ export {
   expectHeldRefused,
   keptRecords,
   recordingFiscalSeat,
-  heldActions,
-  currentIds,
-  abandonUnemptied,
   dropTables,
 };
 
