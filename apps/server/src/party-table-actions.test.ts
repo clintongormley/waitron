@@ -4,6 +4,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
 import {
   captureError,
   diningTables,
@@ -11,16 +12,27 @@ import {
   orderGroupEvents,
   orderGroups,
   partyTables,
+  products,
   sales,
   ticketItems,
   workingOrderLines,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { readPartyAllergy, setAllergyLineTicks, writePartyAllergy } from "@waitron/venue-service";
+import { decimal, decimalToCents } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
+import { recallToDraft } from "./draft-recall.js";
 import { readBillBalance } from "./bill-payments.js";
 import { writeMerge } from "./floor-today-merges.js";
 import { createCourse } from "./kitchen.js";
+import { insertPartyBill } from "./parties.js";
+import { splitTable as splitSelection, type SplitSelection } from "./table-actions.js";
+import {
+  readChangesAfterSending,
+  setChangesAfterSending,
+} from "./testing/changes-after-sending.js";
+import { serveLine } from "./testing/serve-line.js";
+import { advanceTicketItem, storedOrderTotal } from "./working-order.js";
 import { fireGroup } from "./order-groups.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -69,7 +81,7 @@ import {
   floorRow,
 } from "./testing/party-venue.js";
 import { mergeOf, needingMoving, plannedZone } from "./testing/floor-today-venue.js";
-import { numbersOf } from "./testing/bill-identities.js";
+import { allocationsOf, numbersOf } from "./testing/bill-identities.js";
 import "./errors.js";
 
 // Move guests, join tables and split a table (table actions plan, Task 8; spec §6, §8, §15).
@@ -77,6 +89,14 @@ import "./errors.js";
 let v: PartyVenue;
 /** A second zone of dining tables. */
 let terraceZone: string;
+/** Offers beyond the venue's menu: a dish with an extra, and prices a bill can cut to the cent. */
+let extras: {
+  toppedBurger: string;
+  toppings: string;
+  cheese: string;
+  side: string;
+  steak: string;
+};
 
 useVenueDb({
   resetPerTest: false,
@@ -84,6 +104,53 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     v = await setupPartyVenue(db);
+    extras = await inTx(v, async (tx) => {
+      const [burger] = await tx
+        .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
+        .from(products)
+        .where(eq(products.id, v.productId("Burger")));
+      const product = async (name: string, unitPrice: string) =>
+        (
+          await createProduct(tx, {
+            catalogueId: burger!.catalogueId,
+            categoryId: burger!.categoryId,
+            name,
+            customerName: { [v.cfg.locale]: name },
+            kitchenName: name.toUpperCase(),
+            pricingUnit: "each",
+            unitPrice,
+            vatClass: "general",
+          })
+        ).id;
+      const cheese = await product("Cheese", "1.00");
+      const topped = await product("Topped burger", "12.00");
+      const side = await product("Side", "39.99");
+      const steak = await product("Steak", "12.01");
+      const toppings = (
+        await createExtraList(
+          tx,
+          {
+            name: "Toppings",
+            customerName: null,
+            kitchenName: null,
+            minPicks: 0,
+            maxPicks: null,
+            active: true,
+            items: [{ productId: cheese, maxQuantity: 2, preselected: false, price: null }],
+          },
+          v.cfg.locale,
+        )
+      ).id;
+      await writeProductModifiers(tx, topped, [{ kind: "extras", id: toppings }]);
+      const offers = await offerProducts(tx, v.cfg, { zone: "tables" });
+      return {
+        toppedBurger: offers.offerFor(topped),
+        toppings,
+        cheese,
+        side: offers.offerFor(side),
+        steak: offers.offerFor(steak),
+      };
+    });
     terraceZone = await inTx(v, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
@@ -2458,29 +2525,6 @@ describe("A803 split", () => {
       });
     });
 
-    it("refuses a loose pick, until loose dishes are built", async () => {
-      const { ana, m4, m5, b1, b2, b3 } = await threeBills("A803 Suelta");
-      const splitting = await cmd(ana.partyId);
-
-      const error = await refused([ana.partyId], [b1, b2, b3], [m4, m5], () =>
-        act((tx) =>
-          splitTable(
-            tx,
-            v.cfg,
-            ana.partyId,
-            m5,
-            { wholeBillIds: [], loose: [{ billId: b2, lineIds: [randomUUID()] }] },
-            { ...splitting, expectedEdits: [] },
-          ),
-        ),
-      );
-
-      expect(error).toMatchObject({
-        code: "management.request_invalid",
-        params: { field: "selection" },
-      });
-    });
-
     it("refuses a paid bill among them", async () => {
       const { ana, m4, m5, b1, b2, b3 } = await threeBills("A803 Cobrada");
       await pay(v, b3, "5.00");
@@ -2542,5 +2586,643 @@ describe("A803 split", () => {
     expect(result.billIds).toEqual([b2]);
     expect((await ticketsOf(b2)).at(-1)!.firedAt).toEqual(expect.any(String));
     expect((await act((tx) => readPartyAllergy(tx, result.partyId))).answer).toBe("none");
+  });
+
+  describe("loose dishes", () => {
+    const loose = (billId: string, ...lineIds: string[]) => ({ billId, lineIds });
+
+    /** The real command, which answers what the fixture's does not: `looseSourceIds`. */
+    async function splitSelected(
+      partyId: string,
+      tableId: string,
+      selection: SplitSelection,
+      cfg: typeof v.cfg = v.cfg,
+    ) {
+      const splitting = await cmd(partyId);
+      const named = [...selection.wholeBillIds, ...selection.loose.map((entry) => entry.billId)];
+      const expectedEdits = await act(async (tx) => {
+        const edits = [];
+        for (const billId of [...new Set(named)].sort())
+          edits.push(await readBillEditState(tx, billId));
+        return edits;
+      });
+      return act((tx) =>
+        splitSelection(tx, cfg, partyId, tableId, selection, { ...splitting, expectedEdits }),
+      );
+    }
+
+    const SPLIT_TABLES = [
+      "parties",
+      "party_tables",
+      "working_orders",
+      "working_order_lines",
+      "ticket_items",
+      "order_groups",
+      "order_group_events",
+      "order_drafts",
+      "order_draft_lines",
+      "order_draft_recalled_lines",
+      "party_allergy",
+      "party_allergy_guests",
+      "allergy_line_ticks",
+      "kitchen_notices",
+      "print_jobs",
+      "bill_number_allocations",
+      "bill_identities",
+    ];
+
+    /** Every row of every table a split writes, whoever's: a refusal may leave a new party behind. */
+    function everyRow() {
+      return Object.fromEntries(
+        SPLIT_TABLES.map((table) => [
+          table,
+          v.db.all(sql.raw(`select * from ${table} order by rowid`)),
+        ]),
+      );
+    }
+
+    /** Runs `fn`, expecting a refusal that leaves every row of {@link SPLIT_TABLES} as it was. */
+    async function refusedWithNoRowChanged(fn: () => Promise<unknown>) {
+      const before = everyRow();
+      const error = await captureError(fn);
+      expect(everyRow()).toEqual(before);
+      return error;
+    }
+
+    async function lineOn(billId: string, name: string) {
+      const line = (await lineRows(billId)).find((row) => row.name === name);
+      expect(line, `${name} on the bill`).toBeDefined();
+      return line!;
+    }
+
+    const namesOn = async (billId: string) => (await lineRows(billId)).map((line) => line.name);
+
+    /** The bill's kitchen items with everything stored, by line id. */
+    function kitchenRows(billId: string) {
+      return act((tx) =>
+        tx
+          .select()
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderId, billId))
+          .orderBy(asc(ticketItems.workingOrderLineId)),
+      );
+    }
+
+    /** Ana on `<prefix> 4` and `<prefix> 5` with Bill 1 holding `names`, sent. */
+    async function tableFor(prefix: string, ...names: string[]) {
+      const [m4, m5] = await tables(prefix, 4, 5);
+      const ana = await seat(v, m4);
+      await joinFree(ana.partyId, m5);
+      await order(v, ana.tabId, ...names);
+      return { ana, m4, m5, b1: ana.tabId };
+    }
+
+    it("loose dishes from a staying bill and whole bills leave together", async () => {
+      const { ana, m4, m5, b1, b2, b3 } = await threeBills("A803 Suelta");
+      await act((tx) =>
+        placeGroups(tx, v.cfg, ana.partyId, {
+          groups: [
+            {
+              lines: [
+                {
+                  menuItemId: extras.toppedBurger,
+                  quantity: "1",
+                  extras: [
+                    { listId: extras.toppings, picks: [{ productId: extras.cheese, quantity: 1 }] },
+                  ],
+                },
+                { menuItemId: v.item("Tarta"), quantity: "1" },
+              ],
+              release: "fire",
+            },
+          ],
+          operatorId: OPERATOR,
+          billId: b1,
+        }),
+      );
+      const topped = await lineOn(b1, "Topped burger");
+      const tarta = await lineOn(b1, "Tarta");
+      const preparing = (await kitchenRows(b1)).find(
+        (item) => item.workingOrderLineId === topped.id,
+      )!;
+      await act((tx) => advanceTicketItem(tx, v.cfg, preparing.id, "preparing"));
+      await act((tx) => serveLine(tx, v.cfg, b1, tarta.lineNo));
+      const leftAsItWas = (line: Awaited<ReturnType<typeof lineRows>>[number]) => ({
+        ...line,
+        lineNo: 0,
+        workingOrderId: "",
+        groupId: null,
+      });
+      const movedIds = [topped.id, tarta.id];
+      const family = (await lineRows(b1)).filter(
+        (line) => movedIds.includes(line.id) || movedIds.includes(line.parentLineId ?? ""),
+      );
+      expect(family.map((line) => line.name)).toEqual(["Topped burger", "Cheese", "Tarta"]);
+      const tartaServed = (await lineOn(b1, "Tarta")).servedQuantity;
+      const sourceOrderNumber = (await billRow(v, b1)).orderNumber;
+      const kitchen = (await kitchenRows(b1))
+        .filter((item) => movedIds.includes(item.workingOrderLineId!))
+        .map((item) => ({
+          ...item,
+          workingOrderId: null,
+          sentOrderNumber: sourceOrderNumber,
+        }));
+      expect(kitchen.map((item) => item.state)).toContain("preparing");
+      const stayingBurger = await lineOn(b1, "Burger");
+
+      const result = await splitSelected(ana.partyId, m5, {
+        wholeBillIds: [b2, b3],
+        loose: [loose(b1, topped.id, tarta.id)],
+      });
+
+      const newBill = result.billIds[2]!;
+      expect(result.billIds).toEqual([b2, b3, expect.any(String)]);
+      expect([b1, b2, b3]).not.toContain(newBill);
+      expect(result.looseSourceIds).toEqual([b1]);
+      expect(await numbersOf(v, result.partyId)).toEqual([
+        [b2, 1, null],
+        [b3, 2, null],
+        [newBill, 3, null],
+      ]);
+      expect(await numbersOf(v, ana.partyId)).toEqual([[b1, 1, null]]);
+      expect(await lineRows(b1)).toEqual([stayingBurger]);
+      expect(await billRow(v, newBill)).toMatchObject({
+        partyId: result.partyId,
+        status: "open",
+        label: null,
+      });
+      expect(await zoneOf(v, newBill)).toBe(v.tables.zoneId);
+      expect(await activeTablesOf(v, result.partyId)).toEqual([m5]);
+      expect(await activeTablesOf(v, ana.partyId)).toEqual([m4]);
+      const arrived = await lineRows(newBill);
+      expect(arrived.map(leftAsItWas)).toEqual(family.map(leftAsItWas));
+      expect((await lineOn(newBill, "Tarta")).servedQuantity).toBe(tartaServed);
+      expect(tartaServed).toBeGreaterThan(0);
+      expect(
+        (await kitchenRows(newBill)).map((item) => ({ ...item, workingOrderId: null })),
+      ).toEqual(kitchen);
+    });
+
+    it("dishes picked from two bills go on one new bill", async () => {
+      const { ana, m5, b2, b3 } = await threeBillsWithIdsAgainstNumbers("A803 Dos fuentes");
+      await order(v, b2, "Agua");
+      await order(v, b3, "Caña");
+      const agua = await lineOn(b2, "Agua");
+      const cana = await lineOn(b3, "Caña");
+
+      const result = await splitSelected(ana.partyId, m5, {
+        wholeBillIds: [],
+        loose: [loose(b3, cana.id), loose(b2, agua.id)],
+      });
+
+      expect(result.billIds).toEqual([expect.any(String)]);
+      const newBill = result.billIds[0]!;
+      expect(result.looseSourceIds).toEqual([b2, b3]);
+      expect(await namesOn(newBill)).toEqual(["Agua", "Caña"]);
+      expect(await namesOn(b2)).toEqual(["Vino"]);
+      expect(await namesOn(b3)).toEqual(["Flan"]);
+      expect(await shownBills(result.partyId)).toEqual([{ id: newBill, status: "open" }]);
+      expect(await numbersOf(v, result.partyId)).toEqual([[newBill, 1, null]]);
+    });
+
+    it("a loose pick burns no number at the staying table", async () => {
+      const { ana, m5, b1 } = await tableFor("A803 Sin hueco", "Burger", "Vino");
+      const vino = await lineOn(b1, "Vino");
+
+      await splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, vino.id)] });
+
+      const next = await act((tx) => insertPartyBill(tx, v.cfg, ana.partyId));
+      expect(await numbersOf(v, ana.partyId)).toEqual([
+        [b1, 1, null],
+        [next, 2, null],
+      ]);
+      expect(await allocationsOf(v, ana.partyId)).toEqual([
+        [1, b1],
+        [2, next],
+      ]);
+    });
+
+    describe("a part-paid bill", () => {
+      async function partPaid(prefix: string) {
+        const bill = await tableFor(prefix, "Burger", "Agua");
+        await takeBillPayment(
+          { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
+          v.cfg,
+          bill.b1,
+          {
+            submissionId: randomUUID(),
+            kind: "items",
+            lines: [{ lineNo: (await lineOn(bill.b1, "Burger")).lineNo }],
+            method: "cash",
+            tendered: "12.00",
+            applied: "12.00",
+            tip: "0.00",
+          },
+          v.operator,
+        );
+        return bill;
+      }
+
+      it("a whole part-paid bill stays selectable", async () => {
+        const { ana, m5, b1 } = await partPaid("A803 Parte entera");
+        const payments = await paymentsOf(v, b1);
+
+        const result = await splitSelected(ana.partyId, m5, whole(b1));
+
+        expect(result.billIds).toEqual([b1]);
+        expect(await paymentsOf(v, b1)).toEqual(payments);
+        expect(payments).toHaveLength(1);
+      });
+
+      it("its unpaid dishes can go loose, the payment staying", async () => {
+        const { ana, m5, b1 } = await partPaid("A803 Parte suelta");
+        const payments = await paymentsOf(v, b1);
+        const agua = await lineOn(b1, "Agua");
+
+        const result = await splitSelected(ana.partyId, m5, {
+          wholeBillIds: [],
+          loose: [loose(b1, agua.id)],
+        });
+
+        expect(await namesOn(result.billIds[0]!)).toEqual(["Agua"]);
+        expect(await namesOn(b1)).toEqual(["Burger"]);
+        expect(await paymentsOf(v, b1)).toEqual(payments);
+      });
+
+      it("its paid dish refuses bill.line_paid, every row unchanged", async () => {
+        const { ana, m5, b1 } = await partPaid("A803 Parte pagado");
+        const burger = await lineOn(b1, "Burger");
+
+        const error = await refusedWithNoRowChanged(() =>
+          splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, burger.id)] }),
+        );
+
+        expect(error).toMatchObject({
+          code: "bill.line_paid",
+          params: { workingOrderId: b1, lineNo: burger.lineNo },
+        });
+      });
+    });
+
+    describe("a contribution", () => {
+      it("a loose pick leaving €40.00 of €52.00 with €40.00 received goes", async () => {
+        const { ana, m5, b1 } = await tableFor(
+          "A803 Justo",
+          "Vino",
+          "Burger",
+          "Agua",
+          "Flan",
+          "Caña",
+        );
+        expect(decimalToCents(await act((tx) => storedOrderTotal(tx, b1)))).toBe(5200);
+        await cashContribution(v, b1, "40.00");
+        const burger = await lineOn(b1, "Burger");
+
+        const result = await splitSelected(ana.partyId, m5, {
+          wholeBillIds: [],
+          loose: [loose(b1, burger.id)],
+        });
+
+        expect(decimalToCents(await act((tx) => storedOrderTotal(tx, b1)))).toBe(4000);
+        expect(await namesOn(result.billIds[0]!)).toEqual(["Burger"]);
+      });
+
+      it("a loose pick leaving €39.99 of €52.00 with €40.00 received refuses bill.received_exceeds_total", async () => {
+        const [m4, m5] = await tables("A803 Corto", 4, 5);
+        const ana = await seat(v, m4);
+        await joinFree(ana.partyId, m5);
+        await act((tx) =>
+          addTabRound(tx, v.cfg, ana.tabId, [
+            { menuItemId: extras.side, quantity: "1" },
+            { menuItemId: extras.steak, quantity: "1" },
+          ]),
+        );
+        expect(decimalToCents(await act((tx) => storedOrderTotal(tx, ana.tabId)))).toBe(5200);
+        await cashContribution(v, ana.tabId, "40.00");
+        const steak = await lineOn(ana.tabId, "Steak");
+
+        const error = await refusedWithNoRowChanged(() =>
+          splitSelected(ana.partyId, m5, {
+            wholeBillIds: [],
+            loose: [loose(ana.tabId, steak.id)],
+          }),
+        );
+
+        expect(error).toMatchObject({
+          code: "bill.received_exceeds_total",
+          params: { workingOrderId: ana.tabId, excess: "0.01" },
+        });
+      });
+    });
+
+    it("a held dish loose: the new table gets its own held copy, the staying dish stays held in the source group, and each fires alone", async () => {
+      const [m4, m5] = await tables("A803 Retenida", 4, 5);
+      const ana = await seat(v, m4);
+      await joinFree(ana.partyId, m5);
+      await sendGroups(ana.partyId, [{ names: ["Burger"], release: "fire" }], ana.tabId);
+      await sendGroups(ana.partyId, [{ names: ["Flan", "Tarta"], release: "hold" }], ana.tabId);
+      const b1 = ana.tabId;
+      const burger = await lineOn(b1, "Burger");
+      const flan = await lineOn(b1, "Flan");
+      const tarta = await lineOn(b1, "Tarta");
+      const source = flan.groupId!;
+      const firedSource = burger.groupId!;
+      const before = everyRow();
+
+      const result = await splitSelected(ana.partyId, m5, {
+        wholeBillIds: [],
+        loose: [loose(b1, burger.id, flan.id)],
+      });
+
+      const after = everyRow();
+      const newBill = result.billIds[0]!;
+      const groups = await groupsOf(result.partyId);
+      expect(groups.map((group) => group.state)).toEqual(["fired", "held"]);
+      const [fired, copy] = groups;
+      expect((await lineOn(newBill, "Burger")).groupId).toBe(fired!.id);
+      expect(fired!.id).not.toBe(firedSource);
+      expect((await lineOn(newBill, "Flan")).groupId).toBe(copy!.id);
+      expect(copy!.id).not.toBe(source);
+      expect((await lineOn(b1, "Tarta")).groupId).toBe(source);
+      expect((await groupsOf(ana.partyId)).find((group) => group.id === source)!.state).toBe(
+        "held",
+      );
+      expect(
+        SPLIT_TABLES.filter(
+          (table) => JSON.stringify(before[table]) !== JSON.stringify(after[table]),
+        ),
+      ).toEqual([
+        "parties",
+        "party_tables",
+        "working_orders",
+        "working_order_lines",
+        "ticket_items",
+        "order_groups",
+        "order_group_events",
+        "party_allergy",
+        "bill_number_allocations",
+        "bill_identities",
+      ]);
+      const firedAt = async (billId: string, lineId: string) =>
+        (await ticketsOf(billId)).find((item) => item.lineId === lineId)!.firedAt;
+      expect(await firedAt(newBill, flan.id)).toBeNull();
+      expect(await firedAt(b1, tarta.id)).toBeNull();
+
+      const firingCopy = { ...(await cmd(result.partyId)), submissionId: randomUUID() };
+      await act((tx) => fireGroup(tx, v.cfg, result.partyId, copy!.id, firingCopy));
+
+      expect(await firedAt(newBill, flan.id)).toEqual(expect.any(String));
+      expect(await firedAt(b1, tarta.id)).toBeNull();
+
+      const firingSource = { ...(await cmd(ana.partyId)), submissionId: randomUUID() };
+      await act((tx) => fireGroup(tx, v.cfg, ana.partyId, source, firingSource));
+
+      expect(await firedAt(b1, tarta.id)).toEqual(expect.any(String));
+    });
+
+    it("a dish recalled into a draft refuses draft.out_of_date, naming the source", async () => {
+      const [m4, m5] = await tables("A803 Recuperada", 4, 5);
+      const ana = await seat(v, m4);
+      await joinFree(ana.partyId, m5);
+      await sendGroups(ana.partyId, [{ names: ["Paella", "Flan"], release: "hold" }], ana.tabId);
+      const paella = await lineOn(ana.tabId, "Paella");
+      const flan = await lineOn(ana.tabId, "Flan");
+      const recalling = await cmd(ana.partyId);
+      await act(async (tx) => {
+        const stations = await readChangesAfterSending(tx);
+        await setChangesAfterSending(tx, "held-or-waiting");
+        await recallToDraft(tx, v.cfg, ana.partyId, paella.id, {
+          ...recalling,
+          expectedEdit: await readBillEditState(tx, ana.tabId),
+          submissionId: randomUUID(),
+        });
+        for (const [stationId, value] of stations)
+          await setChangesAfterSending(tx, value, [stationId]);
+      });
+
+      const error = await refusedWithNoRowChanged(() =>
+        splitSelected(ana.partyId, m5, {
+          wholeBillIds: [],
+          loose: [loose(ana.tabId, flan.id, paella.id)],
+        }),
+      );
+
+      expect(error).toMatchObject({
+        code: "draft.out_of_date",
+        params: { billId: ana.tabId },
+      });
+    });
+
+    describe("a presented source", () => {
+      it("loose, it refuses bill.presented", async () => {
+        const { ana, m5, b2 } = await threeBills("A803 Cuenta suelta");
+        await placeByHand(v, b2);
+        const vino = await lineOn(b2, "Vino");
+
+        const error = await refusedWithNoRowChanged(() =>
+          splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b2, vino.id)] }),
+        );
+
+        expect(error).toMatchObject({
+          code: "bill.presented",
+          params: { workingOrderId: b2 },
+        });
+      });
+
+      it("the same bill whole goes", async () => {
+        const { ana, m5, b2 } = await threeBills("A803 Cuenta entera");
+        await placeByHand(v, b2);
+
+        const result = await splitSelected(ana.partyId, m5, whole(b2));
+
+        expect(result.billIds).toEqual([b2]);
+        expect(await billRow(v, b2)).toMatchObject({ partyId: result.partyId, status: "placed" });
+      });
+    });
+
+    it("a dish the kitchen holds outside a held group refuses tab.split_held_line", async () => {
+      const { ana, m5, b1 } = await tableFor("A803 Sin grupo suelta", "Burger");
+      await act((tx) =>
+        addTabRound(tx, v.cfg, b1, [{ menuItemId: v.item("Tarta"), quantity: "1", hold: true }]),
+      );
+      const tarta = await lineOn(b1, "Tarta");
+
+      const error = await refusedWithNoRowChanged(() =>
+        splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, tarta.id)] }),
+      );
+
+      expect(error).toMatchObject({
+        code: "tab.split_held_line",
+        params: { tabId: b1, lineNo: tarta.lineNo },
+      });
+    });
+
+    describe("a pending payment", () => {
+      const pending = (billId: string) =>
+        v.db.run(
+          sql`update working_orders set payment_attempt_at = '2026-11-01T10:00:00.000Z' where id = ${billId}`,
+        );
+
+      it("on a loose source refuses order.payment_in_flight", async () => {
+        const { ana, m5, b1 } = await tableFor("A803 Cobro suelta", "Burger", "Agua");
+        pending(b1);
+        const agua = await lineOn(b1, "Agua");
+
+        const error = await refusedWithNoRowChanged(() =>
+          splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, agua.id)] }),
+        );
+
+        expect(error).toMatchObject({
+          code: "order.payment_in_flight",
+          params: { workingOrderId: b1 },
+        });
+      });
+
+      it("on a whole bill it goes", async () => {
+        const { ana, m5, b2 } = await threeBills("A803 Cobro entera");
+        pending(b2);
+
+        const result = await splitSelected(ana.partyId, m5, whole(b2));
+
+        expect(result.billIds).toEqual([b2]);
+        expect(await billRow(v, b2)).toMatchObject({ partyId: result.partyId });
+      });
+    });
+
+    it("over the simplified-invoice limit, the new bill refuses sale.total_exceeds_simplified_limit", async () => {
+      const { ana, m5, b1, b3 } = await threeBills("A803 Limite");
+      const burger = await lineOn(b1, "Burger");
+      const flan = await lineOn(b3, "Flan");
+
+      const error = await refusedWithNoRowChanged(() =>
+        splitSelected(
+          ana.partyId,
+          m5,
+          { wholeBillIds: [], loose: [loose(b1, burger.id), loose(b3, flan.id)] },
+          { ...v.cfg, simplifiedInvoiceLimit: decimal("15.00") },
+        ),
+      );
+
+      expect(error).toMatchObject({ code: "sale.total_exceeds_simplified_limit" });
+    });
+
+    it("an allergy tick on a loose dish moves with it; one on a dish that stayed stays", async () => {
+      const { ana, m5, b1, b2 } = await threeBills("A803 Marcas");
+      await order(v, b1, "Agua");
+      await act((tx) =>
+        addTabRound(tx, v.cfg, b2, [{ menuItemId: v.item("Tarta"), quantity: "1", hold: true }]),
+      );
+      await act((tx) =>
+        writePartyAllergy(
+          tx,
+          ana.partyId,
+          { answer: "allergies", guests: [{ who: "Window seat", allergens: { milk: {} } }] },
+          OPERATOR,
+        ),
+      );
+      const { guests } = await act((tx) => readPartyAllergy(tx, ana.partyId));
+      const burger = await lineOn(b1, "Burger");
+      const agua = await lineOn(b1, "Agua");
+      await act((tx) =>
+        setAllergyLineTicks(tx, ana.partyId, [
+          { guestId: guests[0]!.id, workingLineId: burger.id },
+          { guestId: guests[0]!.id, workingLineId: agua.id },
+        ]),
+      );
+
+      const result = await splitSelected(ana.partyId, m5, {
+        wholeBillIds: [b2],
+        loose: [loose(b1, agua.id)],
+      });
+
+      const source = await act((tx) => readPartyAllergy(tx, ana.partyId));
+      const target = await act((tx) => readPartyAllergy(tx, result.partyId));
+      expect(source.ticks).toEqual([
+        { guestId: guests[0]!.id, draftLineId: null, workingLineId: burger.id },
+      ]);
+      expect(target.guests.map((guest) => guest.who)).toEqual(["Window seat"]);
+      expect(target.ticks).toEqual([
+        { guestId: target.guests[0]!.id, draftLineId: null, workingLineId: agua.id },
+      ]);
+    });
+
+    describe("a selection it cannot read", () => {
+      it("a bill both whole and loose", async () => {
+        const { ana, m5, b2 } = await threeBills("A803 Ambas");
+        const vino = await lineOn(b2, "Vino");
+
+        const error = await refusedWithNoRowChanged(() =>
+          splitSelected(ana.partyId, m5, { wholeBillIds: [b2], loose: [loose(b2, vino.id)] }),
+        );
+
+        expect(error).toMatchObject({
+          code: "management.request_invalid",
+          params: { field: "selection" },
+        });
+      });
+
+      it("one bill in two loose entries", async () => {
+        const { ana, m5, b1 } = await tableFor("A803 Dos entradas", "Burger", "Agua");
+        const burger = await lineOn(b1, "Burger");
+        const agua = await lineOn(b1, "Agua");
+
+        const error = await refusedWithNoRowChanged(() =>
+          splitSelected(ana.partyId, m5, {
+            wholeBillIds: [],
+            loose: [loose(b1, burger.id), loose(b1, agua.id)],
+          }),
+        );
+
+        expect(error).toMatchObject({
+          code: "management.request_invalid",
+          params: { field: "selection" },
+        });
+      });
+
+      it("an empty entry", async () => {
+        const { ana, m5, b2 } = await threeBills("A803 Vacia");
+
+        const error = await refusedWithNoRowChanged(() =>
+          splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b2)] }),
+        );
+
+        expect(error).toMatchObject({
+          code: "management.request_invalid",
+          params: { field: "selection" },
+        });
+      });
+
+      it("a line named twice is tab.transfer_duplicate_line", async () => {
+        const { ana, m5, b1 } = await tableFor("A803 Repetida", "Burger", "Agua");
+        const burger = await lineOn(b1, "Burger");
+
+        const error = await refusedWithNoRowChanged(() =>
+          splitSelected(ana.partyId, m5, {
+            wholeBillIds: [],
+            loose: [loose(b1, burger.id, burger.id)],
+          }),
+        );
+
+        expect(error).toMatchObject({
+          code: "tab.transfer_duplicate_line",
+          params: { tabId: b1, lineNo: burger.lineNo },
+        });
+      });
+
+      it("a line of another bill is tab.line_not_found, and no line of the named bill with that number moves", async () => {
+        const { ana, m5, b1, b2 } = await threeBills("A803 Otra cuenta");
+        const vino = await lineOn(b2, "Vino");
+        expect((await lineRows(b1)).map((line) => line.lineNo)).toContain(vino.lineNo);
+
+        const error = await refusedWithNoRowChanged(() =>
+          splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, vino.id)] }),
+        );
+
+        expect(error).toMatchObject({
+          code: "tab.line_not_found",
+          params: { tabId: b1, lineId: vino.id },
+        });
+      });
+    });
   });
 });
