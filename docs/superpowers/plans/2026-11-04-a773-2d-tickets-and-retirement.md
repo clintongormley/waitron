@@ -8,8 +8,9 @@ kitchen paper name the group's courses (`GROUP 3 · MAINS`), and prints and show
 food" on such a station's ticket and screen card (spec §5, §6, pictures 7 and 8). Second, two
 storage items no code reads any more are dropped: the column `ticket_items.away_at` (the old Away
 stamp) and the table `pass_item_marks` (the old per-device Done marks). The third retired item,
-`locations.fire_control`, stays where it is: dropping it would rebuild `locations`, a table A1301
-drops whole in its slice S28 (D113).
+`locations.fire_control`, stays where it is: dropping it generates a rebuild of `locations` that the
+upgrade guard refuses with `FOREIGN KEY constraint failed` (the reviewer's E5), and A1301 drops that
+table whole in its slice S28 (D113).
 
 **Words used here.** *Group heading*: the line `GROUP n …` kitchen paper prints above a group's
 dishes (`emitGroup`, `apps/server/src/kitchen-ticket.ts:265-277`). *Pass-controlled dish*: a ticket
@@ -28,8 +29,10 @@ tail: A773-2 station modes, pass and shared fire tickets"). Decisions continue P
 D112.
 
 **Researched at** `69534cec83` (main, 2026-11-04; PR C landed as #2445). Every file, line and
-signature below was read at that commit; four probes were run (P1–P4 in "What the planning pass
-found") and reverted (`git status --short` printed nothing after each). Implementers find code by
+signature below was read at that commit; three probes were run (P1–P3 in "What the planning pass
+found") and reverted (`git status --short` printed nothing after each). Revision 1 adds the
+fresh-context plan review's experiments (E1–E11 in `~/waitron-campaign-c/a773-2d-plan-review.md`),
+cited as the reviewer's, run in a throwaway worktree at `ef3b99156d`. Implementers find code by
 function name, never by line alone.
 
 **No location (owner, 2026-11-01, A1301; high priority).** Nothing here adds a `location_id`
@@ -52,7 +55,15 @@ and Task 9 drops `ticket_items.away_at`; drizzle-kit writes a plain `DROP TABLE`
 migration with the change feed installed in between (`:184-215`, `:217-330`). If either step fails
 there, the task stops (master S: "An unsafe parent rebuild or failing preservation guard blocks that
 schema PR"); it never gains a `RESETS` entry without a new plan revision. The PR's first line says
-which, from that run.
+which, from that run. The reviewer ran it already with both drops in one probe migration: `Tests 4
+passed (4)` (E4), and a control that appended `DELETE FROM ticket_items;` to the same migration
+failed with `Step core/0205_exp_probe lost rows the step before wrote: ticket_items: 2 rows before,
+0 after` (E4c), so the walk reaches the new step with rows present. This lane has read the master's
+"Schema releases require a pre-live reset, stated first in the PR" as "state in the first line
+whether a reset is needed" since B1: #2381 shipped `packages/db/drizzle/0204_requested_release.sql`
+and #2440 a venue-service migration (`0073_brief_silver_samurai.sql`), both titled "no venue reset"
+(`git show --stat 05fdd7c009 af9a7d568c`). Both of those only added columns; a drop is new here,
+which is why the guard run, not the precedent, is the receipt.
 
 **Execution.** Every implementer is dispatched as `subagent_type: "implementer"` (medium effort),
 one task per dispatch, in this worktree. An implementer that passes about 150 calls with the task
@@ -119,10 +130,13 @@ aside).
    TABLE \`__new_locations\` RENAME TO \`locations\`; PRAGMA foreign_keys=ON;` Reverted. A rebuild
    runs with foreign keys on (CLAUDE.md §3), and `locations` has 37 child tables, none cascading
    (A1301 design `docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md` §4, `:363`), so
-   its `DROP TABLE` would be refused on any box that holds a child row. `tenants.ts:20-24` already
+   its `DROP TABLE` would be refused on any box that holds a child row. The reviewer ran it: with the
+   generated rebuild in place, `scripts/migration-upgrade.test.ts` failed with `AppError:
+   migrations.apply_failed … Caused by: Error: FOREIGN KEY constraint failed` (E5). `tenants.ts:20-24` already
    leaves `bump_mode` in place for the same reason. A1301's plan drops the whole table: S23 moves the
    venue's settings into `venue_settings` without `fire_control` (design §2.1 table, `:136`: "deleted,
-   unused … Whichever lands first does it; the other drops the step"), and S28 runs a plain
+   unused … Whichever lands first does it; the other drops the step"; design note 9, `:778`, says
+   "Whichever lands second drops its removal step"), and S28 runs a plain
    `DROP TABLE locations` once nothing points at it (`:625`). Lane A's S18a worktree
    (`refactor/a1301-s18a-venue-service-scope`, at `d8f2848689`) has no commits and no changes yet.
 
@@ -151,8 +165,9 @@ aside).
    `apps/server/src/order-groups.ts:2477-2517`, used at `kitchen-print.ts:233-235,328-330`).
    `buildTicketItems` (`kitchen-print.ts:173-345`) reads no course. A ticket whose items share one
    group names it once under the header; otherwise each group's run is headed
-   (`formatKitchenTicket`, `:345-410`). The same `emitGroup` heads groups on correction slips
-   (`:509-523`), kitchen-note slips (`:559-580`) and MOVED slips (`:616-645`). The words are
+   (`formatKitchenTicket`, `kitchen-ticket.ts:345-410`). The same `emitGroup` heads groups on
+   correction slips (`kitchen-ticket.ts:509-523`), kitchen-note slips (`kitchen-ticket.ts:559-580`)
+   and MOVED slips (`kitchen-ticket.ts:616-645`). The words are
    `GROUP`/`GRUPO` (`apps/server/src/i18n/kitchen-ticket.ts:25,62`).
 
 8. **The station screen already names a group and its course; it has no cue.** The card head draws
@@ -161,9 +176,9 @@ aside).
    which is picture 7's "T4 · Group 4 · Desserts". The server's `QueueGroup` carries
    `id, position, displayNumber, numberPartyId, numberPartyLabel?, state`
    (`apps/server/src/working-order.ts:7860-7867`; client twin `apps/till/src/api/client.ts:1550-1557`),
-   built per row by the helper at `working-order.ts:8120-8145` inside `listStationQueues`
-   (`:8235-…`), the one read behind the till's station screen and a kitchen display
-   (`device-api.ts` `listStationQueues` import). Course names on the screen come from
+   built per row by `queueGroup` (`working-order.ts:8119-8145`). `queueGroup` has two callers:
+   `listStationQueues` (`:8235`, the call at `:8429`), the one read behind the till's station screen
+   and a kitchen display, and `readPassRows` (`:8504`, the call at `:8618`), the pass board's read. Course names on the screen come from
    `kitchen_courses.name` joined by `ticket_items.course_id`, not filtered by `active`
    (`working-order.ts` `listStationQueues`, "a course deleted after the item was fired still names
    its header").
@@ -182,8 +197,19 @@ aside).
     gave `Tests 34 failed | 623 passed (657)`, every failure in `order-groups.test.ts` (listed in
     "Changed test checks"), each a heading line now reading for example `GROUP 1 · DRINKS` where the
     pin says `GROUP 1`. The other eleven files' fixtures print no course on a heading. Reverted.
-    Fifty server test files read paper text (`grep -rlE 'GROUP|GRUPO|decodeTicket|ticketText|paperText' apps/server/src apps/server/scripts --include='*.test.ts'`);
-    P3 ran the twelve most likely. Task 1b re-runs the rest before editing anything.
+    **P3 was too narrow.** The reviewer repeated it over 288 server test files (every `*.test.ts`
+    under `apps/server/src` and `apps/server/scripts` matching
+    `GROUP|GRUPO|decodeTicket|ticketText|paperText|printJobs|TextDecoder|\.bytes|jobText|paper|decode-ticket|printedLines|kitchenPrintJobs`)
+    and found **37** red cases: P3's 34, whose names match "Changed test checks" exactly, plus three
+    in `apps/server/src/party-arriving-dishes.test.ts` (`:938`, `:982`, `:1031`), which pin the
+    heading through `` `${kitchenTicketWords("es").group} 2` `` (`:958`, `:975`, `:1001`) and read
+    jobs through `printJobs` (`:912`), so P3's word list could not see them (E6; control: that file
+    alone gave `29 passed (29)` without the scratch change, and a diff `- "GRUPO 2"` /
+    `+ "GRUPO 2 · POSTRES"` with it).
+    **Two negative pins go vacuous.** `order-groups.test.ts:620` and `:639` assert
+    `expect(paper[0]).not.toContain("GROUP 3\n")`; group 3 in that fixture has a course, so once the
+    heading reads `GROUP 3 · <COURSE>` neither can fail (E7). A probe that only lists failures cannot
+    find them.
 
 11. **The waiter's group Fire prints bill by bill.** `releaseGroup` (`order-groups.ts:853-909`)
     loops over the group's bills and calls `fireOrderLines` for each (`:876-878`); each bill's
@@ -221,8 +247,8 @@ aside).
 
 16. **A803 has built nothing on tickets that PR D touches.** A803 slices 1–4a landed (portions,
     named bills, the bill switcher, the dish picker; `docs/backlog/till.md` "A803" entry). Its ticket
-    work is portion folding in `kitchen-print.ts` (`readWholePortionLines`, `foldWholePortions`,
-    `:660-760`); its station ticket modes, bill names on tickets and one cross-bill ticket per action
+    work is portion folding: `foldWholePortions` (`kitchen-print.ts:757`) over
+    `readWholePortionLines` (`apps/server/src/order-portions.ts:306`); its station ticket modes, bill names on tickets and one cross-bill ticket per action
     wait for A773-2 (A803 spec §6 "Slices touching the pass and the station settings wait for
     A773-2"; plan dependency tail). A kitchen print job still belongs to one bill
     (`kitchen_print_jobs.working_order_id`, `linkKitchenJob`, `kitchen-print.ts:841-851`).
@@ -238,7 +264,27 @@ aside).
 18. **Backlog.** `docs/backlog.md:88-98` (Ordered work item 1) and `:2474-2479` (A773-2 entry) and
     `docs/backlog/till.md:2506-2560` say PR D is next and name its three items; `docs/backlog/kitchen.md:291`
     and `docs/backlog/architecture.md:1080` say A773-2 removes `fire_control`, which D113 changes.
-    `docs/backlog.md:2584-2588` keeps "a station waits for another station's part" for later.
+    `docs/backlog.md:2584-2588` keeps "a station waits for another station's part" for later. The
+    owner's live rationalisation proposal also expects PR D to drop all three:
+    `docs/superpowers/specs/2026-11-02-rationalisation/tables-floorkitchen.md:318,331,447,455-466,525,598-599`
+    (`away_at` and `pass_item_marks`) and `tables-venuebox.md:361-369` ("The backlog says A773-2
+    removes that column", `fire_control`).
+
+19. **The cue changes no existing pin in the files that could show it (the reviewer's E8).** A
+    scratch version of D117 and D118 set in `planKitchenTickets` only, over the 24 server files that
+    both make a station wait and read paper plus `kitchen-print.test.ts`,
+    `kitchen-print.shared-printers.test.ts` and `order-groups.test.ts`, gave `1342 passed, 0
+    failed`; a log showed the cue printed on 14 tickets, so the files do reach it. A scratch
+    `goesWithKitchenFood` on the station queue's group (E9) gave `2321 passed, 0 failed` over the 43
+    files that read a station queue, with the key set on 2 groups: few fixtures reach it, so this is
+    weak evidence that no whole-shape pin changes.
+
+20. **Import shape.** `kitchen-print.ts` already sits in a loop with `working-order.ts`:
+    `kitchen-print.ts:63` imports `order-groups.ts`, `order-groups.ts:88` imports values from
+    `working-order.ts`, and `working-order.ts:299` imports `kitchen-print.ts`. `liveKitchenDish`
+    lives in `working-order.ts:8474`; `pass-board.ts:25` and `pass-coverage.ts:21` import it from
+    there. `kitchen-release.ts` imports nothing from `working-order.ts` today, and `working-order.ts`
+    imports it (`passWaitingStations`, `requestHeldItems`, `requestStamps`).
 
 ## Scope
 
@@ -246,7 +292,8 @@ aside).
 a station that does not wait for the pass and on its station card; the guide; an A803 handoff note;
 dropping `pass_item_marks` and `ticket_items.away_at` with their tests; prose that named them.
 
-**Out.** Dropping `locations.fire_control` and its enum (A1301 S28, D113). Any configuration-copy
+**Out.** Dropping `locations.fire_control` and its enum (A1301 S28, D113; the owner is told, Owner
+FYI). Any configuration-copy
 format change (finding 5). The pass board and the waiter's table screen (D126). A803's bill names on
 tickets, station ticket modes and one cross-bill ticket per action (D124). The cue on counter orders
 (D120). The till fixtures that still pass a `fireControl` prop (backlog point, Task 10).
@@ -255,12 +302,17 @@ tickets, station ticket modes and one cross-bill ticket per action (D124). The c
 
 - **D112 No location.** As stated above.
 
-- **D113 `fire_control` stays for A1301 S28.** Dropping it rebuilds `locations` (P2), the rebuild
-  A1301 avoided in S23 for the same reason (design §2.1, "cutting it to its id in S23 would mean an
-  extra rebuild of a table 37 others point at"), and S28's plain `DROP TABLE locations` takes the
-  column, its CHECK and, with the schema line, `fireControlMode`. Doing it here would duplicate that
-  slice's work through the riskier rebuild. Under A1301 design note 9 ("Whichever lands second drops
-  its removal step") PR D is the one that drops its step. Task 10 rewrites `tenants.ts`'s doc comment
+- **D113 `fire_control` stays for A1301 S28.** Dropping it generates a rebuild of `locations` (P2)
+  that the upgrade guard refuses on a database with child rows: `migrations.apply_failed … FOREIGN KEY
+  constraint failed` (the reviewer's E5). So a PR D that dropped it would fail to start on any box
+  that has set up a venue, unless every venue were reset. S28's plain `DROP TABLE locations`, run once
+  nothing points at the table, takes the column, its CHECK and, with the schema line,
+  `fireControlMode`; A1301 avoided a `locations` rebuild in S23 for the same reason (design §2.1,
+  "cutting it to its id in S23 would mean an extra rebuild of a table 37 others point at"). This
+  departs from three texts: spec §9 and master Task 12 put the removal in A773-2, and the A1301 design
+  expects whichever of the two lands first to do it (`:136`; PR D lands first; note 9, `:778`, tells
+  the second one to drop its step, which here will be S28's, if it has one). The owner is told in the
+  FYI and the PR body. Task 10 rewrites `tenants.ts`'s doc comment
   on `fireControlMode` to say what `bumpMode`'s says (read by nothing; S28's drop of `locations`
   removes it), and leaves a dated pointer in the A1301 design and backlog so S28 also deletes the
   tests that still set it (`packages/db/src/schema/kitchen-courses.test.ts:128-161`,
@@ -274,13 +326,16 @@ tickets, station ticket modes and one cross-bill ticket per action (D124). The c
 - **D115 The heading names the courses of its dishes.** Every group heading on kitchen paper reads
   `GROUP n[ · <origin tables>][ · <COURSES>]`: today's number and origin label unchanged, then, when
   any dish under that heading has a course, ` · ` and the distinct course names of the dishes under
-  that heading on that paper, ordered by `kitchen_courses.display_order`, then name, joined by `, `
+  that heading, ordered by `kitchen_courses.display_order`, then name, joined by `, `
   (`GROUP 3 · STARTERS, MAINS`). A dish with no course adds nothing; a group whose dishes have none
   prints today's heading. Names are upper-cased with `toLocaleUpperCase` in the paper's kitchen
   language, as the late-send mark is (`emitLateMark`, `kitchen-ticket.ts:279-288`), because picture
-  8 prints `MAINS` for the course Mains. "Under that heading on that paper" means every item with
-  the same group key (`groupKey`, `:254-256`) anywhere on the paper, so a shared-printer ticket that
-  heads a group once (`onlyGroupOf`) names every course the group has on it. This applies to every
+  8 prints `MAINS` for the course Mains. "The dishes under that heading" are: for the one heading a
+  paper prints under its header when all its dishes share a group (`onlyGroupOf`), every dish on the
+  paper, across station sections; for a heading `emitGrouped` prints at the start of a group's run,
+  the dishes of that run, in that section only (`kitchen-ticket.ts:296-322`; callers sort a list by
+  group, so a group has one run per section). So on a shared-printer ticket spanning two groups, the
+  Grill section's `GROUP 3` heading names only the Grill's group-3 courses. This applies to every
   paper `emitGroup` heads: FIRE and HOLD tickets, reprints, correction slips, kitchen-note slips and
   MOVED slips (picture 8 heads a HOLD ticket this way). The course name is read when the paper is
   planned, from the dish's ticket item (`ticket_items.course_id` → `kitchen_courses`, not filtered
@@ -289,8 +344,8 @@ tickets, station ticket modes and one cross-bill ticket per action (D124). The c
 
 - **D116 Where the course travels.** `KitchenTicketItem` gains `course?: { name: string; order:
   number }`, set by `buildTicketItems` for a dish whose ticket item has a course. The formatter
-  computes each group's course list from the paper's items (a pure helper in `kitchen-ticket.ts`),
-  never from the database. `entryKey` (`:88-108`) gains the course name, so two otherwise identical
+  computes each heading's course list from the dishes under it (D115; a pure helper in
+  `kitchen-ticket.ts`), never from the database. `entryKey` (`:88-108`) gains the course name, so two otherwise identical
   dishes of different courses in one group never merge and lose a course from the heading.
   Correction slips build their items by spreading the same `buildTicketItems` entry and overriding
   only `group` and `groupLabel` (`kitchen-print.ts:1318-1335`, `:1380-1394`), so `course` travels
@@ -299,7 +354,12 @@ tickets, station ticket modes and one cross-bill ticket per action (D124). The c
 
 - **D117 Which groups have kitchen food at the pass.** One server function,
   `groupsWithPassFood(tx: Transaction, groupIds: readonly string[]): Promise<ReadonlySet<string>>`
-  in `apps/server/src/kitchen-release.ts`, one query whatever the number of groups. A group is in
+  in `apps/server/src/working-order.ts` beside `liveKitchenDish`, whose consumers already import it
+  from there (finding 20), one query whatever the number of groups. Not in `kitchen-release.ts`,
+  which would then import `working-order.ts` while `working-order.ts` imports it. `kitchen-print.ts`
+  gains a direct import of `working-order.ts`; it already reaches it through `order-groups.ts` and
+  `working-order.ts` already imports it back (finding 20), and every use is inside a function body,
+  so module load order is unaffected. A group is in
   the answer when, among its live dishes (`liveKitchenDish()`, joined through
   `working_order_lines.group_id`, across every bill of the party), at least one ticket item either
   has `pass_controlled` true, or has not been asked for yet (`requested_at` null) and sits at a
@@ -312,7 +372,12 @@ tickets, station ticket modes and one cross-bill ticket per action (D124). The c
 
 - **D118 The cue on paper.** A dish on a station ticket carries `goesWithKitchenFood: true` when its
   group is in D117's answer, its own ticket item is not pass-controlled and not made here, and the
-  ticket is not a HOLD ticket (`mark !== "HOLD"`). The formatter prints the cue once per group
+  ticket is not a HOLD ticket (`mark !== "HOLD"`). The flag is set in `planKitchenTickets`
+  (`kitchen-print.ts:540`) after its `buildTicketItems` call (`:586`), where `mark` is known, and
+  D117's query is skipped when `mark === "HOLD"`. `buildTicketItems` itself is unchanged for the
+  cue: its other callers build correction, kitchen-note and MOVED slips (`:1182`, `:1292`, `:1752`),
+  which never carry the cue, and setting the flag there would change their `entryKey`s and add the
+  query to every slip. The formatter prints the cue once per group
   heading whose run holds such a dish, on its own line directly under the heading (picture 8), in
   the paper's kitchen language, normal case. With one shared group heading under the header, the
   cue prints once under it. Correction, kitchen-note and MOVED slips never print it (they describe a
@@ -324,8 +389,10 @@ tickets, station ticket modes and one cross-bill ticket per action (D124). The c
 
 - **D119 The cue on the station screen.** The server's `QueueGroup` gains `goesWithKitchenFood?:
   true`, present only when the group is in D117's answer (absent when not, as `numberPartyLabel` is,
-  so no existing whole-shape pin changes), computed once per `listStationQueues` call for all its
-  groups. The till's `QueueGroup` twin gains the same optional key. A station card draws the cue as a
+  so no existing whole-shape pin changes; finding 19's E9 is the weak receipt), computed once per
+  `listStationQueues` call for all its groups and added at that function's `queueGroup` call
+  (`working-order.ts:8429`) only. `queueGroup` itself is unchanged, so `readPassRows`' call
+  (`:8618`) and the pass board never carry the key (D126). The till's `QueueGroup` twin gains the same optional key. A station card draws the cue as a
   muted line under its dishes (picture 7) when its group carries the key and at least one of the
   card's dishes is released (phase `waiting`, `preparing` or `ready`) and not pass-controlled. A held
   card, and a card all of whose dishes are pass-controlled (a Grill card), draws nothing. New till
@@ -386,10 +453,10 @@ tickets, station ticket modes and one cross-bill ticket per action (D124). The c
 | `KitchenTicketItem.groupCourseNames?: string[]` | `course?: { name; order }` per dish; the formatter derives each heading's list | the heading lists what is on that paper; one source per dish keeps slips and tickets alike (D115, D116) |
 | "print the cue once per affected group/station section" when "same group has pass-waiting station work" | D117's rule: pass-controlled dishes, or held dishes at a station that waits now | bills print one at a time (finding 11) |
 | "immediate Bar ticket/screen" | paper and the station card; pass board and table screen unchanged | spec §5 names ticket and screen of the station (D126) |
-| Delete `locations.fire_control` and its enum/CHECK | stays for A1301 S28 | a `locations` rebuild (P2); S28 drops the table (D113) |
+| Delete `locations.fire_control` and its enum/CHECK | stays for A1301 S28 | the generated `locations` rebuild is refused by the upgrade guard (P2, E5); S28 drops the table (D113); also departs from spec §9 and A1301 design `:136` (owner FYI) |
 | Bump configuration format "4 → 5" | none | already 10; nothing carried changes (D114) |
 | "Remove retired child marks first; generate drops" in one task | test edits first (Tasks 6, 7a, 7b), then one generation per storage item (Tasks 8, 9) | each commit green; tasks small |
-| "Reset is required, never backfill" | no reset expected; the upgrade guard decides | plain `DROP TABLE` / `DROP COLUMN` (P1); stop if the guard refuses |
+| "Schema releases require a pre-live reset, stated first in the PR" | no reset expected, stated first in the PR; the upgrade guard decides | plain `DROP TABLE` / `DROP COLUMN` (P1), guard green with rows present (E4, control E4c); this lane's reading since B1 (#2381, #2440); stop if the guard refuses |
 | Requested Grill prints no paper at request, one at release; HOLD obeys A756 | pinned already by B3 (`kitchen-request.hold-paper.test.ts`, `pass-release.test.ts`); Task 2 adds the heading and no-cue facts to one release case | not rebuilt |
 
 ## Consumer audit
@@ -409,22 +476,40 @@ The search in finding 1, every hit outside tests, drizzle output and fixtures:
 | `packages/country-es/test-fixtures/demo/madrid-before-move.{en,es}.json` | unchanged (hash-pinned capture, finding 13) |
 | `packages/db/drizzle/*.sql`, `meta/*.json` | historical, unchanged |
 
-Prose hits (`rg -n -i 'away_at|awayAt|pass_item_marks|fire_control|fireControl' docs/developers docs/operations docs/backlog docs/backlog.md`):
+Prose hits (`rg -n -i 'away_at|awayAt|pass_item_marks|fire_control|fireControl' docs/developers docs/operations docs/backlog docs/backlog.md docs/superpowers/specs`,
+current documents only; finished plans and dated specs are history):
 `docs/developers/conventions-ui.md:632` (Task 8), `docs/developers/conventions-data.md:1721,1733`
 (historical format-10 description; unchanged), `docs/backlog/data-protection.md:93` (Task 8),
 `docs/operations/a760-migration-squash-inventory.md:259` (Task 8, dated pointer),
-`docs/backlog/kitchen.md:291`, `docs/backlog/architecture.md:1080` (Task 10), the A773 entries
-(Task 11).
+`docs/backlog/kitchen.md:291`, `docs/backlog/architecture.md:1080` (Task 10), the
+rationalisation proposal's `tables-floorkitchen.md` and `tables-venuebox.md` lines in finding 18
+(Task 10, dated pointers), the A1301 design `:136` and `:778` (Task 10, dated pointer), the A773
+entries (Task 11).
 
-New readers this PR adds: `buildTicketItems`' course and pass-control read (Tasks 1b, 2),
-`groupsWithPassFood` (Task 2) and its call in `listStationQueues` (Task 3).
+New readers this PR adds: `buildTicketItems`' course read (Task 1b), `planKitchenTickets`' pass
+food read (Task 2), `groupsWithPassFood` (Task 2) and its call in `listStationQueues` (Task 3).
 
 ## Changed test checks (expected; the implementer confirms each)
 
-**Course headings (Task 1b; P3).** In `apps/server/src/order-groups.test.ts`, only the heading
-strings change: each expected `GROUP n` (or `GROUP n · <tables>`) line, or substring ending in
-`\n`, gains ` · <COURSE>` for its fixture dishes' course; every other expected value, order and
-count stays. The 34 cases P3 turned red:
+**Course headings (Task 1b; P3, E6, E7).** 37 cases and two negative lines. In each case only the
+heading strings change: each expected `GROUP n` / `GRUPO n` (or `GROUP n · <tables>`) line or
+element, or substring ending in `\n`, gains ` · <COURSE>` with the course the probe prints for its
+fixture dishes; every other expected value, order and count stays.
+
+The two negatives, `order-groups.test.ts:620` and `:639` (in "keeps original numbers on FIRE paper
+after reordering held groups" and "keeps original numbers on HOLD corrections after reordering"),
+`expect(paper[0]).not.toContain("GROUP 3\n")`, become `expect(paper[0]).not.toMatch(/^GROUP 3\b/m)`:
+no line of that paper starts with group 3's heading, whatever follows the number. This keeps them
+able to fail (a paper heading group 3 with any course matches) and does not match `GROUP 30`.
+
+The three in `apps/server/src/party-arriving-dishes.test.ts` › "an arriving held group's advance
+HOLD ticket": "with Print held groups in advance on, a moved bill's waiting dish prints a HOLD ticket
+at the move and a FIRE slip when its group is fired" (`:938`), "names on the HOLD ticket the moved
+bill itself, kept apart from the destination's bill" (`:982`), "with Print held groups in advance on,
+a waiting dish on the bill Split a table takes prints a HOLD ticket" (`:1031`); each
+`` `${kitchenTicketWords("es").group} 2` `` element gains ` · POSTRES` (E6's diff).
+
+The 34 in `apps/server/src/order-groups.test.ts` P3 turned red:
 "permanent group numbers on kitchen work" › "qualifies duplicate numbers from a closed origin using
 its recorded tables", "keeps original numbers on FIRE paper after reordering held groups", "keeps
 original numbers on HOLD corrections after reordering", "reprints permanent numbers in the changed
@@ -459,7 +544,7 @@ each group", "firing one held dish takes it off the HOLD ticket only at a statio
 group", "a held edit's quantity change corrects the HOLD ticket only at a station recorded for the
 group", "a held dish moved into a printed group holding none of a station's held work gets HOLD
 CHANGED there, and records it", "a station switched off after its HOLD ticket printed still gets +N
-for a joining dish". A heading change in any other case or file found by Task 1b's step 1 is a
+for a joining dish". A heading change in any other case or file found by Task 1b's probe is a
 **stop**: report it and amend this table before editing.
 
 **Retired storage (Tasks 6–9, rule D123).**
@@ -470,14 +555,14 @@ for a joining dish". A heading change in any other case or file found by Task 1b
 | `apps/server/src/device-api.pass.test.ts` | marks 14 | each case keeps its 404s and board reads; marks inserts and `select … from(passItemMarks)` assertions go (a) |
 | `apps/server/src/pass-lifetime.test.ts` | marks 5, away 3 | (a) |
 | `apps/server/src/station-outputs-down.test.ts` | marks 4, away 2 | (a) |
-| `apps/server/src/watchers.leave.test.ts` | marks 4 | the insert, the two `onPassScreen` checks between it and the delete, and the delete go (a); the rest unchanged |
+| `apps/server/src/watchers.leave.test.ts` | marks 4 | the insert, the `onPassScreen` check between it and the delete (`:82`), the delete and the check after it (`:88`) go (a); the rest unchanged |
 | `apps/server/src/personal-data-actions.coverage.test.ts:57` | 1 | the list entry `pass_item_marks.done_by_person_id` goes (the table's column no longer exists) |
 | `scripts/schema-constraints.test.ts:234-235` | 2 | the two `pass_item_marks` key rows go |
 | `packages/db/src/schema/pass-item-marks.test.ts` | file | deleted with the table |
 | `packages/db/src/schema/ticket-items.test.ts:144`, `:147-158` | 4 | `expect(row!.awayAt).toBeNull()` goes; the case "stamps away_at (the pass dispatch) …" is deleted |
 | `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts:36`, after `:165` | set-up of the expected side | `REMOVED_TABLES` gains `"pass_item_marks"`; `ticket_items`' expected columns lose `away_at` (and each captured row its key), as `parties` loses `main_bill_id` |
 | server tests with `awayAt` (Tasks 7a, 7b): `current-orders` 1, `department-transfer-api` 4, `device-levers` 4, `kitchen-allergy.notices` 1, `kitchen-print` 1, `management-api.station-disable` 1, `order-groups` 6, `order-kitchen-note.corrections` 2, `party-move-bill` 3, `rest-of-order` 1, `served` 2, `split-off-extras.groups` 3, `split-off-extras.release` 2, `station-delete` 1, `station-move` 1, `station-queue-rest` 1, `table-signals.service-lifetime` 1, `tables` 1, `till-api.groups` 3, `till-api.station-today` 2, `working-order-reads.sqlite` 1, `working-order` 13 | as counted | (a) or (b) per hit; a combined `.set({ state, awayAt })` keeps `state`; a helper option `away` (e.g. `rest-of-order.test.ts:154`, `station-queue-rest.test.ts:160`, `station-delete.test.ts:110`) and the fixtures that pass it go |
-| `apps/server/src/till-api.courses.test.ts:674,696,731` | 3 | `:674`, `:696` stay (c); `:731` (`before.items.every((item) => item.awayAt === null)`) reads the API answer: stays if the answer still types `awayAt`-free items, as (c); confirm |
+| `apps/server/src/till-api.courses.test.ts:674,696,731` | 3 | `:674`, `:696` stay (c); `:731` `expect(before.items.every((item) => item.awayAt === null)).toBe(true)` is deleted under (a) in Task 7b: `before.items` is `tx.select().from(ticketItems)` (`:720-728`), a database row, not an API answer; without the column it fails to typecheck (`TS2339`, the reviewer's E3 typecheck) and at run time `undefined === null` is false |
 
 ## Guard suites (the final task runs each; earlier tasks run the ones they name)
 
@@ -486,6 +571,10 @@ for a joining dish". A heading change in any other case or file found by Task 1b
   `pnpm exec vitest run scripts/mutation-shard.test.mjs`.
 - **Fiscal pair, unedited** (Tasks 8, 9, 11): `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`.
 - **G** (Task 4, 11): `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts src/guide-pages.test.ts`; `pnpm exec vitest run scripts/guide-links.test.ts`.
+- **The wide paper probe** (Task 1b, Task 11): the file list `PAPER=( $(/usr/bin/grep -rlE 'GROUP|GRUPO|decodeTicket|ticketText|paperText|printJobs|TextDecoder|\.bytes|jobText|paper|decode-ticket|printedLines|kitchenPrintJobs|kitchenTicketWords' apps/server/src apps/server/scripts --include='*.test.ts' | sed 's#^apps/server/##') )`
+  (zsh: an array, not a bare `$PAPER`), run as `pnpm --filter @waitron/server exec vitest run "${PAPER[@]}"`.
+  It is E6's selector plus `kitchenTicketWords`, so it lists `party-arriving-dishes.test.ts`. Measure
+  free memory first; E6's run was 266 files in one go.
 - `scripts/english-only.test.ts`, `scripts/style-token-names.test.ts`,
   `scripts/primary-coloured-text.test.ts` (Tasks 2, 3).
 - `scripts/errors-reachable.test.ts`, `scripts/alert-codes.test.ts`, `scripts/personal-log-params.test.ts`:
@@ -525,7 +614,10 @@ name (`GRUPO 4 · POSTRES`) as picture 8 does; a group with two courses on one t
 ENTRANTES, PRINCIPALES`; a merged table's repeated number keeps its tables first (`GRUPO 1 · Mesa 4,
 9 · PRINCIPALES`). A counter order gets no heading and no cue, since it has no groups (D120; asked
 later as a backlog question). The cue stays while the kitchen's part of the group is still held,
-because those dishes still go with it (D117).
+because those dishes still go with it (D117). `locations.fire_control` is not dropped here, though the
+spec (§9) puts its removal in A773-2: dropping it rebuilds the `locations` table, and that rebuild
+fails to start on any box with a venue set up (`FOREIGN KEY constraint failed`); A1301 drops the
+whole `locations` table in its slice S28, which takes the column with it (D113).
 
 ## Task 0: preflight (no commit, about 15 calls)
 
@@ -545,9 +637,10 @@ because those dishes still go with it (D117).
 **Files.** `apps/server/src/kitchen-ticket.ts`; test `kitchen-ticket.test.ts`.
 
 **Interfaces.** D116: `KitchenTicketItem.course?: { name: string; order: number }`; a pure,
-exported helper `groupCourseNames(items: readonly KitchenTicketItem[], locale: string):
-ReadonlyMap<string, string[]>` keyed by `groupKey`, values upper-cased per D115; `emitGroup` takes
-the list for its group. `entryKey` gains `item.course?.name ?? null`.
+exported helper `headingCourses(items: readonly KitchenTicketItem[], locale: string): string[]`
+returning the distinct, ordered, upper-cased course names of the dishes it is given (D115); each
+heading calls it with the dishes under that heading. `emitGroup` takes the list. `entryKey` gains
+`item.course?.name ?? null`.
 
 - [ ] **Failing tests** (new cases in `kitchen-ticket.test.ts`, `A773 fire paper` in each title):
   1. "A773 fire paper: a group heading names its dishes' course" — one-group station ticket, two
@@ -564,6 +657,10 @@ the list for its group. `entryKey` gains `item.course?.name ?? null`.
   6. "A773 fire paper: a shared-printer ticket names every course its one group has" — `scope:
      "stations"`, Grill's Mains and Bar's Drinks in group 2 → one heading `GROUP 2 · MAINS, DRINKS`
      (order 2 then 5) under the header.
+  6b. "A773 fire paper: on a shared ticket spanning groups, each section's heading names its own
+     dishes' courses" — `scope: "stations"`, Grill: group 3 Mains, group 4 Desserts; Bar: group 3
+     Drinks → Grill's section heads `GROUP 3 · MAINS` and `GROUP 4 · DESSERTS`, Bar's heads
+     `GROUP 3 · DRINKS` (D115: a run's heading names that run's dishes only).
   7. "A773 fire paper: two dishes alike but for their course do not merge" — `arrangeTicketItems(…,
      "combined")` keeps them apart and the heading names both courses.
   8. "A773 fire paper: correction, kitchen-note and MOVED slips name the course" — one case per
@@ -571,67 +668,94 @@ the list for its group. `entryKey` gains `item.course?.name ?? null`.
      its `held` groups) → the heading carries the course.
 - [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/kitchen-ticket.test.ts -t 'A773 fire paper'`
   — fails on the heading text, not on a type or import error.
-- [ ] **Minimal implementation.** As Interfaces. Compute the map once per formatted paper over all
-  its items (for `formatMovedSlip`, `slip.items` and every `held` group's items) and pass each group's
-  list to `emitGroup`. Upper-case with `toLocaleUpperCase(kitchenLanguageFor(locale))`.
+- [ ] **Minimal implementation.** As Interfaces. The shared heading under the header passes every
+  item on the paper; `emitGrouped` passes the run it is about to print (the items of `items` from
+  this one up to the next group change); `formatMovedSlip` passes each `held` group's items for its
+  heading. Upper-case with `toLocaleUpperCase(kitchenLanguageFor(locale))`.
 - [ ] **Mutation controls.** Sort courses by name instead of `order` → case 2 red; drop the
-  `entryKey` addition → case 7 red; compute per run instead of per paper → case 6 red.
+  `entryKey` addition → case 7 red; give the shared heading only the first section's items → case 6
+  red; give every run heading the whole paper's items → case 6b red.
 - [ ] **GREEN.** `pnpm --filter @waitron/server exec vitest run src/kitchen-ticket.test.ts src/kitchen-ticket.kitchen-note.test.ts src/kitchen-ticket.language.test.ts`
   (read each `Tests` count; existing cases pass unchanged because no existing item has a `course`);
   `pnpm --filter @waitron/server typecheck`.
 - [ ] **Commit.** `git commit -s -m "Kitchen paper's group heading can name its dishes' courses"`.
 
-## Task 1b: the planner reads each dish's course (about 55 calls)
+## Task 1b: the planner reads each dish's course, and the heading pins move with it (about 70 calls)
 
 **Files.** `apps/server/src/kitchen-print.ts` (`buildTicketItems`); tests `kitchen-print.test.ts`,
-`order-groups.test.ts` (the 34 pins).
+`order-groups.test.ts` (34 cases and the two negatives), `party-arriving-dishes.test.ts` (3 cases).
+The planner change and the 37 pin edits land in one commit: either alone leaves the suite red.
 
-- [ ] **Step 1, the probe that decides the edit list.** Before any code: implement the change below,
-  then run every server test file that reads paper text and could carry a group heading:
-  `pnpm --filter @waitron/server exec vitest run src/order-groups.test.ts src/kitchen-request.*.test.ts src/print-problems.test.ts src/kitchen-print*.test.ts src/adjustments-extra-cancel.test.ts src/kitchen-ticket*.test.ts src/pass-release.test.ts src/station-move.test.ts src/split-off-extras.*.test.ts src/till-api.reprint.test.ts src/orders-reprint.test.ts src/move-merge.test.ts src/working-order.test.ts src/working-order.pay-and-dispatch.test.ts src/made-here.routes.test.ts src/till-api.service-periods.test.ts src/order-kitchen-note.receipts.test.ts`.
-  The failures must be exactly the 34 cases in "Changed test checks"; any other is a **stop**.
-- [ ] **Failing tests** (new, `kitchen-print.test.ts`):
-  1. "A773 fire paper: a waiter's fire prints the group's course on its heading" — a party with a
-     Mains group of two dishes at Grill, fired → the Grill job's text has `GROUP n · MAINS`.
-  2. "A773 fire paper: the heading keeps the course a dish was sent with after the course is
-     renamed and deactivated" — rename the course after the HOLD ticket, fire → the FIRE paper names
-     the current name (D115: read when planned), and a reprint names it too; deactivating the course
-     still prints its name (not filtered by `active`).
-  3. "A773 fire paper: reordering held groups keeps each heading's number and course" — two held
-     groups (Mains, Desserts) swapped, Desserts fired → `GROUP <its original number> · DESSERTS`.
-- [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/kitchen-print.test.ts -t 'A773 fire paper'`.
-- [ ] **Minimal implementation.** In `buildTicketItems`, left-join `kitchen_courses` on
-  `ownRecord.courseId` (alias it; no location column named) and set `course: { name, order:
-  displayOrder }` when present. Edit the 34 pins per "Changed test checks" (heading strings only).
-- [ ] **Mutation controls.** Join on the line's `course_id` of the parent instead of the dish's own
-  ticket item → case 1 still green? If so, add a case where the line's and the ticket item's courses
-  differ (`ticket_items.course_id` is what the station screen reads, finding 8) and show it red.
-- [ ] **GREEN.** Step 1's command again, all green (read the count); `pnpm --filter @waitron/server typecheck`.
+- [ ] **Failing test first** (new, `kitchen-print.test.ts`): "A773 fire paper: a waiter's fire
+  prints the group's course on its heading" — a party with a Mains group of two dishes at Grill,
+  fired → the Grill job's text has a line `GROUP n · MAINS`.
+- [ ] **RED, observed before any implementation.** `pnpm --filter @waitron/server exec vitest run src/kitchen-print.test.ts -t 'A773 fire paper'`
+  — fails on the heading line (`GROUP n` received), not on an import or fixture error.
+- [ ] **Minimal implementation.** In `buildTicketItems`, left-join `kitchen_courses` (aliased) on
+  `ownRecord.courseId`, not filtered by `active` and naming no location column, and set `course: {
+  name, order: displayOrder }` when present. The new case goes green.
+- [ ] **Probe for the pins this changes.** Run the wide paper probe ("Guard suites"; it lists
+  `party-arriving-dishes.test.ts`). The red cases must be exactly the 37 in "Changed test checks";
+  any other is a **stop**. Then, because a probe that lists failures cannot see a negative that went
+  vacuous, list every negative heading check in the files the probe ran:
+  `/usr/bin/grep -nE 'not\.(toContain|toMatch)\(.*(GROUP|GRUPO|\.group\b)' "${PAPER[@]/#/apps/server/}"`;
+  for each hit say whether its group has a course in that fixture. Expected: `order-groups.test.ts:620`
+  and `:639` go vacuous (E7); `kitchen-ticket.language.test.ts:39,60,103`,
+  `kitchen-print.test.ts:557` and `adjustments-extra-cancel.test.ts:300` stay meaningful (the
+  reviewer's reading: course-free formatter fixtures, and checks for the bare word `GROUP`). Any other
+  vacuous one is a **stop**.
+- [ ] **Edit the pins** exactly as "Changed test checks → Course headings" says: heading strings
+  only, and the two negatives to `not.toMatch(/^GROUP 3\b/m)`.
+- [ ] **Mutation controls.** Join on the parent line's course instead of the dish's own ticket item:
+  if the new case stays green, add a case where `working_order_lines.course_id` and
+  `ticket_items.course_id` differ (the station screen reads the ticket item's, finding 8) and show it
+  red. Revert the planner join: the 37 edited cases turn red. For the two rewritten negatives,
+  show each can still fail: in a scratch edit, fire `s.mains` (group 3) instead of `s.desserts`
+  (the first case) or join the flan to group 3 (the second), see `not.toMatch(/^GROUP 3\b/m)` red,
+  record the output, revert.
+- [ ] **GREEN.** The wide paper probe again, all green (read the count); `pnpm --filter @waitron/server typecheck`.
 - [ ] **Commit.** `git commit -s -m "Kitchen tickets and slips name each group's courses on its heading (GROUP 3 · MAINS)"`.
 
-## Task 2: "Goes with kitchen food" on the ticket (about 55 calls)
+## Task 1c: pins for a renamed course and a reordered group (about 35 calls)
 
-**Files.** `apps/server/src/kitchen-release.ts` (`groupsWithPassFood`), `kitchen-print.ts`
-(`buildTicketItems` or the ticket planner), `kitchen-ticket.ts` (cue line, `entryKey`),
-`i18n/kitchen-ticket.ts` (`goesWithKitchenFood`); tests a new `kitchen-release.test.ts` (none exists;
-`requestStamps` and friends are exercised through `pass-release.test.ts` and
-`party-move-bill.test.ts`), `kitchen-ticket.test.ts`, new `kitchen-print.goes-with.test.ts` (or cases in `pass-release.test.ts`
-where its fixtures fit; use `setStationsWaitForPass`, `apps/server/src/testing/pass-waiting.ts`).
+These pin behaviour Task 1b built; each names the mutation that turns it red.
+
+- [ ] **Cases** (`kitchen-print.test.ts`, `A773 fire paper`):
+  1. "A773 fire paper: the heading reads the course as it is when the paper is planned, deactivated
+     or not" — after a group's HOLD ticket, rename its course; fire → the FIRE paper names the new
+     name (D115); deactivate the course and reprint → the reprint still names it. Mutation: filter
+     the join by `kitchen_courses.active` → the reprint part red.
+  2. "A773 fire paper: reordering held groups keeps each heading's number and course" — two held
+     groups (Mains, Desserts) swapped, Desserts fired → `GROUP <its original number> · DESSERTS`.
+     Mutation: head with `order_groups.position` instead of `display_number` → red.
+- [ ] Run each mutation, see it red, revert. **GREEN.** `pnpm --filter @waitron/server exec vitest run src/kitchen-print.test.ts`.
+- [ ] **Commit.** `git commit -s -m "Pin kitchen headings' course name after a rename and a reorder"`.
+
+## Task 2: "Goes with kitchen food" on the ticket (about 60 calls)
+
+**Files.** `apps/server/src/working-order.ts` (`groupsWithPassFood`, beside `liveKitchenDish`,
+D117), `kitchen-print.ts` (`planKitchenTickets` only, D118), `kitchen-ticket.ts` (cue line,
+`entryKey`), `i18n/kitchen-ticket.ts` (`goesWithKitchenFood`); tests a new
+`goes-with-kitchen-food.test.ts` for the predicate and the paper (use `setStationsWaitForPass`,
+`apps/server/src/testing/pass-waiting.ts`), `kitchen-ticket.test.ts`.
 
 **Interfaces.** D117 `groupsWithPassFood(tx, groupIds)`; D118 `KitchenTicketItem.goesWithKitchenFood?: true`;
 `KITCHEN_TICKET_WORDS.{en,es}.goesWithKitchenFood`.
 
+- [ ] **Stub first, so RED is an assertion.** Export `groupsWithPassFood` returning an empty set,
+  and add `goesWithKitchenFood?: true` to `KitchenTicketItem` and the word to `KITCHEN_TICKET_WORDS`
+  (unused). Typecheck clean.
 - [ ] **Failing tests** (`A773 fire paper` in each title):
-  1. new `kitchen-release.test.ts` "A773 fire paper: a group has kitchen food at the pass" — group with
+  1. `goes-with-kitchen-food.test.ts` "A773 fire paper: a group has kitchen food at the pass" — group with
      a pass-controlled Grill dish → in; group whose Grill dish is held and Grill waits now → in; group
      whose only Grill dish was released before Grill started waiting (`pass_controlled` false,
      `requested_at` set) → out; a cancelled pass-controlled dish (not `liveKitchenDish`) → out;
-     empty input → empty set with no query (count queries or assert on an empty array).
+     empty input → empty set.
   2. `kitchen-ticket.test.ts` "A773 fire paper: the cue prints once under its group's heading" —
      two dishes of group 4 with the flag → `GROUP 4 · DESSERTS`, then `Goes with kitchen food`, then
      the dishes; Spanish ticket uses the `es` word; a group without the flag prints no cue; a HOLD
      ticket's items never carry it (planner) and the formatter prints whatever the items say.
-  3. "A773 fire paper: the bar's ticket says it goes with the kitchen's food" — Grill waits, Bar does
+  3. `goes-with-kitchen-food.test.ts` "A773 fire paper: the bar's ticket says it goes with the kitchen's food" — Grill waits, Bar does
      not; one bill, desserts group of a tarta (Grill) and moscatel (Bar), held, then the waiter fires
      it → the Bar job's text has the cue under `GROUP n · DESSERTS`; no Grill job yet; the pass
      releases the tarta → the Grill job has the heading and no cue.
@@ -640,20 +764,25 @@ where its fixtures fit; use `setStationsWaitForPass`, `apps/server/src/testing/p
      Bill 1 prints first, and show it red with D117's second half removed.
   5. "A773 fire paper: no cue without food at the pass" — nobody waits → no cue; a Bar-only group →
      no cue; an advance HOLD ticket at Bar for the held group → no cue.
-- [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/kitchen-release.test.ts src/kitchen-ticket.test.ts src/kitchen-print.goes-with.test.ts -t 'A773 fire paper'`.
-- [ ] **Minimal implementation.** One query for the planned dishes' groups per paper plan; set the
-  flag per D118 (needs the dish's own `pass_controlled` and `made_here`: add both to
-  `buildTicketItems`' `ownRecord` select). Print the cue after the heading in `emitGrouped` and after
-  the shared heading in `formatKitchenTicket`; never in the slip formatters. Add the flag to
-  `entryKey`.
+- [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/goes-with-kitchen-food.test.ts src/kitchen-ticket.test.ts -t 'A773 fire paper'`
+  — case 1's "in" expectations and cases 2–4's cue lines fail as assertions (the stub answers empty).
+- [ ] **Minimal implementation.** `groupsWithPassFood` per D117 (one query). In `planKitchenTickets`,
+  unless `mark === "HOLD"`, call it once for the planned dishes' groups and set the flag per D118. The
+  dish's own `pass_controlled` and `made_here` come from one read over the planned line ids, or from
+  `buildTicketItems`' map entry beside `item` (not on `item`), so the slip callers see no change.
+  Print the cue after the heading in `emitGrouped` and after the shared heading in
+  `formatKitchenTicket`; never in the slip formatters. Add the flag to `entryKey`.
+- [ ] **Probe for pins the cue changes.** Run the wide paper probe. Any red case outside this task's
+  new ones is a **stop**. The reviewer's scratch version of this change (E8, finding 19) changed none
+  of 1342 cases while printing the cue on 14 tickets.
 - [ ] **Mutation controls.** Drop the `mark !== "HOLD"` guard → case 5's HOLD part red; drop the
   dish's own `pass_controlled` check → case 3's Grill release red; read `pass_controlled` only (no
   held-at-waiting-station half) → case 4 red.
-- [ ] **GREEN.** The three files unfiltered, plus `src/pass-release.test.ts src/kitchen-request.hold-paper.test.ts src/kitchen-print.shared-printers.test.ts src/kitchen-print.concurrency.test.ts src/order-groups.test.ts`;
+- [ ] **GREEN.** The two files unfiltered, plus `src/pass-release.test.ts src/kitchen-request.hold-paper.test.ts src/kitchen-print.shared-printers.test.ts src/kitchen-print.concurrency.test.ts src/order-groups.test.ts src/party-arriving-dishes.test.ts`;
   `scripts/english-only.test.ts`; `pnpm --filter @waitron/server typecheck`.
 - [ ] **Commit.** `git commit -s -m "A station that does not wait for the pass prints 'Goes with kitchen food' when its group has food at the pass"`.
 
-## Task 3: the cue on the station card (about 50 calls)
+## Task 3: the cue on the station card (about 55 calls)
 
 **Files.** `apps/server/src/working-order.ts` (`QueueGroup`, `listStationQueues`); till
 `apps/till/src/api/client.ts` (`QueueGroup`), `widgets/station-queue.ts` (`#card`),
@@ -672,10 +801,15 @@ where its fixtures fit; use `setStationsWaitForPass`, `apps/server/src/testing/p
      whose dishes are all pass-controlled → no line; no key → no line. Restore the language after
      the case (CLAUDE.md §4).
   3. Till a11y: the Bar card with the line passes axe in both themes.
+  4. Server: "A773 fire paper: the pass board's groups carry no cue key" — the same fixture's
+     `readPassRows` (or the pass board read built on it) → no group has `goesWithKitchenFood`.
+     Mutation: add the key inside `queueGroup` → red.
 - [ ] **RED.** Server: `pnpm --filter @waitron/server exec vitest run src/station-queue.goes-with.test.ts -t 'A773 fire paper'`;
   till (memory first): `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue.test.ts -t 'A773 fire paper'`.
-- [ ] **Minimal implementation.** One `groupsWithPassFood` call over the read's group ids; add the
-  key in the group builder only when true. Client type gains `goesWithKitchenFood?: true`. The card
+- [ ] **Minimal implementation.** In `listStationQueues`, one `groupsWithPassFood` call over the
+  read's group ids; add the key at its `queueGroup` call (`working-order.ts:8429`) only when true.
+  `queueGroup` and `readPassRows` (`:8504`, its call at `:8618`) stay unchanged, so the pass board
+  never carries the key (D119, D126). Client type gains `goesWithKitchenFood?: true`. The card
   draws `<p class="goes-with" data-goes-with>` after its sections, styled with the tokens the card's
   muted text already uses.
 - [ ] **Mutation controls.** Draw on any card with the key (drop the released-and-not-pass-controlled
@@ -688,13 +822,14 @@ where its fixtures fit; use `setStationsWaitForPass`, `apps/server/src/testing/p
 
 ## Task 4: the guide and the A803 handoff (about 35 calls)
 
-- [ ] `apps/server/src/guide/en/kitchen-service.md` and `es/` twin: in `#held-work` (or a new
-  `{#group-headings}` section; if new, `guide-content.test.ts`' list of ids gains it and it is added
-  to "Changed test checks"), written from the code, each sentence's `file:line` in the task report:
-  a group's heading names its courses; a station that does not wait for the pass prints and shows
-  "Goes with kitchen food" when the same group has dishes for the pass, and what that means (serve
-  it with that food); `#kitchen-screen` mentions the card's line. Spanish uses Owner question 1's
-  words.
+- [ ] `apps/server/src/guide/en/kitchen-service.md` and its `es/` twin, in existing sections (no new
+  id, so `guide-content.test.ts`' id list is unchanged), written from the code, each sentence's
+  `file:line` in the task report: in `#held-work` (`en :56`, the section about a group's paper), that
+  a group's heading on kitchen paper names its courses; in `#station-waits` ("Make a station wait for
+  the pass", `en :331`, `es :367`), that a station which does not wait prints and shows "Goes with
+  kitchen food" when the same group has dishes for the pass, and what that means (serve it with that
+  food); in `#kitchen-screen` (`en :130`), one sentence that the card shows that line. Spanish uses
+  Owner question 1's words.
 - [ ] Append to `docs/superpowers/plans/2026-10-19-a803-bills-and-tables.md`'s "Dependency tail" a
   paragraph headed "A773-2 PR D handoff (2026-11-04)" with D124's seams.
 - [ ] G. **Commit.** `git commit -s -m "Guide: course headings and 'Goes with kitchen food'; A803 handoff note"`.
@@ -737,11 +872,13 @@ where its fixtures fit; use `setStationsWaitForPass`, `apps/server/src/testing/p
 
 **Files.** `rest-of-order`, `served`, `split-off-extras.groups`, `split-off-extras.release`,
 `station-delete`, `station-move`, `station-outputs-down`, `station-queue-rest`,
-`table-signals.service-lifetime`, `tables`, `till-api.courses` (confirm `:731`),
+`table-signals.service-lifetime`, `tables`, `till-api.courses` (delete `:731`, a database-row read,
+under (a); keep `:674`, `:696` under (c)),
 `till-api.groups`, `till-api.station-today`, `working-order-reads.sqlite`, `working-order`.
 
 - [ ] Apply D123; record each. **GREEN.** Those files unfiltered;
-  `rg -n 'awayAt|away_at' apps/server/src` lists only the (c) assertions. **Commit.**
+  `rg -n 'awayAt|away_at' apps/server/src` lists only `till-api.courses.test.ts:674,696` (c).
+  **Commit.**
   `git commit -s -m "Tests stop writing the retired Away stamp (part 2)"`.
 
 ## Task 8: drop `pass_item_marks` (about 45 calls)
@@ -778,25 +915,34 @@ where its fixtures fit; use `setStationsWaitForPass`, `apps/server/src/testing/p
   showing only finding 2's till payload keys and D123 (c) assertions.
 - [ ] **Commit.** `git commit -s -m "Drop the retired Away column from kitchen items (no venue reset)"`.
 
-## Task 10: prose, `fire_control`'s pointer and the audit (about 30 calls)
+## Task 10: prose, `fire_control`'s pointer and the audit (about 35 calls)
 
 - [ ] `packages/db/src/schema/tenants.ts`: `fireControlMode`'s doc comment becomes the `bumpMode`
   form ("Read by nothing … A1301 S28's drop of `locations` removes it"). Comment only; generate and
   confirm drizzle writes no migration (`git status packages/db/drizzle` clean).
 - [ ] `docs/backlog/kitchen.md:291` and `docs/backlog/architecture.md:1080`: `fire_control`'s
-  removal is A1301 S28's (D113), with the test list from D113. A dated pointer line under A1301
-  design note 9 (`2026-11-01-a1301-remove-location-design.md:778`): "2026-11-04: A773-2 PR D left
-  `fire_control` to S28 (its plan D113)". A dated pointer at the top of the master plan's Tasks 11–12
-  to this plan.
-- [ ] Re-run finding 1's search and the prose search; every hit is in a "Consumer audit" row or is
-  new code from Tasks 1–3. Record any till fixture still passing `fireControl` as one backlog point
+  removal is A1301 S28's (D113), with the test list from D113. Dated pointer lines in the A1301
+  design at its §2.1 `fire_control` row (`2026-11-01-a1301-remove-location-design.md:136`) and note 9
+  (`:778`): "2026-11-04: A773-2 PR D landed first but left `fire_control` to S28: dropping it alone
+  rebuilds `locations`, which the upgrade guard refuses (PR D plan D113). S28's `DROP TABLE` takes it;
+  S28 also deletes the tests that still set it (listed in D113)." A dated pointer at the top of the
+  master plan's Tasks 11–12 to this plan.
+- [ ] The owner's rationalisation proposal (finding 18): a dated pointer under
+  `docs/superpowers/specs/2026-11-02-rationalisation/tables-floorkitchen.md:331` and `:461` ("2026-11-04:
+  A773-2 PR D drops `away_at` and `pass_item_marks`, migrations `<numbers>`") and under
+  `tables-venuebox.md:369` ("2026-11-04: A773-2 PR D left `fire_control` to A1301 S28, its plan
+  D113"). The proposal's tables are not rewritten.
+- [ ] Re-run finding 1's search and the prose search (Consumer audit, including
+  `docs/superpowers/specs`); every hit is in a "Consumer audit" row or is new code from Tasks 1–3. Record any till fixture still passing `fireControl` as one backlog point
   (Task 11).
 - [ ] **Commit.** `git commit -s -m "Docs: the retired pass storage is gone; fire_control goes with locations in A1301 S28"`.
 
 ## Task 11: the whole branch, backlog and the PR (about 40 calls)
 
+- [ ] The wide paper probe ("Guard suites"), green, count read.
 - [ ] Focused suites, each count read: server `kitchen-ticket*.test.ts`, `kitchen-print*.test.ts`,
-  `kitchen-release.test.ts`, `order-groups.test.ts`, `pass-release.test.ts`, `pass-board.test.ts`,
+  `goes-with-kitchen-food.test.ts`, `order-groups.test.ts`, `party-arriving-dishes.test.ts`,
+  `pass-release.test.ts`, `pass-board.test.ts`,
   `device-api.pass.test.ts`, the Tasks 6–7b files, `station-queue*.test.ts`, `guide-content.test.ts`,
   `guide-pages.test.ts`, `scripts/demo-seed/seed.madrid-baseline.test.ts`; db `src/schema`; till
   `station-queue*.test.ts`, `till-station-screen.test.ts` (memory first).
@@ -814,25 +960,56 @@ where its fixtures fit; use `setStationsWaitForPass`, `apps/server/src/testing/p
   group's courses and say 'Goes with kitchen food'; the old Away and Done storage is dropped (A773-2
   PR D; no venue reset)"; first line from Tasks 8–9's upgrade-guard result; plain-English body:
   what paper and the station card now say (with the worked example), what was dropped and why
-  `fire_control` waits for A1301 S28, the two migrations' SQL, the A803 handoff (D124), "Changed test
+  `fire_control` waits for A1301 S28 although spec §9 put it here (D113, with E5's refusal), the two
+  migrations' SQL and the upgrade guard's result, the A803 handoff (D124), "Changed test
   checks", the owner question's state, LOOK's findings.
 
 ## Self-review
 
 - **Spec coverage.** §5 "One group, several stations" (cue on ticket and screen) → Tasks 2, 3; §6
-  headings → Tasks 1a, 1b; §6 "a station that waits prints when the pass fires" and HOLD → already
-  pinned by B3, plus Task 2 case 3's release facts; §8 counter → D120; §9 `away_at` and Done marks →
-  Tasks 6–9; §9 `fire_control` → D113 (A1301 S28); §13 "each rule gets a test that fails if removed"
-  → every task's mutation controls.
+  headings → Tasks 1a, 1b, 1c; §6 "a station that waits prints when the pass fires" and HOLD →
+  already pinned by B3, plus Task 2 case 3's release facts; §8 counter → D120; §9 `away_at` and Done
+  marks → Tasks 6–9; §9 `fire_control` → D113 (A1301 S28; a stated departure, told to the owner);
+  §13 "each rule gets a test that fails if removed" → every task's mutation controls.
 - **Master Task 11/12 coverage.** Headings, cue, print boundary, A803 handoff (D124), guide (Task 4),
   LOOK (Task 5); storage retirement (Tasks 6–9), format bump (not needed, D114), audit (Task 10),
   prose (Tasks 8, 10). Review Focus 5 (output count follows outputs): Task 2 runs
   `kitchen-print.shared-printers.test.ts` unfiltered, and the cue is a property of each paper, not
   a new job.
-- **Claims checked by running something.** P1 (plain drops), P2 (`locations` rebuild), P3 (34 pins),
-  the bundle grep, the trigger grep, the Madrid row counts. Reasoned, not run: that the two drops
-  pass the upgrade guard with rows present (Tasks 8–9 run it and stop otherwise); that P3's twelve
-  files are the only heading pins (Task 1b step 1 runs eighteen globs first).
-- **Task sizes.** Every task is estimated under 60 calls; 1b and 2 are the largest (55).
+- **Claims checked by running something.** Planning pass: P1 (plain drops), P2 (`locations`
+  rebuild generated), P3 (34 pins in 12 files), the bundle grep, the trigger grep, the Madrid row
+  counts. The reviewer's experiments, in a throwaway worktree at `ef3b99156d`: the upgrade guard
+  passes with both drops and rows present (E4) and its control fails on lost rows (E4c); the
+  `fire_control` rebuild is refused with `FOREIGN KEY constraint failed` (E5); the wide paper probe
+  finds 37 heading pins in 266 files (E6) and two vacuous negatives (E7); the cue (E8) and the queue
+  key (E9) change no existing pin in the files that reach them. Still reasoned, not run: that the
+  wide probe's file list holds every heading pin (it is E6's selector plus `kitchenTicketWords`, and
+  Task 1b runs it); D119's "no whole-shape pin changes" beyond the 43 queue files E9 ran.
+- **Task sizes.** 1b is the largest at about 70 calls (the 37 pin edits must ride with the planner
+  change); every other task is estimated at 60 or fewer.
 - **No location, English only, no fiscal edit, no compatibility code.** Stated above; no task adds a
   location column or parameter, a Spanish identifier, or a conversion.
+
+## Revision 1 (2026-11-04, plan review)
+
+The fresh-context review (`~/waitron-campaign-c/a773-2d-plan-review.md`: 0 Critical, 5 Important,
+11 Minor) ran its experiments in a throwaway worktree; they are cited here as the reviewer's.
+
+| Finding | Change |
+| --- | --- |
+| I1 37 heading pins, not 34 | Finding 10 records E6; "Changed test checks" names the three `party-arriving-dishes.test.ts` cases (`:938`, `:982`, `:1031`); a "wide paper probe" (E6's selector plus `kitchenTicketWords`) joins "Guard suites" and is Task 1b's probe and Task 11's first step; `party-arriving-dishes.test.ts` is in Task 2's GREEN and Task 11's list |
+| I2 two vacuous negatives | `order-groups.test.ts:620`, `:639` become `not.toMatch(/^GROUP 3\b/m)` ("Changed test checks"); Task 1b greps every negative heading check after its probe, and its mutation step shows both rewritten negatives can fail |
+| I3 no observable RED in 1b | Task 1b now writes its case and sees it fail before the planner change; the probe follows the implementation |
+| I4 `till-api.courses.test.ts:731` reads the database | Deleted under D123 (a) in Task 7b; the table row and Task 7b's GREEN grep say so |
+| I5 1b oversized | Split: 1b (case, planner join, 37 pin edits, probe; about 70 calls, one green commit) and 1c (rename/deactivate and reorder pins with their mutations; about 35) |
+| M1 note 9 misread; stronger receipt | D113 rests on E5's refusal; it now says PR D departs from spec §9, master Task 12 and A1301 design `:136` ("whichever lands first does it"), and that note 9 (`:778`) addresses the second lander; Owner FYI and the PR body tell the owner; Task 10's pointers go at `:136` and `:778` |
+| M2 `queueGroup` shared with the pass board | D119 and Task 3: key added at `listStationQueues`' call (`:8429`) only; new Task 3 case 4 pins its absence on the pass board's read |
+| M3 where the cue flag is set | D118 and Task 2: set in `planKitchenTickets` (`:540`, after `:586`), query skipped for HOLD; `buildTicketItems` and the slip callers (`:1182`, `:1292`, `:1752`) unchanged for the cue |
+| M4 no cue probe | Finding 19 records E8/E9; Task 2 runs the wide paper probe after implementing, any other red a stop |
+| M5 import-error RED | Task 2 first exports a stub `groupsWithPassFood` (empty set) and the type and word, so RED is an assertion |
+| M6 import loop | D117 puts `groupsWithPassFood` in `working-order.ts` beside `liveKitchenDish`; finding 20 records the existing `kitchen-print` ↔ `working-order` loop through `order-groups.ts` (`kitchen-print.ts:63`, `order-groups.ts:88`, `working-order.ts:299`) and that `kitchen-release.ts` imports nothing from `working-order.ts`; the test file is `goes-with-kitchen-food.test.ts` |
+| M7 D115's wording | D115 now says a run heading names its own run's dishes and the one shared heading names the whole paper's; Task 1a gains case 6b and two mutations |
+| M8 rationalisation proposal | Finding 18 lists its lines; the prose search covers `docs/superpowers/specs`; Task 10 adds dated pointers there |
+| M9 guide home | Task 4 names `#held-work` for headings, `#station-waits` for the cue, `#kitchen-screen` for the card; no new section id |
+| M10 receipt drift | (b) `readWholePortionLines` is `order-portions.ts:306`, `foldWholePortions` `kitchen-print.ts:757` (the review's `:760` is the line after; `grep -n 'function foldWholePortions'` prints 757); (c) finding 7's slip lines now name `kitchen-ticket.ts`; (d) `watchers.leave.test.ts`: one check between insert and delete (`:82`), one after (`:88`). **Not applied, (a):** `rg -n KitchenRoute apps/server/src/kitchen-print.ts` prints `457:interface KitchenRoute {` first (then `:463`, `:490`, `:499`), so `:457` stays |
+| M11 cite what was run | The migrations paragraph, the departures row and the self-review cite E4/E4c. The review said #2381, #2440 and #2445 all shipped migrations as "no venue reset"; `git show --stat` shows #2445 (`69534cec83`) changed no drizzle file, so only #2381 (core `0204`) and #2440 (venue-service `0073`) are cited, and both only added columns |
