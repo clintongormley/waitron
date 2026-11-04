@@ -1,5 +1,10 @@
 # A696: invoice dates and record offsets in the location's time zone
 
+> **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
+> Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
+> `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)
+> carries the reporting example. References below describe the earlier scripts.
+
 _2026-11-01, A1008: the one-sale operator command and its command-only tests are retired by owner decision. References below describe the earlier tree. Stream and fingerprint-refusal assertions remain, using an open-database preproduction fixture._
 
 _2026-10-22, A973: the invoice-first settlement operator script and its test are retired by owner decision. References to that command below record the earlier tree; current build plans omit it._

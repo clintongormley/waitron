@@ -414,19 +414,11 @@ until A977).
   also stay with A976, along with counter-screen display text, station-screen display names,
   kitchen-ticket grouping, payment/queue widget display text, variant media fixtures and
   device/printer deletion fixture text.
-  Developer/demo script names remain A975's. Low priority.
+  Low priority.
 - **Setup receipt-language selection lookup.** `apps/setup/src/screens/venue-screen.ts` still
   treats an inherited property such as `constructor` as a language entry. Qualify the selection path with country-pack
   choices carrying such a code before changing it. Its reachability through an installed pack
   has not been established. `git blame` attributes the selection expression to `082553a65`.
-- **A975 — remaining demo scripts.** The `*-demo.ts` scripts still carry non-English sample
-  text. Retire the fake-backend demos after moving their useful checks into ordinary English
-  tests. Move the worked VAT-return example in `modelo-303-demo.ts` into Spain's reporting area.
-  The receipt picture tool's sample identities, addresses, dishes and units are English; its
-  rendered-output test runs the tool and reads its PDFs. Spanish and Basque receipt presentation
-  stays selected, with the QR caption taken from the existing fiscal invoice fixture. The demo
-  seed itself is A972's; script-suite test fixtures belong to A976 below. Low priority; A977
-  cannot scan `apps/*/scripts` until the remaining demos and test-fixture cleanup land.
 - **A976 — remaining test-venue defaults.** Menu-period rule samples use English names.
   The kitchen-note upgrade fixture uses an English operation description.
   Native allergy, kitchen-note and bill-identity suites use English sample location names.
@@ -654,7 +646,7 @@ until A977).
   `scripts/cloud-cost/fixtures/remote-browser-backend.mjs` and `remote-waitron-backend.mjs` still
   carry Spanish operation and street examples. Translate those samples in a Cloud change; the
   Waitron fixture's wording change does not update those files.
-- **A977 — point 8, after A963–A975 land.** Widen `scripts/english-only.test.ts` to every
+- **A977 — point 8, after the remaining English cleanup.** Widen `scripts/english-only.test.ts` to every
   text file under `packages/` and `apps/`, exempting only the homes (the packages written for Spain,
   `fiscal-verifactu`, translation files, a package's `src/starter-content.ts`), add an accented-letter check, and keep a list of test
   folders still to clean that may only get shorter. Fix the wrong comment at

@@ -28,12 +28,7 @@
     "test:shard": "vitest run --coverage --reporter=default --reporter=blob --coverage.thresholds.statements=0 --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.branches=0",
     "test:merge": "vitest --merge-reports .vitest-reports --coverage",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
-    "demo:daily-close": "tsx scripts/daily-close-demo.ts",
-    "demo:daily-close-z": "tsx scripts/daily-close-z-demo.ts",
-    "demo:modelo-303": "tsx scripts/modelo-303-demo.ts",
-    "demo:allergens": "tsx scripts/allergens-demo.ts",
-    "demo:recipes": "tsx scripts/recipes-demo.ts"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1159.0",

@@ -29,7 +29,6 @@
   "scripts/fingerprint-refusal.test.ts": 11,
   "scripts/receipt-look.test.ts": 14,
   "scripts/restore-allocation.test.ts": 9.9,
-  "scripts/script-device.test.ts": 2.4,
   "scripts/testing/venue.test.ts": 6.7,
   "scripts/throwaway-venue.test.ts": 5.4,
   "scripts/venue-dir.test.ts": 4.4,

@@ -1,5 +1,10 @@
 # Product folders (slice 1) Implementation Plan
 
+> **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
+> Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
+> `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)
+> carries the reporting example. References below describe the earlier scripts.
+
 > Update, 2026-10-09 (A435-1): the product Disable/Enable behavior described here is historical.
 > Products and variants now archive permanently. See [the current product guide](../../../apps/server/src/guide/en/products.md)
 > for Archive, View and the editor's staged Archive/Keep actions.

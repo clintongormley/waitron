@@ -1348,9 +1348,9 @@ file under `packages/provisioning/src` calls `applyMigrations` at all (the one c
 `schema-ahead.migrate.test.ts`, which migrates its own fixture). The two dev scripts,
 `apps/server/scripts/dev-setup.ts` and `apps/server/scripts/dev-onboard.ts`, are converted: each
 calls `applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null))`, so each installs the
-triggers the way everything else does. The five demo scripts beside them (`allergens-demo.ts`,
-`daily-close-demo.ts`, `daily-close-z-demo.ts`, `modelo-303-demo.ts`, `recipes-demo.ts`) call it the
-same way with their own set list.
+triggers the way everything else does. The retired fake-backend demos now run as ordinary server
+integration tests in `catalogue-allergen-workflow.test.ts` and `reporting-write-workflows.test.ts`;
+`useVenueDb` applies their migration sets.
 
 **2026-09-22: the names do NOT come from the `ledger` class, and for one step group they were
 going to.** The first design said "every table the modules classify `ledger`", and the guard that
@@ -3292,7 +3292,7 @@ lock, not that every writer of the file takes it.
 | `apps/server/scripts/cloud-capture-client-fixture.ts` (`schedule`), `cloud-recovery-client-fixture.ts` (`restore`, `prepareReplacement`, `statusReplacement`) | Cloud's integration runners, on a folder under the system's temporary directory; whether a server holds the same folder at that moment was not checked | locks (default); the recovery fixture's `restore` also locks through `runStagedRestore` first |
 | `apps/server/scripts/cloud-integration-fixture.ts` | Cloud's runners start it as the server; a restart waits for the old process to exit before relaunching on the same folder (`stop` awaits the child's `exit` before `launch`: Cloud's runner scripts, read, not run) | locks (default); its first open runs before `startServer` in the same process |
 | `apps/server/src/fiscal-readiness-runner.ts` | its own directory | locks; no contention |
-| `*-demo.ts` scripts, `apps/server/scripts/testing/venue.ts`, `useVenueDb` | their own temporary directories | locks; no contention |
+| `apps/server/scripts/testing/venue.ts`, `useVenueDb` | their own temporary directories | locks; no contention |
 
 **First-setup entry, 2026-10-16:** `apps/server/src/first-setup-entry.ts` inspects an existing claim
 through a read-only SQLite connection before the ordinary entry path. Its admission callback holds

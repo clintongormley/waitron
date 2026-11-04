@@ -1,5 +1,10 @@
 # A1301 — Remove the location concept: one venue, one box, one premises
 
+> **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
+> Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
+> `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)
+> carries the reporting example. References below describe the earlier scripts.
+
 Status: design, 2026-11-01, lane A, revised after fresh-context review 1 (folds in Appendix A).
 Owner decision it builds (2026-11-01 ~14:45): "Remove the location concept from the codebase
 entirely", and (~14:55) "Give this high priority so we don't build anything more on this concept."

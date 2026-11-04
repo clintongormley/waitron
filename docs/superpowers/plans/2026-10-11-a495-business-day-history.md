@@ -1,5 +1,10 @@
 # A495 business-day history implementation plan
 
+> **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
+> Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
+> `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)
+> carries the reporting example. References below describe the earlier scripts.
+
 > 2026-10-18, A788: dated scheduling, Replace, Cancel and `hours.clock_change_pending` are replaced: a new start takes effect at the next changeover — see `docs/superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md`.
 
 > **Execution:** the driver implements inline, task by task. Read `superpowers:executing-plans` and, before writing product code or tests, `superpowers:test-driven-development`. No mandatory implementation agents. Checkboxes track execution; this planner has implemented none of them.

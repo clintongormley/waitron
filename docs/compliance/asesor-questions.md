@@ -1,5 +1,10 @@
 # Questions for the asesor
 
+> **2026-11-04 (A1009):** The five standalone demo scripts and commands are retired.
+> Their checks now live in `catalogue-allergen-workflow.test.ts` and `reporting-write-workflows.test.ts`
+> in the server. See the [worked Spain VAT return](../../packages/reporting/examples/modelo-303.md).
+> References below describe the earlier scripts.
+
 **2026-10-27 implementation update:** A948 enables prepared table-payment and unpaid-departure
 F1 paths in all environments. The owner removed the physical paper/QR checks, A555, A444, B2B
 delivery and the asesor's manual-remedy approval as prerequisites to that switch. They remain
