@@ -198,7 +198,7 @@ tables go into the core set.** Only modules a venue can do without, or swap, kee
 
 | Set after | Takes in | Why it stays separate |
 | --- | --- | --- |
-| `core` | core, catalogue, venue-service, media, adjustments (all `tier: "mandatory"`: `packages/composition/src/modules.ts:152, :177, :193, :371`, media in `packages/media/src/module.ts:32`), credentials, identity | — |
+| `core` | core, catalogue, venue-service, media, adjustments (all `tier: "mandatory"`: `packages/composition/src/modules.ts:152, :177, :193, :371`, media in `packages/media/src/module.ts:32`), credentials, identity, handover (mandatory; added by A1018 Slice 5) | — |
 | `node` | node (`node.db`) | a different file |
 | `workforce` | workforce, staffing | can be switched off |
 | `workforce-es` | — | Spain-only rules |
@@ -210,9 +210,9 @@ The owner approved this on 4 November. Identity and credentials stop being switc
 `toggleable` today (`packages/composition/src/modules.ts:214, :294`), and CLAUDE.md §3 has "a new
 product domain lands as a MODULE" and "no new table enters the core migration set without a stated
 reason in the commit". The code stays modular; only where the tables live changes, and this section
-is the stated reason, which each slice's commit cites. A1018's plan gives its later handover tables
-a `venue.db` migration set of their own (its Slice 5), which would make nine; that plan and this
-design have to agree before either builds it.
+is the stated reason, which each slice's commit cites. A1018 Slice 5 adds a `handover` set before
+A760 runs. Its module is mandatory, so by this rule A760 folds it into core and the count stays at
+eight; later A1018 slices add their tables to core.
 
 **U2. How the shared `settings` table works** (`tables-venuebox.md` §2.4, read not run):
 - *Live updates.* Today a change carries an id only when the table has a column named `id`, so a
@@ -558,11 +558,12 @@ A803 §3.1 and §3.9 (the line is the dish's identity), timed around lane C. The
 
 1. **Slice 0 — the bench and the protection inventory.** The year-of-trading dataset, the timing
    harness, and a script that lists every protection in the schema, run before and after each
-   slice.
+   slice. [Plan](../../plans/2026-11-04-a1308-slice-0-bench.md).
 2. **A760's squash, into U1's eight sets** (owner, 2026-11-02). No table changes shape; its
    identical-schema check proves it. Moving catalogue's, venue-service's, media's, adjustments',
-   credentials' and identity's table definitions into `@waitron/db` comes with it, since those
-   packages depend on `@waitron/db` and core's set cannot import them.
+   credentials', identity's and handover's table definitions into `@waitron/db` comes with it, since
+   those packages depend on `@waitron/db` and core's set cannot import them.
+   [Plan](../../plans/2026-11-04-a760-squash-into-eight-sets.md).
 3. **The shared tables:** `settings` (with U2's plumbing), `activity_log`, `outgoing_mail`.
 4. **One slice per area,** each landing behind the bench: venue and box (with A1301's remaining
    slices, U8), menu and photos, floor and kitchen, devices and printing, orders and sales, people

@@ -1,5 +1,9 @@
 # A760 migration squash operator plan
 
+> **2026-11-04:** the [eight-set plan](../superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md)
+> replaces this procedure where the two differ: its opening table lists each change. Everything else
+> here still governs. The freeze, reset roster and owner approval below are still to be recorded.
+
 > Retained on 22 October 2026 for A979, before the planned removal of planning files.
 > This is the approved 16 October procedure, not a record of execution. Its measured counts,
 > paths, source lines and branch examples describe that authoring date. Refresh the inventory,

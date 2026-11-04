@@ -792,7 +792,7 @@ full path.
 | 5a | The relinquished fact (crosses the module operation contract) | **yes, loud** | no | 6 | 0 | — |
 | 5 | Controlled handover, server | **yes** | yes (`venue.db`, new `handover` set) | 14 | 3, 4, 4b, 5a (real boxes: A947 3b) | — |
 | 6 | Controlled handover, screens and guide | no | no | 6 | 5 | — |
-| 7 | Emergency handover, server | **yes** | yes (`venue.db`, `handover` set) | 7 | 5 (real boxes: A947 3b; continuous copy: 3c) | — |
+| 7 | Emergency handover, server | **yes** | yes (`venue.db`, core set: A760 folds `handover` into core, 2026-11-04) | 7 | 5 (real boxes: A947 3b; continuous copy: 3c) | — |
 | 8 | Emergency declaration page and guide | no | no | 4 | 6, 7 | — |
 | 9 | The S2 prototype re-run, fiscal-only | no | no | 3 | 0 | — |
 | 10 | Return batch: evidence, and the exchange both scenarios use | **yes** | no | 8 | 7, 9 | the owner's reading of S2 (Slice 9) |

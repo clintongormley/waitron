@@ -688,7 +688,11 @@ The [operator procedure](../operations/a760-migration-squash.md)
   The watcher starts the sole job after big work and migration branches drain, with the full
   Waitron/Cloud mutation freeze and named reset/operator roster recorded. Reset the laptop
   dev-stack slots and Santet venue through the plan; leave the owner's physical `waitron.local`
-  off/quarantined, image pinned, for the owner to reset on return after 2 November.
+  off/quarantined, image pinned, until A1308 ends, when it is reset once.
+  The [eight-set plan](../superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md) replaces the
+  procedure where they differ, in three pull requests, only the last under the freeze. A790 Cut A,
+  A802, A799 and A739 do not hold it up: they land afterwards with regenerated migrations (owner,
+  2026-11-04). The owner approved setup-only edits to six named fiscal test files (2026-11-04).
 
 ## Station deletion's draft-location filter needs a discriminating test
 
@@ -1016,14 +1020,17 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 - **A1308. Rationalise the tables, background jobs, environment variables and files** (owner,
   2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
   [design](../superpowers/specs/2026-11-02-rationalisation/README.md) is written. The owner has
-  reviewed every file and answered every question (2026-11-04), and **it waits for the owner's final
-  approval before any work starts**. 246 tables become 145, or 144 once A1323 removes
+  reviewed every file and answered every question (2026-11-04), and approved it the same day. It runs
+  first: [slice 0](../superpowers/plans/2026-11-04-a1308-slice-0-bench.md) (the bench and the
+  protection list), then [A760](../superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md).
+  **Open:** the design does not cover A790's six tables, A802's eleven or A739's; each later slice
+  must fold in the ones it touches. 246 tables become 145, or 144 once A1323 removes
   `recovery_packs`, in eight migration sets instead of sixteen. There is one job runner. 111 product
   environment variables become 51, or 55 until A951 lands. There is one state-folder layout. It keeps
   the second-box path that A947 and the landed A1018 handover slices build on (adoption, the mirror
   link, the pinned main-box key, the handover tables) and removes only the standby's reserved identity
   (`fiscal_reservations`). It removes recipes (owner, 2026-11-04). The owner chose that A760's squash
-  runs first, merged into the eight sets. If approved, it absorbs A1301's schema slices (S20–S28);
+  runs first, merged into the eight sets. It absorbs A1301's schema slices (S20–S28);
   S23 builds no `venue_settings`, because the venue's settings become documents in the shared
   `settings` table. It also renames every leftover "tenant" name: the `tenants` table becomes
   `taxpayer`, and names that mean the venue or box get that name (owner, 2026-11-02; design §5 U9).
