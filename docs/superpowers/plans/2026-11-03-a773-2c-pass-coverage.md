@@ -432,6 +432,7 @@ pins and the migration case changed.
 | `apps/server/src/station-order-migration.test.ts:53-56`, `:248-261` (set-up, not an assertion) | final `setsAsOf` keeps the station migrations up to `_station_ready_warning` | also keeps `_requested_release` | D98 (P2) |
 | `packages/venue-service/src/dashboard/station-table.test.ts:52`, `:78`, `:148`, `:163` | `["Name","Printed on","Shown on","Actions"]` / Spanish | `"Waits for the pass"` / `"Espera al pase"` inserted before Actions | D106 |
 | `packages/venue-service/src/dashboard/prep-stations-screen.test.ts:516`, `:3097-3100` | same lists | same insertion | D106 |
+| `packages/venue-service/src/dashboard/station-table.test.ts` "keeps the table with its read-outs inside %s %ipx" | `headings(el)` length `4` | `5`: the new column; width check unchanged | D106 (Revision 3) |
 | `packages/venue-service/src/service.test.ts:22-…` "exposes every generic ordering capability" | the seat's sorted key list | gains `"readProfilesZones"` in sorted place | D100 |
 | `packages/venue-service/src/dashboard/station-editor.test.ts:993-995` ("at %ipx (printers managed: %s) the minutes, notes and read-out end where the fields end") | `.note` count `canManagePrinters ? 3 : 2` | `canManagePrinters ? 4 : 3`; the rest of the case (every block lines up with the name field at 390 and 1280 px) unchanged, and now also holds the new switch and its line | D105 (review probe E2) |
 
@@ -978,3 +979,11 @@ rejected.
   zone T and the counter zone C in one department, so case 10 relies on the till pass's zone list
   alone (`allowedZoneIds: [T]`), and its helper checks the shared department. Whether a profile's
   department bounds its zones is held by the venue-service `readProfilesZones` case instead.
+
+## Revision 3 (2026-11-04, Task 6)
+
+- A seventh heading pin: "keeps the table with its read-outs inside %s %ipx" counts the headings
+  (`toHaveLength(4)` → `5`), added to Changed test checks; its 390 px width check passes unedited.
+- Task 6's control "put the column after Actions" cannot go red: `wt-data-table` always draws an
+  end-pinned column last (`packages/ui/src/components/wt-data-table.ts:1414-1434`). The substitute
+  control moved the column before Shown on, which turned every heading pin red.
