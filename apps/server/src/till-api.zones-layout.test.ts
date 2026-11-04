@@ -222,7 +222,7 @@ describe("GET /api/zones offers the due layout", () => {
         .set({ floorPlanSetId: null })
         .where(eq(menuPeriods.floorPlanSetId, d.dinner));
       await tx.delete(departmentFloorPlanSets).where(eq(departmentFloorPlanSets.setId, d.dinner));
-      await floorDeletionFor(v.cfg, REMOVALS).removeSets(tx, [d.dinner]);
+      await floorDeletionFor(REMOVALS).removeSets(tx, [d.dinner]);
     });
 
     expect(await zoneAt(AFTERNOON, d.zoneId)).toMatchObject({

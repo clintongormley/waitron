@@ -440,12 +440,7 @@ describe("checkLayoutSave", () => {
     const removals: TableRemoval[] = [{ refuse, release: vi.fn() }];
     const error = await refusal(check(z, { ...input, tables: [] }, removals));
     expect(error.code).toBe("table.booked");
-    expect(refuse).toHaveBeenCalledWith(
-      expect.anything(),
-      { locationId: v.cfg.locationId },
-      [live],
-      NOW,
-    );
+    expect(refuse).toHaveBeenCalledWith(expect.anything(), [live], NOW);
   });
 
   it("asks nothing when a deleted master table has no live table", async () => {

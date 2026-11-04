@@ -983,7 +983,7 @@ describe("the floor's attention signals", () => {
     const statements = async () => {
       const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
       try {
-        const rows = await inTx(v, (tx) => listTablesWithState(tx, v.cfg));
+        const rows = await inTx(v, (tx) => listTablesWithState(tx));
         return { count: prepare.mock.calls.length, rows };
       } finally {
         prepare.mockRestore();

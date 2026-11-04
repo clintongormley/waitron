@@ -101,7 +101,7 @@ async function releasedAt(tx: Transaction, itemId: string, at: string) {
 }
 
 async function floorRow(tx: Transaction, venue: Venue) {
-  const rows = await listTablesWithState(tx, venue.cfg);
+  const rows = await listTablesWithState(tx);
   return rows.find((row) => row.id === venue.party.tableId)!;
 }
 

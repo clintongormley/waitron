@@ -60,7 +60,7 @@ async function snapshot(billId: string) {
 async function signalsOf(order: { billId: string; partyId: string }) {
   return inTx(venue, async (tx) => {
     const bills = await readBillSignals(tx, [order.billId], Date.now());
-    const tables = await listTablesWithState(tx, venue.cfg);
+    const tables = await listTablesWithState(tx);
     const table = tables.find((row) => row.party?.id === order.partyId)!;
     return {
       bill: bills.get(order.billId),

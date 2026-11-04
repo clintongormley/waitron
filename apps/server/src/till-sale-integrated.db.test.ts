@@ -3200,13 +3200,13 @@ describe("a party's bill request goes when a card or collect settles its last ow
   }
 
   /** The party's stored request time, and whether the floor shows its table asking for the bill. */
-  async function request(cfg: DeviceRequestConfig, partyId: string, tableId: string) {
+  async function request(partyId: string, tableId: string) {
     return withTransaction(suite.db, async (tx) => {
       const [party] = await tx
         .select({ at: parties.billRequestedAt })
         .from(parties)
         .where(eq(parties.id, partyId));
-      const table = (await listTablesWithState(tx, cfg)).find((row) => row.id === tableId)!;
+      const table = (await listTablesWithState(tx)).find((row) => row.id === tableId)!;
       return {
         billRequestedAt: party!.at,
         shown: table.signals.some((signal) => signal.kind === "bill_requested"),
@@ -3287,17 +3287,17 @@ describe("a party's bill request goes when a card or collect settles its last ow
 
     expect((await orderState(tabId)).status).toBe("open");
     expect(await saleCount(tabId)).toBe(0);
-    expect(await request(cfg, partyId, tableId)).toEqual(kept);
+    expect(await request(partyId, tableId)).toEqual(kept);
   });
 
   describe.each(paths)("through %s", (_name, serviceMode, settle) => {
     it("goes when that bill was the party's last owing one", async () => {
       const { cfg, tabId, partyId, tableId } = await partyAskingForBill(serviceMode);
-      expect(await request(cfg, partyId, tableId)).toEqual(kept);
+      expect(await request(partyId, tableId)).toEqual(kept);
 
       await settle(cfg, tabId);
 
-      expect(await request(cfg, partyId, tableId)).toEqual(gone);
+      expect(await request(partyId, tableId)).toEqual(gone);
     });
 
     it("stays while another bill of the party still owes", async () => {
@@ -3305,7 +3305,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
 
       await settle(cfg, tabId);
 
-      expect(await request(cfg, partyId, tableId)).toEqual(kept);
+      expect(await request(partyId, tableId)).toEqual(kept);
     });
 
     it("stays, and the payment still settles the bill, when clearing it is refused", async () => {
@@ -3323,7 +3323,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
       expect(await orderState(tabId)).toEqual({ status: "settled", settledAtSet: true });
       expect(await saleCount(tabId)).toBe(1);
       expect((await rawPaymentsFor(tabId)).filter((payment) => !payment.hasSale)).toEqual([]);
-      expect(await request(cfg, partyId, tableId)).toEqual(kept);
+      expect(await request(partyId, tableId)).toEqual(kept);
       expect(logged).toEqual([
         [
           "warn",

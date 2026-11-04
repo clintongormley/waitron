@@ -1313,7 +1313,7 @@ describe("Reset table and the room's reset", () => {
 
     const command = await commandFor(v, partyId);
     await inTx(v, (tx) => finishTable(tx, { partyId, ...command }));
-    await inTx(v, (tx) => catchUpZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+    await inTx(v, (tx) => catchUpZone(tx, REMOVALS, zoneId, NOW));
 
     expect(await placeOf(table.long!)).toEqual({ x: 12, y: 20, width: 4, height: 2 });
     expect(await seatsOf(table.long!)).toBe(8);

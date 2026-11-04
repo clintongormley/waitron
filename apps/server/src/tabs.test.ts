@@ -1044,7 +1044,7 @@ describe("listTablesWithState (occupancy)", () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const operatorId = randomUUID();
 
-    const free = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    const free = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(free).toEqual([
       expect.objectContaining({
         id: tableId,
@@ -1063,7 +1063,7 @@ describe("listTablesWithState (occupancy)", () => {
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "2" }]),
     );
-    const busy = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    const busy = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(busy[0]).toMatchObject({
       state: "open-tab",
       hasOpenTab: true,
@@ -1076,11 +1076,11 @@ describe("listTablesWithState (occupancy)", () => {
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
-    const paid = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    const paid = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(paid[0]).toMatchObject({ state: "open-tab", hasOpenTab: false });
 
     await asApp(cfg, (tx) => finishTable(tx, { partyId, expectedPartyRevision: 0, operatorId }));
-    const freed = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    const freed = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(freed[0]).toMatchObject({ state: "free", hasOpenTab: false, party: null });
   });
 
@@ -1088,7 +1088,7 @@ describe("listTablesWithState (occupancy)", () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const orderId = await seedFiredDelivery(cfg, cafeOffer, tableId);
 
-    const pending = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    const pending = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(pending[0]).toMatchObject({
       state: "delivery-pending",
       hasOpenTab: false,
@@ -1101,7 +1101,7 @@ describe("listTablesWithState (occupancy)", () => {
         sql`update working_orders set status = 'settled', settled_at = ${settledAt}, collected_at = ${settledAt} where id = ${orderId}`,
       ),
     );
-    const cleared = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    const cleared = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(cleared[0]).toMatchObject({ state: "free", pendingDeliveries: 0 });
   });
 
@@ -1152,7 +1152,7 @@ describe("listTablesWithState (occupancy)", () => {
       }),
     );
 
-    let rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    let rows = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(rows.find((t) => t.id === tableId)).toMatchObject({
       zoneId: zone.id,
       pendingToServe: 2,
@@ -1164,11 +1164,11 @@ describe("listTablesWithState (occupancy)", () => {
 
     await asApp(cfg, (tx) => fireAll(tx, cfg, tabId));
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
-    rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    rows = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(rows.find((t) => t.id === tableId)!.pendingToServe).toBe(1);
 
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 2));
-    rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    rows = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(rows.find((t) => t.id === tableId)!.pendingToServe).toBe(0);
   });
 
@@ -1178,7 +1178,7 @@ describe("listTablesWithState (occupancy)", () => {
       openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     await seedFiredDelivery(cfg, cafeOffer, tableId);
-    const rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    const rows = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(rows[0]).toMatchObject({ state: "open-tab", hasOpenTab: true, pendingDeliveries: 1 });
   });
 });

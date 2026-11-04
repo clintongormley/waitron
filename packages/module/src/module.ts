@@ -132,7 +132,6 @@ export type ModulePermission = { readonly permission: string; readonly grantedFr
 export interface FloorAnnotator {
   annotate(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     now: Date,
     tableIds: string[],
   ): Promise<Map<string, { reservedTime: string | null }>>;
@@ -157,7 +156,6 @@ export interface FloorDeletion {
 export interface TableRemoval {
   deleteRefusals?(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     tableIds: readonly string[],
     now: Date,
   ): Promise<readonly DeleteImpactRefusal[]>;
@@ -167,17 +165,11 @@ export interface TableRemoval {
    */
   refuse(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     tableIds: readonly string[],
     now: Date,
   ): Promise<ReadonlyMap<string, AppError>>;
   /** Lets go of every row naming the table, keeping `label` as text where history needs it. */
-  release(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    tableId: string,
-    label: string,
-  ): Promise<void>;
+  release(tx: Transaction, tableId: string, label: string): Promise<void>;
 }
 
 export type ServiceMode = "table_tab" | "prepay" | "ticket_then_pay";

@@ -269,7 +269,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         if (!active || day === null) return from;
         const onto = await recordedOnto(tx, deps.cfg, zoneId, day);
         if (onto === null) return from;
-        return resetZoneOn(tx, deps.cfg, removals, zoneId, day, now, onto);
+        return resetZoneOn(tx, removals, zoneId, day, now, onto);
       });
       return c.json({ zoneId, revision });
     }),

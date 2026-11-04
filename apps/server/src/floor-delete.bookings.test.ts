@@ -196,7 +196,7 @@ for (const enabled of [true, false]) {
           ).toEqual([]);
         }
         const result = await withTransaction(suite.db, (tx) =>
-          tableDeleteRefusals(tx, cfg, removals, [table!.id], now),
+          tableDeleteRefusals(tx, removals, [table!.id], now),
         );
         expect(result).toEqual(
           enabled
@@ -216,8 +216,8 @@ for (const enabled of [true, false]) {
           });
         else {
           await withTransaction(suite.db, async (tx) => {
-            expect(await tableDeleteRefusals(tx, cfg, removals, [table!.id], now)).toEqual([]);
-            expect(await removeLiveTables(tx, cfg, removals, [table!.id], now)).toEqual(new Set());
+            expect(await tableDeleteRefusals(tx, removals, [table!.id], now)).toEqual([]);
+            expect(await removeLiveTables(tx, removals, [table!.id], now)).toEqual(new Set());
           });
           expect(await suite.db.select().from(diningTables)).toEqual([]);
         }
@@ -227,9 +227,7 @@ for (const enabled of [true, false]) {
           release: () => Promise.reject(new Error("unexpected release")),
         };
         await expect(
-          withTransaction(suite.db, (tx) =>
-            tableDeleteRefusals(tx, cfg, [broken], [table!.id], now),
-          ),
+          withTransaction(suite.db, (tx) => tableDeleteRefusals(tx, [broken], [table!.id], now)),
         ).rejects.toThrow("booking read failed");
         const legacy: TableRemoval = {
           refuse: () =>
@@ -252,7 +250,6 @@ for (const enabled of [true, false]) {
             await withTransaction(suite.db, (tx) =>
               tableDeleteRefusals(
                 tx,
-                cfg,
                 [
                   legacy,
                   {
@@ -294,7 +291,7 @@ for (const enabled of [true, false]) {
           };
           await expect(
             withTransaction(suite.db, (tx) =>
-              tableDeleteRefusals(tx, cfg, [nullable], [table!.id], now),
+              tableDeleteRefusals(tx, [nullable], [table!.id], now),
             ),
           ).rejects.toMatchObject({
             code: "origin.invalid",
@@ -305,7 +302,6 @@ for (const enabled of [true, false]) {
           withTransaction(suite.db, (tx) =>
             tableDeleteRefusals(
               tx,
-              cfg,
               [{ ...legacy, refuse: () => Promise.reject(new Error("legacy read failed")) }],
               [table!.id],
               now,
@@ -313,7 +309,7 @@ for (const enabled of [true, false]) {
           ),
         ).rejects.toThrow("legacy read failed");
         expect(
-          await withTransaction(suite.db, (tx) => tableDeleteRefusals(tx, cfg, [broken], [], now)),
+          await withTransaction(suite.db, (tx) => tableDeleteRefusals(tx, [broken], [], now)),
         ).toEqual([]);
       },
     );

@@ -529,7 +529,7 @@ describe("stale floor identifiers", () => {
         ),
     ],
     ["floor reset", "zone.not_found", (tx, f) => resetZone(tx, v.cfg, [], f.zoneId, now, "due")],
-    ["floor catch-up", "zone.not_found", (tx, f) => catchUpZone(tx, v.cfg, [], f.zoneId, now)],
+    ["floor catch-up", "zone.not_found", (tx, f) => catchUpZone(tx, [], f.zoneId, now)],
     ["table move", "table.not_found", (tx, f) => moveToday(tx, v.cfg, f.tableId, { x: 2, y: 2 })],
     ["table rotate", "table.not_found", (tx, f) => rotateToday(tx, v.cfg, f.tableId)],
     ["table take off", "table.not_found", (tx, f) => takeOffToday(tx, v.cfg, f.tableId)],

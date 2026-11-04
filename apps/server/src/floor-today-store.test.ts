@@ -264,7 +264,7 @@ const reset = (
   onto: Parameters<typeof resetZone>[5] = "due",
 ) => inTx(v, (tx) => resetZone(tx, v.cfg, removals, zoneId, now, onto));
 const catchUp = (zoneId: string, removals: readonly TableRemoval[] = NONE) =>
-  inTx(v, (tx) => catchUpZone(tx, v.cfg, removals, zoneId, NOW));
+  inTx(v, (tx) => catchUpZone(tx, removals, zoneId, NOW));
 
 /** The tables of the zone whose reset rows are marked ready to move, sorted. */
 async function readyToMoveIn(zoneId: string): Promise<(string | null)[]> {
@@ -760,7 +760,7 @@ describe("building today's plan from a zone's layout", () => {
         .set({ pending: true, placed: false, remove: false })
         .where(eq(floorResetTables.tableId, t1)),
     );
-    await inTx(v, (tx) => catchUpZone(tx, v.cfg, NONE, z, NOW, { inReset: true }));
+    await inTx(v, (tx) => catchUpZone(tx, NONE, z, NOW, { inReset: true }));
 
     expect(await todayRow(u1)).toMatchObject({ x: 30, y: 40, rotation: 90 });
     expect(await mergeMembersIn(z)).toEqual([]);
@@ -820,8 +820,8 @@ describe("building today's plan from a zone's layout", () => {
     let booked = true;
     const asked: string[] = [];
     const bookings: TableRemoval = {
-      refuse: (_tx, cfg, tableIds, now) => {
-        asked.push(`${cfg.locationId}:${now.toISOString()}`);
+      refuse: (_tx, tableIds, now) => {
+        asked.push(now.toISOString());
         const refused = booked && tableIds.includes(t1) ? [t1] : [];
         return Promise.resolve(
           new Map(refused.map((tableId) => [tableId, new AppError("table.booked", { tableId })])),
@@ -837,7 +837,7 @@ describe("building today's plan from a zone's layout", () => {
     expect((await pendingRows(z)).map((row) => row.tableId)).toEqual([t1]);
     expect((await liveTablesOf(z)).map((t) => t.id)).not.toContain(t2);
     expect(await todayRow(t2)).toBeUndefined();
-    expect(asked).toContain(`${v.cfg.locationId}:${NOW.toISOString()}`);
+    expect(asked).toContain(NOW.toISOString());
 
     booked = false;
     await catchUp(z, [bookings]);
@@ -853,7 +853,7 @@ describe("building today's plan from a zone's layout", () => {
     const master = await masterOf(z, [{ label: "Unseeded 1", live: t1 }]);
     await deleteFromMaster(master.get("Unseeded 1")!);
     const bookings: TableRemoval = {
-      refuse: (_tx, _cfg, tableIds) =>
+      refuse: (_tx, tableIds) =>
         Promise.resolve(
           new Map(tableIds.map((tableId) => [tableId, new AppError("table.booked", { tableId })])),
         ),
@@ -1084,7 +1084,7 @@ describe("a deleted zone", () => {
     expect(await inService(hidden)).toBe(false);
     expect(await inService(never)).toBe(false);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
-    const floor = await inTx(v, (tx) => listTablesWithState(tx, v.cfg, [], NOW));
+    const floor = await inTx(v, (tx) => listTablesWithState(tx, [], NOW));
     expect(floor.map((t) => t.id)).not.toContain(planned);
   });
 });
@@ -1190,7 +1190,7 @@ describe("catch-up containing-zone validation", () => {
         await inTx(v, (tx) =>
           tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, z)),
         );
-      await expect(inTx(v, (tx) => catchUpZone(tx, v.cfg, NONE, z, NOW))).rejects.toMatchObject({
+      await expect(inTx(v, (tx) => catchUpZone(tx, NONE, z, NOW))).rejects.toMatchObject({
         code: "zone.not_found",
         params: { zoneId: z },
       });
@@ -2120,7 +2120,7 @@ describe("a reset over a joined table split today", () => {
     const marked = [table.long!, table.c3!, table.c4!].sort();
     expect(await readyToMoveIn(zoneId)).toEqual(marked);
     const bookings: TableRemoval = {
-      refuse: (_tx, _cfg, tableIds) =>
+      refuse: (_tx, tableIds) =>
         Promise.resolve(
           new Map(
             tableIds

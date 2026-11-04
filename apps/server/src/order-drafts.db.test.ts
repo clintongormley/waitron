@@ -412,8 +412,8 @@ async function partyRevision(partyId: string): Promise<number> {
   return row!.revision;
 }
 
-async function unsentDraftsAt(v: Venue, tableId: string) {
-  const rows = await inTx((tx) => listTablesWithState(tx, v.cfg));
+async function unsentDraftsAt(tableId: string) {
+  const rows = await inTx((tx) => listTablesWithState(tx));
   const unsent = rows.find((row) => row.id === tableId)!.party!.unsentDrafts;
   return [...unsent].sort((a, b) => a.ownerName.localeCompare(b.ownerName));
 }
@@ -435,8 +435,8 @@ const withSauce = (v: Venue) => [
 ];
 
 describe("floor bill/editor pairs", () => {
-  async function pairsAt(v: Venue, tableId: string) {
-    const rows = await inTx((tx) => listTablesWithState(tx, v.cfg));
+  async function pairsAt(tableId: string) {
+    const rows = await inTx((tx) => listTablesWithState(tx));
     return rows.find((row) => row.id === tableId)!.party!.unsentDrafts;
   }
 
@@ -449,7 +449,7 @@ describe("floor bill/editor pairs", () => {
       item(v, "burger"),
     ]);
     const secondEdit = await inTx((tx) => readBillEditState(tx, second.billId));
-    expect(await pairsAt(v, tableId)).toEqual([
+    expect(await pairsAt(tableId)).toEqual([
       {
         billId: first.billId,
         billNumber: 1,
@@ -469,7 +469,7 @@ describe("floor bill/editor pairs", () => {
     ]);
 
     const taken = await takeOver(v, partyId, first.id, SAM, first.revision);
-    expect(await pairsAt(v, tableId)).toEqual([
+    expect(await pairsAt(tableId)).toEqual([
       {
         billId: first.billId,
         billNumber: 1,
@@ -488,7 +488,7 @@ describe("floor bill/editor pairs", () => {
       },
     ]);
     await save(v, partyId, SAM, taken.id, taken.revision, []);
-    expect(await pairsAt(v, tableId)).toEqual([
+    expect(await pairsAt(tableId)).toEqual([
       {
         billId: second.billId,
         billNumber: 2,
@@ -507,7 +507,7 @@ describe("floor bill/editor pairs", () => {
     const alex = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
     const stored = "2026-01-01T00:00:00.000Z";
     await db.update(orderDrafts).set({ updatedAt: stored }).where(eq(orderDrafts.id, alex.id));
-    expect(await pairsAt(v, tableId)).toEqual([
+    expect(await pairsAt(tableId)).toEqual([
       {
         billId: alex.billId,
         billNumber: 1,
@@ -519,7 +519,7 @@ describe("floor bill/editor pairs", () => {
     ]);
 
     await save(v, partyId, ALEX, alex.id, alex.revision, [item(v, "fish")]);
-    const [entry] = await pairsAt(v, tableId);
+    const [entry] = await pairsAt(tableId);
     expect(entry!.savedAt).toBe(await savedAtOf(alex.id));
     expect(entry!.savedAt).not.toBe(stored);
   });
@@ -529,14 +529,14 @@ describe("floor bill/editor pairs", () => {
     const { partyId, tableId } = await seated(v);
     const alex = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
     await takeOver(v, partyId, alex.id, SAM, alex.revision);
-    expect((await pairsAt(v, tableId)).map((entry) => entry.ownerId)).toEqual([SAM]);
+    expect((await pairsAt(tableId)).map((entry) => entry.ownerId)).toEqual([SAM]);
   });
 
   it("gives each unsent order its bill's stored number, in number order, even when the drafts were saved in reverse", async () => {
     const v = await setupVenue();
     const { partyId, tableId } = await seated(v);
     const second = await saveOnSeparateBill(v, partyId, SAM, null, 0, [item(v, "fish")]);
-    expect(await pairsAt(v, tableId)).toEqual([
+    expect(await pairsAt(tableId)).toEqual([
       {
         billId: second.billId,
         billNumber: 2,
@@ -547,7 +547,7 @@ describe("floor bill/editor pairs", () => {
       },
     ]);
     const first = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
-    expect(await pairsAt(v, tableId)).toEqual([
+    expect(await pairsAt(tableId)).toEqual([
       {
         billId: first.billId,
         billNumber: 1,
@@ -599,7 +599,7 @@ describe("separate drafts (spec §12 item 1)", () => {
     expect(byOwner(await draftsOf(v, table4.partyId))).toEqual([alex, sam]);
 
     // Two rows on Alex's draft hold three units: the count is of rows.
-    expect(await unsentDraftsAt(v, table4.tableId)).toEqual([
+    expect(await unsentDraftsAt(table4.tableId)).toEqual([
       {
         billId: alex.billId,
         billNumber: 1,
@@ -625,7 +625,7 @@ describe("separate drafts (spec §12 item 1)", () => {
     const table5 = await seated(v, "Mesa 5");
     const alex = await save(v, table4.partyId, ALEX, null, 0, [item(v, "beer")]);
     const sam = await save(v, table5.partyId, SAM, null, 0, [item(v, "fish")]);
-    expect(await unsentDraftsAt(v, table4.tableId)).toEqual([
+    expect(await unsentDraftsAt(table4.tableId)).toEqual([
       {
         billId: alex.billId,
         billNumber: 1,
@@ -637,8 +637,8 @@ describe("separate drafts (spec §12 item 1)", () => {
     ]);
 
     await save(v, table4.partyId, ALEX, alex.id, alex.revision, []);
-    expect(await unsentDraftsAt(v, table4.tableId)).toEqual([]);
-    expect(await unsentDraftsAt(v, table5.tableId)).toEqual([
+    expect(await unsentDraftsAt(table4.tableId)).toEqual([]);
+    expect(await unsentDraftsAt(table5.tableId)).toEqual([
       {
         billId: sam.billId,
         billNumber: 1,
@@ -656,7 +656,7 @@ describe("separate drafts (spec §12 item 1)", () => {
     const alex = await save(v, table4.partyId, ALEX, null, 0, [item(v, "beer")]);
     await db.update(orderDrafts).set({ state: "discarded" }).where(eq(orderDrafts.id, alex.id));
     expect(await storedLines(alex.id)).toHaveLength(1);
-    expect(await unsentDraftsAt(v, table4.tableId)).toEqual([]);
+    expect(await unsentDraftsAt(table4.tableId)).toEqual([]);
     expect(await draftsOf(v, table4.partyId)).toEqual([]);
   });
 });
@@ -668,7 +668,7 @@ describe("saving a draft", () => {
     const nobody = randomUUID();
     const draft = await save(v, table4.partyId, nobody, null, 0, [item(v, "beer")]);
     expect(draft).toMatchObject({ ownerId: nobody, ownerName: "" });
-    expect(await unsentDraftsAt(v, table4.tableId)).toEqual([
+    expect(await unsentDraftsAt(table4.tableId)).toEqual([
       {
         billId: draft.billId,
         billNumber: 1,
@@ -1128,7 +1128,7 @@ describe("draft bill ownership", () => {
     const onSecond = await onBill(v, partyId, secondId);
     const thirdId = await otherBill(v, partyId, tabId);
     const onThird = await onBill(v, partyId, thirdId, SAM);
-    expect(await unsentDraftsAt(v, tableId)).toEqual([
+    expect(await unsentDraftsAt(tableId)).toEqual([
       {
         billId: tabId,
         billNumber: 1,
@@ -2020,7 +2020,7 @@ describe("taking over a draft (D5, spec §2)", () => {
       { kind: "created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
       { kind: "taken_over", fromPerson: ALEX, toPerson: SAM, actorId: SAM, detail: {} },
     ]);
-    expect(await unsentDraftsAt(v, table4.tableId)).toEqual([
+    expect(await unsentDraftsAt(table4.tableId)).toEqual([
       {
         billId: alex.billId,
         billNumber: 1,
@@ -2129,7 +2129,7 @@ describe("taking over a draft (D5, spec §2)", () => {
       { kind: "created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
       { kind: "taken_over", fromPerson: ALEX, toPerson: SAM, actorId: SAM, detail: {} },
     ]);
-    expect(await unsentDraftsAt(v, table4.tableId)).toEqual([
+    expect(await unsentDraftsAt(table4.tableId)).toEqual([
       {
         billId: alex.billId,
         billNumber: 1,
@@ -3523,7 +3523,7 @@ describe("merging parties (D2)", () => {
     expect(await draftRow(miasSent.id)).toEqual(sentRow);
 
     // The source's table now seats the target's party, and shows its unsent orders.
-    expect(await unsentDraftsAt(v, table5.tableId)).toEqual([
+    expect(await unsentDraftsAt(table5.tableId)).toEqual([
       {
         billId: alexOn4.billId,
         billNumber: 1,
@@ -4984,7 +4984,7 @@ describe("source-backed draft foundations", () => {
       { id: draft.lines[1]!.id, position: 2 },
       { id: draft.lines[0]!.id, position: 3 },
     ]);
-    expect(await unsentDraftsAt(v, tableId)).toEqual([
+    expect(await unsentDraftsAt(tableId)).toEqual([
       {
         billId: tabId,
         billNumber: 1,
@@ -5368,7 +5368,7 @@ describe("source-backed draft foundations", () => {
     expect(saved.lines).toHaveLength(1);
     expect(saved.lines[0]).toMatchObject({ id, sourceLineId: parentId, slot: 0 });
     expect(await storedLines(draft.id)).toEqual([]);
-    expect(await unsentDraftsAt(v, tableId)).toEqual([
+    expect(await unsentDraftsAt(tableId)).toEqual([
       {
         billId: tabId,
         billNumber: 1,
@@ -5479,7 +5479,7 @@ describe("source-backed draft foundations", () => {
     await db
       .insert(orderDraftRecalledLines)
       .values({ draftId: draft.id, sourceLineId: second.parentId, position: 4 });
-    expect(await unsentDraftsAt(v, tableId)).toEqual([
+    expect(await unsentDraftsAt(tableId)).toEqual([
       {
         billId: tabId,
         billNumber: 1,

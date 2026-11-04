@@ -132,7 +132,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       .insert(floorTodayTables)
       .values([{ tableId: closed!.id }, { tableId: takenOff!.id, takenOff: true }]);
     await withTransaction(db, async (tx) => {
-      const floor = await listTablesWithState(tx, cfg);
+      const floor = await listTablesWithState(tx);
       const plain = await listTables(tx, cfg, new Date());
       const all = await listTables(tx, cfg, new Date(), { includeDisabled: true });
       expect(floor.map((t) => t.id).sort()).toEqual([tableId, takenOff!.id].sort());
@@ -151,7 +151,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
 
   it("rolls an open tab up onto its table — counts, total and timing band", async () => {
     const [table] = await withTransaction(db, async (tx) => {
-      return listTablesWithState(tx, cfg);
+      return listTablesWithState(tx);
     });
     expect(table).toMatchObject({
       id: tableId,
@@ -216,7 +216,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
         [
           await listStationQueue(tx, stationId),
           await readScopedPassBoard(tx, cfg, EVERY),
-          await listTablesWithState(tx, cfg),
+          await listTablesWithState(tx),
         ] as const,
     );
     expect(station.flatMap((group) => group.items).map((item) => item.name)).toEqual(["Burger"]);
@@ -263,7 +263,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
     });
     const board = await withTransaction(db, (tx) => readScopedPassBoard(tx, cfg, EVERY));
     expect(boardOrderIds(board)).not.toContain(orderId);
-    const [table] = await withTransaction(db, (tx) => listTablesWithState(tx, cfg));
+    const [table] = await withTransaction(db, (tx) => listTablesWithState(tx));
     expect(table).toMatchObject({ pendingDeliveries: 0 });
   });
 });

@@ -477,9 +477,7 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
     );
     await asApp(cfg, (tx) => fireLines(tx, cfg, tabId, lines));
 
-    let row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
-      (t) => t.id === tableId,
-    )!;
+    let row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 0, pendingToServe: 2 });
 
     const [item] = await asApp(cfg, (tx) =>
@@ -491,11 +489,11 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
     await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item!.id, "preparing"));
     await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item!.id, "ready"));
 
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 1, pendingToServe: 2 });
 
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 0, pendingToServe: 1 });
   });
 });
@@ -529,9 +527,7 @@ describe("listTablesWithState — A773 no dispatch state", () => {
     );
     await asApp(cfg, (tx) => fireLines(tx, cfg, tabId, lines));
 
-    let row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
-      (t) => t.id === tableId,
-    )!;
+    let row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 0, pendingToServe: 2 });
     expect(row).not.toHaveProperty("enRoute");
 
@@ -545,23 +541,23 @@ describe("listTablesWithState — A773 no dispatch state", () => {
       await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item.id, "preparing"));
       await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item.id, "ready"));
     }
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 2, pendingToServe: 2 });
     expect(row).not.toHaveProperty("enRoute");
 
     const ready = row;
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toEqual(ready);
     expect(row).toMatchObject({ readyToServe: 2, pendingToServe: 2 });
     expect(row).not.toHaveProperty("enRoute");
 
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 1, pendingToServe: 1 });
     expect(row).not.toHaveProperty("enRoute");
 
     await asApp(cfg, (tx) => unserveLine(tx, cfg, tabId, 1));
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 2, pendingToServe: 2 });
     expect(row).not.toHaveProperty("enRoute");
   });
@@ -603,13 +599,11 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
                      where working_order_line_id = ${lines[0]!.id}`),
     );
 
-    let row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
-      (t) => t.id === tableId,
-    )!;
+    let row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row.timingBand).toBe("overdue");
 
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
+    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row.timingBand).toBe("fresh");
   });
 
@@ -647,17 +641,13 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
                      where working_order_line_id = ${lines[0]!.id}`),
     );
 
-    const row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
-      (t) => t.id === tableId,
-    )!;
+    const row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row.timingBand).toBe("forgotten");
   });
 
   it("a free table (no open tab) reports fresh", async () => {
     const { cfg, tableId } = await setupTabVenue();
-    const row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
-      (t) => t.id === tableId,
-    )!;
+    const row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row.timingBand).toBe("fresh");
   });
 });
@@ -696,7 +686,7 @@ it("refuses zone removal while an open party occupies a table there", async () =
 
   await expect(
     asApp(cfg, (tx) =>
-      deleteZone(tx, cfg, floorDeletionFor(cfg, []), zoneId, new Date("2026-10-11T12:00:00Z")),
+      deleteZone(tx, cfg, floorDeletionFor([]), zoneId, new Date("2026-10-11T12:00:00Z")),
     ),
   ).rejects.toMatchObject({
     code: "zone.table_in_use",
@@ -744,7 +734,7 @@ it("allows removing a zone with a closed party while another zone has an open pa
 
   await expect(
     asApp(cfg, (tx) =>
-      deleteZone(tx, cfg, floorDeletionFor(cfg, []), removedZone, new Date("2026-10-11T12:00:00Z")),
+      deleteZone(tx, cfg, floorDeletionFor([]), removedZone, new Date("2026-10-11T12:00:00Z")),
     ),
   ).resolves.toMatchObject({ target: { id: removedZone, name: "Dining" }, refusals: [], ends: [] });
   expect(

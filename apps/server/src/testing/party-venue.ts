@@ -319,7 +319,7 @@ export async function nameParty(v: HasDb, partyId: string, name: string): Promis
 
 /** The table as the till's floor lists it. */
 export async function floorRow(v: Pick<PartyVenue, "db" | "cfg">, tableId: string) {
-  const rows = await inTx(v, (tx) => listTablesWithState(tx, v.cfg));
+  const rows = await inTx(v, (tx) => listTablesWithState(tx));
   return rows.find((row) => row.id === tableId)!;
 }
 
@@ -328,7 +328,7 @@ export async function openingBillOfParty(
   v: Pick<PartyVenue, "db" | "cfg">,
   partyId: string,
 ): Promise<string | null> {
-  const rows = await inTx(v, (tx) => listTablesWithState(tx, v.cfg));
+  const rows = await inTx(v, (tx) => listTablesWithState(tx));
   const row = rows.find((candidate) => candidate.party?.id === partyId);
   if (row === undefined) throw new Error(`no table on the floor holds party ${partyId}`);
   return row.party!.openingBillId;

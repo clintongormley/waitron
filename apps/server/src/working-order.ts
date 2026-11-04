@@ -149,7 +149,6 @@ import {
   compareLabels,
   compareStationNames,
   divideDecimal,
-  locationId as brandLocationId,
   partyDisplayName,
   MONEY_SCALE,
   QUANTITY_SCALE,
@@ -8876,7 +8875,6 @@ export interface TableState {
  */
 export async function listTablesWithState(
   tx: Transaction,
-  cfg: TradingContext,
   annotators: readonly FloorAnnotator[] = [],
   now: Date = new Date(),
   log?: Logger,
@@ -9051,9 +9049,8 @@ export async function listTablesWithState(
 
   if (annotators.length > 0) {
     const tableIds = states.map((s) => s.id);
-    const annCfg = { locationId: brandLocationId(cfg.locationId) };
     for (const annotator of annotators) {
-      const annotations = await annotator.annotate(tx, annCfg, now, tableIds);
+      const annotations = await annotator.annotate(tx, now, tableIds);
       for (const s of states) {
         const reserved = annotations.get(s.id)?.reservedTime ?? null;
         if (reserved !== null) s.nextReservation = { time: reserved };

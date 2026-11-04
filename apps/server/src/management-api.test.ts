@@ -190,7 +190,7 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
 /** Live tables the fake bookings removal refuses to let go of. */
 const bookedTables = new Set<string>();
 const fakeBookings: TableRemoval = {
-  refuse: (_tx, _cfg, tableIds) =>
+  refuse: (_tx, tableIds) =>
     Promise.resolve(
       new Map(
         tableIds

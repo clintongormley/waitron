@@ -2815,9 +2815,9 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const state = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
         const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
-        return (
-          await listTablesWithState(tx, deps.cfg, deps.floorAnnotators ?? [], undefined, log)
-        ).filter((table) => inScope(scope, table.zoneId));
+        return (await listTablesWithState(tx, deps.floorAnnotators ?? [], undefined, log)).filter(
+          (table) => inScope(scope, table.zoneId),
+        );
       });
       return c.json(state);
     }),

@@ -1486,7 +1486,7 @@ export function mountManagementApi(
           return readZoneDeleteImpact(
             tx,
             cfg,
-            floorDeletionFor(cfg, deps.tableRemovals ?? []),
+            floorDeletionFor(deps.tableRemovals ?? []),
             id,
             new Date(),
           );
@@ -1505,13 +1505,7 @@ export function mountManagementApi(
       return c.json(
         await withVenueAuth(deps, sessionId, async (tx) => {
           await requireLiveZone(tx, id);
-          return deleteZone(
-            tx,
-            cfg,
-            floorDeletionFor(cfg, deps.tableRemovals ?? []),
-            id,
-            new Date(),
-          );
+          return deleteZone(tx, cfg, floorDeletionFor(deps.tableRemovals ?? []), id, new Date());
         }),
       );
     }),

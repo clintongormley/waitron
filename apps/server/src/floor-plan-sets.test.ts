@@ -426,7 +426,7 @@ describe("the floor plan sets port", () => {
 
     await inTx(v, async (tx) => {
       await tx.delete(departmentFloorPlanSets).where(eq(departmentFloorPlanSets.setId, d.dinner));
-      await floorDeletionFor(v.cfg, NONE).removeSets(tx, [d.dinner]);
+      await floorDeletionFor(NONE).removeSets(tx, [d.dinner]);
     });
 
     const after = await inTx(v, async (tx) => ({
@@ -458,7 +458,7 @@ describe("the floor plan sets port", () => {
 
   it("removes nothing for no sets", async () => {
     const d = await department();
-    await inTx(v, (tx) => floorDeletionFor(v.cfg, NONE).removeSets(tx, []));
+    await inTx(v, (tx) => floorDeletionFor(NONE).removeSets(tx, []));
     const rows = await inTx(v, (tx) =>
       tx.select().from(floorPlanSets).where(eq(floorPlanSets.id, d.standard)),
     );

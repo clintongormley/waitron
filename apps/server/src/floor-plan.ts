@@ -432,7 +432,7 @@ async function checkSave(
 
   const kept = new Set(tables.map((t) => t.id));
   const liveIds = masters.flatMap((m) => (kept.has(m.id) ? [] : (followers.get(m.id) ?? [])));
-  const refusals = await refusedByAModule(tx, cfg, removals, liveIds, now);
+  const refusals = await refusedByAModule(tx, removals, liveIds, now);
   for (const liveId of liveIds) {
     const refusal = refusals.get(liveId);
     if (refusal !== undefined) throw refusal;

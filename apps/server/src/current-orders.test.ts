@@ -346,8 +346,8 @@ async function reorder(partyId: string, heldGroupIds: string[]) {
   return inTx((tx) => reorderHeldGroups(tx, partyId, heldGroupIds, command));
 }
 
-async function floorReminder(v: Venue, tableId: string) {
-  const rows = await inTx((tx) => listTablesWithState(tx, v.cfg));
+async function floorReminder(tableId: string) {
+  const rows = await inTx((tx) => listTablesWithState(tx));
   return rows.find((row) => row.id === tableId)!.party!.reminder;
 }
 
@@ -527,7 +527,7 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);
 
-    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(15) });
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(15) });
     expect((await currentOrders(s.partyId)).reminder).toEqual({
       groupId: s.g3.id,
       dueAt: T(15),
@@ -539,11 +539,11 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     const s = await fourGroups(v);
     await at(T(0), () => serveGroup(v, s.partyId, s.g1.id));
 
-    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: null });
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: s.g3.id, dueAt: null });
 
     await at(T(5), () => serve(v, s.partyId, [{ lineId: s.g2.lineIds[0]!, quantity: "1" }]));
 
-    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: null });
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: s.g3.id, dueAt: null });
     expect((await currentOrders(s.partyId)).reminder).toEqual({ groupId: s.g3.id, dueAt: null });
   });
 
@@ -557,7 +557,7 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
 
     expect(answer).toEqual({ revision: revision + 1 });
     expect(await remindAtOf(s.g3.id)).toBe(T(20));
-    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(20) });
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(20) });
     expect(await servedAtOf(s.g2.lineIds)).toEqual(servedBefore);
     expect(servedBefore[0]!.servedAt).toBe(T(5));
   });
@@ -570,9 +570,9 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     await fire(v, s.partyId, s.g3.id);
 
     expect(await remindAtOf(s.g3.id)).toBeNull();
-    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g4.id, dueAt: null });
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: s.g4.id, dueAt: null });
     await at(T(30), () => serveGroup(v, s.partyId, s.g3.id));
-    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g4.id, dueAt: T(40) });
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: s.g4.id, dueAt: T(40) });
   });
 
   it("moves the reminder to group 4 when it is reordered ahead of group 3, clearing group 3's snooze", async () => {
@@ -582,7 +582,7 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
 
     await reorder(s.partyId, [s.g4.id, s.g3.id]);
 
-    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g4.id, dueAt: T(15) });
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: s.g4.id, dueAt: T(15) });
     expect(await remindAtOf(s.g3.id)).toBeNull();
   });
 
@@ -594,7 +594,7 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     await reorder(s.partyId, [s.g3.id, s.g4.id]);
 
     expect(await remindAtOf(s.g3.id)).toBe(T(20));
-    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(20) });
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(20) });
   });
 
   it("clears the snooze of a group reordered FORWARD, which a merge left behind the waiting one", async () => {
@@ -614,12 +614,12 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     };
     await inTx((tx) => joinTables(tx, v.cfg, a.partyId, b.tableId, command));
     expect(await remindAtOf(bHeld.id)).toBe(T(20));
-    expect(await floorReminder(v, a.tableId)).toEqual({ groupId: aHeld.id, dueAt: T(10) });
+    expect(await floorReminder(a.tableId)).toEqual({ groupId: aHeld.id, dueAt: T(10) });
 
     await reorder(a.partyId, [bHeld.id, aHeld.id]);
 
     expect(await remindAtOf(bHeld.id)).toBeNull();
-    expect(await floorReminder(v, a.tableId)).toEqual({ groupId: bHeld.id, dueAt: T(10) });
+    expect(await floorReminder(a.tableId)).toEqual({ groupId: bHeld.id, dueAt: T(10) });
   });
 
   it("moves the reminder on when group 3 is emptied, which removes it and clears its snooze", async () => {
@@ -644,7 +644,7 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
       .from(orderGroups)
       .where(eq(orderGroups.id, s.g3.id));
     expect(removed).toEqual({ state: "removed", remindAt: null });
-    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g4.id, dueAt: T(15) });
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: s.g4.id, dueAt: T(15) });
     expect((await currentOrders(s.partyId)).groups.map((g) => g.id)).toEqual([
       s.g1.id,
       s.g2.id,
@@ -657,7 +657,7 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     const s = await servedUpToGroupTwo(v);
     await inTx((tx) => setReleaseReminderInEveryDepartment(tx, null));
 
-    expect(await floorReminder(v, s.tableId)).toBeNull();
+    expect(await floorReminder(s.tableId)).toBeNull();
     expect((await currentOrders(s.partyId)).reminder).toBeNull();
   });
 
@@ -668,8 +668,8 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     await group(v, bare.partyId, "fire", [line(v, "croquetas")]);
     await inTx((tx) => setReleaseReminderInEveryDepartment(tx, 25));
 
-    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(30) });
-    expect(await floorReminder(v, bare.tableId)).toBeNull();
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(30) });
+    expect(await floorReminder(bare.tableId)).toBeNull();
   });
 
   it("gives each party on the floor its own reminder", async () => {
@@ -677,7 +677,7 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     const a = await servedUpToGroupTwo(v);
     const b = await fourGroups(v);
 
-    const rows = await inTx((tx) => listTablesWithState(tx, v.cfg));
+    const rows = await inTx((tx) => listTablesWithState(tx));
 
     expect(rows.find((row) => row.id === a.tableId)!.party!.reminder).toEqual({
       groupId: a.g3.id,
@@ -718,9 +718,9 @@ describe("the reminder follows the party's department", () => {
     const b = await servedUpToGroupTwo(v);
     await moveTable(b.tableId, await otherDepartment(v, null));
 
-    expect(await floorReminder(v, a.tableId)).toEqual({ groupId: a.g3.id, dueAt: T(15) });
+    expect(await floorReminder(a.tableId)).toEqual({ groupId: a.g3.id, dueAt: T(15) });
     expect((await currentOrders(a.partyId)).reminder).toEqual({ groupId: a.g3.id, dueAt: T(15) });
-    expect(await floorReminder(v, b.tableId)).toBeNull();
+    expect(await floorReminder(b.tableId)).toBeNull();
     expect((await currentOrders(b.partyId)).reminder).toBeNull();
   });
 
@@ -743,7 +743,7 @@ describe("the reminder follows the party's department", () => {
       return id;
     });
 
-    expect(await floorReminder(v, a.tableId)).toEqual({ groupId: a.g3.id, dueAt: T(15) });
+    expect(await floorReminder(a.tableId)).toEqual({ groupId: a.g3.id, dueAt: T(15) });
     expect((await currentOrders(a.partyId)).reminder).toEqual({ groupId: a.g3.id, dueAt: T(15) });
 
     await inTx((tx) =>
@@ -753,7 +753,7 @@ describe("the reminder follows the party's department", () => {
         .where(and(eq(partyTables.partyId, a.partyId), eq(partyTables.tableId, first))),
     );
 
-    expect(await floorReminder(v, a.tableId)).toEqual({ groupId: a.g3.id, dueAt: T(10) });
+    expect(await floorReminder(a.tableId)).toEqual({ groupId: a.g3.id, dueAt: T(10) });
     expect((await currentOrders(a.partyId)).reminder).toEqual({ groupId: a.g3.id, dueAt: T(10) });
   });
 
@@ -769,7 +769,7 @@ describe("the reminder follows the party's department", () => {
       await tx.update(diningTables).set({ zoneId: zone!.id }).where(eq(diningTables.id, s.tableId));
     });
 
-    expect(await floorReminder(v, s.tableId)).toBeNull();
+    expect(await floorReminder(s.tableId)).toBeNull();
     expect((await currentOrders(s.partyId)).reminder).toBeNull();
   });
 
@@ -779,7 +779,7 @@ describe("the reminder follows the party's department", () => {
     await servedUpToGroupTwo(v);
     const spy = vi.spyOn(VENUE_SERVICE, "readReleaseReminderMinutesByZone");
     try {
-      await inTx((tx) => listTablesWithState(tx, v.cfg));
+      await inTx((tx) => listTablesWithState(tx));
       expect(spy).toHaveBeenCalledTimes(1);
     } finally {
       spy.mockRestore();
@@ -856,7 +856,7 @@ describe("snoozeReminder (D8, D11, D19)", () => {
     expect(await remindAtOf(s.g4.id)).toBeNull();
     await fire(v, s.partyId, s.g3.id);
     await at(T(30), () => serveGroup(v, s.partyId, s.g3.id));
-    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g4.id, dueAt: T(40) });
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: s.g4.id, dueAt: T(40) });
   });
 
   it("takes the waiting group from the sequence: after group 4 is reordered ahead, it is snoozed and group 3 refused", async () => {
@@ -937,14 +937,14 @@ describe("unsnoozeReminder (D8, D11, D19)", () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);
     await at(T(15), () => snooze(v, s.partyId, s.g3.id, 5));
-    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(20) });
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(20) });
     const revision = await revisionOf(s.partyId);
 
     const answer = await at(T(16), () => unsnooze(v, s.partyId, s.g3.id));
 
     expect(answer).toEqual({ revision: revision + 1 });
     expect(await remindAtOf(s.g3.id)).toBeNull();
-    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(15) });
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(15) });
     expect((await currentOrders(s.partyId)).reminder).toEqual({ groupId: s.g3.id, dueAt: T(15) });
   });
 
@@ -957,7 +957,7 @@ describe("unsnoozeReminder (D8, D11, D19)", () => {
 
     expect(answer).toEqual({ revision: revision + 1 });
     expect(await remindAtOf(s.g3.id)).toBeNull();
-    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(15) });
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(15) });
   });
 
   it("answers a repeat of the same submission with the first answer, leaving a snooze taken since", async () => {
@@ -1076,12 +1076,12 @@ describe("unsnoozeReminder (D8, D11, D19)", () => {
 
     await fire(v, a.partyId, aHeld.id);
     await at(T(30), () => serveGroup(v, a.partyId, aHeld.id));
-    expect(await floorReminder(v, a.tableId)).toEqual({ groupId: bHeld.id, dueAt: T(20) });
+    expect(await floorReminder(a.tableId)).toEqual({ groupId: bHeld.id, dueAt: T(20) });
 
     await at(T(31), () => unsnooze(v, a.partyId, bHeld.id));
 
     expect(await remindAtOf(bHeld.id)).toBeNull();
-    expect(await floorReminder(v, a.tableId)).toEqual({ groupId: bHeld.id, dueAt: T(40) });
+    expect(await floorReminder(a.tableId)).toEqual({ groupId: bHeld.id, dueAt: T(40) });
   });
 });
 
@@ -1642,7 +1642,7 @@ describe("an abandoned bill", () => {
     const read = await currentOrders(s.partyId);
 
     expect(read.reminder).toEqual({ groupId: desserts.id, dueAt: T(10) });
-    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: desserts.id, dueAt: T(10) });
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: desserts.id, dueAt: T(10) });
     expect(read.groups[0]!.id).toBe(starters.id);
     expect(read.groups[0]!.rows.map((r) => r.workingOrderId)).toEqual([s.tabId]);
   });

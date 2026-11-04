@@ -1501,7 +1501,7 @@ describe("Reset to … plan", () => {
         .set({ floorPlanSetId: null })
         .where(eq(menuPeriods.floorPlanSetId, d.dinner));
       await tx.delete(departmentFloorPlanSets).where(eq(departmentFloorPlanSets.setId, d.dinner));
-      await floorDeletionFor(v.cfg, REMOVALS).removeSets(tx, [d.dinner]);
+      await floorDeletionFor(REMOVALS).removeSets(tx, [d.dinner]);
     });
     const from = (await zoneRevisionOf(v, d.zoneId))!;
     const before = await everything();

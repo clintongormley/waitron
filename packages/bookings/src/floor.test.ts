@@ -78,12 +78,11 @@ async function insertBooking(
 }
 
 function annotate(
-  v: Venue,
   now: Date,
   tableIds: string[],
 ): Promise<Map<string, { reservedTime: string | null }>> {
   return withTransaction(db, async (tx: Transaction) => {
-    return BOOKINGS_FLOOR_ANNOTATIONS.annotate(tx, v, now, tableIds);
+    return BOOKINGS_FLOOR_ANNOTATIONS.annotate(tx, now, tableIds);
   });
 }
 
@@ -95,33 +94,23 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     const v = await setupVenue();
     const t = await makeTable(v, "7");
     await insertBooking(v, { tableId: t, date: "2026-09-15", time: "14:00" });
-    const m = await annotate(v, MADRID_NOON, [t]);
-    expect(m.get(t)).toEqual({ reservedTime: "14:00" });
-  });
-
-  // A1301: deleted with cfg in S18
-  it("annotates the venue's booking whatever location the scope names", async () => {
-    const v = await setupVenue();
-    const t = await makeTable(v, "7b");
-    await insertBooking(v, { tableId: t, date: "2026-09-15", time: "14:00" });
-    const stray = { locationId: brandLocationId(randomUUID()) };
-    const m = await annotate(stray, MADRID_NOON, [t]);
+    const m = await annotate(MADRID_NOON, [t]);
     expect(m.get(t)).toEqual({ reservedTime: "14:00" });
   });
 
   it("returns reservedTime null when the table has no upcoming booked reservation", async () => {
     const v = await setupVenue();
     const t = await makeTable(v, "8");
-    const m = await annotate(v, MADRID_NOON, [t]);
+    const m = await annotate(MADRID_NOON, [t]);
     expect(m.get(t)).toEqual({ reservedTime: null });
   });
 
   it("carries one entry per input tableId (empty set → empty map)", async () => {
     const v = await setupVenue();
     const t = await makeTable(v, "8b");
-    const m = await annotate(v, MADRID_NOON, [t]);
+    const m = await annotate(MADRID_NOON, [t]);
     expect([...m.keys()]).toEqual([t]);
-    expect(await annotate(v, MADRID_NOON, [])).toEqual(new Map());
+    expect(await annotate(MADRID_NOON, [])).toEqual(new Map());
   });
 
   it("excludes past-time, non-booked-status, and other-day reservations", async () => {
@@ -136,7 +125,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     await insertBooking(v, { tableId: t, date: "2026-09-15", time: "18:00", status: "completed" });
     // Booked but a different day: excluded.
     await insertBooking(v, { tableId: t, date: "2026-09-16", time: "13:00" });
-    const m = await annotate(v, MADRID_NOON, [t]);
+    const m = await annotate(MADRID_NOON, [t]);
     expect(m.get(t)).toEqual({ reservedTime: null });
   });
 
@@ -145,7 +134,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     const t = await makeTable(v, "10");
     await insertBooking(v, { tableId: t, date: "2026-09-15", time: "20:00" });
     await insertBooking(v, { tableId: t, date: "2026-09-15", time: "13:30" });
-    const m = await annotate(v, MADRID_NOON, [t]);
+    const m = await annotate(MADRID_NOON, [t]);
     expect(m.get(t)).toEqual({ reservedTime: "13:30" });
   });
 
@@ -156,7 +145,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     const v = await setupVenue({ timeZone: "Not/AZone" });
     const t = await makeTable(v, "13");
     await insertBooking(v, { tableId: t, date: "2026-09-15", time: "14:00" });
-    const m = await annotate(v, MADRID_NOON, [t]);
+    const m = await annotate(MADRID_NOON, [t]);
     expect(m.get(t)).toEqual({ reservedTime: "14:00" });
   });
 
@@ -169,7 +158,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     await insertBooking(v, { tableId: t, date: "2026-09-02", time: "15:00" });
     // A booking on the UTC day (2026-09-01) must NOT surface — it is yesterday at the venue.
     await insertBooking(v, { tableId: t, date: "2026-09-01", time: "23:30" });
-    const m = await annotate(v, clock, [t]);
+    const m = await annotate(clock, [t]);
     expect(m.get(t)).toEqual({ reservedTime: "15:00" });
   });
 
@@ -180,7 +169,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     const t = await makeTable(v, "12");
     await insertBooking(v, { tableId: t, date: "2026-09-02", time: "12:00" });
     await insertBooking(v, { tableId: t, date: "2026-09-02", time: "14:00" });
-    const m = await annotate(v, clock, [t]);
+    const m = await annotate(clock, [t]);
     expect(m.get(t)).toEqual({ reservedTime: "14:00" });
   });
 
@@ -194,7 +183,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     await insertBooking(v, { tableId: within, date: "2026-09-15", time: "11:45" });
     await insertBooking(v, { tableId: beyond, date: "2026-09-15", time: "11:15" });
     await insertBooking(v, { tableId: boundary, date: "2026-09-15", time: "11:30" });
-    const m = await annotate(v, MADRID_NOON, [within, beyond, boundary]);
+    const m = await annotate(MADRID_NOON, [within, beyond, boundary]);
     expect(m.get(within)).toEqual({ reservedTime: "11:45" });
     expect(m.get(beyond)).toEqual({ reservedTime: null });
     expect(m.get(boundary)).toEqual({ reservedTime: "11:30" });
@@ -217,10 +206,10 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
       return new OriginalDTF(...args);
     } as unknown as typeof Intl.DateTimeFormat);
     try {
-      await annotate(v, MADRID_NOON, [t]); // same zone, twice
-      await annotate(v, MADRID_NOON, [t]);
+      await annotate(MADRID_NOON, [t]); // same zone, twice
+      await annotate(MADRID_NOON, [t]);
       await db.execute(sql`update locations set time_zone = ${tzB}`);
-      await annotate(v, MADRID_NOON, [t]); // a different zone
+      await annotate(MADRID_NOON, [t]); // a different zone
 
       const builtFor = (tz: string): Intl.DateTimeFormat[] =>
         spy.mock.results
@@ -245,7 +234,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     const v = await setupVenue({ timeZone: "Not/AZone" });
     const t = await makeTable(v, "invalid-cache");
     await insertBooking(v, { tableId: t, date: "2026-09-15", time: "14:00" });
-    expect((await annotate(v, MADRID_NOON, [t])).get(t)).toEqual({ reservedTime: "14:00" });
-    expect((await annotate(v, MADRID_NOON, [t])).get(t)).toEqual({ reservedTime: "14:00" });
+    expect((await annotate(MADRID_NOON, [t])).get(t)).toEqual({ reservedTime: "14:00" });
+    expect((await annotate(MADRID_NOON, [t])).get(t)).toEqual({ reservedTime: "14:00" });
   });
 });

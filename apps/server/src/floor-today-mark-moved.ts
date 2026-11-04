@@ -118,12 +118,12 @@ export async function markMoved(
     }
   }
 
-  await catchUpZone(tx, cfg, removals, zoneId, now, {
+  await catchUpZone(tx, removals, zoneId, now, {
     inReset: false,
     carry: new Set(group.map(({ row }) => row.id)),
   });
   if (await tableNeedsMoving(tx, tableId))
-    await refuseHeldBack(tx, cfg, removals, now, tableId, [...groupTables]);
+    await refuseHeldBack(tx, removals, now, tableId, [...groupTables]);
 }
 
 /**
@@ -170,7 +170,7 @@ export async function leaveHere(
           : { placed: true, readyToMove: false };
     await tx.update(floorResetTables).set(state).where(eq(floorResetTables.id, row.id));
   }
-  await catchUpZone(tx, cfg, removals, zoneId, now, { inReset: false });
+  await catchUpZone(tx, removals, zoneId, now, { inReset: false });
 }
 
 /**
@@ -181,7 +181,6 @@ export async function leaveHere(
  */
 async function refuseHeldBack(
   tx: Transaction,
-  cfg: TradingContext,
   removals: readonly TableRemoval[],
   now: Date,
   tableId: string,
@@ -233,7 +232,6 @@ async function refuseHeldBack(
     );
   const refusals = await refusedByAModule(
     tx,
-    cfg,
     removals,
     removing.map((row) => row.id!),
     now,

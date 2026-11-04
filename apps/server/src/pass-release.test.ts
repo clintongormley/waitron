@@ -286,7 +286,7 @@ describe("A773 pass release: set and stamps", () => {
     vi.setSystemTime(new Date("2026-03-14T12:14:00.000Z"));
     await release(f.venue, every, askOf(card!));
     vi.setSystemTime(new Date("2026-03-14T12:16:00.000Z"));
-    const table = (await withTransaction(db, (tx) => listTablesWithState(tx, f.venue.cfg))).find(
+    const table = (await withTransaction(db, (tx) => listTablesWithState(tx))).find(
       (row) => row.id === f.venue.party.tableId,
     )!;
     expect(table.timingBand).toBe("forgotten");

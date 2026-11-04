@@ -57,7 +57,7 @@ useVenueDb({
   },
 });
 const NOW = new Date("2026-10-11T12:00:00Z");
-const seatFor = () => floorDeletionFor(v.cfg, [BOOKINGS_TABLE_REMOVAL]);
+const seatFor = () => floorDeletionFor([BOOKINGS_TABLE_REMOVAL]);
 
 async function zone(name: string, locationId = v.cfg.locationId as string) {
   const id = randomUUID();

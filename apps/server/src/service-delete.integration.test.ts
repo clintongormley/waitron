@@ -1272,7 +1272,7 @@ it.each(["zone", "department"] as const)(
       await run(async (tx) => {
         const nextDay = new Date("2026-10-12T12:00:00Z");
         await ensureToday(tx, venue.cfg, removals, nextDay);
-        return listTablesWithState(tx, venue.cfg, enabledFloorAnnotators(ALL_MODULES), nextDay);
+        return listTablesWithState(tx, enabledFloorAnnotators(ALL_MODULES), nextDay);
       }),
     ).toEqual([]);
     expect(await run(completeSnapshot)).toEqual(after);
@@ -1281,9 +1281,9 @@ it.each(["zone", "department"] as const)(
     ).rejects.toMatchObject({
       code: "zone.not_found",
     });
-    await expect(
-      run((tx) => catchUpZone(tx, venue.cfg, removals, f.zoneId, NOW)),
-    ).rejects.toMatchObject({ code: "zone.not_found" });
+    await expect(run((tx) => catchUpZone(tx, removals, f.zoneId, NOW))).rejects.toMatchObject({
+      code: "zone.not_found",
+    });
     await replacementSave();
     const replacementPlan = await run(async (tx) =>
       readLayout(tx, venue.cfg, await defaultLayout(tx, venue.cfg, replacementZone.id)),
