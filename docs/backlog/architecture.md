@@ -1046,7 +1046,8 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   `scripts/a1301-seed-codemod.mjs` rewrites the common shapes and reports the rest (F1, #2383).
   S18 is planned in six sub-slices
   ([S18 plan](../superpowers/plans/2026-11-04-a1301-s18-contract-cleanup.md)). S18c (#2443),
-  S18a (#2447) and S18b (#2450) have landed; S18d can be built now. The owner decided on 2026-11-02 what the venue id sent to Cloud and naming the backup
+  S18a (#2447), S18b (#2450) and S18d's second task (#2451) have landed; S18d's first task
+  (`TradingConfig.locationId`) can be built now and is landed by the owner. The owner decided on 2026-11-02 what the venue id sent to Cloud and naming the backup
   folder becomes: Cloud assigns the id, and a box not connected to Cloud backs up where its owner
   says. The owner approved the [venue-id design](../superpowers/specs/2026-11-04-a1301-venue-id-design.md)
   that writes this up, with its defaults, on 2026-11-04. S18e builds it. S18f does not wait for
