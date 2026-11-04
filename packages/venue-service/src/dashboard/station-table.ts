@@ -102,6 +102,14 @@ export class StationTable extends LitElement {
           >`,
       },
       {
+        key: "waitsForPass",
+        label: t("prep.waits_for_pass"),
+        cell: (station) =>
+          html`<span data-test=${`waits-for-pass-${station.id}`}
+            >${station.waitsForPass ? t("venue.yes") : t("venue.no")}</span
+          >`,
+      },
+      {
         key: "actions",
         label: t("prep.actions"),
         pinned: "end",

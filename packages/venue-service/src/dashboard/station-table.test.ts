@@ -49,7 +49,7 @@ it("draws its rows from the stations list, with its daily status beside Name", a
   const el = await mount();
   expect(
     [...(table(el)?.querySelectorAll("thead th") ?? [])].map((th) => th.textContent?.trim()),
-  ).toEqual(["Name", "Printed on", "Shown on", "Actions"]);
+  ).toEqual(["Name", "Printed on", "Shown on", "Waits for the pass", "Actions"]);
   const rows = [...(table(el)?.querySelectorAll("tbody tr") ?? [])];
   expect(rows).toHaveLength(1);
   expect(rows[0]!.textContent).toContain("Bar");
@@ -75,7 +75,7 @@ it("names its columns in Spanish, and says so when there are no stations", async
   const el = await mount();
   expect(
     [...(table(el)?.querySelectorAll("thead th") ?? [])].map((th) => th.textContent?.trim()),
-  ).toEqual(["Nombre", "Se imprime en", "Se muestra en", "Acciones"]);
+  ).toEqual(["Nombre", "Se imprime en", "Se muestra en", "Espera al pase", "Acciones"]);
   const empty = await mount([]);
   expect(table(empty)?.textContent).toContain("No hay estaciones de preparación");
 });
@@ -145,7 +145,7 @@ it("reads each station's printers and screens in Printed on and Shown on, beside
   const el = await mount();
   el.outputs = outputs;
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(headings(el)).toEqual(["Name", "Printed on", "Shown on", "Actions"]);
+  expect(headings(el)).toEqual(["Name", "Printed on", "Shown on", "Waits for the pass", "Actions"]);
   const row = table(el)!.querySelector("tbody tr")!;
   expect(row.querySelector('[data-test="printed-on-bar"]')!.textContent?.trim()).toBe(
     "Epson, Star",
@@ -160,7 +160,13 @@ it("names the read-out columns in Spanish", async () => {
   const el = await mount();
   el.outputs = outputs;
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(headings(el)).toEqual(["Nombre", "Se imprime en", "Se muestra en", "Acciones"]);
+  expect(headings(el)).toEqual([
+    "Nombre",
+    "Se imprime en",
+    "Se muestra en",
+    "Espera al pase",
+    "Acciones",
+  ]);
 });
 it.each([
   ["en", 390],
@@ -175,7 +181,7 @@ it.each([
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => requestAnimationFrame(resolve));
     const summary = el.shadowRoot!.querySelector("wt-data-table")!;
-    expect(headings(el)).toHaveLength(4);
+    expect(headings(el)).toHaveLength(5);
     expect(summary.getBoundingClientRect().right).toBeLessThanOrEqual(width);
   } finally {
     await page.viewport(frame.width, frame.height);
@@ -236,4 +242,20 @@ it("A725 leaves station names and status without a retired Times link", async ()
   expect(rows[0]!.textContent).toContain("Closed for today → Grill");
   expect(rows[1]!.textContent).toContain("Grill");
   expect(rows.flatMap((row) => [...row.querySelectorAll('a[href*="/view/times"]')])).toEqual([]);
+});
+
+it("A773 station policy: shows whether each station waits for the pass", async () => {
+  const stations = [
+    station({ id: "bar", name: "Bar", waitsForPass: false }),
+    station({ id: "grill", name: "Grill", waitsForPass: true }),
+  ];
+  const cell = (el: HTMLElement, id: string) =>
+    table(el)!.querySelector(`[data-test="waits-for-pass-${id}"]`)?.textContent?.trim();
+  const el = await mount(stations);
+  expect(cell(el, "grill")).toBe("Yes");
+  expect(cell(el, "bar")).toBe("No");
+  setLocale("es");
+  const es = await mount(stations);
+  expect(cell(es, "grill")).toBe("Sí");
+  expect(cell(es, "bar")).toBe("No");
 });

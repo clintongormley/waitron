@@ -11,14 +11,22 @@ afterEach(() => {
 });
 
 const stations = [
-  { id: "bar", name: "Bar", colour: "blue", active: true, isDefault: true },
-  { id: "grill", name: "Grill", colour: "green", active: true, isDefault: false },
+  { id: "bar", name: "Bar", colour: "blue", active: true, isDefault: true, waitsForPass: false },
+  {
+    id: "grill",
+    name: "Grill",
+    colour: "green",
+    active: true,
+    isDefault: false,
+    waitsForPass: true,
+  },
   {
     id: "old",
     name: "Old kitchen",
     colour: "red",
     active: false,
     isDefault: false,
+    waitsForPass: false,
   },
 ] as PrepStation[];
 
@@ -61,6 +69,9 @@ describe.each(["light", "dark"] as const)("station table (%s)", (theme) => {
     if (state !== "empty") {
       expect(rowText[0]).toContain("Bar");
       expect(rowText[1]).toContain("Grill");
+      expect(
+        rows[1]!.querySelector('[data-test="waits-for-pass-grill"]')?.textContent?.trim(),
+      ).toBe("Yes");
     }
     if (state === "manager")
       expect(rows[0]!.querySelector('[data-test="printed-on-bar"]')?.textContent).toBe("Epson");
