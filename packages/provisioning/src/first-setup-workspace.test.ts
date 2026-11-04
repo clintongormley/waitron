@@ -33,18 +33,26 @@ it.each([
   ["stateDir", "first-setup-retirement.json", "file"],
   ["stateDir", "first-setup-workspace.json", "file"],
   ["stateDir", "first-setup-workspaces", "folder"],
+  ["venueDir", "first-setup-resolutions/backup-recovery", "folder"],
+  ["stateDir", "first-setup-resolutions/backup-recovery", "folder"],
 ] as const)(
   "%s holding %s (an empty %s) is refused as an earlier layout",
   async (folder, name, kind) => {
     const { roots } = await folders();
     const path = join(roots[folder], name);
-    if (kind === "folder") await mkdir(path);
+    if (kind === "folder") await mkdir(path, { recursive: true });
     else await writeFile(path, "");
     await expect(assertNoLegacyFirstSetupWorkspace(roots)).rejects.toMatchObject({
       code: "setup.workspace_unsupported",
     });
   },
 );
+
+it("a state folder holding first-setup-resolutions/<id>/ alone passes", async () => {
+  const { roots } = await folders();
+  await mkdir(join(roots.stateDir, "first-setup-resolutions", "r1"), { recursive: true });
+  await expect(assertNoLegacyFirstSetupWorkspace(roots)).resolves.toBeUndefined();
+});
 
 it("a venue folder inside first-setup-workspaces/<id>/ is refused as an earlier layout", async () => {
   const { root } = await folders();

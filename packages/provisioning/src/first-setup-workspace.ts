@@ -4,13 +4,15 @@ import { basename, dirname, join } from "node:path";
 import { canonicalFirstSetupDirectory } from "./first-setup-resolution.js";
 import "./errors.js";
 
-// What an earlier Waitron's Start again left behind; nothing reads them now (A1042, D4).
+// What an earlier Waitron's Start again, or its repair-page recovery from backup, left behind;
+// nothing reads them now (A1042, D4).
 const LEGACY_NAMES = [
   "first-setup-selection.json",
   "first-setup-retirement.json",
   "first-setup-workspace.json",
   "first-setup-workspaces",
-] as const;
+  join("first-setup-resolutions", "backup-recovery"),
+];
 
 export function insideFirstSetupWorkspace(dir: string): boolean {
   return basename(dirname(dirname(dir))) === "first-setup-workspaces";
