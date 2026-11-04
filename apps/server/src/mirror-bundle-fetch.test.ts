@@ -1105,13 +1105,31 @@ describe("boxDownload streams one answer to a file", () => {
     expect(await existingFiles()).toEqual([]);
   });
 
-  it("a folder that is not there is a failure: the caller makes it", async () => {
+  /** A box that sends part of its answer and holds the rest, so only the client can close it. */
+  async function boxHoldingItsAnswer(): Promise<{ url: URL; closed: () => boolean }> {
+    let closed = false;
     const url = await httpBox((res) => {
+      res.on("close", () => {
+        closed = true;
+      });
       res.writeHead(200, { "content-length": String(BYTES.length) });
-      res.end(BYTES);
+      res.write(BYTES.subarray(0, 1_000));
     });
+    return { url, closed: () => closed };
+  }
+
+  it("a folder that is not there is a failure: the caller makes it, and the connection closes", async () => {
+    const box = await boxHoldingItsAnswer();
     await expect(
-      boxDownload(url, options(), join(folder, "missing", "received.db")),
+      boxDownload(box.url, options(), join(folder, "missing", "received.db")),
     ).rejects.toThrow("ENOENT");
+    await vi.waitFor(() => expect(box.closed()).toBe(true));
+  });
+
+  it("a partial path that cannot be cleared is a failure, and the connection closes", async () => {
+    await mkdir(join(partial, "in-the-way"), { recursive: true });
+    const box = await boxHoldingItsAnswer();
+    await expect(boxDownload(box.url, options(), destination)).rejects.toThrow();
+    await vi.waitFor(() => expect(box.closed()).toBe(true));
   });
 });

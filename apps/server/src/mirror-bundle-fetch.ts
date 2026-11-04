@@ -241,6 +241,8 @@ export async function boxDownload(
     }
     await rename(partialPath, destinationPath);
   } catch (error) {
+    // Nothing else closes an answer whose file could not be started; the sender would hold it open.
+    res.destroy();
     await rm(partialPath, { force: true });
     throw error;
   }
