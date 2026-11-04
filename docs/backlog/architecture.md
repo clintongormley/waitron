@@ -1068,8 +1068,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
     (S8, #2405). Left for S18 by S11 (#2411): the unread `_cfg` in `kitchen.ts`, `dead-ends.ts`
     and `kitchen-allergy.ts`, the `VENUE_SERVICE.stationStates` scopes in `kitchen.ts` and
     `station-move.ts`, the floor annotator's `cfg`, and `receipt-guests.ts`'s `cfg`. The node and
-    storage ids remain for S18 and the schema slices (S16, #2402). `InvoiceCustomerDataDeps.nodeId`
-    is read only by `boot.node-configuration.test.ts` and remains for S18 (S12).
+    storage ids remain for S18 and the schema slices (S16, #2402).
   - **The schema slices S20–S28:** the schema changes remain for S20–S28 (S3, #2387). Until the
     schema slices drop `print_jobs.location_id`, `enqueuePrintJob` takes the venue id as an
     optional `venueId`, so a sale, a kitchen send or a payment's slips read it once, and the demo

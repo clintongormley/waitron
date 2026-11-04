@@ -375,7 +375,6 @@ it.each(["mirror", "primary"] as const)(
       expect(observed.cfg).toMatchObject({ nodeId: NODE, locationId: LOCATION });
       expect(observed.orders?.cfg).toStrictEqual({ nodeId: mode === "mirror" ? originNode : NODE });
       expect(observed.orders?.tradingContext).toBe(observed.cfg);
-      expect(observed.customers?.nodeId).toBe(mode === "mirror" ? originNode : NODE);
       expect(observed.customers?.tradingContext).toBe(observed.cfg);
       if (mode === "mirror") {
         const write = await fetch(`${base}/management-api/catalogues`, {

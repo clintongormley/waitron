@@ -1743,7 +1743,7 @@ async function bootServer(
   if (nodeLocationId === null)
     throw new AppError("server.node_config_invalid", { key: "WAITRON_NODE_ID" });
   const node: NodeConfig = { ...config.node, locationId: nodeLocationId };
-  assertSingleOperationalVenue(await readOperationalVenueIds(db), nodeLocationId);
+  assertSingleOperationalVenue(await readOperationalVenueIds(db));
 
   await assertRestoredMembershipReadable(config.stateDir, db);
   // Not a self-promotion: it applies a promotion this box already committed and signed with its own
@@ -2066,7 +2066,7 @@ async function bootServer(
   const venueLocale = await readVenueLocale(db, { override: tradingContext.localeOverride });
   const tradingAdmission = new TradingAdmission();
   health.readTradingAdmission = () => tradingAdmission.snapshot();
-  const scope = { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId };
+  const scope = { nodeId: tradingContext.nodeId };
   const context = await withTransaction(db, async (tx) => {
     const context = await readZoneContext(tx, scope);
     if (context.savedZone.kind === "valid")
@@ -2707,7 +2707,6 @@ async function bootServer(
       db,
       backend: nodeBackend,
       tradingContext,
-      nodeId: dataNodeId,
       venueLocale,
       onMirror: () => holders.mode.current === "mirror",
       now,

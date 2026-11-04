@@ -28,7 +28,6 @@ export interface ZoneContext {
   clockRevision: number;
 }
 
-/** `scope.locationId` is not read: the box holds one venue. */
 export async function readZoneContext(tx: Transaction, scope: IssueScope): Promise<ZoneContext> {
   const [node] = await tx.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, scope.nodeId));
   if (node === undefined) throw new AppError("venue.time_zone_target_invalid", { reason: "node" });

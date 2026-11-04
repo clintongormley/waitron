@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -275,12 +275,12 @@ type Offer = (sale: InvoiceDeliverySale) => Promise<OfferedPrinter[]>;
 
 const a4 = (id: string, name = "Back office"): OfferedPrinter => ({ id, name, kind: "a4" });
 
-const locationOffices: Offer = async (sale) =>
+const locationOffices: Offer = async () =>
   (
     await suite.db
       .select({ id: pagePrinters.id, name: pagePrinters.name })
       .from(pagePrinters)
-      .where(and(eq(pagePrinters.locationId, sale.locationId), eq(pagePrinters.active, true)))
+      .where(eq(pagePrinters.active, true))
       .orderBy(pagePrinters.name)
   ).map((row) => a4(row.id, row.name));
 
@@ -1040,7 +1040,7 @@ describe("readInvoiceDeliveries", () => {
 
     for (const id of [saleId, simplified]) await read(id, true, offer);
 
-    expect(asked).toEqual([{ id: saleId, locationId: v.locationId }]);
+    expect(asked).toEqual([{ id: saleId }]);
   });
 
   it("reads several sales at once exactly as it reads each one", async () => {

@@ -69,7 +69,6 @@ function mounted(patch: Partial<InvoiceCustomerDataDeps> = {}) {
       db: suite.db,
       backend: fixture.venue.backend,
       tradingContext: fixture.venue.cfg,
-      nodeId: fixture.venue.cfg.nodeId,
       venueLocale: "es-ES",
       render: stubPdf,
       onMirror: () => false,

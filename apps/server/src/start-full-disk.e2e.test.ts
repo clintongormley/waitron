@@ -458,7 +458,6 @@ describe("the Box status read and free-space deletion on a real full disk", () =
           tipsEnabled: false,
           simplifiedInvoiceLimit: null,
         },
-        nodeId,
         venueLocale: "en-GB",
         onMirror: () => false,
       },
