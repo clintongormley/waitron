@@ -79,7 +79,6 @@ export async function readPassCoverage(
   });
   const screens = await VENUE_SERVICE.readDevicesKitchenScreens(
     tx,
-    cfg,
     candidates.map((row) => row.id),
   );
   const passes: { scope: PassScope; profileZones: ReadonlySet<string> | null }[] = [];

@@ -810,7 +810,7 @@ describe("A773 station policy: readProfilesZones", () => {
   it("A773 station policy: readProfilesZones answers each profile as readProfileZones does", async () => {
     const venue = await seedVenueWithZones();
     const access = (profileId: string, input: ProfileServiceAccessInput) =>
-      scoped((tx) => setProfileServiceAccess(tx, venue.cfg, profileId, input));
+      scoped((tx) => setProfileServiceAccess(tx, profileId, input));
     const display = await seedProfile();
     await access(display, restaurantScope(venue));
     await db
@@ -838,7 +838,7 @@ describe("A773 station policy: readProfilesZones", () => {
     const answers = await scoped((tx) => readProfilesZones(tx, [...profiles, unknown]));
     expect([...answers.keys()].sort()).toEqual([...profiles].sort());
     for (const profileId of profiles) {
-      const one = await scoped((tx) => readProfileZones(tx, venue.cfg, profileId));
+      const one = await scoped((tx) => readProfileZones(tx, profileId));
       expect(answers.get(profileId)).toEqual(one.allowedZoneIds);
     }
     expect(profiles.map((profileId) => answers.get(profileId))).toEqual([
@@ -854,7 +854,7 @@ describe("A773 station policy: readProfilesZones", () => {
   it("lists two or more zones in readProfileZones's order, by position before name", async () => {
     const venue = await seedVenueWithZones();
     const access = (profileId: string, input: ProfileServiceAccessInput) =>
-      scoped((tx) => setProfileServiceAccess(tx, venue.cfg, profileId, input));
+      scoped((tx) => setProfileServiceAccess(tx, profileId, input));
     const everyZone = await seedProfile();
     await access(everyZone, restaurantScope(venue));
     const listed = await seedProfile();
@@ -862,7 +862,7 @@ describe("A773 station policy: readProfilesZones", () => {
 
     const answers = await scoped((tx) => readProfilesZones(tx, [everyZone, listed]));
     for (const profileId of [everyZone, listed]) {
-      const one = await scoped((tx) => readProfileZones(tx, venue.cfg, profileId));
+      const one = await scoped((tx) => readProfileZones(tx, profileId));
       expect(answers.get(profileId)).toEqual(one.allowedZoneIds);
       expect(answers.get(profileId)).toEqual([venue.terrace, venue.dining]);
     }
