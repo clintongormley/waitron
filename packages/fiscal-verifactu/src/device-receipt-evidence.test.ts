@@ -57,7 +57,7 @@ describe("device receipt evidence", () => {
         series: "A",
         invoiceNumber: "A/1",
         issuedDate: "2026-03-01",
-        fingerprint: record!.huella,
+        recordEvidence: record!.huella,
       });
       expect(
         await suite.db
@@ -172,7 +172,7 @@ it("reads the original fingerprint after a correction even when later rows are r
       series: "REMEDY",
       invoiceNumber: "REMEDY/1",
       issuedDate: "2026-07-21",
-      fingerprint: original!.huella,
+      recordEvidence: original!.huella,
     });
   } finally {
     await suite.db.execute(sql`pragma reverse_unordered_selects = off`);

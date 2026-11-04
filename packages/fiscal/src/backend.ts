@@ -29,7 +29,8 @@ export interface FiledInvoiceEvidence {
   series: string;
   invoiceNumber: string;
   issuedDate: string;
-  fingerprint: string;
+  /** Opaque observation supplied by the backend, without interpretation by the POS. */
+  recordEvidence: string;
 }
 
 /** Receipt facts read from a backend's stored fiscal record. */

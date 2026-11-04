@@ -29,7 +29,7 @@ it("returns stored invoice evidence on a cash sale and on its replay and receipt
     series: original.invoiceNumber.slice(0, original.invoiceNumber.lastIndexOf("/")),
     invoiceNumber: original.invoiceNumber,
     issuedDate: new URL(original.qr).searchParams.get("fecha")!.split("-").reverse().join("-"),
-    fingerprint: expect.stringMatching(/^[0-9A-F]{64}$/),
+    recordEvidence: expect.stringMatching(/^[0-9A-F]{64}$/),
   });
   const replay = await pay();
   expect(replay.status).toBe(200);

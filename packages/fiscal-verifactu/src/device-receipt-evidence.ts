@@ -10,7 +10,7 @@ export async function readDeviceReceiptEvidence(
   const { rows } = await tx.execute<Omit<FiledInvoiceEvidence, "series">>(sql`
     select id_emisor_factura as taxpayerId, entorno as environment,
       num_serie_factura as invoiceNumber, fecha_expedicion_factura as issuedDate,
-      huella as fingerprint
+      huella as recordEvidence
     from registros_facturacion
     where sale_id = ${saleId} and tipo_registro = 'alta'
       and corrects_registro_id is null and entorno is not null

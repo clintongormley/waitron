@@ -1527,3 +1527,9 @@ migrations. Its predecessor descriptor now omits those two tables; its full post
 comparison adds only their empty rows. Every earlier expected row and fiscal refusal remains.
 The fixture failed locally before both additions; all three predecessor-upgrade cases and the
 unedited write-path/immutability pair then passed 23 cases. Exact-head package CI remains required.
+
+The same run found the regime-specific evidence field in the base fiscal contract and two more
+fixture omissions. The base now retains opaque `recordEvidence`; Veri*Factu supplies and displays
+its own value. Its unchanged vocabulary guard and the complete base package pass 363 cases with
+100% coverage in every column. The Madrid seed's empty-table list and the staged older backup's
+removed-table list each gain the two new tables, preserving their existing assertions and captures.

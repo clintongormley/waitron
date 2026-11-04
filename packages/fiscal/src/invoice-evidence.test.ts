@@ -11,7 +11,7 @@ const observation = {
   series: "A-0CNNY",
   invoiceNumber: "A-0CNNY/9007199254740993",
   issuedDate: "2026-10-16",
-  fingerprint: "A".repeat(64),
+  recordEvidence: "A".repeat(64),
 };
 const storedKey = 'waitron.invoiceEvidence.v1:["B12345674","production","A-0CNNY"]';
 let values: Map<string, string>;
@@ -31,6 +31,20 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it("retains opaque backend evidence without interpreting its format", () => {
+  const evidence = {
+    taxpayerId: "B12345674",
+    environment: "production",
+    series: "A-0CNNY",
+    invoiceNumber: "A-0CNNY/1",
+    issuedDate: "2026-10-16",
+    recordEvidence: "provider-issued-evidence:invoice/1",
+  };
+  rememberInvoiceEvidence({ invoiceEvidence: evidence });
+  expect(readInvoiceEvidence(evidence)).toEqual(evidence);
+  expect(readInvoiceEvidenceReport(evidence)).toEqual([evidence]);
 });
 
 it("reports only matching taxpayer/environment observations under their own series key", () => {
@@ -101,11 +115,11 @@ it.each([
     { ...observation, issuedDate: "not-a-date" },
     { ...observation, issuedDate: "2026-02-30" },
     { ...observation, issuedDate: "9999-99-99" },
-    ...["taxpayerId", "environment", "series", "fingerprint"].map((field) => ({
+    ...["taxpayerId", "environment", "series", "recordEvidence"].map((field) => ({
       ...observation,
       [field]: "",
     })),
-    ...["taxpayerId", "environment", "series", "invoiceNumber", "issuedDate", "fingerprint"].map(
+    ...["taxpayerId", "environment", "series", "invoiceNumber", "issuedDate", "recordEvidence"].map(
       (field) => ({ ...observation, [field]: 42 }),
     ),
   ].map((invoiceEvidence) => ({ invoiceEvidence })),

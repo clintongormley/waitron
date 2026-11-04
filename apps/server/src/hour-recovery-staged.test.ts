@@ -96,6 +96,8 @@ async function olderBackup() {
     CREATE UNIQUE INDEX registros_identidad_uq ON registros_facturacion
       (id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_registro);
   `);
+  raw.exec("DROP TABLE fiscal_lookup_conflicts");
+  raw.exec("DROP TABLE fiscal_series_conflicts");
   raw.exec("DROP TABLE fiscal_conflict_evidence");
   raw.exec("DROP TABLE clock_confirmations");
   raw.exec("DROP TABLE clock_checks");

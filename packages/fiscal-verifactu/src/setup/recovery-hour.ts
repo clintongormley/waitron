@@ -375,7 +375,7 @@ export class RecoveryHourEntry extends LitElement {
                 ${observations.map(
                   (observation) =>
                     html`<dt>${observation.invoiceNumber}</dt>
-                      <dd>${observation.issuedDate}<br />${observation.fingerprint}</dd>`,
+                      <dd>${observation.issuedDate}<br />${observation.recordEvidence}</dd>`,
                 )}
               </dl>
             </section>`

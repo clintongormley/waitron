@@ -8,7 +8,7 @@ export interface InvoiceEvidenceScope {
 export interface InvoiceEvidence extends InvoiceEvidenceScope {
   invoiceNumber: string;
   issuedDate: string;
-  fingerprint: string;
+  recordEvidence: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -17,7 +17,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function evidenceFrom(value: unknown): InvoiceEvidence | undefined {
   if (!isRecord(value)) return undefined;
-  const { taxpayerId, environment, series, invoiceNumber, issuedDate, fingerprint } = value;
+  const { taxpayerId, environment, series, invoiceNumber, issuedDate, recordEvidence } = value;
   if (
     typeof taxpayerId !== "string" ||
     taxpayerId === "" ||
@@ -30,14 +30,14 @@ function evidenceFrom(value: unknown): InvoiceEvidence | undefined {
     !/^[1-9][0-9]*$/.test(invoiceNumber.slice(series.length + 1)) ||
     typeof issuedDate !== "string" ||
     !/^\d{4}-\d{2}-\d{2}$/.test(issuedDate) ||
-    typeof fingerprint !== "string" ||
-    fingerprint === ""
+    typeof recordEvidence !== "string" ||
+    recordEvidence === ""
   )
     return undefined;
   const date = new Date(`${issuedDate}T00:00:00.000Z`);
   if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== issuedDate)
     return undefined;
-  return { taxpayerId, environment, series, invoiceNumber, issuedDate, fingerprint };
+  return { taxpayerId, environment, series, invoiceNumber, issuedDate, recordEvidence };
 }
 
 function key(scope: InvoiceEvidenceScope): string {

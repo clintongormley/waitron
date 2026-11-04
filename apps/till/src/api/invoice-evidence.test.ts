@@ -13,7 +13,7 @@ const evidence: InvoiceEvidence = {
   series: "ABCD",
   invoiceNumber: "ABCD/12",
   issuedDate: "2026-11-04",
-  fingerprint: "A".repeat(64),
+  recordEvidence: "A".repeat(64),
 };
 const key = 'waitron.invoiceEvidence.v1:["89890001K","production","ABCD"]';
 const ownedKeys = new Set([key]);
@@ -104,7 +104,7 @@ describe("optional device invoice evidence", () => {
     { ...evidence, invoiceNumber: "DIFFERENT/12" },
     { ...evidence, invoiceNumber: "ABCD/0" },
     { ...evidence, invoiceNumber: "ABCD/1.2" },
-    { ...evidence, fingerprint: "" },
+    { ...evidence, recordEvidence: "" },
     { ...evidence, issuedDate: "not-a-date" },
     { ...evidence, issuedDate: "2026-02-30" },
     { ...evidence, taxpayerId: "" },
@@ -167,7 +167,7 @@ it("retains only invoice evidence, without the rest of the receipt or unknown fi
   expect(JSON.parse(localStorage.getItem(key)!)).toEqual(evidence);
 });
 
-it.each(["taxpayerId", "environment", "series", "invoiceNumber", "issuedDate", "fingerprint"])(
+it.each(["taxpayerId", "environment", "series", "invoiceNumber", "issuedDate", "recordEvidence"])(
   "discards evidence whose %s has the wrong type",
   (field) => {
     rememberInvoiceEvidence({ invoiceEvidence: { ...evidence, [field]: 42 } });

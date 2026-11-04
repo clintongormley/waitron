@@ -25,7 +25,7 @@ for (const theme of ["light", "dark"] as const)
           series: "A-0CNNY",
           invoiceNumber: "A-0CNNY/9007199254740993",
           issuedDate: "2026-10-16",
-          fingerprint: "A".repeat(64),
+          recordEvidence: "A".repeat(64),
         }),
       );
       try {
