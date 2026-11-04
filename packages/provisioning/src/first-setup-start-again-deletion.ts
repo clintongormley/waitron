@@ -76,9 +76,9 @@ const REFUSED = {
 type Root = "venue" | "state";
 type Roots = { stateDir: string; venueDir: string };
 /**
- * `held`: the setup database holds what activation wrote, so the `modules.json` activation writes after its
- * commit is deleted with it rather than refused. `nodeId`: the attempt's node; without it, no
- * node.db row counts as the attempt's.
+ * `held`: the setup database holds what activation wrote, so the `modules.json` activation writes
+ * after its commit is deleted with it rather than refused. `nodeId`: the attempt's node; without
+ * it, no node.db row counts as the attempt's.
  */
 type Options = { held?: true; nodeId?: string };
 const MODULES = "modules.json";

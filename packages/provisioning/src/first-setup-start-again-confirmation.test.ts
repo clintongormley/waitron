@@ -266,27 +266,20 @@ it("a shown.held key is not stored in the record", async () => {
   ).toEqual({ ...V2, ...record });
 });
 
-it.each([["with no recovery", {}]])(
-  "a record with the database unreadable keeps what the page showed, %s",
-  async (_label, extra) => {
-    const dir = await stateDir();
-    const unreadable = {
-      ...record,
-      database: "unreadable" as const,
-      shown: { ...record.shown, databaseUnreadable: true as const, ...extra },
-    };
-    await writeStartAgainConfirmation(dir, unreadable);
-    const stored = JSON.parse(
-      await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8"),
-    ) as { shown: object };
-    expect(stored).toEqual({ ...V2, ...unreadable });
-    expect(Object.keys(stored.shown)).toEqual([
-      "reached",
-      "databaseUnreadable",
-      ...Object.keys(extra),
-    ]);
-  },
-);
+it("a record with the database unreadable keeps what the page showed", async () => {
+  const dir = await stateDir();
+  const unreadable = {
+    ...record,
+    database: "unreadable" as const,
+    shown: { ...record.shown, databaseUnreadable: true as const },
+  };
+  await writeStartAgainConfirmation(dir, unreadable);
+  const stored = JSON.parse(
+    await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8"),
+  ) as { shown: object };
+  expect(stored).toEqual({ ...V2, ...unreadable });
+  expect(Object.keys(stored.shown)).toEqual(["reached", "databaseUnreadable"]);
+});
 
 it.each([
   ["unreadable without databaseUnreadable", "unreadable", {}],
