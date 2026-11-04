@@ -483,3 +483,100 @@ describe("runtime lookup conflicts use the administrator stop without changing f
     ]);
   });
 });
+
+it.each(["original", "cancellation"] as const)(
+  "keeps a cancelled invoice's known %s fingerprint out of the conflict stop",
+  async (fingerprintSource) => {
+    const f = await fixture();
+    await appendCancellation(suite.db, f.seeded, f.seeded.registroIds[0]!, 2);
+    await drain(
+      {
+        db: suite.db,
+        resolveClient: staticResolver(f.client),
+        environment: "production",
+        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+      },
+      new Date("2026-07-21T00:02:00Z"),
+    );
+    const records = (
+      await suite.db.execute<{ tipo_registro: string; huella: string }>(
+        sql`select tipo_registro, huella from registros_facturacion order by secuencia`,
+      )
+    ).rows;
+    const fingerprint = records.find(
+      (row) => row.tipo_registro === (fingerprintSource === "original" ? "alta" : "anulacion"),
+    )!.huella;
+    const client: VerifactuClient = {
+      ...f.client,
+      consultar: async (...args) => {
+        const response = await f.client.consultar(...args);
+        return {
+          ...response,
+          registros: response.registros!.map((record) => ({
+            ...record,
+            DatosRegistroFacturacion: { ...record.DatosRegistroFacturacion, Huella: fingerprint },
+          })),
+        };
+      },
+    };
+    const before = await immutableSnapshot();
+    const result = await run(f, client);
+    expect(result.conflicts ?? []).toEqual([]);
+    expect(result.noTrace).toEqual([]);
+    expect(
+      await withTransaction(suite.db, (tx) => readActiveConflicts(tx, f.seeded.nodeId)),
+    ).toEqual([]);
+    expect(await immutableSnapshot()).toEqual(before);
+    expect((await suite.db.execute(sql`select * from fiscal_lookup_conflicts`)).rows).toEqual([]);
+  },
+);
+
+it.each([false, true])(
+  "keeps an external cancellation on the existing drift path (scoped %s)",
+  async (scoped) => {
+    const f = await fixture();
+    f.aeat.annul(f.aeat.stored()[0]!.key);
+    const client: VerifactuClient = {
+      ...f.client,
+      consultar: async (...args) => {
+        const response = await f.client.consultar(...args);
+        return {
+          ...response,
+          registros: response.registros.map((record) => ({
+            ...record,
+            DatosRegistroFacturacion: {
+              ...record.DatosRegistroFacturacion,
+              Huella: "E".repeat(64),
+            },
+          })),
+        };
+      },
+    };
+    const before = await immutableSnapshot();
+    const result = await reconcile(
+      {
+        db: suite.db,
+        clock: f.seeded.clock,
+        resolveClient: staticResolver(client),
+        ...(scoped
+          ? {
+              scope: {
+                nodeId: f.seeded.nodeId,
+                taxpayerId: f.seeded.nif,
+                environment: "production" as const,
+              },
+            }
+          : {}),
+      },
+      PERIOD,
+    );
+    expect(result.drift).toEqual([
+      { recordId: f.seeded.registroIds[0], localState: "aceptado", reportedState: "Anulado" },
+    ]);
+    expect(result.conflicts ?? []).toEqual([]);
+    expect(
+      await withTransaction(suite.db, (tx) => readActiveConflicts(tx, f.seeded.nodeId)),
+    ).toEqual([]);
+    expect(await immutableSnapshot()).toEqual(before);
+  },
+);

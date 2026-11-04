@@ -1002,6 +1002,16 @@ a Waitron bug. Acknowledging the alert does not resolve its cause.
 
 ### fiscal-reconcile
 
+**4 November 2026, W41s-10a candidate update:** the caller findings below describe the earlier
+implementation. The candidate adds a module-owned startup/daily sweep through the optional fiscal
+reconciliation seat, with node/taxpayer/environment scope and an independent host duty. The
+runtime checks are `apps/server/src/fiscal-reconciliation.test.ts` and
+`boot.fiscal-reconciliation.test.ts`; the scoped sweep, completeness and concurrency suites sit
+beside `packages/fiscal-verifactu/src/reconcile.ts`. This changes the caller/cadence portion of
+this audit. Read-only inspection and a decision route for persistent `reconcile_no_trace` or
+`reconcile_drift_anulada` findings remain separate work; a resubmission marker still does not prove
+that a second submission happened. The candidate still needs fiscal review and current-head CI.
+
 **Reconciliation alerts need a production caller and an evidence/decision route.** Do not
 promise a periodic fiscal check or offer another submission until that caller and its recovery
 choices are specified and exercised.

@@ -14,15 +14,17 @@ export const createRuntimeReconciliation: NonNullable<
   let taxpayerId: string | undefined;
   let sweep: ReturnType<typeof createReconciliationSweep> | undefined;
   let running: Promise<ReconciliationSweepResult> | undefined;
+  let activeSignal: AbortSignal | undefined;
   const resolvers: ClientResolver[] = [];
-  return (now) => {
-    running ??= run(now).finally(() => {
+  return (now, signal) => {
+    running ??= run(now, signal).finally(() => {
       running = undefined;
     });
     return running;
   };
 
-  async function run(now: Date): Promise<ReconciliationSweepResult> {
+  async function run(now: Date, signal?: AbortSignal): Promise<ReconciliationSweepResult> {
+    activeSignal = signal;
     try {
       const tenant = await withTransaction(deps.db, readTenant);
       if (tenant === null) throw new Error("reconciliation requires the venue taxpayer");
@@ -34,13 +36,31 @@ export const createRuntimeReconciliation: NonNullable<
           scope: { nodeId: deps.nodeId, taxpayerId, environment: deps.environment },
           retryMs: deps.skipRetryMs,
           includeCurrentPeriod: true,
+          now: () => deps.clock.now().instant,
           resolveClient: () => {
             const resolver = aeatClientResolver(
               {
                 db: deps.db,
                 ring: deps.ring,
                 endpointFor: aeatEndpointFor(deps.environment),
-                fetchFor: mtlsFetch,
+                fetchFor: (material) => {
+                  const transport = mtlsFetch(material);
+                  const stop = activeSignal;
+                  return stop === undefined
+                    ? transport
+                    : {
+                        ...transport,
+                        fetch: (input, init) => {
+                          const signals = [stop];
+                          if (init?.signal) signals.push(init.signal);
+                          if (typeof input === "object" && "signal" in input)
+                            signals.push(input.signal);
+                          const signal = AbortSignal.any(signals);
+                          signal.throwIfAborted();
+                          return transport.fetch(input, { ...init, signal });
+                        },
+                      };
+                },
               },
               deps.log,
             );
@@ -49,7 +69,7 @@ export const createRuntimeReconciliation: NonNullable<
           },
         });
       }
-      const result = await sweep(now);
+      const result = await sweep(now, signal);
       for (const period of result.periods) {
         deps.log?.(
           period.outcome === "unknown" ? "warn" : "info",

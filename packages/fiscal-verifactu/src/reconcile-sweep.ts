@@ -22,20 +22,25 @@ export interface ReconciliationSweepResult {
 }
 
 export function createReconciliationSweep(
-  deps: ReconcileDeps & { scope: ReconcileScope; retryMs: number; includeCurrentPeriod?: boolean },
-): (now: Date) => Promise<ReconciliationSweepResult> {
+  deps: ReconcileDeps & {
+    scope: ReconcileScope;
+    retryMs: number;
+    includeCurrentPeriod?: boolean;
+    now?: () => Date;
+  },
+): (now: Date, signal?: AbortSignal) => Promise<ReconciliationSweepResult> {
   const next = new Map<string, number>();
   const dailyMs = 86_400_000;
   let lastTick: number | undefined;
   let running: Promise<ReconciliationSweepResult> | undefined;
-  return (now) => {
-    running ??= run(now).finally(() => {
+  return (now, signal) => {
+    running ??= run(now, signal).finally(() => {
       running = undefined;
     });
     return running;
   };
 
-  async function run(now: Date): Promise<ReconciliationSweepResult> {
+  async function run(now: Date, signal?: AbortSignal): Promise<ReconciliationSweepResult> {
     // A wall-clock correction must not postpone a daily check until the old clock catches up.
     if (lastTick !== undefined && now.getTime() < lastTick) next.clear();
     lastTick = now.getTime();
@@ -62,29 +67,49 @@ export function createReconciliationSweep(
       deps.includeCurrentPeriod === true &&
       (await withTransaction(deps.db, (tx) => readLiveReconciliationSeries(tx, deps.scope)))
         .length > 0;
-    if (hasLiveSeries) candidates.add(currentKey);
+    if (hasLiveSeries) {
+      candidates.add(currentKey);
+      for (const key of next.keys()) candidates.add(key);
+      let cursor = [...candidates].sort()[0]!;
+      while (cursor < currentKey) {
+        candidates.add(cursor);
+        const year = Number(cursor.slice(0, 4));
+        const month = Number(cursor.slice(5, 7));
+        cursor =
+          month === 12
+            ? `${String(year + 1).padStart(4, "0")}-01`
+            : `${String(year).padStart(4, "0")}-${String(month + 1).padStart(2, "0")}`;
+      }
+    }
     const periods: ReconciliationObservation[] = [];
     for (const key of [...candidates].sort()) {
+      if (signal?.aborted) break;
       if ((next.get(key) ?? -Infinity) > now.getTime()) continue;
       const period = { year: key.slice(0, 4), month: key.slice(5, 7) };
       try {
-        const result = await reconcile(deps, period);
+        const result = await reconcile({ ...deps, signal }, period);
         const outcome =
-          (result.checked > 0 || (hasLiveSeries && key === currentKey)) &&
-          (result.deferred?.length ?? 0) === 0
+          (result.checked > 0 || hasLiveSeries) && (result.deferred?.length ?? 0) === 0
             ? "observed"
             : "unknown";
         periods.push({ ...period, outcome, result });
-        next.set(key, now.getTime() + (outcome === "observed" ? dailyMs : deps.retryMs));
       } catch (error) {
         periods.push({ ...period, outcome: "unknown", errorCode: codeOf(error) });
-        next.set(key, now.getTime() + deps.retryMs);
       }
     }
+    const finishedAt = Math.max(now.getTime(), deps.now?.().getTime() ?? now.getTime());
+    for (const period of periods)
+      next.set(
+        `${period.year}-${period.month}`,
+        finishedAt + (period.outcome === "observed" ? dailyMs : deps.retryMs),
+      );
     return {
       periods,
       nextDueAt: new Date(
-        Math.min(now.getTime() + dailyMs, ...[...candidates].map((key) => next.get(key)!)),
+        Math.min(
+          finishedAt + dailyMs,
+          ...[...candidates].map((key) => next.get(key) ?? now.getTime() + deps.retryMs),
+        ),
       ),
     };
   }

@@ -8,6 +8,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { insertPendingAlta, seedPendingEnvios } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { envios } from "./schema/envios.js";
+import { readActiveConflicts } from "./conflict-evidence.js";
 import { drain } from "./drain.js";
 import { createReconciliationSweep } from "./reconcile-sweep.js";
 
@@ -253,5 +254,109 @@ describe("a scoped startup and daily reconciliation sweep", () => {
       release.resolve();
       await first;
     }
+  });
+});
+
+it("abandons an in-flight lookup and starts no later month after stepdown", async () => {
+  const { deps, client } = await fixture();
+  const controller = new AbortController();
+  const started = gate();
+  const held = gate();
+  const months: string[] = [];
+  const delayed: VerifactuClient = {
+    ...client,
+    consultar: async (header, filter) => {
+      months.push(filter.Periodo);
+      started.resolve();
+      await held.promise;
+      return client.consultar(header, filter);
+    },
+  };
+  const sweep = createReconciliationSweep({ ...deps, resolveClient: staticResolver(delayed) });
+  const pending = sweep(START, controller.signal);
+  try {
+    await started.promise;
+    controller.abort();
+  } finally {
+    held.resolve();
+  }
+  await pending;
+  expect(months).toEqual(["12"]);
+  expect(await acknowledgements()).toEqual([]);
+  expect((await suite.db.execute(sql`select estado from envios order by rowid`)).rows).toEqual([
+    { estado: "pendiente" },
+    { estado: "pendiente" },
+    { estado: "pendiente" },
+  ]);
+});
+
+it("looks up empty months between its oldest local period and the current month", async () => {
+  const { deps, client } = await fixture();
+  const asked = new Set<string>();
+  const sweep = createReconciliationSweep({
+    ...deps,
+    includeCurrentPeriod: true,
+    resolveClient: staticResolver({
+      ...client,
+      consultar: async (header, filter) => {
+        asked.add(`${filter.Ejercicio}-${filter.Periodo}`);
+        return client.consultar(header, filter);
+      },
+    }),
+  });
+  const result = await sweep(new Date("2027-03-01T12:00:00Z"));
+  expect([...asked]).toEqual(["2026-12", "2027-01", "2027-02", "2027-03"]);
+  expect(result.periods.map(({ month, outcome }) => ({ month, outcome }))).toEqual([
+    { month: "12", outcome: "observed" },
+    { month: "01", outcome: "observed" },
+    { month: "02", outcome: "observed" },
+    { month: "03", outcome: "observed" },
+  ]);
+});
+
+it("detects an outside invoice in a fully empty intervening month", async () => {
+  const { deps, client } = await fixture();
+  const header = { ObligadoEmision: { NombreRazon: "Waitron SL", NIF: deps.scope.taxpayerId } };
+  const template = (await client.consultar(header, { Ejercicio: "2026", Periodo: "12" }))
+    .registros[0]!;
+  const sweep = createReconciliationSweep({
+    ...deps,
+    includeCurrentPeriod: true,
+    resolveClient: staticResolver({
+      ...client,
+      consultar: async (h, filter) => {
+        const response = await client.consultar(h, filter);
+        return filter.Periodo !== "02"
+          ? response
+          : {
+              ...response,
+              registros: [
+                {
+                  ...template,
+                  IDFactura: {
+                    ...template.IDFactura,
+                    NumSerieFactura: "S1/99",
+                    FechaExpedicionFactura: "19-02-2027",
+                  },
+                  DatosRegistroFacturacion: {
+                    ...template.DatosRegistroFacturacion,
+                    RefExterna: "outside-empty-month",
+                    Huella: "E".repeat(64),
+                  },
+                },
+              ],
+            };
+      },
+    }),
+  });
+  await sweep(new Date("2027-03-01T12:00:00Z"));
+  const conflicts = await withTransaction(suite.db, (tx) =>
+    readActiveConflicts(tx, deps.scope.nodeId),
+  );
+  expect(conflicts).toHaveLength(1);
+  expect(conflicts[0]!.evidence).toHaveProperty("invoice", {
+    IDEmisorFactura: deps.scope.taxpayerId,
+    NumSerieFactura: "S1/99",
+    FechaExpedicionFactura: "19-02-2027",
   });
 });

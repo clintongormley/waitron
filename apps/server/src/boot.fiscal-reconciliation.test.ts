@@ -165,12 +165,14 @@ describe("boot's fiscal reconciliation duty", () => {
     const venue = await freshVenue();
     const migrations = await mkdtemp(join(tmpdir(), "waitron-fiscal-reconciliation-failed-start-"));
     const held = gate();
+    const started = gate();
     const called: Date[] = [];
     const failure = new Error("later boot step failed");
     const create = vi
       .spyOn(FISCAL_SLOT, "createReconciliation")
       .mockImplementation(() => async (at) => {
         called.push(at);
+        started.resolve();
         await held.promise;
         return { nextDueAt: new Date(at.getTime() + 86_400_000) };
       });
@@ -183,14 +185,17 @@ describe("boot's fiscal reconciliation duty", () => {
       await seedSharedVenue(venue.store.venue);
       await copyMigrationsRoot(migrations);
       let settled = false;
-      pending = startServer({
-        ...KEY_ENV,
-        WAITRON_ENV: "preproduction",
-        WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
-        WAITRON_VENUE_DIR: venue.directory,
-        WAITRON_MIGRATIONS_DIR: migrations,
-        WAITRON_HTTP_PORT: String(await freePort()),
-      })
+      pending = new Promise<void>((resolve) => setTimeout(resolve, 1200))
+        .then(async () =>
+          startServer({
+            ...KEY_ENV,
+            WAITRON_ENV: "preproduction",
+            WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
+            WAITRON_VENUE_DIR: venue.directory,
+            WAITRON_MIGRATIONS_DIR: migrations,
+            WAITRON_HTTP_PORT: String(await freePort()),
+          }),
+        )
         .then(
           async (server) => {
             await server.close();
@@ -202,7 +207,8 @@ describe("boot's fiscal reconciliation duty", () => {
           settled = true;
           return result;
         });
-      await vi.waitFor(() => expect(called).toHaveLength(1));
+      await Promise.race([started.promise, pending]);
+      expect(called).toHaveLength(1);
       cleanupDuty = vi.mocked(startFiscalReconciliation).mock.results.at(-1)!.value;
       await vi.waitFor(() => expect(cleanupDuty!.stop).toHaveBeenCalled());
       expect(settled).toBe(false);

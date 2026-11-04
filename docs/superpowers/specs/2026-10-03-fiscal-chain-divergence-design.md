@@ -1,5 +1,13 @@
 # A fiscal chain that AEAT disagrees with — design (W41s)
 
+**4 November 2026, W41s-10a candidate update:** the earlier statements below about a missing
+production fiscal reconciliation caller are historical. The candidate adds a scoped startup/daily
+module duty, qualified by `apps/server/src/fiscal-reconciliation.test.ts` and
+`boot.fiscal-reconciliation.test.ts`. See the [current backlog checkpoint](../../backlog/fiscal.md#w41s-10a-runtime-candidate-checkpoint-2-november-2026).
+It still needs the fiscal review/CI gate. The separate evidence-inspection and persistent-repair
+work is unchanged.
+
+
 **2026-10-12, W41s-5:** the server now reads the live standard or full series inside issuance.
 Startup and saved trading identity carry node and location, without a cached standard-series id.
 The references below to the boot series setting describe the earlier implementation.

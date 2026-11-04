@@ -1491,3 +1491,32 @@ to the same report reader without another request.
 The remaining gate is whole-item reviews, the normal hook and current-head CI before owner fiscal
 review. The browser report does not recover missing invoices or prove that an unlisted number was
 unused.
+
+### W41s-10a whole-item review corrections, 4 November 2026
+
+The two run-it reviews found a per-invoice local read in a complete month's missing-history check,
+a false stop when a reply matched another local version, continued work after stepdown, an empty
+intervening-month gap and retries whose deadline had already elapsed. The candidate now reads the
+month's local identities once. A known earlier fingerprint is not a contents conflict and cannot
+acknowledge a pending correction. A cancellation without a local counterpart keeps the existing
+state-discrepancy path; that change does not depend on choosing which cancellation fingerprint an
+outside service reports. The original recorded versions and filing results remain separate.
+
+The host's stop signal reaches the sweep, transaction checks and lookup transport. The sweep
+starts no later month after that signal, and a reply received after it cannot commit a correction.
+Empty months between the oldest local or already-observed period and the current month are queried;
+this makes no claim about a wholly missing period before that starting point. Daily/retry deadlines
+are saved using the end of the pass, so an early host wake does not bypass a slow failure's wait.
+
+The boot failed-start test also waited for a lookup before allowing for boot's duration. It now
+waits for the lookup-start event or an earlier boot outcome, retaining its prior assertions and
+60-second case deadline. A deliberate 1.2-second startup delay reproduced the earlier failure.
+
+A conflict on a locally stored invoice opens an internal filing case alongside its lookup evidence;
+an absent-local invoice observation does not create a fictional local invoice, filing result or
+submission attempt. The earlier review brief's broader "no invented filing cases" phrase was
+inaccurate. Evidence inspection and persistent-repair policy remain separate A1089 work.
+
+The initial reports are retained with their findings and qualification limits. This candidate
+still needs the normal hook and exact-head CI before owner fiscal review; no automatic landing is
+authorized for this item.

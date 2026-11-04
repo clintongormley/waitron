@@ -142,3 +142,27 @@ it("keeps checking after an interrupted sleep fails for a reason other than shut
   }
   expect(passes).toBe(2);
 });
+
+it("aborts the signal received by the running pass before joining it", async () => {
+  const held = gate();
+  let signal: AbortSignal | undefined;
+  const duty = startFiscalReconciliation({
+    enabled: () => true,
+    now: () => START,
+    maxWaitMs: 60_000,
+    retryMs: 300_000,
+    log: () => {},
+    pass: async (_now, received) => {
+      signal = received;
+      await held.promise;
+      return { nextDueAt: START };
+    },
+  });
+  const stop = duty.stop();
+  try {
+    expect(signal?.aborted).toBe(true);
+  } finally {
+    held.resolve();
+    await stop;
+  }
+});

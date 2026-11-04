@@ -186,7 +186,7 @@ export interface FiscalContribution {
   /** Built once per server start; the host runs it separately from submission and sales. */
   createReconciliation?(
     deps: FiscalDutyDeps & { readonly nodeId: string; readonly clock: TrustedClock },
-  ): (now: Date) => Promise<{ nextDueAt: Date }>;
+  ): (now: Date, signal?: AbortSignal) => Promise<{ nextDueAt: Date }>;
   /** Returns every submission a previous run left in flight to the queue, with no wait. The server
    * calls it before its first `drain` (`apps/server/src/restart-reset.ts`), when nothing in flight
    * can belong to a live pass of this process. Required, so a regime that files cannot omit it. */

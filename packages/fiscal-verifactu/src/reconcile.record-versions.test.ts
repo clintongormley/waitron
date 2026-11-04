@@ -8,6 +8,7 @@ import { createFakeAeat } from "@waitron/verifactu/testing";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { writeAck } from "./acks.js";
+import { readActiveConflicts } from "./conflict-evidence.js";
 import { appendToChain } from "./chain.js";
 import { reconcile, type ReconcileDeps } from "./reconcile.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
@@ -204,4 +205,24 @@ it("does not requeue a version superseded while the consulta request is in fligh
   expect(result.lostAck).toEqual([]);
   expect(result.drift).toEqual([]);
   expect(result.incidentsRaised).toBe(0);
+});
+
+it("keeps a pending correction waiting when the lookup still holds its own earlier version", async () => {
+  const original = await version(1, "aceptado");
+  const latest = await version(2, "pendiente", original);
+  const { client } = await authorityHolding([original]);
+  const before = await delivery([original, latest]);
+  const recordsBefore = await immutableRows();
+  const result = await reconcile(
+    {
+      ...deps(client),
+      scope: { nodeId: node.nodeId, taxpayerId: TEST_NIF, environment: "preproduction" },
+    },
+    PERIOD,
+  );
+  expect(result.conflicts ?? []).toEqual([]);
+  expect(await withTransaction(suite.db, (tx) => readActiveConflicts(tx, node.nodeId))).toEqual([]);
+  expect(await delivery([original, latest])).toEqual(before);
+  expect(await immutableRows()).toEqual(recordsBefore);
+  expect((await suite.db.execute(sql`select * from fiscal_lookup_conflicts`)).rows).toEqual([]);
 });

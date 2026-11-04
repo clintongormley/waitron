@@ -271,3 +271,60 @@ it("observes the current venue month without local invoices, then waits a day be
   await run(new Date(at.getTime() + 86_400_000));
   expect(log.mock.calls.filter(([, , params]) => params?.month === "08")).toHaveLength(2);
 });
+
+it("cancels the lookup transport on stepdown without acknowledging the invoice", async () => {
+  const { deps } = await fixture();
+  const controller = new AbortController();
+  let started!: () => void;
+  const began = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  let fail!: (error: Error) => void;
+  let signal: AbortSignal | null | undefined;
+  const close = vi.fn(async () => {});
+  vi.mocked(mtlsFetch).mockReturnValue({
+    close,
+    fetch: async (_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        fail = reject;
+        signal = init?.signal;
+        signal?.addEventListener("abort", () => reject(new Error("lookup aborted")), {
+          once: true,
+        });
+        started();
+      }),
+  });
+  const run = FISCAL_SLOT.createReconciliation!(deps);
+  const pending = run(NOW, controller.signal);
+  try {
+    await began;
+    expect(signal?.aborted).toBe(false);
+    controller.abort();
+    expect(signal?.aborted).toBe(true);
+  } finally {
+    fail(new Error("release test lookup"));
+    await pending;
+  }
+  expect(await states()).toEqual([{ estado: "pendiente" }]);
+  expect((await suite.db.execute(sql`select * from acks`)).rows).toEqual([]);
+  expect(close).toHaveBeenCalledTimes(1);
+});
+
+it("waits a full retry interval after a slow failed runtime lookup finishes", async () => {
+  const { deps } = await fixture();
+  let current = NOW;
+  const clock = { ...deps.clock, now: () => ({ ...deps.clock.now(), instant: current }) };
+  vi.mocked(mtlsFetch).mockReturnValue({
+    fetch: async () => {
+      current = new Date(NOW.getTime() + 600_000);
+      throw new Error("slow unavailable authority");
+    },
+    close: async () => {},
+  });
+  const run = FISCAL_SLOT.createReconciliation!({ ...deps, clock });
+  const result = await run(NOW);
+  expect(result.nextDueAt).toEqual(new Date("2026-07-21T00:15:00Z"));
+  await run(new Date("2026-07-21T00:11:00Z"));
+  expect(mtlsFetch).toHaveBeenCalledTimes(1);
+  expect(await states()).toEqual([{ estado: "pendiente" }]);
+});

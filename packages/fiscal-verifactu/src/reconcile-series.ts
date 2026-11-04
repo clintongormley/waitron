@@ -36,8 +36,17 @@ export async function retainUnheldSeriesConflicts(
   observed: readonly RegistroConsultado[],
   representedNumbers: ReadonlySet<string>,
   now: Date,
+  period: { year: string; month: string },
 ): Promise<void> {
   const live = await readLiveReconciliationSeries(tx, scope);
+  const local = await tx.execute<{ number: string; date: string }>(sql`
+    select r.num_serie_factura as number, r.fecha_expedicion_factura as date
+    from registros_facturacion r
+    where r.node_id = ${scope.nodeId} and r.id_emisor_factura = ${scope.taxpayerId}
+      and r.entorno = ${scope.environment}
+      and substr(r.fecha_expedicion_factura, 1, 7) = ${`${period.year}-${period.month}`}
+  `);
+  const held = new Set(local.rows.map((row) => JSON.stringify([row.number, row.date])));
   for (const record of observed) {
     if (record.IDFactura.IDEmisorFactura !== scope.taxpayerId) continue;
     const number = record.IDFactura.NumSerieFactura;
@@ -49,14 +58,8 @@ export async function retainUnheldSeriesConflicts(
     );
     if (series === undefined) continue;
     const date = record.IDFactura.FechaExpedicionFactura.split("-").reverse().join("-");
-    const local = await tx.execute(sql`
-      select 1 from registros_facturacion r
-      where r.node_id = ${scope.nodeId} and r.id_emisor_factura = ${scope.taxpayerId}
-        and r.entorno = ${scope.environment} and r.num_serie_factura = ${number}
-        and r.fecha_expedicion_factura = ${date} limit 1
-    `);
     // A sale committed during the lookup belongs to the current copy, not missing history.
-    if (local.rows.length > 0) continue;
+    if (held.has(JSON.stringify([number, date]))) continue;
     const data = record.DatosRegistroFacturacion;
     const evidence: LookupConflictEvidence = {
       source: "consulta",

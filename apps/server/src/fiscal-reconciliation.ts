@@ -5,7 +5,7 @@ import { realSleep, sleepMsFor } from "./loop.js";
 export function startFiscalReconciliation(deps: {
   enabled(): boolean;
   now(): Date;
-  pass(now: Date): Promise<{ nextDueAt: Date }>;
+  pass(now: Date, signal?: AbortSignal): Promise<{ nextDueAt: Date }>;
   maxWaitMs: number;
   retryMs: number;
   log: Logger;
@@ -25,7 +25,7 @@ export function startFiscalReconciliation(deps: {
     while (!controller.signal.aborted) {
       let nextDueAt: Date | null = null;
       try {
-        if (deps.enabled()) nextDueAt = (await deps.pass(deps.now())).nextDueAt;
+        if (deps.enabled()) nextDueAt = (await deps.pass(deps.now(), controller.signal)).nextDueAt;
       } catch (error) {
         deps.log("warn", "fiscal.reconciliation_failed", { errorCode: codeOf(error) });
         nextDueAt = new Date(deps.now().getTime() + deps.retryMs);
