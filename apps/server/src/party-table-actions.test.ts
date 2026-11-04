@@ -2708,9 +2708,12 @@ describe("A803 split", () => {
       "print_jobs",
       "bill_number_allocations",
       "bill_identities",
+      "working_order_counters",
+      "bill_edit_states",
+      "order_service_contexts",
     ];
 
-    /** Every row of every table a split writes, whoever's: a refusal may leave a new party behind. */
+    /** Every row of {@link SPLIT_TABLES}, whoever's: a refusal may leave a new party behind. */
     function everyRow() {
       return Object.fromEntries(
         SPLIT_TABLES.map((table) => [
@@ -2992,6 +2995,64 @@ describe("A803 split", () => {
           params: { workingOrderId: ana.tabId, excess: "0.01" },
         });
       });
+
+      it("with two sources, the second left a cent short refuses naming it, the first's dish staying too", async () => {
+        const [m4, m5] = await tables("A803 Second short", 4, 5);
+        const ana = await seat(v, m4);
+        await joinFree(ana.partyId, m5);
+        await order(v, ana.tabId, "Burger", "Agua");
+        const b2 = await act((tx) => insertPartyBill(tx, v.cfg, ana.partyId));
+        await act((tx) =>
+          addTabRound(tx, v.cfg, b2, [
+            { menuItemId: extras.side, quantity: "1" },
+            { menuItemId: extras.steak, quantity: "1" },
+          ]),
+        );
+        expect(decimalToCents(await act((tx) => storedOrderTotal(tx, b2)))).toBe(5200);
+        await cashContribution(v, b2, "40.00");
+        const agua = await lineOn(ana.tabId, "Agua");
+        const steak = await lineOn(b2, "Steak");
+
+        const error = await refusedWithNoRowChanged(() =>
+          splitSelected(ana.partyId, m5, {
+            wholeBillIds: [],
+            loose: [loose(b2, steak.id), loose(ana.tabId, agua.id)],
+          }),
+        );
+
+        expect(error).toMatchObject({
+          code: "bill.received_exceeds_total",
+          params: { workingOrderId: b2, excess: "0.01" },
+        });
+      });
+
+      it("every sent dish picked off a bill holding €1.00 refuses bill.received_exceeds_total, the person's unsent dish left there or not", async () => {
+        const { ana, m5, b1 } = await tableFor("A803 Emptied money", "Burger", "Agua");
+        await cashContribution(v, b1, "1.00");
+        const picked = loose(b1, (await lineOn(b1, "Burger")).id, (await lineOn(b1, "Agua")).id);
+        const refusal = {
+          code: "bill.received_exceeds_total",
+          params: { workingOrderId: b1, excess: "1.00" },
+        };
+
+        const bare = await refusedWithNoRowChanged(() =>
+          splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [picked] }),
+        );
+        expect(bare).toMatchObject(refusal);
+
+        await act((tx) =>
+          saveDraft(tx, v.cfg, ana.partyId, OPERATOR, {
+            billId: b1,
+            draftId: null,
+            revision: 0,
+            lines: [{ menuItemId: v.item("Flan"), quantity: "1" }],
+          }),
+        );
+        const drafted = await refusedWithNoRowChanged(() =>
+          splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [picked] }),
+        );
+        expect(drafted).toMatchObject(refusal);
+      });
     });
 
     it("a held dish loose: the new table gets its own held copy, the staying dish stays held in the source group, and each fires alone", async () => {
@@ -3006,6 +3067,10 @@ describe("A803 split", () => {
       const tarta = await lineOn(b1, "Tarta");
       const source = flan.groupId!;
       const firedSource = burger.groupId!;
+      const firedBy = randomUUID();
+      await act((tx) =>
+        tx.update(orderGroups).set({ firedBy }).where(eq(orderGroups.id, firedSource)),
+      );
       const before = everyRow();
 
       const result = await splitSelected(ana.partyId, m5, {
@@ -3020,6 +3085,14 @@ describe("A803 split", () => {
       const [fired, copy] = groups;
       expect((await lineOn(newBill, "Burger")).groupId).toBe(fired!.id);
       expect(fired!.id).not.toBe(firedSource);
+      expect(
+        await act((tx) =>
+          tx
+            .select({ firedBy: orderGroups.firedBy })
+            .from(orderGroups)
+            .where(eq(orderGroups.id, fired!.id)),
+        ),
+      ).toEqual([{ firedBy }]);
       expect((await lineOn(newBill, "Flan")).groupId).toBe(copy!.id);
       expect(copy!.id).not.toBe(source);
       expect((await lineOn(b1, "Tarta")).groupId).toBe(source);
@@ -3039,8 +3112,11 @@ describe("A803 split", () => {
         "order_groups",
         "order_group_events",
         "party_allergy",
+        "kitchen_notices",
         "bill_number_allocations",
         "bill_identities",
+        "working_order_counters",
+        "order_service_contexts",
       ]);
       const firedAt = async (billId: string, lineId: string) =>
         (await ticketsOf(billId)).find((item) => item.lineId === lineId)!.firedAt;

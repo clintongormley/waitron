@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
+  captureError,
   floorTodayJoinTables,
   floorTodayJoins,
   kitchenStations,
@@ -28,11 +29,16 @@ import {
   createProduct,
   units,
 } from "@waitron/catalogue";
-import { centsToDecimal, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
+import {
+  centsToDecimal,
+  decimalToCents,
+  nodeId as brandNodeId,
+  jobOrigin,
+} from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
-import { listStationQueues, moveOrderLines } from "./working-order.js";
+import { listStationQueues, moveOrderLines, storedOrderTotal } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
 import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
 import { createStation, updateStation } from "./kitchen.js";
@@ -43,6 +49,7 @@ import { attachPrinterToStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
   OPERATOR,
+  activeTablesOf,
   billRow,
   commandFor,
   inTx,
@@ -51,7 +58,9 @@ import {
   nextMillisecond,
   order,
   orderForParty,
+  partyRow,
   pay,
+  paymentsOf,
   revisionOf,
   seatWithNoAllergies as seat,
   setupPartyVenue,
@@ -68,7 +77,10 @@ import {
   type SplitSelection,
 } from "./testing/table-action-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
-import type { BillEditExpected } from "./order-drafts.js";
+import { discardDraft, readDrafts, type BillEditExpected } from "./order-drafts.js";
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
+import { finishTable } from "./testing/party-close-fixture.js";
+import { numbersOf as billNumbersOf } from "./testing/bill-identities.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import {
@@ -1277,6 +1289,162 @@ describe("A803 split: what the kitchen is told", () => {
     expect(await slipsSince(grill, before)).toEqual([
       movedSlip("Grill", await orderLine(tabId, newBill), "Terraza", "Mesa 52", ["1.000 x BURG"]),
     ]);
+  });
+
+  it("a loose source whose name has gone, left with only the person's own unsent dish, tells only the dish that left", async () => {
+    const { v, grill, stay, leave, partyId, tabId } = await twoTables(51, 52);
+    await group(v, "Terraza", [stay, leave]);
+    await order(v, tabId, "Burger");
+    const burger = await lineId(v, tabId, "Burger");
+    await inTx(v, (tx) =>
+      saveDraft(tx, v.cfg, partyId, OPERATOR, {
+        billId: tabId,
+        draftId: null,
+        revision: 0,
+        lines: [{ menuItemId: v.item("Paella"), quantity: "1" }],
+      }),
+    );
+    const before = (await printedBy(grill)).length;
+    expect(before).toBeGreaterThan(0);
+
+    const { billId: newBill } = await splitPicked(v, partyId, leave, {
+      wholeBillIds: [],
+      loose: [loose(tabId, burger)],
+    });
+
+    expect(await linesOf(tabId)).toEqual([]);
+    expect(await noticesOf([tabId, newBill])).toEqual([
+      { workingOrderId: newBill, kind: "moved", lineName: "BURG", movedTo: "Mesa 52" },
+    ]);
+    expect(await slipsSince(grill, before)).toEqual([
+      movedSlip("Grill", await orderLine(tabId, newBill), "Terraza", "Mesa 52", ["1.000 x BURG"]),
+    ]);
+  });
+
+  describe("every sent dish picked off a bill whose name stays", () => {
+    /** Mesa 51 + 52 with Burger and Flan sent on one bill. */
+    async function bothSent() {
+      const table = await twoTables(51, 52);
+      await order(table.v, table.tabId, "Burger", "Flan");
+      const picked = loose(
+        table.tabId,
+        await lineId(table.v, table.tabId, "Burger"),
+        await lineId(table.v, table.tabId, "Flan"),
+      );
+      const printedBefore = (await printedBy(table.grill)).length;
+      expect(printedBefore).toBeGreaterThan(0);
+      return { ...table, picked, printedBefore };
+    }
+
+    /** What both tables and the kitchen hold after the split: the bill stays, the dishes left. */
+    async function expectOnlyTheDishesLeft(
+      table: Awaited<ReturnType<typeof bothSent>>,
+      moved: { partyId: string; billId: string },
+    ) {
+      const { v, grill, stay, leave, partyId, tabId, printedBefore } = table;
+      expect(await billRow(v, tabId)).toMatchObject({ partyId, status: "open" });
+      expect(await linesOf(tabId)).toEqual([]);
+      expect(
+        await db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+      ).toEqual([]);
+      expect(decimalToCents(await inTx(v, (tx) => storedOrderTotal(tx, tabId)))).toBe(0);
+      expect(await paymentsOf(v, tabId)).toEqual([]);
+      expect(await activeTablesOf(v, partyId)).toEqual([stay]);
+      expect(await billNumbersOf(v, partyId)).toEqual([[tabId, 1, null]]);
+
+      expect((await linesOf(moved.billId)).map((line) => line.productId)).toEqual([
+        v.productId("Burger"),
+        v.productId("Flan"),
+      ]);
+      expect(await billRow(v, moved.billId)).toMatchObject({
+        partyId: moved.partyId,
+        status: "open",
+      });
+      expect(await activeTablesOf(v, moved.partyId)).toEqual([leave]);
+      expect(await billNumbersOf(v, moved.partyId)).toEqual([[moved.billId, 1, null]]);
+
+      expect(await noticesOf([tabId, moved.billId])).toEqual([
+        { workingOrderId: moved.billId, kind: "moved", lineName: "BURG", movedTo: "Mesa 52" },
+        { workingOrderId: moved.billId, kind: "moved", lineName: "FLAN", movedTo: "Mesa 52" },
+      ]);
+      expect(await slipsSince(grill, printedBefore)).toEqual([
+        movedSlip("Grill", await orderLine(tabId, moved.billId), "Mesa 51, 52", "Mesa 52", [
+          "1.000 x BURG",
+          "1.000 x FLAN",
+        ]),
+      ]);
+    }
+
+    it("with the person's own unsent dish left there, the unsent dish stays and Finish table refuses until it is dealt with", async () => {
+      const table = await bothSent();
+      const { v, partyId, tabId, leave, picked } = table;
+      const draft = await inTx(v, (tx) =>
+        saveDraft(tx, v.cfg, partyId, OPERATOR, {
+          billId: tabId,
+          draftId: null,
+          revision: 0,
+          lines: [{ menuItemId: v.item("Paella"), quantity: "1" }],
+        }),
+      );
+
+      const moved = await splitPicked(v, partyId, leave, { wholeBillIds: [], loose: [picked] });
+
+      await expectOnlyTheDishesLeft(table, moved);
+      const drafts = await inTx(v, (tx) => readDrafts(tx, v.cfg, partyId));
+      expect(
+        drafts.map((row) => [row.id, row.billId, row.lines.map((line) => line.menuItemId)]),
+      ).toEqual([[draft.id, tabId, [v.item("Paella")]]]);
+
+      const finishing = await commandFor(v, partyId);
+      const refused = await captureError(() =>
+        inTx(v, (tx) => finishTable(tx, { partyId, ...finishing })),
+      );
+      expect(refused).toMatchObject({ code: "bill.unsent_dishes", params: { billId: tabId } });
+      expect((await partyRow(v, partyId)).state).toBe("open");
+
+      const [current] = await inTx(v, (tx) => readDrafts(tx, v.cfg, partyId));
+      const discarding = {
+        admission: testTradingAdmission(),
+        submissionId: randomUUID(),
+        revision: current!.revision,
+        expectedRevision: (await billRow(v, tabId)).revision,
+        expectedEdit: await inTx(v, (tx) => readBillEditState(tx, tabId)),
+        note: null,
+      };
+      await inTx(v, (tx) =>
+        discardDraft(tx, v.cfg, partyId, draft.id, OPERATOR, discarding, LOCALE),
+      );
+      const closing = await commandFor(v, partyId);
+      await inTx(v, (tx) => finishTable(tx, { partyId, ...closing }));
+
+      expect((await partyRow(v, partyId)).state).toBe("closed");
+      expect((await billRow(v, tabId)).status).toBe("abandoned");
+      expect((await partyRow(v, moved.partyId)).state).toBe("open");
+      expect((await billRow(v, moved.billId)).status).toBe("open");
+    });
+
+    it("with nothing left there, the bill takes a new order, and Finish table waits for it to be paid", async () => {
+      const table = await bothSent();
+      const { v, partyId, tabId, leave, picked } = table;
+
+      const moved = await splitPicked(v, partyId, leave, { wholeBillIds: [], loose: [picked] });
+
+      await expectOnlyTheDishesLeft(table, moved);
+
+      await order(v, tabId, "Agua");
+      const finishing = await commandFor(v, partyId);
+      const refused = await captureError(() =>
+        inTx(v, (tx) => finishTable(tx, { partyId, ...finishing })),
+      );
+      expect(refused).toMatchObject({ code: "party.bill_outstanding", params: { partyId } });
+
+      await pay(v, tabId, "2.00");
+      const closing = await commandFor(v, partyId);
+      await inTx(v, (tx) => finishTable(tx, { partyId, ...closing }));
+
+      expect((await partyRow(v, partyId)).state).toBe("closed");
+      expect((await billRow(v, tabId)).status).toBe("settled");
+    });
   });
 });
 
