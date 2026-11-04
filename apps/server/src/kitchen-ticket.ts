@@ -7,7 +7,12 @@
  * `esc()` has no bold, so ASCII markers stand in for emphasis.
  */
 import { esc, prepareText, wrapText, type EscSetting } from "@waitron/printing";
-import { partyTablesName, stringToThousandths, thousandthsToDecimal } from "@waitron/shared";
+import {
+  conjunctionList,
+  partyTablesName,
+  stringToThousandths,
+  thousandthsToDecimal,
+} from "@waitron/shared";
 import type { TicketGrouping } from "@waitron/shared";
 import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
 import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
@@ -36,8 +41,8 @@ export interface KitchenTicketItem {
   groupLabel?: string;
   /** The dish's own course, named on its group's heading. */
   course?: { name: string; order: number };
-  /** Its group has kitchen food at the pass while this dish is not pass-controlled. */
-  goesWithKitchenFood?: true;
+  /** The stations holding its group's dishes for the pass, while this dish is not pass-controlled. */
+  goesWith?: readonly string[];
   /** Printed as sold, never merged or split. */
   printedAsSold?: boolean;
   /** The period the dish was agreed to be sent after. */
@@ -98,7 +103,7 @@ function entryKey(item: KitchenTicketItem): string {
     item.groupId ?? null,
     item.groupLabel ?? null,
     item.course?.name ?? null,
-    item.goesWithKitchenFood ?? false,
+    item.goesWith ?? [],
     item.modifiers ?? [],
     item.crossRefs ?? [],
     item.afterPeriod ?? null,
@@ -296,16 +301,18 @@ function emitGroup(
     b.line(line);
 }
 
-/** "Goes with kitchen food" under a heading, when a dish under it carries the flag. */
+/** "Goes with {stations}" under a heading, naming the stations its dishes go out with. */
 function emitCue(
   b: ReturnType<typeof esc>,
   under: readonly KitchenTicketItem[],
   columns: number,
   locale: string,
 ): void {
-  if (!under.some((item) => item.goesWithKitchenFood === true)) return;
-  for (const line of wrapText(prepareText(kitchenTicketWords(locale).goesWithKitchenFood), columns))
-    b.line(line);
+  const stations = [...new Set(under.flatMap((item) => item.goesWith ?? []))];
+  if (stations.length === 0) return;
+  const list = conjunctionList(stations, locale);
+  const words = kitchenTicketWords(locale).goesWith.replace("{stations}", () => list);
+  for (const line of wrapText(prepareText(words), columns)) b.line(line);
 }
 
 function emitLateMark(

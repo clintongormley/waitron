@@ -2042,7 +2042,7 @@ describe("A773 fire paper: group headings name their dishes' courses", () => {
   });
 });
 
-describe("A773 fire paper: Goes with kitchen food", () => {
+describe("A773 fire paper: Goes with the stations holding dishes for the pass", () => {
   const at = new Date(2026, 7, 17, 14, 30);
   const desserts = { name: "Desserts", order: 4 };
   const ticket = (
@@ -2063,8 +2063,8 @@ describe("A773 fire paper: Goes with kitchen food", () => {
 
   it("A773 fire paper: the cue prints once under its group's heading", () => {
     const flagged: KitchenTicketItem[] = [
-      { qty: 2, name: "Moscatel", group: 4, course: desserts, goesWithKitchenFood: true },
-      { qty: 1, name: "Cava", group: 4, course: desserts, goesWithKitchenFood: true },
+      { qty: 2, name: "Moscatel", group: 4, course: desserts, goesWith: ["Grill", "Pastry"] },
+      { qty: 1, name: "Cava", group: 4, course: desserts, goesWith: ["Grill", "Pastry"] },
     ];
     expect(lines(ticket(flagged))).toEqual([
       "Bar",
@@ -2072,35 +2072,36 @@ describe("A773 fire paper: Goes with kitchen food", () => {
       "A-17",
       "14:30",
       "GROUP 4 · DESSERTS",
-      "Goes with kitchen food",
+      "Goes with Grill and Pastry",
       "2 x Moscatel",
       "1 x Cava",
       "",
     ]);
     expect(lines(ticket(flagged, "es-ES")).slice(4, 6)).toEqual([
       `${kitchenTicketWords("es").group} 4 · DESSERTS`,
-      "Sale con la comida de cocina",
+      "Sale con Grill y Pastry",
     ]);
 
     const spanning = lines(
       ticket([
         { qty: 1, name: "Caña", group: 3 },
-        { qty: 2, name: "Moscatel", group: 4, course: desserts, goesWithKitchenFood: true },
+        { qty: 2, name: "Moscatel", group: 4, course: desserts, goesWith: ["Grill"] },
       ]),
     );
     expect(spanning.slice(4)).toEqual([
       "GROUP 3",
       "1 x Caña",
       "GROUP 4 · DESSERTS",
-      "Goes with kitchen food",
+      "Goes with Grill",
       "2 x Moscatel",
       "",
     ]);
 
-    expect(lines(ticket([{ qty: 2, name: "Moscatel", group: 4, course: desserts }]))).not.toContain(
-      "Goes with kitchen food",
+    const cues = (printed: string[]) => printed.filter((text) => text.startsWith("Goes with"));
+    expect(cues(lines(ticket([{ qty: 2, name: "Moscatel", group: 4, course: desserts }])))).toEqual(
+      [],
     );
-    expect(lines(ticket(flagged, "en-GB", "HOLD"))).toContain("Goes with kitchen food");
+    expect(lines(ticket(flagged, "en-GB", "HOLD"))).toContain("Goes with Grill and Pastry");
 
     const slip = printedLines(
       formatCorrectionSlip(
@@ -2117,21 +2118,30 @@ describe("A773 fire paper: Goes with kitchen food", () => {
       ),
     );
     expect(slip).toContain("GROUP 4 · DESSERTS");
-    expect(slip).not.toContain("Goes with kitchen food");
+    expect(cues(slip)).toEqual([]);
   });
 
   it("A773 fire paper: a heading over flagged and unflagged dishes prints the cue once and keeps them apart", () => {
     const arranged = arrangeTicketItems(
       [
-        { qty: 1, name: "Moscatel", group: 4, course: desserts, goesWithKitchenFood: true },
+        { qty: 1, name: "Moscatel", group: 4, course: desserts, goesWith: ["Grill"] },
         { qty: 1, name: "Moscatel", group: 4, course: desserts },
       ],
       "combined",
     );
     expect(arranged).toHaveLength(2);
+    expect(
+      arrangeTicketItems(
+        [
+          { qty: 1, name: "Moscatel", group: 4, course: desserts, goesWith: ["Grill"] },
+          { qty: 1, name: "Moscatel", group: 4, course: desserts, goesWith: ["Grill", "Pastry"] },
+        ],
+        "combined",
+      ),
+    ).toHaveLength(2);
     expect(lines(ticket(arranged)).slice(4)).toEqual([
       "GROUP 4 · DESSERTS",
-      "Goes with kitchen food",
+      "Goes with Grill",
       "1.000 x Moscatel",
       "1.000 x Moscatel",
       "",

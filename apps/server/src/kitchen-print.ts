@@ -65,7 +65,7 @@ import { heldPaperStations, readGroupNumberLabels } from "./order-groups.js";
 import { freezeKitchenAllergyItems } from "./kitchen-allergy.js";
 import type { KitchenTicketItem, MovedSlip, OtherStationItem } from "./kitchen-ticket.js";
 import type { TradingContext } from "./trading-context.js";
-import { groupsWithPassFood } from "./working-order.js";
+import { passStationsByGroup } from "./working-order.js";
 import "./errors.js";
 
 /**
@@ -606,10 +606,10 @@ async function planKitchenTickets(
 
   const language = await readKitchenLanguage(tx);
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds, language);
-  const passFood =
+  const passStations =
     mark === "HOLD"
-      ? new Set<string>()
-      : await groupsWithPassFood(tx, [
+      ? new Map<string, readonly string[]>()
+      : await passStationsByGroup(tx, [
           ...new Set([...itemsByLine.values()].flatMap(({ item }) => item.groupId ?? [])),
         ]);
   const stationNames =
@@ -631,13 +631,11 @@ async function planKitchenTickets(
   for (const fired of firedItems) {
     const entry = itemsByLine.get(fired.workingOrderLineId)!;
     const fresh = atFiredQuantity(entry.item, fired);
-    const item =
-      fresh.groupId !== undefined &&
-      passFood.has(fresh.groupId) &&
-      !entry.passControlled &&
-      !entry.madeHere
-        ? { ...fresh, goesWithKitchenFood: true as const }
-        : fresh;
+    const goesWith =
+      fresh.groupId === undefined || entry.passControlled || entry.madeHere
+        ? undefined
+        : passStations.get(fresh.groupId);
+    const item = goesWith === undefined ? fresh : { ...fresh, goesWith };
     const bucket = itemsByStation.get(fired.stationId) ?? [];
     bucket.push({
       lineNo: entry.lineNo,
