@@ -7864,6 +7864,8 @@ export interface QueueGroup {
   numberPartyId: string;
   numberPartyLabel?: string;
   state: "held" | "fired";
+  /** On a station's queue only: the group has kitchen food at the pass. */
+  goesWithKitchenFood?: true;
 }
 
 export interface StationQueueItem {
@@ -8231,6 +8233,16 @@ export async function stationHasWork(tx: Transaction, stationId: string): Promis
   return item !== undefined;
 }
 
+/** A station's own view of `group`: the pass board reads {@link queueGroup} without the cue. */
+function stationQueueGroup(
+  group: QueueGroup | undefined,
+  withPassFood: ReadonlySet<string>,
+): QueueGroup | undefined {
+  return group !== undefined && withPassFood.has(group.id)
+    ? { ...group, goesWithKitchenFood: true }
+    : group;
+}
+
 /** Each of `stationIds`' {@link listStationQueue}, read together. */
 export async function listStationQueues(
   tx: Transaction,
@@ -8297,6 +8309,9 @@ export async function listStationQueues(
     tx,
     rows.flatMap((row) => (row.groupPartyId === null ? [] : [row.groupPartyId])),
   );
+  const withPassFood = await groupsWithPassFood(tx, [
+    ...new Set(rows.flatMap((row) => (row.groupId === null ? [] : [row.groupId]))),
+  ]);
   const lastMoves = await readStationQueueMoves(
     tx,
     rows.map((row) => row.workingOrderLineId),
@@ -8426,7 +8441,7 @@ export async function listStationQueues(
         row.courseId === null
           ? null
           : { id: row.courseId, name: row.courseName!, displayOrder: row.courseDisplayOrder! },
-      ...optional("group", queueGroup(row, numberLabels)),
+      ...optional("group", stationQueueGroup(queueGroup(row, numberLabels), withPassFood)),
       phase: kitchenPhase(row),
       requestedAt: row.requestedAt,
       firedAt: row.firedAt,

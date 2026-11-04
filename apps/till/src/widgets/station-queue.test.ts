@@ -5462,3 +5462,61 @@ describe("A773 held column", () => {
     expect(held?.textContent?.trim()).toBe("+3");
   });
 });
+
+describe("A773 fire paper: the cue on the station card", () => {
+  const plainGroup = {
+    id: "g-4",
+    position: 4,
+    displayNumber: 4,
+    numberPartyId: "pa-1",
+    state: "fired" as const,
+  };
+  const dessertsGroup = { ...plainGroup, goesWithKitchenFood: true as const };
+  const mountCard = (items: StationQueueItem[]) =>
+    mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [ageBill(7, items)],
+      stationId: "st-bar",
+      now: AGE_NOW,
+    });
+  const cue = (el: TillStationQueue) =>
+    cardOf(el, 7).querySelector<HTMLElement>("[data-goes-with]");
+
+  it("A773 fire paper: a released card whose group has food at the pass says so", async () => {
+    const moscatel = ageDish("moscatel", 18, { name: "Moscatel", group: dessertsGroup });
+    const { el } = await mountCard([moscatel]);
+    expect(cue(el)).not.toBeNull();
+    expect(cue(el)!.textContent!.trim()).toBe("Goes with kitchen food");
+    const lines = [...cardOf(el, 7).querySelectorAll(".line-name")];
+    expect(
+      lines.at(-1)!.compareDocumentPosition(cue(el)!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    cleanupWidgets();
+
+    const previousLocale = currentLocale();
+    setLocale("es-ES");
+    try {
+      const spanish = await mountCard([moscatel]);
+      expect(cue(spanish.el)!.textContent!.trim()).toBe(es["station.goes_with_kitchen_food"]);
+      expect(es["station.goes_with_kitchen_food"]).toBe("Sale con la comida de cocina");
+    } finally {
+      setLocale(previousLocale);
+    }
+    cleanupWidgets();
+
+    const held = await mountCard([
+      ageDish("held", 18, { firedAt: null, group: { ...dessertsGroup, state: "held" } }),
+    ]);
+    expect(cue(held.el)).toBeNull();
+    cleanupWidgets();
+
+    const grill = await mountCard([
+      ageDish("tarta", 18, { name: "Tarta", passControlled: true, group: dessertsGroup }),
+    ]);
+    expect(cue(grill.el)).toBeNull();
+    cleanupWidgets();
+
+    const plain = await mountCard([ageDish("moscatel", 18, { group: plainGroup })]);
+    expect(cardOf(plain.el, 7)).not.toBeNull();
+    expect(cue(plain.el)).toBeNull();
+  });
+});

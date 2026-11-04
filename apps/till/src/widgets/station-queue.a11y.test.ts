@@ -834,6 +834,38 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     );
     await expectNoA11yViolations(host);
   });
+  it("A773 fire paper: a Bar card saying it goes with kitchen food has no violations", async () => {
+    const moscatel = {
+      allergy: null,
+      id: "ti-moscatel",
+      workingOrderLineId: "wol-moscatel",
+      state: "queued" as const,
+      name: "Moscatel",
+      quantity: "1.000",
+      course: null,
+      firedAt: "2026-08-17T10:00:00.000Z",
+      queuedAt: "2026-08-17T10:00:00.000Z",
+      group: {
+        id: "g-4",
+        position: 4,
+        displayNumber: 4,
+        numberPartyId: "pa-1",
+        state: "fired" as const,
+        goesWithKitchenFood: true as const,
+      },
+    };
+    const { host, el } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      {
+        groups: [{ ...groups[0]!, items: [{ ...moscatel, ...kitchenStamps(moscatel) }] }],
+        stationId: "st-bar",
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-goes-with]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("a party's card by group (held note, printing problem, Reprint) has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",

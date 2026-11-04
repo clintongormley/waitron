@@ -14,7 +14,7 @@ import { createPrinter } from "@waitron/printing";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { fireGroup } from "./order-groups.js";
-import { groupsWithPassFood } from "./working-order.js";
+import { groupsWithPassFood, listStationQueue } from "./working-order.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
@@ -283,5 +283,50 @@ describe("A773 fire paper: Goes with kitchen food", () => {
       expect(hold[0]![0]).toBe(`*** ${words.hold} ***`);
       expect(hold[0]).not.toContain(CUE);
     });
+  });
+});
+
+describe("A773 fire paper: the cue on the station card", () => {
+  /** Each queue item's group at `stationId`, keyed by the item's group id. */
+  async function queueGroups(k: Kitchen, stationId: string) {
+    const queue = await inTx(k.v, (tx) => listStationQueue(tx, stationId));
+    return new Map(
+      queue.flatMap((bill) => bill.items).map((item) => [item.group!.id, item.group!]),
+    );
+  }
+
+  it("A773 fire paper: a station's queue marks a group with kitchen food at the pass", async () => {
+    const k = await kitchen(true);
+    const [desserts, drinks] = await place(k, [
+      { names: ["Tarta", "Vino"], release: "hold" },
+      { names: ["Caña"], release: "hold" },
+    ]);
+    await fire(k, desserts!);
+    await fire(k, drinks!);
+
+    const bar = await queueGroups(k, k.bar);
+    expect(bar.get(desserts!)).toMatchObject({ id: desserts, goesWithKitchenFood: true });
+    expect(bar.get(drinks!)).toBeDefined();
+    expect(bar.get(drinks!)).not.toHaveProperty("goesWithKitchenFood");
+
+    await releaseAtPass(k, desserts!);
+    expect((await queueGroups(k, k.grill)).get(desserts!)).toMatchObject({
+      goesWithKitchenFood: true,
+    });
+  });
+
+  it("A773 fire paper: the pass board's groups carry no cue key", async () => {
+    const k = await kitchen(true);
+    const [desserts] = await place(k, [{ names: ["Tarta", "Vino"], release: "hold" }]);
+    await fire(k, desserts!);
+    const by = await passDevice(k);
+    const board = await withTransaction(db, async (tx) => {
+      const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, k.v.cfg, by.deviceId)).find(
+        (candidate) => candidate.kind === "pass",
+      )!;
+      return readScopedPassBoard(tx, k.v.cfg, passScopeOf(screen));
+    });
+    expect(JSON.stringify(board.toFire)).toContain(desserts!);
+    expect(JSON.stringify(board)).not.toContain("goesWithKitchenFood");
   });
 });

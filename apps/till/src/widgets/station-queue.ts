@@ -137,6 +137,16 @@ export function stationColumnNames(): Map<ColumnKey, string> {
   ]);
 }
 
+/** A card whose group has kitchen food at the pass, holding a released dish the pass does not hold. */
+function goesWithKitchenFood(card: KitchenCard): boolean {
+  return (
+    card.group?.goesWithKitchenFood === true &&
+    card.items.some(
+      (item) => item.phase !== "held" && item.phase !== "requested" && !item.passControlled,
+    )
+  );
+}
+
 function afterPeriodWords(period: string): string {
   return t("station.after_period").replace("{period}", () => period);
 }
@@ -542,6 +552,12 @@ export class TillStationQueue extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         color: var(--wt-color-text-muted);
         text-transform: uppercase;
+      }
+
+      .goes-with {
+        margin: 0;
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
       }
 
       .held-note {
@@ -1315,6 +1331,7 @@ export class TillStationQueue extends LitElement {
       ${card.orders.map((order) => this.#kitchenNote(order, tag(order)))}
       ${card.orders.map((order) => this.#printProblem(order, tag(order)))}
       ${sections.map((section) => this.#courseSection(section, row, sections.length > 1))}
+      ${goesWithKitchenFood(card) ? html`<p class="goes-with" data-goes-with>${t("station.goes_with_kitchen_food")}</p>` : nothing}
       ${card.orders.map((order) => this.#elsewhere(order, tag(order)))}
       ${card.orders.map((order) => this.#collectAction(order, tag(order)))}
       ${card.orders.map((order) => this.#reprintAction(order, tag(order)))}

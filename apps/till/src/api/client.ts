@@ -1554,6 +1554,8 @@ export interface QueueGroup {
   numberPartyId: string;
   numberPartyLabel?: string;
   state: "held" | "fired";
+  /** The group has kitchen food at the pass. */
+  goesWithKitchenFood?: true;
 }
 
 /** One ticket item on a station's queue; `id` is the per-line bump target. */
