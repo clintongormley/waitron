@@ -14,7 +14,7 @@ import {
   createProduct,
   listAvailableProducts,
 } from "@waitron/catalogue";
-import { catalogues, ticketItems, workingOrderLines } from "@waitron/db";
+import { catalogues, ticketItems, workingOrderLines, venueLocationId } from "@waitron/db";
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -68,10 +68,10 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: brandLocationId(venueId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -121,7 +121,8 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
     { db, modules: ALL_MODULES },
   );
 
-  const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue));
+  const venueId = await venueLocationId(db);
+  const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue, venueId));
   const { available, counter, tables } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });

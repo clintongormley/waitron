@@ -21,6 +21,7 @@ import {
   withTransaction,
   workingOrders,
   type Database,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -158,6 +159,7 @@ async function venueWith(
     ),
     { db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(db);
   // Built the way boot builds it, from the variables the box sets.
   const cfg = await deviceRequestCfg(suite.db, {
     ...loadNodeIdentity({
@@ -168,7 +170,7 @@ async function venueWith(
       WAITRON_NODE_ID: venue.nodeId,
       ...(envLocale === undefined ? {} : { WAITRON_TILL_LOCALE: envLocale }),
     }),
-    locationId: brandLocationId(venue.locationId),
+    locationId: brandLocationId(venueId),
     simplifiedInvoiceLimit: null,
   });
   const { menuItemId, staffId, profileId, printerId } = await withTransaction(db, async (tx) => {

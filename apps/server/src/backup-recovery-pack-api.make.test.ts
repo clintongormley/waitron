@@ -978,7 +978,7 @@ describe("the status route", () => {
     await suite.db
       .update(locations)
       .set({ timeZone: "Atlantic/Canary" })
-      .where(eq(locations.id, node.locationId));
+      .where(eq(locations.id, await venueLocationId(suite.db)));
     expect(await read(fixture())).toMatchObject({ timeZone: "Atlantic/Canary" });
   });
 
@@ -986,7 +986,7 @@ describe("the status route", () => {
     await suite.db
       .update(locations)
       .set({ timeZone: "Mars/Olympus_Mons" })
-      .where(eq(locations.id, node.locationId));
+      .where(eq(locations.id, await venueLocationId(suite.db)));
     expect(await read(fixture())).toMatchObject({ timeZone: "UTC" });
   });
 

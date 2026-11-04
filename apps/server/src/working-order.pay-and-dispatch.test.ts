@@ -9,7 +9,7 @@ import {
   placeOrder,
 } from "./testing/order-writer-fixture.js";
 import { departments, departmentReceipts } from "@waitron/venue-service";
-import { floorTodayTables } from "@waitron/db";
+import { floorTodayTables, venueLocationId } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -160,10 +160,10 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: brandLocationId(venueId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -222,7 +222,8 @@ async function setupVenue(): Promise<SeededVenue> {
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
+  const venueId = await venueLocationId(suite.db);
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
   const [department] = await suite.db
     .select()
     .from(departments)

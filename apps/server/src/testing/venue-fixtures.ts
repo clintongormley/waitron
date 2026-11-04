@@ -1,6 +1,6 @@
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { sql } from "drizzle-orm";
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, venueLocationId } from "@waitron/db";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -43,11 +43,11 @@ export interface Venue {
   staffCookie: string;
 }
 
-function tillConfigFromVenue(venue: VenueResult): OriginConfig {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): OriginConfig {
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: brandLocationId(venueId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -101,10 +101,11 @@ export async function setupVenue(db: Database): Promise<Venue> {
     { db, modules: ALL_MODULES },
   );
 
-  const cfg = tillConfigFromVenue(venue);
+  const venueId = await venueLocationId(db);
+  const cfg = tillConfigFromVenue(venue, venueId);
 
   const seeded = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: `Delicatessen ${venue.locationId}` });
+    const cat = await createCatalogue(tx, { name: `Delicatessen ${venueId}` });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
     const cafe = await createProduct(tx, {
       catalogueId: cat.id,

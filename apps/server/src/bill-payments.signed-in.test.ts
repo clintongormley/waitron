@@ -12,6 +12,7 @@ import {
   printJobs,
   sales,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -129,10 +130,11 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     ),
     { db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
-    locationId: brandLocationId(provisioned.locationId),
+    locationId: brandLocationId(venueId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

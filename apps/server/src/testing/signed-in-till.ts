@@ -3,7 +3,13 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { deviceProfiles, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  deviceProfiles,
+  withTransaction,
+  type Database,
+  type Transaction,
+  venueLocationId,
+} from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { loginWithPin, persons } from "@waitron/identity";
 import { SimulatorPaymentProvider } from "@waitron/payments";
@@ -89,9 +95,10 @@ export async function provisionSignedInTill<S extends TillSeed>(
     ),
     { db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(db);
   const cfg: TradingContext = {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: brandLocationId(venueId),
     locale: SIGNED_IN_TILL_LOCALE,
     invoiceLocales: [SIGNED_IN_TILL_LOCALE],
     tipsEnabled: false,

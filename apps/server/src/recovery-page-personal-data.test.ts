@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import nodemailer from "nodemailer";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { withTransaction, venueLocationId } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -166,9 +166,10 @@ async function setupVenue(): Promise<{ adminId: string; clerkId: string }> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(suite.db);
   venueCfg = {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: brandLocationId(venueId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

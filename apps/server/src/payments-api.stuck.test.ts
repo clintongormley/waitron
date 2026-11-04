@@ -11,6 +11,7 @@ import {
   devices,
   withTransaction,
   workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import {
@@ -185,10 +186,11 @@ async function setup(
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(suite.db);
   const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
-    locationId: brandLocationId(venue.locationId),
+    locationId: brandLocationId(venueId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -271,8 +273,8 @@ async function setup(
     noopLog,
   );
   const devices = [
-    await seedDevice(suite.db, { locationId: brandLocationId(venue.locationId), label: "Barra 1" }),
-    await seedDevice(suite.db, { locationId: brandLocationId(venue.locationId), label: "Barra 2" }),
+    await seedDevice(suite.db, { locationId: brandLocationId(venueId), label: "Barra 1" }),
+    await seedDevice(suite.db, { locationId: brandLocationId(venueId), label: "Barra 2" }),
   ];
   return {
     cfg,

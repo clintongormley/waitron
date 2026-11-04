@@ -19,6 +19,7 @@ import {
   sales,
   withTransaction,
   type Database,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
@@ -119,6 +120,7 @@ async function venue(db: Database): Promise<Venue> {
     ),
     { db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     ...loadNodeIdentity({
       WAITRON_NODE_ID: allocated.nodeId,
@@ -126,7 +128,7 @@ async function venue(db: Database): Promise<Venue> {
     ...loadTillAppSettings({
       WAITRON_NODE_ID: allocated.nodeId,
     }),
-    locationId: brandLocationId(allocated.locationId),
+    locationId: brandLocationId(venueId),
     simplifiedInvoiceLimit: null,
   });
   const {

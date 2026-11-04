@@ -4,7 +4,7 @@ import {
   departmentSalePolicies,
   readPrintedDepartmentReceipt,
 } from "@waitron/venue-service";
-import { locations } from "@waitron/db";
+import { locations, venueLocationId } from "@waitron/db";
 /**
  * The dashboard's sign-in and staff-administration routes end to end — login, logout, the roster
  * and its gate, invitations, password reset, Google linking, degenerate bodies answering 4xx rather
@@ -126,9 +126,10 @@ async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(suite.db);
   venueCfg = {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: brandLocationId(venueId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, venueLocationId } from "@waitron/db";
 import { loginWithPin, persons, startManagementSession } from "@waitron/identity";
 import { createDeviceProfile } from "@waitron/layouts";
 import type { WaitronModule } from "@waitron/module";
@@ -60,9 +60,10 @@ export async function createClockVenue(
     ),
     { db, modules },
   );
+  const venueId = await venueLocationId(db);
   const cfg: TradingContext = {
     nodeId: nodeId(venue.nodeId),
-    locationId: locationId(venue.locationId),
+    locationId: locationId(venueId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

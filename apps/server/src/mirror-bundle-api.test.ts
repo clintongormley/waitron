@@ -9,6 +9,7 @@ import {
   readMembershipTrustSet,
   readNodeMembership,
   stampDeployment,
+  venueLocationId,
   withTransaction,
   writeNodeMembership,
   type Database,
@@ -770,7 +771,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(byCode.get("RF-P000042")).toBe("rectificative");
     const primary = {
       nodeId: nodeId(designated.nodeId),
-      locationId: locationId(designated.locationId),
+      locationId: locationId(await venueLocationId(db)),
     };
     await prepareStandbyDatabase(db, spare.db, primary);
     expect(await takenOverSeries(spare.db, standby.nodeId, fixture, fiscal)).toEqual([
@@ -1476,7 +1477,7 @@ async function allocatedReply(
 ) {
   const primary = {
     nodeId: nodeId(designated.nodeId),
-    locationId: locationId(designated.locationId),
+    locationId: locationId(await venueLocationId(db)),
   };
   const fixture = await standbyContract(
     db,

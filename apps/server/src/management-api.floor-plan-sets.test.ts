@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { floorPlanSets, withTransaction } from "@waitron/db";
+import { floorPlanSets, withTransaction, venueLocationId } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
@@ -73,9 +73,10 @@ async function provisionTenant(): Promise<TradingContext> {
       });
     }
   });
+  const venueId = await venueLocationId(suite.db);
   return {
     nodeId: nodeId(venue.nodeId),
-    locationId: locationId(venue.locationId),
+    locationId: locationId(venueId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

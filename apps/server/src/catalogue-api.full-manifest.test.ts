@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { floorZones, withTransaction } from "@waitron/db";
+import { floorZones, withTransaction, venueLocationId } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -197,7 +197,7 @@ interface Venue {
 
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupVenue(): Promise<Venue> {
-  const venue = await applyVenue(
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -244,8 +244,9 @@ async function setupVenue(): Promise<Venue> {
     return { managerSid: managerSession.token, staffSid: staffSession.token };
   });
 
+  const venueId = await venueLocationId(suite.db);
   return {
-    locationId: venue.locationId,
+    locationId: venueId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
   };

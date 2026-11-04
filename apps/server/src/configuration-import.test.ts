@@ -9,7 +9,7 @@ import type { WaitronModule } from "@waitron/module";
 import { sql } from "drizzle-orm";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
 import { loadKeyRing } from "@waitron/credentials";
-import { kitchenStations, products, withTransaction } from "@waitron/db";
+import { kitchenStations, products, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { expectedSchemaVersion, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -665,7 +665,8 @@ describe("routing cells in a staged import", () => {
         db: source.db,
         modules: ALL_MODULES,
       });
-      const cfg = { locationId: locationId(venueResult.locationId) };
+      const venueId = await venueLocationId(source.db);
+      const cfg = { locationId: locationId(venueId) };
       const variant = await withTransaction(source.db, async (tx) => {
         const department = await createDepartment(tx, {
           name: "Dining room",

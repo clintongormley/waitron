@@ -24,6 +24,7 @@ import {
   readStandardSeriesId,
   stampDeployment,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import {
   createPaperAllocationPreparation,
@@ -313,6 +314,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         ),
         { db: seeding.venue, modules: ALL_MODULES },
       );
+      const venueId = await venueLocationId(seeding.venue);
       nodeSecret = await mintBreakGlassSecret(
         { venue: seeding.venue, node: seeding.node },
         venue.nodeId,
@@ -329,7 +331,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       await withTransaction(seeding.venue, (tx) =>
         putCredential(tx, ring, {
           purpose: "backup.stream",
-          value: streamSettingsPayload({ venueId: venue.locationId, bucket }),
+          value: streamSettingsPayload({ venueId, bucket }),
         }),
       );
       const [row] = await seeding.venue
@@ -339,7 +341,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       a = {
         nodeId: venue.nodeId,
         seriesId: venue.seriesIds[0]!,
-        locationId: venue.locationId,
+        locationId: venueId,
         publicKey: row!.publicKey!,
       };
     } finally {

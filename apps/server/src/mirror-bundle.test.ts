@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { readMembershipTrustSet, stampDeployment, type Database } from "@waitron/db";
+import {
+  readMembershipTrustSet,
+  stampDeployment,
+  venueLocationId,
+  type Database,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
@@ -72,6 +77,7 @@ let caKeyPem: string;
 let db: Database;
 // Provisioned once: the suite does not reset between tests, and a database holds one tenant.
 let designated: AdoptResult;
+let venueId: string;
 
 async function setupVenue(): Promise<AdoptResult> {
   const venue = await applyVenue(
@@ -140,6 +146,7 @@ beforeAll(async () => {
   db = suite.db;
   await stampDeployment(db, "preproduction");
   designated = await setupVenue();
+  venueId = await venueLocationId(db);
 }, 180_000);
 
 afterAll(async () => {
@@ -153,7 +160,7 @@ describe("assembleMirrorBundle (primary side)", () => {
     const { bundle } = await allocatedBundle(standby, { designated: stale });
     expect(bundle.designated).not.toHaveProperty("seriesId");
     expect(bundle.designated.nodeId).toBe(designated.nodeId);
-    expect(bundle.designated.locationId).toBe(designated.locationId);
+    expect(bundle.designated.locationId).toBe(venueId);
   });
 
   it("assembles a bundle carrying tenant + node identity and the box's connection details", async () => {
@@ -335,7 +342,7 @@ describe("assembleMirrorBundle (primary side)", () => {
 });
 
 function primaryNode() {
-  return { nodeId: nodeId(designated.nodeId), locationId: locationId(designated.locationId) };
+  return { nodeId: nodeId(designated.nodeId), locationId: locationId(venueId) };
 }
 async function allocatedBundle(
   standby: { nodeId: string; publicKey: string },

@@ -16,6 +16,7 @@ import {
   printers,
   tenants,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import {
   assignCatalogueToVenue,
@@ -158,9 +159,10 @@ async function venue(): Promise<Venue> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(suite.db);
   const cfg: TradingContext = {
     nodeId: brandNodeId(result.nodeId),
-    locationId: brandLocationId(result.locationId),
+    locationId: brandLocationId(venueId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

@@ -1,7 +1,7 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
-import { floorTodayTables } from "@waitron/db";
+import { floorTodayTables, venueLocationId } from "@waitron/db";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -142,21 +142,21 @@ function nextNif(): string {
   return nifWithControlLetter(50_000_000 + nifCounter);
 }
 
-async function readyDepartment(venue: VenueResult): Promise<void> {
+async function readyDepartment(venueId: string): Promise<void> {
   const [department] = await suite.db
     .select({ id: departments.id })
     .from(departments)
-    .where(eq(departments.locationId, venue.locationId));
+    .where(eq(departments.locationId, venueId));
   await suite.db.insert(departmentReceipts).values({
     departmentId: department!.id,
     receipt: { operationDescription: "Venta en establecimiento" },
   });
 }
 
-function tillConfigFromVenue(venue: VenueResult): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: brandLocationId(venueId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -210,8 +210,9 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  await readyDepartment(venue);
-  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
+  const venueId = await venueLocationId(suite.db);
+  await readyDepartment(venueId);
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
   const catalogue = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const comida = await createCategory(tx, { name: "Comida" });
@@ -826,8 +827,9 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
       ),
       { db: suite.db, modules: ALL_MODULES },
     );
-    await readyDepartment(venue);
-    const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
+    const venueId = await venueLocationId(suite.db);
+    await readyDepartment(venueId);
+    const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
     const productId = await withTransaction(suite.db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
       const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -1081,8 +1083,9 @@ describe("ordering extras and options — parent + child lines", () => {
       ),
       { db: suite.db, modules: ALL_MODULES },
     );
-    await readyDepartment(venue);
-    const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
+    const venueId = await venueLocationId(suite.db);
+    await readyDepartment(venueId);
+    const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
     const seeded = await withTransaction(suite.db, async (tx) => {
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
       const cat = await createCatalogue(tx, { name: "Delicatessen" });

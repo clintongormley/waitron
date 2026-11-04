@@ -11,6 +11,7 @@ import {
   workingOrderLines,
   workingOrders,
   type Database,
+  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -134,10 +135,10 @@ function venueRequest(nif: string): VenueRequest {
   };
 }
 
-function tillConfigFromVenue(venue: VenueResult): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: brandLocationId(venueId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -173,7 +174,8 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
     db,
     modules: ALL_MODULES,
   });
-  const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue));
+  const venueId = await venueLocationId(db);
+  const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue, venueId));
   await withTransaction(db, (tx) =>
     registerSif(tx, {
       nodeId: cfg.nodeId,

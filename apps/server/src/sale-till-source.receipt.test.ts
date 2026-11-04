@@ -6,7 +6,7 @@ import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, sales, withTransaction } from "@waitron/db";
+import { deviceProfiles, sales, withTransaction, venueLocationId } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -83,10 +83,10 @@ function nextNif(): string {
   return nifWithControlLetter(61_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: brandLocationId(venueId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -134,7 +134,8 @@ async function setupVenue(): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = tillConfigFromVenue(venue);
+  const venueId = await venueLocationId(suite.db);
+  const cfg = tillConfigFromVenue(venue, venueId);
   const [department] = await suite.db
     .select()
     .from(departments)
@@ -190,7 +191,7 @@ async function setupVenue(): Promise<{
       operatorId: person!.id,
     };
   });
-  return { cfg, locationId: venue.locationId, product, operatorId };
+  return { cfg, locationId: venueId, product, operatorId };
 }
 
 /** Seed a `phone-portrait` (handheld) `device_profiles` row. A per-call counter keeps the
