@@ -50,6 +50,7 @@ export type {
   DrainResult,
   FiscalBackend,
   FiledReceipt,
+  FiledInvoiceEvidence,
   FiscalRecordRef,
   FiscalState,
   IntegrityIssue,

@@ -22,6 +22,16 @@ export interface NodeRegistration {
   registeredAt: Date;
 }
 
+/** An observation of an issued invoice; it grants no allocation or recovery authority. */
+export interface FiledInvoiceEvidence {
+  taxpayerId: string;
+  environment: string;
+  series: string;
+  invoiceNumber: string;
+  issuedDate: string;
+  fingerprint: string;
+}
+
 /** Receipt facts read from a backend's stored fiscal record. */
 export interface FiledReceipt {
   verificationUrl: string;
@@ -481,6 +491,8 @@ export interface FiscalBackend {
    * show what was filed. `undefined` when the sale has no filed record.
    */
   filedReceiptFor(tx: Transaction, saleId: SaleId): Promise<FiledReceipt | undefined>;
+  /** Optional receipt observation, independent of allocation and the original receipt result. */
+  invoiceEvidenceFor?(tx: Transaction, saleId: SaleId): Promise<FiledInvoiceEvidence | undefined>;
 
   recordVoid(tx: Transaction, saleId: SaleId, reason: string): Promise<FiscalRecordRef>;
 

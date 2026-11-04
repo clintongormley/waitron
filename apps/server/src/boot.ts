@@ -3736,6 +3736,7 @@ async function bootServer(
     attendanceEmailLoop,
     certificateReminderLoop,
     certificateDiagnosis,
+    fiscalReconciliation,
     invoiceEmailLoop,
     cloudWorker,
     cloudSnapshots,
@@ -3761,9 +3762,7 @@ async function bootServer(
     health,
     log,
     {
-      stopWork: async () => {
-        await closeAll([() => fiscalReconciliation?.stop(), () => stopBackgroundDuties(duties)]);
-      },
+      stopWork: () => stopBackgroundDuties(duties),
       settleRequests: settleManagementRequests,
       closePools: () => store.close(),
     },

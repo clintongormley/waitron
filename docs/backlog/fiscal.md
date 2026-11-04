@@ -486,6 +486,33 @@ real files to reject dangling identity and series links and changed evidence.
 Optional device-held evidence, the sale-under-unknown exercise, necessary rebase, both whole-item
 reviews and current-head CI remain before owner review. This checkpoint is not a partial PR.
 
+### W41s-10a receipt-observation candidate checkpoint, 4 November 2026
+
+A separate optional fiscal reader returns the original invoice's taxpayer, stored environment,
+series, number, issue date and fingerprint. It leaves the existing filed-receipt result unchanged.
+The receipt response carries this observation on a cash sale, its replay and a later receipt read.
+The till reads direct receipts and the `ticket` and `invoice` payment envelopes, retaining the
+observation in browser storage under the taxpayer/environment/series combination. An older
+receipt cannot replace a later invoice number; malformed values or unavailable storage supply no
+evidence and do not refuse the receipt response. Unknown fields and the rest of the receipt are
+not stored with the observation.
+
+`device-receipt-evidence.test.ts` checks stored facts after the taxpayer and backend settings change,
+a retired series, and original-versus-cancellation/correction selection. The till's
+`api/invoice-evidence.test.ts` checks browser persistence, separate scopes, corrupted or blocked
+storage, and a client joining before reading a different series. That last case is a client exchange,
+not an exercise of the server's offline recovery and pairing procedure. Device observations grant
+no allocation authority; their use in the full recovery flow remains unfinished.
+
+`till-sale-reconciliation.test.ts` records and replays a real cash sale through the till API while a
+real scoped sweep is pending, failed or incomplete. It checks one new invoice, one new cash tender,
+the retained original record and pending deliveries. These cases use the fake authority; they make
+no claim about a live authority outage. Reconciliation also joins main's shared shutdown table,
+with its closer selected for stepdown and shared with ordinary shutdown.
+
+This is an unpublished checkpoint. Full device/recovery qualification, both whole-item reviews,
+the normal push hook and current-head CI remain before owner review. No partial PR is ready.
+
 ### Task 8 staff refund and held-cancellation qualification, 2 November 2026
 
 `apps/server/src/fiscal-remedy.staff-refund.test.ts` uses a real provisioned venue and the

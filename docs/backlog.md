@@ -392,8 +392,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   number and use the existing administrator stop without changing its filing result. It also queries
   the current venue month without local invoices and retains an externally held number in an active
   series without inventing a local record or filing case. Lookup-only recovery preserves the existing
-  filing results. Optional device evidence, the sale-under-unknown exercise and whole-item qualification
-  remain unfinished; this is not a partial publication candidate.
+  filing results. The next candidate retains receipt observations on the till by taxpayer, environment
+  and series, through a separate optional reader. Cash sales and their retries have now been exercised
+  while a lookup is pending, failed or incomplete. Device evidence in the full recovery flow and
+  whole-item qualification remain unfinished; this is not a partial publication candidate.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
