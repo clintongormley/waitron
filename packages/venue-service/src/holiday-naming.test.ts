@@ -88,3 +88,9 @@ describe("holiday display language", () => {
     ).toBe("English public holiday");
   });
 });
+
+it("uses the dashboard's English fallback for an unsupported display language", () => {
+  expect(
+    holidayDateName([{ ...NATIONAL, englishName: "English holiday" }], TARGET, "", "fr-CA"),
+  ).toBe("English holiday");
+});

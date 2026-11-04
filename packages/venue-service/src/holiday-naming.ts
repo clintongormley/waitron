@@ -18,7 +18,9 @@ export function holidayDisplayName(
   fact: { readonly name: string; readonly englishName?: string },
   language?: string,
 ): string {
-  return language?.split("-")[0] === "en" ? (fact.englishName ?? fact.name) : fact.name;
+  return language !== undefined && language.split("-")[0] !== "es"
+    ? (fact.englishName ?? fact.name)
+    : fact.name;
 }
 
 /** The holiday labels on `date` joined with ` · `, each text once, or `original` when there are none. */
