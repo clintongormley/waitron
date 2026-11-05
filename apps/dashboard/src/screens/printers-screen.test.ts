@@ -2896,7 +2896,7 @@ describe("printers-screen", () => {
     }
   });
 
-  it("leaves the empty discovered table without a message while Scan's spinner runs", async () => {
+  it("says no printers are found yet while Scan's spinner runs", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -2905,7 +2905,7 @@ describe("printers-screen", () => {
       await openDiscovery(el);
       expect(q(el, "[data-test=scan-printers]")!.hasAttribute("loading")).toBe(true);
       const table = q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable;
-      expect(table.emptyMessage).toBe("");
+      expect(table.emptyMessage).toBe(t("printers.scan_empty", "es-ES"));
       expect(table.shadowRoot!.textContent).not.toContain(t("printers.scan_loading", "es-ES"));
     } finally {
       el.remove();
@@ -6991,6 +6991,19 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(text(el, sel("bluetooth-note"))).toBe(t("printers.bluetooth_pair_note"));
     await openPair(el);
     expect(q(el, sel("name-printer-modal"))).toBeNull();
+  });
+
+  it("shows the one-line pairing note only while a Bluetooth printer is listed", async () => {
+    const hidden = await mountPairing([headphones]);
+    await openDiscovery(hidden.el);
+    expect(q(hidden.el, sel("bluetooth-note"))).toBeNull();
+    q(hidden.el, sel("show-all-bluetooth"))!.click();
+    await flush(hidden.el);
+    expect(text(hidden.el, sel("bluetooth-note"))).toBe(t("printers.bluetooth_pair_note"));
+    hidden.el.remove();
+    const { el } = await mountPairing([barPrinter]);
+    await openDiscovery(el);
+    expect(text(el, sel("bluetooth-note"))).toBe(t("printers.bluetooth_pair_note"));
   });
 
   it("says nothing about Bluetooth when no Bluetooth device was found", async () => {
@@ -11546,4 +11559,99 @@ describe("literal translated printer labels", () => {
       });
     });
   }
+});
+
+describe("the Add a printer dialog's discovered rows", () => {
+  const officePrinter: DiscoveredPrinter = {
+    agentId: "a1",
+    agentName: "Cocina agent",
+    transport: "network_tcp",
+    host: "192.168.10.30",
+    port: 631,
+    name: "HP Color LaserJet MFP M181fw",
+    ippOnly: true,
+    serverName: "DE0887",
+    pagePrinter: true,
+    ipp: { port: 631, resourcePath: "/ipp/print" },
+    office: {
+      port: 631,
+      resourcePath: "/ipp/print",
+      printable: true,
+      documentFormat: "application/pdf",
+      media: "iso_a4_210x297mm",
+      resolutionDpi: 600,
+      supportedFormats: ["application/pdf"],
+    },
+    alreadyRegistered: false,
+    printerId: null,
+    lastSeenAt: "2023-11-14T22:13:20.000Z",
+  };
+  const pairedBluetooth: DiscoveredPrinter = {
+    agentId: "a1",
+    agentName: "Cocina agent",
+    transport: "bluetooth",
+    localKey: "00:11:22:33:44:55",
+    name: "BlueTooth Printer",
+    printerLike: true,
+    paired: true,
+    alreadyRegistered: false,
+    printerId: null,
+    lastSeenAt: "2023-11-14T22:13:20.000Z",
+  };
+
+  async function mountRows(): Promise<PrintersScreen> {
+    const api = stubApi({
+      listDiscoveredPrinters: vi.fn().mockResolvedValue([officePrinter, pairedBluetooth]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openDiscovery(el);
+    return el;
+  }
+  const detailRows = (el: PrintersScreen) => [
+    ...q(el, "[data-test=discovered-table]")!.shadowRoot!.querySelectorAll<HTMLElement>(
+      "[data-test^=discovered-row-]",
+    ),
+  ];
+  const middle = (box: DOMRect) => box.top + box.height / 2;
+
+  afterEach(async () => {
+    await page.viewport(1280, 900);
+  });
+
+  it("draws a long discovered name on one line in its column", async () => {
+    await page.viewport(1280, 800);
+    const el = await mountRows();
+    const strong = detailRows(el)
+      .map((row) => row.querySelector("strong")!)
+      .find((name) => name.textContent === "HP Color LaserJet MFP M181fw (DE0887)")!;
+    expect(strong).toBeDefined();
+    expect(strong.getClientRects().length).toBe(1);
+  });
+
+  it("lines each discovered row's details up with its buttons", async () => {
+    await page.viewport(1280, 800);
+    const el = await mountRows();
+    const rows = detailRows(el);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      const strong = row.querySelector("strong")!;
+      const button = row.closest("tr")!.querySelector("wt-button")!;
+      expect(
+        Math.abs(middle(strong.getBoundingClientRect()) - middle(button.getBoundingClientRect())),
+      ).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it("keeps the discovered list inside the dialog at phone width", async () => {
+    await page.viewport(390, 844);
+    const el = await mountRows();
+    const table = q(el, "[data-test=discovered-table]")!;
+    const modal = q(el, "[data-test=new-printer-modal]")!;
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body, [part=body]")!;
+    expect(body).not.toBeNull();
+    expect(table.getBoundingClientRect().right).toBeLessThanOrEqual(
+      body.getBoundingClientRect().right,
+    );
+  });
 });

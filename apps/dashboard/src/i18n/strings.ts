@@ -1713,7 +1713,9 @@ export const en = {
   "printers.scan": "Scan for printers",
   "printers.scan_loading": "Scanning…",
   "printers.discovered_title": "Discovered printers",
-  "printers.no_discovered": "No printers found yet — click Scan, or check the printer is on.",
+  "printers.scan_empty": "No printers found yet. Still searching…",
+  "printers.no_discovered":
+    "No printers found. Check that the printer is on and connected, then scan again.",
   "printers.discovered_seen_on": "Seen on {agent}",
   "printers.page_printer_add": "Add as A4 printer",
   "printers.page_printer_added": "Added as A4 printer",
@@ -1760,8 +1762,7 @@ export const en = {
   "printers.test_page_hold_paused": "paused",
   "printers.test_page_hold_stopped": "stopped",
   "printers.seen_at": "Seen on {agent} · {time}",
-  "printers.bluetooth_pair_note":
-    "To add a Bluetooth printer that is not paired yet, press Pair and add beside it in the list: it asks for the printer's PIN, pairs it, then opens the form to add it. A printer already added and active that was unpaired shows Pair instead: it pairs it again without adding it.",
+  "printers.bluetooth_pair_note": "A Bluetooth printer must be in pairing mode before you add it.",
   "printers.bluetooth_pair": "Pair and add",
   "printers.bluetooth_pair_only": "Pair",
   "printers.bluetooth_forget": "Unpair",
@@ -5490,8 +5491,9 @@ export const es: Record<StringKey, string> = {
   "printers.scan": "Buscar impresoras",
   "printers.scan_loading": "Buscando…",
   "printers.discovered_title": "Impresoras detectadas",
+  "printers.scan_empty": "Aún no se ha encontrado ninguna impresora. Seguimos buscando…",
   "printers.no_discovered":
-    "Aún no se ha detectado ninguna impresora — pulsa Buscar o comprueba que esté encendida.",
+    "No se ha encontrado ninguna impresora. Comprueba que esté encendida y conectada, y vuelve a buscar.",
   "printers.discovered_seen_on": "Detectada en {agent}",
   "printers.page_printer_add": "Añadir como impresora A4",
   "printers.page_printer_added": "Añadida como impresora A4",
@@ -5539,7 +5541,7 @@ export const es: Record<StringKey, string> = {
   "printers.test_page_hold_stopped": "detenida",
   "printers.seen_at": "Detectada en {agent} · {time}",
   "printers.bluetooth_pair_note":
-    "Para añadir una impresora Bluetooth que aún no está emparejada, pulsa Emparejar y añadir junto a ella en la lista: pide el PIN de la impresora, la empareja y luego abre el formulario para añadirla. Una impresora ya añadida y activa que se desvinculó muestra Emparejar: la vuelve a emparejar sin añadirla.",
+    "Una impresora Bluetooth debe estar en modo de emparejamiento antes de añadirla.",
   "printers.bluetooth_pair": "Emparejar y añadir",
   "printers.bluetooth_pair_only": "Emparejar",
   "printers.bluetooth_forget": "Desvincular",

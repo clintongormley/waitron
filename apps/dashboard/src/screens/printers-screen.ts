@@ -238,7 +238,7 @@ export class PrintersScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
       wt-data-table::part(discovered-details) {
-        max-width: min(28vw, 24dvh);
+        max-width: 28vw;
         overflow-wrap: anywhere;
       }
       wt-data-table::part(discovered-page-printer),
@@ -4010,7 +4010,7 @@ export class PrintersScreen extends LitElement {
         },
       },
     ];
-    const bluetooth = addable.some((d) => d.transport === "bluetooth");
+    const bluetooth = rows.some((d) => d.transport === "bluetooth");
     const otherDevices = addable.some((d) => !shown(d));
     const probeChecked = this.probeAttempted ? this.#probeValidate() : {};
     const probeErrors = { ...this.probeRefused, ...probeChecked };
@@ -4138,7 +4138,7 @@ export class PrintersScreen extends LitElement {
         .columns=${columns}
         .rows=${[...rows, ...lost]}
         .rowKey=${(d: DiscoveredPrinter) => `${d.agentId}:${this.#deviceKey(d)}`}
-        .emptyMessage=${this.scanning ? "" : t("printers.no_discovered")}
+        .emptyMessage=${t(this.scanning ? "printers.scan_empty" : "printers.no_discovered")}
       ></wt-data-table>
       <wt-form-actions
         slot="footer"
