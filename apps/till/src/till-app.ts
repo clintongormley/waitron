@@ -335,7 +335,14 @@ import {
   type HeldBill,
   type LocalBill,
 } from "./state/bar-tables.js";
-import { mergeMembersOf, nextFloorMoment, shownUnder, tableSentence } from "./state/floor-today.js";
+import {
+  carryRevisions,
+  mergeMembersOf,
+  nextFloorMoment,
+  shownUnder,
+  tableSentence,
+  type CarriedRevision,
+} from "./state/floor-today.js";
 import type {
   AdjustmentAsk,
   AdjustmentCommand,
@@ -2133,6 +2140,9 @@ export class TillApp extends LitElement {
   #tablesRead = 0;
   /** When the read whose answer `tables` holds started, numbered by `nextFloorMoment`. */
   @state() private tablesReadAt = 0;
+  /** What a change this app sent answered about its rooms, which a handheld's floor may not be
+   * mounted to be told. */
+  @state() private floorCarried: ReadonlyMap<string, CarriedRevision> = new Map();
   #tablesApplied = 0;
   #tablesJson = "[]";
   #counterRetrievals = new Map<object, string>();
@@ -15936,7 +15946,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     this.splitRefusal = null;
     try {
-      await asked.api.splitTable(
+      const answer = await asked.api.splitTable(
         party.id,
         tableId,
         selection,
@@ -15944,6 +15954,7 @@ export class TillApp extends LitElement {
         observed === undefined ? asked.expectedEdits : selected.map((id) => observed.get(id)!),
         guestCounts,
       );
+      this.floorCarried = carryRevisions(this.floorCarried, answer.zoneRevisions);
     } catch (error) {
       if ("selection" in detail) {
         const here = () =>
@@ -19633,6 +19644,7 @@ export class TillApp extends LitElement {
         }
         .tables=${this.tables}
         .tablesReadAt=${this.tablesReadAt}
+        .carriedRevisions=${this.floorCarried}
         .api=${this.api}
         .operatorSession=${this.#operatorSession}
         .canExitToCounter=${false}

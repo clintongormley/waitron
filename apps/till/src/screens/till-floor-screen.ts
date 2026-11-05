@@ -89,6 +89,7 @@ import {
   spareSpot,
   tableSentence,
   withoutTodaysNames,
+  type CarriedRevision,
 } from "../state/floor-today.js";
 import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
@@ -903,6 +904,9 @@ export class TillFloorScreen extends LitElement {
   @property({ attribute: false }) tables: TableState[] = [];
   /** When the read that drew `tables` started, numbered by `nextFloorMoment`. */
   @property({ attribute: false }) tablesReadAt = 0;
+  /** Rooms' revisions a change the app sent was answered with, as `tablesReadAt` is numbered. */
+  @property({ attribute: false }) carriedRevisions: ReadonlyMap<string | null, CarriedRevision> =
+    new Map();
   @property({ attribute: false }) api?: TillApi;
   @property({ attribute: false }) operatorSession = 0;
   @property({ attribute: false }) canExitToCounter = true;
@@ -991,7 +995,7 @@ export class TillFloorScreen extends LitElement {
   /** Where a dropped group is drawn until the next floor read, a refusal or a cancel. */
   #pending: Map<string, TodayPlacement> | null = null;
   /** Each room's revision as this screen's last change there answered it, and that answer's `nextFloorMoment`. */
-  #carried = new Map<string | null, { revision: number; answeredAt: number }>();
+  #carried = new Map<string | null, CarriedRevision>();
   #mapCopy = { locale: "", copy: { label: "", allergy: "" } };
 
   /** The clock the last render was drawn by. */
@@ -1374,9 +1378,13 @@ export class TillFloorScreen extends LitElement {
     this.requestUpdate();
   }
 
-  /** The room's revision as this screen last saw it: its read, unless its own answer came after that read started. */
+  /** The room's revision as this screen last saw it: its read, unless an answer, its own or the
+   * app's, came after that read started; the later answer of the two. */
   #revision(zoneId: string | null): number | null {
-    const carried = this.#carried.get(zoneId);
+    const own = this.#carried.get(zoneId);
+    const app = this.carriedRevisions.get(zoneId);
+    const carried =
+      own === undefined || (app !== undefined && app.answeredAt > own.answeredAt) ? app : own;
     if (carried !== undefined && this.tablesReadAt < carried.answeredAt) return carried.revision;
     return (
       this.tables.find((each) => each.zoneId === zoneId && each.today !== null)?.today!

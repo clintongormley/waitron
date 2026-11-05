@@ -515,6 +515,70 @@ describe("till-floor-screen: the room's revision on today's plan", () => {
     }
   });
 
+  /** What the app hands down: a split answered the room at `revision`, at this moment. */
+  const answeredByTheApp = (revision: number) =>
+    new Map([["z1", { revision, answeredAt: nextFloorMoment() }]]);
+
+  it("a poll started before the app's answer and applied after it leaves that answer as the revision sent", async () => {
+    const api = stubApi();
+    const el = await mount(at7(), api);
+    const pollStarted = nextFloorMoment();
+    el.carriedRevisions = answeredByTheApp(9);
+    el.tablesReadAt = pollStarted;
+    el.tables = at7();
+    await el.updateComplete;
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 12, y: 5 }, 9);
+  });
+
+  it("a read started after the app's answer replaces it, higher or lower", async () => {
+    for (const read of [12, 6]) {
+      const api = stubApi();
+      const el = await mount(at7(), api);
+      el.carriedRevisions = answeredByTheApp(9);
+      el.tablesReadAt = nextFloorMoment();
+      el.tables = [
+        planned("t1", 2, { zoneRevision: read }),
+        planned("t2", 20, { zoneRevision: read }),
+      ];
+      await el.updateComplete;
+      await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+      expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 12, y: 5 }, read);
+      cleanupWidgets();
+    }
+  });
+
+  it("the screen's own answer after the app's is the revision sent", async () => {
+    const api = stubApi();
+    api.moveToday.mockResolvedValueOnce({ zoneId: "z1", revision: 8 });
+    const el = await mount(at7(), api);
+    el.tablesReadAt = nextFloorMoment();
+    el.carriedRevisions = answeredByTheApp(5);
+    await el.updateComplete;
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    await settle(el);
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 12, y: 5 }, 5);
+    await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 8);
+  });
+
+  it("the app's answer after the screen's own is the revision sent", async () => {
+    const { api, el } = await movedTo8();
+    el.carriedRevisions = answeredByTheApp(9);
+    await el.updateComplete;
+    await drop(el, { tableId: "t1", x: 14, y: 5, targetId: null });
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 14, y: 5 }, 9);
+  });
+
+  it("the app's answer for another room leaves this room's revision alone", async () => {
+    const api = stubApi();
+    const el = await mount(at7(), api);
+    el.carriedRevisions = new Map([["z2", { revision: 9, answeredAt: nextFloorMoment() }]]);
+    await el.updateComplete;
+    await drop(el, { tableId: "t1", x: 12, y: 5, targetId: null });
+    expect(api.moveToday).toHaveBeenLastCalledWith("t1", { x: 12, y: 5 }, 7);
+  });
+
   it("a change in another room keeps the first room's answer as the revision sent", async () => {
     const api = stubApi();
     api.moveToday
