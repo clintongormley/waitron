@@ -32,7 +32,7 @@ import { readInvoiceDocument } from "./invoice-document.js";
 import { mountPrintApi } from "./print-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { createPageTestPages } from "./page-test-pages.js";
-import { sampleSale } from "./sample-receipt.js";
+import { sampleDocument } from "./sample-receipt.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
@@ -496,7 +496,7 @@ describe("printing a test page", () => {
     expect(rendered[0]!.format).toBe("image/urf");
     expect(rendered[0]!.dpi).toBe(600);
     expect(rendered[0]!.document.surface).toBe("a4");
-    expect(rendered[0]!.document.result).toEqual(sampleSale(QR_TEXT, "es-ES"));
+    expect(rendered[0]!.document.result).toEqual(sampleDocument(QR_TEXT, "es-ES").result);
     expect(rendered[0]!.document.result.invoiceNumber).toBe("MUESTRA/1");
 
     expect((await agentPost(v, `${job.id}/result`, { ...held(job), status: "sent" })).status).toBe(

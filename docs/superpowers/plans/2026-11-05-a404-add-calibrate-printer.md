@@ -370,6 +370,10 @@ PR 2:
   realistic receipt" (no «pingüino» line; the total follows the added dishes).
 - `packages/country-es/src/spain.test.ts` (Task 5) "translates the sample names into %s without
   repeating the table caption" — no `sampleFooter`.
+- `apps/server/src/page-test-page.test.ts` (Task 5) "hands it to the printer's own agent in the
+  printer's format, renders the sample sale and writes no delivery row" — compares the rendered sale
+  with `sampleDocument(...).result` instead of `sampleSale(...)`: the A4 test page is built from
+  `sampleDocument`, which now adds the dishes.
 
 ---
 
