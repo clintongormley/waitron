@@ -6683,6 +6683,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   setup and several fixture/reference substitutions survived the A974 review’s probes.
   [Detail](backlog/architecture.md#a974-review-assertion-gaps).
 
+- **Strengthen arriving-dish event and receipt-guest split checks.** Checking one held
+  group twice or choosing the other split table can leave the two complete suites passing.
+  Add observations that distinguish those identities without changing the existing checks.
+  [Detail](backlog/architecture.md#a974-review-assertion-gaps).
+
 - **Setup's receipt-language selection still reads inherited object properties.** Its
   `venue-screen.ts` lookup needs qualification with a country-pack code such as `constructor`;
   the review screen now keeps such an unknown code visible.

@@ -826,6 +826,16 @@ Repeat the controlled substitutions with the two complete suites, or first selec
 The private-name AST replay and types caught reference mistakes that the current value-only
 checks did not.
 
+The arriving-dishes and receipt-guest suites also need distinct-identity observations.
+Driver probes on 5 November 2026 copied each complete suite and changed one reference:
+checking `[heldDesserts!, heldDesserts!]` instead of both held groups left all 29 arriving-dish
+cases passing; passing `table4` instead of `table5` to the guest-count case's `splitTable`
+left all 39 receipt-guest cases passing. Add a check of each distinct group's event and the
+split's table membership, while retaining every existing event, guest-count and payment
+assertion. These are observed assertion gaps, not demonstrated product failures. Other
+reference substitutions from the naming review need triage before treating them as gaps:
+some changes can legitimately preserve the observation a case makes.
+
 ## A976. Finish the server's English test-venue defaults.
 
 - **A976. Finish the server's English test-venue defaults.** Spanish display samples remain in
