@@ -158,25 +158,46 @@ Line numbers below were measured on `c3a4f8a56a`.
   and sizes its QR code in dots from the resolution (`:156-163`). A404's measured experiment
   (A404 plan, "The QR question") printed a QR code stored for 203 dpi on a 180 dpi head at 41.5 mm,
   over the 40 mm legal limit (`docs/compliance/verifactu-findings.md:1000`). **This plan offers only
-  printers with the same paper width and the same resolution** as the original printer's current
-  settings, and asks the owner to confirm (open question 1).
+  printers with the paper width and resolution the job was laid out for**, and asks the owner to
+  confirm (open question 1).
+- **The setting a job was laid out for is read from its stored bytes, not from its printer.**
+  Comparing with the original printer's current settings would be wrong after a recalibration (A404's
+  calibration changes both). Receipts, kitchen tickets and refund receipts all begin with `ESC @`
+  then the print area: `init()` pushes `1B 40` (`escpos.ts:63-67`) and `printArea(w)` pushes
+  `1D 4C 00 00` then `1D 57`, `w & 0xff`, `w >> 8` (`escpos.ts:139-143`), called first by
+  `formatReceipt` (`receipt-ticket.ts:81-83`), `formatKitchenTicket` (`kitchen-ticket.ts:388-390`)
+  and the refund receipt (`tender-refund-receipt.ts:86-88`); `esc()`'s constructor pushes nothing
+  (`escpos.ts:53-56`). So bytes 0–9 are `1B 40 1D 4C 00 00 1D 57 nL nH` and the width is
+  `nL + 256 × nH`. The four settings' widths, 360, 384, 512 and 576, are all different
+  (`layout.ts:34-39`), so a width names exactly one (paper width, resolution) pair, resolution
+  included. A job whose first ten bytes do not have that shape, or whose width is not one of the
+  four, reprints only on its own printer. Whether every builder of a `sale_id` job starts this way
+  was **not checked** beyond `formatReceipt`; one that does not falls back to its own printer.
 - Paper width and resolution are stored only for receipt printers (`printers.paper_width`,
   `printers.resolution`, `packages/db/src/schema/printers.ts:55-56`). **A4 printers have no print
   jobs today:** `print_jobs.printer_id` references `printers` alone
   (`packages/db/src/schema/print-jobs.ts:38-42`), and the queue joins `printers`
   (`print-api.ts:1456`). A4 printers are never offered for a reprint.
 - **Test and calibration pages cannot be told apart from other printouts without a schema change.**
-  Nothing records a job's kind beyond `document` / `drawer` (`print-jobs.ts:52`). What can be
-  told: a receipt or full invoice on a receipt printer carries `sale_id` (`receipt-print.ts`, the
-  `enqueuePrintJob(…, { saleId })` calls), and a kitchen ticket has `kitchen_print_jobs` rows
-  (`linkKitchenJob`, `apps/server/src/kitchen-print.ts:831-834`, `:870-880`). Everything else has
-  neither: test pages and calibration samples (`print-api.ts:1319`, `:1354`, `:1373`), equipment labels
-  (`:1297`), report pages (`report-api.ts:402`), payment slips (`payment-slip-print.ts:101`), refund
-  acknowledgements (`tender-refund-api.ts:218`, no `saleId` passed) and the kitchen slips enqueued
-  without links (`kitchen-print.ts:1383`, `:1452`, `:1843`). So **only receipts and kitchen tickets
-  may move to another printer; every other printout reprints on its own printer**, which keeps the
-  spec's rule for test and calibration pages. A resend copies `sale_id` (`outbox.ts:125`) but not
-  kitchen links, so the kitchen test reads the links of the chain's first job (`resend_of ?? id`).
+  Nothing records a job's kind beyond `document` / `drawer` (`print-jobs.ts:52`). Three things can
+  be told from existing rows, each read on the chain's first job (`resend_of ?? id`), because a
+  resend copies `sale_id` (`outbox.ts:125`) but neither link table:
+  - `sale_id` set: a receipt, receipt copy or full invoice on a receipt printer (every
+    `enqueuePrintJob(…, { saleId })` call in `receipt-print.ts`, e.g. `:338-341`, `:364-367`, `:533-537`);
+  - a `kitchen_print_jobs` row: a kitchen ticket (`linkKitchenJob`,
+    `apps/server/src/kitchen-print.ts:831-834`, `:870-880`);
+  - a `receipt_reprints` row: a receipt copy, which also carries `sale_id`
+    (`orders-reprint.ts:40`, `orders-api.ts:332`, `transaction-receipt-api.ts:79`), or a refund
+    receipt, which does not (`tender-refund-api.ts:218-221`). So this test adds only refund
+    receipts to the first two; `receipt_reprints.print_job_id` is unique
+    (`packages/db/src/schema/receipt-reprints.ts`), and a resend writes no row, hence the chain's
+    first job.
+  **The rule: a job may go to another printer only when one of those three holds AND its stored
+  bytes name a setting (above); every other job reprints only on its own printer.** That covers
+  test pages, calibration samples, equipment labels, report pages, payment slips, the
+  collection-number slip (`receipt-print.ts:302`, no `sale_id`) and the kitchen slips enqueued
+  without links (`kitchen-print.ts:1383`, `:1452`, `:1843`), and it keeps the spec's rule for test
+  and calibration pages.
 - A reprint that prints on another printer still clears the original's trouble: the resend clause
   of `printJobInTrouble` names no printer (`apps/server/src/print-job-trouble.ts:56-60`). Task 17
   pins this with a test rather than relying on reading.
@@ -240,12 +261,25 @@ Said plainly here, in the backlog (Task 20) and in each PR description.
   out again for the chosen printer with the same builder (`formatReceipt`, `formatKitchenTicket`,
   `formatCorrectionSlip`, `formatPaymentSlip`, `formatCategorySalesPage`). It needs a new column on
   `print_jobs`. With it go: reprinting onto a printer of another paper width or resolution;
-  reprinting payment slips, report pages, equipment labels, refund acknowledgements and the
-  unlinked kitchen slips onto another printer; and the spec's open question about A4 pages for
-  kitchen tickets, payment slips and reports.
-- **Cut because the A4 routes do not exist (no schema needed, but new server features beyond the
-  spec):** deleting an A4 printer, changing an A4 printer's address, and switching a disabled A4
-  printer back on from its details (the server refuses it, `page-printers-api.ts:177`).
+  reprinting onto another printer any job outside the rule above (no `sale_id`, kitchen link or
+  `receipt_reprints` row, or bytes that name no setting); and the spec's open question about A4
+  pages for kitchen tickets, payment slips and reports.
+- **Held until after A760 (A1308 hold): deleting an A4 printer.** `page_printers` has no deletion
+  column (`packages/db/src/schema/page-printers.ts:10-35`), and three tables reference it with
+  `onDelete: "restrict"`: `invoice_deliveries.page_printer_id`
+  (`packages/db/src/schema/invoice-deliveries.ts:65-67`), `devices.invoice_page_printer_id`
+  (`devices.ts:55-57`) and `device_profile_printers.page_printer_id`
+  (`device-profile-printers.ts:34`). Delivery history keeps rows pointing at it, so a delete has to
+  be a soft delete, as receipt printers have (`printers.deleted_at`), which needs a new column.
+- **Not built, by design:** switching a disabled A4 printer back on and changing its address from
+  its details. Enabling is refused on purpose: "Enabling needs current capabilities and a current
+  agent, which only a fresh discovery entry gives: it goes through the POST"
+  (`page-printers-api.ts:164-165`, `page_printer.rediscover` at `:178`). The address is part of the
+  queue's identity (the unique endpoint index, `page-printers.ts:29`) and its format and media come
+  from what that queue answered at discovery, so a new address also goes through Add a printer
+  (this reading of the address case is mine; the comment names enabling only).
+- **The gap against the spec:** point 6 implies the A4 details carry the same footer as a receipt
+  printer's, less calibration. They have no Delete (held, above). PR 3's description says so.
 - **Left open:** a station link opens the Stations tab, not the station (the module's screen
   clears its `station` word, `prep-stations-screen.ts:199`).
 - **Not a cut:** the details' A4 "Used by" shows profiles listing it for full invoices; no station
@@ -275,7 +309,7 @@ Said plainly here, in the backlog (Task 20) and in each PR description.
 
 ## PR split and review weight
 
-Twenty-one tasks, four PRs, in order; each later PR is branched from `main` after the earlier one lands
+Twenty-two tasks, four PRs, in order; each later PR is branched from `main` after the earlier one lands
 (`python3 ~/workspace/tools/worktree.py new waitron <branch> --headless`, after syncing `main`),
 because all four change `printers-screen.ts` and `strings.ts`.
 
@@ -295,7 +329,8 @@ because all four change `printers-screen.ts` and `strings.ts`.
 - **PR 3 — "A4 printers in the same table"** (`feat/a405-one-printer-table`): Tasks 12–14, point 6
   (Task 14 carries its guide sentence, backlog edit and look). Dashboard only; the A4 routes are unchanged.
   **No risk trigger: light path**; it deletes a widget and moves its tests, so the simplify seat
-  runs.
+  runs. Its description flags the gap against point 6: A4 details have no Delete (held for A1308)
+  and cannot be switched back on or re-addressed there (refused by design).
 - **PR 4 — "Pair again, and reprint to another printer"** (`feat/a405-pair-again-reprint`):
   Tasks 15–20, points 3 and 4 (schema-free part). **Risk triggers: cross-package contract**
   (`resendPrintJob` in `@waitron/printing` gains a target; `resendInvoicePrintJob`, the route body
@@ -328,13 +363,15 @@ The inputs most likely to bite that no step would otherwise test; each has its t
    while its details are open (Task 2).
 2. Closing the details, browser Back and leaving through the dashboard's navigation, each with an
    unsaved Edit draft: each asks first, and Keep leaves the draft and the window; Used by links are
-   not drawn while editing (Tasks 4b and 10).
+   not drawn while editing (Tasks 4c and 10).
 3. "Today" just after local midnight, "Yesterday" across a month end, and Spanish (Task 1).
 4. A profile listing the printer for two roles shows once with both; a kitchen-display profile has
    no department; a link to a screen the person may not open is plain text (Tasks 8 and 10).
 5. A reprint target with the same paper width but another resolution, a disabled target, a drawer
-   job with a target, a test page with another target, and a resend of a resend of a kitchen
-   ticket — each refused or accepted server-side, whatever the dashboard offered (Task 17).
+   job with a target, a test page with another target, a resend of a resend of a kitchen ticket,
+   a refund receipt, and a job whose original printer was recalibrated after it printed (a target
+   with the old setting accepted, one with the new setting refused) — each refused or accepted
+   server-side, whatever the dashboard offered (Task 17).
 
 ## Words for the owner
 
@@ -442,10 +479,10 @@ lista. Sus detalles no tienen calibración; **Imprimir página de prueba** la co
 | `printers.pair_again_look` | new | Look again | Buscar de nuevo |
 | `printers.pair_again_done` | new | {printer} is paired again and active. | {printer} vuelve a estar emparejada y activa. |
 | `printers.reprint_printer` | new | Print on | Imprimir en |
-| `printers.reprint_same_setting` | new | Only printers with the same paper width and resolution are offered. | Solo se ofrecen impresoras con el mismo ancho de papel y la misma resolución. |
+| `printers.reprint_same_setting` | new | Only printers with the paper width and resolution this printout was made for are offered. | Solo se ofrecen impresoras con el ancho de papel y la resolución para los que se preparó esta impresión. |
 | `printers.reprint_own_only` | new | This printout reprints only on its own printer. | Esta impresión solo se reimprime en su propia impresora. |
 | `printers.reprint_original_off` | new | {printer} is disabled. Switch it on in its details, then reprint. | {printer} está deshabilitada. Actívala en sus detalles y vuelve a reimprimir. |
-| `printers.reprint_none` | new | No active printer has the same paper width and resolution. Switch {printer} on in its details, then reprint. | Ninguna impresora activa tiene el mismo ancho de papel y resolución. Activa {printer} en sus detalles y vuelve a reimprimir. |
+| `printers.reprint_none` | new | No other active printer has the paper width and resolution this printout was made for. Switch {printer} on in its details, then reprint. | Ninguna otra impresora activa tiene el ancho de papel y la resolución para los que se preparó esta impresión. Activa {printer} en sus detalles y vuelve a reimprimir. |
 | `printers.reprint_sent` | new | Reprint sent to {printer} | Reimpresión enviada a {printer} |
 
 Reused: `printers.resend_job` (Reprint / Reimprimir) as the dialog's heading and button,
@@ -468,9 +505,9 @@ English, a new section after Printer details, and a sentence appended to Printer
 ```markdown
 ## Reprint from the print queue {#print-queue}
 
-In the **Print Queue**, **Reprint** sends a printout again. A receipt or a kitchen ticket can go to
-another active printer with the same paper width and resolution, for when the first one is out of
-service. Other printouts reprint only on their own printer.
+In the **Print Queue**, **Reprint** sends a printout again. A receipt, a refund receipt or a
+kitchen ticket can go to another active printer with the paper width and resolution it was made
+for, for when the first one is out of service. Other printouts reprint only on their own printer.
 ```
 
 Appended to Printer details: "A Bluetooth printer you unpaired is disabled. To use it again, put it
@@ -481,9 +518,10 @@ Spanish:
 ```markdown
 ## Reimprimir desde la cola de impresión {#print-queue}
 
-En la **Cola de impresión**, **Reimprimir** vuelve a enviar una impresión. Un ticket o una comanda
-de cocina puede ir a otra impresora activa con el mismo ancho de papel y la misma resolución, por si
-la primera no funciona. Las demás impresiones solo se reimprimen en su propia impresora.
+En la **Cola de impresión**, **Reimprimir** vuelve a enviar una impresión. Un ticket, un ticket de
+devolución o una comanda de cocina puede ir a otra impresora activa con el ancho de papel y la
+resolución para los que se preparó, por si la primera no funciona. Las demás impresiones solo se
+reimprimen en su propia impresora.
 ```
 
 Appended: "Una impresora Bluetooth que desvinculaste queda deshabilitada. Para volver a usarla,
@@ -519,7 +557,7 @@ PR 1:
   Every other case that queries `printer-status`, `printer-section-*`, `all-printers-link` or
   `printer-breadcrumb` (72 references in this file) moves to the modal's `data-test`s with its
   checks unchanged.
-- `printer-inline.unsaved.test.ts` → becomes `printer-details.unsaved.test.ts` (Task 4b). Its
+- `printer-inline.unsaved.test.ts` → becomes `printer-details.unsaved.test.ts` (Task 4c). Its
   per-owner cases run against the one form; "saving a printer name leaves the independently edited
   connection protected" (`:242`) is **deleted** (one form, one save) and replaced by "a save whose
   refresh fails keeps both fields' newer input dirty".
@@ -564,27 +602,31 @@ PR 4:
 **Files:**
 - Modify: `apps/dashboard/src/date-utils.ts` — add `formatRecentMinute`
 - Modify: `apps/dashboard/src/i18n/strings.ts` — `time.today_at`, `time.yesterday_at` (EN, ES)
-- Test: `apps/dashboard/src/date-utils.test.ts` (it runs with the zone pinned to America/New_York,
-  `:5-7`)
+- Test: `apps/dashboard/src/date-utils.test.ts` — it runs in the dashboard's **Node** project, not
+  the browser (`apps/dashboard/vitest.config.ts:100-101`), with the zone pinned to America/New_York
+  (`date-utils.test.ts:5-7`)
 
 **Interfaces:**
-- Produces: `formatRecentMinute(iso: string, now?: Date, locale?: string): string` — in the
-  browser's zone: "Today HH:MM" when `iso` falls on `now`'s local date, "Yesterday HH:MM" on the
-  day before, otherwise Intl's short day and month in `locale` then `HH:MM`, with the year when it
-  differs from `now`'s. 24-hour clock. A future instant on another day takes the last form.
+- Produces: `formatRecentMinute(iso: string, now?: Date): string` — in the session's language
+  (`currentLocale()`, the same global screen language `t()` follows, so "Today"/"Hoy" and the month
+  words always agree) and the browser's zone: "Today HH:MM" when `iso` falls on `now`'s local date,
+  "Yesterday HH:MM" on the day before, otherwise Intl's short day and month then `HH:MM`, with the
+  year when it differs from `now`'s. 24-hour clock. A future instant on another day takes the last
+  form.
 
-- [ ] **Step 1: Write the failing tests.** `it.each` over `en-GB` and `es-ES` with fixed `now`s:
-  "Today 13:09" / "Hoy 13:09" for an instant earlier the same local day; one minute after local
-  midnight with the instant one minute before it → "Yesterday 23:59" / "Ayer 23:59"; 1 November
-  00:30 local with the instant on 31 October → Yesterday; three days earlier → `3 Nov 13:09` shape
-  (assert with a regex on the day number, the month text from
-  `new Intl.DateTimeFormat(locale, { month: "short" })`, and the time); last year → contains the
-  year; an instant whose UTC date differs from its local date reads the LOCAL day (the control: the
-  failing case would print the UTC day).
+- [ ] **Step 1: Write the failing tests.** `it.each` over `en` and `es`, each case calling
+  `setLocale` first and an `afterEach` restoring the language it found (CLAUDE.md §4: a test that
+  changes the screen language restores it): "Today 13:09" / "Hoy 13:09" for an instant earlier the
+  same local day; one minute after local midnight with the instant one minute before it →
+  "Yesterday 23:59" / "Ayer 23:59"; 1 November 00:30 local with the instant on 31 October →
+  Yesterday; three days earlier → the `3 Nov 13:09` shape (assert with a regex on the day number,
+  the month text from `new Intl.DateTimeFormat(currentLocale(), { month: "short" })`, and the time);
+  last year → contains the year; an instant whose UTC date differs from its local date reads the
+  LOCAL day (the control: the failing case would print the UTC day).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/dashboard exec vitest run src/date-utils.test.ts` —
-  FAILS (no export). Browser mode, real Chromium.
+  FAILS (no export).
 - [ ] **Step 3: Implement** with `dateTimeFormat` from `@waitron/dashboard-kit` (cached formatters,
-  `date-format.ts:12-25`) and `fill`/`t` for the two keys.
+  `date-format.ts:12-25`), `currentLocale()`, and `fill`/`t` for the two keys.
 - [ ] **Step 4: Run** the file whole, then `pnpm exec vitest run scripts/english-only.test.ts` — pass.
 - [ ] **Step 5: Commit** — `git commit -s -m "A date helper that says Today 13:09 or Yesterday 18:40 (A405)"`.
 
@@ -641,7 +683,22 @@ closing returns focus there.
   import `settingsRows`, `settingsCardStyles` from `../widgets/settings-card.js`
 - Modify: `strings.ts` — `printers.details_paper`, `printers.connected_through` new;
   `printers.connection_roaming` removed
-- Test: `printers-screen.test.ts`, `printers-screen.a11y.test.ts`
+- Test: `printers-screen.test.ts`, `printers-screen.a11y.test.ts`,
+  `printers-screen.save-state.test.ts`, `printer-calibration.unsaved.test.ts`
+
+**Size, and why this task is not split:** each group's wrapper keeps the old section's
+`data-test` — `printer-section-status`, `printer-section-connection`, and `printer-section-calibration`
+on the Paper and drawer group — so the existing lookups by those names still find the same facts.
+They are 55 lines in `printers-screen.test.ts` (status 5, connection 35, calibration 15), 8 in the
+a11y suite, 6 in save-state and 1 in `printer-calibration.unsaved.test.ts` (counted with
+`grep -c printer-section-<name>` on `c3a4f8a56a`); most are `text(el, …)` reads that need no change.
+What does change is every line that opens, closes or reads the summary of a disclosure: run
+`grep -nE "printer-section-[a-z]+.*(open|summary|wt-toggle)|statusOpen|connectionOpen|calibrationOpen"`
+over the four files before starting, and migrate only those (the brief's count is whatever that
+prints; on `c3a4f8a56a` no more than 26 lines in `printers-screen.test.ts` match the looser
+`openSection|toggleSection|section.*\.open|\.open\)\.toBe`). If that grep prints more than about
+40 lines, stop after the layout and its new tests, commit cleanly red, and hand the migration to a
+second implementer as Task 3b.
 
 The view reads, top to bottom (each group an `h3` and a `settingsRows` list, each row a
 `data-test`):
@@ -680,7 +737,36 @@ The view reads, top to bottom (each group an `h3` and a `settingsRows` list, eac
   `pnpm exec vitest run scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts` — pass.
 - [ ] **Step 5: Commit** — `git commit -s -m "Printer details read one fact per line under Status, Connection and Paper and drawer, and name a USB or Bluetooth printer's agent (A405 points 1 and 2)"`.
 
-### Task 4a: Delete, Calibrate and Edit at the bottom; Edit turns the window into one form
+### Task 4a: Route the existing inline-editor cases through helpers (tests only, old code)
+
+A preparatory refactor so the form change in Task 4b touches the helpers, not every case. Green
+before and after.
+
+**Files:**
+- Modify: `printers-screen.test.ts`, `printers-screen.save-state.test.ts`,
+  `printers-screen.a11y.test.ts` — add shared helpers to `apps/dashboard/src/widgets/test-helpers.ts`,
+  the dashboard's one test-helper file already outside coverage (`apps/dashboard/vitest.config.ts:123`;
+  do not add another exclude):
+  `openDetailsEdit(el, printerId, part: "name" | "connection")`,
+  `saveDetailsEdit(el, part)`, `cancelDetailsEdit(el, part)`, `detailsEditButton(el, action, part)`.
+  Today they press `edit-printer-<part>`, `save-printer-<part>`, `cancel-printer-<part>`.
+
+**References migrated:** every line matching `(edit|save|cancel)-printer-(name|connection)` —
+109 in `printers-screen.test.ts`, 30 in `printers-screen.save-state.test.ts`, 11 in
+`printers-screen.a11y.test.ts` (5 in `printer-inline.unsaved.test.ts` are left for Task 4c). The
+field names `printer-detail-name`, `printer-detail-host` and `printer-detail-port` stay in the new
+form, so the other 97 lines matching
+`(edit|save|cancel)-printer-(name|connection)|printer-detail-(name|host|port)` in
+`printers-screen.test.ts` need no change.
+
+- [ ] **Step 1:** Run the three files; note each `Tests` count.
+- [ ] **Step 2:** Add the helpers and replace the 150 lines. No assertion changes.
+- [ ] **Step 3:** Run the three files — the same counts, all pass;
+  `grep -cE "(edit|save|cancel)-printer-(name|connection)"` over the three files prints 0 outside the
+  helpers.
+- [ ] **Step 4: Commit** — `git commit -s -m "Printer details tests drive the name and connection editors through shared helpers (A405, groundwork)"`.
+
+### Task 4b: Delete, Calibrate and Edit at the bottom; Edit turns the window into one form
 
 **Files:**
 - Modify: `printers-screen.ts` — replace `#detailNameScope`/`#detailConnectionScope`,
@@ -689,6 +775,8 @@ The view reads, top to bottom (each group an `h3` and a `settingsRows` list, eac
   `detailEdit: { id, name, host, port, saving, error } | null` and one `#detailEditScope` from
   `draftScopeFor`; the row menu's Edit (`:2494-2504`) opens the details in edit mode with the name
   focused
+- Modify: the Task 4a helpers — `part` is now ignored; they press `edit-printer-details`,
+  `save-printer-details`, `cancel-printer-details`
 - Test: `printers-screen.test.ts`, `printers-screen.save-state.test.ts`
 
 **Interfaces:** view footer is a `wt-form-actions` in the modal's `footer` slot:
@@ -697,6 +785,10 @@ The view reads, top to bottom (each group an `h3` and a `settingsRows` list, eac
 `save-printer-details` in the default slot. The form holds `wt-input name="printer-detail-name"`
 (required) and, for `network_tcp` only, `printer-detail-host` (required) and `printer-detail-port`.
 Equipment label stays in its row.
+
+**Cases whose assertions change** (beyond the helpers): only the ones listed for PR 1 that assert two
+separate editors — run `grep -n "independently\|second editor\|both editors" printers-screen.test.ts`
+and list each in the commit.
 
 - [ ] **Step 1: Write the failing tests.**
   `it("puts Delete, Calibrate and Edit together at the bottom of the details")` — the three buttons
@@ -714,19 +806,20 @@ Equipment label stays in its row.
   `it("offers no Delete while editing")`.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/dashboard exec vitest run src/screens/printers-screen.test.ts -t "at the bottom|form of name|only the name|Cancel leaves|emptied name|refused save|row menu's Edit|no Delete while"`
   — FAIL.
-- [ ] **Step 3: Implement.** The save handler returns early when
+- [ ] **Step 3: Implement**, then switch the helpers. The save handler returns early when
   `saveActionState(this.#detailEditScope).unchanged`; the PATCH carries only fields that differ from
   the saved printer; `host`/`port` validation is today's (`:2685-2696`). Delete still goes through
   `#requestDetailDelete` (no draft can be open in view mode).
-- [ ] **Step 4: Run** the file whole and `printers-screen.save-state.test.ts`; change the listed
-  inline-editor assertions (same checks through the one form). Pass.
+- [ ] **Step 4: Run** `printers-screen.test.ts`, `printers-screen.save-state.test.ts` and
+  `printers-screen.a11y.test.ts` whole. Pass.
 - [ ] **Step 5: Commit** — `git commit -s -m "Printer details keep Delete, Calibrate and Edit at the bottom, and Edit turns them into one form (A405 point 1)"`.
 
-### Task 4b: The one form's unsaved-changes behaviour
+### Task 4c: The one form's unsaved-changes behaviour
 
 **Files:**
 - Rename and rewrite: `apps/dashboard/src/screens/printer-inline.unsaved.test.ts` →
-  `printer-details.unsaved.test.ts`
+  `printer-details.unsaved.test.ts` (its 5 button references and 6 field references move to the
+  form)
 - Modify: `apps/dashboard/src/dashboard-app.test.ts` (`:7940-8030`)
 - Modify (only if a test fails for a real defect): `printers-screen.ts`
 
@@ -739,7 +832,7 @@ Equipment label stays in its row.
   earlier opening changes nothing; a port-only edit sends an explicit cleared port. Add
   `it("a save whose refresh fails keeps both fields' newer input dirty")`.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/dashboard exec vitest run src/screens/printer-details.unsaved.test.ts src/dashboard-app.test.ts -t "printer"`
-  — the new case FAILS if Task 4a commits only one field's baseline; otherwise all pass. If every
+  — the new case FAILS if Task 4b commits only one field's baseline; otherwise all pass. If every
   case passes at once, prove the suite by deletion: remove the `draftScopeFor` registration in a
   throwaway edit, see the close-window case fail, restore.
 - [ ] **Step 3: Fix** what fails, in `printers-screen.ts`.
@@ -805,18 +898,19 @@ Equipment label stays in its row.
 - Modify: `packages/module/src/module.ts` — `VenueServiceContribution` (`:740`) gains
   `readDepartmentNames(tx: Transaction, ids: readonly string[]): Promise<{ id: string; name: string }[]>`
   with a one-line doc: every named department that exists, switched off or not
-- Modify: `packages/venue-service/src/operations.ts` — implement it (a `departments` select by id,
-  no `active` filter)
-- Modify: `packages/venue-service/src/service.ts` — export it on the contribution object (beside
-  `readProfileServiceScopes`, `:228`)
-- Test: `packages/venue-service/src/service.test.ts` (or the file that tests
-  `readProfileServiceScopes`; grep)
+- Modify: `packages/venue-service/src/profile-access.ts` — implement it beside
+  `readProfileServiceScopes` (`:257`): a `departments` select by id, no `active` filter
+- Modify: `packages/venue-service/src/service.ts` — import it with the others (`:107-112`) and put it
+  on the contribution object (beside `readProfileServiceScopes`, `:228`)
+- Test: `packages/venue-service/src/profile-access.test.ts` (beside the `readProfileServiceScopes`
+  cases, `:508`); and `packages/venue-service/src/service.test.ts`'s list of the contribution's
+  method names (`:89`) gains `"readDepartmentNames"`
 
 - [ ] **Step 1: Write the failing test.** `it("reads the names of the departments asked for, switched off ones included, and nothing for an unknown id")`
   — `useVenueDb`; seed two departments, switch one off; ask for both plus a random UUID: two rows,
   names as seeded; an empty id list returns `[]` without a query error.
-- [ ] **Step 2: Run** `pnpm --filter @waitron/venue-service exec vitest run src/service.test.ts -t "names of the departments"`
-  — FAIL.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/venue-service exec vitest run src/profile-access.test.ts src/service.test.ts`
+  — FAIL (no function; the method-name list differs).
 - [ ] **Step 3: Implement.** Use `inArray` and the store's chunking only if the id list can grow
   with venue size (profiles are few; say so in the commit).
 - [ ] **Step 4: Run** the file, `pnpm --filter @waitron/module exec tsc --noEmit`,
@@ -1047,7 +1141,13 @@ A refactor; no behaviour changes for the Add dialog.
   starts a scan and shows `printers.pair_again_looking` with a spinner; when a discovered Bluetooth
   entry with `printerId === p.id` arrives it opens the existing Pair dialog for it (`#openPair`,
   `:1798-1813`); when the scan window ends unfound it shows `printers.pair_again_missing` and
-  `printers.pair_again_look`; in `#addPaired`, a succeeded pair for the printer being paired again
+  `printers.pair_again_look`. The Pair dialog's draft scope takes its `parent` from the Add dialog's
+  address scope (`parent: this.#addressScope?.id`, `:1804`), which does not exist during Pair again:
+  `#openPair` gains a `parent` argument, and Pair again passes the id of a scope the Pair again
+  window registers when it opens (a scope holding no value of its own, never dirty by itself;
+  check in `packages/ui`'s `draftScopeFor` that a parent may be value-less, and if it may not,
+  stop and report), so closing the Pair again window asks about a typed PIN once and discards it with
+  the window. In `#addPaired`, a succeeded pair for the printer being paired again
   switches it on (`updatePrinter(id, { active: true })`, only if inactive), closes both dialogs and
   shows `printers.pair_again_done` as a `wt-notice` — it never opens the name form or calibration;
   closing the Pair again window ends its scan
@@ -1063,7 +1163,8 @@ A refactor; no behaviour changes for the Add dialog.
   `it("stops looking when the Pair again window closes")` — no further `listDiscoveredPrinters`
   after close (count calls);
   `it("shows a failed pair's reason and lets the person try again")`.
-  In `printer-pair.unsaved.test.ts`: `it("a PIN typed for Pair again asks before it is lost")`.
+  In `printer-pair.unsaved.test.ts`: `it("a PIN typed for Pair again asks before it is lost")` and
+  `it("closing the Pair again window with a typed PIN asks once, and Discard closes both")`.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/dashboard exec vitest run src/screens/printers-screen.test.ts src/screens/printer-pair.unsaved.test.ts -t "Pair again"`
   — FAIL.
 - [ ] **Step 3: Implement.** The pair route's refusals (`printer.bluetooth_not_discovered`,
@@ -1074,54 +1175,77 @@ A refactor; no behaviour changes for the Add dialog.
 ### Task 17: The server reprints to another suitable printer
 
 **Files:**
-- Modify: `packages/printing/src/outbox.ts` — `resendPrintJob(tx, jobId, { printerId }: { printerId?: string } = {})`;
-  when `printerId` is given and differs from the job's: refuse `print_job.own_printer_only` unless
-  the job has a `sale_id` or the chain's first job (`resend_of ?? id`) has a `kitchen_print_jobs`
-  row; refuse `print_job.printer_unsuitable` unless the target is active, not deleted, and has the
-  original printer's current `paper_width` and `resolution`; then insert for the target. The
-  existing checks run first and keep their order (`:95-122`). Export
-  `canReprintElsewhere(tx, job)` for the list
+- Modify: `packages/printing/src/outbox.ts` — `resendPrintJob(tx, jobId, { printerId }: { printerId?: string } = {})`.
+  The existing checks run first and keep their order (`:95-122`). When `printerId` is given and
+  differs from the job's printer: refuse `print_job.own_printer_only` unless the job is movable —
+  the chain's first job (`resend_of ?? id`) has a `sale_id`, a `kitchen_print_jobs` row or a
+  `receipt_reprints` row, AND `jobSetting(payload)` names a setting; refuse
+  `print_job.printer_unsuitable` unless the target is active, not deleted, and its current
+  `paper_width` and `resolution` equal the setting the job's bytes name (never the original
+  printer's current settings); then insert for the target. A target equal to the job's own printer
+  takes today's path unchanged.
+- Modify: `packages/printing/src/layout.ts` (or a new `job-setting.ts` beside it, exported from the
+  package) — `jobSetting(payload: Uint8Array): { paperWidth; resolution } | null`: `null` unless
+  bytes 0–9 are `1B 40 1D 4C 00 00 1D 57 nL nH` and `nL + 256 × nH` is one of `SETTING_WIDTHS`'
+  widths, else that entry's pair
 - Modify: `packages/printing/src/errors.ts` — declare both codes with their params
   (`{ id: string }`; `{ id: string; printerId: string }`)
 - Modify: `apps/server/src/invoice-print.ts:24-57` — `resendInvoicePrintJob` passes an optional
   `printerId` through to both `resendPrintJob` calls
 - Modify: `apps/server/src/print-api.ts` — the resend route (`:1503-1514`) reads an optional body
   `{ printerId?: string }` (`requireUuidParam` when present; an empty or missing body is today's
-  request); the job list (`:1418-1501`) adds `reprintElsewhere: boolean` per row
+  request). The job list (`:1418-1501`) adds, per row, `setting: { paperWidth, resolution } | null`
+  (from `jobSetting` over the first ten bytes only, selected as `substr(payload, 1, 10)`) and
+  `reprintElsewhere: boolean`. **No query per row:** the three movable tests are `exists`
+  subqueries correlated to `coalesce(print_jobs.resend_of, print_jobs.id)` in the list's one select.
+  `print_jobs` is that select's `.from()` base, which CLAUDE.md §3 warns can break a correlated `sql`
+  subquery silently — read the emitted SQL with `.toSQL()` and keep a test that tells a movable
+  row from an unmovable one in the same list
 - Modify: `apps/dashboard/src/api/client.ts` — `resendPrintJob(id, printerId?)` (`:4090-4092`) sends
-  the body only with a target; `PrintJobRow.reprintElsewhere` (`:1441-1452`)
+  the body only with a target; `PrintJobRow.setting` and `PrintJobRow.reprintElsewhere`
+  (`:1441-1452`)
 - Modify: `apps/dashboard/src/i18n/codes.ts` — the two codes' words
-- Test: `packages/printing/src/outbox.test.ts`, `apps/server/src/print-api.printer-wiring.test.ts`
-  (`describe("print job resend")`, `:835`), `apps/server/src/alert-sources.test.ts` (beside `:980`),
-  `apps/server/src/kitchen-print.test.ts` or `print-api.unpair-kitchen.test.ts` (whichever seeds a
-  table's printing problem)
+- Test: `packages/printing/src/outbox.test.ts`, a `jobSetting` case file beside it,
+  `apps/server/src/print-api.printer-wiring.test.ts` (`describe("print job resend")`, `:835`),
+  `apps/server/src/alert-sources.test.ts` (beside `:980`), `apps/server/src/kitchen-print.test.ts` or
+  `print-api.unpair-kitchen.test.ts` (whichever seeds a table's printing problem)
 
 - [ ] **Step 1: Write the failing tests** (each refusal asserts the domain code, not just a status).
-  - `outbox.test.ts`: a receipt job (with `saleId`) to an active printer of the same width and
-    resolution → a new job on the target, `resendOf` the original, `saleId` kept; a kitchen job
-    (link row) likewise; a resend of a resend of a kitchen job (links only on the first) likewise;
-    a test-page-shaped job (no sale, no link) to another printer → `print_job.own_printer_only`;
+  - `jobSetting`: the bytes `formatReceipt` / `formatKitchenTicket` produce for each of the four
+    settings give back that setting; a payload shorter than ten bytes, one with another prefix, and
+    one with a width of 500 give `null`.
+  - `outbox.test.ts`: a receipt job (with `saleId`) to an active printer of the job's setting → a new
+    job on the target, `resendOf` the original, `saleId` kept; a kitchen job (link row) likewise; a
+    resend of a resend of a kitchen job (links only on the first) likewise;
+    `it("moves a refund receipt, recorded only in receipt_reprints, to another printer")`; a
+    test-page-shaped job (no sale, no link, no `receipt_reprints` row) to another printer →
+    `print_job.own_printer_only`; a receipt whose bytes name no setting → `print_job.own_printer_only`;
     the same job to its own printer id → accepted as today; a target of the same width and other
-    resolution → `print_job.printer_unsuitable`; a disabled target and a deleted target → same
-    code; a drawer job with a target → `print_job.not_resendable` (unchanged order); no target →
-    today's behaviour, byte for byte.
+    resolution → `print_job.printer_unsuitable`; a disabled target and a deleted target → same code;
+    a drawer job with a target → `print_job.not_resendable` (unchanged order); no target → today's
+    behaviour, byte for byte.
+    `it("judges a target by the setting the job was printed at, not its printer's setting now")` — a
+    receipt printed on an 80 mm / 203 dpi printer; that printer is then recalibrated to 80 mm /
+    180 dpi; a target at 80 mm / 203 dpi is accepted, a target at 80 mm / 180 dpi is refused
+    `print_job.printer_unsuitable`.
   - `print-api.printer-wiring.test.ts`: the route with `{ printerId }` still requires `print.resend`
     (401 unauth, 403 for a session without it, asserting codes); a malformed `printerId` →
-    `management.request_invalid`; the list marks a receipt job `reprintElsewhere: true` and a test
-    page `false`; an invoice receipt reprinted elsewhere reserves its invoice delivery for the new
-    job (as `invoice-print-api.test.ts` asserts for a same-printer resend).
+    `management.request_invalid`; one list holding a receipt job, a refund receipt and a test page
+    marks the first two `reprintElsewhere: true` with their `setting`, and the test page `false`; an
+    invoice receipt reprinted elsewhere reserves its invoice delivery for the new job (as
+    `invoice-print-api.test.ts` asserts for a same-printer resend).
   - `alert-sources.test.ts`: `it("stops counting a job once a resend of it has printed on another printer")`.
   - kitchen: `it("clears a table's printing problem once its failed ticket is reprinted and printed on another printer")`.
-- [ ] **Step 2: Run** `pnpm --filter @waitron/printing exec vitest run src/outbox.test.ts`,
-  `pnpm --filter @waitron/server exec vitest run src/print-api.printer-wiring.test.ts src/alert-sources.test.ts -t "resend|reprint|another printer"`
-  — the target cases FAIL (no parameter); the two trouble cases may pass at once — if so they pin
+- [ ] **Step 2: Run** `pnpm --filter @waitron/printing exec vitest run src/outbox.test.ts` (and the
+  `jobSetting` file), `pnpm --filter @waitron/server exec vitest run src/print-api.printer-wiring.test.ts src/alert-sources.test.ts -t "resend|reprint|another printer"`
+  — the target and `jobSetting` cases FAIL; the two trouble cases may pass at once — if so they pin
   `print-job-trouble.ts:56-60`'s printer-free resend clause, and a deletion control (add
   `and copy.printer_id = print_jobs.printer_id` in a throwaway edit) must make them fail.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the files whole, `src/invoice-print-api.test.ts`, `src/till-api.receipt.test.ts`,
   `src/till-api.deliveries.test.ts` (the other callers, unchanged), `pnpm exec vitest run scripts/errors-reachable.test.ts`,
   and `tsc --noEmit` for `@waitron/printing`, `@waitron/server`, `@waitron/dashboard` — pass.
-- [ ] **Step 5: Commit** — `git commit -s -m "A print queue reprint can go to another active printer with the same paper width and resolution, for receipts and kitchen tickets only (A405 point 4)"`.
+- [ ] **Step 5: Commit** — `git commit -s -m "A print queue reprint can go to another active printer of the setting it was printed at, for receipts, refund receipts and kitchen tickets only (A405 point 4)"`.
 
 ### Task 18: The Reprint dialog
 
@@ -1134,9 +1258,10 @@ A refactor; no behaviour changes for the Add dialog.
 - Create: `apps/dashboard/src/widgets/print-job-reprint-dialog.test.ts`
 - Modify: `strings.ts` — the reprint keys
 
-Offered printers: for a `reprintElsewhere` job, active printers with the original's paper width and
-resolution, the original first and chosen when active, with `printers.reprint_same_setting` as the
-hint; for any other job, the original alone with `printers.reprint_own_only`. An original that is
+Offered printers: for a `reprintElsewhere` job, the original first (chosen when active, whatever its
+setting now — that is today's same-printer reprint) and then the other active printers whose
+current paper width and resolution equal the job's `setting`, with `printers.reprint_same_setting`
+as the hint; for any other job, the original alone with `printers.reprint_own_only`. An original that is
 disabled: not offered, nothing chosen; with no other offer the combobox is replaced by
 `printers.reprint_original_off` (own-only jobs) or `printers.reprint_none` (others), and Reprint is
 quiet and disabled. A refusal shows at the bottom through `codeMessage`, Reprint usable again. A
@@ -1149,7 +1274,9 @@ description asks `/finish-branch`'s convention reviewer to judge this against th
 staged-input rule.
 
 - [ ] **Step 1: Write the failing tests** (dialog suite): the original preselected among same-setting
-  printers, a different-resolution printer absent, A4 printers absent; an own-only job offers only
+  printers, a different-resolution printer absent, A4 printers absent; with the original
+  recalibrated since the job (job `setting` 80 mm / 203 dpi, original now 180 dpi), a printer at
+  80 mm / 203 dpi is offered and one at 80 mm / 180 dpi is not; an own-only job offers only
   its printer with the own-only line; a disabled original with no alternative explains and keeps
   Reprint disabled; Reprint sends `resendPrintJob(id, chosen)` once while pending; a refusal shows
   `codeMessage("print_job.printer_unsuitable")` at the bottom; in `printers-screen.test.ts`, the
@@ -1180,14 +1307,17 @@ staged-input rule.
   with a version number, and Reprint would lay it out again for the chosen printer with the same
   builder (`formatReceipt`, `formatKitchenTicket`, `formatCorrectionSlip`, `formatPaymentSlip`,
   `formatCategorySalesPage`); a job whose version the running code cannot read falls back to its own
-  printer or one of the same setting. Needs a column on `print_jobs`. Until then only receipts and
-  linked kitchen tickets may go to another printer, and only one with the same paper width and
-  resolution; payment slips, report pages, equipment labels, refund acknowledgements and unlinked
-  kitchen slips stay on their own printer. Also open: whether kitchen tickets, payment slips and
-  reports need an A4 page, or A4 printers stay out for them." And: "**A4 printers cannot be
-  deleted, re-addressed or switched back on from their details (left open by A405).** No route does
-  any of the three (`apps/server/src/page-printers-api.ts`)." Keep the station-link entry from
-  Task 11.
+  printer or one of the same setting. Needs a column on `print_jobs`. Until then a job may go to
+  another printer only when its chain's first job has a `sale_id`, a `kitchen_print_jobs` row or a
+  `receipt_reprints` row and its stored bytes name the setting it was laid out for, and only to a
+  printer of that setting; every other job reprints on its own printer. Also open: whether kitchen
+  tickets, payment slips and reports need an A4 page, or A4 printers stay out for them." And:
+  "**Deleting an A4 printer (left for after A760 — A1308 hold; from A405 point 6).**
+  `page_printers` has no deletion column and is referenced with `restrict` by
+  `invoice_deliveries`, `devices` and `device_profile_printers`, so a delete must be a soft delete,
+  which needs a column. Until then A4 details have no Delete. Switching an A4 printer back on and
+  changing its address stay in Add a printer by design: both need a fresh discovery entry
+  (`apps/server/src/page-printers-api.ts:164-165`)." Keep the station-link entry from Task 11.
 - [ ] **Step 2: Look** as in Task 6 Step 2: the Pair again window in its looking, not-found and
   found states, the Reprint dialog with alternatives, own-only, and disabled-original states, both
   themes, desktop and phone, both languages; render the guide page.
