@@ -344,6 +344,9 @@ those letters (not checked).
 ## A404 — adding and calibrating a printer
 
 - **A404 — adding and calibrating a printer (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room):**
+  Points 1 and 5–8 landed in #2481. Points 2–4 are PR 2, planned as Tasks 5–9 of
+  `docs/superpowers/plans/2026-11-05-a404-add-calibrate-printer.md`, which also answers point 2's
+  open question: the QR measurement is needed (that plan's section "The QR question").
   2. **Calibration step 1 (paper width and resolution) is laid out out of order.** Rename "Print
      width ruler" (nobody knows what it means — e.g. "Print width test"); the action button goes on
      the right, on its own row; then a row of the two things the person enters (last number fully
