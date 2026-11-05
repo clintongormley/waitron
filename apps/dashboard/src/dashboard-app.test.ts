@@ -7995,7 +7995,7 @@ describe("printer breadcrumb during a pending save", () => {
           await expect.poll(() => typeof refuse).toBe("function");
           await screen.updateComplete;
           expect(save.disabled).toBe(true);
-          q("[data-test=all-printers-link]").click();
+          q("[data-test=printer-details-close]").click();
           await flush(el);
           expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
           expect(screenPrinters(el)).toBe(screen);
@@ -8014,7 +8014,7 @@ describe("printer breadcrumb during a pending save", () => {
                 : "Revisa los ajustes de conexión de la impresora",
             );
           expect(save.disabled).toBe(false);
-          q("[data-test=all-printers-link]").click();
+          q("[data-test=printer-details-close]").click();
           const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
           await expect.poll(() => question.open).toBe(true);
           await question.updateComplete;

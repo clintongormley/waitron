@@ -45,7 +45,7 @@ import { relativeTime } from "../widgets/relative-time.js";
 import { fill, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import type { StringKey } from "../i18n/strings.js";
-import { dashboardPath, leftToBrowser } from "../navigation.js";
+import { dashboardPath } from "../navigation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
 import { formatIsoMinute } from "../date-utils.js";
@@ -2494,8 +2494,9 @@ export class PrintersScreen extends LitElement {
     return html`<dashboard-row-actions .label=${fill("printers.row_actions", { name: p.name })}>
       <wt-button
         data-test=${`edit-printer-${p.id}`}
-        @click=${() => {
-          this.#showPrinterStatus(p.id);
+        @click=${(event: Event) => {
+          const button = event.currentTarget as HTMLElement;
+          this.#showPrinterStatus(p.id, this.#rowMenuButton(button) ?? button);
           this.#openDetailName(p);
           void this.updateComplete.then(() => {
             if (this.detailName?.id === p.id)
@@ -2560,8 +2561,12 @@ export class PrintersScreen extends LitElement {
     return latest;
   }
 
-  #showPrinterStatus(id: string): void {
+  /** What opened the details window, so closing it hands focus back there. */
+  #detailsOpener: HTMLElement | null = null;
+
+  #showPrinterStatus(id: string, opener: HTMLElement | null): void {
     if (id !== this.selectedPrinterId) this.#resetPrinterSections();
+    this.#detailsOpener = opener;
     this.selectedPrinterId = id;
     this.#url.write({ dashboard: "printers", view: this.view, printer: id });
   }
@@ -2747,35 +2752,56 @@ export class PrintersScreen extends LitElement {
     await this.#load();
   }
 
-  #renderPrinterStatus(): TemplateResult {
+  /** Closing the details asks first when a detail draft is dirty, through the address change. */
+  readonly #beforeDetailsClose = async (): Promise<boolean> => {
+    if (this.detailName?.saving || this.detailConnection?.saving) return false;
+    const leaving = this.#url.write({ printer: null });
+    if (!leaving) {
+      this.#resetPrinterSections();
+      this.selectedPrinterId = null;
+      return true;
+    }
+    return (await leaving) === "proceeded";
+  };
+
+  #renderPrinterDetails(): TemplateResult {
     const p = this.printers.find(({ id }) => id === this.selectedPrinterId);
-    const listUrl = new URL(location.href);
-    listUrl.pathname = listUrl.pathname.replace(/\/printer\/[^/]+$/, "");
-    const back = html`<nav aria-label=${t("printers.filter_all")} data-test="printer-breadcrumb">
-      <a
-        data-test="all-printers-link"
-        data-own-click
-        href=${`${listUrl.pathname}${listUrl.search}`}
-        @click=${(event: MouseEvent) => {
-          if (leftToBrowser(event)) return;
-          event.preventDefault();
-          if (this.detailName?.saving) return;
-          if (this.detailConnection?.saving) return;
-          const leaving = this.#url.write({ printer: null });
-          if (!leaving) {
-            this.#resetPrinterSections();
-            this.selectedPrinterId = null;
-          }
-        }}
-        >${t("printers.filter_all")}</a
-      >
-      ${p ? html`<span aria-hidden="true"> › </span><span>${p.name}</span>` : nothing}
-    </nav>`;
-    if (!p)
-      return html`${back}
-        <p role="status">
-          ${this.loading ? t("printers.table_loading") : codeMessage("printer.not_found")}
-        </p>`;
+    return html`<wt-modal
+      size="standard"
+      data-test="printer-details-modal"
+      heading=${p?.name ?? nothing}
+      aria-label=${p ? nothing : t("printers.list_title")}
+      .open=${this.selectedPrinterId !== null}
+      .opener=${this.#detailsOpener}
+      .beforeClose=${this.#beforeDetailsClose}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+      }}
+    >
+      <div data-test="printer-details-body">
+        ${
+          this.selectedPrinterId === null
+            ? nothing
+            : p
+              ? this.#renderPrinterStatus(p)
+              : html`<p role="status">
+                  ${this.loading ? t("printers.table_loading") : codeMessage("printer.not_found")}
+                </p>`
+        }
+      </div>
+      <wt-form-actions slot="footer">
+        <wt-button
+          slot="cancel"
+          data-test="printer-details-close"
+          @click=${(event: Event) =>
+            void (event.currentTarget as HTMLElement).closest("wt-modal")?.requestClose("cancel")}
+          >${t("action.close")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-modal>`;
+  }
+
+  #renderPrinterStatus(p: Printer): TemplateResult {
     const seen = this.#printerObservation(p);
     const field = (label: string, value: unknown, test = "") =>
       html`<div>
@@ -2786,7 +2812,6 @@ export class PrintersScreen extends LitElement {
       .filter((offer) => offer.printerId === p.id)
       .map((offer) => offer.profileName);
     return html`<section data-test="printer-status">
-      ${back}
       <div class="status-heading">
         <h1 class="title">${p.name}</h1>
         ${
@@ -3063,7 +3088,8 @@ export class PrintersScreen extends LitElement {
             variant="ghost"
             part="printer-name"
             data-test=${`printer-row-${p.id}`}
-            @click=${() => this.#showPrinterStatus(p.id)}
+            @click=${(event: Event) =>
+              this.#showPrinterStatus(p.id, event.currentTarget as HTMLElement)}
             >${p.name}</wt-button
           >`,
       },
@@ -3236,7 +3262,8 @@ export class PrintersScreen extends LitElement {
                     variant="ghost"
                     part="printer-name"
                     data-test=${`job-printer-${j.id}`}
-                    @click=${() => this.#showPrinterStatus(printer.id)}
+                    @click=${(event: Event) =>
+                      this.#showPrinterStatus(printer.id, event.currentTarget as HTMLElement)}
                     >${printer.name}</wt-button
                   >`
                 : html`<span data-test=${`job-printer-${j.id}`}>${j.printerName}</span>`
@@ -4399,35 +4426,32 @@ export class PrintersScreen extends LitElement {
     // Each of these dialogs shows the refusal and the failed read itself.
     const dialogOpen =
       this.addingAgent || this.addingPrinter || this.editingAgent || this.editingPrinter;
-    return html`${
-        this.selectedPrinterId
-          ? this.#renderPrinterStatus()
-          : html`<h1 class="title">${t("printers.title")}</h1>
-              <wt-tabs
-                label=${t("printers.title")}
-                .value=${this.view}
-                .items=${[
-                  { key: "queue", label: t("printers.jobs_title") },
-                  { key: "printers", label: t("printers.list_title") },
-                  { key: "agents", label: t("printers.agents_tab") },
-                ]}
-                @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
-                  this.view = event.detail.value;
-                  this.#url.write({ dashboard: "printers", view: this.view });
-                }}
-              >
-                ${this.#renderTabActions()}
-                <div slot="queue">${this.#renderJobsSection()}</div>
-                <div slot="printers">${this.#renderPrintersSection()}</div>
-                <div slot="agents">${this.#renderAgentsSection()}</div>
-              </wt-tabs>`
-      }${
+    return html`<h1 class="title">${t("printers.title")}</h1>
+      <wt-tabs
+        label=${t("printers.title")}
+        .value=${this.view}
+        .items=${[
+          { key: "queue", label: t("printers.jobs_title") },
+          { key: "printers", label: t("printers.list_title") },
+          { key: "agents", label: t("printers.agents_tab") },
+        ]}
+        @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
+          this.view = event.detail.value;
+          this.#url.write({ dashboard: "printers", view: this.view });
+        }}
+      >
+        ${this.#renderTabActions()}
+        <div slot="queue">${this.#renderJobsSection()}</div>
+        <div slot="printers">${this.#renderPrintersSection()}</div>
+        <div slot="agents">${this.#renderAgentsSection()}</div>
+      </wt-tabs>
+      ${
         dialogOpen
           ? nothing
           : html`${this.#renderTestPageSent()}${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
             ${this.#renderRefreshError()}`
       }
-      ${this.#renderAgentModal()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#renderDeleteDialog()}
+      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#renderDeleteDialog()}
       <dashboard-print-job-preview
         .preview=${this.preview}
         .open=${this.previewOpen}

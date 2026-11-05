@@ -340,6 +340,12 @@ function deepQuery(root: ShadowRoot | HTMLElement, sel: string): HTMLElement | n
   return null;
 }
 const q = (el: PrintersScreen, sel: string) => deepQuery(el.shadowRoot!, sel);
+/** Presses the details window's Close, which may ask first; it does not wait for the window. */
+function pressCloseDetails(el: PrintersScreen): void {
+  q(el, "[data-test=printer-details-close]")!.click();
+}
+const detailsHeading = (el: PrintersScreen) =>
+  q(el, "[data-test=printer-details-modal]")?.getAttribute("heading") ?? undefined;
 
 async function clickAndAwaitClose(
   el: PrintersScreen,
@@ -380,8 +386,8 @@ async function selectTab(el: PrintersScreen, key: string): Promise<void> {
 }
 async function openPrinterDetails(el: PrintersScreen, id = "p1"): Promise<void> {
   if (!location.pathname.endsWith(`/printer/${id}`)) {
-    if (q(el, "[data-test=all-printers-link]")) {
-      q(el, "[data-test=all-printers-link]")!.click();
+    if (q(el, "[data-test=printer-status]")) {
+      pressCloseDetails(el);
       await flush(el);
     }
     await selectTab(el, "printers");
@@ -1497,7 +1503,7 @@ describe("printers-screen", () => {
     await flush(el);
     await choosePrinter(el, "discard");
     await flush(el);
-    q(el, "[data-test=all-printers-link]")!.click();
+    pressCloseDetails(el);
     await flush(el);
     const row = q(el, "[data-test=printer-row-p1]")!.closest("tr")!;
     expect(
@@ -1651,13 +1657,13 @@ describe("printers-screen", () => {
       transportName("network_tcp", "es-ES"),
     );
     expect(text(el, "[data-test=printer-connection-p1]")).toBe("Cualquier agente del local");
-    q(el, "[data-test=all-printers-link]")!.click();
+    pressCloseDetails(el);
     await flush(el);
     q(el, "[data-test=printer-row-p2]")!.click();
     await flush(el);
     expect(text(el, "[data-test=printer-transport-p2]")).toBe(transportName("cloud_poll", "es-ES"));
     expect(text(el, "[data-test=printer-connection-p2]")).toBe("Directa (sin agente)");
-    q(el, "[data-test=all-printers-link]")!.click();
+    pressCloseDetails(el);
     await flush(el);
     q(el, "[data-test=printer-row-p3]")!.click();
     await flush(el);
@@ -4061,18 +4067,113 @@ it.each(["printer-row-p1", "job-printer-j1"])(
   },
 );
 
-it("links the printer breadcrumb back to the selected list", async () => {
+async function closeDetails(el: PrintersScreen): Promise<void> {
+  const closed = dialogClosed(q(el, "[data-test=printer-details-modal]")!);
+  q(el, "[data-test=printer-details-close]")!.click();
+  await closed;
+  await flush(el);
+}
+
+function detailsOpen(el: PrintersScreen): boolean {
+  const modal = q(el, "[data-test=printer-details-modal]") as
+    (HTMLElement & { open: boolean }) | null;
+  return modal?.open === true;
+}
+
+function selectedTab(el: PrintersScreen): string {
+  return (q(el, "wt-tabs") as HTMLElement & { value: string }).value;
+}
+
+it("opens a printer's details in a window over the Printers tab, and closing returns to the tab", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  q(el, "[data-test=printer-row-p1]")!.click();
+  await flush(el);
+  expect(detailsOpen(el)).toBe(true);
+  expect(q(el, "wt-tabs")).not.toBeNull();
+  expect(selectedTab(el)).toBe("printers");
+  expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+  await closeDetails(el);
+  expect(location.pathname).toBe("/manage/printers/view/printers");
+  expect(detailsOpen(el)).toBe(false);
+  expect(q(el, "[data-test=printer-row-p1]")!.matches(":focus-within")).toBe(true);
+});
+
+it("opens the details from the print queue and closes back to the queue", async () => {
+  history.replaceState(null, "", "/manage/printers/view/queue");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  q(el, "[data-test=job-printer-j1]")!.click();
+  await flush(el);
+  expect(detailsOpen(el)).toBe(true);
+  expect(selectedTab(el)).toBe("queue");
+  expect(q(el, "[data-test=job-printer-j1]")).not.toBeNull();
+  await closeDetails(el);
+  expect(selectedTab(el)).toBe("queue");
+  expect(location.pathname).toBe("/manage/printers/view/queue");
+  expect(q(el, "[data-test=job-printer-j1]")!.matches(":focus-within")).toBe(true);
+});
+
+it("opens the details from an address naming the printer", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  expect(detailsOpen(el)).toBe(true);
+  expect(q(el, "[data-test=printer-details-modal]")!.getAttribute("heading")).toBe("Cocina");
+  expect(q(el, "wt-tabs")).not.toBeNull();
+});
+
+it("says a printer named in the address does not exist, in the window", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/nope");
+  let release: (rows: Printer[]) => void = () => {};
+  const listing = new Promise<Printer[]>((resolve) => {
+    release = resolve;
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi({ listPrinters: vi.fn().mockReturnValue(listing) }),
+  });
+  await flush(el);
+  expect(detailsOpen(el)).toBe(true);
+  expect(text(el, "[data-test=printer-details-modal]")).toContain(t("printers.table_loading"));
+  release(printers);
+  await flush(el);
+  expect(detailsOpen(el)).toBe(true);
+  const body = q(el, "[data-test=printer-details-body]")!;
+  expect(body.textContent!.replace(/\s+/g, " ").trim()).toBe(codeMessage("printer.not_found"));
+});
+
+it("closes the details of a printer deleted from another tab and says so", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const liveData = new LiveData();
+  const api = stubApi({ liveData } as Partial<DashboardApi>);
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  expect(detailsOpen(el)).toBe(true);
+  vi.mocked(api.listPrinters).mockResolvedValue(printers.slice(1));
+  liveData.invalidate([{ type: "printers", id: "p1" }]);
+  await vi.waitFor(() => expect(detailsOpen(el)).toBe(false));
+  await flush(el);
+  expect(location.pathname).not.toContain("/printer/p1");
+  expect((el as unknown as { errorKey: string | null }).errorKey).toBe("printer.not_found");
+  expect(text(el, "p.error")).toBe(codeMessage("printer.not_found"));
+});
+
+it("closing the details returns to the tab they were opened from", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1?keep=yes");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi(),
   });
   await flush(el);
-  const link = q(el, "[data-test=all-printers-link]") as HTMLAnchorElement | null;
-  expect(link?.textContent?.trim()).toBe(t("printers.filter_all"));
-  expect(link?.getAttribute("href")).toBe("/manage/printers/view/printers?keep=yes");
-  expect(text(el, "[data-test=printer-breadcrumb]")).toContain("Cocina");
-  link!.click();
-  await flush(el);
+  expect(detailsHeading(el)).toContain("Cocina");
+  await closeDetails(el);
+  expect(location.search).toBe("?keep=yes");
   expect(location.pathname).toBe("/manage/printers/view/printers");
   expect(q(el, "[data-test=printers-table]")!.checkVisibility()).toBe(true);
 });
@@ -4166,7 +4267,7 @@ it("closes calibration for the previous printer when browser navigation selects 
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
 
-  expect(text(el, "[data-test=printer-breadcrumb]")).toContain("Nube");
+  expect(detailsHeading(el)).toContain("Nube");
   expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
 });
 
@@ -4240,7 +4341,7 @@ it("keeps a late Active refusal off the next printer's details", async () => {
   history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
-  expect(text(el, "[data-test=printer-breadcrumb]")).toContain("Nube");
+  expect(detailsHeading(el)).toContain("Nube");
   expect(q(el, '[name="printer-detail-active"]')!.hasAttribute("disabled")).toBe(false);
 
   refuse({ code: "connection.failed" });
@@ -4403,12 +4504,12 @@ it("keeps the next printer's name draft when an earlier save finishes", async ()
   history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
-  expect(text(el, "[data-test=printer-breadcrumb]")).toContain("Cocina");
+  expect(detailsHeading(el)).toContain("Cocina");
   await choosePrinter(el, "discard");
   history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
-  expect(text(el, "[data-test=printer-breadcrumb]")).toContain("Nube");
+  expect(detailsHeading(el)).toContain("Nube");
   q(el, "[data-test=edit-printer-name]")!.click();
   await flush(el);
   typeField(el, '[name="printer-detail-name"]', "Cloud copy");
@@ -4443,8 +4544,7 @@ it("asks before leaving a printer with an unsaved name through All printers", as
   q(el, "[data-test=edit-printer-name]")!.click();
   await flush(el);
   typeField(el, '[name="printer-detail-name"]', "Unsaved kitchen");
-  const link = q(el, "[data-test=all-printers-link]")!;
-  link.click();
+  pressCloseDetails(el);
   await flush(el);
   expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
   expect(q(el, '[name="printer-detail-name"]')).not.toBeNull();
@@ -4730,7 +4830,7 @@ it("asks before discarding a changed network connection or leaving its printer",
   expect(q(el, '[name="printer-detail-host"]')).not.toBeNull();
   await expect.poll(() => questionOf(el).open).toBe(true);
   expect(questionOf(el).message).toBe(t("unsaved.message"));
-  q(el, "[data-test=all-printers-link]")!.click();
+  pressCloseDetails(el);
   await flush(el);
   expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
   await choosePrinter(el, "discard");
@@ -4738,7 +4838,7 @@ it("asks before discarding a changed network connection or leaving its printer",
   q(el, "[data-test=edit-printer-connection]")!.click();
   await flush(el);
   typeField(el, '[name="printer-detail-host"]', "10.0.0.89");
-  q(el, "[data-test=all-printers-link]")!.click();
+  pressCloseDetails(el);
   await flush(el);
   expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
   await choosePrinter(el, "discard");
@@ -4819,7 +4919,7 @@ it("reopens printer status from its URL and reflects a saved drawer choice", asy
   await flush(el);
   expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
   expect(text(el, "[data-test=printer-drawer]")).toBe(t("printers.yes"));
-  q(el, "[data-test=all-printers-link]")!.click();
+  pressCloseDetails(el);
   await flush(el);
   expect(location.pathname).toBe("/manage/printers/view/printers");
   expect(location.search).toBe("?keep=yes");
@@ -4865,7 +4965,7 @@ it("explains an unknown printer URL and lets you return to the list", async () =
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api: stubApi() });
   await flush(el);
   expect(text(el, '[role="status"]')).toContain(codeMessage("printer.not_found"));
-  q(el, "[data-test=all-printers-link]")!.click();
+  pressCloseDetails(el);
   await flush(el);
   expect(q(el, "[data-test=printer-row-p1]")).not.toBeNull();
 });

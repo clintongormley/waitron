@@ -252,7 +252,7 @@ it("saving a printer name leaves the independently edited connection protected",
 });
 
 for (const owner of ["name", "connection"] as const) {
-  for (const route of ["breadcrumb", "back"] as const) {
+  for (const route of ["close", "back"] as const) {
     it(`inline ${owner} ${route} preserves route and draft on Keep, leaves once on Discard`, async () => {
       const { app, screen } = await mount();
       await app.url.write({ printer: null });
@@ -263,7 +263,7 @@ for (const owner of ["name", "connection"] as const) {
       change(screen, owner, edited);
       const leave = () => {
         if (route === "back") history.back();
-        else q(screen, "[data-test=all-printers-link]")!.click();
+        else q(screen, "[data-test=printer-details-close]")!.click();
       };
       leave();
       await choose(app, "keep");

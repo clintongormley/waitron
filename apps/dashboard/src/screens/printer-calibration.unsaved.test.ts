@@ -94,7 +94,7 @@ async function open(screen: PrintersScreen, id: string) {
   const row = q(screen, `[data-test=printer-row-${id}]`);
   if (row) row.click();
   else {
-    q(screen, "[data-test=all-printers-link]")!.click();
+    q(screen, "[data-test=printer-details-close]")!.click();
     await screen.updateComplete;
     await expect.poll(() => q(screen, `[data-test=printer-row-${id}]`)).not.toBeNull();
     q(screen, `[data-test=printer-row-${id}]`)!.click();

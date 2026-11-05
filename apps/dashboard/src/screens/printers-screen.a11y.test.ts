@@ -638,7 +638,10 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       await flush(el);
       await openPrinter(el);
       expect(el.scrollWidth).toBeLessThanOrEqual(width);
-      expect(q(el, "[data-test=printer-breadcrumb]")).not.toBeNull();
+      expect(
+        (q(el, "[data-test=printer-details-modal]") as (HTMLElement & { open: boolean }) | null)
+          ?.open,
+      ).toBe(true);
       expect(q(el, "[data-test=printer-section-status]")).not.toBeNull();
       expect(q(el, "[data-test=printer-section-connection]")).not.toBeNull();
       expect(q(el, "[data-test=printer-section-calibration]")).not.toBeNull();
@@ -836,7 +839,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
         await expectNoA11yViolations(host);
         q(el, '[data-test="cancel-edit-printer"]')!.click();
         await flush(el);
-        q(el, '[data-test="all-printers-link"]')!.click();
+        q(el, '[data-test="printer-details-close"]')!.click();
         await flush(el);
         q(el, '[data-test="open-add-agent"]')!.click();
         await flush(el);
