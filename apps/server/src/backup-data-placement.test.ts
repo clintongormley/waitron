@@ -405,8 +405,7 @@ it("refuses a copy holding two venue rows before moving the database", async () 
       copy.close();
     }
     await expect(placeBackupData(validated, f)).rejects.toMatchObject({
-      code: "restore.identity_unknown",
-      params: { nodeId: node },
+      code: "provisioning.second_venue",
     });
     expect((await stat(validated.databasePath)).isFile()).toBe(true);
     await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });

@@ -3267,7 +3267,7 @@ async function bootServer(
             ? `https://${tunnelConfig.relayHost}:${tunnelConfig.relayPort}/`
             : undefined,
         boxHostname: BOX_HOSTNAME,
-        designated: { ...config.node },
+        designated: config.node,
         accountKey: accountKey.toString("base64"),
         credentialKeyRing: totpKeyRing,
       },

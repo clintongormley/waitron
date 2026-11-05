@@ -178,7 +178,7 @@ describe("applyVenue: the one taxpayer row", () => {
   });
 
   it("reuses a venue whose stored day cutover has no seconds", async () => {
-    await applyVenue(planVenue(request("B10000006"), ALL_MODULES), {
+    const first = await applyVenue(planVenue(request("B10000006"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
@@ -190,7 +190,7 @@ describe("applyVenue: the one taxpayer row", () => {
         db: suite.db,
         modules: ALL_MODULES,
       }),
-    ).resolves.toBeDefined();
+    ).resolves.toMatchObject({ nodeId: first.nodeId });
   });
 
   it("refuses a re-run whose tax id differs, by name", async () => {

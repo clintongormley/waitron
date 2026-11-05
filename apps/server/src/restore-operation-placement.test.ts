@@ -30,6 +30,7 @@ import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 import { writeStreamRestore } from "./restore-stream.js";
 import { encodeRecoveryKit } from "@waitron/stream";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
+import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import { restoreFromArtifactFile, writeValidated, type PlacementDeps } from "./restore.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
@@ -251,6 +252,60 @@ it("the admission check's folder holds the backup's node copy, not an empty node
   } finally {
     await suite.node.run(sql`drop table backup_marker`);
   }
+});
+
+async function secondVenueRow(): Promise<void> {
+  await suite.db.insert(locations).values({
+    id: "d0000000-0000-4000-8000-000000000099",
+    name: "Second venue",
+    invoiceLocales: ["es"],
+    operationDescription: "Venta",
+  });
+}
+
+it("refuses a copy holding two venue rows at admission, before anything is placed", async () => {
+  await secondVenueRow();
+  let entered = false;
+  const f = await fixture(
+    regime(async () => {
+      entered = true;
+      return { report: "unexpected" };
+    }),
+  );
+  let admitted = false;
+  f.deps.withModuleOperations!.checkBeforePlacement = async () => {
+    admitted = true;
+  };
+  const error = await writeValidated(f.validated, f.deps).catch((e: unknown) => e);
+  expect(error).toMatchObject({ code: "provisioning.second_venue" });
+  expect(admitted).toBe(false);
+  expect(entered).toBe(false);
+  await expect(readFile(join(f.deps.venueDir, "venue.db"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  await expect(readFile(join(f.deps.stateDir, REBUILD_MARKER))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  await expect(readFile(join(f.deps.stateDir, "trading.env"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+it("refuses a copy holding two venue rows before any restore hook runs or the identity is published", async () => {
+  await secondVenueRow();
+  let entered = false;
+  const f = await fixture(
+    regime(async () => {
+      entered = true;
+      return { report: "unexpected" };
+    }),
+  );
+  const error = await writeValidated(f.validated, f.deps).catch((e: unknown) => e);
+  expect(error).toMatchObject({ code: "provisioning.second_venue" });
+  expect(entered).toBe(false);
+  await expect(readFile(join(f.deps.stateDir, "trading.env"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
 });
 
 it("refuses a wrong node key before hooks or restored identity are published", async () => {

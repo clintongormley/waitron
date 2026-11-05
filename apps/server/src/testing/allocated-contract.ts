@@ -96,8 +96,7 @@ export async function takenOverSeries(
   fixture: StandbyContract,
   state: unknown,
 ) {
-  const primary = { nodeId: nodeId(fixture.request("establish").binding.sourceId) };
-  const target = { ...primary, nodeId: nodeId(targetNodeId) };
+  const target = { nodeId: nodeId(targetNodeId) };
   const venueId = (await db.select().from(locations))[0]!.id;
   await db.insert(nodes).values({ id: target.nodeId, locationId: venueId, name: "Standby" });
   await fixture.transaction(db, "establish", (tx, operation) =>
