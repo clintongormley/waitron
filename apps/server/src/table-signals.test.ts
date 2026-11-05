@@ -76,7 +76,6 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-/** A bar station taking every Caña. */
 async function withBar(v: PartyVenue): Promise<string> {
   return inTx(v, async (tx) => {
     const { id } = await createStation(tx, { name: "Barra" });
@@ -467,7 +466,6 @@ describe("the floor's attention signals", () => {
       },
     ]);
 
-    // One of the two cañas on line 1 goes out.
     const line1 = await lineId(v, two.tabId, 1);
     const serve = await command(v, two.partyId);
     await inTx(v, (tx) =>
@@ -532,7 +530,7 @@ describe("the floor's attention signals", () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
     const kitchen = await kitchenStationId(v);
-    const pulpo = await inTx(v, async (tx) => {
+    const octopusMenuItemId = await inTx(v, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Pesados" });
       const category = await createCategory(tx, { name: "Raciones" });
       const product = await createProduct(tx, {
@@ -552,7 +550,7 @@ describe("the floor's attention signals", () => {
     const { tabId } = await seat(v, table2);
     await inTx(v, (tx) =>
       addTabRound(tx, v.cfg, tabId, [
-        { menuItemId: pulpo, quantity: "0.350" },
+        { menuItemId: octopusMenuItemId, quantity: "0.350" },
         { menuItemId: v.item("Caña"), quantity: "1" },
       ]),
     );
@@ -882,7 +880,6 @@ describe("the floor's attention signals", () => {
     const table8 = await v.table("Mesa 8");
     const into = await seat(v, table2);
     const from = await seat(v, table8);
-    // Mesa 8 paid for its caña, which is still at the bar when the parties join.
     await order(v, from.tabId, "Caña");
     await pay(v, from.tabId, "3.00");
     await makeReady(v, from.tabId, "Caña");
@@ -911,7 +908,6 @@ describe("the floor's attention signals", () => {
     ];
     expect((await floorRow(v, table2)).signals).toEqual(expected);
     expect((await floorRow(v, table8)).signals).toEqual(expected);
-    // The floor's own figures count the kept bill's caña too, beside the party's own agua.
     for (const tableId of [table2, table8]) {
       expect(await floorRow(v, tableId)).toMatchObject({ pendingToServe: 2, readyToServe: 1 });
     }
@@ -1021,10 +1017,6 @@ describe("the floor's attention signals", () => {
 describe("each station's oldest ready time", () => {
   const at = (minute: string) => `2026-10-26T20:${minute}:00.000Z`;
 
-  /**
-   * Mesa 2 with a caña line per quantity, stamped in turn with `minutes`, and a burger stamped
-   * 20:03, all made ready.
-   */
   async function readyTable(
     quantities: readonly string[],
     minutes: readonly string[] = ["04", "01"],

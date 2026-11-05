@@ -335,7 +335,6 @@ describe("parties combined, bills merged → one registro (H2)", () => {
     expect(await saleCount(intoTab)).toBe(1);
     expect(await registroCount(intoTab)).toBe(1);
     expect(await registroCount(fromTab)).toBe(0);
-    // The FILED sale reflects BOTH lines — café 1.50 (intoTab) + agua 2.00 (moved from fromTab) = 3.50.
     // Every count above would still pass on a merge that moved NOTHING; a dropped line files 1.50.
     expect(await filedSaleTotal(intoTab)).toBe("3.50");
   });
@@ -376,6 +375,6 @@ describe("tables joined across parties, bills merged → one bill covering both 
     expect(await orderState(fromTab)).toMatchObject({ status: "abandoned" });
     expect(await registroCount(intoTab)).toBe(1);
     expect(await registroCount(fromTab)).toBe(0);
-    expect(await filedSaleTotal(intoTab)).toBe("3.50"); // café 1.50 + agua 2.00
+    expect(await filedSaleTotal(intoTab)).toBe("3.50");
   });
 });
