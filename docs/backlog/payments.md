@@ -111,22 +111,42 @@ Each stays open until the owner answers it. "The picture" was a mock-up, removed
 
 ## The SumUp Solo experiments
 
-**A949 checkpoint, 2026-10-22:** the replacement credential passed account, reader and transaction
-reads. The configured Solo is paired but reports `OFFLINE`. Affiliate credentials are present;
-their checkout validity remains untested. History returns separate payment and refund rows;
-filtering each type returned the exact expected sets. The original payment's detail agrees by
-UUID, transaction code and client transaction id. See the
-[authenticated baseline and operator checklist](../research/2026-09-10-sumup-solo-experiments.md#9-a949-authenticated-baseline-2026-10-22).
-Published refund units still conflict with September's measurement; keep the adapter unchanged
-until the controlled live re-test settles this.
+**A949 session, 2026-11-05:** affiliate checkout and lookup after payment worked. A repeated
+foreign reference started a new checkout, so the reference did not prevent a second request.
+The first immediate lookup before the tap returned 404; a later checkout was visible as
+PENDING while waiting. The saved callback carried no signature-like header. One delivery
+arrived after the listener returned, about 112 seconds after its event timestamp; the failed
+attempt count and retry schedule are unknown. Read the
+[results and provenance](../research/2026-09-10-sumup-solo-experiments.md#10-a949-solo-session-2026-11-05).
 
-Question 4 was answered on 2026-09-11: a Solo paired to SumUp's cloud cannot also take a payment on its own,
-so the owner chose a separate standalone card machine for the internet-down case
-([deli hardware](../superpowers/specs/2026-07-30-deli-hardware-design.md) §5). Still open: whether we
-can look up a supplied reference before and after payment, whether a duplicate reference is
-refused, actual reader webhook headers, signature-card handling, and a fresh immediate full
-refund. September's full-refund result is not a measurement of a distinct authorisation void.
-[Runbook](../research/2026-09-10-sumup-solo-experiments.md).
+The integer refund control sent `40` and returned EUR 0.40. The decimal `0.40` request, resent
+after a definite refusal, unexpectedly returned the full EUR 1.00, unlike September's
+no-movement observation. Its cause is unknown. Current Waitron methods send integer cents;
+the stale truncation comments have been removed. The session also observed temporary 409
+balance refusals; the proposed correction is below. The watcher's repeated requests departed
+from the earlier single-request checklist and are recorded as such.
+
+Still open: signature-required cards, the customer's statement and returned-fee check, the
+SIM-only/offline/busy-reader/termination probes, and a second standalone machine's matching
+sample. The phone-app samples below do not establish the latter. No further paid request is
+authorised unattended, and a distinct authorisation void has not been measured.
+
+## A949: explain a temporary SumUp refund refusal
+
+The 5 November session returned HTTP 409 with `detail` “Not enough available balance to
+perform the operation at the moment”, then accepted later requests. The timing does not
+establish a safe wait or a payout-based readiness rule. On current main, `callForStatus` drops
+the detail; the SumUp adapter marks 409 as documented, and shared `refundOutcome` fails a
+first-send documented refusal. Staff get the generic failed-refund words with no explanation
+of this temporary state and no next step. The code-path trace and its test limits are in
+[§10.5](../research/2026-09-10-sumup-solo-experiments.md#105-current-waitron-path-and-proposed-correction).
+
+Next, in A949: preserve a bounded recognised reason for this specific refusal and explain that
+this attempt returned no money and a new refund can be tried later. Keep other 409 causes and
+uncertain outcomes distinct; do not automatically resend an uncertain SumUp refund. Cover the
+real HTTP body and both bill and settled-tender staff paths. First check whether existing records
+can carry the reason; any schema addition waits for A760 under the A1308 hold. This is a proposal,
+not implemented behaviour.
 
 ## The deli's outage card machine
 
@@ -136,7 +156,11 @@ replace estimated prices with real quotes. The owner chose three supported cases
 by amount and time, with unmatched payments listed for a manager; identify other providers'
 manual payments as paid outside Waitron, carrying the operation number and machine through the
 till, day report and accountant exports; and check cash-only service without a backup machine.
-Historical API-payment rows are now readable; a standalone-payment sample remains missing.
+The 5 November phone-app samples report `payment_type: POS`, as API payments do, and client
+references starting `urn:sumup:pos:sale:`. The owner's typed reference became product text
+(`Some ref`, with a trailing space in detail), not a verified matching key. These samples inform
+the design; the second standalone Solo and the other-provider and cash-only cases still need
+qualification.
 A barcode scanner only if the deli sells barcoded goods; nothing in the till reads one today.
 
 ## The SumUp reconciler
@@ -144,9 +168,12 @@ A barcode scanner only if the deli sells barcoded goods; nothing in the till rea
 **A949, owner 2026-10-21:** build after the reference experiments establish the matching inputs.
 Include the backup-machine contract above and W44's durable reversal attempts: write an attempt
 before the provider call, then recover an uncertain outcome without a fresh blind refund. The
-[authenticated baseline](../research/2026-09-10-sumup-solo-experiments.md#9-a949-authenticated-baseline-2026-10-22)
-records separate payment/refund history rows and working detail lookups. Supplied-reference
-creation, standalone matching samples and current refund units remain open; no reconciler was built.
+[November session](../research/2026-09-10-sumup-solo-experiments.md#10-a949-solo-session-2026-11-05)
+establishes supplied-reference acceptance and lookup after payment, duplicate creation, separate
+refund rows/events, and phone-app samples. History projections do not supply the foreign
+reference that detail carries. A first missing lookup does not license another charge; ambiguous
+matches stay visible. No reconciler was built. Its design may continue, but table changes wait for
+A760 under A1308. Signature handling remains independently open.
 
 Settlement-report audit and orphan self-heal. `resolvePending` is the
 interim backstop; without an affiliate key a create whose response is lost resolves `failed` and
