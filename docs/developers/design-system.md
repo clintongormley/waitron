@@ -2994,7 +2994,7 @@ and nothing guards it across screens:
   receipts page; the backup screen's turn-on form and settings editor; the bucket copy form; your
   profile's details and its credential dialogs; the edit-person and new-person dialogs; the purchase
   form;
-- batch 3b: the print agent's Edit dialog; a printer page's name and connection editors; the
+- batch 3b: the print agent's Edit dialog; the printer details' Edit form (it replaced the printer page's name and connection editors, A405); the
   calibration wizard; the Bluetooth printer Pair dialog; the Edit device dialog; the device profile
   editor, new and existing; the card reader's Rename dialog; the bill attestation's Record; the held
   payment's Record;
@@ -3105,7 +3105,7 @@ These open already savable:
   default settings, and after a re-add pressing Save is what keeps the printer on, because closing
   the wizard switches it off again (`#calibrationOpenedByAdd` in
   `apps/dashboard/src/screens/printers-screen.ts`). This is the campaign runner's ruling of
-  2026-10-08, still awaiting the owner's word. Opened from a printer's page, it opens quiet;
+  2026-10-08, still awaiting the owner's word. Opened from a printer's details, it opens quiet;
 - the device pairing dialog's Pair: its settings step opens holding the name the device asked
   with, and pressing Pair approves the device;
 - each reader's Add (Enable for a disabled one) in "Add a card reader", holding the provider's name;
