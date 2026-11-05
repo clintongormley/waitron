@@ -1603,6 +1603,79 @@ test("in a guarded dialog, types keys other than Escape and keeps its Escape fro
   expect(seen).toEqual(["a", "b"]);
 });
 
+/** Opens `tag` holding a focused field, then disables the field and waits for the browser to drop
+ * focus from it to the page body. */
+async function openThenDisableFocusedField(tag: "wt-dialog" | "wt-modal", guarded: boolean) {
+  const el = (await mount(
+    `<${tag} heading="Edit"><input name="note" /><button>Other</button></${tag}>`,
+  )) as WtDialog;
+  const decide = vi.fn(async () => false);
+  if (guarded) el.beforeClose = decide;
+  el.open = true;
+  await el.updateComplete;
+  const field = el.querySelector("input")!;
+  field.focus();
+  field.disabled = true;
+  await vi.waitFor(() => expect(document.activeElement).toBe(document.body));
+  return { el, decide };
+}
+
+test.each(["wt-dialog", "wt-modal"] as const)(
+  "%s, guarded, still asks its guard on Escape once its focused field is disabled, and keeps it from the page",
+  async (tag) => {
+    const { decide } = await openThenDisableFocusedField(tag, true);
+    const seen: string[] = [];
+    const listen = (event: KeyboardEvent) => seen.push(event.key);
+    document.addEventListener("keydown", listen);
+    onTestFinished(() => document.removeEventListener("keydown", listen));
+    await userEvent.keyboard("a");
+    expect(decide).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Escape}");
+    expect(decide).toHaveBeenCalledExactlyOnceWith("escape");
+    expect(seen).toEqual(["a"]);
+  },
+);
+
+test("asks only the top guarded dialog on Escape once focus has fallen to the page body", async () => {
+  const below = (await mount('<wt-modal heading="Below">draft</wt-modal>')) as WtDialog;
+  const belowDecide = vi.fn(async () => false);
+  below.beforeClose = belowDecide;
+  below.open = true;
+  await below.updateComplete;
+  const { decide } = await openThenDisableFocusedField("wt-modal", true);
+  await userEvent.keyboard("{Escape}");
+  expect(decide).toHaveBeenCalledExactlyOnceWith("escape");
+  expect(belowDecide).not.toHaveBeenCalled();
+});
+
+test("an Escape inside a plain native dialog opened over a guarded one is not its to answer", async () => {
+  const { decide } = await openThenDisableFocusedField("wt-modal", true);
+  const above = document.createElement("dialog");
+  above.innerHTML = "<button>Inside</button>";
+  host.append(above);
+  above.showModal();
+  above.querySelector("button")!.focus();
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(above.open).toBe(false));
+  expect(decide).not.toHaveBeenCalled();
+});
+
+test.each(["wt-dialog", "wt-modal"] as const)(
+  "%s, unguarded, still closes on Escape once its focused field is disabled, and the page sees it",
+  async (tag) => {
+    const { el } = await openThenDisableFocusedField(tag, false);
+    const closes = vi.fn();
+    el.addEventListener("wt-close", closes);
+    const seen: string[] = [];
+    const listen = (event: KeyboardEvent) => seen.push(event.key);
+    document.addEventListener("keydown", listen);
+    onTestFinished(() => document.removeEventListener("keydown", listen));
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(closes).toHaveBeenCalledOnce());
+    expect(seen).toEqual(["Escape"]);
+  },
+);
+
 test("scrolls a body row's new message only just into view", async () => {
   const { el, body } = await openAtPhoneSize(
     '<input name="note" /><div style="height: 1800px">Lines</div><wt-form-actions><button>Check</button></wt-form-actions><div style="height: 1800px">More lines</div>',

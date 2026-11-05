@@ -3274,7 +3274,11 @@ Bind the dialog's `beforeClose` property to a scoped coordinator request and ret
 outcome is `"proceeded"`. Keep the callback reference stable while that editor is open:
 `WtDialog.requestClose` rejects a pending close if its `beforeClose` callback changes. A background
 render must not replace it while you are answering the question. Route Cancel, close controls and
-an existing backdrop action through `requestClose(reason)`. Native Escape uses the same gate. The
+an existing backdrop action through `requestClose(reason)`. Native Escape uses the same gate,
+including after a focused control was disabled (a field disabled while its save is sent) and
+Chromium dropped focus to the page body: the most recently opened dialog still open is asked when it
+has a `beforeClose` (`packages/ui/src/components/wt-dialog.test.ts`, "still asks its guard on
+Escape once its focused field is disabled"). The
 dialog stays open while asking, and a later answer cannot close a different opening. `closeAfter("saved")` and
 `closeAfter("security")` bypass a pending question for a successful write or forced teardown.
 An owner's `open` binding still controls rendering; it is not a user-dismissal path. The floor

@@ -138,6 +138,23 @@ export class WtDialog extends LitElement {
    * to; one the browser has shut stays until its `open` update runs. */
   private static readonly openDialogs = new Set<WtDialog>();
   private static openings = 0;
+
+  static {
+    document.addEventListener("keydown", (event) => WtDialog.escapeFromPageBody(event));
+  }
+
+  /** A focused control that is disabled drops focus to the page body, outside every dialog.
+   * Chromium still sends an unguarded dialog's close request from there, but a guarded one hears
+   * Escape only on its own keydown, so the top one is asked from here. */
+  private static escapeFromPageBody(event: KeyboardEvent): void {
+    if (event.key !== "Escape" || event.target !== document.body) return;
+    let top: WtDialog | undefined;
+    for (const each of WtDialog.openDialogs) if (!top || each.openedAt > top.openedAt) top = each;
+    if (!top?.beforeClose) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void top.requestClose("escape");
+  }
   /** This opening's place among all openings: later is higher. */
   private openedAt = 0;
   /** Where focus last was inside this dialog. The browser has already moved it by
