@@ -2301,6 +2301,14 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Cloud's D579 owns dependency updates, the seven-day lag check and portal/image
   qualification under the [approved simple release plan](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/plans/2026-11-06-simple-private-ui-release.md).
 
+- **A1345. Choosing the next kitchen round number reads every round ever sent.** For A1308's
+  orders and sales slice, measured by the bench before and after.
+  [Detail](backlog/architecture.md#a1345-choosing-the-next-kitchen-round-number-reads-every-round-ever-sent)
+
+- **A1346. Two invoice-record lookups by sale walk every original record.** For A1308's fiscal
+  slice (the owner lands it), measured by the bench before and after.
+  [Detail](backlog/architecture.md#a1346-two-invoice-record-lookups-by-sale-walk-every-original-record)
+
 - **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
   2026-11-01, high priority; nothing new is built on locations meanwhile). Still open: S18e
   and the schema slices S20–S28; every other slice has landed. S18 has a plan
