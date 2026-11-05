@@ -1144,6 +1144,41 @@ describe("A803 split: the route", () => {
     expect(lineIdsOf(billIds[0]!)).toEqual([]);
   });
 
+  it("an empty selection from a party with no bill leaves it with none, and the leaving table with one empty bill", async () => {
+    const ana = await seatedWith(venue, "Tarta");
+    const second = await freeTable();
+    const joined = await post(`/api/parties/${ana.partyId}/join`, {
+      tableId: second,
+      expectedPartyRevision: revisionOf(ana.partyId),
+    });
+    expect(joined.status).toBe(200);
+    const moved = await post(`/api/bills/${ana.tabId}/move`, {
+      to: { counter: { zoneId: null } },
+      partyId: ana.partyId,
+      expectedPartyRevision: revisionOf(ana.partyId),
+    });
+    expect(moved.status, JSON.stringify(moved.json)).toBe(200);
+    const billsOf = async (partyId: string) => {
+      const read = await send(venue.app, venue.cookie, "GET", `/api/parties/${partyId}/bills`);
+      expect(read.status).toBe(200);
+      return read.json as unknown as { workingOrderId: string; outstanding: string }[];
+    };
+    expect(await billsOf(ana.partyId)).toEqual([]);
+
+    const answer = await post(
+      `/api/parties/${ana.partyId}/split-table`,
+      splitting(ana.partyId, second, { wholeBillIds: [], loose: [] }),
+    );
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await billsOf(ana.partyId)).toEqual([]);
+    const taken = await billsOf(answer.json.partyId as string);
+    expect(taken.map((bill) => bill.workingOrderId)).toEqual(answer.json.billIds);
+    expect(taken.map((bill) => bill.outstanding)).toEqual(["0.00"]);
+    expect(tablesOf(answer.json.partyId as string)).toEqual([second]);
+    expect(tablesOf(ana.partyId)).toEqual([ana.tableId]);
+  });
+
   it.each<[string, (billId: string, lineId: string) => unknown]>([
     ["null", () => null],
     ["a number", () => 5],

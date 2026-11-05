@@ -786,6 +786,14 @@ describe("Split a table's panel", () => {
     },
   );
 
+  it("a party with no bill is told its staying table is left with nothing to pay, since the server makes it no bill", async () => {
+    const el = await mountScreen({ bills: [], splitRead: { bills: [] } });
+    await toPanel(el);
+
+    expect(textOf(el, "[data-split-takes]")).toBe("T8 takes an empty bill · €0.00");
+    expect(textOf(el, "[data-split-keeps]")).toBe("T7 is left with nothing to pay");
+  });
+
   it("the new-bill note shows only while a loose dish is ticked", async () => {
     const el = await mountScreen();
     await toPanel(el);
@@ -2730,6 +2738,100 @@ describe("A803 split: a read and a selected bill", () => {
       await press(el);
       expect(sent).toHaveLength(1);
       expect(sent[0]!).toMatchObject({ selection: { wholeBillIds: ["b3"] } });
+    });
+  });
+
+  describe("a bill that goes and comes back", () => {
+    const allBills = () =>
+      read(
+        { b1: lines("b1"), b2: lines("b2"), b3: lines("b3") },
+        { b1: "97.00", b2: "40.00", b3: "39.00" },
+      );
+    const renumbered = (el: TillTableOrderScreen) =>
+      el.bills.map((bill) => (bill.workingOrderId === "b3" ? { ...bill, billNumber: 4 } : bill));
+
+    it("a stop waiting on a bill listed again under a new number names the number its row carries", async () => {
+      const { el, sent } = await selected();
+      el.splitRead = withoutBills("b3");
+      await settled(el);
+      el.bills = renumbered(el);
+      el.splitRead = allBills();
+      await settled(el);
+
+      await press(el);
+      expect(sent).toEqual([]);
+      expect(sentence(el)).toBe(changed("Bill 4"));
+
+      await press(el);
+      expect(sent).toHaveLength(1);
+    });
+
+    it("a stop waiting on a bill that came back and has gone again says it has left, with no row to check", async () => {
+      const { el, sent } = await selected();
+      el.splitRead = withoutBills("b3");
+      await settled(el);
+      el.splitRead = allBills();
+      await settled(el);
+      el.splitRead = withoutBills("b3");
+      await settled(el);
+      expect(tick(el, "b3")).toBeNull();
+
+      await press(el);
+      expect(sent).toEqual([]);
+      expect(sentence(el)).toBe(gone("Bill 3"));
+
+      await press(el);
+      expect(sent).toHaveLength(1);
+    });
+
+    it("a sentence on screen saying a bill left follows it back, under the number its row carries, and the next press sends", async () => {
+      const { el, sent } = await selected();
+      el.splitRead = withoutBills("b3");
+      await settled(el);
+      await press(el);
+      expect(sentence(el)).toBe(gone("Bill 3"));
+
+      el.bills = renumbered(el);
+      el.splitRead = allBills();
+      await settled(el);
+      expect(sentence(el)).toBe(changed("Bill 4"));
+      expect(sent).toEqual([]);
+
+      await press(el);
+      expect(sent).toHaveLength(1);
+    });
+
+    it("a sentence on screen saying a bill changed follows it away", async () => {
+      const { el, sent } = await selected();
+      el.splitRead = withoutBills("b3");
+      await settled(el);
+      el.splitRead = allBills();
+      await settled(el);
+      await press(el);
+      expect(sentence(el)).toBe(changed("Bill 3"));
+
+      el.splitRead = withoutBills("b3");
+      await settled(el);
+      expect(sentence(el)).toBe(gone("Bill 3"));
+      expect(sent).toEqual([]);
+    });
+
+    it("a sentence that is not a stop's stays when a read moves a bill", async () => {
+      const el = await mountScreen();
+      await toPanel(el);
+      el.splitRefusal = {
+        tableId: "t8",
+        selection: { wholeBillIds: ["b3"], loose: [] },
+        staying: "",
+        leaving: "",
+        message: "Refused for another reason",
+      };
+      await settled(el);
+      expect(sentence(el)).toBe("Refused for another reason");
+
+      el.splitRead = withoutBills("b2");
+      await settled(el);
+      expect(sentence(el)).toBe("Refused for another reason");
     });
   });
 

@@ -1464,6 +1464,8 @@ export class TillTableOrderScreen extends LitElement {
   /** Bills a read took away or changed, each stopping one press with its name as last drawn. */
   #splitGone = new Map<string, string>();
   #splitChanged = new Map<string, string>();
+  /** The stop on screen: no press says it again, so a read that moves its bill re-words it. */
+  #splitSaid?: { billId: string; name: string; text: string };
   /** Outlives the panel, so a bill gone from a refused selection is still named when it reopens. */
   #splitNames = new Map<string, string>();
   #splitRows?: { inputs: SplitInputs; sources: SplitSource[] };
@@ -5270,6 +5272,7 @@ export class TillTableOrderScreen extends LitElement {
     this.#splitObserved = "";
     this.#splitGone.clear();
     this.#splitChanged.clear();
+    this.#splitSaid = undefined;
   }
 
   /** A party on one table is never offered Split a table, so it has no panel to stay on. */
@@ -5367,13 +5370,18 @@ export class TillTableOrderScreen extends LitElement {
       this.#splitChanged.delete(id);
     }
     for (const id of changed) this.#splitChanged.set(id, lastDrawn(id));
-    // A bill listed again has not left, yet it came back unticked, so it still stops one press.
-    for (const source of sources) {
-      const name = this.#splitGone.get(source.bill.workingOrderId);
-      if (name === undefined) continue;
-      this.#splitGone.delete(source.bill.workingOrderId);
-      this.#splitChanged.set(source.bill.workingOrderId, name);
-    }
+    // A bill listed again has not left, yet it came back unticked, so it still stops one press. A
+    // bill comes back under a new number, so a sentence names what its row says now.
+    const listed = new Map(sources.map((source) => [source.bill.workingOrderId, source.bill]));
+    for (const [id, bill] of listed)
+      if (this.#splitGone.delete(id) || this.#splitChanged.has(id))
+        this.#splitChanged.set(id, billLabel(bill));
+    for (const [id, name] of this.#splitChanged)
+      if (!listed.has(id)) {
+        this.#splitChanged.delete(id);
+        this.#splitGone.set(id, name);
+      }
+    this.#followSplitSaid(listed);
     const [held] = heldSelected(sources, split);
     if (held !== undefined) this.splitMessage = null;
     const active = (this.renderRoot as ShadowRoot).activeElement;
@@ -5406,12 +5414,29 @@ export class TillTableOrderScreen extends LitElement {
     const [gone] = this.#splitGone;
     if (gone !== undefined) {
       this.#splitGone.delete(gone[0]);
-      return fill(t("table.split_bill_gone"), { bill: gone[1] });
+      return this.#saySplitStop(gone[0], gone[1], false);
     }
     const [changed] = this.#splitChanged;
     if (changed === undefined) return null;
     this.#splitChanged.delete(changed[0]);
-    return fill(t("table.split_changed"), { bill: changed[1] });
+    return this.#saySplitStop(changed[0], changed[1], true);
+  }
+
+  #saySplitStop(billId: string, name: string, listed: boolean): string {
+    const text = fill(t(listed ? "table.split_changed" : "table.split_bill_gone"), { bill: name });
+    this.#splitSaid = { billId, name, text };
+    return text;
+  }
+
+  #followSplitSaid(listed: ReadonlyMap<string, PartyBill>): void {
+    const said = this.#splitSaid;
+    if (said === undefined || this.splitMessage !== said.text) return;
+    const bill = listed.get(said.billId);
+    this.splitMessage = this.#saySplitStop(
+      said.billId,
+      bill === undefined ? said.name : billLabel(bill),
+      bill !== undefined,
+    );
   }
 
   /** Dispatched only in the page, so a change made while taken out is told once it is put back. */
@@ -5544,13 +5569,15 @@ export class TillTableOrderScreen extends LitElement {
       ...keeps.whole.map(({ bill }) => billLabel(bill)),
       ...keeps.rest.map(({ bill }) => fill(t("table.split_rest_of"), { bill: billLabel(bill) })),
     ];
-    const keepsLine = leftWithNothingToPay(sources, this.splitPicks, this.#anyBillPaid())
-      ? fill(t("table.split_nothing_to_pay"), { table: kept })
-      : fill(t("table.split_keeps"), {
-          table: kept,
-          what: keepsParts.length > 0 ? list(keepsParts) : t("table.split_empty_bill"),
-          amount: this.#money(keeps.amount),
-        });
+    // The server makes a staying party a bill only when one leaves it, so with none it has none.
+    const keepsLine =
+      sources.length === 0 || leftWithNothingToPay(sources, this.splitPicks, this.#anyBillPaid())
+        ? fill(t("table.split_nothing_to_pay"), { table: kept })
+        : fill(t("table.split_keeps"), {
+            table: kept,
+            what: keepsParts.length > 0 ? list(keepsParts) : t("table.split_empty_bill"),
+            amount: this.#money(keeps.amount),
+          });
     return html`<div class="split-lines">
       <p class="split-summary" data-split-takes>
         ${fill(t("table.split_takes"), {

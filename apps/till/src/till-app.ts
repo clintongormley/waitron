@@ -4250,8 +4250,9 @@ export class TillApp extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
-    if (this.#splitPanel !== undefined && this.#splitPanel.partyId !== this.orderParty?.id) {
+    if (this.#splitReadParty !== undefined && this.#splitReadParty !== this.orderParty?.id) {
       this.#leaveSplitRead();
+      this.#splitReadParty = undefined;
       this.splitRead = null;
     }
     const paying = this.billPaying;
@@ -11669,18 +11670,20 @@ export class TillApp extends LitElement {
     clearTimeout(this.#billDraftTimer);
     this.#billDraftTimer = setTimeout(() => {
       void Promise.all([this.#refreshBillDraft(), this.#rereadBillsOnTimer()]).finally(() => {
-        if (this.isConnected && this.#draftSync !== undefined) this.#scheduleBillDraftRefresh();
+        if (this.isConnected && (this.#draftSync !== undefined || this.#splitPanel !== undefined))
+          this.#scheduleBillDraftRefresh();
       });
     }, 15_000);
   }
 
   /** The till has no push from the server, so another till merging or moving the bill on screen away
-   * (D11 rule 3) is seen only by a bills read; the draft's timer makes one. */
+   * (D11 rule 3) is seen only by a bills read; the draft's timer makes one. So does Split a table's
+   * panel on a party with no sync, or a bill started elsewhere would never reach it. */
   async #rereadBillsOnTimer(): Promise<void> {
-    const sync = this.#draftSync;
+    const partyId = this.#draftSync?.partyId ?? this.#splitPanel?.partyId;
     if (
-      sync === undefined ||
-      sync.partyId !== this.orderParty?.id ||
+      partyId === undefined ||
+      partyId !== this.orderParty?.id ||
       !this.#tableCatalogueActive() ||
       this.operatorName === "" ||
       document.hidden
@@ -15631,7 +15634,14 @@ export class TillApp extends LitElement {
     this.#splitTablePrompts.set(prompt, this.#billComposition(billId === null ? [] : [billId]));
   }
 
-  #splitPanel?: { partyId: string; billsSeen: string; screen: TillTableOrderScreen };
+  #splitPanel?: {
+    partyId: string;
+    billsSeen: string;
+    screen: TillTableOrderScreen;
+    reloading?: boolean;
+  };
+  /** Whose answer {@link splitRead} may hold, which outlives the panel for a refusal's reopen. */
+  #splitReadParty?: string;
   #splitReadGeneration = 0;
   #splitReadAbort?: AbortController;
 
@@ -15645,6 +15655,8 @@ export class TillApp extends LitElement {
     screen.splitRead = null;
     if (party === null) return;
     this.#splitPanel = { partyId: party.id, billsSeen: billsSeen(this.partyBills), screen };
+    this.#splitReadParty = party.id;
+    if (this.#draftSync === undefined) this.#scheduleBillDraftRefresh();
     void this.#readSplitSources(party.id);
   }
 
@@ -15654,7 +15666,10 @@ export class TillApp extends LitElement {
     const generation = ++this.#splitReadGeneration;
     try {
       const read = await this.api.getSplitSources(partyId, { signal: controller.signal });
-      if (generation === this.#splitReadGeneration) this.splitRead = read;
+      if (generation === this.#splitReadGeneration) {
+        this.splitRead = read;
+        this.#followSplitAnswer(read);
+      }
     } catch {
       if (generation === this.#splitReadGeneration && this.splitRead === null)
         this.splitRead = "failed";
@@ -15666,15 +15681,48 @@ export class TillApp extends LitElement {
     this.#splitReadGeneration++;
     this.#splitReadAbort?.abort();
     this.#splitReadAbort = undefined;
+    if (this.#draftSync === undefined) clearTimeout(this.#billDraftTimer);
   }
 
   #followSplitBills(bills: readonly PartyBill[]): void {
     const panel = this.#splitPanel;
     if (panel === undefined) return;
     const seen = billsSeen(bills);
-    if (seen === panel.billsSeen) return;
-    panel.billsSeen = seen;
-    void this.#readSplitSources(panel.partyId);
+    if (seen !== panel.billsSeen) {
+      panel.billsSeen = seen;
+      void this.#readSplitSources(panel.partyId);
+    }
+    if (this.activeTabId === undefined && billToShow(undefined, bills) !== undefined)
+      void this.#reloadSplitParty();
+  }
+
+  /** An answer can be newer than the bills list, whose rows the panel's are joined with. */
+  #followSplitAnswer(read: SplitSources): void {
+    const known = new Set(this.partyBills.map((bill) => bill.workingOrderId));
+    if (
+      read.bills.some(({ billId }) => !known.has(billId)) ||
+      (this.activeTabId === undefined && read.bills.length > 0)
+    )
+      void this.#reloadSplitParty();
+  }
+
+  /** A party with no sync stops being a special case the moment it has a bill: this makes the sync
+   * and brings the drafts, so that bill's rows are drawn as any other's (D14). A background read,
+   * so a failure leaves the rows alone and the timer's next read comes back here. */
+  async #reloadSplitParty(): Promise<void> {
+    const panel = this.#splitPanel;
+    if (panel === undefined || panel.reloading === true) return;
+    panel.reloading = true;
+    try {
+      await this.#reloadTables();
+      if (panel !== this.#splitPanel) return;
+      this.#rememberOrderParty();
+      const before = this.partyBills;
+      const answer = await this.#loadPartyBills(undefined, false, true);
+      if (panel === this.#splitPanel) await this.#followBillsRead(answer, before, true);
+    } finally {
+      panel.reloading = false;
+    }
   }
 
   async #onSplitTable(event: Event, confirmed?: PartyComposition): Promise<void> {
@@ -15752,10 +15800,12 @@ export class TillApp extends LitElement {
     this.#rememberOrderParty();
     const shown = this.activeTabId;
     const leftWhole = shown !== undefined && selection.wholeBillIds.includes(shown);
+    let paidUnseen = false;
     if (leftWhole || (shown !== undefined && looseIds.includes(shown))) {
       const known = this.partyBills;
       const { bills: read } = await this.#loadPartyBills(undefined, false);
       if (!live()) return;
+      paidUnseen = !leftWhole && read === null;
       const remaining = read?.find((bill) => bill.workingOrderId === shown);
       // A bill just left paid counts as gone: `GET lines` refuses it, so its list would be empty.
       if (leftWhole || (remaining !== undefined && !owing(remaining))) {
@@ -15771,7 +15821,16 @@ export class TillApp extends LitElement {
         }
       }
     }
-    await this.#loadLinesAndBills();
+    const [, { bills: reread }] = await this.#loadLinesAndBills();
+    if (paidUnseen && live()) {
+      const remaining = reread?.find((bill) => bill.workingOrderId === shown);
+      const next = billToShow(undefined, reread ?? []);
+      if (remaining !== undefined && !owing(remaining) && next !== undefined && next !== shown) {
+        this.billGone = null;
+        this.#chooseBill(next);
+        await this.#loadLinesAndBills();
+      }
+    }
     if (
       this.api === asked.api &&
       asked.session === this.#operatorSession &&
