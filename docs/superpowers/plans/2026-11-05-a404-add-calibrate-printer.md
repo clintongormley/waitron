@@ -41,9 +41,10 @@ Line numbers below were measured on `9b6e397df5`.
 - Forms follow `docs/developers/design-system.md` → Forms. A switch's explanation is drawn by the
   screen as a hint line and also passed as the switch's `description` (the `wt-switch` row of the
   primitives table, `design-system.md:862`).
-- A help bubble is a `wt-help-tooltip mode="help-mode"` with `guide-href` from
-  `apps/dashboard/src/help-guide.ts` and `guide-label=${t("help.guide_link")}`, as
-  `box-status-screen.ts:573-579` does.
+- A help bubble is a `wt-help-tooltip mode="help-mode"` with
+  `aria-label=${fill("help.badge_label", { part })}`, `guide-href` from
+  `apps/dashboard/src/help-guide.ts` and `guide-label=${t("help.guide_link")}`, as the product
+  editor's shared `help()` does (`apps/dashboard/src/widgets/product-editor.ts:1151-1159`).
 - A look complaint about a shared `wt-*` component is fixed in the component, everywhere, and
   checked by screenshot; one screen's own layout is fixed in that screen.
 - TDD: the failing test first, run it, watch it fail for the stated reason, then the code.
@@ -116,8 +117,10 @@ The dashboard keeps reading the list after its scan ends, through its live subsc
    the dialog is open"): the list starts empty when the server restarts, and a paired printer is
    unmarked until the agent's first scan pass answers.
 
-**What `paired` means, and what part 2 lets through.** `paired` is set while the agent's last
-paired listing named the device (`print-api.ts:1007-1008`), and that listing is everything
+**What `paired` means, and what part 2 lets through.** `paired` is `isListed(e.pairedAt, now)`
+(`print-api.ts:487`, `:1008`): a device stays paired for the discovered list's freshness window
+(15 seconds, or 45 while a discovery window is open: `discovery-listing.ts`) after the last paired
+listing that named it. That listing is everything
 `bluetoothctl devices Paired` prints on the agent's machine, unfiltered
 (`apps/print-agent/src/bluetooth.ts:232-233`, `linux-devices.ts:209-215`). So a paired device that
 is not a printer would show too. On the box that is a device someone paired through Waitron's own
@@ -165,7 +168,11 @@ read is a cross-package contract change; adding a method that nothing yet relies
   `/Users/clintongormley/workspace/worktrees/waitron-feat-a404-add-calibrate-printer`,
   `feat/a404-add-calibrate-printer`): Tasks 1–4, points 1, 5, 6, 7 and 8. `WtInput.select()` is a
   new method on a shared primitive, changing nothing existing callers use; discovery state is in
-  memory. No risk trigger: the light review path.
+  memory. No risk trigger: the light review path. If Task 2 finds the row misalignment in
+  `wt-data-table` and fixes it there, that is a look change to a component every app's tables use,
+  not a contract change, so the path stays light — but screenshots of other screens' tables
+  (Task 4 Step 6) are then required, and the PR description asks `/finish-branch`'s convention
+  reviewer to look at the table change.
 - **PR 2 — "Calibrating a printer"** (new worktree:
   `python3 ~/workspace/tools/worktree.py new waitron feat/a404-calibrate-printer --headless`, after
   syncing `main`): Tasks 5–9, points 2, 3 and 4. Task 5 removes `sampleFooter` from
@@ -200,20 +207,20 @@ text; "removed" deletes the key from both catalogues.
 | 1 | `printers.scan_empty` | new | No printers found yet. Still searching… | Aún no se ha encontrado ninguna impresora. Seguimos buscando… |
 | 1 | `printers.no_discovered` | changed | No printers found. Check that the printer is on and connected, then scan again. | No se ha encontrado ninguna impresora. Comprueba que esté encendida y conectada, y vuelve a buscar. |
 | 8 | `printers.bluetooth_pair_note` | changed | A Bluetooth printer must be in pairing mode before you add it. | Una impresora Bluetooth debe estar en modo de emparejamiento antes de añadirla. |
-| guide | `printers.add_help_label` | new | About adding a printer | Sobre cómo añadir una impresora |
 | guide | `printers.add_help` | new | Waitron lists the printers its print agents find. Not listed? Check it is on, or type its address under Check a known address. | Waitron muestra las impresoras que encuentran sus agentes de impresión. ¿No aparece? Comprueba que esté encendida o escribe su dirección en Comprobar una dirección conocida. |
 | 2 | `printers.ruler_print` | changed | Print width test | Imprimir prueba de ancho |
 | 2 | `printers.resolution_hint` | changed | Print the width test. Choose the last number you can see in full on the ruler, and measure the QR code’s black square without its white border. You do not need to scan it. | Imprime la prueba de ancho. Elige el último número de la regla que se ve entero y mide el cuadrado negro del código QR sin su borde blanco. No hace falta escanearlo. |
 | 2 | `printers.qr_square` | new | QR code’s black square | Cuadrado negro del código QR |
 | 2 | `printers.test_qr_help` | removed | (was the separate QR paragraph; its words are now in `printers.resolution_hint`) | |
-| guide | `printers.calibration_help_label` | new | About calibration | Sobre la calibración |
 | guide | `printers.calibration_help` | new | Calibration sets how wide Waitron prints and how large the QR code comes out. Run it again if you change the paper width. | La calibración fija el ancho de impresión y el tamaño del código QR. Repítela si cambias el ancho del papel. |
 | 4 | `printers.portable` | changed | Portable printer | Impresora portátil |
 | 4 | `printers.portable_hint` | new | Carried by one person, such as a belt printer; one device holds it at a time. | La lleva una persona, como una impresora de cinturón; la tiene un solo dispositivo a la vez. |
 | 4 | `printers.calibration_drawer` | changed | Cash drawer and portable use | Cajón portamonedas y uso portátil |
 
-Both help bubbles link with the existing `help.guide_link` (Read more in the guide / Más
-información en la guía).
+Both help bubbles are named with the existing `help.badge_label` (Help: {part} / Ayuda: {part}),
+filled with the existing `printers.add_printer` (Add a printer / Añadir impresora) and
+`printers.calibration_layout` (Set paper width and resolution / Ajusta el ancho y la resolución),
+and link with the existing `help.guide_link` (Read more in the guide / Más información en la guía).
 
 Unchanged and reused by point 2's result row: `printers.paper_width` (Paper width / Ancho del
 papel), `printers.resolution` (Print resolution / Resolución de impresión),
@@ -258,7 +265,9 @@ PR 1:
 - `printers-screen.test.ts` "keeps a wrongly-described registered printer reachable in its printer
   row and through Show all" (about line 7481) — its device is reported `paired: true`, so it is now
   listed without Show all devices: `discovered-row-…` is present at once, and the Show all click
-  goes (point 6). Its Enable assertions stay.
+  goes (point 6). Its Enable assertions stay. A copy of the case with `paired` unset — "a
+  registered, switched-off printer, not paired and not marked as a printer, can still be enabled
+  through Show all" — keeps today's assertions, so that path stays tested.
 - `printers-screen.test.ts` "names a new A4 printer in a dialog whose Add waits for a name, then
   adds it from the row's discovery entry" — Add is enabled at open with the discovered name filled
   in (point 7). Its whitespace and "Back office" steps stay.
@@ -275,13 +284,37 @@ PR 2:
   is `printers.qr_square`) and "keeps the width step's rows, and the button beside the ruler's
   answer, within the form width on a wide window" (rewritten for the button's own row and the result
   row).
+- `printers-screen.a11y.test.ts` (Task 6a) "keeps setup forms inside desktop and phone dialogs",
+  its calibration width-step check (lines 801-806): at 1280 px it asserts `printer-paper-width` and
+  `printer-resolution` end at the same height, which 6a's re-layout ends (the paper-width dropdown
+  gets its own row). It now asserts the ruler and QR answers end at the same height, and that the
+  button row, the answers and the result row stay inside the dialog. Task 6b then drops
+  `printer-paper-width` from its `assertInsideDialog` list and renames `printer-resolution` to
+  `printer-qr-square`.
 - `printers-screen.test.ts` (Task 6b, the paper-width dropdown removed, the QR answer renamed
   `printer-qr-square`): "keeps the printer's saved paper width and resolution when calibration is run
   again" (paper width read from the result row), the `it.each` "derives layout settings from the
   ruler and QR answers (%s)" (results instead of the dropdown), "says when the ruler's number and the
   chosen paper width and resolution disagree, without stopping the save" (drives
   `printer-qr-square`), "leaves the paper width alone when the ruler's answer is set back to Choose"
-  (reads the result row).
+  (reads the result row), and four more that assert on the removed dropdown, each now reading the
+  result row (`[data-test=calibration-result-paper]` / `-resolution`) with the same expected value
+  and changing the draft through the ruler's answer:
+  - "saves changed paper width and resolution through calibration alone" (from line 5177; the
+    value check at 5182, the changes at 5183-5184);
+  - "cancels calibration without saving its draft" (from line 5304; the change at 5317, the value
+    check after reopening at 5323);
+  - "opens calibration for the same printer with its saved settings, and cancelling switches it off
+    again" (from line 7602; the value checks at 7606-7607);
+  - "leaves the printer switched on once its calibration is saved" (from line 7629; the change at
+    7644).
+- `printers-screen.save-state.test.ts` (Task 6b), value checks on the removed dropdown, each now
+  reading the result row, same expected value: "reaches the last step with Save quiet on the stored
+  settings, and a press sends nothing" (lines 500-501), "re-adding a switched-off printer opens its
+  wizard with Save ready, and an untouched press keeps it on" (line 619), "a freshly added
+  printer's wizard opens with Save ready, and an untouched press closes it sending nothing" (line
+  672); and the changes in "a paper width changed on the first step wakes Save on the last, and
+  changing it back quiets it" (lines 515, 519) go through the ruler's answer (`512`, then `360`).
 - `printers-screen.test.ts` "clears the ruler answer when paper width is changed directly" —
   **deleted** in Task 6b: point 2 removes the direct paper-width control it tested.
 - `printer-calibration.unsaved.test.ts` (Task 6b), each moving to the control named:
@@ -301,11 +334,10 @@ PR 2:
     331, 349, 371, 423, 454, 481, 501, 524, 542) become `change(screen, "printer-ruler-number",
     "360")`, and `printer-resolution` becomes `printer-qr-square` (lines 244, 298, 305, 307, 375,
     401, 430, 437, 447, 508, 513), the asserted values unchanged.
-- Setup-only changes in Task 6b (assertions kept, only how the draft is changed): "opens calibration
-  after adding, and saves the tested draft", "saves changed paper width and resolution through
-  calibration alone", "uses explicit width and resolution, and prints a sample from the calibration
-  draft", `printers-screen.save-state.test.ts`, and the step-1 states of
-  `printers-screen.a11y.test.ts`.
+- Setup-only changes in Task 6b (assertions kept, only how the draft is changed — through the
+  ruler's answer and `printer-qr-square`): "opens calibration after adding, and saves the tested
+  draft" (lines 945-946) and "uses explicit width and resolution, and prints a sample from the
+  calibration draft" (lines 5211-5212).
 - `apps/server/src/sample-receipt.test.ts` (Task 5): "A965 sample language keeps %s sample and
   document inputs together" (no footer; the document's sale now differs from the preview's sale by
   the added dishes) and "draws at the selected setting and prints an unmistakably simulated
@@ -362,7 +394,7 @@ PR 2:
   `d.paired === true`.
 - [ ] **Step 4: Run** both files whole — all pass, except "keeps a wrongly-described registered
   printer reachable in its printer row and through Show all", whose assertion changes as listed
-  above. Make that change.
+  above. Make that change, and add its copy with `paired` unset (today's assertions).
 - [ ] **Step 5: Commit** — `git commit -s -m "A paired Bluetooth printer stays listed between scans and after a restart (A404 point 6)"`.
 
 ### Task 2: The Add a printer dialog says what is happening, and its rows line up (points 1, 5 and 8)
@@ -483,8 +515,9 @@ PR 2:
     form's own check — so it needs only the selection.
   - `product-list.ts:747` calls `box.select()`.
 - [ ] **Step 4: Run** the three test files whole, plus `src/screens/printer-name.unsaved.test.ts`
-  and `src/widgets/product-list.test.ts` (the category-name rename case that relies on the
-  selection) — all pass.
+  and `src/widgets/catalogue-browser.test.ts` ("renames a top-level category in place without
+  adopting the addressed one", line 1119, which relies on `product-list.ts`'s selection) — all
+  pass.
 - [ ] **Step 5: Commit** — `git commit -s -m "Name dialogs open with the found name filled in and selected, ready to type over (A404 point 7)"`.
 
 ### Task 4: PR 1's guide page, help bubble, backlog and a look at it
@@ -498,7 +531,7 @@ PR 2:
 - Modify: `apps/dashboard/src/help-guide.ts` — `"printers.add-printer": { page: "printers", section: "add-printer" }`
 - Modify: `apps/dashboard/src/screens/printers-screen.ts` — a help bubble beside the Add a printer
   dialog's search hint (`printers.discovery_hint`)
-- Modify: `apps/dashboard/src/i18n/strings.ts` — `printers.add_help_label`, `printers.add_help`
+- Modify: `apps/dashboard/src/i18n/strings.ts` — `printers.add_help`
 - Modify: `docs/backlog/printers.md` (the A404 section)
 
 - [ ] **Step 1: Write the failing tests.**
@@ -507,7 +540,7 @@ PR 2:
     `["add-printer"]`.
   - `printers-screen.test.ts`: `it("explains adding a printer in a help bubble that links to the guide")`
     — in the open Add a printer dialog a `wt-help-tooltip` has `mode="help-mode"`, `aria-label`
-    `t("printers.add_help_label")`, text `t("printers.add_help")` and
+    `fill("help.badge_label", { part: t("printers.add_printer") })`, text `t("printers.add_help")` and
     `guide-href` `guideHref("printers.add-printer")`.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts -t "printers"`
   and the dashboard case — FAIL (no page, no bubble).
@@ -631,7 +664,8 @@ PR 2:
   helpers, not floating point. Drop `receipt.footerMessage` from `sampleDocument`. Update the
   English-only audit row.
 - [ ] **Step 4: Run** the three files whole, then
-  `pnpm --filter @waitron/server exec vitest run src/page-test-page.test.ts src/receipt-preview-api.test.ts src/print-api.test.ts`
+  `pnpm --filter @waitron/server exec vitest run src/page-test-page.test.ts src/receipt-preview-api.test.ts src/print-api.test.ts src/invoice-pdf.test.ts src/invoice-raster.test.ts`
+  (the last two build `sampleDocument`)
   and `pnpm --filter @waitron/country exec vitest run` — pass; `pnpm --filter @waitron/country exec tsc --noEmit`
   and the same for `country-es`, `country-packs`, `server` — clean.
 - [ ] **Step 5: Commit** — `git commit -s -m "The sample receipt lists dishes using each language's accented letters instead of the pingüino line (A404 point 3)"`.
@@ -748,13 +782,12 @@ words alone.
 **Files:**
 - Modify: `apps/dashboard/src/help-guide.ts` — `"printers.calibrate": { page: "printers", section: "calibrate" }`
 - Modify: `apps/dashboard/src/screens/printers-screen.ts` — a help bubble beside step 1's heading
-- Modify: `apps/dashboard/src/i18n/strings.ts` — `printers.calibration_help_label`,
-  `printers.calibration_help`
+- Modify: `apps/dashboard/src/i18n/strings.ts` — `printers.calibration_help`
 - Test: `apps/dashboard/src/screens/printers-screen.test.ts`
 
 This task needs the guide's `calibrate` section, so do Task 9 Step 1 first, then:
 - [ ] **Step 1:** `it("explains calibration in a help bubble that links to the guide")` — on step 1
-  a `wt-help-tooltip` has `mode="help-mode"`, `aria-label` `t("printers.calibration_help_label")`,
+  a `wt-help-tooltip` has `mode="help-mode"`, `aria-label` `fill("help.badge_label", { part: t("printers.calibration_layout") })`,
   text `t("printers.calibration_help")` and `guide-href` `guideHref("printers.calibrate")`.
 - [ ] **Step 2: Run** it — FAILS (no bubble).
 - [ ] **Step 3: Implement.**
