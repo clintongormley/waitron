@@ -1,7 +1,14 @@
 import { expect, afterEach, describe, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption as pickOption } from "@waitron/ui/src/test-helpers.js";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+  openDetailsEdit,
+  detailsEditButton,
+  detailsEditTest,
+} from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import "./printers-screen.js";
 import type { PrintersScreen } from "./printers-screen.js";
@@ -603,11 +610,11 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     );
     await flush(el);
     await openPrinter(el);
-    q(el, "[data-test=edit-printer-name]")!.click();
+    openDetailsEdit(el, "name");
     await flush(el);
     await expectNoA11yViolations(host);
     await flush(el);
-    q(el, "[data-test=edit-printer-connection]")!.click();
+    openDetailsEdit(el, "connection");
     await flush(el);
     await expectNoA11yViolations(host);
   });
@@ -637,7 +644,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       expect(q(el, "[data-test=printer-section-connection]")).not.toBeNull();
       expect(q(el, "[data-test=printer-section-calibration]")).not.toBeNull();
       expect(
-        q(el, "[data-test=edit-printer-name]")!.getBoundingClientRect().right,
+        detailsEditButton(el, "edit", "name")!.getBoundingClientRect().right,
       ).toBeLessThanOrEqual(
         q(el, "[data-test=printer-section-status]")!.getBoundingClientRect().right,
       );
@@ -1203,12 +1210,15 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     );
     await flush(el);
     await openPrinter(el);
-    q(el, "[data-test=edit-printer-name]")!.click();
+    openDetailsEdit(el, "name");
     await flush(el);
-    q(el, "[data-test=edit-printer-connection]")!.click();
+    openDetailsEdit(el, "connection");
     await flush(el);
-    expect(saveLook(el, "save-printer-name")).toEqual({ variant: "secondary", disabled: true });
-    expect(saveLook(el, "save-printer-connection")).toEqual({
+    expect(saveLook(el, detailsEditTest("save", "name"))).toEqual({
+      variant: "secondary",
+      disabled: true,
+    });
+    expect(saveLook(el, detailsEditTest("save", "connection"))).toEqual({
       variant: "secondary",
       disabled: true,
     });
@@ -1216,8 +1226,11 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     edit(el, '[name="printer-detail-name"]', "Kitchen 2");
     edit(el, '[name="printer-detail-port"]', "9101");
     await flush(el);
-    expect(saveLook(el, "save-printer-name")).toEqual({ variant: "primary", disabled: false });
-    expect(saveLook(el, "save-printer-connection")).toEqual({
+    expect(saveLook(el, detailsEditTest("save", "name"))).toEqual({
+      variant: "primary",
+      disabled: false,
+    });
+    expect(saveLook(el, detailsEditTest("save", "connection"))).toEqual({
       variant: "primary",
       disabled: false,
     });

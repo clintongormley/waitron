@@ -601,3 +601,41 @@ export function timesAcrossLines(elements: readonly Node[]): { checked: number; 
   }
   return { checked, broken };
 }
+
+export type DetailsEditPart = "name" | "connection";
+export type DetailsEditAction = "edit" | "save" | "cancel";
+
+function deepFind(root: ParentNode, selector: string): HTMLElement | null {
+  const found = root.querySelector<HTMLElement>(selector);
+  if (found) return found;
+  for (const node of root.querySelectorAll<HTMLElement>("*")) {
+    const nested = node.shadowRoot ? deepFind(node.shadowRoot, selector) : null;
+    if (nested) return nested;
+  }
+  return null;
+}
+
+/** The `data-test` of a printer details editor's button. */
+export function detailsEditTest(action: DetailsEditAction, part: DetailsEditPart): string {
+  return `${action}-printer-${part}`;
+}
+
+export function detailsEditButton<T extends HTMLElement = HTMLElement>(
+  el: HTMLElement,
+  action: DetailsEditAction,
+  part: DetailsEditPart,
+): T | null {
+  return deepFind(el.shadowRoot!, `[data-test=${detailsEditTest(action, part)}]`) as T | null;
+}
+
+export function openDetailsEdit(el: HTMLElement, part: DetailsEditPart): void {
+  detailsEditButton(el, "edit", part)!.click();
+}
+
+export function saveDetailsEdit(el: HTMLElement, part: DetailsEditPart): void {
+  detailsEditButton(el, "save", part)!.click();
+}
+
+export function cancelDetailsEdit(el: HTMLElement, part: DetailsEditPart): void {
+  detailsEditButton(el, "cancel", part)!.click();
+}
