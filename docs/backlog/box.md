@@ -1007,8 +1007,7 @@ NetworkManager.
   escape is refused. Refusals: `request_invalid`, `unknown_request`, `actor_invalid`,
   `fields_invalid`. The verb is read before the space is looked for: an empty verb is
   `request_invalid`, a verb not on `HOST_VERBS` is `unknown_request`, and only then is a listed
-  verb with nothing after it `request_invalid` (the plan's D4 first had the missing space checked
-  first).
+  verb with nothing after it `request_invalid`.
 - The actor is ids only: `{"source":"person","person":<id>}` (1–64 of `A–Z a–z 0–9 -`) or
   `{"source":"server"}`, each request accepting only its listed sources. The host checks the form
   and never a permission; the log entry names the verb's permission (`system.manage`) from the
@@ -1023,16 +1022,15 @@ NetworkManager.
   for a refused password are left for the garbage collector unzeroed, and the password arrives and
   leaves as a JavaScript string, which cannot be zeroed at all. So the module makes no claim that a
   password is wiped from memory.
-- Replies: each request's shape is checked when written and when read back (`formatHostReply`,
+- Replies: each request's reply is checked when written and when read back (`formatHostReply`,
   `parseHostReply`), so the server's client can check what it receives by the same rules. A join
   or forget answers only `{"ok":true}` or a refusal, and `network.read` reports the latest change
   and the boot copy's state (PR 5's, its lists now exported by `wifi-boot-copy.mjs`) side by side.
   A scan lists at most 32 networks: 32 of the longest kind make a reply of 3641 bytes with its
   newline, under the client's 4096.
-- A wired address is one Node's `net.isIP` accepts, with no `%`. The plan's 45-character limit is
-  not in the code: on Node v26.13.0 `net.isIP` refused every longer form tried (the hand cases, and
-  200,000 random IPv6 shapes, the longest accepted 45 characters). A test case of 46 characters
-  fails first if a later Node accepts longer forms.
+- A wired address is one Node's `net.isIP` accepts, with no `%`; the code has no length limit of
+  its own. On Node v26.13.0 `net.isIP` accepted no form longer than 45 characters among those
+  tried (the hand cases, and 200,000 random IPv6 shapes).
 - `handleHostRequest(line, adapters)` checks that `adapters` holds exactly the eight functions,
   reading each once, then logs the verb and actor, calls the one adapter as a plain function (no
   `this`) with only the checked fields, copies and checks its answer, and answers the fixed
@@ -1212,9 +1210,13 @@ NetworkManager.
 - The shell handler forwards a line whose verb is on `HOST_VERBS` to the Node host and keeps
   answering both clock verbs itself; a B3 line can be up to 4096 characters, so it must be read
   past the clock's 700-character limit without changing a clock answer. A box with the shell alone
-  answers every B3 request `unknown_request`; the client reads `unknown_request` as "this host does
-  not know this request", for that request only (D16), since a host built before a later request
-  was added answers it to that request alone.
+  answers `unknown_request` to a B3 line of at most 700 characters, and `request_invalid` to a
+  longer one, before it reads the verb (`deploy/box/waitron-box.sh:161-165`; a join line reaches
+  1003 characters, a `tag.write` line 3142). So the server's client must not read
+  `request_invalid` from a shell-only box as a fault in its own line; the forwarding pull request,
+  which raises the shell's limit for B3 lines, removes the case. The client reads
+  `unknown_request` as "this host does not know this request", for that request only (D16), since
+  a host built before a later request was added answers it to that request alone.
 - Every connection's instance stops at `RuntimeMaxSec=15`. A join and a forget are meant to answer
   once the change has started (D8), so each exchange stays short; how long a scan takes on the
   box's radio, and a join with its address, are rig measurements.
@@ -1349,7 +1351,7 @@ The owner's four answers: no reserved
 **Full-disk write stop (owner, 2026-10-21, A798-B slice 3, #1950):** refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21.
 
 - **A box that already holds Waitron but has its TPM or Secure Boot switched off still starts (owner, 2026-11-03).** The stick starts the installed Waitron after 15 seconds so the venue keeps selling; the installer's message and the status page carry the setting that is off; slice 3's host service raises the alert; a reinstall on that box stays refused. Built as the installer's decision D2 in B3 PR 3 (`scripts/box/installer-policy.mjs`, #2426) and kept as built. The 15 seconds, two minutes, 60 seconds and one minute stay the spec's proposals; the owner was not asked about them. ([B3 PR 4's plan](../superpowers/plans/2026-11-03-b3-4-name-tag-wifi-copy.md), D13.)
-- **B3 keeps slice 9b's clock requests on their wire and shell handler (B3 PR 7's D1; the lane's decision of 2026-11-05, open to the owner).** They have landed, the clock-behind stop and the clock confirmation use them, and a box installed by `waitron.sh` has no Node on its host. B3's requests share the socket, the one-line framing and `apps/server/src/box-host-client.ts`; the shell handler forwards them to the Node host in slice 3's Linux pull request. The host knows its caller by the socket alone (D2): only root and the app's group can connect, one request per connection, so there is no token to replay; the server mints an ids-only actor from a session it authorised, the host checks its form and logs it, and a compromised server can send any actor, as with slice 9b's requester. ([PR 7's plan](../superpowers/plans/2026-11-05-b3-7-host-protocol.md), D1, D2.)
+- **B3 keeps slice 9b's clock requests on their wire and shell handler (B3 PR 7's D1; the lane's decision of 2026-11-05, open to the owner).** They have landed, the clock-behind stop and the clock confirmation use them, and a box installed by `waitron.sh` has no Node on its host. B3's requests will share the socket, the one-line framing and `apps/server/src/box-host-client.ts`; the shell handler is to forward them to the Node host in slice 3's Linux pull request. The host knows its caller by the socket alone (D2): only root and the app's group can connect, one request per connection, so there is no token to replay; the server is to mint an ids-only actor from a session it authorised, and the host checks its form and logs it, and a compromised server can send any actor, as with slice 9b's requester. ([PR 7's plan](../superpowers/plans/2026-11-05-b3-7-host-protocol.md), D1, D2.)
 - **Cloud verification keeps worker threads denied (owner, 2026-10-22, A1004).** Only the fresh
   disposable venue copy omits its watchdog; it still takes the venue lock. Ordinary server and
   restore opens retain monitoring. Cloud must pin the implementing release and requalify its
