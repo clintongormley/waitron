@@ -77,6 +77,7 @@ const balance = (workingOrderId: string, total: string) => ({
   paidLines: [],
 });
 const splitRead: SplitSources = {
+  partyRevision: 3,
   bills: [
     {
       billId: "main",
@@ -490,6 +491,7 @@ describe("Split a table's panel, what counts as changed", () => {
           selection: { wholeBillIds: ["other"], loose: [] },
           guestCounts: { staying: 3, leaving: 2 },
           prompt: expect.any(Object),
+          partyRevision: 3,
         },
       },
     ]);
@@ -826,6 +828,7 @@ describe("Split a table's panel reopened by a refusal", () => {
     expect(unload()).toBe(true);
 
     screen.splitRead = {
+      partyRevision: 3,
       bills: splitRead.bills.map((bill) =>
         bill.billId === "main"
           ? {

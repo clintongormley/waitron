@@ -310,6 +310,8 @@ export type SplitTableDetail = {
   selection: SplitSelection;
   guestCounts: SplitGuestsDetail;
   prompt?: object;
+  /** The revision of the read that drew the rows the waiter pressed on. */
+  partyRevision: number;
 };
 
 type SplitSide = "staying" | "leaving";
@@ -541,6 +543,13 @@ class TabPayStore extends WorkingOrderStore {
 }
 
 type ActionStep = "closed" | "pick" | "move-dishes" | "split-table" | "split-table-pick";
+
+/** What the foot says when a refusal's own sentence would claim the rows were read again and they
+ * were not. */
+const splitRowsUnreadSentence = (): string => t("table.reread_failed");
+
+const isAnswer = (read: SplitSources | "failed" | null): read is SplitSources =>
+  read !== null && read !== "failed";
 
 @customElement("till-table-order-screen")
 export class TillTableOrderScreen extends LitElement {
@@ -1308,9 +1317,6 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) splitRowsUnread: SplitRefusal | null = null;
   /** The party's bills for the panel: null until the read answers, "failed" when it could not. */
   @property({ attribute: false }) splitRead: SplitSources | "failed" | null = null;
-  /** The app is bringing a party's first bill in behind the panel, so what Split would act on is
-   * still moving: it waits, as for a load. */
-  @property({ type: Boolean }) splitReloading = false;
   /** The last drafts read's drafts, of every bill of the party. */
   @property({ attribute: false }) partyDrafts: readonly PartyDraft[] = [];
   /** Who is signed in, which tells their own drafts from someone else's. */
@@ -2235,9 +2241,10 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The app clears its offer on this event, so a screen mounted later does not open it again. Taken
    * even when the line is gone, for the same reason. */
-  override updated(): void {
+  override updated(changed: PropertyValues<this>): void {
     this.#refocusMenu();
     this.#placeStepFocus();
+    if (changed.has("splitRead")) this.#returnToSplitFoot();
     this.#watchAutomaticRouting();
     this.#sizeDraftBar();
     this.#observeSplit();
@@ -2292,9 +2299,43 @@ export class TillTableOrderScreen extends LitElement {
     // A refusal is said at the foot, beside Split, which a tall panel's top leaves below the window.
     const foot = this.#splitFootDue ? panel.querySelector("wt-form-actions") : null;
     this.#splitFootDue = false;
+    if (foot !== null) this.#awaitSplitFootRows();
     void this.#scrollIntoViewOnceDrawn(panel).then(() =>
       foot?.scrollIntoView({ block: "nearest" }),
     );
+  }
+
+  /** The read after a refusal can draw rows above a foot just brought into view. It follows that
+   * one answer, unless the waiter has touched the screen since. */
+  #awaitSplitFootRows(): void {
+    this.#splitFootRows?.abort();
+    const touched = new AbortController();
+    for (const type of ["pointerdown", "wheel", "touchstart", "keydown"])
+      this.addEventListener(type, () => touched.abort(), {
+        capture: true,
+        passive: true,
+        signal: touched.signal,
+      });
+    this.#splitFootRows = touched;
+  }
+
+  #returnToSplitFoot(): void {
+    const awaiting = this.#splitFootRows;
+    if (awaiting === undefined || awaiting.signal.aborted || !isAnswer(this.splitRead)) return;
+    awaiting.abort();
+    const panel = this.renderRoot.querySelector<HTMLElement>("[data-action-panel]");
+    const foot = panel?.querySelector("wt-form-actions");
+    if (panel == null || foot == null) return;
+    const picker = panel.querySelector("till-split-picker");
+    void (async () => {
+      await picker?.updateComplete;
+      await Promise.all(
+        [...(picker?.shadowRoot?.querySelectorAll("till-portion-picker") ?? [])].map(
+          (rows) => rows.updateComplete,
+        ),
+      );
+      if (foot.isConnected) foot.scrollIntoView({ block: "nearest" });
+    })();
   }
 
   /** The step's buttons draw after the screen does, and only then does the panel have its height. */
@@ -2318,6 +2359,7 @@ export class TillTableOrderScreen extends LitElement {
   #drawnStep: ActionStep = "closed";
   #stepFocus?: "step" | "menu";
   #splitFootDue = false;
+  #splitFootRows?: AbortController;
 
   /** Copies the draft bar's height to `--draft-bar-size` on `.round-bar`, the bar's parent, from
    * which the basket's lines inherit it. Measured at once when the bar is drawn or shown, because
@@ -5236,6 +5278,7 @@ export class TillTableOrderScreen extends LitElement {
     this.splitTakeOverMessage = null;
     this.splitAsking = false;
     this.#splitPrompt = undefined;
+    this.#splitFootRows?.abort();
     this.#splitAnswered = undefined;
     this.#splitRows = undefined;
     this.#splitDrawn = undefined;
@@ -5597,10 +5640,10 @@ export class TillTableOrderScreen extends LitElement {
       held.length > 0
         ? this.#splitTakenSentence(held)
         : this.splitRowsUnread !== null && this.splitMessage === this.splitRowsUnread.message
-          ? t("table.reread_failed")
+          ? splitRowsUnreadSentence()
           : this.splitMessage;
     // A take-over's answer reaches the drafts before its record is replaced; Split waits for both.
-    const holding = held.length > 0 || this.takeOverSent !== null || this.splitReloading;
+    const holding = held.length > 0 || this.takeOverSent !== null;
     const countsBad =
       parseGuestCount(this.splitStaying) === undefined ||
       parseGuestCount(this.splitLeaving) === undefined;
@@ -5611,7 +5654,7 @@ export class TillTableOrderScreen extends LitElement {
           ${fill(t("table.split_pick_heading"), { table: leaving, party: this.#partyScope(party) })}
         </h2>
         ${
-          sources?.length === 0
+          sources?.length === 0 || readFailed
             ? nothing
             : html`<p class="split-note" data-split-hint>
                 ${fill(t("table.split_pick_hint"), { table: leaving, kept })}
@@ -5703,7 +5746,7 @@ export class TillTableOrderScreen extends LitElement {
                   data-split-anyway
                   slot="secondary"
                   variant="secondary"
-                  ?disabled=${countsBad || this.splitReloading}
+                  ?disabled=${countsBad}
                   @click=${(event: Event) => void this.#confirmSplitPick(event, true)}
                 >
                   ${t("table.split_anyway")}
@@ -5804,6 +5847,7 @@ export class TillTableOrderScreen extends LitElement {
       selection,
       guestCounts: { staying: staying.guestCount, leaving: leaving.guestCount },
       ...(prompt === undefined ? {} : { prompt }),
+      partyRevision: this.#splitAnswered!.partyRevision,
     } satisfies SplitTableDetail);
     this.#closeActions();
   }

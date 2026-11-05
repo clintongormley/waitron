@@ -2360,8 +2360,10 @@ export interface TabLines {
   revision: number;
 }
 
-/** `GET /api/parties/:id/split-sources`: the party's own open and presented bills, in number order. */
+/** `GET /api/parties/:id/split-sources`: the party's own open and presented bills, in number order,
+ * and the party's revision read in the same transaction. */
 export interface SplitSources {
+  partyRevision: number;
   bills: { billId: string; lines: TabLine[]; balance: BillBalance }[];
 }
 

@@ -4668,7 +4668,7 @@ describe("TillApi: a party's drafts", () => {
   const takeover = { revision: 1, expectedEdit: observed, submissionId: "takeover-1" };
 
   it("getSplitSources reads the party's route and hands a caller's abort signal to fetch", async () => {
-    const answer = { bills: [] };
+    const answer = { partyRevision: 3, bills: [] };
     const fetchStub = vi.fn().mockResolvedValueOnce(jsonResponse(answer));
     const signal = new AbortController().signal;
 

@@ -3254,8 +3254,9 @@ export class TillApp extends LitElement {
   @state() private splitRefusal: SplitRefusal | null = null;
   @state() private splitRowsUnread: SplitRefusal | null = null;
   /** Null until a panel's first read answers; "failed" only while no read has answered. */
+  /** The panel's rows and the revision a press sends with them: one answer, written in one place,
+   * {@link #readSplitSources}. */
   @state() private splitRead: SplitSources | "failed" | null = null;
-  @state() private splitReloading = false;
   /** The line a change refused as started offers to cancel; the table screen opens its Cancel. */
   @state() private cancelOffer: number | null = null;
   @state() private editDeadEnds: {
@@ -4305,6 +4306,7 @@ export class TillApp extends LitElement {
       this.#leaveSplitRead();
     if (changed.has("splitRefusal") && this.splitRefusal !== null)
       void this.#watchReopenedSplit(this.splitRefusal);
+    if (changed.has("orderParty") || changed.has("partyBills")) this.#followSplitSeen();
     if (this.#moveAllergyOpening && !this.#moveAllergyCurrent()) this.#closeMoveAllergy();
     this.#syncTableAllergy();
     if (this.allergyDialog !== null && !this.allergyDialog.current()) this.#closeAllergyDialog();
@@ -4322,7 +4324,7 @@ export class TillApp extends LitElement {
     if (this.#splitReadParty !== undefined && this.#splitReadParty !== this.orderParty?.id) {
       this.#leaveSplitRead();
       this.#splitReadParty = undefined;
-      this.#splitBillsSeen = undefined;
+      this.#splitReadAgainst = undefined;
       this.splitRead = null;
     }
     const paying = this.billPaying;
@@ -12110,8 +12112,6 @@ export class TillApp extends LitElement {
       }
       return answer;
     } catch {
-      // The floor may have moved the party's revision by now, and no list says whether the rows did.
-      this.#splitBillsSeen = undefined;
       if (
         read === this.#partyBillsRead &&
         !background &&
@@ -15731,8 +15731,6 @@ export class TillApp extends LitElement {
     await this.#followActionBills(result.billIds, sent);
   }
 
-  // A plain refresh keeps what a prompt opened with: only #retakeSplitRevision and #readRowsAndRevision
-  // replace it.
   readonly #splitTablePrompts = new WeakMap<object, PartyComposition | null>();
   /** Each selected bill's edit state when it joined the selection, or null if it had none then: a
    * later read does not turn that into permission. */
@@ -15789,10 +15787,9 @@ export class TillApp extends LitElement {
   };
   /** Whose answer {@link splitRead} may hold, which outlives the panel for a refusal's reopen. */
   #splitReadParty?: string;
-  /** The bills list {@link splitRead}'s rows were read against, or nothing if a sources read since
-   * failed or was dropped, or a bills read failed. Outlives the panel: a list read while it is closed
-   * must not count as seen. */
-  #splitBillsSeen?: string;
+  /** What this till knew when the last sources read started, or nothing if that read failed or was
+   * dropped. Outlives the panel: what is read while it is closed must not count as seen. */
+  #splitReadAgainst?: { bills: string; revision: number | undefined };
   #splitReadGeneration = 0;
   #splitReadAbort?: AbortController;
 
@@ -15827,36 +15824,32 @@ export class TillApp extends LitElement {
     if (refusal !== this.splitRefusal || partyId === undefined) return;
     this.#watchSplitPanel(prompt, partyId, screen);
     const said = this.#splitRefusalSaid;
-    const behind = this.#splitRowsBehind();
-    this.#splitRowsOwed = behind && typeof said === "object" && "partyChanged" in said;
-    if (behind) await this.#readRowsAndRevision(prompt, partyId);
+    const refusedAsStale =
+      typeof said === "object" &&
+      ("partyChanged" in said || ("code" in said && said.code === "party.out_of_date"));
+    const read = refusedAsStale || this.#splitSeenMoved();
+    this.#splitRowsOwed = read && typeof said === "object" && "partyChanged" in said;
+    if (read) await this.#readSplitSources(partyId);
   }
 
-  #splitRowsBehind(): boolean {
-    return billsSeen(this.partyBills) !== this.#splitBillsSeen;
-  }
-
-  /** The waiter is looking at the new state only from here, so only here does the composition catch
-   * up: pressed sooner, or after a failed read, Split still sends the old revision for the server to
-   * judge. It takes the revision from before the read: a floor read landing while that is out may
-   * name a change the rows do not show. */
-  async #readRowsAndRevision(prompt: object, partyId: string): Promise<void> {
-    const revisions = this.#billRevisions();
-    if (!(await this.#readSplitSources(partyId))) return;
-    const fresh = this.#partyComposition([]);
-    this.#splitTablePrompts.set(prompt, fresh === null ? null : { ...fresh, revisions });
-  }
-
-  /** With the rows behind the bills list, a press keeps its old revision for the server to judge. */
-  #retakeSplitRevision(prompt: object): void {
-    const fresh = this.#partyComposition([]);
-    const kept = this.#splitTablePrompts.get(prompt);
-    this.#splitTablePrompts.set(
-      prompt,
-      fresh !== null && kept != null && this.#splitRowsBehind()
-        ? { ...fresh, revisions: kept.revisions }
-        : fresh,
+  /** Whether this till has been told anything the rows on the panel may not show. */
+  #splitSeenMoved(): boolean {
+    const against = this.#splitReadAgainst;
+    if (against?.bills !== billsSeen(this.partyBills)) return true;
+    const revision = this.orderParty?.revision;
+    const rows = this.splitRead;
+    return (
+      revision !== against.revision &&
+      (rows === null || rows === "failed" || rows.partyRevision !== revision)
     );
+  }
+
+  /** Only ever starts a read: {@link splitRead} is the one thing a press sends, and only a read's
+   * answer writes it. */
+  #followSplitSeen(): void {
+    const panel = this.#splitPanel;
+    if (panel !== undefined && this.orderParty?.id === panel.partyId && this.#splitSeenMoved())
+      void this.#readSplitSources(panel.partyId);
   }
 
   #onSplitRefusalDeclined(event: Event): void {
@@ -15868,12 +15861,14 @@ export class TillApp extends LitElement {
       this.#leaveSplitRead();
   }
 
-  /** Answers whether its rows are the ones on the panel now: not if it failed or was overtaken. */
-  async #readSplitSources(partyId: string): Promise<boolean> {
+  async #readSplitSources(partyId: string): Promise<void> {
     this.#splitReadAbort?.abort();
     const controller = (this.#splitReadAbort = new AbortController());
     const generation = ++this.#splitReadGeneration;
-    this.#splitBillsSeen = billsSeen(this.partyBills);
+    this.#splitReadAgainst = {
+      bills: billsSeen(this.partyBills),
+      revision: this.orderParty?.revision,
+    };
     try {
       const read = await this.api.getSplitSources(partyId, { signal: controller.signal });
       if (generation === this.#splitReadGeneration) {
@@ -15882,33 +15877,33 @@ export class TillApp extends LitElement {
         this.#splitRowsOwed = false;
         this.splitRowsUnread = null;
         this.#followSplitAnswer(read);
-        return true;
       }
     } catch {
       if (generation === this.#splitReadGeneration) {
         this.#splitReadAbort = undefined;
-        this.#splitBillsSeen = undefined;
+        this.#splitReadAgainst = undefined;
         if (this.splitRead === null) this.splitRead = "failed";
         if (this.#splitRowsOwed) this.splitRowsUnread = this.splitRefusal;
         this.#splitRowsOwed = false;
       }
     }
-    return false;
   }
 
   #leaveSplitRead(): void {
     this.#splitPanel = undefined;
     this.#splitReadGeneration++;
-    if (this.#splitReadAbort !== undefined) this.#splitBillsSeen = undefined;
+    if (this.#splitReadAbort !== undefined) this.#splitReadAgainst = undefined;
     this.#splitReadAbort?.abort();
     this.#splitReadAbort = undefined;
   }
 
   #followSplitBills(bills: readonly PartyBill[]): void {
-    const panel = this.#splitPanel;
-    if (panel === undefined) return;
-    if (billsSeen(bills) !== this.#splitBillsSeen) void this.#readSplitSources(panel.partyId);
-    if (this.activeTabId === undefined && billToShow(undefined, bills) !== undefined)
+    this.#followSplitSeen();
+    if (
+      this.#splitPanel !== undefined &&
+      this.activeTabId === undefined &&
+      billToShow(undefined, bills) !== undefined
+    )
       void this.#reloadSplitParty();
   }
 
@@ -15929,7 +15924,6 @@ export class TillApp extends LitElement {
     const panel = this.#splitPanel;
     if (panel === undefined || panel.reloading === true) return;
     panel.reloading = true;
-    this.splitReloading = true;
     const visit = this.#orderVisit;
     try {
       // Only leaving ends this: a panel closed during these reads leaves a party that still needs
@@ -15941,23 +15935,40 @@ export class TillApp extends LitElement {
       const answer = await this.#loadPartyBills(undefined, false, true);
       if (visit !== this.#orderVisit) return;
       await this.#followBillsRead(answer, before, true);
-      // Whichever panel is open now draws what this read found, so Split acts on that, not on what
-      // it opened with. A sources read still out may have started before the floor read, so Split
-      // waits for one that started after it.
-      const open = this.#splitPanel;
-      if (open !== undefined && answer.bills !== null) {
-        if (this.#splitReadAbort === undefined) this.#retakeSplitRevision(open.prompt);
-        else await this.#readRowsAndRevision(open.prompt, open.partyId);
-      }
     } finally {
       panel.reloading = false;
-      this.splitReloading = this.#splitPanel?.reloading === true;
     }
   }
 
+  /** What a press needs of its panel. While the panel is open or a refusal has brought it back, the
+   * visit, the bill on screen and its sync may have moved under it, and the press names its own bills.
+   * A prompt carried anywhere else keeps what it opened with, for the comparison to refuse. */
+  #splitPress(prompt: object, partyRevision: number): PartyComposition | null | undefined {
+    const opened = this.#splitTablePrompts.get(prompt);
+    if (opened == null) return opened;
+    const revisions = { ...opened.revisions, expectedPartyRevision: partyRevision };
+    return this.#splitPanel?.prompt === prompt
+      ? {
+          ...opened,
+          revisions,
+          visit: this.#orderVisit,
+          sync: this.#draftSync,
+          billId: this.activeTabId,
+        }
+      : { ...opened, revisions };
+  }
+
+  /** A party gaining its first bill moves these behind a press, which names its own bills. */
+  #withFirstBill(asked: PartyComposition): PartyComposition {
+    return asked.billId === undefined
+      ? { ...asked, sync: this.#draftSync, billId: this.activeTabId }
+      : asked;
+  }
+
   async #onSplitTable(event: Event, confirmed?: PartyComposition): Promise<void> {
-    const { tableId, selection, guestCounts, prompt } = (event as CustomEvent<SplitTableDetail>)
-      .detail;
+    const { tableId, selection, guestCounts, prompt, partyRevision } = (
+      event as CustomEvent<SplitTableDetail>
+    ).detail;
     const party = this.orderParty;
     if (party === null) return;
     const looseIds = selection.loose.map((source) => source.billId);
@@ -15970,12 +15981,12 @@ export class TillApp extends LitElement {
       confirmed ??
       (prompt === undefined
         ? this.#partyComposition([...selection.wholeBillIds, ...looseIds])
-        : this.#splitTablePrompts.get(prompt));
+        : this.#splitPress(prompt, partyRevision));
     if (asked == null) {
       this.errorKey = { code: "draft.out_of_date" };
       return;
     }
-    if (!this.#billCompositionUnchanged(asked)) return;
+    if (!this.#billCompositionUnchanged(this.#withFirstBill(asked))) return;
     const stopIfChanged = async (): Promise<boolean> => {
       const changed =
         observed === undefined ? undefined : this.#splitBillChanged(observed, selected);
@@ -15998,7 +16009,8 @@ export class TillApp extends LitElement {
       ))
     )
       return;
-    if (!this.#billCompositionUnchanged(asked) || (await stopIfChanged())) return;
+    if (!this.#billCompositionUnchanged(this.#withFirstBill(asked)) || (await stopIfChanged()))
+      return;
     const sent = asked.sent;
     const visit = this.#orderVisit;
     this.errorKey = undefined;
@@ -16041,7 +16053,7 @@ export class TillApp extends LitElement {
     selection: SplitSelection,
   ): Promise<void> {
     const looseIds = selection.loose.map((source) => source.billId);
-    const live = () => this.#billCompositionCurrent(asked);
+    const live = () => this.#billCompositionCurrent(this.#withFirstBill(asked));
     const sent = asked.sent;
     if (!live()) return;
     if (this.activeTableId === tableId)
@@ -16174,10 +16186,8 @@ export class TillApp extends LitElement {
       this.errorKey = banner;
       return;
     }
-    if (prompt !== undefined) {
-      this.#retakeSplitRevision(prompt);
-      if (said !== undefined && side === undefined) this.#splitObservations.delete(prompt);
-    }
+    if (prompt !== undefined && said !== undefined && side === undefined)
+      this.#splitObservations.delete(prompt);
     this.errorKey = undefined;
     this.#splitRefusalSaid = said;
     const counts = {
@@ -19771,7 +19781,6 @@ export class TillApp extends LitElement {
       .splitRefusal=${this.splitRefusal}
       .splitRowsUnread=${this.splitRowsUnread}
       .splitRead=${this.splitRead}
-      .splitReloading=${this.splitReloading}
       .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
       .personId=${this.#draftSync?.personId ?? this.#sessionPersonId}
       .busy=${this.submitting || this.invoiceRecipientReading}
@@ -19920,7 +19929,6 @@ export class TillApp extends LitElement {
           .splitRefusal=${this.splitRefusal}
           .splitRowsUnread=${this.splitRowsUnread}
           .splitRead=${this.splitRead}
-          .splitReloading=${this.splitReloading}
           .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
           .personId=${this.#draftSync?.personId ?? this.#sessionPersonId}
           .busy=${this.submitting || this.invoiceRecipientReading}

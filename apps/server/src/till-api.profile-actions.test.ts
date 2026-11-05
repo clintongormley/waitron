@@ -535,7 +535,7 @@ describe("A803 split: the panel's read", () => {
       `/api/parties/${id}/split-sources`,
     );
     expect(answer.status).toBe(200);
-    expect(answer.body).toEqual({ bills: [] });
+    expect(answer.body).toEqual({ partyRevision: 0, bills: [] });
   });
 });
 

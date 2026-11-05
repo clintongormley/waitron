@@ -666,15 +666,9 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   `split-guests-dialog.ts:66`); leaving starts blank; blank records no count, and neither field has a placeholder (the pay screens' "No line" is about the receipt). Invalid text marks
   the field on Split, with `form.fix_fields` at the bottom and Split disabled until fixed; a server
   refusal of a count (`refusedSplitSide`, `till-app.ts:731`) goes under its field with `form.fix_fields`
-  at the bottom (`design-system.md:2666-2669`) and keeps Split enabled. While the panel's read has not
-  answered, or the screen does not know the person yet, no rows draw and Split is quiet and disabled (the Forms contract's "waits for a load"): with no person every draft would read as someone else's, and the rows would say so. The person is the draft sync's; with no sync, as for a party with no bill, it is `#sessionPersonId`, which is what `#openDraft` builds the sync from, so that party's panel draws no bills, with Split primary, the leaving table's line `table.split_empty_bill` and the staying table's `table.split_nothing_to_pay`: with no bill leaving, the server gives the staying party no bill (`ensureFamilyBill` runs only when one left; `till-api.table-actions.test.ts`'s no-bill case). It is not `operatorPersonId`, which moves only once a sign-in has loaded where `#sessionPersonId` moves at its start. Sign-out separates neither: both keep the last person, with the screen out of the page by then (Task 12a's fix round). While the panel is open, a bills read that shows a bill's `revision`, `status`, `outstanding` or `hasPayments` changed reads again, because a part payment leaves `revision` as it was (run in Task 12a's review) and presenting a bill sets only its status (`markOrderPlaced`, read). Those bills reads come from the draft's timer. A party with no sync has no draft, so while its panel is open the app keeps the same 15-second read going, and stops it when the panel is left. A read that shows such a party a bill, or a panel answer listing a bill the app's list lacks, reloads the party (`#reloadSplitParty`: the floor, the bills, then `#followBillsRead`'s opening rule), which shows that bill, makes the sync and brings the drafts. So the party stops being a special case the moment it has a bill, and a bill someone else is working on is held as on any other party (D21). This reaches a bills list that already held the bill from one of this till's own writes, at the panel's next answer, and Back and the same table. Between that answer and the drafts' first read the rows draw as a fresh sync's do, and D21 holds a tick taken meanwhile. The reload's bills read is a background one: if it fails the rows stay and the timer's next read comes back here. The server's revision check stands behind all of it: a Split at the panel's revision after another till gave the party a bill answers 409 `party.out_of_date` (run on both routes by which a party gains a bill, Task 12a's fix review). A party with a sync whose only bill leaves has its panel closed, as any change of the bill on screen does. If the panel's first read
-  fails, that is a load failure, not a check of the form, so it shows at once: `table.split_read_failed` at
-  the bottom, with Split still quiet. Only the first read does that: a later read that fails keeps the last
+  at the bottom (`design-system.md:2666-2669`) and keeps Split enabled. While the panel's read has not answered, or the screen does not know the person yet, no rows draw and Split is quiet and disabled (the Forms contract's "waits for a load"): before a first answer there is nothing for a press to send (D16), and with no person every draft would read as someone else's, and the rows would say so. The person is the draft sync's; with no sync, as for a party with no bill, it is `#sessionPersonId`, which is what `#openDraft` builds the sync from, so that party's panel draws no bills, with Split primary, the leaving table's line `table.split_empty_bill` and the staying table's `table.split_nothing_to_pay`: with no bill leaving, the server gives the staying party no bill (`ensureFamilyBill` runs only when one left; `till-api.table-actions.test.ts`'s no-bill case). It is not `operatorPersonId`, which moves only once a sign-in has loaded where `#sessionPersonId` moves at its start. Sign-out separates neither: both keep the last person, with the screen out of the page by then (Task 12a's fix round). While the panel is open, a bills read that shows a bill's `revision`, `status`, `outstanding` or `hasPayments` changed reads again, because a part payment leaves `revision` as it was (run in Task 12a's review) and presenting a bill sets only its status (`markOrderPlaced`, read). Those bills reads come from the draft's timer. A party with no sync has no draft, so while its panel is open the app keeps the same 15-second read going, and stops it when the panel is left. A read that shows such a party a bill, or a panel answer listing a bill the app's list lacks, reloads the party (`#reloadSplitParty`: the floor, the bills, then `#followBillsRead`'s opening rule), which shows that bill, makes the sync and brings the drafts. So the party stops being a special case the moment it has a bill, and a bill someone else is working on is held as on any other party (D21). This reaches a bills list that already held the bill from one of this till's own writes, at the panel's next answer, and Back and the same table. Between that answer and the drafts' first read the rows draw as a fresh sync's do, and D21 holds a tick taken meanwhile. The reload's bills read is a background one: if it fails the rows stay and the timer's next read comes back here. The server's revision check stands behind all of it: a Split at the panel's revision after another till gave the party a bill answers 409 `party.out_of_date` (run on both routes by which a party gains a bill, Task 12a's fix review). A party with a sync whose only bill leaves has its panel closed, as any change of the bill on screen does. If the panel's first read fails, that is a load failure, not a check of the form, so it shows at once: `table.split_read_failed` at the bottom, with Split still quiet and no hint above the rows that are not there. Only the first read does that: a later read that fails keeps the last
   rows, says nothing and leaves Split as it was, because a request's failure never disables the action. A
-  drafts read that fails while the panel is open says nothing either, and the next timed read tries again. While
-  the app brings a party's first bill in behind the panel its sync, its bill on screen and its revision are all
-  moving, so Split is quiet and disabled until `#reloadSplitParty` has finished with the composition (`splitReloading`,
-  the Forms contract's "waits for a load"). If that read's floor gives the table on screen to another party, the
+  drafts read that fails while the panel is open says nothing either, and the next timed read tries again. Bringing a party's first bill in behind the panel holds nothing: a press while those reads are out sends the rows on screen, and the server judges it (D16). If that read's floor gives the table on screen to another party, the
   panel closes with the party and the screen opens that party's bill.
   Task 15 writes this into Forms. Enter submits from either stepper (`submitOnEnter`, as the window does). Split is primary
   from the start: "nothing ticked" is a valid split (spec §3.7 case 4).
@@ -755,8 +749,8 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   | Code | The sentence | What is read again |
   | --- | --- | --- |
   | `management.request_invalid` naming `guestCounts.staying` or `.leaving` | `seat.guest_count_invalid` under that stepper | nothing; the observation (D20) stays |
-  | no `code`: the request failed or its reply was lost | Order and floor are read first. If the party no longer holds the table, the split went through: no message, no panel, and D17 follows it. Otherwise `table.error` | order and floor, then the sources on reopening if the bills list moved (below) |
-  | `party.out_of_date` | `#onTableRefusal`'s words | order and floor, then the sources on reopening if the bills list moved (below) |
+  | no `code`: the request failed or its reply was lost | Order and floor are read first. If the party no longer holds the table, the split went through: no message, no panel, and D17 follows it. Otherwise `table.error` | order and floor, then the sources on reopening if the bills list or the revision moved (below) |
+  | `party.out_of_date` | `#onTableRefusal`'s words | order and floor, then always the sources on reopening: the server has said the rows are behind (below) |
   | `draft.taken_over` | If the read shows the bill held: D21's state, with its sentence and rows. If that read fails or shows none: `table.split_changed` naming the refusal's `billId`, with Split enabled | drafts |
   | `draft.out_of_date`, and the till's own comparison at Send (D20) | `table.split_changed` naming the bill in its params. If the read shows that bill held, D21's state and sentence instead | drafts |
   | `tab.line_not_found`, `tab.not_open` | `table.split_changed` naming the bill (`tabId` in its params, `errors.ts:755`, `:760`) | bills, sources |
@@ -766,27 +760,41 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   | `sale.total_exceeds_simplified_limit` | Its existing words (in `TABLE_REFUSALS`, `till-app.ts:620`) | nothing |
   | anything else, including another `management.request_invalid` and a refusal carrying `recoveryUrl` | `tableWriteError`, through `errorText(…, "panel")` | nothing |
 
-  **What the rows were read against.** The panel's rows describe the read they came from, and a press does not
-  carry a revision past a change those rows have not shown. This rests on the bills list moving whenever a dish
-  does (measured on `move-dishes` and a new round; a rename moves the revision alone, and the rows do not change).
-  The app keeps the bills list the sources were last read against (`#splitBillsSeen`)
-  across the closed panel, and a list read while the panel is closed, the different-people question included, does
-  not count as seen. A panel that reopens compares, and reads the sources if the list differs. A row above that
-  reads no sources, with no change to the list, still reads none. A sources read that fails, or that the panel's
-  closing drops, counts as not seen, so the next timed read tries again. A bills read that fails counts as not seen
-  too, whoever asked for it, because the floor may already have moved the party's revision and no list says whether
-  the rows moved with it. So when a refusal's bills read fails, the reopening reads the sources, even if nothing had
-  changed; once they answer, the panel shows them and the next press carries the floor's revision. If that sources
-  read fails as well, the old rows stay under `table.reread_failed` for `party.out_of_date` (fix round B: "so it has
-  been reloaded" was not true of them) or `table.error` for a lost reply, Split stays enabled, and a press carries the
-  old revision for the server to judge. The next timed read brings the rows without moving that revision, and
-  `party.out_of_date`'s own sentence comes back with them; if the server refuses the press, that refusal's reopening
-  brings both. A reopening takes the revision from before its sources read, not
-  after it. `#reloadSplitParty` keeps to the same rule: if a sources read is still out when its reads end, that read
-  may have started before its floor read, so it is read again and Split stays disabled until that answers; the press
-  then carries the revision from before it, and if it fails, the old revision. A floor read that fails while the panel
-  is open or due to reopen keeps the last floor, as a failed bills read keeps the last list: the panel names its
-  tables from the floor, and comparing against an empty floor would say the party has gone from a table it holds.
+  **One snapshot** (fix round C's ruling). The panel's rows and the revision a press sends are one value: the
+  sources answer, whose `partyRevision` the route reads in the rows' own transaction. It is written in one place,
+  where a sources read lands (`#readSplitSources`), and emptied when a panel opens afresh or the party changes. The
+  screen sends the revision of the answer drawing its rows in `split-table`'s `partyRevision`, and the app sends that;
+  the different-people question keeps what the press that raised it carried.
+
+  Nothing else writes it. A floor read, a bills read, a refusal, a reopening, a first bill, a take-over and the till's
+  own stop at Send can only start a read. `#followSplitSeen` runs whenever `orderParty` or `partyBills` changes, and
+  starts one when the bills list differs from the one the last read started against, or the party's revision differs
+  from both that read's start and the rows' own. The list stays in the rule because a part payment leaves the revision
+  as it was (run in Task 12a's review). A read that fails, or that the panel's closing drops, counts as not started, so
+  the next timed bills read tries again. The record of what the last read started against outlives the panel, so what
+  is read while it is closed does not count as seen. A panel that reopens compares the same way. A row above that reads
+  no sources, with nothing seen to have moved, still reads none, except `party.out_of_date`, which always reads.
+
+  No read holds Split. A press while a read is out, after one failed, or under one that never answers sends the rows'
+  revision. If the rows are stale the server answers `party.out_of_date`, the panel reopens with the sentence, and it
+  reads (real-route case: refused 409, read, then 200 at that read's revision). So a failed or hung read costs a
+  refusal. If the read after that refusal fails too, the old rows stay under `table.reread_failed` for
+  `party.out_of_date` (fix round B: "so it has been reloaded" was not true of them) or `table.error` for a lost reply,
+  and the next read that answers brings the rows and their revision together, and `party.out_of_date`'s own sentence
+  back. `table.reread_failed` reaches the foot from that `party.out_of_date` row alone, through
+  `splitRowsUnreadSentence`, so a change of its words is one line. A floor read that fails while the panel is open or
+  due to reopen keeps the last floor, as a failed bills read keeps the last list: the panel names its tables from the
+  floor, and comparing against an empty floor would say the party has gone from a table it holds.
+
+  **Edit states do not follow this rule, because D20's comparison needs otherwise.** It asks what happened to a bill
+  since the waiter ticked it, so each state is recorded per tick from the drafts read, and the rows carry none. That
+  leaves no gap for a dish: an order sent moves the party's revision as well (real-route case, whatever edit state the
+  press carries, refused 409).
+
+  **What this does not reach.** Before a first answer there is no snapshot, so a first read that never answers leaves
+  a blank panel with Split quiet and no words. A refusal's own floor or bills read that never answers keeps the panel
+  closed and the sentence unsaid until it ends, because the sentence comes from those reads. A reload whose floor or
+  bills read never answers starts no second reload on that panel, while the rows, their reads and Split go on.
 
   **Refund on the bill the refusal names.** `bill.received_exceeds_total` names its bill
   (`workingOrderId`, `errors.ts:608`), and a loose source may be any bill. So for a split: `CounterError`'s
@@ -839,15 +847,10 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   table step `table.split_table_heading` and `table.split_guests_confirm` "Split" stay.
 
   **`split-table-open`, `prompt` and `#splitTablePrompts` stay, because their guard stays** (A773 §6;
-  finding 15). What they hold changes, because a bill can now be ticked long after the panel opened:
-  - The opening composition from `#partyComposition([])`: API, session, visit, party, bill on screen,
-    party revision. A prompt carried across a bill switch or to a replacement API sends nothing, as today.
+  finding 15). What they hold changes, because a bill can now be ticked long after the panel opened:  - The opening composition from `#partyComposition([])`: API, session, visit, party, bill on screen, written once, when the panel opens. The revision a press sends is not taken from it (D16). A prompt carried across a bill switch or to a replacement API sends nothing, as today.
     Not `#billComposition([])`, which is null with no bill on screen, so Split on a party with no bill would
     stop at `draft.out_of_date` (run at Task 12a's fix review, N4, and Task 12b's, I1). That does not let a
-    ticked bill past: its observation is what stops it, recorded as missing when it has no edit state. A party
-    gaining its first bill with the panel open (D14) has its sync, bill on screen and revision all move, so
-    `#reloadSplitParty` replaces the composition under the panel's prompt once those rows are read (D16): the waiter now sees them. A panel
-    closed during those reads, by the floor or by the waiter, does not stop them, because the party still needs its
+    ticked bill past: its observation is what stops it, recorded as missing when it has no edit state. A party gaining its first bill with the panel open (D14) has its sync and bill on screen move under the panel, and a press names its own bills, so a press on a prompt whose panel the app is watching takes those two as they are now (`#splitPress`), and one made with no bill on screen still stands once the first bill has arrived (`#withFirstBill`). A panel closed during those reads, by the floor or by the waiter, does not stop them, because the party still needs its
     bill and sync. Only leaving the table does.
   - One observation per selected bill. The screen dispatches `split-table-observe { prompt, billIds }`
     whenever the set of whole bills and loose sources changes, `#tidySplit`'s changes included, and when a
@@ -863,15 +866,12 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   - At Send the app compares the selected bills only. One missing or moved sends no request and goes through
     D16's `table.split_changed` row, with the panel reopened.
   - A refused count keeps the observation, so a change made while the waiter corrects the count is still
-    refused (`till-app-parties.test.ts:12078`). It retakes the composition all the same, as every other
-    reopening does, so the retry after a bill switch is not stopped in silence. A refusal with words that names
+    refused (`till-app-parties.test.ts:12078`). The app watches the reopened panel's prompt as it does every reopening's, so the retry after a bill switch is not stopped in silence. A refusal with words that names
     no count clears the observations after its re-read, and the reopened panel's `split-table-observe` records
     new ones, so the waiter can retry. Cancelling the different-people question told the waiter nothing, so it
     keeps them.
-  - The composition's party revision catches up only once the rows have been read after the bills list the
-    reopening found (D16). The waiter is looking at the new state from that moment. Pressed sooner, or after that
-    read failed, Split sends the old revision and the server judges it, because a whole-bill tick has nothing
-    else to stop a split of a dish the rows do not show.
+  - A press carries the rows' revision (D16), whenever it is pressed, because a whole-bill tick has nothing else to
+    stop a split of a dish the rows do not show.
   - A take-over from the panel replaces that bill's record with `expectedEditFor` after the take-over, because the waiter
     has just acted on that state (D18, Task 12e). The screen's own `table.split_changed` stop does the same for the bill it names, through `split-table-stopped`, or the app's comparison would stop that bill again in the same words where D21 says one press. No other bill's record moves.
   - Worked example: Clint ticks Bill 2 whole while its unsent order is his own. His other device saves more
@@ -914,8 +914,7 @@ Changing from B to A later removes one call in `splitTable` and changes those th
     receives (`design-system.md:2888`). Enter from a stepper does nothing, because `submitOnEnter` skips a
     disabled button (`packages/ui-core/src/submit-on-enter.ts:35`). A `split-table` event carrying an old
     `prompt` meets D20's comparison and sends nothing. A request already on its way when the order arrived is
-    refused by the server (`draft.out_of_date`, D16), and its re-read brings the panel to this same state.
-  - **Forms.** Split is held by the state of a row the waiter chose, A427's rule for a button its row's own state
+    refused by the server (`draft.out_of_date`, D16), and its re-read brings the panel to this same state.  - **Forms.** A read out never holds Split (D16). Only this does, beside a take-over waiting for its answer and a count marked invalid. Split is held by the state of a row the waiter chose, A427's rule for a button its row's own state
     rules out (`design-system.md:2909-2912`), not by a refusal, so "a request refusal never disables the action"
     stands: if the read after a refusal fails, no bill shows held and Split stays enabled. The sentence shows
     before any press because a disabled button with no reason is a dead end, and it reports what someone else
@@ -952,7 +951,7 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   **The order two reads arrive in can cause this too.** Rows come from `splitRead` and `partyDrafts`, read
   separately (Task 12a). If this person's own order is sent from another device and the drafts read arrives
   first, the bill still lists only the earlier dishes, so every dish looks picked and the bill goes whole, named
-  once. The bills read then brings the dish just sent, and the whole bill takes it, naming nothing. A waiter
+  once. The next sources read then brings the dish just sent, and the whole bill takes it, naming nothing. A press before that read lands carries the rows' revision, which the send has moved past, so the server refuses it (D16). A waiter
   who chose two dishes can therefore send the bill whole, with a dish they never saw on the panel, after one
   `table.split_changed` and with the new total in the summary. With the reads the other way round the new dish
   is an unpicked row and the picks stay loose. These are two measurements put together
@@ -979,6 +978,7 @@ Changing from B to A later removes one call in `splitTable` and changes those th
 | Board 10 greys a paid dish and gives it a `paid` chip | Ordinary text, a grey tick and `Paid` under it; pale only when the whole bill is ticked | The picker slice 4a landed; Move dishes draws the same |
 | Boards 08 and 10 draw each bill as a card, with lines between its dishes | The shaded header alone, in the panel's own border | Fix round B's ruling asks for the header alone |
 | Board 10 puts the holder and Take over in the bill's header, and `€20.00 paid` beside its name | The holder's row under the header, `{amount} paid` beside the total | As built in Task 11d; fix round B's ruling did not move it |
+| Board 09 marks the bill a split makes `new` | Not drawn | It needs a stored fact and new words. The leaving table's bills are read later, and by any till, since the till stays with the staying party (D17), and `PartyBill` says nothing to tell a made bill from one that moved whole; a new column is under the A1308 hold. The till has no such word either: `table.new_bill` is the "+ New bill" button. For the owner's words, if wanted once the hold lifts |
 | Board 08 lists each table's guests on its own row, with Cancel | The shared guests field side by side, with Back | `guestsStepper` is the shared field (`widgets/guest-count.ts`); Back is the action panel's own button |
 
 ## Current code map (main `4259a040d2`)
@@ -1044,7 +1044,7 @@ prints" that slip, and spec §3.7, four days later, ended it.
 | 18b | `till-app-parties.test.ts` (19 `split-table` emits, stub `:321`), `till-app-table-service.test.ts` (4 emits; stub `:293`; row `:1147`) | detail `{ tableId, selection, guestCounts }`; the old `billId` shape keeps working until then. `:2382` is not here: row 24 moves it | 14a |
 | 19 | `screens/till-table-order-screen.a11y.test.ts:945-952` | scans the new panel, with a part-paid bill, a take-over row and a whole bill | 11a |
 | 20 | `.table-menu.test.ts:584-600` | the second step is the picker; Escape returns to the tables | 11a |
-| 21 | `.actions-unsaved.test.ts:211-240` | ticks and counts are protected; Split submits with no question | 11b |
+| 21 | `.actions-unsaved.test.ts:211-240` | ticks and counts are protected; Split submits with no question; its `detail` also carries the rows' `partyRevision` (D16, fix round C) | 11b |
 | 22 | `till-app-parties.test.ts:11914-12123`, ten cases | moved, under their titles: "Moved till-app cases" | 12c |
 | 23 | `till-app-parties.test.ts:1902-1909`, the Split a table row of `:1910` | moved: "Moved till-app cases" | 12d, removed 14a |
 | 24 | `till-app-parties.test.ts:2359-2427` | moved: "Moved till-app cases" | 12d, removed 14a |

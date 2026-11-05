@@ -96,6 +96,7 @@ function balance(workingOrderId: string, total: string): BillBalance {
 }
 
 const answered = (): SplitSources => ({
+  partyRevision: 3,
   bills: [
     { billId: "wo-4", lines: [dish("soup", 1)], balance: balance("wo-4", "10.00") },
     { billId: "b2", lines: [dish("steak", 1)], balance: balance("b2", "20.00") },
@@ -531,7 +532,7 @@ describe("till-app: the read behind Split a table's panel", () => {
         .fn()
         .mockResolvedValue([table("t4", "4", noBill), table("t5", "5", noBill), table7]),
       getPartyBills: vi.fn().mockResolvedValue([]),
-      getSplitSources: vi.fn().mockResolvedValue({ bills: [] }),
+      getSplitSources: vi.fn().mockResolvedValue({ partyRevision: 3, bills: [] }),
     };
     const text = (el: TillApp, selector: string) =>
       q(el, selector)!.textContent!.replace(/\s+/g, " ").trim();
@@ -590,10 +591,11 @@ describe("till-app: the read behind Split a table's panel", () => {
           .fn()
           .mockResolvedValue([table("t4", "4", noBill), table("t5", "5", noBill), table7]),
         getPartyBills: vi.fn().mockResolvedValue([]),
-        getSplitSources: vi.fn().mockResolvedValue({ bills: [] }),
+        getSplitSources: vi.fn().mockResolvedValue({ partyRevision: 3, bills: [] }),
       });
       const firstBill = () => [partyBill("b9", 1, "20.00")];
       const firstBillRead = (): SplitSources => ({
+        partyRevision: 3,
         bills: [{ billId: "b9", lines: [dish("steak", 1)], balance: balance("b9", "20.00") }],
       });
       const tick = (el: TillApp, billId: string) =>
@@ -619,9 +621,8 @@ describe("till-app: the read behind Split a table's panel", () => {
         const lost = () => new TypeError("Failed to fetch");
         const heading = (el: TillApp) => q(el, "[data-split-pick] h2")!.textContent ?? "";
 
-        it("Split waits while the first bill's reads are out, then is primary and sends", async () => {
+        it("Split stays primary while the first bill's reads are out, and a press goes to the server", async () => {
           fakeTimers();
-          let answerDrafts = () => {};
           const el = await mounted("desktop", {
             ...noBillApi(),
             splitTable: vi.fn().mockResolvedValue({ partyId: "v-split", billIds: [] }),
@@ -630,21 +631,11 @@ describe("till-app: the read behind Split a table's panel", () => {
           const reading = server.listDrafts("v1");
           anotherTillStartsTheBill();
           server.drafts.length = 0;
-          api.listDrafts!.mockImplementationOnce(
-            () =>
-              new Promise((resolve) => {
-                answerDrafts = () => void reading.then(resolve);
-              }),
-          );
+          api.listDrafts!.mockImplementationOnce(() => reading.then(() => new Promise(() => {})));
 
           await rereadBills(el, firstBill());
           expect(tableOrder(el)!.orderId).toBe("b9");
           expect(q(el, "[data-split-pick]")).not.toBeNull();
-          expect(splitButton(el).variant).toBe("secondary");
-          expect(splitButton(el).disabled).toBe(true);
-
-          answerDrafts();
-          await flush(el, 6);
           expect(splitButton(el).variant).toBe("primary");
           expect(splitButton(el).disabled).toBe(false);
 
@@ -653,9 +644,8 @@ describe("till-app: the read behind Split a table's panel", () => {
           expect(api.splitTable).toHaveBeenCalledOnce();
         });
 
-        it("on a handheld, Split waits while the first bill's reads are out, then is primary", async () => {
+        it("on a handheld, Split stays primary while the first bill's reads are out", async () => {
           fakeTimers();
-          let answerDrafts = () => {};
           const el = await mounted("handheld", {
             ...noBillApi(),
             splitTable: vi.fn().mockResolvedValue({ partyId: "v-split", billIds: [] }),
@@ -664,27 +654,16 @@ describe("till-app: the read behind Split a table's panel", () => {
           const reading = server.listDrafts("v1");
           anotherTillStartsTheBill();
           server.drafts.length = 0;
-          api.listDrafts!.mockImplementationOnce(
-            () =>
-              new Promise((resolve) => {
-                answerDrafts = () => void reading.then(resolve);
-              }),
-          );
+          api.listDrafts!.mockImplementationOnce(() => reading.then(() => new Promise(() => {})));
 
           await rereadBills(el, firstBill());
           expect(q(el, "[data-split-pick]")).not.toBeNull();
-          expect(splitButton(el).variant).toBe("secondary");
-          expect(splitButton(el).disabled).toBe(true);
-
-          answerDrafts();
-          await flush(el, 6);
           expect(splitButton(el).variant).toBe("primary");
           expect(splitButton(el).disabled).toBe(false);
         });
 
-        it("a panel opened again while that read is out waits for it, then acts on what it brought", async () => {
+        it("a panel opened again while that read is out can be pressed once its rows are drawn", async () => {
           fakeTimers();
-          let answerLines = () => {};
           const el = await mounted("desktop", {
             ...noBillApi(),
             splitTable: vi.fn().mockResolvedValue({ partyId: "v-split", billIds: [] }),
@@ -692,19 +671,10 @@ describe("till-app: the read behind Split a table's panel", () => {
           await toPanel(el);
           anotherTillStartsTheBill();
           server.drafts.length = 0;
-          api.getTabLines!.mockImplementationOnce(
-            () =>
-              new Promise((resolve) => {
-                answerLines = () => resolve({ lines: [], revision: 0 });
-              }),
-          );
+          api.getTabLines!.mockImplementationOnce(() => new Promise(() => {}));
           await rereadBills(el, firstBill());
-          expect(splitButton(el).disabled).toBe(true);
 
           await backAndAgain(el);
-          await flush(el, 6);
-          expect(splitButton(el).disabled).toBe(true);
-          answerLines();
           await flush(el, 6);
 
           expect(splitButton(el).variant).toBe("primary");
@@ -743,7 +713,7 @@ describe("till-app: the read behind Split a table's panel", () => {
           expectHeldByLuis(el);
         });
 
-        it("the read the first bill started is still out when the reload ends: Split waits for one made after the floor's", async () => {
+        it("the read the first bill started is still out when the floor's revision lands: another starts, Split stays pressable, and the press carries the rows", async () => {
           fakeTimers();
           const el = await mounted("desktop", {
             ...noBillApi(),
@@ -765,18 +735,17 @@ describe("till-app: the read behind Split a table's panel", () => {
 
           expect(tableOrder(el)!.party?.revision).toBe(9);
           expect(held.calls).toHaveLength(2);
-          expect(splitButton(el).disabled).toBe(true);
-
-          held.calls[1]!.answer(firstBillRead());
-          await flush(el, 6);
           expect(splitButton(el).disabled).toBe(false);
+
+          held.calls[1]!.answer({ ...firstBillRead(), partyRevision: 9 });
+          await flush(el, 6);
           await press(el, "[data-split-confirm]");
           await flush(el, 6);
 
           expect(api.splitTable!.mock.calls[0]![3]).toBe(9);
         });
 
-        it("the bills read failing leaves the old revision on the composition", async () => {
+        it("the bills read failing leaves the rows and their revision as they were", async () => {
           fakeTimers();
           const el = await mounted("desktop", {
             ...noBillApi(),
@@ -803,6 +772,7 @@ describe("till-app: the read behind Split a table's panel", () => {
 
         describe("the panel closing during the reload, on the same party", () => {
           const reads = () => ({
+            partyRevision: 3,
             bills: api.getPartyBills!.mock.calls.length,
             drafts: api.listDrafts!.mock.calls.length,
           });
@@ -1102,6 +1072,7 @@ describe("till-app: the read behind Split a table's panel", () => {
     const withB7 = [...bills(), partyBill("b7", 3, "30.00")];
     api.getPartyBills!.mockResolvedValue(withB7);
     api.getSplitSources!.mockResolvedValue({
+      partyRevision: 3,
       bills: [
         ...answered().bills,
         { billId: "b7", lines: [dish("wine", 1)], balance: balance("b7", "30.00") },
@@ -1719,7 +1690,7 @@ describe("till-app: Split a table sends the selection and follows it", () => {
           .fn()
           .mockResolvedValue([table("t4", "4", noBill), table("t5", "5", noBill), table7]),
         getPartyBills: vi.fn().mockResolvedValue([]),
-        getSplitSources: vi.fn().mockResolvedValue({ bills: [] }),
+        getSplitSources: vi.fn().mockResolvedValue({ partyRevision: 3, bills: [] }),
         splitTable: vi.fn(async () => {
           api.getTablesState!.mockResolvedValue([
             table("t4", "4", staying),
@@ -2138,6 +2109,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     const el = await panelWith({
       listDrafts,
       getSplitSources: vi.fn().mockResolvedValue({
+        partyRevision: 3,
         bills: [
           answered().bills[0],
           {
@@ -2178,6 +2150,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     });
     const el = await panelWith({
       getSplitSources: vi.fn().mockResolvedValue({
+        partyRevision: 3,
         bills: [
           answered().bills[0],
           {
@@ -2210,6 +2183,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
   describe("the comparison beyond one ticked bill, and around the question", () => {
     const threeBills = () => [...bills(), partyBill("b3", 3, "5.00")];
     const threeRead = (): SplitSources => ({
+      partyRevision: 3,
       bills: [
         ...answered().bills,
         { billId: "b3", lines: [dish("tea", 1)], balance: balance("b3", "5.00") },
@@ -2226,6 +2200,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     const limited = () => ({
       getTill: vi.fn().mockResolvedValue({ ...till("till"), simplifiedInvoiceLimit: "15.00" }),
       getSplitSources: vi.fn().mockResolvedValue({
+        partyRevision: 3,
         bills: [
           { billId: "wo-4", lines: [dish("soup", 1)], balance: balance("wo-4", "10.00") },
           {
@@ -2265,6 +2240,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     it("a whole bill and a loose source: the edits go sorted by bill, not whole bills first", async () => {
       const el = await threeBillPanel({
         getSplitSources: vi.fn().mockResolvedValue({
+          partyRevision: 3,
           bills: [
             ...threeRead().bills.filter(({ billId }) => billId !== "b2"),
             {
@@ -2374,6 +2350,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
   describe("refusals", () => {
     const refused = (error: unknown) => ({ splitTable: vi.fn().mockRejectedValue(error) });
     const reads = () => ({
+      partyRevision: 3,
       bills: api.getPartyBills!.mock.calls.length,
       sources: api.getSplitSources!.mock.calls.length,
       floor: api.getTablesState!.mock.calls.length,
@@ -2457,6 +2434,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         { code: "tab.split_held_line" },
         {
           getSplitSources: vi.fn().mockResolvedValue({
+            partyRevision: 3,
             bills: [
               { billId: "wo-4", lines: longBill, balance: balance("wo-4", "160.00") },
               { billId: "b2", lines: [dish("steak", 1)], balance: balance("b2", "20.00") },
@@ -3140,7 +3118,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         const el = await panelWith(withPayments(excess("b2")));
         await tick(el, "b2");
         api.getPartyBills!.mockResolvedValue([paidBills()[0]!]);
-        api.getSplitSources!.mockResolvedValue({ bills: [answered().bills[0]!] });
+        api.getSplitSources!.mockResolvedValue({ partyRevision: 3, bills: [answered().bills[0]!] });
         await pressSplit(el);
         await flush(el, 6);
 
@@ -3157,7 +3135,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         const el = await panelWith(withPayments(excess("b2")));
         await tick(el, "b2");
         api.getPartyBills!.mockResolvedValue([paidBills()[0]!]);
-        api.getSplitSources!.mockResolvedValue({ bills: [answered().bills[0]!] });
+        api.getSplitSources!.mockResolvedValue({ partyRevision: 3, bills: [answered().bills[0]!] });
         await pressSplit(el);
         await flush(el, 6);
         refundButton(el).click();
@@ -3606,6 +3584,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         const el = await panelWith({
           ...limited(),
           getSplitSources: vi.fn().mockResolvedValue({
+            partyRevision: 3,
             bills: [
               { billId: "wo-4", lines: [dish("soup", 1)], balance: balance("wo-4", "10.00") },
               {
@@ -3655,6 +3634,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           ...limited(),
           listDrafts,
           getSplitSources: vi.fn().mockResolvedValue({
+            partyRevision: 3,
             bills: [
               { billId: "wo-4", lines: [dish("soup", 1)], balance: balance("wo-4", "10.00") },
               {
@@ -3765,7 +3745,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
             .fn()
             .mockResolvedValue([table("t4", "4", noBill), table("t5", "5", noBill), table7]),
           getPartyBills: vi.fn().mockResolvedValue([]),
-          getSplitSources: vi.fn().mockResolvedValue({ bills: [] }),
+          getSplitSources: vi.fn().mockResolvedValue({ partyRevision: 3, bills: [] }),
           ...refused({ code: "table.not_shared" }),
         });
         await toPanel(el);
@@ -3789,7 +3769,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
             .fn()
             .mockResolvedValue([table("t4", "4", noBill), table("t5", "5", noBill), table7]),
           getPartyBills: vi.fn().mockResolvedValue([]),
-          getSplitSources: vi.fn().mockResolvedValue({ bills: [] }),
+          getSplitSources: vi.fn().mockResolvedValue({ partyRevision: 3, bills: [] }),
           ...refused({ code: "table.not_shared" }),
         });
         await toPanel(el);
@@ -3815,8 +3795,9 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         return [table("t4", "4", later), table("t5", "5", later), table7];
       };
       const sentRevision = (call: number) => api.splitTable!.mock.calls[call]![3];
+      const rowsAt = (partyRevision: number) => ({ ...answered(), partyRevision });
 
-      it("party.out_of_date with the bills as they were: the second press carries the new revision", async () => {
+      it("party.out_of_date with the bills as they were: the reopening reads, and the second press carries that read's revision", async () => {
         const el = await panelWith({
           splitTable: vi
             .fn()
@@ -3825,6 +3806,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         });
         await tick(el, "b2");
         api.getTablesState!.mockResolvedValue(atRevision(7));
+        api.getSplitSources!.mockResolvedValue(rowsAt(7));
 
         await pressSplit(el);
         await pressSplit(el);
@@ -3833,9 +3815,10 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         expect(sentRevision(1)).toBe(7);
       });
 
-      it("a refused count retakes too, and keeps its observation", async () => {
+      it("a refused count's reopening reads what moved meanwhile, and keeps its observation", async () => {
         const { el, refuse } = await requestOut("b2");
         api.getTablesState!.mockResolvedValue(atRevision(7));
+        api.getSplitSources!.mockResolvedValue(rowsAt(7));
         emit(tableOrder(el)!, "name-party", { name: "Ana" });
         await flush(el, 6);
         refuse({ code: "management.request_invalid", field: "guestCounts.leaving" });
@@ -3848,7 +3831,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         expect(sentRevision(1)).toBe(7);
       });
 
-      it("the till's own comparison retakes, so its retry carries a revision a floor read moved", async () => {
+      it("the till's own stop writes no revision: its retry carries the read that a rename's floor read started", async () => {
         const { moved, listDrafts } = draftsMoving("b2");
         const el = await panelWith({
           listDrafts,
@@ -3856,6 +3839,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         });
         await tick(el, "b2");
         api.getTablesState!.mockResolvedValue(atRevision(7));
+        api.getSplitSources!.mockResolvedValue(rowsAt(7));
         emit(tableOrder(el)!, "name-party", { name: "Ana" });
         await flush(el, 6);
         moved.now = true;
@@ -4047,6 +4031,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         const el = await panelWith({
           getTill: vi.fn().mockResolvedValue({ ...till("till"), simplifiedInvoiceLimit: "15.00" }),
           getSplitSources: vi.fn().mockResolvedValue({
+            partyRevision: 3,
             bills: [
               { billId: "wo-4", lines: [dish("soup", 1)], balance: balance("wo-4", "10.00") },
               {
@@ -4077,6 +4062,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
       const lost = () => new TypeError("Failed to fetch");
       const takes = (el: TillApp) => q(el, "[data-split-takes]")?.textContent ?? "";
       const movedSources = (): SplitSources => ({
+        partyRevision: 7,
         bills: [
           { billId: "wo-4", lines: [dish("bread", 1)], balance: balance("wo-4", "10.00") },
           {
@@ -4140,6 +4126,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         const made = partyBill("b3", 3, "5.00");
         api.getPartyBills!.mockResolvedValue([...bills(), made]);
         api.getSplitSources!.mockResolvedValue({
+          partyRevision: 3,
           bills: [
             ...answered().bills,
             { billId: "b3", lines: [dish("tea", 1)], balance: balance("b3", "5.00") },
@@ -4157,6 +4144,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         const el = await panelWith({
           getTill: vi.fn().mockResolvedValue({ ...till("till"), simplifiedInvoiceLimit: "15.00" }),
           getSplitSources: vi.fn().mockResolvedValue({
+            partyRevision: 3,
             bills: [
               { billId: "wo-4", lines: [dish("bread", 1)], balance: balance("wo-4", "10.00") },
               {
@@ -4185,10 +4173,9 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
       });
 
       it.each([
-        ["party.out_of_date", { code: "party.out_of_date" }],
         ["a lost reply", lost()],
         ["table.not_shared", { code: "table.not_shared" }],
-      ])("%s with no change to the bills reads no sources", async (_name, error) => {
+      ])("%s with nothing seen to have moved reads no sources", async (_name, error) => {
         const el = await panelWith(refused(error));
         await tick(el, "b2");
         const sources = reads().sources;
@@ -4198,6 +4185,18 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
         expect(tableOrder(el)!.splitRefusal).not.toBeNull();
         expect(reads().sources).toBe(sources);
+      });
+
+      it("party.out_of_date reads the sources even with nothing seen to have moved: the server has said the rows are behind", async () => {
+        const el = await panelWith(refused({ code: "party.out_of_date" }));
+        await tick(el, "b2");
+        const sources = reads().sources;
+
+        await pressSplit(el);
+        await flush(el, 6);
+
+        expect(tableOrder(el)!.splitRefusal).not.toBeNull();
+        expect(reads().sources).toBe(sources + 1);
       });
 
       it("a row that reads the bills and the sources reads the sources once, after the bills", async () => {
@@ -4335,7 +4334,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           },
         );
 
-        it("the sources read failing as well, then a timed read: the rows show the change and the press still carries the old revision", async () => {
+        it("the sources read failing as well, then a timed read: the rows show the change and the press carries that read's revision", async () => {
           fakeTimers();
           const el = await panelWith(firstRefused({ code: "party.out_of_date" }));
           await tick(el, "b2");
@@ -4349,7 +4348,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           expect(takes(el)).toContain("30.00");
           await pressSplit(el);
 
-          expect(api.splitTable!.mock.calls[1]![3]).toBe(3);
+          expect(api.splitTable!.mock.calls[1]![3]).toBe(7);
         });
 
         it("party.out_of_date, the rows read failing: the floor answering does not make it reloaded", async () => {
@@ -4445,13 +4444,14 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           expect(reads().sources).toBe(sources + 1);
         });
 
-        it("a bills read failing behind an open panel counts too: a refusal that reads nothing still brings the rows up to the floor", async () => {
+        it("a bills read failing behind an open panel changes nothing: the floor's revision has started the read, and the press carries its answer", async () => {
           fakeTimers();
           const el = await panelWith(firstRefused({ code: "table.not_shared" }));
           await tick(el, "b2");
           api.getSplitSources!.mockResolvedValue({
+            partyRevision: 7,
             bills: [
-              ...answered().bills,
+              ...movedSources().bills,
               { billId: "b3", lines: [dish("tea", 1)], balance: balance("b3", "5.00") },
             ],
           });
@@ -4462,22 +4462,17 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           await flush(el, 6);
           expect(api.getPartyBills!.mock.calls.length).toBe(timed + 2);
           expect(tableOrder(el)!.party?.revision).toBe(7);
-          api.getPartyBills!.mockResolvedValue(bills(7));
-          api.getSplitSources!.mockResolvedValue(movedSources());
-
-          await pressSplit(el);
-          await flush(el, 6);
-
-          expect(api.splitTable!.mock.calls[0]![3]).toBe(3);
           expect(takes(el)).toContain("30.00");
+
           await pressSplit(el);
 
-          expect(api.splitTable!.mock.calls[1]![3]).toBe(7);
+          expect(api.splitTable!.mock.calls[0]![3]).toBe(7);
         });
       });
 
       describe("a reload behind the open panel", () => {
         const withNewBill = (): SplitSources => ({
+          partyRevision: 7,
           bills: [
             ...movedSources().bills,
             { billId: "b3", lines: [dish("tea", 1)], balance: balance("b3", "5.00") },
@@ -4489,6 +4484,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           partyBill("b3", 3, "5.00"),
         ];
         const newestRows = (): SplitSources => ({
+          partyRevision: 9,
           bills: withNewBill().bills.map((each) =>
             each.billId === "b2" ? { ...each, balance: balance("b2", "40.00") } : each,
           ),
@@ -4514,7 +4510,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           expect(reads().sources).toBeGreaterThanOrEqual(2);
         }
 
-        it("the rows' read failing: the press carries the old revision, not the floor's", async () => {
+        it("the rows' read failing: the press carries the rows' revision, not the floor's", async () => {
           fakeTimers();
           const el = await panelWith({});
           await tick(el, "b2");
@@ -4524,10 +4520,10 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           await pressSplit(el);
 
           expect(api.splitTable).toHaveBeenCalledOnce();
-          expect(api.splitTable!.mock.calls[0]![3]).toBe(3);
+          expect(api.splitTable!.mock.calls[0]![3]).toBe(7);
         });
 
-        it("the rows' read still out: Split waits for a read made after the floor's, then carries the floor's revision", async () => {
+        it("the rows' read still out: Split can be pressed over the rows it has, and carries the floor's revision once that read answers", async () => {
           fakeTimers();
           const el = await panelWith({});
           await tick(el, "b2");
@@ -4536,12 +4532,11 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           expect(held.calls).toHaveLength(2);
           expect(held.calls[0]!.signal?.aborted).toBe(true);
           expect(takes(el)).toContain("30.00");
-          expect(splitButton(el).disabled).toBe(true);
+          expect(splitButton(el).disabled).toBe(false);
 
           held.calls[1]!.answer(newestRows());
           await flush(el, 6);
           expect(takes(el)).toContain("40.00");
-          expect(splitButton(el).disabled).toBe(false);
 
           await pressSplit(el);
 
@@ -4549,7 +4544,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           expect(api.splitTable!.mock.calls[0]![3]).toBe(9);
         });
 
-        it("that read failing as well: Split comes back and the press carries the old revision", async () => {
+        it("that read failing as well: Split still sends, at the rows' revision", async () => {
           fakeTimers();
           const el = await panelWith({});
           await tick(el, "b2");
@@ -4564,16 +4559,16 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           await pressSplit(el);
 
           expect(api.splitTable).toHaveBeenCalledOnce();
-          expect(api.splitTable!.mock.calls[0]![3]).toBe(3);
+          expect(api.splitTable!.mock.calls[0]![3]).toBe(7);
         });
 
-        it("the bills read showing the list the rows were read against: the press carries the floor's revision", async () => {
+        it("a read that already answered at the floor's revision is not repeated when the floor lands", async () => {
           fakeTimers();
           const el = await panelWith({});
           await tick(el, "b2");
           api.getTablesState!.mockResolvedValue(atRevision(9));
           api.getPartyBills!.mockResolvedValue(movedList());
-          api.getSplitSources!.mockResolvedValueOnce(withNewBill());
+          api.getSplitSources!.mockResolvedValue({ ...withNewBill(), partyRevision: 9 });
           const before = reads().sources;
           await vi.advanceTimersByTimeAsync(15_000);
           await flush(el, 6);
@@ -4586,7 +4581,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         });
       });
 
-      it("a floor read landing while a reopening's read is out: the press carries what the floor said before that read", async () => {
+      it("a floor read landing while a reopening's read is out starts another, and only that one writes the rows and their revision", async () => {
         const el = await panelWith({
           ...firstRefused({ code: "party.out_of_date" }),
           setPartyName: vi.fn().mockResolvedValue({ revision: 9 }),
@@ -4603,13 +4598,17 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         emit(tableOrder(el)!, "name-party", { name: "Ana" });
         await flush(el, 6);
         expect(tableOrder(el)!.party?.revision).toBe(9);
+        expect(held.calls).toHaveLength(2);
         held.calls[0]!.answer(movedSources());
+        await flush(el, 6);
+        expect(takes(el)).toContain("20.00");
+        held.calls[1]!.answer({ ...movedSources(), partyRevision: 9 });
         await flush(el, 6);
         expect(takes(el)).toContain("30.00");
 
         await pressSplit(el);
 
-        expect(api.splitTable!.mock.calls[1]![3]).toBe(7);
+        expect(api.splitTable!.mock.calls[1]![3]).toBe(9);
       });
 
       it("a read out when Split was pressed is dropped, so it does not count as seen", async () => {
@@ -4698,6 +4697,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
       const el = await tickedThenHeld({
         takeOverDraft: vi.fn().mockRejectedValue({ code: "draft.out_of_date" }),
         getSplitSources: vi.fn().mockResolvedValue({
+          partyRevision: 3,
           bills: [
             { billId: "b2", lines: [dish("steak", 1)], balance: balance("b2", "20.00") },
             { billId: "wo-4", lines: longBill, balance: balance("wo-4", "160.00") },
@@ -5109,6 +5109,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     it("take-over: a bill with picks keeps them, and sends once with the new state", async () => {
       const el = await panelWith({
         getSplitSources: vi.fn().mockResolvedValue({
+          partyRevision: 3,
           bills: [
             { billId: "wo-4", lines: [dish("soup", 1)], balance: balance("wo-4", "10.00") },
             {
@@ -5170,6 +5171,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
       const el = await panelWith({
         getPartyBills: vi.fn().mockResolvedValue(three),
         getSplitSources: vi.fn().mockResolvedValue({
+          partyRevision: 3,
           bills: [
             ...answered().bills,
             { billId: "b3", lines: [dish("flan", 1)], balance: balance("b3", "30.00") },
@@ -5239,6 +5241,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
       const threeBills = () => [...bills(), partyBill("b3", 3, "30.00")];
       const threeAnswered = (): SplitSources => ({
+        partyRevision: 3,
         bills: [
           ...answered().bills,
           { billId: "b3", lines: [dish("flan", 1)], balance: balance("b3", "30.00") },
@@ -5303,6 +5306,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         );
 
       const twoDishes = (): SplitSources => ({
+        partyRevision: 3,
         bills: [
           answered().bills[0]!,
           {
@@ -5485,6 +5489,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
       });
 
       const without = (billId: string) => ({
+        partyRevision: 3,
         bills: threeAnswered().bills.filter((bill) => bill.billId !== billId),
       });
       const billsWithout = (billId: string) =>
@@ -5551,6 +5556,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
       describe("A803 split: a pick lost as the order goes", () => {
         const threeDishes = (): SplitSources => ({
+          partyRevision: 3,
           bills: twoDishes().bills.map((bill) =>
             bill.billId !== "b2"
               ? bill
@@ -5558,6 +5564,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           ),
         });
         const withDishes = (keep: string[], from: SplitSources): SplitSources => ({
+          partyRevision: 3,
           bills: from.bills.map((bill) =>
             bill.billId !== "b2"
               ? bill
@@ -5594,6 +5601,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
         describe("a whole bill and a dish reaching it", () => {
           const withWine = (from: SplitSources): SplitSources => ({
+            partyRevision: 3,
             bills: from.bills.map((bill) =>
               bill.billId !== "b2"
                 ? bill
@@ -5733,7 +5741,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         .fn()
         .mockResolvedValue([table("t4", "4", noBill), table("t5", "5", noBill), table7]),
       getPartyBills: vi.fn().mockResolvedValue([]),
-      getSplitSources: vi.fn().mockResolvedValue({ bills: [] }),
+      getSplitSources: vi.fn().mockResolvedValue({ partyRevision: 3, bills: [] }),
       splitTable: vi.fn().mockResolvedValue({ partyId: "v-split", billIds: [] }),
     });
 
@@ -5768,6 +5776,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         table7,
       ]);
       api.getSplitSources!.mockResolvedValue({
+        partyRevision: 9,
         bills: [{ billId: "b9", lines: [dish("steak", 1)], balance: balance("b9", "20.00") }],
       });
       await rereadBills(el, [partyBill("b9", 1, "20.00")]);

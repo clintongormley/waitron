@@ -216,6 +216,7 @@ it("Split a table's panel protects its ticks and counts, and Split submits with 
   const { app, screen } = await mount("split-table");
   screen.personId = "me";
   screen.splitRead = {
+    partyRevision: 3,
     bills: bills.map(({ workingOrderId }) => ({
       billId: workingOrderId,
       lines,
@@ -263,6 +264,7 @@ it("Split a table's panel protects its ticks and counts, and Split submits with 
         selection: { wholeBillIds: ["other"], loose: [] },
         guestCounts: { staying: 2, leaving: 1 },
         prompt: expect.any(Object),
+        partyRevision: 3,
       },
     },
   ]);

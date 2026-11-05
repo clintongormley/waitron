@@ -105,6 +105,7 @@ const read = (
   money: Record<string, Partial<BillBalance>> = {},
 ) =>
   ({
+    partyRevision: 3,
     bills: Object.entries(rows).map(([billId, lines]) => ({
       billId,
       lines: [...lines],
@@ -114,6 +115,7 @@ const read = (
 
 // Board 08's example: three dishes of Bill 1 go, €30, and the €67 dish stays.
 const board08 = {
+  partyRevision: 3,
   bills: [partyBill("b1", 1, "97.00"), partyBill("b2", 2, "40.00"), partyBill("b3", 3, "39.00")],
   splitRead: read(
     {
@@ -811,7 +813,7 @@ describe("Split a table's panel", () => {
   );
 
   it("a party with no bill is told its staying table is left with nothing to pay, since the server makes it no bill", async () => {
-    const el = await mountScreen({ bills: [], splitRead: { bills: [] } });
+    const el = await mountScreen({ bills: [], splitRead: { partyRevision: 3, bills: [] } });
     await toPanel(el);
 
     expect(textOf(el, "[data-split-takes]")).toBe("T8 takes an empty bill · €0.00");
@@ -886,9 +888,24 @@ describe("Split a table's panel", () => {
         selection: { wholeBillIds: ["b3"], loose: [{ billId: "b1", lineIds: ["salad"] }] },
         guestCounts: { staying: 3, leaving: 2 },
         prompt: opened[0]!.prompt,
+        partyRevision: 3,
       },
     ]);
     expect(q(el, "[data-action-panel]")).toBeNull();
+  });
+
+  it("a press carries the revision of the read drawing its rows, whatever the party says by then", async () => {
+    const el = await mountScreen();
+    const sent = heard<SplitTableDetail>(el, "split-table");
+    await toPanel(el);
+    el.party = { ...el.party!, revision: 9 };
+    el.splitRead = { ...(el.splitRead as SplitSources), partyRevision: 5 };
+    await el.updateComplete;
+
+    split(el).click();
+    await el.updateComplete;
+
+    expect(sent.map((detail) => detail.partyRevision)).toEqual([5]);
   });
 
   it("nothing ticked sends an empty selection, and blank counts as null", async () => {
@@ -906,6 +923,7 @@ describe("Split a table's panel", () => {
         selection: { wholeBillIds: [], loose: [] },
         guestCounts: { staying: null, leaving: null },
         prompt: expect.any(Object),
+        partyRevision: 3,
       },
     ]);
   });
@@ -1978,6 +1996,7 @@ describe("A803 split: Everything ticked", () => {
         selection: { wholeBillIds: ["b1", "b2", "b3"], loose: [] },
         guestCounts: { staying: 3, leaving: 2 },
         prompt,
+        partyRevision: 3,
       },
     ]);
     expect(inPanel(el)).toBe(false);
@@ -2004,23 +2023,6 @@ describe("A803 split: Everything ticked", () => {
     anyway().click();
     await settled(el);
     expect(sent).toHaveLength(1);
-  });
-
-  it("Everything ticked: a first bill's reads still out disable Split anyway until they are done", async () => {
-    const { el, sent } = await everythingTicked();
-    split(el).click();
-    await settled(el);
-    const anyway = () => q<HTMLElement & { disabled: boolean }>(el, "[data-split-anyway]")!;
-    expect(anyway().disabled).toBe(false);
-
-    el.splitReloading = true;
-    await settled(el);
-    expect(anyway().disabled).toBe(true);
-
-    el.splitReloading = false;
-    await settled(el);
-    expect(anyway().disabled).toBe(false);
-    expect(sent).toEqual([]);
   });
 
   it("Everything ticked: Enter from a stepper under the question sends nothing and moves no one", async () => {
@@ -2063,6 +2065,7 @@ describe("A803 split: Everything ticked", () => {
 
     el.bills = [...board08.bills, partyBill("b4", 4, "10.00")];
     el.splitRead = {
+      partyRevision: 3,
       bills: [
         ...board08.splitRead.bills,
         ...read({ b4: [dish("tea", 7, "10.00")] }, { b4: "10.00" }).bills,
@@ -2082,6 +2085,7 @@ describe("A803 split: Everything ticked", () => {
 
     el.bills = [...board08.bills, partyBill("b4", 4, "10.00")];
     el.splitRead = {
+      partyRevision: 3,
       bills: [
         ...board08.splitRead.bills,
         ...read({ b4: [dish("tea", 7, "10.00")] }, { b4: "10.00" }).bills,
@@ -2100,6 +2104,7 @@ describe("A803 split: Everything ticked", () => {
 
     el.bills = [...board08.bills, partyBill("b4", 4, "10.00")];
     el.splitRead = {
+      partyRevision: 3,
       bills: [
         ...board08.splitRead.bills,
         ...read({ b4: [dish("tea", 7, "10.00")] }, { b4: "10.00" }).bills,
@@ -2201,7 +2206,10 @@ describe("A803 split: a read and a selected bill", () => {
   }
 
   function withoutBills(...ids: string[]): SplitSources {
-    return { bills: board08.splitRead.bills.filter((bill) => !ids.includes(bill.billId)) };
+    return {
+      partyRevision: 3,
+      bills: board08.splitRead.bills.filter((bill) => !ids.includes(bill.billId)),
+    };
   }
 
   /** A whole bill and a bill with picks, ready for a read to reach them. */
@@ -2410,6 +2418,7 @@ describe("A803 split: a read and a selected bill", () => {
 
   it("a read and a selected bill: a whole bill the read no longer lists takes one press to say so", async () => {
     const named = {
+      partyRevision: 3,
       bills: [board08.bills[0]!, board08.bills[1]!, { ...board08.bills[2]!, billName: "Clint" }],
     };
     const { el, sent } = await selected(named);
@@ -3045,6 +3054,7 @@ describe("Split a table's mark on a dish waiting for its course", () => {
     summary: "",
   });
   const waiting = {
+    partyRevision: 3,
     bills: [partyBill("b1", 1, "20.00")],
     splitRead: read(
       {
@@ -3099,7 +3109,7 @@ describe("Split a table's mark on a dish waiting for its course", () => {
 
 describe("Split a table's hint", () => {
   it("goes when the party has no bill, as there is nothing to tick", async () => {
-    const el = await mountScreen({ bills: [], splitRead: { bills: [] } });
+    const el = await mountScreen({ bills: [], splitRead: { partyRevision: 3, bills: [] } });
     await toPanel(el);
     expect(q(el, "[data-split-hint]")).toBeNull();
     expect(textOf(el, "[data-split-takes]")).toBe("T8 takes an empty bill · €0.00");

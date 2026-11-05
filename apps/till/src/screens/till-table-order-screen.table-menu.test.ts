@@ -584,7 +584,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     it("a second step replacing the first takes focus too, and Back from it returns to the first", async () => {
       const el = await mountScreen({ bills: three });
       el.personId = "me";
-      el.splitRead = { bills: [] };
+      el.splitRead = { partyRevision: 3, bills: [] };
       await userEvent.click(menu(el));
       await userEvent.click(item(el, '[data-action="split-table"]')!);
       await el.updateComplete;

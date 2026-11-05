@@ -405,6 +405,24 @@ describe("till-split-picker", () => {
     );
   });
 
+  it("a stepper's + that makes the bill whole, leaving the row no stepper, moves focus to that row's tick", async () => {
+    const { el } = await picker([source("b1", 1, DISHES)], looseOf("b1", "c1", "c2", "h1"));
+    el.addEventListener("split-picks", (event) => {
+      el.split = (event as CustomEvent<{ split: SplitPicks }>).detail.split;
+    });
+    await el.updateComplete;
+    const rows = inner(el, "b1")!;
+    await rows.updateComplete;
+    const plus =
+      rows.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-pick-inc="c1"]')!;
+    plus.focus();
+
+    await userEvent.keyboard("{Enter}");
+
+    await expect.poll(() => el.split.whole.has("b1")).toBe(true);
+    await expect.poll(() => rows.shadowRoot!.activeElement).toBe(rowTick(el, "b1", "c1"));
+  });
+
   describe("a read that takes away the bill holding focus", () => {
     const two = () => [source("b1", 1, DISHES), source("b2", 2, DISHES)];
     const active = (el: TillSplitPicker) => el.shadowRoot!.activeElement;
@@ -416,6 +434,18 @@ describe("till-split-picker", () => {
       el.sources = [second!];
       await expect.poll(() => active(el) === header(el, "b2")).toBe(true);
       expect(inner(el, "b2")!.shadowRoot!.activeElement).toBeNull();
+    });
+
+    it("from the first of three bills, focus goes to the bill taking its place, not the last", async () => {
+      const [first, second] = two();
+      const third = source("b3", 3, DISHES);
+      const { el } = await picker([first!, second!, third]);
+      header(el, "b1").focus();
+      el.sources = [second!, third];
+      await el.updateComplete;
+      await new Promise(requestAnimationFrame);
+      await new Promise(requestAnimationFrame);
+      expect(active(el)).toBe(header(el, "b2"));
     });
 
     it("from the last bill's tick, focus goes to the bill now last", async () => {

@@ -969,6 +969,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         status: "open",
       }));
       el.splitRead = {
+        partyRevision: 3,
         bills: [billOf("wo-1", "2.00"), billOf("wo-2", "0.00"), billOf("wo-3", "0.00")],
       };
       el.partyDrafts = [
@@ -1006,7 +1007,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     ])("has no violations in Split a table's panel with %s", async (_state, over) => {
       const { el, host } = await toAction("split-table");
       el.bills = partyBills;
-      el.splitRead = { bills: [] };
+      el.splitRead = { partyRevision: 3, bills: [] };
       await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>('[data-target="t5"]')!.click();
       await el.updateComplete;

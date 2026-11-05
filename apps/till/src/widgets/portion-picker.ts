@@ -152,16 +152,17 @@ export class TillPortionPicker extends LitElement {
   @property({ attribute: false }) money: (amount: string) => string = (amount) => amount;
 
   /** The other stepper button, once this press has moved the picks: the pressed one is disabled at
-   * its limit, which would drop focus to the page. */
-  #stepperFocus?: string;
+   * its limit, which would drop focus to the page. The row's tick, when that press made the bill
+   * whole and the row has no stepper left. */
+  #stepperFocus?: { button: string; tick: string };
 
   override updated(changed: PropertyValues<this>): void {
     if (!changed.has("picks") || this.#stepperFocus === undefined) return;
-    const button = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(
-      this.#stepperFocus,
-    );
+    const { button: other, tick } = this.#stepperFocus;
     this.#stepperFocus = undefined;
-    void button?.updateComplete.then(() => button.focus());
+    const button = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(other);
+    if (button === null) this.renderRoot.querySelector<HTMLElement>(tick)?.focus();
+    else void button.updateComplete.then(() => button.focus());
   }
 
   #emit(next: Picks): void {
@@ -258,7 +259,11 @@ export class TillPortionPicker extends LitElement {
         aria-label=${`${t("basket.decrease")} ${name}`}
         ?disabled=${count <= 1}
         @click=${() => {
-          if (count - 1 <= 1) this.#stepperFocus = `[data-pick-inc="${CSS.escape(id)}"]`;
+          if (count - 1 <= 1)
+            this.#stepperFocus = {
+              button: `[data-pick-inc="${CSS.escape(id)}"]`,
+              tick: `[data-pick="${CSS.escape(id)}"]`,
+            };
           this.#emit(setCount(row, count - 1, this.picks));
         }}
       >
@@ -277,7 +282,11 @@ export class TillPortionPicker extends LitElement {
         aria-description=${count >= row.limit && reason !== "" ? reason : nothing}
         ?disabled=${count >= row.limit}
         @click=${() => {
-          if (count + 1 >= row.limit) this.#stepperFocus = `[data-pick-dec="${CSS.escape(id)}"]`;
+          if (count + 1 >= row.limit)
+            this.#stepperFocus = {
+              button: `[data-pick-dec="${CSS.escape(id)}"]`,
+              tick: `[data-pick="${CSS.escape(id)}"]`,
+            };
           this.#emit(setCount(row, count + 1, this.picks));
         }}
       >

@@ -2646,13 +2646,15 @@ form's own checks disable the action; an error that comes back from a request ne
 
 Split a table's panel (A803 4c) departs from these in three ways. `till-table-order-screen.split-table.test.ts`
 pins the first two and `till-app-split-table.test.ts` the third, and that a failed read after a refused
-split leaves Split enabled; both read this panel alone, with stubbed reads, and nothing checks another
-panel for the same behaviour.
+split leaves Split enabled; `till-app-split-table.snapshot.test.ts` pins that no read holds Split. All read this
+panel alone, with stubbed reads, and nothing checks another panel for the same behaviour.
 
 **(a) A first read that fails says so at once.** The panel's rows come from a read, so a failed
 first read shows `table.split_read_failed` in `wt-form-actions`'s bottom message, before any press,
-with Split quiet and disabled, until a read answers. A later read that fails keeps the last rows,
-says nothing and leaves Split as it was. Its precedents: the Products browser's Move and Delete
+with Split quiet and disabled and no hint above the missing rows, until a read answers. A later read that fails keeps the last rows,
+says nothing and leaves Split as it was. Once rows are drawn no read holds Split: a press sends the party revision
+the rows' read answered with, and if they are stale the server refuses it and the panel comes back with the sentence
+and reads. Its precedents: the Products browser's Move and Delete
 dialog, whose confirm is quiet after the summary failed; `wt-delete-dialog`, whose Delete is quiet
 while `readError` is set; and the period delete dialog, whose bottom says when its impact read
 failed.
@@ -2667,7 +2669,8 @@ or by a read showing the order gone. The hold is the row's state and not a refus
 after a refused split fails, no bill shows held and Split stays enabled.
 
 A refused split comes back with the foot brought into view, the sentence and Split together on
-screen, and a refused take-over's line does the same. After `party.out_of_date`, if the read that
+screen, and a refused take-over's line does the same. If the read after that refusal draws more rows above it, the
+foot follows that one answer, unless the waiter has touched the screen since. After `party.out_of_date`, if the read that
 brings the panel's rows fails, the foot says `table.reread_failed` rather than that the table was
 reloaded; once a later read brings the rows, it goes back to the refusal's own sentence.
 

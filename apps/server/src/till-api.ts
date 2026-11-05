@@ -22,6 +22,7 @@ import {
 import type { FloorAnnotator, TableRemoval } from "@waitron/module";
 import {
   newId,
+  parties,
   readNodeMembership,
   sales,
   ticketItems,
@@ -3664,7 +3665,13 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             balance: await readBillBalance(tx, bill.workingOrderId),
           });
         }
-        return { bills };
+        const [party] = await tx
+          .select({ revision: parties.revision })
+          .from(parties)
+          .where(eq(parties.id, partyId));
+        // A press sends this revision with these rows, so it is read in their transaction. An id
+        // naming no party has no rows, and a split sent for it is refused whatever its revision.
+        return { partyRevision: party?.revision ?? 0, bills };
       });
       return c.json(answer);
     }),
