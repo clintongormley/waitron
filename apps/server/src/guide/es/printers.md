@@ -13,3 +13,16 @@ abre el diálogo del nombre: elige **Añadir**.
 
 Si no aparece una impresora de red, abre **Comprobar una dirección conocida**, escribe su dirección
 IP y elige **Conectar**.
+
+## Calibrar una impresora de recibos {#calibrate}
+
+La calibración tiene tres pasos. Se abre al añadir una impresora de recibos, y **Calibrar
+impresora** en los detalles de la impresora la repite.
+
+- Elige **Imprimir prueba de ancho**. En el papel, elige el último número de la regla que se ve
+  entero y mide el cuadrado negro del código QR sin su borde blanco. Waitron muestra el ancho del
+  papel y la resolución de impresión que resultan. Si dice que no coinciden, vuelve a medir.
+- Elige **Imprimir recibo de muestra** y comprueba que todas las letras salen con sus acentos y
+  que el recibo ocupa el ancho del papel.
+- Indica si hay un cajón portamonedas conectado y pruébalo. Activa **Impresora portátil** para una
+  impresora que lleva una persona, como una de cinturón. Elige **Guardar**.

@@ -99,6 +99,12 @@ export class WtDialog extends LitElement {
         margin: 0 0 var(--wt-space-3);
       }
 
+      /* The help badge hangs over the row's top trailing corner, centred on it, so the row runs half
+         a badge past the heading's text and the badge starts where the text ends. */
+      .heading-row.has-help {
+        padding-inline-end: calc(var(--wt-help-badge-target) / 2);
+      }
+
       h2 {
         margin: 0;
         font-size: var(--wt-font-size-lg);
@@ -567,6 +573,15 @@ export class WtDialog extends LitElement {
     this.readFooterMessage();
   }
 
+  private updateHasHelp(event: Event): void {
+    const slot = event.target as HTMLSlotElement;
+    // Imperatively, like the footer's class, so a `slotchange` costs no Lit update.
+    slot.parentElement!.classList.toggle(
+      "has-help",
+      slot.assignedElements({ flatten: true }).length > 0,
+    );
+  }
+
   /** Every footer row's message, so one row's change cannot hide or clear another's. */
   private readFooterMessage(): void {
     this.footerMessage = this.footerActions
@@ -609,7 +624,7 @@ export class WtDialog extends LitElement {
             this.heading
               ? html`<div class="heading-row">
                   <h2 id=${this.headingId}>${this.heading}</h2>
-                  <slot name="help"></slot>
+                  <slot name="help" @slotchange=${this.updateHasHelp}></slot>
                 </div>`
               : nothing
           }

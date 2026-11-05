@@ -12,3 +12,16 @@ PIN and choose **Pair and add** again. Once it is paired, the name dialog opens:
 
 If a network printer is not found, open **Check a known address**, type its IP address and choose
 **Connect**.
+
+## Calibrate a receipt printer {#calibrate}
+
+Calibration has three steps. It opens after you add a receipt printer, and **Calibrate printer**
+on the printer's details runs it again.
+
+- Choose **Print width test**. On the paper, choose the last number on the ruler you can see in
+  full, and measure the QR code's black square without its white border. Waitron shows the paper
+  width and print resolution these give. If it says they disagree, measure again.
+- Choose **Print sample receipt** and check that every letter prints with its accents and the
+  receipt is as wide as the paper.
+- Say whether a cash drawer is attached, and test it. Switch on **Portable printer** for a printer
+  one person carries, such as a belt printer. Choose **Save**.

@@ -1,14 +1,26 @@
-import { receiptLabelsFor } from "@waitron/country-packs";
+import { receiptLabelsFor, receiptSampleItemsFor } from "@waitron/country-packs";
 import type { ReceiptQrText } from "@waitron/fiscal";
 import type { EscSetting } from "@waitron/printing";
+import {
+  addDecimal,
+  centsToDecimal,
+  decimal,
+  decimalToCents,
+  MONEY_SCALE,
+  multiplyDecimal,
+  subtractDecimal,
+  toScale,
+  type Decimal,
+} from "@waitron/shared";
 import { formatReceipt } from "./receipt-ticket.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 
 const SAMPLE_QR = "https://example.invalid/waitron/sample-receipt";
 
 /**
- * The sale a sample or preview receipt shows: it was never filed. It carries a sample QR only when
- * the venue's fiscal backend has words to print around one, as a filed sale's receipt would.
+ * The sale a receipt preview shows, and the base `sampleDocument` adds the sample dishes to: it was
+ * never filed. It carries a sample QR only when the venue's fiscal backend has words to print around
+ * one, as a filed sale's receipt would.
  */
 export function sampleSale(
   qrText: ReceiptQrText | undefined,
@@ -41,10 +53,30 @@ export function sampleDocument(
   receiptLocale: string,
 ): ReceiptDocumentInput {
   const labels = receiptLabelsFor(receiptLocale);
+  const sale = sampleSale(qrText, receiptLocale);
+  const names = receiptSampleItemsFor(receiptLocale);
+  const count = decimal(String(names.length));
+  const plus = (base: string, each: string): Decimal =>
+    toScale(addDecimal(decimal(base), multiplyDecimal(decimal(each), count)), MONEY_SCALE);
+  const total = plus("5.50", "2.20");
+  const tenderedCents = (Math.floor(decimalToCents(total) / 1000) + 1) * 1000;
   return {
-    result: sampleSale(qrText, receiptLocale),
+    result: {
+      ...sale,
+      total,
+      vatBreakdown: [{ rate: "10", base: plus("5.00", "2.00"), tax: plus("0.50", "0.20") }],
+      lines: [
+        ...sale.lines,
+        ...names.map((name) => ({
+          descriptions: { [receiptLocale]: name },
+          quantity: "1",
+          gross: "2.20",
+        })),
+      ],
+      tender: { method: "cash", change: subtractDecimal(centsToDecimal(tenderedCents), total) },
+    },
     issuer: { venueName: labels.sampleIssuerName, nif: "B00000000" },
-    receipt: { footerMessage: labels.sampleFooter },
+    receipt: {},
     invoiceLocale: receiptLocale,
     simulated: true,
   };

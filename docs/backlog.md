@@ -3877,12 +3877,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **While a discovery window is open, a device not reported within 45 seconds drops off the list**
   until its next report; 45 seconds does not cover every scan pass (C102, #953).
 
-- **A404 — adding and calibrating a printer, the calibration half (points 2–4; adding a printer
-  landed in #2481):**
-  [Detail](backlog/printers.md#a404--adding-and-calibrating-a-printer)
-
 - **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority; not queued —
-  owner 2026-10-08: take it from here when a lane has room; after A404).**
+  owner 2026-10-08: take it from here when a lane has room).**
   [Detail](backlog/printers.md#a405--printer-details-and-the-print-queue)
 
 - **Loose ends left by A662 (#1803).**

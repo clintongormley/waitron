@@ -341,37 +341,9 @@ those letters (not checked).
   Whether a future replication drain can carry the audit row to a node without its print job is
   unverified and needs a test when that drain is built.
 
-## A404 — adding and calibrating a printer
-
-- **A404 — adding and calibrating a printer (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room):**
-  Points 1 and 5–8 landed in #2481. Points 2–4 are PR 2, planned as Tasks 5–9 of
-  `docs/superpowers/plans/2026-11-05-a404-add-calibrate-printer.md`, which also answers point 2's
-  open question: the QR measurement is needed (that plan's section "The QR question").
-  2. **Calibration step 1 (paper width and resolution) is laid out out of order.** Rename "Print
-     width ruler" (nobody knows what it means — e.g. "Print width test"); the action button goes on
-     the right, on its own row; then a row of the two things the person enters (last number fully
-     visible on the ruler, the QR square's size); then a row of the two results (paper width and
-     print resolution). Resolution is never shown as a result today, yet the mismatch message
-     ("The ruler shows 384 dots, but this paper width and resolution print 360 dots…") talks about
-     it. **Open question for the task:** is the QR measurement needed at all, or does the ruler
-     alone settle what printing needs? Answer it from the code (does anything need the width in
-     millimetres rather than dots?) before redesigning.
-  3. **The sample receipt (calibration step 2).** Drop the "Café, jamón, niño, pingüino · 5 €" line; test the language's accented
-     letters as ordered items instead (for Catalan: à è é í ï ò ó ú ü ç and l·l). Add horizontal
-     rules so the receipt reads in blocks: after the venue name and NIF, before the first item,
-     before the tax lines, and before the total. (The owner's photo showed TOTAL and Cambio printed a
-     line below their labels; that was the paper curling — nothing to fix.)
-  4. **Rename and move "Carried by one device at a time".** It means a portable printer (a waiter's
-     belt printer): one device holds it, and another device choosing it is asked to take it over
-     (`device.equipment_held`); off means a fixed printer any number of devices share. Name it
-     e.g. "Portable printer", with the explanation as its hint. It sits under calibration step 3's
-     heading "Does this printer have a cash drawer?", which is not what it is about — give it its
-     own heading or a wider one for the step. The same label shows on the printer details
-     (A405), and changes there too.
-
 ## A405 — printer details and the print queue
 
-- **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room; after A404).** A modal means the printer page is no longer a sub-page, so the owner
+- **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room).** A modal means the printer page is no longer a sub-page, so the owner
   dropped lane B's A398 redraw of the printer page's heading (2026-10-08).
   1. **Printer details become a modal, viewing and editing both.** Today's page is badly laid out:
      Edit opens the name field off to the right, away from the title it changes; whether the
@@ -740,7 +712,7 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   (`ReceiptDocument.guests`), and many function, property and event names (for example
   `readReceiptGuests`, `setPartyGuests`) keep the word.
 
-- **Sample wording (owner, 2026-10-28, A965).** The table and product names follow the sample receipt language. English uses “Outside 6” and “Coffee and toast”; Spanish uses “Terraza 6” and “Café y tostada”. The table name does not repeat the table caption. The synthetic number and character-probe footer remain; removing the footer and changing the calibration layout remain in A404.
+- **Sample wording (owner, 2026-10-28, A965).** The table and product names follow the sample receipt language. English uses “Outside 6” and “Coffee and toast”; Spanish uses “Terraza 6” and “Café y tostada”. The table name does not repeat the table caption. The synthetic number remains.
 
 - **A receipt's header rows (owner, 2026-10-19, A754).** The first row is the table on the left and
   «Pedido N» on the right (the order alone on the right when there is no table). Then:
@@ -795,6 +767,10 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   `docs/compliance/regional-language-rules.md`); with only the TOTAL enlarged, the rest of the data
   keeps the caption's size. The same call as the till screen's larger TOTAL on 2026-10-01 (C115,
   `docs/compliance/verifactu-findings.md`). The VERI\*FACTU line may be printed in bold for margin.
+
+- **A ruled line between TOTAL and the VAT lines on every simplified receipt (owner, 2026-11-05,
+  A404).** It reverses A663's "TOTAL, then the rates, nothing between them" for that one line; the
+  sample receipt matches (`buildReceiptDocument`, `apps/server/src/receipt-document.ts`).
 
 - **Receipts carry no drink and food subtotals (owner, 2026-10-15).** The owner dropped them from
   A663.

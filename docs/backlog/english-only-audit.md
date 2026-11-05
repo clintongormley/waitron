@@ -5,6 +5,8 @@
 > `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../packages/reporting/examples/modelo-303.md)
 > carries the reporting example. References below describe the earlier scripts.
 
+_2026-11-05, A404: the sample receipt's character-probe footer is gone; its accented letters now come from per-language sample dishes in `country-es`._
+
 _2026-11-03, A968: the guide frame's words and the recovery page's words now live in `apps/server/src/i18n/guide-pages.ts` and `apps/server/src/i18n/recovery-page.ts`; the two rows below record their earlier location._
 
 _2026-10-29, A964: kitchen-ticket frames and collection-number captions now live in `apps/server/src/i18n/kitchen-ticket.ts` and read the saved default content language at rendering. Spanish selects Spanish; other defaults or missing settings select English. Recorded names, frozen allergy translations and unit selection keep their own inputs. The inline-wording and `WAITRON_TILL_LOCALE` findings below describe the earlier tree._
@@ -194,7 +196,7 @@ the provisioned station breaks that lookup; finding it by `is_default` (as `dev-
 | `apps/server/src/invoice-selection.ts:31` | Spain-only check in general code: a full-invoice address must end with «España», or staff get `invoice.recipient_invalid`. Home: `country-es`, beside the tax ID check it already uses |
 | `packages/ui/demo/main.ts:66–274` | About 45 Spanish strings in the ui package's developer showcase («Cobrar», «Modo formación»); not shipped, not scanned |
 | `apps/setup/src/receipt-languages.ts:6–9` | «Español», «Català», «Galego», «Euskara» on setup's review screen; the venue screen shows translated labels instead, so the two disagree |
-| `apps/server/src/printer-test-page.ts:19`, `sample-receipt.ts:38` | «Café, jamón, niño · 5 € · ¿Sí? ¡Sí!» and «…pingüino · 5 €» — character samples printed in every language |
+| `apps/server/src/i18n/printer-test-page.ts:3` | «Café, jamón, niño · 5 € · ¿Sí? ¡Sí!» — the printer test page's character sample, printed in every language |
 | `apps/server/scripts/receipt-look.ts` | A developer tool drawing Spanish sample receipts as pictures; never run by CI, writes no database |
 | `apps/server/README.md:152–156` | Example setup values «Mostrador», «Calle Mayor 1» |
 | `apps/server/scripts/cloud-translation-vectors.ts:36` | `{ ca: "Cigaló", es: "Carajillo" }` — sample translation in the Cloud contract's test data; translation is its subject |

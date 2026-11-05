@@ -167,6 +167,8 @@ same `info`.
   settled in A663 (`docs/superpowers/plans/2026-10-15-a663-receipt-layout.md:52`, `:1122-1129`).
   The sample must look like a real receipt, so it is not drawn here; Task 9 records it as a short
   open question in the backlog, and the PR description asks the owner.
+  **2026-11-05:** the owner chose the line, on every simplified receipt and the sample; built in
+  PR 2, and recorded in `docs/backlog/printers.md`'s decisions in place of the open entry.
 
 ## What goes beyond the spec
 
@@ -235,6 +237,7 @@ text; "removed" deletes the key from both catalogues.
 | guide | `printers.add_help` | new | Waitron lists the printers its print agents find. Not listed? Check it is on; for a network printer, type its address under Check a known address. | Waitron muestra las impresoras que encuentran sus agentes de impresión. ¿No aparece? Comprueba que esté encendida; si es de red, escribe su dirección en Comprobar una dirección conocida. |
 | 2 | `printers.ruler_print` | changed | Print width test | Imprimir prueba de ancho |
 | 2 | `printers.resolution_hint` | changed | Print the width test. Choose the last number you can see in full on the ruler, and measure the QR code’s black square without its white border. You do not need to scan it. | Imprime la prueba de ancho. Elige el último número de la regla que se ve entero y mide el cuadrado negro del código QR sin su borde blanco. No hace falta escanearlo. |
+| 2 | `printers.ruler_last_number` | changed (Spanish only) | Last number fully visible on the ruler | Último número que se ve completo |
 | 2 | `printers.qr_square` | new | QR code’s black square | Cuadrado negro del código QR |
 | 2 | `printers.test_qr_help` | removed | (was the separate QR paragraph; its words are now in `printers.resolution_hint`) | |
 | guide | `printers.calibration_help` | new | Calibration sets how wide Waitron prints and how large the QR code comes out. Run it again if you change the paper width. | La calibración fija el ancho de impresión y el tamaño del código QR. Repítela si cambias el ancho del papel. |
@@ -243,9 +246,9 @@ text; "removed" deletes the key from both catalogues.
 | 4 | `printers.calibration_drawer` | changed | Cash drawer and portable use | Cajón portamonedas y uso portátil |
 
 Both help bubbles are named with the existing `help.badge_label` (Help: {part} / Ayuda: {part}),
-filled with the existing `printers.add_printer` (Add a printer / Añadir impresora) and
-`printers.calibration_layout` (Set paper width and resolution / Ajusta el ancho y la resolución),
-and link with the existing `help.guide_link` (Read more in the guide / Más información en la guía).
+filled with the title of the window each sits on: the existing `printers.add_printer` (Add a
+printer / Añadir impresora) and `printers.calibrate` (Calibrate printer / Calibrar impresora), and
+link with the existing `help.guide_link` (Read more in the guide / Más información en la guía).
 
 Unchanged and reused by point 2's result row: `printers.paper_width` (Paper width / Ancho del
 papel), `printers.resolution` (Print resolution / Resolución de impresión),
@@ -370,6 +373,18 @@ PR 2:
   realistic receipt" (no «pingüino» line; the total follows the added dishes).
 - `packages/country-es/src/spain.test.ts` (Task 5) "translates the sample names into %s without
   repeating the table caption" — no `sampleFooter`.
+- `apps/server/src/page-test-page.test.ts` (Task 5) "hands it to the printer's own agent in the
+  printer's format, renders the sample sale and writes no delivery row" — compares the rendered sale
+  with `sampleDocument(...).result` instead of `sampleSale(...)`: the A4 test page is built from
+  `sampleDocument`, which now adds the dishes.
+- **2026-11-05, the owner's rule between TOTAL and the VAT lines:** `apps/server/src/receipt-document.test.ts`'s
+  two A663 layout cases and `apps/server/src/receipt-ticket.test.ts`'s "a comped or discounted
+  dish" slice now expect the rule after TOTAL.
+- **2026-11-05, the dialog's help badge:** `packages/ui/src/components/wt-help-tooltip.slots.test.ts`
+  "wt-dialog: with help on the badge hangs over the heading's top trailing corner" — renamed, and
+  the badge's expected centre moves half a badge past the heading's end; and "wt-dialog: a
+  help-mode badge takes no room, off or on" is renamed "…leaves the heading's box unchanged, off or
+  on", its assertions unchanged.
 
 ---
 
@@ -818,7 +833,7 @@ words alone.
 
 This task needs the guide's `calibrate` section, so do Task 9 Step 1 first, then:
 - [ ] **Step 1:** `it("explains calibration in a help bubble that links to the guide")` — on step 1
-  a `wt-help-tooltip` has `mode="help-mode"`, `aria-label` `fill("help.badge_label", { part: t("printers.calibration_layout") })`,
+  a `wt-help-tooltip` has `mode="help-mode"`, `aria-label` `fill("help.badge_label", { part: t("printers.calibrate") })`,
   text `t("printers.calibration_help")` and `guide-href` `guideHref("printers.calibrate")`.
 - [ ] **Step 2: Run** it — FAILS (no bubble).
 - [ ] **Step 3: Implement.**
@@ -880,7 +895,8 @@ This task needs the guide's `calibrate` section, so do Task 9 Step 1 first, then
   put TOTAL straight after the items, then the rates, with no rule between them. Owner to say
   whether one is wanted; it would change every printed simplified receipt." Leave the entry "While a
   discovery window is open, a device not reported within 45 seconds drops off the list" — still
-  true for unpaired devices.
+  true for unpaired devices. **2026-11-05:** the owner chose the line, so no open entry is added;
+  the decision is recorded in `docs/backlog/printers.md`'s decisions.
 - [ ] **Step 4: Look at it.** As in Task 4 Step 6: screenshots of calibration steps 1 and 3 in both
   themes, at 1280 × 800 and 390 × 844, English and Spanish, before and after answering step 1, and
   the guide page. And the paper: in a throwaway `apps/server` test print
@@ -890,4 +906,5 @@ This task needs the guide's `calibrate` section, so do Task 9 Step 1 first, then
 - [ ] **Step 5: Commit** — `git commit -s -m "A printers guide section for calibration, and A404 removed from the backlog with its one open question"`.
   Then `/finish-branch` with PR 2's worktree, naming this plan. The PR description lists the
   changed assertions, what goes beyond the spec, the New words tables, and asks the owner the
-  TOTAL-rule question.
+  TOTAL-rule question. **2026-11-05:** answered (the line is drawn), so the PR description reports
+  the decision instead.

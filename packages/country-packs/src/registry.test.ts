@@ -1,3 +1,4 @@
+import { SPAIN_RECEIPT_SAMPLE_ITEMS } from "@waitron/country-es";
 import { VALENCIA_DEMO_TEXT, GALICIA_DEMO_TEXT } from "@waitron/country-packs/demo/testing";
 import { countryNameFor, receiptCountryNameFor } from "./registry.js";
 import { findAdministrativeArea, resolveFiscalJurisdiction } from "@waitron/country";
@@ -11,6 +12,7 @@ import {
   getCountryPack,
   getVenueSetupCountryPack,
   receiptLabelsFor,
+  receiptSampleItemsFor,
   resolveInstalledContentLanguageRules,
   resolveInstalledCountryLocale,
   resolveInstalledDefaultContentLanguage,
@@ -250,6 +252,11 @@ describe("receipt labels", () => {
     expect(receiptLabelsFor("es-ES")).toBe(spain["es-ES"]);
     for (const locale of ["es", "en", "ca", "gl", "eu", "fr-FR", "en-US", "ca-ES-valencia"])
       expect(receiptLabelsFor(locale), locale).toBe(spain["es-ES"]);
+  });
+
+  it("finds a locale's sample dishes in the pack that has them, and Spanish ones otherwise", () => {
+    expect(receiptSampleItemsFor("ca-ES")).toEqual(SPAIN_RECEIPT_SAMPLE_ITEMS["ca-ES"]);
+    expect(receiptSampleItemsFor("fr-FR")).toEqual(SPAIN_RECEIPT_SAMPLE_ITEMS["es-ES"]);
   });
 
   it("finds a locale's labels in the pack that has them", () => {

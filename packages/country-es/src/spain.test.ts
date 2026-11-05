@@ -284,10 +284,22 @@ describe("receipt labels", () => {
         sampleTableLabel: table,
         sampleItemName: item,
         sampleInvoiceNumber: "MUESTRA/1",
-        sampleFooter: "Café, jamón, niño, pingüino · 5 €",
       });
     },
   );
+
+  it.each([
+    ["es-ES", [..."áéíóúüñ"]],
+    ["ca-ES", [..."àèéíïòóúüç", "l·l"]],
+    ["gl-ES", [..."áéíóúñ"]],
+    ["eu-ES", [..."ñ"]],
+    ["en-GB", []],
+  ])("lists sample dishes that use every accented letter %s writes", (locale, letters) => {
+    const items = SPAIN.receiptSampleItems?.[locale];
+    expect(items).toBeDefined();
+    const written = [...(items ?? []), SPAIN.receiptLabels?.[locale]?.sampleItemName].join(" ");
+    for (const letter of letters) expect(written, letter).toContain(letter);
+  });
 
   it("A965 labels supplies English receipt words without offering an English receipt in Spain", () => {
     expect(SPAIN.receiptLabels?.["en-GB"]).toMatchObject({

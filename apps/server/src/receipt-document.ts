@@ -412,6 +412,7 @@ export function buildReceiptDocument({
   };
   if (simplified) {
     total();
+    rule();
     vatRows();
   } else {
     vatRows();

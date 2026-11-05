@@ -461,6 +461,7 @@ describe("the simplified receipt's own layout (A663)", () => {
       ["2  Agua mineral", "8,80", undefined],
       "rule",
       ["TOTAL", "19,69 €", { double: true }],
+      "rule",
       ["Base imponible 21%", "9,00 €", undefined],
       ["IVA 21%", "1,89 €", undefined],
       ["Base imponible 10%", "8,00 €", undefined],
@@ -483,8 +484,9 @@ describe("the simplified receipt's own layout (A663)", () => {
         },
       });
     const es = oneRate("es-ES");
-    expect(es.slice(es.indexOf("rule", 5) + 1, es.indexOf("rule", 5) + 5)).toEqual([
+    expect(es.slice(es.indexOf("rule", 5) + 1, es.indexOf("rule", 5) + 6)).toEqual([
       ["TOTAL", "19,69 €", { double: true }],
+      "rule",
       ["Base imponible 10%", "17,90 €", undefined],
       ["IVA 10%", "1,79 €", undefined],
       "rule",

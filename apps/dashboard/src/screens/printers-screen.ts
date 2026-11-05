@@ -373,12 +373,26 @@ export class PrintersScreen extends LitElement {
         flex: 1 1 calc(var(--wt-space-6) * 6);
         min-width: 0;
       }
-      .field-row > [name$="port"],
-      .field-row > wt-button {
+      .field-row > [name$="port"] {
         flex: 0 1 calc(var(--wt-space-6) * 4);
       }
-      .ruler-row > wt-button {
-        flex: none;
+      .print-row {
+        display: flex;
+        justify-content: flex-end;
+        max-width: var(--wt-field-max-width);
+      }
+      .calibration-results {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-3);
+        max-width: var(--wt-field-max-width);
+      }
+      .ruler-disagrees {
+        max-width: var(--wt-field-max-width);
+      }
+      .calibration-results > div {
+        flex: 1 1 calc(var(--wt-space-6) * 6);
+        min-width: 0;
       }
       .field-row > wt-form-actions {
         flex: 0 1 auto;
@@ -480,6 +494,9 @@ export class PrintersScreen extends LitElement {
       .hint {
         margin: 0 0 var(--wt-space-3);
         color: var(--wt-color-text-muted);
+      }
+      .switch-field .hint {
+        margin: var(--wt-space-2) 0 0;
       }
       .origin {
         font-family: var(--wt-font-family-mono, monospace);
@@ -3460,6 +3477,18 @@ export class PrintersScreen extends LitElement {
       }}
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep < 3 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
     >
+      ${
+        this.calibrationStep === 1
+          ? html`<wt-help-tooltip
+              slot="help"
+              mode="help-mode"
+              aria-label=${fill("help.badge_label", { part: t("printers.calibrate") })}
+              guide-href=${guideHref("printers.calibrate")}
+              guide-label=${t("help.guide_link")}
+              >${t("printers.calibration_help")}</wt-help-tooltip
+            >`
+          : nothing
+      }
       <div class="form-fields">
         ${this.#renderRefreshError()}
         <p role="status">
@@ -3473,7 +3502,7 @@ export class PrintersScreen extends LitElement {
         >
           <h2 class="title">${t("printers.calibration_layout")}</h2>
           <p class="hint">${t("printers.resolution_hint")}</p>
-          <div class="field-row ruler-row">
+          <div class="print-row">
             <wt-button
               variant="primary"
               data-test=${`print-ruler-${p.id}`}
@@ -3481,6 +3510,8 @@ export class PrintersScreen extends LitElement {
               @click=${() => void this.#testPrint(p.id)}
               >${t("printers.ruler_print")}</wt-button
             >
+          </div>
+          <div class="field-row">
             <wt-combobox
               name="printer-ruler-number"
               label=${t("printers.ruler_last_number")}
@@ -3502,26 +3533,9 @@ export class PrintersScreen extends LitElement {
                 if (setting) this.#editPrinter(p.id, { paperWidth: setting.paperWidth });
               }}
             ></wt-combobox>
-          </div>
-          <p class="hint" data-test="calibration-qr-question">${t("printers.test_qr_help")}</p>
-          <div class="field-row">
             <wt-combobox
-              name="printer-paper-width"
-              label=${t("printers.paper_width")}
-              search="auto"
-              .options=${[
-                { value: "80mm", label: t("printers.paper_width_80") },
-                { value: "58mm", label: t("printers.paper_width_58") },
-              ]}
-              .value=${p.paperWidth}
-              @wt-change=${(e: CustomEvent<{ value: string }>) => {
-                this.rulerNumber = "";
-                this.#editPrinter(p.id, { paperWidth: e.detail.value as PrintPaperWidth });
-              }}
-            ></wt-combobox>
-            <wt-combobox
-              name="printer-resolution"
-              label=${t("printers.resolution")}
+              name="printer-qr-square"
+              label=${t("printers.qr_square")}
               search="auto"
               .options=${[
                 { value: "180dpi", label: t("printers.test_qr_45") },
@@ -3532,9 +3546,23 @@ export class PrintersScreen extends LitElement {
                 this.#editPrinter(p.id, { resolution: e.detail.value as PrintResolution })}
             ></wt-combobox>
           </div>
+          <dl class="status-fields calibration-results" data-test="calibration-results">
+            <div>
+              <dt>${t("printers.paper_width")}</dt>
+              <dd data-test="calibration-result-paper">
+                ${t(p.paperWidth === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80")}
+              </dd>
+            </div>
+            <div>
+              <dt>${t("printers.resolution")}</dt>
+              <dd data-test="calibration-result-resolution">
+                ${t(p.resolution === "180dpi" ? "printers.resolution_180" : "printers.resolution_203")}
+              </dd>
+            </div>
+          </dl>
           ${
             this.rulerNumber !== "" && Number(this.rulerNumber) !== settingDots
-              ? html`<p role="status" data-test="ruler-disagrees">
+              ? html`<p role="status" class="ruler-disagrees" data-test="ruler-disagrees">
                   ${fill("printers.ruler_disagrees", { ruler: this.rulerNumber, setting: String(settingDots) })}
                 </p>`
               : nothing
@@ -3572,34 +3600,6 @@ export class PrintersScreen extends LitElement {
               this.drawerTestSent = false;
             }}
           ></wt-switch>
-          <wt-switch
-            name="printer-portable"
-            label=${t("printers.portable")}
-            .checked=${p.portable}
-            @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
-              e.stopPropagation();
-              this.#editPrinter(p.id, { portable: e.detail.checked });
-            }}
-          ></wt-switch>
-          <wt-combobox
-            name="printer-pickup-roles"
-            searchPlaceholder=${t("categories.combobox_search")}
-            noResultsLabel=${t("categories.combobox_no_results")}
-            label=${t("printers.pickup_roles")}
-            multiple
-            show-empty-option
-            .values=${p.pickupRoles}
-            .countLabel=${() => t("printers.pickup_both")}
-            .options=${[
-              { value: "", label: t("printers.pickup_none") },
-              { value: "receipt", label: t("devices.receipt_printer_now") },
-              { value: "payment_slip", label: t("devices.slip_printer_now") },
-            ]}
-            @wt-change=${(e: CustomEvent<{ values: Printer["pickupRoles"] }>) => {
-              e.stopPropagation();
-              this.#editPrinter(p.id, { pickupRoles: e.detail.values });
-            }}
-          ></wt-combobox>
           ${
             p.hasCashDrawer
               ? html`
@@ -3635,6 +3635,38 @@ export class PrintersScreen extends LitElement {
                 `
               : nothing
           }
+          <div class="switch-field">
+            <wt-switch
+              name="printer-portable"
+              label=${t("printers.portable")}
+              description=${t("printers.portable_hint")}
+              .checked=${p.portable}
+              @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
+                e.stopPropagation();
+                this.#editPrinter(p.id, { portable: e.detail.checked });
+              }}
+            ></wt-switch>
+            <p class="hint" aria-hidden="true">${t("printers.portable_hint")}</p>
+          </div>
+          <wt-combobox
+            name="printer-pickup-roles"
+            searchPlaceholder=${t("categories.combobox_search")}
+            noResultsLabel=${t("categories.combobox_no_results")}
+            label=${t("printers.pickup_roles")}
+            multiple
+            show-empty-option
+            .values=${p.pickupRoles}
+            .countLabel=${() => t("printers.pickup_both")}
+            .options=${[
+              { value: "", label: t("printers.pickup_none") },
+              { value: "receipt", label: t("devices.receipt_printer_now") },
+              { value: "payment_slip", label: t("devices.slip_printer_now") },
+            ]}
+            @wt-change=${(e: CustomEvent<{ values: Printer["pickupRoles"] }>) => {
+              e.stopPropagation();
+              this.#editPrinter(p.id, { pickupRoles: e.detail.values });
+            }}
+          ></wt-combobox>
         </div>
       </div>
       <wt-form-actions slot="footer" .error=${bottom}>
