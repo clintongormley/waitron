@@ -44,6 +44,13 @@ function* tabbables(root: Node, skip: Set<Node>): Generator<HTMLElement> {
   }
 }
 
+/** Open popovers and modal dialogs in `root` and in every open shadow root inside it. */
+function* openSurfaces(root: Document | ShadowRoot): Generator<HTMLElement> {
+  yield* root.querySelectorAll<HTMLElement>(":popover-open, dialog:modal");
+  for (const each of root.querySelectorAll("*"))
+    if (each.shadowRoot) yield* openSurfaces(each.shadowRoot);
+}
+
 @customElement("wt-dialog")
 export class WtDialog extends LitElement {
   static override styles = [
@@ -145,16 +152,34 @@ export class WtDialog extends LitElement {
 
   /** A focused control that is disabled drops focus to the page body, outside every dialog.
    * Chromium still sends an unguarded dialog's close request from there, but a guarded one hears
-   * Escape only on its own keydown, so the top one is asked from here. */
+   * Escape only on its own keydown, so the top one is asked from here — unless something above it
+   * takes Escape. A bubbling listener on the document, so a handler on the body has had its say. */
   private static escapeFromPageBody(event: KeyboardEvent): void {
     if (event.key !== "Escape" || event.target !== document.body) return;
+    if (event.defaultPrevented || event.isComposing) return;
     let top: WtDialog | undefined;
     for (const each of WtDialog.openDialogs) if (!top || each.openedAt > top.openedAt) top = each;
-    if (!top?.beforeClose) return;
+    if (!top?.beforeClose || WtDialog.surfaceAbove(top)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     void top.requestClose("escape");
   }
+
+  /** Whether a surface that Escape should reach first is open above `top`, the latest wt-dialog
+   * opened: a popover that is not manual or a modal `<dialog>` that is not a wt-dialog's, and does
+   * not hold `top`. Opening a modal closes every such popover outside it, so an open one came later. A plain
+   * modal `<dialog>`'s opening order is not known, so it counts as above. */
+  private static surfaceAbove(top: WtDialog): boolean {
+    for (const surface of openSurfaces(document)) {
+      if (surface instanceof HTMLDialogElement) {
+        const root = surface.getRootNode();
+        if (root instanceof ShadowRoot && root.host instanceof WtDialog) continue;
+      } else if (surface.popover === "manual") continue;
+      if (!composedContains(surface, top)) return true;
+    }
+    return false;
+  }
+
   /** This opening's place among all openings: later is higher. */
   private openedAt = 0;
   /** Where focus last was inside this dialog. The browser has already moved it by

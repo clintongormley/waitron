@@ -8,6 +8,7 @@ import "./wt-button.js";
 import "./wt-form-actions.js";
 import "./wt-input.js";
 import "./wt-modal.js";
+import "./wt-row-actions.js";
 
 /**
  * Resolves once every `<dialog>` close already queued has been delivered. The browser reports a
@@ -1675,6 +1676,106 @@ test.each(["wt-dialog", "wt-modal"] as const)(
     expect(seen).toEqual(["Escape"]);
   },
 );
+
+/** Puts focus back on the page body, wherever opening a surface moved it. */
+async function focusPageBody(): Promise<void> {
+  (deepActiveElement() as HTMLElement | null)?.blur();
+  await vi.waitFor(() => expect(document.activeElement).toBe(document.body));
+}
+
+test("leaves a page-body Escape to a native popover opened over a guarded dialog", async () => {
+  const { decide } = await openThenDisableFocusedField("wt-modal", true);
+  const above = document.createElement("div");
+  above.popover = "auto";
+  above.textContent = "Above";
+  host.append(above);
+  above.showPopover();
+  await focusPageBody();
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(above.matches(":popover-open")).toBe(false));
+  expect(decide).not.toHaveBeenCalled();
+});
+
+test("leaves a page-body Escape to a row menu opened inside a guarded dialog", async () => {
+  const { el, decide } = await openThenDisableFocusedField("wt-modal", true);
+  const menu = document.createElement("wt-row-actions");
+  menu.label = "Actions";
+  menu.innerHTML = "<button>Edit</button>";
+  el.append(menu);
+  await menu.updateComplete;
+  menu.show();
+  const popup = menu.shadowRoot!.querySelector("[popover]")!;
+  expect(popup.matches(":popover-open")).toBe(true);
+  await focusPageBody();
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
+  expect(decide).not.toHaveBeenCalled();
+});
+
+test("leaves a page-body Escape to a plain native modal dialog opened over a guarded one", async () => {
+  const { decide } = await openThenDisableFocusedField("wt-modal", true);
+  const above = document.createElement("dialog");
+  above.textContent = "Above";
+  host.append(above);
+  above.showModal();
+  await focusPageBody();
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(above.open).toBe(false));
+  expect(decide).not.toHaveBeenCalled();
+});
+
+test("still asks a guarded dialog on a page-body Escape when it sits inside a native modal dialog", async () => {
+  const outer = (await mount(
+    '<dialog><wt-modal heading="Edit"><input name="note" /></wt-modal></dialog>',
+  )) as HTMLDialogElement;
+  outer.showModal();
+  const el = outer.querySelector("wt-modal")!;
+  const decide = vi.fn(async () => false);
+  el.beforeClose = decide;
+  el.open = true;
+  await el.updateComplete;
+  const field = el.querySelector("input")!;
+  field.focus();
+  field.disabled = true;
+  await vi.waitFor(() => expect(document.activeElement).toBe(document.body));
+  await userEvent.keyboard("{Escape}");
+  expect(decide).toHaveBeenCalledExactlyOnceWith("escape");
+  expect(outer.open).toBe(true);
+});
+
+test("still asks a guarded dialog on a page-body Escape over a manual popover, which Escape does not close", async () => {
+  const { decide } = await openThenDisableFocusedField("wt-modal", true);
+  const above = document.createElement("div");
+  above.popover = "manual";
+  above.textContent = "Above";
+  host.append(above);
+  above.showPopover();
+  await focusPageBody();
+  await userEvent.keyboard("{Escape}");
+  expect(decide).toHaveBeenCalledExactlyOnceWith("escape");
+  expect(above.matches(":popover-open")).toBe(true);
+});
+
+test("does not ask a guarded dialog on a page-body Escape the page has already handled", async () => {
+  const { decide } = await openThenDisableFocusedField("wt-modal", true);
+  const handled = (event: KeyboardEvent) => event.preventDefault();
+  document.body.addEventListener("keydown", handled);
+  onTestFinished(() => document.body.removeEventListener("keydown", handled));
+  await userEvent.keyboard("{Escape}");
+  expect(decide).not.toHaveBeenCalled();
+});
+
+test("does not ask a guarded dialog on a page-body Escape that ends a text composition", async () => {
+  const { decide } = await openThenDisableFocusedField("wt-modal", true);
+  const escape = (isComposing: boolean) =>
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", isComposing, bubbles: true, cancelable: true }),
+    );
+  escape(true);
+  expect(decide).not.toHaveBeenCalled();
+  escape(false);
+  expect(decide).toHaveBeenCalledExactlyOnceWith("escape");
+});
 
 test("scrolls a body row's new message only just into view", async () => {
   const { el, body } = await openAtPhoneSize(
