@@ -185,7 +185,12 @@ import {
   type SplitSelection,
   type SplitSource,
 } from "../state/split-selection.js";
-import { guestsStepper, guestsStepperStyles, parseGuestCount } from "../widgets/guest-count.js";
+import {
+  guestsStepper,
+  guestsStepperStyles,
+  parseGuestCount,
+  sameGuestCount,
+} from "../widgets/guest-count.js";
 import { billControlStyles, billSwitcher, tableMenu } from "./table-bill-controls.js";
 
 /** The screen's own width, in CSS pixels, from which browsing and the draft show side by side.
@@ -259,6 +264,10 @@ interface ActionDraft {
   tableId: string | null;
   picks: Picks;
   moveTo: string | null | undefined;
+  whole: ReadonlySet<string>;
+  billPicks: ReadonlyMap<string, Picks>;
+  staying: string;
+  leaving: string;
 }
 
 /** Move this bill's choice: to a table, with who the picker showed seated there, or to the counter. */
@@ -302,6 +311,16 @@ interface DraftMoveOpening {
 
 function samePicks(a: Picks, b: Picks): boolean {
   return a.size === b.size && [...a].every((id) => b.has(id));
+}
+
+function sameBillPicks(a: ReadonlyMap<string, Picks>, b: ReadonlyMap<string, Picks>): boolean {
+  return (
+    a.size === b.size &&
+    [...a].every(([id, picks]) => {
+      const other = b.get(id);
+      return other !== undefined && samePicks(picks, other);
+    })
+  );
 }
 
 /** What Split a table's rows are made from. */
@@ -1397,6 +1416,9 @@ export class TillTableOrderScreen extends LitElement {
   readonly #actionId = {};
   #actionScope?: DraftScope<ActionDraft>;
   #actionBaseline?: ActionDraft;
+  /** The party was replaced since the panel last compared its stored count; kept while out of the
+   * page, where nothing compares it. */
+  #storedGuestsChanged = false;
   #actionLeave?: LeaveCoordinator;
   #actionOpening = 0;
 
@@ -1415,7 +1437,30 @@ export class TillTableOrderScreen extends LitElement {
       tableId: this.splitTableId,
       picks: new Set(this.moveDishesPicks),
       moveTo: this.#moveDishesChosen(),
+      whole: new Set(this.splitPicks.whole),
+      billPicks: new Map(this.splitPicks.picks),
+      staying: this.splitStaying,
+      leaving: this.splitLeaving,
     };
+  }
+
+  /** What the panel holds now is what its unsaved work is measured from. */
+  #moveActionBaseline(): void {
+    this.#actionBaseline = this.#actionPayload();
+    this.#actionScope?.commit(this.#actionBaseline);
+  }
+
+  /** An untouched staying side follows the stored count; a typed one stays, measured against it. */
+  #followStoredGuests(): void {
+    if (!this.#storedGuestsChanged || !this.isConnected) return;
+    this.#storedGuestsChanged = false;
+    if (this.actionStep !== "split-table-pick") return;
+    const stored = this.#savedGuests();
+    const baseline = this.#actionBaseline!;
+    if (sameGuestCount(stored, baseline.staying)) return;
+    if (sameGuestCount(this.splitStaying, baseline.staying)) this.splitStaying = stored;
+    this.#actionBaseline = { ...baseline, staying: stored };
+    this.#actionScope?.commit(this.#actionBaseline);
   }
 
   #watchActions(): void {
@@ -1436,13 +1481,27 @@ export class TillTableOrderScreen extends LitElement {
       id: this.#actionId,
       parent: this,
       current: () => this.#actionPayload(),
-      snapshot: (value) => ({ ...value, picks: new Set(value.picks) }),
+      snapshot: (value) => ({
+        ...value,
+        picks: new Set(value.picks),
+        whole: new Set(value.whole),
+        billPicks: new Map(value.billPicks),
+      }),
       equal: (a, b) =>
-        a.tableId === b.tableId && a.moveTo === b.moveTo && samePicks(a.picks, b.picks),
+        a.tableId === b.tableId &&
+        a.moveTo === b.moveTo &&
+        samePicks(a.picks, b.picks) &&
+        samePicks(a.whole, b.whole) &&
+        sameBillPicks(a.billPicks, b.billPicks) &&
+        sameGuestCount(a.staying, b.staying) &&
+        sameGuestCount(a.leaving, b.leaving),
       restore: (value) => {
         this.splitTableId = value.tableId;
         this.moveDishesPicks = new Set(value.picks);
         this.moveDishesTo = value.moveTo;
+        this.splitPicks = { whole: new Set(value.whole), picks: new Map(value.billPicks) };
+        this.splitStaying = value.staying;
+        this.splitLeaving = value.leaving;
       },
     });
     this.#actionScope.commit(this.#actionBaseline);
@@ -2008,6 +2067,7 @@ export class TillTableOrderScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("draftStore")) this.#kitchenNoteVisit++;
+    if (changed.has("party")) this.#storedGuestsChanged = true;
     if (this.sentLinePending !== null && this.#sentLine() === undefined)
       this.sentLinePending = null;
     this.#watchDraft();
@@ -2051,6 +2111,7 @@ export class TillTableOrderScreen extends LitElement {
     }
     this.#watchServe();
     this.#watchActions();
+    this.#followStoredGuests();
     this.#countMoveDestination();
     if (changed.has("busy") && this.busy) this.#actionScope?.changed();
     this.#shownBill = this.bills.find((bill) => bill.workingOrderId === this.orderId);
@@ -5126,6 +5187,7 @@ export class TillTableOrderScreen extends LitElement {
     this.splitStaying = this.#savedGuests();
     this.#splitPrompt = {};
     this.actionStep = "split-table-pick";
+    this.#moveActionBaseline();
     this.#dispatch("split-table-open", { tableId, prompt: this.#splitPrompt });
   }
 
@@ -5421,6 +5483,7 @@ export class TillTableOrderScreen extends LitElement {
         this.splitTableId = null;
         this.#resetSplitPick();
         this.actionStep = "split-table";
+        this.#moveActionBaseline();
         break;
     }
   }

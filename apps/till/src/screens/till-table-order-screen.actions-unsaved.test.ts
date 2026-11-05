@@ -208,31 +208,63 @@ it("picks are unordered and Move sends whole lines directly", async () => {
   expect(app.protectionAtSubmit).toEqual([false]);
   expect((await question(app)).open).toBe(false);
 });
-it("Back protects the staged table choice, and the bill choice opens the guests window whose confirm submits", async () => {
+it("Split a table's panel protects its ticks and counts, and Split submits with no question", async () => {
   const { app, screen } = await mount("split-table");
+  screen.splitPanelLive = true;
+  screen.personId = "me";
+  screen.splitRead = {
+    bills: bills.map(({ workingOrderId }) => ({
+      billId: workingOrderId,
+      lines: workingOrderId === "other" ? lines : [],
+      balance: {
+        workingOrderId,
+        status: "open",
+        total: "6.00",
+        received: "0.00",
+        reserved: "0.00",
+        outstanding: "6.00",
+        tips: "0.00",
+        payments: [],
+        paidLines: [],
+      },
+    })),
+  };
+  await screen.updateComplete;
   expect(unload()).toBe(false);
   await click(screen, '[data-target="t2"]');
+  expect(unload()).toBe(false);
+  const picker = screen.shadowRoot!.querySelector("till-split-picker")!;
+  await picker.updateComplete;
+  picker.shadowRoot!.querySelector<HTMLElement>('[data-split-tick="other"]')!.click();
+  await screen.updateComplete;
   expect(unload()).toBe(true);
   await click(screen, "[data-action-back]");
   expect((await question(app)).open).toBe(true);
   await answer(app, "keep");
-  await click(screen, '[data-target="other"]');
-  const guests = screen.shadowRoot!.querySelector("till-split-guests-dialog")!;
-  await guests.updateComplete;
-  guests.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-confirm]")!.click();
   await screen.updateComplete;
+  expect(picker.split.whole).toEqual(new Set(["other"]));
+  const leaving = screen.shadowRoot!.querySelector<HTMLElement>(
+    'wt-number-stepper[name="leavingGuests"]',
+  )!;
+  await (leaving as HTMLElementTagNameMap["wt-number-stepper"]).updateComplete;
+  const input = leaving.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  input.value = "1";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await screen.updateComplete;
+  await click(screen, "[data-split-confirm]");
   expect(app.commands).toEqual([
     {
       type: "split-table",
       detail: {
         tableId: "t2",
-        billId: "other",
-        guestCounts: { staying: 2, leaving: null },
+        selection: { wholeBillIds: ["other"], loose: [] },
+        guestCounts: { staying: 2, leaving: 1 },
         prompt: expect.any(Object),
       },
     },
   ]);
   expect(app.protectionAtSubmit).toEqual([false]);
+  expect((await question(app)).open).toBe(false);
 });
 it("an ancestor leave resets staged selections only after Discard", async () => {
   const { app, screen } = await mount();
