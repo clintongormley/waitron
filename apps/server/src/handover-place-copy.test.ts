@@ -33,6 +33,7 @@ import {
   appendHandoverEventTx,
   NODE_MIGRATIONS,
   readHandoverEvent,
+  readHandoverOperation,
   setNodeModeTx,
 } from "@waitron/node-db";
 import { acceptedCopyPath } from "./handover-acceptance.js";
@@ -46,7 +47,7 @@ import {
   removePlacedCopies,
   type PlacementSteps,
 } from "./handover-place-copy.js";
-import { advanceHandover, beginHandover } from "./handover-store.js";
+import { advanceHandover, beginHandover, waitHandover } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -118,6 +119,40 @@ function realOldWal(path: string, write: string): void {
     copyFileSync(join(kept, `db${suffix}`), `${path}${suffix}`);
   }
 }
+
+/** The chart's table as the real migration has the columns placing reads, holding `document`. */
+function holdChart(databasePath: string, document: unknown): void {
+  const raw = new DatabaseSync(databasePath);
+  try {
+    raw.exec("create table if not exists node_membership(id integer primary key, document text)");
+    raw
+      .prepare("insert or replace into node_membership(id, document) values (1, ?)")
+      .run(typeof document === "string" ? document : JSON.stringify(document));
+  } finally {
+    raw.close();
+  }
+}
+
+const chartWith = (term: number, standing: string, others: object[] = []) => ({
+  body: {
+    term,
+    nodes: [
+      { nodeId: SOURCE, contactUrl: "https://old.example", standing },
+      { nodeId: NODE, contactUrl: "https://spare.example", standing: "serving-secondary" },
+      ...others,
+    ],
+  },
+  signerNodeId: SOURCE,
+  signature: "s",
+  endorsements: [],
+});
+const THIRD = {
+  nodeId: OTHER_NODE,
+  contactUrl: "https://third.example",
+  standing: "serving-primary",
+};
+const NAMES_OLD_BOX = chartWith(3, "serving-primary");
+const MOVED_ON = chartWith(4, "sell-only", [THIRD]);
 
 function tableNames(databasePath: string): string[] {
   const reader = new DatabaseSync(databasePath, { readOnly: true });
@@ -209,6 +244,8 @@ describe("placeAcceptedCopyAtStart", () => {
       state?: "copy_accepted" | "filing_assumed";
       withRevision?: boolean;
       anotherBoxIsAMirror?: boolean;
+      /** The chart the accepted copy holds. */
+      acceptedChart?: unknown;
     } = {},
   ) {
     const root = scratch();
@@ -219,6 +256,7 @@ describe("placeAcceptedCopyAtStart", () => {
     const accepted = acceptedCopyPath(stateDir, OP);
     mkdirSync(join(stateDir, "handover", OP), { recursive: true });
     sqliteFile(accepted, "placed");
+    if (options.acceptedChart !== undefined) holdChart(accepted, options.acceptedChart);
     const live = join(venueDir, "venue.db");
     sqliteFile(live, "old_mirror");
     writeFileSync(`${live}-wal`, "stale wal");
@@ -1205,6 +1243,244 @@ describe("placeAcceptedCopyAtStart", () => {
           detail: { operationId: OP, mode },
         },
       ]);
+    });
+  });
+
+  describe("a chart the old file holds", () => {
+    const UNREADABLE = "handover.place_copy.old_chart_unreadable";
+    const SWAPPED = { kind: "copy_placed_owed", operationId: OP, swapped: true };
+    const REFUSED = { kind: "source_no_longer_main", operationId: OP };
+
+    function everyFile(b: Awaited<ReturnType<typeof box>>) {
+      return {
+        live: sha(b.live),
+        wal: existsSync(`${b.live}-wal`) ? sha(`${b.live}-wal`) : null,
+        accepted: sha(b.accepted),
+        note: existsSync(b.note),
+        litestream: existsSync(b.litestream),
+        preparation: existsSync(b.preparation),
+        incoming: existsSync(b.incoming),
+        node: sha(b.nodePath),
+      };
+    }
+
+    it.each([
+      ["the old box sell-only and a third box main", MOVED_ON],
+      ["the old box evicted", chartWith(4, "evicted", [THIRD])],
+      [
+        "the old box gone from it",
+        { ...MOVED_ON, body: { term: 4, nodes: MOVED_ON.body.nodes.slice(1) } },
+      ],
+    ])("%s: refused, with nothing written", async (_name, chart) => {
+      const b = await box({ acceptedChart: NAMES_OLD_BOX });
+      holdChart(b.live, chart);
+      const before = everyFile(b);
+
+      // Failing case, the check deleted: `swapped: true`, and this chart is gone for good.
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(REFUSED);
+
+      expect(everyFile(b)).toEqual(before);
+      expect(b.logged).toEqual([
+        {
+          level: "warn",
+          message: "handover.place_copy.source_no_longer_main",
+          detail: { operationId: OP },
+        },
+      ]);
+    });
+
+    it("sees a chart held only in the old file's -wal, and leaves that -wal as it found it", async () => {
+      const b = await box();
+      holdChart(b.live, NAMES_OLD_BOX);
+      realOldWal(
+        b.live,
+        `update node_membership set document = '${JSON.stringify(MOVED_ON)}' where id = 1`,
+      );
+      const before = everyFile(b);
+      expect(readFileSync(b.live).includes("sell-only")).toBe(false);
+
+      // Failing case, reading the main file alone: `swapped: true`, as the chart is not in it.
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(REFUSED);
+      expect(everyFile(b)).toEqual(before);
+    });
+
+    it("sees it too with no -shm beside the -wal", async () => {
+      const b = await box();
+      holdChart(b.live, NAMES_OLD_BOX);
+      realOldWal(
+        b.live,
+        `update node_membership set document = '${JSON.stringify(MOVED_ON)}' where id = 1`,
+      );
+      rmSync(`${b.live}-shm`);
+      const wal = sha(`${b.live}-wal`);
+
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(REFUSED);
+      expect(sha(`${b.live}-wal`)).toBe(wal);
+    });
+
+    it("a box that is not a mirror is left alone, whatever its chart says", async () => {
+      const b = await box({ mode: "primary" });
+      holdChart(b.live, MOVED_ON);
+
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual({
+        kind: "left_alone",
+        operationId: OP,
+      });
+    });
+
+    it("a repeat answers the same, with no copy left to read as well", async () => {
+      const b = await box();
+      holdChart(b.live, MOVED_ON);
+
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(REFUSED);
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(REFUSED);
+      rmSync(b.accepted);
+      // Failing case, looking for the copy first: refuses the start `accepted_copy_missing`.
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(REFUSED);
+    });
+
+    it("a selection the old box kept is not merged, and the backup-room note stays", async () => {
+      const b = await box();
+      holdChart(b.live, MOVED_ON);
+      let merged = 0;
+
+      await placeAcceptedCopyAtStart({
+        ...b.args,
+        merge: async () => {
+          merged += 1;
+        },
+      });
+
+      expect(merged).toBe(0);
+      expect(existsSync(b.note)).toBe(true);
+    });
+
+    it.each([
+      "copy",
+      "chmod",
+      "flush-incoming",
+      "litestream",
+      "wal",
+      "shm",
+      "flush-before-rename",
+      "rename",
+      "flush-after-rename",
+    ])("a kill set for %s is never reached: no file step runs", async (step) => {
+      const b = await box();
+      holdChart(b.live, MOVED_ON);
+      const before = everyFile(b);
+
+      const ran = await killedPlacing(b, step);
+
+      // Failing case, a step run before the check: `SIGKILL`.
+      expect(ran.signal, ran.output).toBeNull();
+      expect(everyFile(b)).toEqual(before);
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(REFUSED);
+    });
+
+    it("a newer chart still naming the old box the main box places", async () => {
+      const b = await box();
+      holdChart(b.live, chartWith(9, "serving-primary"));
+
+      // Failing case, judging by term: refused, where the rule is the standing.
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(SWAPPED);
+      expect(b.logged.filter((line) => line.level !== "info")).toEqual([]);
+    });
+
+    it("no chart table, as a database never given one has none: places, with no warning", async () => {
+      const b = await box();
+
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(SWAPPED);
+      expect(b.logged.filter((line) => line.level !== "info")).toEqual([]);
+    });
+
+    it.each([
+      ["no row", "delete from node_membership"],
+      ["a row holding the JSON value null", "update node_membership set document = 'null'"],
+    ])("%s: places, with no warning", async (_name, change) => {
+      const b = await box();
+      holdChart(b.live, NAMES_OLD_BOX);
+      const raw = new DatabaseSync(b.live);
+      raw.exec(change);
+      raw.close();
+
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(SWAPPED);
+      expect(b.logged.filter((line) => line.level !== "info")).toEqual([]);
+    });
+
+    it("no old file at all: places, with no warning", async () => {
+      const b = await box();
+      rmSync(b.live);
+
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(SWAPPED);
+      expect(b.logged.filter((line) => line.level !== "info")).toEqual([]);
+    });
+
+    it.each([
+      ["text that is not JSON", "not json"],
+      ["JSON that is no chart", '{"body":1}'],
+      ["a chart whose list is broken", '{"body":{"term":4,"nodes":[{"nodeId":1}]}}'],
+    ])("%s: places, and says so in the log", async (_name, document) => {
+      const b = await box();
+      holdChart(b.live, document);
+
+      // Failing case, letting the read's failure out: the start stops with the old box stopped too.
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(SWAPPED);
+      expect(b.logged.map((line) => line.message)).toContain(UNREADABLE);
+    });
+
+    it("an old file that is not a database: places, and says so in the log", async () => {
+      const b = await box();
+      writeFileSync(b.live, "not a database, and long enough to have a header to read at all");
+
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(SWAPPED);
+      expect(b.logged.map((line) => line.message)).toContain(UNREADABLE);
+      expect(tableNames(b.live)).toContain("placed");
+    });
+
+    it("after a crash and an open, the placed file's own chart is not a moved-on chart", async () => {
+      const b = await box({ acceptedChart: MOVED_ON });
+      holdChart(b.live, NAMES_OLD_BOX);
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(SWAPPED);
+      // Any open changes the bytes, as entry's ahead check does.
+      const raw = new DatabaseSync(b.live);
+      raw.exec("create table written_by_an_open(a)");
+      raw.close();
+      expect(sha(b.live)).not.toBe(sha(b.accepted));
+
+      // Failing case, judging the chart alone: refused, on a file this box already placed.
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(SWAPPED);
+      expect(sha(b.live)).toBe(sha(b.accepted));
+    });
+
+    it("the same after a crash when the copy's chart names the old box: placed again", async () => {
+      const b = await box({ acceptedChart: NAMES_OLD_BOX });
+      holdChart(b.live, NAMES_OLD_BOX);
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(SWAPPED);
+      const raw = new DatabaseSync(b.live);
+      raw.exec("create table written_by_an_open(a)");
+      raw.close();
+
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual(SWAPPED);
+      expect(sha(b.live)).toBe(sha(b.accepted));
+    });
+
+    it("recording copy_placed clears a wait left from before", async () => {
+      const b = await box();
+      await waitHandover(storeDeps(), OP, "handover.source_no_longer_main");
+      const accepted = b.args.stateDir;
+
+      await recordCopyPlaced({
+        node: suite.node,
+        nodeId: NODE,
+        stateDir: accepted,
+        operationId: OP,
+        log: b.args.log,
+      });
+
+      const row = await readHandoverOperation(suite.node, NODE, OP);
+      // Failing case, recording the event alone: the old reason stays beside a placed copy.
+      expect(row).toMatchObject({ state: "filing_assumed", waitingReason: null });
     });
   });
 

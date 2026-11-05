@@ -75,6 +75,7 @@ import {
 import {
   receivedCopyPath,
   startHandoverDestinationDuty,
+  type HandoverDestinationDuty,
   type DestinationDutyDeps,
 } from "./handover-destination-duty.js";
 import { COPY_PLACED_EVENT } from "./handover-place-copy.js";
@@ -1910,6 +1911,83 @@ describe("the spare's duty runs the real comparison", () => {
         },
         60_000,
       );
+
+      describe("at filing_assumed, before the start that places", () => {
+        async function assumed() {
+          const r = await dutyRig();
+          r.seam.answer = (text) => r.answerWith(r.relinquishment(text));
+          const counted = { asked: 0 };
+          const duty = (await r.startAccepting({ restart: () => (counted.asked += 1) }))!;
+          await vi.waitFor(async () => expect((await r.row()).state).toBe("filing_assumed"), {
+            timeout: 15_000,
+          });
+          return { r, duty, counted };
+        }
+
+        /** Tick is 20 ms, so each wait holds several passes, and the wake one more at once. */
+        async function severalPasses(duty: HandoverDestinationDuty): Promise<void> {
+          for (let wait = 0; wait < 3; wait += 1) {
+            duty.wake();
+            await new Promise((resolve) => setTimeout(resolve, 200));
+          }
+        }
+
+        it.each(["sell-only", "evicted"] as const)(
+          "the old box %s: it waits and asks for no restart over many passes, and a chart naming it again asks",
+          async (standing) => {
+            const { r, duty, counted } = await assumed();
+            await chartWith(r, 4, standing);
+            await vi.waitFor(
+              async () =>
+                expect((await r.row()).waitingReason).toBe("handover.source_no_longer_main"),
+              { timeout: 15_000 },
+            );
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            const settled = counted.asked;
+
+            await severalPasses(duty);
+            // Failing case, the duty asking at every pass: about 30 more, a box restarting for ever.
+            expect(counted.asked).toBe(settled);
+            expect((await r.row()).state).toBe("filing_assumed");
+            expect(r.posted).toHaveLength(1);
+
+            await chartWith(r, 5, "serving-primary");
+            await vi.waitFor(() => expect(counted.asked).toBeGreaterThan(settled), {
+              timeout: 15_000,
+            });
+            // Failing case, leaving the reason: this box says it waits while it is restarting.
+            expect((await r.row()).waitingReason).toBeNull();
+          },
+          60_000,
+        );
+
+        // Each of these is a chart placing would not stop for, so the duty must ask for the start,
+        // or the box would sit on its old file with the old box stopped.
+        it.each([
+          ["no chart", sql`delete from node_membership`],
+          ["text that is not JSON", sql`update node_membership set document = 'not json'`],
+          ["JSON that is no chart", sql`update node_membership set document = '{"body":1}'`],
+          [
+            "a chart whose list is broken",
+            sql`update node_membership set document = '{"body":{"term":4,"nodes":[{"nodeId":1}]}}'`,
+          ],
+          ["a row holding the JSON value null", sql`update node_membership set document = 'null'`],
+        ])(
+          "%s: it keeps asking, as placing would place",
+          async (_name, change) => {
+            const { r, duty, counted } = await assumed();
+            r.db.run(change);
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            const settled = counted.asked;
+
+            await severalPasses(duty);
+
+            expect(counted.asked).toBeGreaterThan(settled);
+            expect((await r.row()).waitingReason).toBeNull();
+          },
+          60_000,
+        );
+      });
 
       it("a chart taken while the old box answers: not filing_assumed, and the same answer once it clears", async () => {
         const r = await dutyRig();

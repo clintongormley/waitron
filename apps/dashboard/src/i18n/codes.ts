@@ -1490,8 +1490,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La copia del local que este equipo aceptó ya no está en su disco, así que este equipo no puede pasar a llevar el local.",
   },
   "handover.source_no_longer_main": {
-    en: "This box's chart no longer has the old box as the main box, so this box has not taken over from it, and it asks the old box for nothing more. It carries on by itself if a newer chart names the old box again.",
-    es: "El esquema de este equipo ya no tiene al equipo antiguo como equipo principal, así que este equipo no ha asumido sus funciones y no le pide nada más. Sigue por sí solo si un esquema más reciente vuelve a nombrar al equipo antiguo.",
+    en: "This box's list of servers no longer has the old box as the main box, so this box has not taken over from it. If a newer list names the old box again, a waiting box carries on by itself, and an activation that was refused has to be sent again.",
+    es: "La lista de servidores de este equipo ya no tiene al equipo antiguo como equipo principal, así que este equipo no ha asumido sus funciones. Si una lista más reciente vuelve a nombrar al equipo antiguo, un equipo en espera sigue por sí solo, y una activación rechazada hay que enviarla de nuevo.",
   },
   "handover.relinquishment_invalid": {
     en: "The old box's answer did not hand filing to this box for the copy it accepted, so this box has not taken over. It keeps asking the old box.",

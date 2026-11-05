@@ -72,7 +72,7 @@ function isReadableNode(v: unknown): boolean {
   );
 }
 
-function isReadableChart(held: unknown): boolean {
+export function isReadableChart(held: unknown): boolean {
   if (!isRecord(held) || !isRecord(held.body)) return false;
   const { term, nodes, revoked } = held.body;
   if (typeof term !== "number" || !Number.isInteger(term) || term < 0) return false;

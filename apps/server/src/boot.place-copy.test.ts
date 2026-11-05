@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,8 @@ import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import {
   ACCEPTED_VERSION,
   copyPlacedEvents,
+  handoverRow,
+  holdChart,
   OLD_VERSION,
   PLACE_COPY_MIGRATIONS,
   placeCopyBoxes,
@@ -24,7 +26,7 @@ vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
   return ephemeralHttpMock();
 });
-const { beforeServerStarts, startServer } = ephemeralServerFixture();
+const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
 const PLACED_LINE = "handover.place_copy.placed";
 const SEEN_AFTER_PLACING = "written_after_placing";
@@ -345,6 +347,180 @@ describe("a spare's real start at filing_assumed", () => {
     expect(userVersion(b.live)).toBe(ACCEPTED_VERSION);
     expect(copyPlacedEvents(b)).toBe(1);
   }, 240_000);
+});
+
+describe("a chart the old file holds that no longer names the old box the main box", () => {
+  const MOVED = "handover.source_no_longer_main";
+
+  /** The duty ticks every five seconds, so three passes have run by the end of this. */
+  const threePasses = () => new Promise((resolve) => setTimeout(resolve, 11_000));
+
+  it("places nothing and never asks for a restart; a chart naming the old box again lets the next start place", async () => {
+    const b = await buildBox();
+    holdChart(b.live, b.movedOnChart(4));
+    const acceptedBytes = sha(b.accepted);
+    watchLog();
+    let asked = 0;
+
+    const first = await entryStart(b, { restart: () => (asked += 1) });
+    expect(first.thrown).toBeUndefined();
+    await vi.waitFor(() => expect(handoverRow(b).waitingReason).toBe(MOVED), { timeout: 20_000 });
+    await threePasses();
+
+    // Failing case, the duty asking at every pass as before: 3, a box restarting for ever.
+    expect(asked).toBe(0);
+    expect(loggedLines("handover.place_copy.source_no_longer_main")).toBe(1);
+    expect(loggedLines(PLACED_LINE)).toBe(0);
+    expect(copyPlacedEvents(b)).toBe(0);
+    expect(userVersion(b.live)).toBe(OLD_VERSION);
+    expect(sha(b.accepted)).toBe(acceptedBytes);
+
+    const delivered = await fetch(`http://127.0.0.1:${httpPort()}/api/node/membership`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ document: b.chartNamingOldBox(5) }),
+    });
+    expect(await delivered.json()).toMatchObject({ accepted: true });
+    await vi.waitFor(() => expect(asked).toBeGreaterThanOrEqual(1), { timeout: 20_000 });
+    expect(handoverRow(b)).toEqual({ state: "filing_assumed", waitingReason: null });
+    expect(userVersion(b.live)).toBe(OLD_VERSION);
+    await first.started!.close();
+
+    const second = await entryStart(b);
+    expect(second.thrown).toBeUndefined();
+    await second.started!.close();
+    expect(userVersion(b.live)).toBe(ACCEPTED_VERSION);
+    expect(copyPlacedEvents(b)).toBe(1);
+    expect(existsSync(b.accepted)).toBe(false);
+  }, 180_000);
+
+  it("a chart naming the old box again reached with the box off: the next start places and the wait is gone", async () => {
+    const b = await buildBox();
+    holdChart(b.live, b.movedOnChart(4));
+    const first = await entryStart(b);
+    await vi.waitFor(() => expect(handoverRow(b).waitingReason).toBe(MOVED), { timeout: 20_000 });
+    await first.started!.close();
+
+    holdChart(b.live, b.chartNamingOldBox(5));
+    const second = await entryStart(b);
+    expect(second.thrown).toBeUndefined();
+    await second.started!.close();
+
+    expect(copyPlacedEvents(b)).toBe(1);
+    // Failing case, recording the event alone: the wait stays until the operation next moves.
+    expect(handoverRow(b)).toEqual({ state: "filing_assumed", waitingReason: null });
+  }, 180_000);
+
+  it("a crash after answering, and every start after it, answers the same", async () => {
+    const b = await buildBox();
+    holdChart(b.live, b.movedOnChart(4));
+    const acceptedBytes = sha(b.accepted);
+
+    expect(await killedPlacing(b, "answered")).toBe("SIGKILL");
+    expect(userVersion(b.live)).toBe(OLD_VERSION);
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const start = await entryStart(b);
+      expect(start.thrown).toBeUndefined();
+      await vi.waitFor(() => expect(handoverRow(b).waitingReason).toBe(MOVED), {
+        timeout: 20_000,
+      });
+      await start.started!.close();
+      expect(userVersion(b.live)).toBe(OLD_VERSION);
+      expect(sha(b.accepted)).toBe(acceptedBytes);
+      expect(copyPlacedEvents(b)).toBe(0);
+    }
+  }, 180_000);
+
+  it("a chart the old box's copy holds is not news after a crash: placed again from the kept file, one event", async () => {
+    const b = await buildBox({ copyNamesOldBox: "sell-only" });
+    expect(await killedPlacing(b, "answered")).toBe("SIGKILL");
+    expect(sha(b.live)).toBe(sha(b.accepted));
+    watchLog();
+
+    // Entry's ahead check opens the placed file, so its bytes no longer match the indicator.
+    const start = await entryStart(b);
+    expect(start.thrown).toBeUndefined();
+    await start.started!.close();
+
+    // Failing case, judging the placed file's own chart: 0, and the box waits on a file it placed.
+    expect(copyPlacedEvents(b)).toBe(1);
+    expect(loggedLines(PLACED_LINE)).toBe(1);
+    expect(loggedLines("handover.place_copy.source_no_longer_main")).toBe(0);
+    expect(existsSync(b.accepted)).toBe(false);
+    expect(handoverRow(b)).toEqual({ state: "filing_assumed", waitingReason: null });
+  }, 180_000);
+
+  it("the copy's own chart, placed over a different chart that also moved on, is still refused", async () => {
+    const b = await buildBox({ copyNamesOldBox: "sell-only" });
+    holdChart(b.live, b.movedOnChart(4));
+
+    const start = await entryStart(b);
+    expect(start.thrown).toBeUndefined();
+    await start.started!.close();
+
+    // Failing case, excusing any chart when the copy's is moved on too: 1, and term 4 is lost.
+    expect(copyPlacedEvents(b)).toBe(0);
+    expect(userVersion(b.live)).toBe(OLD_VERSION);
+  }, 120_000);
+
+  it("a chart too broken to read does not stop the swap, and a real start places", async () => {
+    const b = await buildBox();
+    const raw = new DatabaseSync(b.live);
+    raw.exec("update node_membership set document = 'not json'");
+    raw.close();
+    watchLog();
+    let asked = 0;
+
+    const start = await entryStart(b, { restart: () => (asked += 1) });
+    expect(start.page).toBeUndefined();
+    expect(start.thrown).toBeUndefined();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await start.started!.close();
+
+    expect(asked).toBe(0);
+    expect(loggedLines("handover.place_copy.old_chart_unreadable")).toBe(1);
+    expect(userVersion(b.live)).toBe(ACCEPTED_VERSION);
+    expect(copyPlacedEvents(b)).toBe(1);
+  }, 120_000);
+
+  it("a whole file that is not a database stops at entry's ahead check, before placing is reached", async () => {
+    const b = await buildBox();
+    for (const suffix of ["-wal", "-shm"]) rmSync(`${b.live}${suffix}`, { force: true });
+    writeFileSync(b.live, "not a database, and long enough to have a header to read at all");
+    const acceptedBytes = sha(b.accepted);
+
+    const start = await entryStart(b);
+
+    expect(start.thrown).toMatchObject({ errcode: 26 });
+    expect(start.started).toBeUndefined();
+    expect(copyPlacedEvents(b)).toBe(0);
+    expect(sha(b.accepted)).toBe(acceptedBytes);
+  }, 120_000);
+
+  it("a damaged page under the chart does not stop the swap, and a real start places", async () => {
+    const b = await buildBox();
+    const raw = new DatabaseSync(b.live);
+    raw.exec("pragma wal_checkpoint(truncate); pragma journal_mode = delete");
+    const { rootpage } = raw
+      .prepare("select rootpage from sqlite_master where name = 'node_membership'")
+      .get() as { rootpage: number };
+    const { page_size: pageSize } = raw.prepare("pragma page_size").get() as { page_size: number };
+    raw.close();
+    const bytes = readFileSync(b.live);
+    bytes.fill(0xff, (rootpage - 1) * pageSize, rootpage * pageSize);
+    writeFileSync(b.live, bytes);
+    watchLog();
+
+    const start = await entryStart(b);
+    expect(start.page).toBeUndefined();
+    expect(start.thrown).toBeUndefined();
+    await start.started!.close();
+
+    expect(loggedLines("handover.place_copy.old_chart_unreadable")).toBe(1);
+    expect(userVersion(b.live)).toBe(ACCEPTED_VERSION);
+    expect(copyPlacedEvents(b)).toBe(1);
+  }, 120_000);
 });
 
 describe("a spare that takes over filing", () => {

@@ -133,6 +133,8 @@ async function activate(
             });
             return series;
           }),
+        // Venue first, node after: a repeat finishes this record from the committed row, and no record
+        // can claim a promotion that did not commit.
         () => advanceHandover(deps, operationId, "activated", {}),
       ),
     // The password check takes long enough for the operation to move on.

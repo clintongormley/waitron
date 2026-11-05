@@ -143,10 +143,20 @@ export function waitHandover(
   operationId: string,
   reason: ErrorCode | null,
 ): Promise<void> {
-  return withNodeTransaction(deps.node, async (tx) => {
-    const row = await readHandoverOperation(tx, deps.nodeId, operationId);
-    // A fault in Waitron: a box waits only at a step it has recorded.
-    if (row === null) throw new Error(`no handover operation ${operationId} to wait on`);
-    await advanceHandoverOperationTx(tx, deps.nodeId, operationId, row.state, reason);
-  });
+  return withNodeTransaction(deps.node, (tx) =>
+    waitHandoverTx(tx, deps.nodeId, operationId, reason),
+  );
+}
+
+/** `waitHandover` inside a node transaction the caller holds. */
+export async function waitHandoverTx(
+  tx: NodeTransaction,
+  nodeId: string,
+  operationId: string,
+  reason: ErrorCode | null,
+): Promise<void> {
+  const row = await readHandoverOperation(tx, nodeId, operationId);
+  // A fault in Waitron: a box waits only at a step it has recorded.
+  if (row === null) throw new Error(`no handover operation ${operationId} to wait on`);
+  await advanceHandoverOperationTx(tx, nodeId, operationId, row.state, reason);
 }

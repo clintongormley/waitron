@@ -67,6 +67,7 @@ const KEY_ENV = {
 };
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const AUTHORISER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+export const THIRD_BOX = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 /** The accepted copy and the old mirror database tell apart by this, in the file's own header. */
 export const ACCEPTED_VERSION = 777;
 export const OLD_VERSION = 111;
@@ -93,6 +94,31 @@ function leaveCommittedRowInWal(live: string): void {
   writer.close();
   for (const suffix of ["", "-wal", "-shm"]) copyFileSync(join(kept, `x${suffix}`), live + suffix);
   rmSync(kept, { recursive: true });
+}
+
+/** A chart delivered to this box and stored by its real route, written with the box off. */
+export function holdChart(databasePath: string, document: unknown): void {
+  const raw = new DatabaseSync(databasePath);
+  try {
+    raw
+      .prepare("update node_membership set document = ?, term = ? where id = 1")
+      .run(JSON.stringify(document), (document as { body: { term: number } }).body.term);
+  } finally {
+    raw.close();
+  }
+}
+
+export function handoverRow(b: Box): { state: string; waitingReason: string | null } {
+  const raw = new DatabaseSync(join(b.venueDir, "node.db"), { readOnly: true });
+  try {
+    const row = raw.prepare("select state, waiting_reason from node_handover_operations").get() as {
+      state: string;
+      waiting_reason: string | null;
+    };
+    return { state: row.state, waitingReason: row.waiting_reason };
+  } finally {
+    raw.close();
+  }
 }
 
 export function copyPlacedEvents(b: Box): number {
@@ -128,6 +154,8 @@ interface BoxOptions {
   on?: string;
   /** Makes the accepted copy at least this large. */
   acceptedBytes?: number;
+  /** A chart the old box's copy holds that has this standing for the old box, signed by it. */
+  copyNamesOldBox?: MembershipDocumentBody["nodes"][number]["standing"];
 }
 
 export type Box = Awaited<ReturnType<ReturnType<typeof placeCopyBoxes>["buildBox"]>>;
@@ -211,14 +239,39 @@ export function placeCopyBoxes(deps: {
         { nodeId, contactUrl: "https://spare.example", standing: "serving-secondary" },
       ],
     };
-    const held = {
-      body,
+    const endorsements = [
+      endorseKey(nodeId, nodeSigningPublicKey(own), MAIN_BOX.nodeId, MAIN_BOX.privateKey),
+    ];
+    const signedChart = (chartBody: MembershipDocumentBody) => ({
+      body: chartBody,
       signerNodeId: MAIN_BOX.nodeId,
-      signature: signDocumentBody(body, MAIN_BOX.privateKey),
-      endorsements: [
-        endorseKey(nodeId, nodeSigningPublicKey(own), MAIN_BOX.nodeId, MAIN_BOX.privateKey),
-      ],
+      signature: signDocumentBody(chartBody, MAIN_BOX.privateKey),
+      endorsements,
+    });
+    /** The chart a third box's promotion leaves: this standing for the old box, the third box main. */
+    const movedOnChart = (
+      term: number,
+      standing: MembershipDocumentBody["nodes"][number]["standing"] = "sell-only",
+    ) =>
+      signedChart({
+        term,
+        nodes: [
+          { nodeId: MAIN_BOX.nodeId, contactUrl: old.url, standing },
+          { nodeId, contactUrl: "https://spare.example", standing: "serving-secondary" },
+          { nodeId: THIRD_BOX, contactUrl: "https://third.example", standing: "serving-primary" },
+        ],
+      });
+    /** A newer chart with the old box the main box again, signed by a key this box's route trusts. */
+    const chartNamingOldBox = (term: number) => {
+      const chartBody = { ...body, term };
+      return {
+        body: chartBody,
+        signerNodeId: nodeId,
+        signature: signDocumentBody(chartBody, own),
+        endorsements: [endorseKey(MAIN_BOX.nodeId, MAIN_BOX.publicKey, nodeId, own)],
+      };
     };
+    const held = signedChart(body);
     await writeNodeMembership(suite.db, held);
     await stampDeployment(suite.db, "preproduction");
     const tenant = (await readTenant(suite.db))!;
@@ -257,6 +310,9 @@ export function placeCopyBoxes(deps: {
     // Made outside `home`, whose disk may have room for one copy of this and no more.
     const built = join(root, "accepted-built.db");
     databaseWithVersion(built, ACCEPTED_VERSION, `${built}.raw`, options.acceptedBytes);
+    if (options.copyNamesOldBox !== undefined) {
+      holdChart(built, movedOnChart(3, options.copyNamesOldBox));
+    }
     copyFileSync(built, accepted);
     rmSync(built);
 
@@ -356,7 +412,20 @@ export function placeCopyBoxes(deps: {
       WAITRON_MIN_TICK_MS: "200",
       WAITRON_LOG_DIR: join(stateDir, "logs"),
     };
-    return { root, venueDir, stateDir, accepted, live, note, env, nodeId, migrationsRoot, old };
+    return {
+      root,
+      venueDir,
+      stateDir,
+      accepted,
+      live,
+      note,
+      env,
+      nodeId,
+      migrationsRoot,
+      old,
+      movedOnChart,
+      chartNamingOldBox,
+    };
   }
 
   const startSeams = makeSeams;

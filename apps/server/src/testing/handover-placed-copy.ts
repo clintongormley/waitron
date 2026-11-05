@@ -28,7 +28,12 @@ import { signEnvelope } from "@waitron/handover";
 import { hashPassword, persons } from "@waitron/identity";
 import { endorseKey, signDocumentBody, type SignedMembershipDocument } from "@waitron/membership";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
-import { readHandoverOperation, recordHandoverRestrictionTx, setNodeMode } from "@waitron/node-db";
+import {
+  readHandoverOperation,
+  recordHandoverRestrictionTx,
+  setNodeMode,
+  writeMirrorLink,
+} from "@waitron/node-db";
 import { mergeModulePreparationRevisions } from "@waitron/provisioning";
 import { locationId } from "@waitron/shared";
 import { acceptFinalCopy, acceptedCopyPath } from "../handover-acceptance.js";
@@ -36,6 +41,7 @@ import { captureFinalCopy, finalCopyPath } from "../handover-capture.js";
 import { placeAcceptedCopyAtStart, recordCopyPlaced } from "../handover-place-copy.js";
 import { advanceHandover, beginHandover } from "../handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "../node-identity.js";
+import { mintSelfSignedServerCert } from "../self-signed-cert.js";
 import { pinMainBoxKey } from "./pinned-main-box.js";
 
 export const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
@@ -141,8 +147,8 @@ export function placedSpareFixture(boxes: {
     ]);
   }
 
-  /** Two separate boxes, then the real capture, acceptance and placing, leaving M2 on M1's bytes. */
-  async function placeRealCopy({ recordPlaced = true } = {}): Promise<PlacedSpare> {
+  /** Two separate boxes, then the real capture and acceptance, leaving M2 stopped on its own files. */
+  async function stoppedBeforePlacing() {
     const { mainState, spareState, spareVenue } = dirs();
     for (const dir of [mainState, spareState, spareVenue]) await mkdir(dir);
     await mainBox.db
@@ -239,6 +245,7 @@ export function placedSpareFixture(boxes: {
       endorsements: [endorseKey(standby.nodeId, sparePublic, primary.nodeId, mainKey)],
     };
     await writeNodeMembership(mainBox.db, chart);
+    await writeNodeMembership(spareBefore.db, chart);
 
     const mainStore = { node: mainBox.node, nodeId: primary.nodeId };
     await beginHandover(mainStore, handoverBinding, "source");
@@ -282,9 +289,27 @@ export function placedSpareFixture(boxes: {
     );
     await advanceHandover(spareStore, OPERATION, "filing_assumed", {}, relinquishment);
 
+    await writeMirrorLink(spareBefore.node, standby.nodeId, {
+      relayUrl: "http://127.0.0.1:1/",
+      boxHostname: "box.local",
+      boxCaPem: mintSelfSignedServerCert({
+        hostnames: ["box.local"],
+        ipAddresses: [],
+        now: new Date(),
+      }).caCertPem,
+      originNodeId: primary.nodeId,
+    });
+
     // The spare's own files, as a stopped box leaves them for the start that places the copy.
     spareBefore.db.run(sql`vacuum into ${join(spareVenue, "venue.db")}`);
     spareBefore.node.run(sql`vacuum into ${join(spareVenue, "node.db")}`);
+    return { relinquishment, chart, mainKey, spareKey };
+  }
+
+  /** {@link stoppedBeforePlacing}, then the real placing, leaving M2 on M1's bytes. */
+  async function placeRealCopy({ recordPlaced = true } = {}): Promise<PlacedSpare> {
+    const { spareState, spareVenue } = dirs();
+    const stopped = await stoppedBeforePlacing();
     const log = () => {};
     const placing = await placeAcceptedCopyAtStart({
       venueDir: spareVenue,
@@ -307,12 +332,9 @@ export function placedSpareFixture(boxes: {
       venue: placed.venue,
       node: placed.node,
       close: () => placed.close(),
-      relinquishment,
-      chart,
-      mainKey,
-      spareKey,
+      ...stopped,
     };
   }
 
-  return { placeRealCopy };
+  return { placeRealCopy, stoppedBeforePlacing };
 }

@@ -3,7 +3,12 @@ import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import type { KeyRing } from "@waitron/credentials";
-import { readNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
+import {
+  readNodeMembership,
+  readNodeMembershipRow,
+  type Database,
+  type NodeDatabase,
+} from "@waitron/db";
 import type { CanonicalValue, RoutableServer } from "@waitron/membership";
 import {
   readHandoverEvent,
@@ -23,7 +28,7 @@ import {
 } from "./handover-acceptance.js";
 import type { CompareOptions, CompareOutcome, CopyFileChecks } from "./handover-compare.js";
 import type { Statfs } from "./free-bytes.js";
-import { oldBoxStillMain } from "./handover-chart.js";
+import { movedOnFromSource, oldBoxStillMain } from "./handover-chart.js";
 import { COPY_PLACED_EVENT } from "./handover-place-copy.js";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { advanceHandover, waitHandover } from "./handover-store.js";
@@ -188,8 +193,9 @@ function refusalReason(
  * when that box reports the operation abandoned, and otherwise fetches the indicator and the final
  * copy, one attempt at a time, until it holds them. Once a copy is accepted it posts the stored
  * acceptance, once the disk has room to place the copy, until the old box's relinquishment passes
- * its checks, and then asks for the restart that places it until that start has run. Started only on
- * a mirror: anywhere else `undefined`.
+ * its checks, and then asks for the restart that places it until that start has run, except while
+ * its chart has another main box, when that start would not place. Started only on a mirror:
+ * anywhere else `undefined`.
  */
 export async function startHandoverDestinationDuty(
   deps: DestinationDutyDeps,
@@ -437,8 +443,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     if (address === undefined) {
       return waitOn(operation, "handover.source_unreachable");
     }
-    // Before the post, or the old box gives up filing to a box that will not take it. Placing the
-    // copy replaces the chart this reads, so nothing later can see what this box holds now.
+    // Before the post, or the old box gives up filing to a box that will not take it.
     if (!oldBoxStillMain(await readNodeMembership(deps.db), operation.sourceNodeId)) {
       return waitOn(operation, "handover.source_no_longer_main");
     }
@@ -536,7 +541,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
   }
 
   /** Whether the old box has given up filing to this box and the start that places the copy has not run. */
-  async function placingStartOwed(): Promise<string | null> {
+  async function placingStartOwed(): Promise<HandoverOperation | null> {
     const { mode } = await readNodeMode(deps.node, deps.nodeId);
     if (mode !== "mirror") return null;
     const operation = await readOpenHandoverOperation(deps.node, deps.nodeId);
@@ -553,16 +558,43 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       operation.operationId,
       COPY_PLACED_EVENT,
     );
-    return placed === null ? operation.operationId : null;
+    return placed === null ? operation : null;
+  }
+
+  /** What the start that places would read here. A chart too broken to read says nothing there. */
+  async function placingWouldStop(operation: HandoverOperation): Promise<boolean> {
+    try {
+      const row = await readNodeMembershipRow(deps.db);
+      return movedOnFromSource(row?.document ?? null, operation.sourceNodeId);
+    } catch (error) {
+      deps.log("warn", "handover-destination.chart_unreadable", {
+        operationId: operation.operationId,
+        error: String(error),
+      });
+      return false;
+    }
   }
 
   async function pass(): Promise<boolean> {
     await removeClosedFolders();
-    // A start that places records the event before this duty runs, so this cannot loop; a restart
-    // sent before the shutdown handlers are in, on a box where Node is process 1, does nothing.
+    // A start that places records the event before this duty runs, and a start that refuses to place
+    // is one this asks for no longer, so this cannot loop; a restart sent before the shutdown handlers
+    // are in, on a box where Node is process 1, does nothing.
     const owed = await placingStartOwed();
     if (owed !== null) {
-      deps.log("warn", "handover-destination.restart_asked_again", { operationId: owed });
+      const { operationId } = owed;
+      if (await placingWouldStop(owed)) {
+        if (owed.waitingReason !== "handover.source_no_longer_main") {
+          deps.log("info", "handover-destination.waiting", {
+            operationId,
+            reason: "handover.source_no_longer_main",
+          });
+          await waitHandover(deps, operationId, "handover.source_no_longer_main");
+        }
+        return true;
+      }
+      if (owed.waitingReason !== null) await waitHandover(deps, operationId, null);
+      deps.log("warn", "handover-destination.restart_asked_again", { operationId });
       deps.restart();
       return true;
     }

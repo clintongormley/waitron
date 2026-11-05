@@ -13,7 +13,10 @@ import { deleteBackupRoomNote } from "./backup-room-note.js";
 import { errnoOf } from "./errno.js";
 import { acceptedCopyPath } from "./handover-acceptance.js";
 import { digestBytes, FINAL_STATE_EVENT } from "./handover-capture.js";
+import { movedOnFromSource } from "./handover-chart.js";
+import { waitHandoverTx } from "./handover-store.js";
 import type { Logger } from "./logger.js";
+import { isReadableChart } from "./membership-trust.js";
 import { INCOMING_SUFFIX, VENUE_FILE_MODE } from "./restore.js";
 import "./errors.js";
 
@@ -24,6 +27,8 @@ export type PlacementAtStart =
   | { readonly kind: "nothing" }
   /** An operation awaits placing on a box that is not a mirror, whose database is never replaced. */
   | { readonly kind: "left_alone"; readonly operationId: string }
+  /** The old database holds a chart with another main box, and placing would delete that chart. */
+  | { readonly kind: "source_no_longer_main"; readonly operationId: string }
   /**
    * The accepted copy is in place and `copy_placed` is not recorded. `swapped` says whether this
    * call replaced the file or found it already there.
@@ -43,6 +48,7 @@ export interface PlacementSteps {
 
 interface AwaitingPlacement {
   readonly operationId: string;
+  readonly sourceNodeId: string;
   readonly mode: string | null;
   readonly indicatorText: string;
 }
@@ -60,9 +66,9 @@ function readAwaitingPlacement(nodePath: string, nodeId: string): AwaitingPlacem
     if (hasTable === undefined) return null;
     const operation = node
       .prepare(
-        "select operation_id from node_handover_operations where node_id = ? and role = 'destination' and state = 'filing_assumed'",
+        "select operation_id, source_node_id from node_handover_operations where node_id = ? and role = 'destination' and state = 'filing_assumed'",
       )
-      .get(nodeId) as { operation_id: string } | undefined;
+      .get(nodeId) as { operation_id: string; source_node_id: string } | undefined;
     if (operation === undefined) return null;
     const operationId = operation.operation_id;
     const event = node.prepare(
@@ -77,9 +83,73 @@ function readAwaitingPlacement(nodePath: string, nodeId: string): AwaitingPlacem
     }
     const mode = node.prepare("select mode from node_mode where node_id = ?").get(nodeId) as
       { mode: string } | undefined;
-    return { operationId, mode: mode?.mode ?? null, indicatorText: indicator.envelope };
+    return {
+      operationId,
+      sourceNodeId: operation.source_node_id,
+      mode: mode?.mode ?? null,
+      indicatorText: indicator.envelope,
+    };
   } finally {
     node.close();
+  }
+}
+
+/**
+ * The chart's stored text, or `null` when the file holds none. Read-only like `node.db` above, for
+ * the same reason: it may hold the only record of the chart, in a `-wal` the store recovers.
+ */
+function chartTextIn(databasePath: string): string | null {
+  const database = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    const hasTable = database
+      .prepare("select 1 from sqlite_master where name = 'node_membership'")
+      .get();
+    if (hasTable === undefined) return null;
+    const row = database.prepare("select document from node_membership where id = 1").get() as
+      { document: string } | undefined;
+    return row?.document ?? null;
+  } finally {
+    database.close();
+  }
+}
+
+/**
+ * Whether the old database holds a chart this box must not delete by placing. A file or chart this
+ * cannot read is no reason to stay: it would keep a box on a damaged database with the old box
+ * stopped, and the placed copy's own chart still has to pass before anything activates. The copy's
+ * own chart is not news either: it is what a crash leaves here once an open has changed the placed
+ * file's bytes.
+ */
+function holdsMovedOnChart(
+  livePath: string,
+  acceptedPath: string,
+  awaiting: AwaitingPlacement,
+  log: Logger,
+): boolean {
+  const { operationId, sourceNodeId } = awaiting;
+  try {
+    const text = chartTextIn(livePath);
+    if (text === null) return false;
+    const document: unknown = JSON.parse(text);
+    if (document === null) return false;
+    if (!isReadableChart(document)) throw new Error("not a readable chart");
+    if (!movedOnFromSource(document, sourceNodeId)) return false;
+    return !acceptedCopyHolds(acceptedPath, text);
+  } catch (error) {
+    log("warn", "handover.place_copy.old_chart_unreadable", {
+      operationId,
+      error: String(error),
+    });
+    return false;
+  }
+}
+
+/** Whether the accepted copy holds this very chart. One that cannot be read holds none. */
+function acceptedCopyHolds(acceptedPath: string, chartText: string): boolean {
+  try {
+    return chartTextIn(acceptedPath) === chartText;
+  } catch {
+    return false;
   }
 }
 
@@ -182,13 +252,20 @@ export async function placeAcceptedCopyAtStart(args: {
       (JSON.parse(awaiting.indicatorText) as { body?: unknown }).body,
     );
     const { sha256 } = indicator.snapshot;
-    if ((await digestOf(join(venueDir, VENUE_FILE))) === sha256) {
+    const live = join(venueDir, VENUE_FILE);
+    const liveDigest = await digestOf(live);
+    if (liveDigest === sha256) {
       // A crashed run may have renamed and not flushed, and `copy_placed` is recorded next.
       await steps.reachDisk(venueDir);
       return { kind: "copy_placed_owed", operationId, swapped: false };
     }
 
     const accepted = acceptedCopyPath(stateDir, operationId);
+    // No server runs while this holds the lock, so no chart can arrive between this read and the swap.
+    if (liveDigest !== null && holdsMovedOnChart(live, accepted, awaiting, log)) {
+      log("warn", "handover.place_copy.source_no_longer_main", { operationId });
+      return { kind: "source_no_longer_main", operationId };
+    }
     const held = await digestOf(accepted);
     if (held === null) throw new AppError("handover.accepted_copy_missing", {});
     // Checked here as well as at acceptance: the file sat on this disk since, and the old box has
@@ -299,14 +376,16 @@ export async function recordCopyPlaced(args: {
   log: Logger;
 }): Promise<void> {
   const { node, nodeId, stateDir, operationId, log } = args;
-  await withNodeTransaction(node, (tx) =>
-    appendHandoverEventTx(tx, {
+  await withNodeTransaction(node, async (tx) => {
+    await appendHandoverEventTx(tx, {
       nodeId,
       operationId,
       kind: COPY_PLACED_EVENT,
       detail: {},
       envelope: null,
-    }),
-  );
+    });
+    // The chart that ended a wait can arrive with no duty running to clear it, as the box is off.
+    await waitHandoverTx(tx, nodeId, operationId, null);
+  });
   await removeAcceptedCopy(stateDir, operationId, log);
 }
