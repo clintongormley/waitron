@@ -528,8 +528,8 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 
 ## A selling box that takes a newer chart naming another main box keeps selling and filing
 
-Settle before A947 3b lands; left open by A1018 Slice 5 (Ruling R42), for the owner to decide,
-because the cure stops a selling box. `apps/server/src/node-membership-api.ts` and
+A1342. The owner chose on 2026-11-05: settle it before A947 3b lands, and a box that sees another
+main box stops selling. Left open by A1018 Slice 5 (Ruling R42). `apps/server/src/node-membership-api.ts` and
 `apps/server/src/boot-peer-check.ts` stop a box only when the chart fences it (`isFencedStanding`),
 and a third box's promotion leaves a box `serving-secondary`, which does not fence. Run through real
 starts on the Slice 5 branch; on main since #2436. It needs a third box promoted over a running main
@@ -544,8 +544,8 @@ main in the chart it minted from; a third box promoted from M1's first chart wou
 
 ## After a handover the new main box gives no certificate expiry warning
 
-FISCAL; settle before A947 3b lands; left open by A1018 Slice 5 (Ruling R51). The fix decides which
-box a fiscal install record belongs to, which is the owner's call. Every reader looks the record up
+A1341. FISCAL. The owner chose on 2026-11-05: fix it before A947 3b lands, so the certificate's records
+and warnings carry over to the new main box. Left open by A1018 Slice 5 (Ruling R51). Every reader looks the record up
 by this box's node id, and the only row, inside the copy, names the old box: `certificate-card.ts`,
 `certificate-alerts.ts`, `certificate-reminders.ts`, `certificate-diagnosis.ts`,
 `certificate-install.ts`, `provisioning-secret.ts`, and its own SQL in

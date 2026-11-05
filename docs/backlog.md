@@ -5886,16 +5886,16 @@ Not in any track until the standalone primary is done.
   plan yet builds its path, including whose invoice series the new main box takes. A947 3b's table
   expects Slice 5 to reach these venues. Left open by A1018 Slice 5 (Ruling P9).
 
-- **FOR THE OWNER, settle before A947 3b lands: a selling box that takes a newer chart naming another
-  main box keeps selling and filing.** It stops only when the chart fences it, and a third box's
-  promotion can leave it `serving-secondary`, which does not. Two boxes filing could not be repaired.
-  Left open by A1018 Slice 5 (Ruling R42).
+- **A1342. Before A947 3b lands: a selling box that takes a newer chart naming another main box
+  must stop selling.** The owner chose this on 2026-11-05. Today it keeps selling and filing: it
+  stops only when the chart fences it, and a third box's promotion can leave it `serving-secondary`,
+  which does not. Two boxes filing could not be repaired. Left open by A1018 Slice 5 (Ruling R42).
   [Detail](backlog/replication-cloud.md#a-selling-box-that-takes-a-newer-chart-naming-another-main-box-keeps-selling-and-filing)
 
-- **FISCAL, settle before A947 3b lands: after a handover the new main box gives no certificate
-  expiry warning.** Filing and a renewal work, but every reader looks up the install record by this
-  box's node id, and the record names the old box. The owner decides which box the record belongs
-  to. Left open by A1018 Slice 5 (Ruling R51).
+- **A1341. FISCAL, before A947 3b lands: after a handover the certificate's records and warnings must
+  follow the new main box.** The owner chose this on 2026-11-05. Today the new main box gives no
+  expiry warning: filing and a renewal work, but every reader looks up the install record by this
+  box's node id, and the record names the old box. Left open by A1018 Slice 5 (Ruling R51).
   [Detail](backlog/replication-cloud.md#after-a-handover-the-new-main-box-gives-no-certificate-expiry-warning)
 
 - **A spare needs the main box's backup settings, and nothing carries them yet.** The owner's answer
