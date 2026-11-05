@@ -331,16 +331,16 @@ describe("a bill moved between service modes sends each dish to the kitchen once
   });
 
   it("sends the dish of a pay-first counter order moved into a party while its card is at the reader, and the card settles it", async () => {
-    const secondParty = await seatedWith(venue, "Caña");
+    const seatedParty = await seatedWith(venue, "Caña");
     const orderId = await prepayOrder("Pulpo");
     const { release, paying } = await wholeBillAtReader(orderId);
 
-    const moved = await moveTo(orderId, secondParty.tableId, {}, venue.cookie2);
+    const moved = await moveTo(orderId, seatedParty.tableId, {}, venue.cookie2);
     release();
     const paid = await paying;
 
     expect(moved.status).toBe(200);
-    expect(moved.json).toEqual({ partyId: secondParty.partyId, billId: orderId });
+    expect(moved.json).toEqual({ partyId: seatedParty.partyId, billId: orderId });
     expect(paid.json).toMatchObject({ outcome: "captured" });
     expect(await statusOf(venue, orderId)).toBe("settled");
     expect(registroCount(venue, orderId)).toBe(1);
@@ -348,10 +348,10 @@ describe("a bill moved between service modes sends each dish to the kitchen once
   });
 
   it("sends the dish of a pay-first counter order when it moves into a party, and paying in cash sends nothing again", async () => {
-    const secondParty = await seatedWith(venue, "Caña");
+    const seatedParty = await seatedWith(venue, "Caña");
     const orderId = await prepayOrder("Pulpo");
 
-    const moved = await moveTo(orderId, secondParty.tableId);
+    const moved = await moveTo(orderId, seatedParty.tableId);
     const sent = kitchenItems(orderId);
     const paid = await cashContribution(orderId, "20.00");
 
@@ -479,7 +479,7 @@ describe("money on a moved bill", () => {
     });
     expect(paid.status).toBe(200);
     const paymentId = (paid.json.payment as { id: string }).id;
-    const [pulpo] = venue.db.all<{ id: string }>(
+    const [octopusLine] = venue.db.all<{ id: string }>(
       sql`select id from working_order_lines where working_order_id = ${billId} and line_no = 1`,
     );
 
@@ -492,7 +492,7 @@ describe("money on a moved bill", () => {
     );
     const rest = await cashContribution(billId, "10.00");
 
-    expect(applied).toEqual([{ lineId: pulpo!.id, amount: 2000 }]);
+    expect(applied).toEqual([{ lineId: octopusLine!.id, amount: 2000 }]);
     expect(rest.json).toMatchObject({ outcome: "received", invoice: { total: "30.00" } });
     expect(await statusOf(venue, billId)).toBe("settled");
     const invoiced = await inTx(venue, (tx) =>
@@ -578,10 +578,10 @@ describe("the counter's held list after a move", () => {
   });
 
   it("lists a party's bill still at its table with that party, owing its whole total and holding no payment", async () => {
-    const secondParty = await seatedWith(venue, "Caña");
+    const seatedParty = await seatedWith(venue, "Caña");
 
-    expect(await heldRow(secondParty.tabId)).toMatchObject({
-      partyId: secondParty.partyId,
+    expect(await heldRow(seatedParty.tabId)).toMatchObject({
+      partyId: seatedParty.partyId,
       total: "3.00",
       outstanding: "3.00",
       hasPayments: false,
@@ -637,7 +637,7 @@ describe("paying a moved bill, by its state", () => {
 
   it("refuses a presented bill moved into a party as a bill payment, collects it with its one sale, and the party then finishes", async () => {
     const firstParty = await seatedWith(venue, "Caña");
-    const caña = await post(`/api/working-orders/${firstParty.tabId}/payments`, {
+    const beerPayment = await post(`/api/working-orders/${firstParty.tabId}/payments`, {
       submissionId: randomUUID(),
       kind: "contribution",
       amount: "3.00",
@@ -646,7 +646,7 @@ describe("paying a moved bill, by its state", () => {
       applied: "3.00",
       tip: "0.00",
     });
-    expect(caña.status).toBe(200);
+    expect(beerPayment.status).toBe(200);
     const id = randomUUID();
     const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
     await parkOrder(deps, venue.cfg, {
@@ -736,23 +736,23 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
   });
 
   it("keeps a counter order being paid in full separate from the party's bill made at seating, and its card completes on it", async () => {
-    const secondParty = await seatedWith(venue, "Caña");
+    const seatedParty = await seatedWith(venue, "Caña");
     const orderId = await counterOrder("Tarta");
     const { release, paying } = await wholeBillAtReader(orderId);
 
-    const moved = await moveTo(orderId, secondParty.tableId, {}, venue.cookie2);
+    const moved = await moveTo(orderId, seatedParty.tableId, {}, venue.cookie2);
     release();
     const paid = await paying;
 
     expect(moved.status).toBe(200);
-    expect(moved.json).toEqual({ partyId: secondParty.partyId, billId: orderId });
+    expect(moved.json).toEqual({ partyId: seatedParty.partyId, billId: orderId });
     expect(paid.json).toMatchObject({ outcome: "captured" });
     expect(await statusOf(venue, orderId)).toBe("settled");
     expect(registroCount(venue, orderId)).toBe(1);
-    expect(partyOfBill(orderId)).toBe(secondParty.partyId);
+    expect(partyOfBill(orderId)).toBe(seatedParty.partyId);
     expect(linesNamed(orderId)).toEqual(["Tarta"]);
-    expect(await statusOf(venue, secondParty.tabId)).toBe("open");
-    expect(linesNamed(secondParty.tabId)).toEqual(["Caña"]);
+    expect(await statusOf(venue, seatedParty.tabId)).toBe("open");
+    expect(linesNamed(seatedParty.tabId)).toEqual(["Caña"]);
   });
 
   it("keeps the moved bill separate from the receiving table's bill made at seating, with a card refund in progress", async () => {
@@ -1084,7 +1084,7 @@ describe("the move route", () => {
       ],
     });
     expect(placed.status).toBe(200);
-    const [tarta] = venue.db.all<{ id: string }>(
+    const [cakeLine] = venue.db.all<{ id: string }>(
       sql`select id from working_order_lines where working_order_id = ${firstParty.tabId} and name = 'Tarta'`,
     );
     const to = await freeTable();
@@ -1106,7 +1106,7 @@ describe("the move route", () => {
     expect(read.status).toBe(200);
     const groups = read.json.groups as { state: string; rows: { lineId: string }[] }[];
     expect(
-      groups.filter((group) => group.rows.some((row) => row.lineId === tarta!.id)),
+      groups.filter((group) => group.rows.some((row) => row.lineId === cakeLine!.id)),
     ).toMatchObject([{ state: "held" }]);
   });
 
