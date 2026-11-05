@@ -254,3 +254,154 @@ export function triggerParts(triggerSql: string): TriggerParts {
     body: sliceBetween(triggerSql, begin.end, end.start),
   };
 }
+
+export interface DeclaredColumn {
+  readonly name: string;
+  readonly collation: string | null;
+  /** A generated column's formula, between its brackets. */
+  readonly generated: string | null;
+  readonly notNullOnConflict: string | null;
+}
+
+export interface DeclaredKey {
+  readonly kind: "PRIMARY KEY" | "UNIQUE";
+  readonly columns: readonly string[];
+  readonly onConflict: string | null;
+}
+
+export interface DeclaredForeignKey {
+  readonly table: string;
+  readonly from: readonly string[];
+  readonly deferrable: string | null;
+}
+
+/** What a table's stored CREATE text states that no pragma reports. */
+export interface TableDeclarations {
+  readonly columns: readonly DeclaredColumn[];
+  readonly keys: readonly DeclaredKey[];
+  readonly foreignKeys: readonly DeclaredForeignKey[];
+}
+
+const TABLE_CONSTRAINT_STARTS = ["CONSTRAINT", "PRIMARY", "UNIQUE", "CHECK", "FOREIGN"];
+
+export function tableDeclarations(createSql: string): TableDeclarations {
+  const tokens = significantTokens(createSql);
+  const token = (index: number): Token => at(tokens, index, createSql);
+  const columns: DeclaredColumn[] = [];
+  const keys: DeclaredKey[] = [];
+  const foreignKeys: DeclaredForeignKey[] = [];
+  const open = tokens.findIndex((candidate) => isSymbol(candidate, "("));
+  if (open === -1) return { columns, keys, foreignKeys };
+  const close = matchingClose(tokens, open, createSql);
+
+  const onConflictAt = (index: number): string | null =>
+    isWord(tokens[index], "ON") && isWord(tokens[index + 1], "CONFLICT")
+      ? token(index + 2).text
+      : null;
+
+  const columnList = (openAt: number): { names: string[]; next: number } => {
+    const end = matchingClose(tokens, openAt, createSql);
+    const names: string[] = [];
+    let termStart = true;
+    for (let index = openAt + 1; index < end; index += 1) {
+      if (termStart) names.push(unquoted(token(index).text));
+      if (isSymbol(tokens[index], "(")) index = matchingClose(tokens, index, createSql);
+      termStart = isSymbol(tokens[index], ",");
+    }
+    return { names, next: end + 1 };
+  };
+
+  const references = (from: string[], referencesAt: number): number => {
+    const table = unquoted(token(referencesAt + 1).text);
+    let index = referencesAt + 2;
+    if (isSymbol(tokens[index], "(")) index = matchingClose(tokens, index, createSql) + 1;
+    for (;;) {
+      if (isWord(tokens[index], "ON") && !isWord(tokens[index + 1], "CONFLICT")) {
+        index += isWord(tokens[index + 2], "SET") || isWord(tokens[index + 2], "NO") ? 4 : 3;
+      } else if (isWord(tokens[index], "MATCH")) {
+        index += 2;
+      } else {
+        break;
+      }
+    }
+    let deferrable: string | null = null;
+    const deferrableStart = index;
+    if (isWord(tokens[index], "NOT") && isWord(tokens[index + 1], "DEFERRABLE")) index += 1;
+    if (isWord(tokens[index], "DEFERRABLE")) {
+      index += isWord(tokens[index + 1], "INITIALLY") ? 3 : 1;
+      deferrable = sliceBetween(createSql, token(deferrableStart).start, token(index - 1).end);
+    } else {
+      index = deferrableStart;
+    }
+    foreignKeys.push({ table, from, deferrable });
+    return index - 1;
+  };
+
+  const readTableConstraint = (start: number): void => {
+    let index = isWord(tokens[start], "CONSTRAINT") ? start + 2 : start;
+    if (isWord(tokens[index], "PRIMARY") || isWord(tokens[index], "UNIQUE")) {
+      const kind = isWord(tokens[index], "PRIMARY") ? "PRIMARY KEY" : "UNIQUE";
+      if (kind === "PRIMARY KEY") index += 1;
+      const { names, next } = columnList(index + 1);
+      keys.push({ kind, columns: names, onConflict: onConflictAt(next) });
+    } else if (isWord(tokens[index], "FOREIGN")) {
+      const { names, next } = columnList(index + 2);
+      references(names, next);
+    }
+  };
+
+  const readColumn = (start: number, end: number): void => {
+    const name = unquoted(token(start).text);
+    let collation: string | null = null;
+    let generated: string | null = null;
+    let notNullOnConflict: string | null = null;
+    for (let index = start + 1; index < end; index += 1) {
+      const current = token(index);
+      if (isSymbol(current, "(")) {
+        index = matchingClose(tokens, index, createSql);
+      } else if (isWord(current, "CONSTRAINT")) {
+        index += 1;
+      } else if (isWord(current, "DEFAULT")) {
+        const value = tokens[index + 1];
+        if (isSymbol(value, "-") || isSymbol(value, "+")) index += 2;
+        else if (!isSymbol(value, "(")) index += 1;
+      } else if (isWord(current, "COLLATE")) {
+        index += 1;
+        collation = unquoted(token(index).text);
+      } else if (isWord(current, "AS") && isSymbol(tokens[index + 1], "(")) {
+        const formulaEnd = matchingClose(tokens, index + 1, createSql);
+        generated = sliceBetween(createSql, token(index + 1).end, token(formulaEnd).start);
+        index = formulaEnd;
+      } else if (isWord(current, "NOT") && isWord(tokens[index + 1], "NULL")) {
+        notNullOnConflict = onConflictAt(index + 2);
+        index += notNullOnConflict === null ? 1 : 4;
+      } else if (isWord(current, "PRIMARY") || isWord(current, "UNIQUE")) {
+        const kind = isWord(current, "PRIMARY") ? "PRIMARY KEY" : "UNIQUE";
+        if (kind === "PRIMARY KEY") index += 1;
+        if (isWord(tokens[index + 1], "ASC") || isWord(tokens[index + 1], "DESC")) index += 1;
+        const onConflict = onConflictAt(index + 1);
+        keys.push({ kind, columns: [name], onConflict });
+        if (onConflict !== null) index += 3;
+      } else if (isWord(current, "REFERENCES")) {
+        index = references([name], index);
+      }
+    }
+    columns.push({ name, collation, generated, notNullOnConflict });
+  };
+
+  let segmentStart = open + 1;
+  for (let index = open + 1; index <= close; index += 1) {
+    if (isSymbol(tokens[index], "(")) {
+      index = matchingClose(tokens, index, createSql);
+    } else if (index === close || isSymbol(tokens[index], ",")) {
+      const first = token(segmentStart);
+      if (TABLE_CONSTRAINT_STARTS.some((word) => isWord(first, word))) {
+        readTableConstraint(segmentStart);
+      } else {
+        readColumn(segmentStart, index);
+      }
+      segmentStart = index + 1;
+    }
+  }
+  return { columns, keys, foreignKeys };
+}

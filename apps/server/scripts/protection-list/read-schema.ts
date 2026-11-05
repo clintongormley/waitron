@@ -1,7 +1,13 @@
 import type { DatabaseSync } from "node:sqlite";
 import { quoteIdent } from "@waitron/provisioning";
-import { checkClausesIn, hasAutoincrement, indexParts, triggerParts } from "./sql-tokens.js";
-import type { CheckClause, TriggerParts } from "./sql-tokens.js";
+import {
+  checkClausesIn,
+  hasAutoincrement,
+  indexParts,
+  tableDeclarations,
+  triggerParts,
+} from "./sql-tokens.js";
+import type { CheckClause, TableDeclarations, TriggerParts } from "./sql-tokens.js";
 
 /** Values are strings so that the list survives JSON: a 64-bit integer and Infinity do not as numbers. */
 export type Cell = readonly ["null"] | readonly ["integer" | "real" | "text" | "blob", string];
@@ -38,6 +44,7 @@ export interface SchemaTable {
   readonly columns: readonly SchemaColumn[];
   readonly foreignKeys: readonly SchemaForeignKey[];
   readonly checks: readonly CheckClause[];
+  readonly declared: TableDeclarations;
   readonly rows: readonly (readonly Cell[])[];
 }
 
@@ -306,6 +313,10 @@ export function readSchema(db: DatabaseSync): SchemaList {
       columns,
       foreignKeys: readForeignKeys(db, entry.name),
       checks: plainDdl === null ? [] : checkClausesIn(plainDdl),
+      declared:
+        plainDdl === null
+          ? { columns: [], keys: [], foreignKeys: [] }
+          : tableDeclarations(plainDdl),
       rows: readRows(db, entry.name, columns),
     });
     indexes.push(...readIndexes(db, entry.name, catalogue));

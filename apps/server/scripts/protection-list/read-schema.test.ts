@@ -388,6 +388,50 @@ describe("readSchema", () => {
     expect(() => readSchema(db)).toThrow(/broken\.t/);
   });
 
+  it("reads the protections only the stored CREATE text states", () => {
+    db.exec(`
+      CREATE TABLE declared (
+        id INTEGER PRIMARY KEY ASC ON CONFLICT REPLACE AUTOINCREMENT,
+        code TEXT COLLATE NOCASE NOT NULL ON CONFLICT IGNORE UNIQUE ON CONFLICT FAIL,
+        plain TEXT DEFAULT -1 NOT NULL,
+        twice INTEGER GENERATED ALWAYS AS (id  *  2) STORED,
+        parent INTEGER REFERENCES parents (id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+        other INTEGER CONSTRAINT other_fk REFERENCES parents MATCH SIMPLE NOT DEFERRABLE,
+        CONSTRAINT both_unique UNIQUE (code, plain) ON CONFLICT ROLLBACK,
+        FOREIGN KEY (plain, code) REFERENCES "child table" (label, first_id) DEFERRABLE,
+        CHECK (plain <> ',')
+      );
+    `);
+    expect(byName(readSchema(db).tables, "declared").declared).toEqual({
+      columns: [
+        { name: "id", collation: null, generated: null, notNullOnConflict: null },
+        { name: "code", collation: "NOCASE", generated: null, notNullOnConflict: "IGNORE" },
+        { name: "plain", collation: null, generated: null, notNullOnConflict: null },
+        { name: "twice", collation: null, generated: "id  *  2", notNullOnConflict: null },
+        { name: "parent", collation: null, generated: null, notNullOnConflict: null },
+        { name: "other", collation: null, generated: null, notNullOnConflict: null },
+      ],
+      keys: [
+        { kind: "PRIMARY KEY", columns: ["id"], onConflict: "REPLACE" },
+        { kind: "UNIQUE", columns: ["code"], onConflict: "FAIL" },
+        { kind: "UNIQUE", columns: ["code", "plain"], onConflict: "ROLLBACK" },
+      ],
+      foreignKeys: [
+        { table: "parents", from: ["parent"], deferrable: "DEFERRABLE INITIALLY DEFERRED" },
+        { table: "parents", from: ["other"], deferrable: "NOT DEFERRABLE" },
+        { table: "child table", from: ["plain", "code"], deferrable: "DEFERRABLE" },
+      ],
+    });
+  });
+
+  it("reads what a later ALTER TABLE added to a column", () => {
+    db.exec(`ALTER TABLE cells ADD COLUMN extra TEXT COLLATE RTRIM`);
+    expect(byName(readSchema(db).tables, "cells").declared.columns).toEqual([
+      { name: "a", collation: null, generated: null, notNullOnConflict: null },
+      { name: "extra", collation: "RTRIM", generated: null, notNullOnConflict: null },
+    ]);
+  });
+
   it("survives names that need quoting", () => {
     db.exec(`CREATE TABLE "odd ""name" ("a ""col" INTEGER); INSERT INTO "odd ""name" VALUES (2);`);
     expect(byName(readSchema(db).tables, 'odd "name').rows).toEqual([[["integer", "2"]]]);
