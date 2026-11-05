@@ -15730,7 +15730,8 @@ export class TillApp extends LitElement {
     await this.#followActionBills(result.billIds, sent);
   }
 
-  // A plain refresh keeps what a prompt opened with: only #reloadSplitParty and a reopening replace it.
+  // A plain refresh keeps what a prompt opened with: only #retakeSplitRevision and #readRowsAndRevision
+  // replace it.
   readonly #splitTablePrompts = new WeakMap<object, PartyComposition | null>();
   /** Each selected bill's edit state when it joined the selection, or null if it had none then: a
    * later read does not turn that into permission. */
@@ -15822,7 +15823,7 @@ export class TillApp extends LitElement {
     const partyId = this.orderParty?.id;
     if (refusal !== this.splitRefusal || partyId === undefined) return;
     this.#watchSplitPanel(prompt, partyId, screen);
-    if (this.#splitRowsBehind()) await this.#readReopenedRows(prompt, partyId);
+    if (this.#splitRowsBehind()) await this.#readRowsAndRevision(prompt, partyId);
   }
 
   #splitRowsBehind(): boolean {
@@ -15831,10 +15832,25 @@ export class TillApp extends LitElement {
 
   /** The waiter is looking at the new state only from here, so only here does the composition catch
    * up: pressed sooner, or after a failed read, Split still sends the old revision for the server to
-   * judge. */
-  async #readReopenedRows(prompt: object, partyId: string): Promise<void> {
-    if (await this.#readSplitSources(partyId))
-      this.#splitTablePrompts.set(prompt, this.#partyComposition([]));
+   * judge. It takes the revision from before the read: a floor read landing while that is out may
+   * name a change the rows do not show. */
+  async #readRowsAndRevision(prompt: object, partyId: string): Promise<void> {
+    const revisions = this.#billRevisions();
+    if (!(await this.#readSplitSources(partyId))) return;
+    const fresh = this.#partyComposition([]);
+    this.#splitTablePrompts.set(prompt, fresh === null ? null : { ...fresh, revisions });
+  }
+
+  /** With the rows behind the bills list, a press keeps its old revision for the server to judge. */
+  #retakeSplitRevision(prompt: object): void {
+    const fresh = this.#partyComposition([]);
+    const kept = this.#splitTablePrompts.get(prompt);
+    this.#splitTablePrompts.set(
+      prompt,
+      fresh !== null && kept != null && this.#splitRowsBehind()
+        ? { ...fresh, revisions: kept.revisions }
+        : fresh,
+    );
   }
 
   #onSplitRefusalDeclined(event: Event): void {
@@ -15916,10 +15932,13 @@ export class TillApp extends LitElement {
       if (visit !== this.#orderVisit) return;
       await this.#followBillsRead(answer, before, true);
       // Whichever panel is open now draws what this read found, so Split acts on that, not on what
-      // it opened with.
+      // it opened with. A sources read still out may have started before the floor read, so Split
+      // waits for one that started after it.
       const open = this.#splitPanel;
-      if (open !== undefined && answer.bills !== null)
-        this.#splitTablePrompts.set(open.prompt, this.#partyComposition([]));
+      if (open !== undefined && answer.bills !== null) {
+        if (this.#splitReadAbort === undefined) this.#retakeSplitRevision(open.prompt);
+        else await this.#readRowsAndRevision(open.prompt, open.partyId);
+      }
     } finally {
       panel.reloading = false;
       this.splitReloading = this.#splitPanel?.reloading === true;
@@ -16146,14 +16165,7 @@ export class TillApp extends LitElement {
       return;
     }
     if (prompt !== undefined) {
-      const fresh = this.#partyComposition([]);
-      const kept = this.#splitTablePrompts.get(prompt);
-      this.#splitTablePrompts.set(
-        prompt,
-        fresh !== null && kept != null && this.#splitRowsBehind()
-          ? { ...fresh, revisions: kept.revisions }
-          : fresh,
-      );
+      this.#retakeSplitRevision(prompt);
       if (said !== undefined && side === undefined) this.#splitObservations.delete(prompt);
     }
     this.errorKey = undefined;

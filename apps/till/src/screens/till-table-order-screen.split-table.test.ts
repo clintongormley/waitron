@@ -339,6 +339,43 @@ describe("Split a table's panel", () => {
     expect(stepper(el, "leaving").label).toBe("Guests at Window");
   });
 
+  it("starts the staying side empty when the party has no count", async () => {
+    const noCount = { ...garcia, guestCount: null };
+    const el = await mountScreen({
+      party: noCount,
+      tables: tables.map((each) => ({ ...each, party: noCount })),
+    });
+    await toPanel(el);
+
+    expect(nativeInput(el, "staying").value).toBe("");
+    expect(nativeInput(el, "leaving").value).toBe("");
+  });
+
+  it("the list step's heading names the party, and it lists the party's tables", async () => {
+    const el = await mountScreen();
+    await click(el, "[data-move-split]");
+    await click(el, '[data-action="split-table"]');
+
+    expect(q(el, "[data-split-table] h2")!.textContent!.trim()).toBe(
+      "Split a table off García (T7, T8):",
+    );
+    expect(q(el, '[data-target="t7"]')!.textContent!.trim()).toBe("T7");
+    expect(q(el, '[data-target="t8"]')!.textContent!.trim()).toBe("T8");
+  });
+
+  it("the list step names a table renamed for today by its name, in its choice and its heading", async () => {
+    const el = await mountScreen({
+      tables: [table("t7"), table("t8", { today: { name: "Window" } as TableState["today"] })],
+    });
+    await click(el, "[data-move-split]");
+    await click(el, '[data-action="split-table"]');
+
+    expect(q(el, '[data-target="t8"]')!.textContent!.trim()).toBe("Window");
+    expect(q(el, "[data-split-table] h2")!.textContent!.trim()).toBe(
+      "Split a table off García (T7, Window):",
+    );
+  });
+
   it("the hint names the tables that stay", async () => {
     const threeTables = { ...garcia, tableIds: ["t7", "t8", "t9"] };
     const el = await mountScreen({

@@ -537,6 +537,16 @@ describe("Split a table's panel and a count stored elsewhere", () => {
     expect(unload()).toBe(false);
   });
 
+  it("a press after a stored count moved an untouched staying side splits with the new count", async () => {
+    const { app, screen } = await mount();
+    await storeCount(app, screen, 6);
+
+    await pressSplit(screen);
+
+    expect(app.commands.at(-1)!.type).toBe("split-table");
+    expect(app.commands.at(-1)!.detail.guestCounts).toEqual({ staying: 6, leaving: null });
+  });
+
   it("a staying count typed before the stored one changes elsewhere stays, unsaved against the new stored count", async () => {
     const { app, screen } = await mount();
     await typeCount(screen, "staying", "3");

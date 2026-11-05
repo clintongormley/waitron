@@ -999,6 +999,37 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         throw new Error("the scan must include a whole bill");
       await expectNoA11yViolations(host);
     });
+
+    it.each([
+      ["a count refused beside its stepper", { field: "leaving", leaving: "0" }],
+      ["a refusal's sentence at the foot", {}],
+    ])("has no violations in Split a table's panel with %s", async (_state, over) => {
+      const { el, host } = await toAction("split-table");
+      el.bills = partyBills;
+      el.splitRead = { bills: [] };
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>('[data-target="t5"]')!.click();
+      await el.updateComplete;
+      el.splitRefusal = {
+        tableId: "t5",
+        selection: { wholeBillIds: [], loose: [] },
+        staying: "2",
+        leaving: "",
+        message: "Refused",
+        ...over,
+      } as NonNullable<TillTableOrderScreen["splitRefusal"]>;
+      await el.updateComplete;
+      const leaving = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>(
+        'wt-number-stepper[name="leavingGuests"]',
+      )!;
+      await leaving.updateComplete;
+      const said =
+        "field" in over
+          ? leaving.error
+          : el.shadowRoot!.querySelector("[data-split-refusal]")?.textContent?.trim();
+      if (said !== "Refused") throw new Error("the scan must include the refusal showing");
+      await expectNoA11yViolations(host);
+    });
   });
 
   it("has no violations in the Move dishes panel with a grouped row stepped down and a weighed dish ticked", async () => {

@@ -358,6 +358,16 @@ describe("A803 selection:", () => {
       expect(rowsOf(one, NOTHING).map((row) => row.blocked?.reason)).toEqual(["floor", "floor"]);
     });
 
+    it("unticking a row of a whole bill leaves every other row picked, up to the floor", () => {
+      const ten = ["a", "b", "c"].map((id, index) => dish(id, index + 1, "10.00"));
+      const clean = source("b1", 1, ten);
+      const part = source("b1", 1, ten, { received: "20.00" });
+      const untick = new Set(["a", "b"]);
+
+      expect(sorted(pickOnBill(clean, wholeOf("b1"), untick).picks.get("b1"))).toEqual(["a", "b"]);
+      expect(sorted(pickOnBill(part, wholeOf("b1"), untick).picks.get("b1"))).toEqual(["a"]);
+    });
+
     it("a contribution marks no dish paid", () => {
       const one = source("b1", 1, [dish("a", 1, "26.00")], { received: "10.00" });
 
@@ -966,6 +976,31 @@ describe("A803 selection:", () => {
       const out = tidySplit(drawn([one], split), [presented], split);
 
       expect(out.split.picks.has("b1")).toBe(false);
+      expect(out.changed).toEqual(["b1"]);
+    });
+
+    it("a re-read that removes a picked dish names the bill, with no row left to say why", () => {
+      const one = source("b1", 1, [a, b, c]);
+      const split = looseOf({ b1: ["a", "b"] });
+      const removed = source("b1", 1, [b, c]);
+
+      const out = tidySplit(drawn([one], split), [removed], split);
+
+      expect(sorted(out.split.picks.get("b1"))).toEqual(["b"]);
+      expect(out.changed).toEqual(["b1"]);
+      expect(named(rowsOf(removed, out.split)).flat()).not.toContain("a");
+    });
+
+    it("a re-read whose money reaches the floor takes a pick with no dish paid", () => {
+      const ten = (id: string, lineNo: number) => dish(id, lineNo, "10.00");
+      const lines = [ten("x", 1), ten("y", 2), ten("z", 3)];
+      const one = source("b1", 1, lines);
+      const split = looseOf({ b1: ["x", "y"] });
+      const funded = source("b1", 1, lines, { received: "20.00" });
+
+      const out = tidySplit(drawn([one], split), [funded], split);
+
+      expect(sorted(out.split.picks.get("b1"))).toEqual(["x"]);
       expect(out.changed).toEqual(["b1"]);
     });
 

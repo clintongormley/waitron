@@ -743,6 +743,39 @@ describe("till-app: the read behind Split a table's panel", () => {
           expectHeldByLuis(el);
         });
 
+        it("the read the first bill started is still out when the reload ends: Split waits for one made after the floor's", async () => {
+          fakeTimers();
+          const el = await mounted("desktop", {
+            ...noBillApi(),
+            splitTable: vi.fn().mockResolvedValue({ partyId: "v-split", billIds: [] }),
+          });
+          await toPanel(el);
+          anotherTillStartsTheBill();
+          server.drafts.length = 0;
+          const later = party({ revision: 9, tableIds: ["t4", "t5"], billCount: 1 });
+          api.getTablesState!.mockResolvedValue([
+            table("t4", "4", later),
+            table("t5", "5", later),
+            table7,
+          ]);
+          const held = heldReads();
+          api.getSplitSources!.mockImplementation(held.read);
+
+          await rereadBills(el, firstBill());
+
+          expect(tableOrder(el)!.party?.revision).toBe(9);
+          expect(held.calls).toHaveLength(2);
+          expect(splitButton(el).disabled).toBe(true);
+
+          held.calls[1]!.answer(firstBillRead());
+          await flush(el, 6);
+          expect(splitButton(el).disabled).toBe(false);
+          await press(el, "[data-split-confirm]");
+          await flush(el, 6);
+
+          expect(api.splitTable!.mock.calls[0]![3]).toBe(9);
+        });
+
         it("the bills read failing leaves the old revision on the composition", async () => {
           fakeTimers();
           const el = await mounted("desktop", {
@@ -4363,6 +4396,139 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         });
       });
 
+      describe("a reload behind the open panel", () => {
+        const withNewBill = (): SplitSources => ({
+          bills: [
+            ...movedSources().bills,
+            { billId: "b3", lines: [dish("tea", 1)], balance: balance("b3", "5.00") },
+          ],
+        });
+        const movedAgain = () => [
+          partyBill("wo-4", 1, "10.00", { revision: 1 }),
+          partyBill("b2", 2, "40.00", { revision: 2 }),
+          partyBill("b3", 3, "5.00"),
+        ];
+        const newestRows = (): SplitSources => ({
+          bills: withNewBill().bills.map((each) =>
+            each.billId === "b2" ? { ...each, balance: balance("b2", "40.00") } : each,
+          ),
+        });
+        /** A timed read moves the list, its sources name a bill the list does not know, which starts
+         * the reload, and another change has moved Bill 2 again before the reload's bills read. */
+        async function reloadOverRowsBehind(el: TillApp, secondRead: () => Promise<SplitSources>) {
+          api.getTablesState!.mockResolvedValue(atRevision(9));
+          api
+            .getPartyBills!.mockReset()
+            .mockResolvedValueOnce(movedList())
+            .mockResolvedValue(movedAgain());
+          api
+            .getSplitSources!.mockReset()
+            .mockResolvedValueOnce(withNewBill())
+            .mockImplementation(secondRead);
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el, 6);
+          expect(tableOrder(el)!.party?.revision).toBe(9);
+          expect(reads().sources).toBeGreaterThanOrEqual(2);
+        }
+
+        it("the rows' read failing: the press carries the old revision, not the floor's", async () => {
+          fakeTimers();
+          const el = await panelWith({});
+          await tick(el, "b2");
+          await reloadOverRowsBehind(el, () => Promise.reject(lost()));
+          expect(takes(el)).toContain("30.00");
+
+          await pressSplit(el);
+
+          expect(api.splitTable).toHaveBeenCalledOnce();
+          expect(api.splitTable!.mock.calls[0]![3]).toBe(3);
+        });
+
+        it("the rows' read still out: Split waits for a read made after the floor's, then carries the floor's revision", async () => {
+          fakeTimers();
+          const el = await panelWith({});
+          await tick(el, "b2");
+          const held = heldReads();
+          await reloadOverRowsBehind(el, held.read);
+          expect(held.calls).toHaveLength(2);
+          expect(held.calls[0]!.signal?.aborted).toBe(true);
+          expect(takes(el)).toContain("30.00");
+          expect(splitButton(el).disabled).toBe(true);
+
+          held.calls[1]!.answer(newestRows());
+          await flush(el, 6);
+          expect(takes(el)).toContain("40.00");
+          expect(splitButton(el).disabled).toBe(false);
+
+          await pressSplit(el);
+
+          expect(api.splitTable).toHaveBeenCalledOnce();
+          expect(api.splitTable!.mock.calls[0]![3]).toBe(9);
+        });
+
+        it("that read failing as well: Split comes back and the press carries the old revision", async () => {
+          fakeTimers();
+          const el = await panelWith({});
+          await tick(el, "b2");
+          const held = heldReads();
+          await reloadOverRowsBehind(el, held.read);
+
+          held.calls[1]!.fail();
+          await flush(el, 6);
+          expect(takes(el)).toContain("30.00");
+          expect(splitButton(el).disabled).toBe(false);
+
+          await pressSplit(el);
+
+          expect(api.splitTable).toHaveBeenCalledOnce();
+          expect(api.splitTable!.mock.calls[0]![3]).toBe(3);
+        });
+
+        it("the bills read showing the list the rows were read against: the press carries the floor's revision", async () => {
+          fakeTimers();
+          const el = await panelWith({});
+          await tick(el, "b2");
+          api.getTablesState!.mockResolvedValue(atRevision(9));
+          api.getPartyBills!.mockResolvedValue(movedList());
+          api.getSplitSources!.mockResolvedValueOnce(withNewBill());
+          const before = reads().sources;
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el, 6);
+          expect(tableOrder(el)!.party?.revision).toBe(9);
+          expect(reads().sources).toBe(before + 1);
+
+          await pressSplit(el);
+
+          expect(api.splitTable!.mock.calls[0]![3]).toBe(9);
+        });
+      });
+
+      it("a floor read landing while a reopening's read is out: the press carries what the floor said before that read", async () => {
+        const el = await panelWith({
+          ...firstRefused({ code: "party.out_of_date" }),
+          setPartyName: vi.fn().mockResolvedValue({ revision: 9 }),
+        });
+        await tick(el, "b2");
+        anotherTillMovesTheSoup();
+        const held = heldReads();
+        api.getSplitSources!.mockImplementation(held.read);
+        await pressSplit(el);
+        await flush(el, 6);
+        expect(held.calls).toHaveLength(1);
+
+        api.getTablesState!.mockResolvedValue(atRevision(9));
+        emit(tableOrder(el)!, "name-party", { name: "Ana" });
+        await flush(el, 6);
+        expect(tableOrder(el)!.party?.revision).toBe(9);
+        held.calls[0]!.answer(movedSources());
+        await flush(el, 6);
+        expect(takes(el)).toContain("30.00");
+
+        await pressSplit(el);
+
+        expect(api.splitTable!.mock.calls[1]![3]).toBe(7);
+      });
+
       it("a read out when Split was pressed is dropped, so it does not count as seen", async () => {
         fakeTimers();
         const el = await panelWith(refused({ code: "table.not_shared" }));
@@ -4587,23 +4753,88 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
       });
     });
 
-    it("take-over: a refusal on a ticked bill shows both lines at once, still held, and nothing is sent", async () => {
+    it("take-over: a refusal on a ticked bill whose order is still there shows both lines at once, still held, and nothing is sent", async () => {
       const el = await tickedThenHeld();
-      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.not_found", status: 404 });
+      server.takeOverDraft.mockImplementationOnce(async () => {
+        server.drafts[0] = { ...server.drafts[0]!, revision: 2 };
+        throw { code: "draft.out_of_date", status: 409 };
+      });
 
       await taken(el);
 
-      expect(footRefusal(el)).toBe(t("table.take_over_gone"));
+      expect(footRefusal(el)).toBe(t("table.take_over_changed"));
       expectStillHeld(el);
       expect(banner(el)).toBeNull();
 
       await refreshDrafts(el);
-      expect(footRefusal(el)).toBe(t("table.take_over_gone"));
+      expect(footRefusal(el)).toBe(t("table.take_over_changed"));
       expectStillHeld(el);
 
       splitButton(el).click();
       await flush(el, 6);
       expect(api.splitTable).not.toHaveBeenCalled();
+    });
+
+    it("take-over: refused with the read after it failing: the foot says so and the bill stays held", async () => {
+      const el = await tickedThenHeld();
+      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
+      api.listDrafts!.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+      await taken(el);
+
+      expect(footRefusal(el)).toBe(t("table.take_over_changed"));
+      expectStillHeld(el);
+    });
+
+    it.each([
+      ["draft.not_found", 404, "table.take_over_gone"],
+      ["draft.out_of_date", 409, "table.take_over_changed"],
+    ])(
+      "take-over: %s with the read after it showing the order gone: the foot says so, the row goes, the tick stays and Split comes back",
+      async (code, status, words) => {
+        const el = await tickedThenHeld();
+        server.takeOverDraft.mockImplementationOnce(async () => {
+          server.drafts.length = 0;
+          throw { code, status };
+        });
+
+        await taken(el);
+
+        expect(footRefusal(el)).toBe(t(words));
+        expect(row(el, "b2")).toBeNull();
+        expect(tickBox(el, "b2").checked).toBe(true);
+        expect(splitButton(el).variant).toBe("primary");
+        expect(splitButton(el).disabled).toBe(false);
+        expect(banner(el)).toBeNull();
+      },
+    );
+
+    it("take-over: refused on an unticked held bill beside a refused split: both sentences, in order above the actions, Split enabled, and the next take-over press clears only its own", async () => {
+      server.drafts.push(luisOn("b2"));
+      const el = await panelWith({
+        splitTable: vi.fn().mockRejectedValue({ code: "table.not_shared" }),
+      });
+      await pressSplit(el);
+      expect(refusal(el)).not.toBeNull();
+      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
+
+      await taken(el);
+
+      expect(tickBox(el, "b2").checked).toBe(false);
+      expect(footRefusal(el)).toBe(t("table.take_over_changed"));
+      const foot = [...q(el, "[data-split-refusal]")!.parentElement!.children];
+      expect(foot.indexOf(refusal(el)!)).toBeLessThan(
+        foot.indexOf(q(el, "[data-split-take-over-refusal]")!),
+      );
+      expect(foot.indexOf(q(el, "[data-split-take-over-refusal]")!)).toBeLessThan(
+        foot.indexOf(bottom(el)),
+      );
+      expect(splitButton(el).disabled).toBe(false);
+
+      await asked(el);
+
+      expect(footRefusal(el)).toBeUndefined();
+      expect(refusal(el)).not.toBeNull();
     });
 
     it('take-over: "failed" says table.error at the foot, still held, nothing sent', async () => {
@@ -4622,7 +4853,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
     it("take-over: the next take-over pressed clears the refusal", async () => {
       const el = await tickedThenHeld();
-      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.not_found", status: 404 });
+      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
       await taken(el);
       expect(footRefusal(el)).not.toBeUndefined();
 
@@ -4634,7 +4865,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     it("take-over: closing the panel clears the refusal", async () => {
       server.drafts.push(luisOn("b2"));
       const el = await panelWith({});
-      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.not_found", status: 404 });
+      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
       await taken(el);
       expect(footRefusal(el)).not.toBeUndefined();
 
@@ -4647,7 +4878,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
       const el = await tickedThenHeld({
         splitTable: vi.fn().mockRejectedValue({ code: "table.not_shared" }),
       });
-      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.not_found", status: 404 });
+      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
       await taken(el);
       await tick(el, "b2");
       await tick(el, "wo-4");
@@ -4662,7 +4893,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
     it("take-over: a refusal goes when a press stays on the panel for a bad count", async () => {
       const el = await tickedThenHeld();
-      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.not_found", status: 404 });
+      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
       await taken(el);
       await tick(el, "b2");
       await tick(el, "wo-4");
@@ -4739,7 +4970,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
     it("take-over: focus goes to the row's button while it is still there", async () => {
       const el = await tickedThenHeld();
-      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.not_found", status: 404 });
+      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
 
       await taken(el);
 
@@ -5276,6 +5507,64 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
           await pressSplit(el);
           expectSentOnce(whole("b2"), [noEdit("b2", { editorVersion: 2 })]);
+        });
+
+        describe("a whole bill and a dish reaching it", () => {
+          const withWine = (from: SplitSources): SplitSources => ({
+            bills: from.bills.map((bill) =>
+              bill.billId !== "b2"
+                ? bill
+                : { ...bill, lines: [...bill.lines, dish("wine", bill.lines.length + 1)] },
+            ),
+          });
+
+          it("ticked whole, a dish someone sends: one stop, then the whole bill", async () => {
+            fakeTimers();
+            const el = await panel();
+            await tick(el, "b2");
+            api.getSplitSources!.mockResolvedValue(withWine(threeAnswered()));
+            await rereadBills(el, revised());
+            reading = (snapshot) => withOrderSent(snapshot, "b2");
+            await refreshDrafts(el);
+
+            await expectOneStop(el);
+
+            await pressSplit(el);
+            expectSentOnce(whole("b2"), [noEdit("b2", { editorVersion: 2 })]);
+          });
+
+          it("ticked whole, a dish moved in, which leaves the edit state: no stop", async () => {
+            fakeTimers();
+            const el = await panel();
+            await tick(el, "b2");
+            api.getSplitSources!.mockResolvedValue(withWine(threeAnswered()));
+            await rereadBills(el, revised());
+            await refreshDrafts(el);
+
+            await pressSplit(el);
+
+            expectSentOnce(whole("b2"), [noEdit("b2")]);
+          });
+
+          it("picks turned whole and their one stop taken, a dish someone sends: one more stop", async () => {
+            fakeTimers();
+            const el = await panel({ getSplitSources: vi.fn().mockResolvedValue(twoDishes()) });
+            await pickDish(el, "b2", "steak");
+            api.getSplitSources!.mockResolvedValue(withDishes(["steak"], twoDishes()));
+            await rereadBills(el, revised());
+            expect(tickBox(el, "b2").checked).toBe(true);
+            await expectOneStop(el);
+
+            api.getSplitSources!.mockResolvedValue(withWine(withDishes(["steak"], twoDishes())));
+            await rereadBills(
+              el,
+              revised().map((bill) => ({ ...bill, total: "30.00" })),
+            );
+            reading = (snapshot) => withOrderSent(snapshot, "b2");
+            await refreshDrafts(el);
+
+            await expectOneStop(el);
+          });
         });
 
         it("a pick paid while held: one stop, then what is still picked", async () => {

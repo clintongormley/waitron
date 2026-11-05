@@ -3357,7 +3357,7 @@ describe("A803 action results: the bill on screen after a table action", () => {
       ),
       splitTable: vi.fn(async () => {
         floorAfter = true;
-        return { partyId: "v-new", billId: "wo-8" };
+        return { partyId: "v-new", billIds: ["wo-8"] };
       }),
     });
     const screen = await toTableOrder(el);
@@ -3410,7 +3410,7 @@ describe("A803 action results: the bill on screen after a table action", () => {
       }),
       splitTable: vi.fn(async () => {
         floorAfter = true;
-        return { partyId: "v-new", billId: "wo-8" };
+        return { partyId: "v-new", billIds: ["wo-8"] };
       }),
     });
     const screen = await toTableOrder(el);
@@ -3458,7 +3458,7 @@ describe("A803 action results: the bill on screen after a table action", () => {
       }),
       splitTable: vi.fn(async () => {
         floorAfter = true;
-        return { partyId: "v-new", billId: "wo-8" };
+        return { partyId: "v-new", billIds: ["wo-8"] };
       }),
     });
     const screen = await toTableOrder(mounted.el);
