@@ -2366,7 +2366,8 @@ export interface SplitSources {
 }
 
 /**
- * One line of an open tab from `GET /api/working-orders/:id/lines`. A tab does NOT re-price:
+ * One line of a bill: an open one from `GET /api/working-orders/:id/lines`, an open or presented
+ * one from `GET /api/parties/:id/split-sources`. A tab does NOT re-price:
  * `unitPriceGross` is the gross unit price LOCKED at add-time.
  */
 export interface TabLine {

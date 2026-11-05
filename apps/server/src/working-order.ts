@@ -4260,7 +4260,7 @@ export async function assertTabOpen(tx: Transaction, tabId: string): Promise<num
   return tab.revision;
 }
 
-/** One line of an OPEN tab. `unitPriceGross` is the gross unit price LOCKED at add time, NOT a
+/** One line of a bill. `unitPriceGross` is the gross unit price LOCKED at add time, NOT a
  *  re-price. */
 export interface TabLine {
   nutrition?: LineNutrition;

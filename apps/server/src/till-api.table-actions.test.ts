@@ -1712,6 +1712,29 @@ describe("A803 split: the panel's read", () => {
     expect((await read(luis.partyId.toUpperCase())).json).toEqual(answer.json);
   });
 
+  it("lists a bill moved onto the table by its number, below a bill opened after it", async () => {
+    const ana = await seatedWith(venue, "Caña");
+    const luis = await seatedWith(venue, "Pulpo");
+    const moved = await post(`/api/bills/${ana.tabId}/move`, {
+      partyId: ana.partyId,
+      expectedPartyRevision: revisionOf(ana.partyId),
+      to: { tableId: luis.tableId },
+      otherPartyId: luis.partyId,
+      expectedOtherPartyRevision: revisionOf(luis.partyId),
+    });
+    expect(moved.status, JSON.stringify(moved.json)).toBe(200);
+    expect((await numbersOf(venue, luis.partyId)).map(([id, n]) => [id, n])).toEqual([
+      [luis.tabId, 1],
+      [ana.tabId, 2],
+    ]);
+
+    const answer = await read(luis.partyId);
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const bills = answer.json.bills as { billId: string }[];
+    expect(bills.map((bill) => bill.billId)).toEqual([luis.tabId, ana.tabId]);
+  });
+
   it("refuses 409 party.not_open for an id that is no UUID", async () => {
     const refused = await read("not-a-uuid");
 
@@ -1738,7 +1761,7 @@ describe("A803 split: the panel's read", () => {
     expect(answer.json).toEqual({ code: "session.required", params: {} });
   });
 
-  it("reading it does not keep a session signed in, where the bills read does", async () => {
+  it("reading it does not stamp the device as seen, where the bills read does", async () => {
     const { partyId } = await seatedWith(venue, "Caña");
     const longAgo = "2020-01-01T00:00:00.000Z";
     await inTx(venue, (tx) =>

@@ -3659,7 +3659,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/parties/:id/split-sources", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { passive: true });
-      const partyId = requireDraftPartyParam(c.req.param("id"));
+      const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
       const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, session, [{ partyId }]);
         const family = (await readBillsOfParties(tx, [partyId], log)).get(partyId)!;
