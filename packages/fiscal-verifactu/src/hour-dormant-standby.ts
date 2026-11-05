@@ -102,6 +102,16 @@ export function readRetainedHourDormant(
   if (matches.length !== 1 || matches[0]!.binding.sourceId !== binding.sourceId) return refuse();
   return matches[0]!;
 }
+export function retainedHourDormantSource(
+  values: readonly unknown[],
+  binding: OperationBinding,
+): "none" | "this_source" | "another_source" {
+  const match = retained(values).find(
+    (value) => value.binding.targetNodeId === binding.targetNodeId,
+  );
+  if (match === undefined) return "none";
+  return match.binding.sourceId === binding.sourceId ? "this_source" : "another_source";
+}
 export function createHourDormantPreparation(
   host?: ModuleOperationHost,
 ): ModuleOperationPreparation {

@@ -239,6 +239,16 @@ async function admit(s: ReturnType<typeof spareService>) {
     ),
   );
 }
+/** The handover route's first request: a person signs in, and the setup is written from the copy. */
+async function switchOnWritesSetup(s: ReturnType<typeof spareService>) {
+  await s.prepareWithDormantSetup(
+    binding,
+    credentials,
+    context,
+    { action: "clock-challenge" },
+    { onBox: true },
+  );
+}
 /** The spare's promotion selection: a fresh clock comparison, then `select`. */
 async function spareSelects(s: ReturnType<typeof spareService>) {
   const auth = { breakGlass: key.secret };
@@ -352,6 +362,30 @@ it("with M1's selections in the spare's own preparation file, the spare waits pa
   expect(await spareSelects(s)).toEqual(
     expect.objectContaining({ status: "waiting", targetMs: minute + 60_000 }),
   );
+});
+
+it("a name M1 selected and never used stays used after the switch-on writes the setup", async () => {
+  const s = spareService();
+  const abandoned = await selectOnM1("abandoned", false);
+  m1Revisions.push(abandoned.revision);
+  await mergeModulePreparationRevisions({ stateDir: join(root, "state") }, m1Revisions);
+  await switchOnWritesSetup(s);
+  const history = await readModulePreparationRevisions({ stateDir: join(root, "state") });
+  expect(history).toHaveLength(m1Revisions.length + 1);
+  expect(history.at(-1)?.binding).toEqual({
+    ...binding,
+    action: "establish",
+  });
+  const minute = minuteOf(abandoned.identity);
+  vi.setSystemTime(minute);
+  expect(await spareSelects(s)).toEqual(
+    expect.objectContaining({ status: "waiting", targetMs: minute + 60_000 }),
+  );
+  vi.advanceTimersByTime(60_000);
+  const selected = await spareSelects(s);
+  expect(selected).toMatchObject({ status: "selected" });
+  expect(selected.identity).not.toBe(abandoned.identity);
+  await sparePromotes(s, selected.input);
 });
 
 it("holding M1's selections on two adjacent minutes, the spare waits past both, selects another and promotes under it", async () => {
@@ -524,9 +558,10 @@ describe("a merged file close to its limit", () => {
     m1Attempts: number,
     m2Attempts: number,
     shape: { venueHistory: boolean; waits: boolean },
+    { setupAlreadyWritten = true } = {},
   ) => {
     const s = spareService();
-    await admit(s);
+    if (setupAlreadyWritten) await admit(s);
     await mkdir(m1Dir(), { recursive: true });
     let minute = await onAbandonedMinute();
     await mergeModulePreparationRevisions({ stateDir: m1Dir() }, m1Revisions);
@@ -545,7 +580,7 @@ describe("a merged file close to its limit", () => {
       venueHistory: false,
       waits: false,
     },
-    { title: "the most attempts one box holds", m1: 22, m2: 0, venueHistory: false, waits: true },
+    { title: "the most attempts one box holds", m1: 20, m2: 0, venueHistory: false, waits: true },
     {
       title: "the most, reading the venue's history",
       m1: 20,
@@ -553,11 +588,11 @@ describe("a merged file close to its limit", () => {
       venueHistory: true,
       waits: true,
     },
-    { title: "two boxes' lists", m1: 16, m2: 16, venueHistory: false, waits: true },
+    { title: "two boxes' lists", m1: 14, m2: 14, venueHistory: false, waits: true },
     {
       title: "two lists, reading the venue's history",
-      m1: 15,
-      m2: 15,
+      m1: 13,
+      m2: 13,
       venueHistory: true,
       waits: true,
     },
@@ -567,6 +602,48 @@ describe("a merged file close to its limit", () => {
       const { s, minute, m1List } = await rig(m1, m2, { venueHistory, waits });
       const incoming = await justInside(m1List);
       await mergeModulePreparationRevisions({ stateDir: stateDir() }, incoming);
+      await waitsSelectsPromotes(s, minute);
+    },
+    120_000,
+  );
+
+  it.each([
+    { title: "few selections", m1: 0, m2: 0, venueHistory: false, waits: true },
+    {
+      title: "30 past attempts that never waited",
+      m1: 30,
+      m2: 0,
+      venueHistory: false,
+      waits: false,
+    },
+    { title: "the most attempts one box holds", m1: 20, m2: 0, venueHistory: false, waits: true },
+    {
+      title: "the most, reading the venue's history",
+      m1: 20,
+      m2: 0,
+      venueHistory: true,
+      waits: true,
+    },
+    { title: "two boxes' lists", m1: 14, m2: 14, venueHistory: false, waits: true },
+    {
+      title: "two lists, reading the venue's history",
+      m1: 13,
+      m2: 13,
+      venueHistory: true,
+      waits: true,
+    },
+  ])(
+    "filled to the last byte the size check takes, $title: the switch-on writes its setup, then the spare waits, selects and promotes",
+    async ({ m1, m2, venueHistory, waits }) => {
+      const { s, minute, m1List } = await rig(
+        m1,
+        m2,
+        { venueHistory, waits },
+        { setupAlreadyWritten: false },
+      );
+      const incoming = await justInside(m1List);
+      await mergeModulePreparationRevisions({ stateDir: stateDir() }, incoming);
+      await switchOnWritesSetup(s);
       await waitsSelectsPromotes(s, minute);
     },
     120_000,

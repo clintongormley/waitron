@@ -8,6 +8,7 @@ import { Agent } from "undici";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  invoiceSeries,
   locations,
   nodes,
   stampDeployment,
@@ -23,6 +24,7 @@ import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
+import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { hashPassword, managementSessions, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -30,6 +32,7 @@ import {
   withOperationAuthority,
   withPreparedModuleOperations,
   type OperationBinding,
+  type WaitronModule,
 } from "@waitron/module";
 import {
   appendHandoverEventTx,
@@ -38,7 +41,11 @@ import {
   writeMirrorLink,
   type HandoverOperation,
 } from "@waitron/node-db";
-import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
+import {
+  createFirstSetupCoordinator,
+  mergeModulePreparationRevisions,
+  readModulePreparationHistory,
+} from "@waitron/provisioning";
 import { locationId } from "@waitron/shared";
 import { startServer, type StartedServer } from "./boot.js";
 import { mintBreakGlassKey } from "./break-glass.js";
@@ -62,7 +69,22 @@ const external = vi.hoisted(() => ({
   internet: vi.fn(),
   hashes: 0,
   duringHash: undefined as undefined | ((password: string) => Promise<void>),
+  aroundWrite: undefined as undefined | ((when: "before" | "after") => void),
 }));
+// By path: the package's exports do not name this file.
+vi.mock("../../../packages/provisioning/src/durable-host-json.js", async (importOriginal) => {
+  const actual = await importOriginal<{
+    writeDurableHostJson: (...args: unknown[]) => Promise<void>;
+  }>();
+  return {
+    ...actual,
+    writeDurableHostJson: async (...args: unknown[]) => {
+      external.aroundWrite?.("before");
+      await actual.writeDurableHostJson(...args);
+      external.aroundWrite?.("after");
+    },
+  };
+});
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: external.internet,
 }));
@@ -121,6 +143,7 @@ beforeEach(async () => {
   await mkdir(join(root, "venue"));
   external.hashes = 0;
   external.duringHash = undefined;
+  external.aroundWrite = undefined;
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
   external.internet.mockImplementation(async () => ({
@@ -233,9 +256,9 @@ function service(modules = fiscalModules) {
 }
 type Service = ReturnType<typeof service>;
 
-/** The dormant setup a promotion needs; the step that writes it for a handover is a later piece. */
-async function seedDormant(s: Service, sourceId = primary.nodeId): Promise<void> {
-  const reserve = { ...binding, action: "reserve", eventId: "admission", sourceId };
+/** A setup a join already wrote, under another event than the operation's. */
+async function setupFromAJoin(s: Service): Promise<void> {
+  const reserve = { ...binding, action: "reserve", eventId: "admission" };
   let state: unknown;
   await s.withOperation(
     { binding: reserve, input: { kind: "hour-dormant", version: 1 } },
@@ -442,7 +465,6 @@ describe("assertBindingNamesOperation", () => {
 describe("the handover's preparation route", () => {
   it("a controlled operation at filing_assumed gets a clock challenge and a comparison", async () => {
     const s = service();
-    await seedDormant(s);
     await controlledAtFilingAssumed();
     const { challenge, compared, selected } = await selectThrough(route(s));
     expect(challenge.cache).toBe("no-store");
@@ -453,7 +475,6 @@ describe("the handover's preparation route", () => {
 
   it("an emergency at emergency_declared prepares too, with no placed copy to wait for", async () => {
     const s = service();
-    await seedDormant(s);
     await emergencyDeclared();
     const { selected } = await selectThrough(route(s));
     expect(selected.body).toMatchObject({ status: "selected", identity: "0CNQR" });
@@ -461,7 +482,6 @@ describe("the handover's preparation route", () => {
 
   it("a body that sets oldMachineRelinquished is ignored: the context comes from the record", async () => {
     const s = service();
-    await seedDormant(s);
     await emergencyDeclared();
     const claims = { oldMachineRelinquished: true, oldNodeNeutralised: false };
     const { selected } = await selectThrough(route(s), claims);
@@ -471,7 +491,6 @@ describe("the handover's preparation route", () => {
 
   it("a controlled record's relinquishment holds against a body denying it", async () => {
     const s = service();
-    await seedDormant(s);
     await controlledAtFilingAssumed();
     const { selected } = await selectThrough(route(s), {
       oldMachineRelinquished: false,
@@ -511,7 +530,6 @@ describe("the handover's preparation route", () => {
 
   it("the window between recording filing_assumed and the restart: refused until copy_placed", async () => {
     const s = service();
-    await seedDormant(s);
     await controlledAtFilingAssumed({ placed: false });
     const app = route(s);
     const before = await post(app, request({ action: "clock-challenge" }));
@@ -525,7 +543,6 @@ describe("the handover's preparation route", () => {
 
   it("an operation that moves on while the password is being checked is refused, leaving no session", async () => {
     const s = service();
-    await seedDormant(s);
     await controlledAtFilingAssumed();
     const sessionsBefore = await suite.db.select().from(managementSessions);
     external.duringHash = async () => {
@@ -603,7 +620,6 @@ describe("the handover's preparation route", () => {
 
   it("the browser on the box itself is refused as the second clock", async () => {
     const s = service();
-    await seedDormant(s);
     await controlledAtFilingAssumed();
     external.internet.mockImplementation(async () => ({
       source: "internet",
@@ -632,7 +648,6 @@ describe("the handover's preparation route", () => {
 
   it("after a prepare here, the activation with the same context is not refused event_mismatch", async () => {
     const s = service();
-    await seedDormant(s);
     await controlledAtFilingAssumed();
     const { selected } = await selectThrough(route(s));
     expect(
@@ -644,7 +659,6 @@ describe("the handover's preparation route", () => {
 
   it("control: prepared with the other scenario's context, the activation is refused event_mismatch", async () => {
     const s = service();
-    await seedDormant(s);
     await emergencyDeclared();
     const { selected } = await selectThrough(route(s));
     const controlled = handoverPromotionContext({ scenario: "controlled" });
@@ -661,7 +675,6 @@ describe("the handover's preparation route", () => {
 
     it("an unknown email and a wrong password get the same answer, password.invalid, after one hash each", async () => {
       const s = service();
-      await seedDormant(s);
       await controlledAtFilingAssumed();
       const app = route(s);
       external.hashes = 0;
@@ -728,7 +741,6 @@ describe("the handover's preparation route", () => {
 
     it("attempts sent at once take turns alike for a known and an unknown email", async () => {
       const s = service();
-      await seedDormant(s);
       await controlledAtFilingAssumed();
       const app = route(s);
       const unknown = await attemptsAtOnce(app, "nobody@venue.test");
@@ -745,7 +757,6 @@ describe("the handover's preparation route", () => {
 
     it("many unknown emails run side by side and leave no queue behind", async () => {
       const s = service();
-      await seedDormant(s);
       await controlledAtFilingAssumed();
       const app = route(s);
       const emails = Array.from({ length: 20 }, (_, i) => `nobody-${i}@venue.test`);
@@ -776,7 +787,6 @@ describe("the handover's preparation route", () => {
 
     it("a suspended account gets that same answer after one hash", async () => {
       const s = service();
-      await seedDormant(s);
       await controlledAtFilingAssumed();
       await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, ADMIN));
       external.hashes = 0;
@@ -789,7 +799,6 @@ describe("the handover's preparation route", () => {
 
     it("a person without node.promote is refused authorization.not_permitted", async () => {
       const s = service();
-      await seedDormant(s);
       await controlledAtFilingAssumed();
       await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, ADMIN));
       expect(await attempt(route(s), signIn)).toMatchObject({
@@ -826,7 +835,6 @@ describe("the handover's preparation route", () => {
 
     it("the box's real break-glass secret inside sign-in does not stand in for the password", async () => {
       const s = service();
-      await seedDormant(s);
       await controlledAtFilingAssumed();
       const key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, standby.nodeId);
       expect(
@@ -894,8 +902,6 @@ describe("the handover's preparation route", () => {
   });
 
   it("a real mirror start serves the route over verified HTTPS", async () => {
-    const s = service();
-    await seedDormant(s);
     await controlledAtFilingAssumed();
     await writeMirrorLink(suite.node, standby.nodeId, {
       relayUrl: "https://127.0.0.1:1/",
@@ -964,4 +970,331 @@ describe("the handover's preparation route", () => {
       await server?.close();
     }
   }, 120_000);
+});
+
+describe("the spare's dormant setup, written at a good sign-in", () => {
+  const stateDir = () => join(root, "state");
+  const file = () => join(stateDir(), "module-preparation-state.json");
+  const bytes = () => readFile(file()).catch(() => null);
+  const challenge = (app: Hono) => post(app, request({ action: "clock-challenge" }));
+  const dormantRevisions = async () =>
+    (await readModulePreparationHistory({ stateDir: stateDir(), venueDir: "" }, MODULE)).filter(
+      (value) => (value as { dormant?: unknown }).dormant !== undefined,
+    );
+  const venueRows = async () => ({
+    nodes: await suite.db.select().from(nodes),
+    allocations: await suite.db.select().from(fiscalAllocations),
+    sif: await suite.db.select().from(registroSif),
+    series: await suite.db.select().from(invoiceSeries),
+  });
+
+  it("a second request leaves the file's bytes and the venue's rows as the first left them", async () => {
+    await controlledAtFilingAssumed();
+    const app = route(service());
+    expect((await challenge(app)).status).toBe(200);
+    const [firstBytes, firstRows] = [await bytes(), await venueRows()];
+    expect(firstBytes).not.toBeNull();
+    expect((await challenge(app)).status).toBe(200);
+    expect(await bytes()).toEqual(firstBytes);
+    expect(await venueRows()).toEqual(firstRows);
+  });
+
+  it("three requests at once write one setup, and all three are answered", async () => {
+    await controlledAtFilingAssumed();
+    const app = route(service());
+    const answers = await Promise.all([challenge(app), challenge(app), challenge(app)]);
+    expect(answers.map((answer) => answer.status)).toEqual([200, 200, 200]);
+    expect(await dormantRevisions()).toHaveLength(1);
+  });
+
+  it("one sign-in pays for the whole request: one password hash", async () => {
+    await controlledAtFilingAssumed();
+    expect((await challenge(route(service()))).status).toBe(200);
+    expect(external.hashes).toBe(1);
+  });
+
+  it("a setup a join already wrote for this source is not written again, and still selects", async () => {
+    const s = service();
+    await setupFromAJoin(s);
+    await controlledAtFilingAssumed();
+    expect(await dormantRevisions()).toHaveLength(1);
+    const before = await bytes();
+    expect((await challenge(route(s))).status).toBe(200);
+    expect(await bytes()).toEqual(before);
+    const { selected } = await selectThrough(route(s));
+    expect(selected.body).toMatchObject({ status: "selected", identity: "0CNQR" });
+  });
+
+  it("an emergency writes it too", async () => {
+    await emergencyDeclared();
+    expect((await challenge(route(service()))).status).toBe(200);
+    expect(await dormantRevisions()).toHaveLength(1);
+  });
+
+  it.each([
+    ["a wrong password", { email: ADMIN_EMAIL, password: "wrong" }],
+    ["an unknown email", { email: "nobody@venue.test", password: PASSWORD }],
+  ])("%s writes nothing", async (_name, wrong) => {
+    await controlledAtFilingAssumed();
+    const before = await venueRows();
+    const answer = await post(
+      route(service()),
+      request({ action: "clock-challenge" }, { signIn: wrong }),
+    );
+    expect(answer).toMatchObject({ status: 401, body: { error: { code: "password.invalid" } } });
+    expect(await bytes()).toBeNull();
+    expect(await venueRows()).toEqual(before);
+  });
+
+  it("before copy_placed nothing is written", async () => {
+    await controlledAtFilingAssumed({ placed: false });
+    expect(await challenge(route(service()))).toMatchObject({
+      status: 409,
+      body: { error: { code: "handover.step_out_of_order" } },
+    });
+    expect(await bytes()).toBeNull();
+  });
+
+  it("a box that is not a mirror writes nothing, and its module refuses for want of a setup", async () => {
+    await controlledAtFilingAssumed();
+    await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "primary");
+    const before = await venueRows();
+    expect(await challenge(route(service()))).toMatchObject({
+      status: 400,
+      body: {
+        error: { code: "sif.allocation_invalid", params: { reason: "reservation_mismatch" } },
+      },
+    });
+    expect(await bytes()).toBeNull();
+    expect(await venueRows()).toEqual(before);
+  });
+
+  it("a person without node.promote writes nothing", async () => {
+    await controlledAtFilingAssumed();
+    const other = "e1000000-0000-4000-8000-000000000005";
+    await suite.db.insert(persons).values({
+      id: other,
+      displayName: "Waiter",
+      role: "staff",
+      passwordHash,
+      email: "waiter@venue.test",
+    });
+    const answer = await post(
+      route(service()),
+      request(
+        { action: "clock-challenge" },
+        { signIn: { email: "waiter@venue.test", password: PASSWORD } },
+      ),
+    );
+    expect(answer).toMatchObject({
+      status: 403,
+      body: { error: { code: "authorization.not_permitted" } },
+    });
+    expect(await bytes()).toBeNull();
+  });
+
+  it("a retained setup naming another source is refused, and nothing is written", async () => {
+    await controlledAtFilingAssumed();
+    const other = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const held = { ...binding, action: "reserve", eventId: "earlier", sourceId: other };
+    await mergeModulePreparationRevisions({ stateDir: stateDir() }, [
+      {
+        binding: held,
+        value: {
+          version: 1,
+          entries: [],
+          dormant: [
+            {
+              kind: "hour-dormant",
+              version: 1,
+              binding: held,
+              scope: { taxpayerNif: "89890001K", environment: "preproduction" },
+              bases,
+            },
+          ],
+        },
+      },
+    ]);
+    const before = await bytes();
+    expect(await challenge(route(service()))).toMatchObject({
+      status: 400,
+      body: { error: { code: "module.operation_invalid", params: { module: MODULE } } },
+    });
+    expect(await bytes()).toEqual(before);
+  });
+
+  it("a retained setup for another box is no reason to refuse or skip", async () => {
+    await controlledAtFilingAssumed();
+    const held = {
+      ...binding,
+      action: "reserve",
+      eventId: "earlier",
+      sourceId: standby.nodeId,
+      targetNodeId: primary.nodeId,
+    };
+    await mergeModulePreparationRevisions({ stateDir: stateDir() }, [
+      {
+        binding: held,
+        value: {
+          version: 1,
+          entries: [],
+          dormant: [
+            {
+              kind: "hour-dormant",
+              version: 1,
+              binding: held,
+              scope: { taxpayerNif: "89890001K", environment: "preproduction" },
+              bases,
+            },
+          ],
+        },
+      },
+    ]);
+    expect((await challenge(route(service()))).status).toBe(200);
+    const last = (await dormantRevisions()).at(-1) as { dormant: unknown[] };
+    expect(last.dormant).toHaveLength(2);
+  });
+
+  describe("a request that dies part way, then a retry", () => {
+    /** The real module, whose `establish` throws once: the step after `reserve` never ran. */
+    const failingEstablishOnce = (): WaitronModule[] => {
+      let failed = false;
+      return fiscalModules.map((module) => ({
+        ...module,
+        provisioning: {
+          ...module.provisioning,
+          standby: {
+            ...module.provisioning!.standby!,
+            establish: async (...args) => {
+              if (!failed) {
+                failed = true;
+                throw new Error("stopped between reserve and establish");
+              }
+              await module.provisioning!.standby!.establish(...args);
+            },
+          },
+        },
+      }));
+    };
+
+    it("between reserve and establish: no file, then one setup", async () => {
+      await controlledAtFilingAssumed();
+      const before = await venueRows();
+      const app = route(service(failingEstablishOnce()));
+      expect((await challenge(app)).status).toBe(500);
+      expect(await bytes()).toBeNull();
+      expect(await venueRows()).toEqual(before);
+      expect((await challenge(app)).status).toBe(200);
+      expect(await dormantRevisions()).toHaveLength(1);
+    });
+
+    it("after the venue transaction and before the file write: no file, then one setup", async () => {
+      await controlledAtFilingAssumed();
+      const before = await venueRows();
+      const app = route(service());
+      external.aroundWrite = (when) => {
+        if (when === "before") {
+          external.aroundWrite = undefined;
+          throw new Error("stopped before the file write");
+        }
+      };
+      expect((await challenge(app)).status).toBe(500);
+      expect(await bytes()).toBeNull();
+      expect(await venueRows()).toEqual(before);
+      expect((await challenge(app)).status).toBe(200);
+      expect(await dormantRevisions()).toHaveLength(1);
+    });
+
+    it("after the file write and before the answer: the retry writes nothing more", async () => {
+      await controlledAtFilingAssumed();
+      const app = route(service());
+      external.aroundWrite = (when) => {
+        if (when === "after") {
+          external.aroundWrite = undefined;
+          throw new Error("stopped after the file write");
+        }
+      };
+      expect((await challenge(app)).status).toBe(500);
+      const written = await bytes();
+      expect(written).not.toBeNull();
+      expect((await challenge(app)).status).toBe(200);
+      expect(await bytes()).toEqual(written);
+    });
+  });
+
+  describe("a venue whose module has no such seat", () => {
+    const plain = (extra: Partial<WaitronModule> = {}): WaitronModule =>
+      ({
+        name: "plain-module",
+        version: "1",
+        operations: {
+          prepare: (operation: never, run: (ready: never) => unknown) => run(operation),
+          recovery: async () => ({ answered: true }),
+        },
+        ...extra,
+      }) as unknown as WaitronModule;
+    const plainRequest = request(
+      { action: "clock-challenge" },
+      { moduleOperation: { binding: { ...binding, module: "plain-module" }, input: null } },
+    );
+
+    it.each([
+      ["no seat and no standby support", plain()],
+      [
+        "a seat but no standby support",
+        plain({
+          operations: {
+            prepare: (operation: never, run: (ready: never) => unknown) => run(operation),
+            recovery: async () => ({ answered: true }),
+            dormantSetup: {
+              reserveInput: null,
+              retained: () => {
+                throw new Error("nothing may read the history");
+              },
+            },
+          },
+        } as unknown as Partial<WaitronModule>),
+      ],
+      [
+        "standby support but no seat",
+        plain({
+          provisioning: {
+            standby: {
+              reserve: async () => {
+                throw new Error("nothing may reserve");
+              },
+              establish: async () => {
+                throw new Error("nothing may establish");
+              },
+            },
+          } as unknown as WaitronModule["provisioning"],
+        }),
+      ],
+    ])("%s: the route answers and writes nothing", async (_name, module) => {
+      await controlledAtFilingAssumed();
+      const before = await venueRows();
+      const answer = await post(route(service([module])), plainRequest);
+      expect(answer).toMatchObject({ status: 200, body: { answered: true } });
+      expect(await bytes()).toBeNull();
+      expect(await venueRows()).toEqual(before);
+    });
+
+    it("the real fiscal-none module keeps its refusal, and nothing is written", async () => {
+      await controlledAtFilingAssumed();
+      const none = ALL_MODULES.filter((module) => module.name === "fiscal-none");
+      expect(none).toHaveLength(1);
+      const answer = await post(
+        route(service(none)),
+        request(
+          { action: "clock-challenge" },
+          { moduleOperation: { binding: { ...binding, module: "fiscal-none" }, input: null } },
+        ),
+      );
+      expect(answer).toMatchObject({
+        status: 400,
+        body: { error: { code: "module.operation_invalid" } },
+      });
+      expect(await bytes()).toBeNull();
+    });
+  });
 });

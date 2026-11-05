@@ -135,9 +135,9 @@ function largestRevisionBytes(revisions: readonly Revision[]): number {
   );
 }
 /**
- * Whether this box's file could take `incoming` and still take the wait and the selection the box
- * writes after the old box has given up filing: a file over its limit makes every later module
- * operation refuse `setup.attempt_invalid`.
+ * Whether this box's file could take `incoming` and still take the dormant setup, the wait and the
+ * selection the box writes after the old box has given up filing: a file over its limit makes every
+ * later module operation refuse `setup.attempt_invalid`.
  */
 export async function modulePreparationMergeFits(
   options: { stateDir: string },
@@ -146,7 +146,7 @@ export async function modulePreparationMergeFits(
   const own = await readStateFile(options.stateDir);
   // Computed because each revision repeats all earlier entries, so the need grows with the file.
   const room =
-    2 * (largestRevisionBytes(incoming) + largestRevisionBytes(own.revisions)) + MERGE_ROOM_FLOOR;
+    3 * (largestRevisionBytes(incoming) + largestRevisionBytes(own.revisions)) + MERGE_ROOM_FLOOR;
   return Buffer.byteLength(JSON.stringify(mergedFile(own, incoming))) <= LIMIT - room;
 }
 /**

@@ -903,7 +903,7 @@ describe("compareFinalCopy", () => {
       expect(await r.compareRow(envelope)).toEqual(refused("handover.preparation_state_too_large"));
     });
 
-    it("selections that fit the file but leave too little room for two revisions as large are refused", async () => {
+    it("selections that fit the file but leave too little room for three revisions as large are refused", async () => {
       const r = await rig();
       const envelope = r.resigned((body) => revisions(body, [revisionOf("x".repeat(LIMIT / 2))]));
       expect(await r.compareRow(envelope)).toEqual(refused("handover.preparation_state_too_large"));
@@ -911,13 +911,13 @@ describe("compareFinalCopy", () => {
 
     it("control: selections that leave that room are not refused", async () => {
       const r = await rig();
-      const envelope = r.resigned((body) => revisions(body, [revisionOf("x".repeat(300 * 1024))]));
+      const envelope = r.resigned((body) => revisions(body, [revisionOf("x".repeat(240 * 1024))]));
       expect(await r.compareRow(envelope)).toEqual({ ok: true });
     });
 
     it("control: a selection both boxes hold is counted once", async () => {
       const r = await rig();
-      const sizeable = "x".repeat(200 * 1024);
+      const sizeable = "x".repeat(140 * 1024);
       await writeFile(
         join(r.m2State, "module-preparation-state.json"),
         JSON.stringify({ version: 1, revisions: [revisionOf(sizeable)] }),

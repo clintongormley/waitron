@@ -434,16 +434,16 @@ const fileBytes = (revisions: unknown[]) =>
   Buffer.byteLength(JSON.stringify({ version: 1, revisions }));
 const largestBytes = (revisions: unknown[]) =>
   Math.max(0, ...revisions.map((revision) => Buffer.byteLength(JSON.stringify(revision))));
-/** What a merge asks of the file: its bytes, room for two revisions sized from each list, and 8 KiB. */
+/** What a merge asks of the file: its bytes, room for three revisions sized from each list, and 8 KiB. */
 const bytesNeeded = (incoming: unknown[], own: unknown[]) =>
-  fileBytes([...incoming, ...own]) + 2 * (largestBytes(incoming) + largestBytes(own)) + 8 * 1024;
+  fileBytes([...incoming, ...own]) + 3 * (largestBytes(incoming) + largestBytes(own)) + 8 * 1024;
 /** Text under a binding of its own that brings `bytesNeeded` to the limit once listed in `incoming`. */
 const textToLimit = (incoming: unknown[], own: unknown[], revisionOf: (text: string) => unknown) =>
   "x".repeat(LIMIT - bytesNeeded([...incoming, revisionOf("")], own));
 
 describe("modulePreparationMergeFits", () => {
   // Small enough that one list's revision and its room fit, and two lists' do not.
-  const SIZEABLE = 200 * 1024;
+  const SIZEABLE = 140 * 1024;
   const stored = (over: Partial<OperationBinding>, text: string) => ({
     binding: { ...binding, ...over },
     value: { text },
@@ -457,7 +457,7 @@ describe("modulePreparationMergeFits", () => {
     expect(await fits([stored({}, "a")])).toBe(true);
   });
 
-  it("keeps room for two revisions sized from the largest on each list, plus 8 KiB: its last byte fits, and the next does not", async () => {
+  it("keeps room for three revisions sized from the largest on each list, plus 8 KiB: its last byte fits, and the next does not", async () => {
     const { options, path } = await fixture();
     const own = [
       stored({ eventId: "own-small" }, "a"),
@@ -468,7 +468,7 @@ describe("modulePreparationMergeFits", () => {
     const list = [
       stored({ eventId: "theirs-small" }, "d"),
       stored({ eventId: "theirs-large" }, "e".repeat(60_000)),
-      ...Array.from({ length: 14 }, (_, index) =>
+      ...Array.from({ length: 12 }, (_, index) =>
         stored({ eventId: `theirs-${index}` }, "f".repeat(50_000)),
       ),
     ];
@@ -483,7 +483,7 @@ describe("modulePreparationMergeFits", () => {
 
   it("with no file of its own, keeps room sized from the old box's list alone", async () => {
     const { options } = await fixture();
-    const list = Array.from({ length: 18 }, (_, index) =>
+    const list = Array.from({ length: 17 }, (_, index) =>
       stored({ eventId: `theirs-${index}` }, "g".repeat(50_000)),
     );
     const last = (text: string) => stored({ eventId: "theirs-exact" }, text);
@@ -497,7 +497,7 @@ describe("modulePreparationMergeFits", () => {
 
   it("a file already too full to keep that room does not fit, even with nothing to merge", async () => {
     const { options, path } = await fixture();
-    const large = stored({ eventId: "large" }, "x".repeat(300_000));
+    const large = stored({ eventId: "large" }, "x".repeat(240_000));
     const last = (text: string) => stored({ eventId: "exact" }, text);
     const write = (text: string) =>
       fs.writeFile(path, JSON.stringify({ version: 1, revisions: [large, last(text)] }));
@@ -553,7 +553,7 @@ describe("modulePreparationMergeFits", () => {
 
   it("a revision listed twice in one list counts once", async () => {
     const { options } = await fixture();
-    const once = stored({}, "x".repeat(300 * 1024));
+    const once = stored({}, "x".repeat(240 * 1024));
     expect(await modulePreparationMergeFits({ stateDir: options.stateDir }, [once, once])).toBe(
       true,
     );
@@ -685,13 +685,13 @@ describe("mergeModulePreparationRevisions", () => {
     const { options, path } = await fixture();
     const stateDir = options.stateDir;
     await place(stateDir, [m2]);
-    const list = Array.from({ length: 18 }, (_, index) =>
+    const list = Array.from({ length: 17 }, (_, index) =>
       revision(`m1-${index}`, { text: "x".repeat(50_000) }),
     );
     const last = (text: string) => revision("exact", { text });
     const atLimit = textToLimit(list, [m2], last);
     const bytes = fileBytes([...list, last(atLimit), m2]);
-    expect(bytes + 2 * (largestBytes(list) + largestBytes([m2])) + 8 * 1024).toBe(LIMIT);
+    expect(bytes + 3 * (largestBytes(list) + largestBytes([m2])) + 8 * 1024).toBe(LIMIT);
     expect(await modulePreparationMergeFits({ stateDir }, [...list, last(`${atLimit}x`)])).toBe(
       false,
     );

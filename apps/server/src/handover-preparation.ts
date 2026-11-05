@@ -100,7 +100,10 @@ async function signInCredentials(
   return { personId: await personIdForLoginEmail(db, email), password, totp };
 }
 
-/** `POST /api/node/handover/:operationId/preparation`: the browser's clock check and minute name. */
+/**
+ * `POST /api/node/handover/:operationId/preparation`: the browser's clock check and minute name.
+ * A good sign-in first makes sure the dormant setup they read exists.
+ */
 export function mountHandoverPreparationApi(
   app: Hono,
   deps: HandoverPreparationDeps,
@@ -128,7 +131,7 @@ export function mountHandoverPreparationApi(
       const credentials = await signInCredentials(deps.appDb, body.signIn);
       const onBox = (deps.requestFromBox ?? requestFromBox)(c);
       return c.json(
-        await deps.nodePreparation.prepare(
+        await deps.nodePreparation.prepareWithDormantSetup(
           moduleOperation.binding,
           credentials,
           handoverPromotionContext(operation),

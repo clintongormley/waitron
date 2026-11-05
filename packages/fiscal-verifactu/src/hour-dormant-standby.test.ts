@@ -1,4 +1,4 @@
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { deployment, invoiceSeries, nodes, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -17,7 +17,11 @@ import { registroSif } from "./schema/sif.js";
 import { cadenas } from "./schema/cadenas.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
-import { createHourDormantPreparation, readRetainedHourDormant } from "./hour-dormant-standby.js";
+import {
+  createHourDormantPreparation,
+  readRetainedHourDormant,
+  retainedHourDormantSource,
+} from "./hour-dormant-standby.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const primary = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
@@ -123,6 +127,52 @@ it("reserves dormant configuration before the standby node exists", async () => 
   const reserved = await reserve();
   expect(reserved.state).toMatchObject({ kind: "hour-dormant", binding: reserveBinding, bases });
   expect(history).toEqual([]);
+});
+describe("retainedHourDormantSource", () => {
+  const retainedFor = (held: OperationBinding) => [
+    {
+      version: 1,
+      entries: [],
+      dormant: [
+        {
+          kind: "hour-dormant",
+          version: 1,
+          binding: held,
+          scope: { taxpayerNif: "89890001K", environment: "preproduction" },
+          bases,
+        },
+      ],
+    },
+  ];
+  const promote = { ...reserveBinding, action: "promote", eventId: "the-operation" };
+  it("answers none with no setup retained", () => {
+    expect(retainedHourDormantSource([{ version: 1, entries: [] }], promote)).toBe("none");
+  });
+  it("answers none for a setup retained for another box", () => {
+    const forPrimary = {
+      ...reserveBinding,
+      sourceId: standby.nodeId,
+      targetNodeId: primary.nodeId,
+    };
+    expect(retainedHourDormantSource(retainedFor(forPrimary), promote)).toBe("none");
+  });
+  it("answers this_source for this box and this source, under any event", () => {
+    expect(retainedHourDormantSource(retainedFor(reserveBinding), promote)).toBe("this_source");
+  });
+  it("answers another_source for this box and another source", () => {
+    const earlier = { ...reserveBinding, sourceId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" };
+    expect(retainedHourDormantSource(retainedFor(earlier), promote)).toBe("another_source");
+  });
+  it("the configured module offers the seat", () => {
+    const configured = FISCAL_OPERATIONS.configure!({
+      environment: {},
+      readPublicEvidence: async () => undefined,
+    });
+    expect(configured.dormantSetup?.reserveInput).toEqual({ kind: "hour-dormant", version: 1 });
+    expect(configured.dormantSetup?.retained(retainedFor(reserveBinding), promote)).toBe(
+      "this_source",
+    );
+  });
 });
 it("reads retained dormant state with exactly five keys", () => {
   const state = {
