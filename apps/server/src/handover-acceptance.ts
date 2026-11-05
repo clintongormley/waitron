@@ -1,4 +1,4 @@
-import { open, rename } from "node:fs/promises";
+import { rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { KeyRing } from "@waitron/credentials";
 import { withNodeTransaction, type Database, type NodeDatabase } from "@waitron/db";
@@ -14,6 +14,7 @@ import { appendHandoverEventTx, readHandoverEvent, type HandoverOperation } from
 import { FINAL_STATE_EVENT } from "./handover-capture.js";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { advanceHandoverTx } from "./handover-store.js";
+import { reachDisk } from "./sync-path.js";
 
 export interface AcceptanceBody {
   readonly binding: CanonicalValue;
@@ -61,12 +62,7 @@ export async function acceptFinalCopy(
     acceptedAtMs: Date.now(),
   } satisfies AcceptanceBody);
   await rename(copyPath, accepted);
-  const folder = await open(dirname(accepted), "r");
-  try {
-    await folder.sync();
-  } finally {
-    await folder.close();
-  }
+  await reachDisk(dirname(accepted));
   await withNodeTransaction(deps.node, async (tx) => {
     // Placing the copy needs the indicator's digest and retained selections; the file holds neither.
     await appendHandoverEventTx(tx, {

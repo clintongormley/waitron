@@ -1,5 +1,5 @@
-import { createReadStream, existsSync } from "node:fs";
-import { chmod, copyFile, open, readdir, rename, rm, rmdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { chmod, copyFile, readdir, rename, rm, rmdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { lockVenueDatabase, withNodeTransaction, type NodeDatabase } from "@waitron/db";
@@ -12,12 +12,13 @@ import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
 import { errnoOf } from "./errno.js";
 import { acceptedCopyPath } from "./handover-acceptance.js";
-import { digestBytes, FINAL_STATE_EVENT } from "./handover-capture.js";
+import { digestFileIfPresent, FINAL_STATE_EVENT } from "./handover-capture.js";
 import { movedOnFromSource } from "./handover-chart.js";
 import { waitHandoverTx } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { isReadableChart } from "./membership-trust.js";
 import { INCOMING_SUFFIX, VENUE_FILE_MODE } from "./restore.js";
+import { reachDisk } from "./sync-path.js";
 import "./errors.js";
 
 /** The `node_handover_events.kind` recording that the accepted copy is the live database. */
@@ -153,24 +154,6 @@ function acceptedCopyHolds(acceptedPath: string, chartText: string): boolean {
   }
 }
 
-async function digestOf(path: string): Promise<string | null> {
-  try {
-    return (await digestBytes(createReadStream(path))).sha256;
-  } catch (error) {
-    if (errnoOf(error) === "ENOENT") return null;
-    throw error;
-  }
-}
-
-async function reachDisk(path: string): Promise<void> {
-  const handle = await open(path, "r");
-  try {
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-}
-
 /**
  * A lost selection could let this box pick a minute the old box already used, so the start stops
  * rather than place the copy without them, while the live database is still as it was.
@@ -255,7 +238,7 @@ export async function placeAcceptedCopyAtStart(args: {
     );
     const { sha256 } = indicator.snapshot;
     const live = join(venueDir, VENUE_FILE);
-    const liveDigest = await digestOf(live);
+    const liveDigest = (await digestFileIfPresent(live))?.sha256 ?? null;
     if (liveDigest === sha256) {
       // A crashed run may have renamed and not flushed, and `copy_placed` is recorded next.
       await steps.reachDisk(venueDir);
@@ -268,11 +251,11 @@ export async function placeAcceptedCopyAtStart(args: {
       log("warn", "handover-place-copy.source_no_longer_main", { operationId });
       return { kind: "source_no_longer_main", operationId };
     }
-    const held = await digestOf(accepted);
+    const held = await digestFileIfPresent(accepted);
     if (held === null) throw new AppError("handover.accepted_copy_missing", {});
     // Checked here as well as at acceptance: the file sat on this disk since, and the old box has
     // given up filing, so what is placed now is what this box files from.
-    if (held !== sha256) throw new AppError("handover.copy_mismatch", {});
+    if (held.sha256 !== sha256) throw new AppError("handover.copy_mismatch", {});
 
     args.onWriting?.(indicator.snapshot.bytes);
     await mergeSelections(

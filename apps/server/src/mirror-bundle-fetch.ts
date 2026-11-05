@@ -9,6 +9,7 @@ import { AppError } from "@waitron/shared";
 import type { AdoptCredential } from "./adopt.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
+import { reachDisk } from "./sync-path.js";
 import "./errors.js";
 // The registry of the code this file relays from the primary.
 import "@waitron/identity";
@@ -260,12 +261,7 @@ export async function boxDownload(
     await rm(partialPath, { force: true }).catch(() => {});
     throw error;
   }
-  const folder = await open(dirname(destinationPath), "r");
-  try {
-    await folder.sync();
-  } finally {
-    await folder.close();
-  }
+  await reachDisk(dirname(destinationPath));
   return { status, text: "" };
 }
 
