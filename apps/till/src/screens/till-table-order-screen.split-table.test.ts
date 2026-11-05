@@ -2816,6 +2816,23 @@ describe("A803 split: a read and a selected bill", () => {
       expect(sent).toEqual([]);
     });
 
+    it("a sentence a later press cleared does not come back with a read", async () => {
+      const { el, sent } = await selected();
+      el.splitRead = withoutBills("b3");
+      await settled(el);
+      await press(el);
+      expect(sentence(el)).toBe(gone("Bill 3"));
+
+      await typeCount(el, "leaving", "abc");
+      await press(el);
+      expect(sentence(el)).toBeUndefined();
+
+      el.splitRead = allBills();
+      await settled(el);
+      expect(sentence(el)).toBeUndefined();
+      expect(sent).toEqual([]);
+    });
+
     it("a sentence that is not a stop's stays when a read moves a bill", async () => {
       const el = await mountScreen();
       await toPanel(el);

@@ -1228,12 +1228,16 @@ describe("till-app: Split a table sends the selection and follows it", () => {
       await flush(el, 8);
 
       expect(tableOrder(el)!.orderId).toBe("wo-4");
+      expect(api.getPartyBills).toHaveBeenCalledTimes(2);
       expect(tableOrder(el)!.billGone).toBeNull();
     });
 
-    it("stays on the bill when the first read fails and the next shows it still owes", async () => {
-      const next = after(partyBill("wo-4", 1, "5.00"), partyBill("b2", 2, "20.00"));
+    it("stays on the bill when the first read fails and the next shows it still owes, a lower-numbered bill owing too", async () => {
+      const next = after(partyBill("wo-4", 1, "10.00"), partyBill("b2", 2, "5.00"));
       const el = await sending(next);
+      emit(tableOrder(el)!, "switch-bill", { workingOrderId: "b2" });
+      await flush(el, 6);
+      expect(tableOrder(el)!.orderId).toBe("b2");
       api.splitTable!.mockImplementation(async () => {
         api.getTablesState!.mockResolvedValue(next.tables);
         api.getPartyBills!.mockReset();
@@ -1243,10 +1247,11 @@ describe("till-app: Split a table sends the selection and follows it", () => {
         return { partyId: "v-split", billIds: ["b9"] };
       });
 
-      split(el, { wholeBillIds: [], loose: [{ billId: "wo-4", lineIds: ["soup"] }] });
+      split(el, { wholeBillIds: [], loose: [{ billId: "b2", lineIds: ["steak"] }] });
       await flush(el, 8);
 
-      expect(tableOrder(el)!.orderId).toBe("wo-4");
+      expect(api.splitTable).toHaveBeenCalledTimes(1);
+      expect(tableOrder(el)!.orderId).toBe("b2");
     });
 
     it("leaves the bill on screen alone when the split took another bill", async () => {

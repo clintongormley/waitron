@@ -15681,7 +15681,6 @@ export class TillApp extends LitElement {
     this.#splitReadGeneration++;
     this.#splitReadAbort?.abort();
     this.#splitReadAbort = undefined;
-    if (this.#draftSync === undefined) clearTimeout(this.#billDraftTimer);
   }
 
   #followSplitBills(bills: readonly PartyBill[]): void {
