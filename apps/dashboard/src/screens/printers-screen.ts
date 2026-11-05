@@ -43,6 +43,7 @@ import { holderText } from "../i18n/equipment.js";
 import { printerDeleteCopy } from "../widgets/printer-delete-copy.js";
 import { relativeTime } from "../widgets/relative-time.js";
 import { fill, t } from "../i18n/t.js";
+import { guideHref } from "../help-guide.js";
 import type { StringKey } from "../i18n/strings.js";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -4053,6 +4054,14 @@ export class PrintersScreen extends LitElement {
     >
       ${this.addedPrinterName ? html`<p role="status" data-test="printer-added">${fill("printers.added", { name: this.addedPrinterName })}</p>` : nothing}
       ${this.#renderRefreshError()}
+      <wt-help-tooltip
+        slot="help"
+        mode="help-mode"
+        aria-label=${fill("help.badge_label", { part: t("printers.add_printer") })}
+        guide-href=${guideHref("printers.add-printer")}
+        guide-label=${t("help.guide_link")}
+        >${t("printers.add_help")}</wt-help-tooltip
+      >
       <p class="hint">${t("printers.discovery_hint")}</p>
       ${bluetooth ? html`<p class="hint" data-test="bluetooth-note">${t("printers.bluetooth_pair_note")}</p>` : nothing}
       <details class="probe-panel" data-test="probe-panel">

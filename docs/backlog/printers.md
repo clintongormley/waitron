@@ -336,8 +336,6 @@ those letters (not checked).
 ## A404 — adding and calibrating a printer
 
 - **A404 — adding and calibrating a printer (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room):**
-  1. **The Add-a-printer scan shows an empty box while it searches.** Say something like "No
-     printers found yet" while scanning, and something clearer if the scan ends with nothing found.
   2. **Calibration step 1 (paper width and resolution) is laid out out of order.** Rename "Print
      width ruler" (nobody knows what it means — e.g. "Print width test"); the action button goes on
      the right, on its own row; then a row of the two things the person enters (last number fully
@@ -359,24 +357,6 @@ those letters (not checked).
      heading "Does this printer have a cash drawer?", which is not what it is about — give it its
      own heading or a wider one for the step. The same label shows on the printer details
      (A405), and changes there too.
-  5. **The found-printer rows are out of line** (owner, 2026-10-14). In the Add a printer dialog's
-     list, each row's buttons sit at the top of the row while its name, connection and address start
-     lower down. A long name also wraps far short of its column: "HP Color LaserJet MFP M181fw
-     (DE0887)" breaks after "MFP" although the Name column is half the dialog wide. Line the details
-     up with the buttons and let the name use its column.
-  6. **A paired Bluetooth printer comes and goes from the list** (owner, 2026-10-14). The owner's
-     paired "BlueTooth Printer" was missing while a scan ran, listed after it ended, and missing
-     again with no scan running. A printer that is already paired stays listed while the dialog is
-     open. The 45-second limit in the entry "While a discovery window is open, a device not reported
-     within 45 seconds drops off the list" (C102, #953) may be the cause; not checked.
-  7. **The name dialog opens with Name filled in** (owner, 2026-10-14): the name discovery found
-     ("HP Color LaserJet MFP M181fw (DE0887)"), or the address when that is all it found
-     ("192.168.10.81"), ready to overwrite. This applies to Add and to Add as A4 printer. With
-     the field filled, Add can be pressed as soon as the dialog opens.
-  8. **One line about Bluetooth instead of the paragraph** (owner, 2026-10-14). The two sentences
-     under the heading ("To add a Bluetooth printer that is not paired yet, press Pair and add…")
-     show every time, even with no Bluetooth printer in the list. Replace them with one line saying
-     a Bluetooth printer must be in pairing mode before it is added.
 
 ## A405 — printer details and the print queue
 

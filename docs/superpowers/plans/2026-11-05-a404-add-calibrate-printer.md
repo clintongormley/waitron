@@ -266,8 +266,9 @@ PR 1:
   row and through Show all" (about line 7481) — its device is reported `paired: true`, so it is now
   listed without Show all devices: `discovered-row-…` is present at once, and the Show all click
   goes (point 6). Its Enable assertions stay. A copy of the case with `paired` unset — "a
-  registered, switched-off printer, not paired and not marked as a printer, can still be enabled
-  through Show all" — keeps today's assertions, so that path stays tested.
+  registered, switched-off printer, not paired and not marked as a printer, is reachable through
+  Show all with Pair" — checks the row is hidden until Show all devices and then offers Pair, not
+  Enable: an unpaired Bluetooth row offers Pair.
 - `printers-screen.test.ts` "names a new A4 printer in a dialog whose Add waits for a name, then
   adds it from the row's discovery entry" — Add is enabled at open with the discovered name filled
   in (point 7). Its whitespace and "Back office" steps stay.
@@ -394,7 +395,7 @@ PR 2:
   `d.paired === true`.
 - [ ] **Step 4: Run** both files whole — all pass, except "keeps a wrongly-described registered
   printer reachable in its printer row and through Show all", whose assertion changes as listed
-  above. Make that change, and add its copy with `paired` unset (today's assertions).
+  above. Make that change, and add its copy with `paired` unset (hidden until Show all, then Pair).
 - [ ] **Step 5: Commit** — `git commit -s -m "A paired Bluetooth printer stays listed between scans and after a restart (A404 point 6)"`.
 
 ### Task 2: The Add a printer dialog says what is happening, and its rows line up (points 1, 5 and 8)
@@ -529,8 +530,9 @@ PR 2:
   (its type requires every `GUIDE_PAGES` name)
 - Modify: `apps/server/src/guide-content.test.ts` — a "registers its sections" case
 - Modify: `apps/dashboard/src/help-guide.ts` — `"printers.add-printer": { page: "printers", section: "add-printer" }`
-- Modify: `apps/dashboard/src/screens/printers-screen.ts` — a help bubble beside the Add a printer
-  dialog's search hint (`printers.discovery_hint`)
+- Modify: `apps/dashboard/src/screens/printers-screen.ts` — a help bubble in the Add a printer
+  dialog's `help` slot, beside its heading (placed beside the search hint, the help-mode badge
+  had no positioned box and hung over the dialog's top corner)
 - Modify: `apps/dashboard/src/i18n/strings.ts` — `printers.add_help`
 - Modify: `docs/backlog/printers.md` (the A404 section)
 
@@ -544,21 +546,24 @@ PR 2:
     `guide-href` `guideHref("printers.add-printer")`.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts -t "printers"`
   and the dashboard case — FAIL (no page, no bubble).
-- [ ] **Step 3: Write the page.** English:
+- [ ] **Step 3: Write the page.** English (as written; the draft lacked the Add after pairing
+  and the Connect after typing an address, both of which the screen needs):
 
   ```markdown
   # Printers
 
   ## Add a printer {#add-printer}
 
-  In **Printers**, choose **Add a printer**. Waitron searches for network, USB and Bluetooth
-  printers. Choose **Add** beside a receipt printer, change the name if you like, and choose **Add**
-  again; calibration opens next. An office printer shows **Add as A4 printer** instead.
+  In **Printers**, open the **Printers** tab and choose **Add a printer**. Waitron searches for
+  network, USB and Bluetooth printers. Choose **Add** beside a receipt printer, change the name if
+  you like, and choose **Add** again; calibration opens next. An office printer shows **Add as A4
+  printer** instead.
 
-  A Bluetooth printer must be in pairing mode first. Choose **Pair and add** beside it and enter
-  its PIN.
+  A Bluetooth printer must be in pairing mode first. Choose **Pair and add** beside it, enter its
+  PIN, and choose **Add** when it is paired.
 
-  If a network printer is not found, open **Check a known address** and type its address.
+  If a network printer is not found, open **Check a known address**, type its IP address and choose
+  **Connect**.
   ```
 
   Spanish (`es/printers.md`, same ids):
@@ -568,16 +573,16 @@ PR 2:
 
   ## Añadir una impresora {#add-printer}
 
-  En **Impresoras**, elige **Añadir impresora**. Waitron busca impresoras de red, USB y Bluetooth.
-  Elige **Añadir** junto a una impresora de recibos, cambia el nombre si quieres y vuelve a elegir
-  **Añadir**; después se abre la calibración. Una impresora de oficina muestra en su lugar **Añadir
-  como impresora A4**.
+  En **Impresoras**, abre la pestaña **Impresoras** y elige **Añadir impresora**. Waitron busca
+  impresoras de red, USB y Bluetooth. Elige **Añadir** junto a una impresora de recibos, cambia el
+  nombre si quieres y vuelve a elegir **Añadir**; después se abre la calibración. Una impresora de
+  oficina muestra en su lugar **Añadir como impresora A4**.
 
   Una impresora Bluetooth debe estar antes en modo de emparejamiento. Elige **Emparejar y añadir**
-  junto a ella e introduce su PIN.
+  junto a ella, introduce su PIN y elige **Añadir** cuando esté emparejada.
 
-  Si no aparece una impresora de red, abre **Comprobar una dirección conocida** y escribe su
-  dirección.
+  Si no aparece una impresora de red, abre **Comprobar una dirección conocida**, escribe su dirección
+  IP y elige **Conectar**.
   ```
 
   Check every bold word against what the screen shows in that language (`printers.list_title`,
@@ -589,7 +594,7 @@ PR 2:
   case now checks the new `printers.add-printer` link against the page's sections), and the
   dashboard printers suite — pass.
 - [ ] **Step 5: Backlog.** In `docs/backlog/printers.md`, delete points 1, 5, 6, 7 and 8 from the
-  A404 entry, renumbering what is left (2, 3, 4) — the entry stays open for PR 2.
+  A404 entry, keeping the numbers 2, 3 and 4 that PR 2's tasks cite — the entry stays open for PR 2.
 - [ ] **Step 6: Look at it.** In a throwaway, uncommitted test file
   (`apps/dashboard/src/screens/zz-a404-look.test.ts`, deleted afterwards) mount the screen as
   `printers-screen.a11y.test.ts` does (`mountWidget(..., theme)`), open Add a printer with the

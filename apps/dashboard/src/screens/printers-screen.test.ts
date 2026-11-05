@@ -11,7 +11,8 @@ import {
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
+import { guideHref } from "../help-guide.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
 import type {
   DashboardApi,
@@ -1032,6 +1033,22 @@ describe("printer configuration tabs", () => {
     await flush(el);
     expect(q(el, "[data-test=new-printer-modal]")).not.toBeNull();
     expect(api.startPrinterDiscovery).toHaveBeenCalledOnce();
+  });
+
+  it("explains adding a printer in a help bubble that links to the guide", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    await openDiscovery(el);
+    const tooltip = q(el, "[data-test=new-printer-modal] wt-help-tooltip")!;
+    expect(tooltip.getAttribute("mode")).toBe("help-mode");
+    expect(tooltip.getAttribute("aria-label")).toBe(
+      fill("help.badge_label", { part: t("printers.add_printer") }),
+    );
+    expect(tooltip.textContent!.trim()).toBe(t("printers.add_help"));
+    expect(tooltip.getAttribute("guide-href")).toBe(guideHref("printers.add-printer"));
+    expect(tooltip.getAttribute("guide-label")).toBe(t("help.guide_link"));
   });
 
   it("puts Add agent under the empty agent table's sentence, opening the same pairing", async () => {
