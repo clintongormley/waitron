@@ -13,6 +13,7 @@ export const GUIDE_LINKS = {
   "data-protection.staff-notice": { page: "data-protection", section: "staff-notice" },
   "printers.add-printer": { page: "printers", section: "add-printer" },
   "printers.calibrate": { page: "printers", section: "calibrate" },
+  "printers.printer-details": { page: "printers", section: "printer-details" },
 } as const;
 
 export type GuideLink = keyof typeof GUIDE_LINKS;

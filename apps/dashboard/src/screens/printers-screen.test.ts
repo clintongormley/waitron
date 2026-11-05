@@ -1127,6 +1127,26 @@ describe("printer configuration tabs", () => {
     expect(tooltip.getAttribute("guide-label")).toBe(t("help.guide_link"));
   });
 
+  it("explains the details in a help bubble that links to the guide", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    await openPrinterDetails(el);
+    const name = q(el, "[data-test=printer-details-modal]")!.getAttribute("heading")!;
+    expect(name).not.toBe("");
+    const tooltip = q(el, "[data-test=printer-details-modal] wt-help-tooltip")!;
+    expect(tooltip.getAttribute("slot")).toBe("help");
+    expect(tooltip.getAttribute("mode")).toBe("help-mode");
+    expect(tooltip.getAttribute("aria-label")).toBe(fill("help.badge_label", { part: name }));
+    expect(tooltip.textContent!.trim()).toBe(t("printers.details_help"));
+    expect(tooltip.getAttribute("guide-href")).toBe(guideHref("printers.printer-details"));
+    expect(tooltip.getAttribute("guide-label")).toBe(t("help.guide_link"));
+    openDetailsEdit(el, "name");
+    await flush(el);
+    expect(q(el, "[data-test=printer-details-modal] wt-help-tooltip")).toBeNull();
+  });
+
   it("puts Add agent under the empty agent table's sentence, opening the same pairing", async () => {
     const api = stubApi({ listAgents: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });

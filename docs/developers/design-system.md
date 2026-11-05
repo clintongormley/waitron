@@ -4190,11 +4190,14 @@ business day runs"). Inside each card a row puts its label
 beside its value, the label muted and the value in normal weight, and stacks them on a phone
 (`settingsRows`), as the owner's approved mock-ups drew.
 
-Printer details are a navigable destination with a different edit pattern. The printer name edits
-beside the heading, network host and port edit inside Connection, and Active saves in Status. Status
-starts open; Connection and Calibration start closed, each with a summary. Calibration opens its
-wizard at paper settings. The list's Edit action navigates to the details page and opens the name
-field. A draft name or connection change asks to be discarded before leaving that page.
+Printer details open in a modal over the tab they were opened from (A405). Each fact is one row,
+in groups under Status, Connection and Paper and drawer (`settingsRows`); the Active switch sits
+once, under Status, and acts at once. The view footer reads Close and Delete at the start,
+Calibrate printer and Edit at the end. Edit turns the modal into one form of the name and, for a
+network printer, its host and port; that form has no Close button, its footer reads Cancel and Save
+with the one bottom message, Cancel returns to the details, and Escape closes the window. The
+list's Edit opens the details in edit mode with the name focused. A dirty form asks before Cancel,
+Escape or leaving the page discards it.
 
 **A screen that isn't itself a navigable destination is the whole page in a modal, not just its
 edits.** `dashboard-profile-screen` (Your profile) has no sidebar entry and is reached from the
@@ -5275,8 +5278,7 @@ one `h1`, at the list page's heading size and outside the landmark, so no other 
 the page's tabs come under it. A one-word name longer than the screen breaks inside the `h1`. A
 short fact about the item sits in brackets after the `h1`, on its line where there is room, in
 normal muted text. A click on the parent link with a modifier key is left to the browser. The menu
-editor draws this pattern. The printer page still names the printer
-after "All printers ›" inside its `nav`; A405 plans to turn its details into a modal instead.
+editor draws this pattern.
 
 The menu editor (`apps/dashboard/src/screens/menus-screen.ts`) reads "Menus ›" above the menu's
 name, then its live version in brackets — "(Live: version 2 · <time>)", or "(Unpublished)" for a

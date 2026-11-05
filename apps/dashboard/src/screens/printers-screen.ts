@@ -2720,6 +2720,18 @@ export class PrintersScreen extends LitElement {
         event.stopPropagation();
       }}
     >
+      ${
+        p && this.detailEdit?.id !== p.id
+          ? html`<wt-help-tooltip
+              slot="help"
+              mode="help-mode"
+              aria-label=${fill("help.badge_label", { part: p.name })}
+              guide-href=${guideHref("printers.printer-details")}
+              guide-label=${t("help.guide_link")}
+              >${t("printers.details_help")}</wt-help-tooltip
+            >`
+          : nothing
+      }
       <div data-test="printer-details-body">
         ${
           this.selectedPrinterId === null
