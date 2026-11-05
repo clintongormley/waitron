@@ -1,5 +1,5 @@
 import "./errors.js";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { AppError } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { eq } from "drizzle-orm";
@@ -43,19 +43,32 @@ async function findPersonLogin(
   // address that signs in is exactly the one the index treats as taken.
   const [person] = await selectPersonLogin(db).where(
     "email" in who
-      ? eq(loginEmailKey(), foldForUniqueness(normalizeEmail(who.email)))
+      ? eq(loginEmailKey(), foldedLoginEmail(who.email))
       : eq(persons.id, who.personId),
   );
   return person;
 }
 
+function foldedLoginEmail(email: string): string {
+  return foldForUniqueness(normalizeEmail(email));
+}
+
+const UNKNOWN_LOGIN_KEY = randomBytes(32);
+
+function idForUnknownLogin(email: string): string {
+  const hex = createHmac("sha256", UNKNOWN_LOGIN_KEY).update(foldedLoginEmail(email)).digest("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
 /**
  * For a route that signs in by email through a seam taking only an id. Hashes nothing, so the one
- * hash stays the seam's; an id no person holds is refused there as a wrong password is.
+ * hash stays the seam's; an id no person holds is refused there as a wrong password is. The seam
+ * queues attempts by id, so an address with no active account keeps one id for the life of the
+ * process, or attempts sent at once would finish sooner for it than for a real account.
  */
 export async function personIdForLoginEmail(db: Database, email: string): Promise<string> {
   const person = await findPersonLogin(db, { email });
-  return person?.status === "active" ? person.id : randomUUID();
+  return person?.status === "active" ? person.id : idForUnknownLogin(email);
 }
 
 /**

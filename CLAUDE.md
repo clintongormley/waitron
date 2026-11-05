@@ -318,6 +318,8 @@ called weaker than its name, the topic file lists what it does not see.
   pending, wrong-secret and till-profile-inadmissible accounts answer `password.invalid` or `pin.invalid`
   after the same hashing work, as one sentence with no field marked. Only missing/malformed
   input marks a field; the real cause is a log-only `reason`. Owner-approved exception: `passkey.not_registered`.
+  An email sign-in through a queue keyed by person id takes its id from `personIdForLoginEmail`,
+  stable per address, or attempts sent at once finish sooner for an unknown address.
   Guards: identity login and route suites, weaker than the set looks: no new sign-in route is covered.
   [Detail](docs/developers/conventions-ui.md#a-logins-refusal-never-says-whether-the-account-exists).
 - **A device's profile and the signed-in person must both allow a till action; profile zones bound

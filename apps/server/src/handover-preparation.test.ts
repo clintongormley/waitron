@@ -50,6 +50,7 @@ import {
   handoverPromotionContext,
   mountHandoverPreparationApi,
 } from "./handover-preparation.js";
+import { keysInTurn } from "./attempt-turns.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -60,7 +61,7 @@ import { freePorts } from "./testing/free-ports.js";
 const external = vi.hoisted(() => ({
   internet: vi.fn(),
   hashes: 0,
-  duringHash: undefined as undefined | (() => Promise<void>),
+  duringHash: undefined as undefined | ((password: string) => Promise<void>),
 }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: external.internet,
@@ -75,7 +76,7 @@ vi.mock("@waitron/identity/src/verify-password.js", async (importOriginal) => {
     ...actual,
     verifyPassword: async (password: string, stored: string) => {
       external.hashes += 1;
-      await external.duringHash?.();
+      await external.duringHash?.(password);
       return actual.verifyPassword(password, stored);
     },
   };
@@ -677,6 +678,100 @@ describe("the handover's preparation route", () => {
       external.hashes = 0;
       expect((await attempt(app, signIn)).status).toBe(200);
       expect(external.hashes).toBe(1);
+    });
+
+    // The last attempt, to another address, marks the moment every attempt sent before it has either
+    // reached its hash or joined a queue. The first attempt's hash stays open until then.
+    async function attemptsAtOnce(app: Hono, email: string) {
+      const LAST = "the-last-attempt";
+      let started = 0;
+      let running = 0;
+      let mostRunning = 0;
+      const atLast = { hashesStarted: -1, addressesInTurn: -1 };
+      let lastArrived!: () => void;
+      const last = new Promise<void>((resolve) => {
+        lastArrived = resolve;
+      });
+      // Only if the last attempt wrongly shares the others' queue does this end the wait.
+      const giveUp = setTimeout(lastArrived, 5_000);
+      external.hashes = 0;
+      external.duringHash = async (password) => {
+        if (password === LAST) {
+          atLast.hashesStarted = started;
+          atLast.addressesInTurn = keysInTurn(suite.db);
+          lastArrived();
+          return;
+        }
+        started += 1;
+        running += 1;
+        mostRunning = Math.max(mostRunning, running);
+        await last;
+        await new Promise((resolve) => setImmediate(resolve));
+        running -= 1;
+      };
+      const answers = await Promise.all([
+        attempt(app, { email, password: "not-the-password" }),
+        attempt(app, { email: email.toUpperCase(), password: "not-the-password" }),
+        attempt(app, { email: `  ${email} `, password: "not-the-password" }),
+        attempt(app, { email, password: "not-the-password" }),
+        attempt(app, { email: "the-last-attempt@venue.test", password: LAST }),
+      ]);
+      clearTimeout(giveUp);
+      external.duringHash = undefined;
+      return {
+        ...atLast,
+        mostRunning,
+        hashes: external.hashes,
+        answers: answers.map((answer) => [answer.status, answer.body.error.code]),
+      };
+    }
+
+    it("attempts sent at once take turns alike for a known and an unknown email", async () => {
+      const s = service();
+      await seedDormant(s);
+      await controlledAtFilingAssumed();
+      const app = route(s);
+      const unknown = await attemptsAtOnce(app, "nobody@venue.test");
+      const known = await attemptsAtOnce(app, ADMIN_EMAIL);
+      expect(known).toEqual({
+        hashesStarted: 1,
+        addressesInTurn: 2,
+        mostRunning: 1,
+        hashes: 5,
+        answers: Array.from({ length: 5 }, () => [401, "password.invalid"]),
+      });
+      expect(unknown).toEqual(known);
+    });
+
+    it("many unknown emails run side by side and leave no queue behind", async () => {
+      const s = service();
+      await seedDormant(s);
+      await controlledAtFilingAssumed();
+      const app = route(s);
+      const emails = Array.from({ length: 20 }, (_, i) => `nobody-${i}@venue.test`);
+      let addressesInTurn = 0;
+      let arrived = 0;
+      let allArrived!: () => void;
+      const all = new Promise<void>((resolve) => {
+        allArrived = resolve;
+      });
+      // Only if the addresses wrongly share a queue does this end the wait, as a failed check below.
+      const giveUp = setTimeout(allArrived, 5_000);
+      external.duringHash = async () => {
+        arrived += 1;
+        if (arrived === emails.length) {
+          addressesInTurn = keysInTurn(suite.db);
+          allArrived();
+        }
+        await all;
+      };
+      const answers = await Promise.all(
+        emails.map((email) => attempt(app, { email, password: PASSWORD })),
+      );
+      clearTimeout(giveUp);
+      expect(answers.map((answer) => answer.status)).toEqual(emails.map(() => 401));
+      expect(addressesInTurn).toBe(emails.length);
+      expect(keysInTurn(suite.db)).toBe(0);
     });
 
     it("a suspended account gets that same answer after one hash", async () => {
