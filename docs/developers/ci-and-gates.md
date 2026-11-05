@@ -2277,9 +2277,13 @@ forced kill 10 s later (`PNPM_SETUP_KILL_SECONDS`); the version check has its ow
 (`PNPM_SETUP_VERSION_SECONDS`) with a 2 s kill, and a check that fails or is stopped fails the
 attempt even when it printed the right version. Three attempts, then the step fails. The initial
 `packageManager` read has a separate 10 s limit (`PNPM_SETUP_READ_SECONDS`) and a 2 s forced-kill
-grace. These command allowances total 10 + 2 + 3 × (60 + 10) + 3 × (10 + 2) = 258 s by default.
-That sum excludes shell scheduling, prefix cleanup and writing `GITHUB_PATH`; it is not a bound
-on the entire step. In the jobs whose own limit is also 5 minutes (`changes`, `typecheck`, the `-merge` jobs and `stripe-sandbox`), that job limit
+grace. This initial read runs once; a failure stops setup before the installer retries begin.
+These command allowances total 10 + 2 + 3 × (60 + 10) + 3 × (10 + 2) = 258 s by default.
+That sum excludes shell scheduling, prefix cleanup, writing `GITHUB_PATH` and waiting for captured
+stdout to close after a command ends; it is not a bound on the entire step. An escaped descendant
+holding stdout open can delay a captured read or version check after its `end` line, even though
+the timed command has ended. In the jobs whose own limit is also 5 minutes (`changes`, `typecheck`,
+the `-merge` jobs and `stripe-sandbox`), that job limit
 covers every other step too, so there a setup that needs its third attempt can still end with the
 job cancelled.
 
@@ -2297,8 +2301,9 @@ initial Node read, which had no timeout, and no progress before each installer/v
 In `scripts/ci-setup-pnpm.test.mjs`, a silent two-second Node stub with a one-second read allowance
 first reached installation and exited successfully; after the read bound was added, it exits 1,
 reports read status 124 and never invokes npm. This reproduces a silent pre-install wait; it does
-not identify the command running in that CI job. A live-child test also observes an install start
-line while its installer stub is waiting, and the silent install/version tests report all three
+not identify the command running in that CI job. A live-child test releases its first installer
+stub only after receiving the full install-start line; the stub must acknowledge that release
+before it exits. The silent install/version tests report all three
 statuses before their own outer test deadline. Retain the next recurrence's named phase before
 assigning its cause; the successful fresh-runner sample did not diagnose or repair the old stall.
 

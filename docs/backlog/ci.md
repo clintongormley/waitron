@@ -625,6 +625,9 @@ job `122671628160`, stayed active through cancellation and its final job log was
 Run [42034714487](https://github.com/clintongormley/waitron/actions/runs/42034714487),
 job `127269970638`, timed out in setup with no script output and no tests run. Both fresh-runner
 samples passed without diagnosing the first attempt. Keep those historical causes unverified.
+The legacy attempt summary still names npm after a version failure; use the preceding named-phase
+status and mismatch reports to identify the failed operation. Changing that retained summary
+needs approval for its existing exact-output checks.
 The controlled reproduction and limits are in
 [the CI guide](../developers/ci-and-gates.md#every-pnpm-setup-is-bounded).
 

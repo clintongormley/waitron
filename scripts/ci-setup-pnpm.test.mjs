@@ -65,7 +65,11 @@ printed="$spec"
 before=""
 after=""
 case "$STUB_NPM_MODE" in
-  live-hang) echo installer-entered; exec sleep 300 ;;
+  live-hang)
+    if [ "$attempt" -ne 1 ]; then exit 1; fi
+    echo installer-entered
+    if read -r release && [ "$release" = release ]; then touch "$STUB_STATE/released"; fi
+    exit 1 ;;
   hang) exec sleep 300 ;;
   ignore-term) trap '' TERM; sleep 300; exit 0 ;;
   fail-then-ok) if [ "$attempt" -eq 1 ]; then exit 1; fi ;;
@@ -86,6 +90,7 @@ writeFileSync(
   `#!/bin/sh
 case "$STUB_NODE_MODE" in
   slow) sleep 2 ;;
+  ignore-term) trap '' TERM; sleep 6 ;;
 esac
 exec "${process.execPath}" "$@"
 `,
@@ -132,7 +137,7 @@ function run(mode, env = {}, scriptPath = script) {
 const failureLines = (stderr) =>
   stderr.split("\n").filter((line) => /^attempt \d of 3 failed/.test(line));
 
-// Removing the start line must fail while npm is still waiting, before any exit report exists.
+// Only the first installer can acknowledge a release; a start printed after its timeout cannot.
 async function observeInstallStart() {
   const state = temporaryDirectory("ci-setup-pnpm-live-");
   const githubPath = join(state, "github-path");
@@ -149,7 +154,7 @@ async function observeInstallStart() {
       PNPM_SETUP_ATTEMPT_SECONDS: "5",
       PNPM_SETUP_KILL_SECONDS: "1",
     },
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["pipe", "pipe", "pipe"],
   });
   let output = "";
   let atStart;
@@ -157,13 +162,14 @@ async function observeInstallStart() {
     output += chunk;
     if (
       atStart === undefined &&
-      output.includes("attempt 1/3 install: start") &&
+      /attempt 1\/3 install: start[^\n]*command=[^\n]*npm install[^\n]*\n/.test(output) &&
       output.includes("installer-entered")
     ) {
-      atStart = { output, running: child.exitCode === null };
-      process.kill(-child.pid, "SIGKILL");
+      atStart = { output };
+      child.stdin.end("release\n");
     }
   };
+  child.stdin.on("error", (error) => (output += `stdin error: ${error.message}`));
   child.stdout.on("data", observe);
   child.stderr.on("data", observe);
   const deadline = setTimeout(() => process.kill(-child.pid, "SIGKILL"), 12_000);
@@ -172,7 +178,10 @@ async function observeInstallStart() {
       child.once("error", reject);
       child.once("close", resolve);
     });
-    return { atStart, output };
+    return {
+      atStart: atStart && { ...atStart, running: existsSync(join(state, "released")) },
+      output,
+    };
   } finally {
     clearTimeout(deadline);
   }
@@ -185,6 +194,16 @@ describe("ci-setup-pnpm.sh", () => {
     expect(result.status, result.stderr).toBe(1);
     expect(result.stderr).toContain("packageManager read: start");
     expect(result.stderr).toMatch(/packageManager read: end status=124 elapsed=[0-9]+s/);
+    expect(result.npmArgs).toBe("");
+    expect(result.githubPath).toBe("");
+    expect(result.elapsedMs).toBeLessThan(10_000);
+  });
+
+  it("forces a silent read to stop when it ignores the polite timeout signal", () => {
+    const result = run("ok", { STUB_NODE_MODE: "ignore-term", PNPM_SETUP_READ_SECONDS: "1" });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toMatch(/packageManager read: end status=137 elapsed=[0-9]+s/);
     expect(result.npmArgs).toBe("");
     expect(result.githubPath).toBe("");
     expect(result.elapsedMs).toBeLessThan(10_000);
