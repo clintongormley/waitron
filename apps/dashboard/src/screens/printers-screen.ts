@@ -3927,7 +3927,7 @@ export class PrintersScreen extends LitElement {
     );
     // A device registered to a switched-on printer is a printer, whatever the scan decoded.
     const shown = (d: DiscoveredPrinter) =>
-      d.transport !== "bluetooth" || d.printerLike === true || pairOnly.has(d);
+      d.transport !== "bluetooth" || d.printerLike === true || d.paired === true || pairOnly.has(d);
     const rows = addable
       .filter(
         (d) =>

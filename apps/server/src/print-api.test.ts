@@ -4251,6 +4251,52 @@ describe("Bluetooth Pair and Forget commands", () => {
     expect((await discoveredRows(app)).filter((r) => r.localKey === mac)).toEqual([]);
   });
 
+  it("keeps a scanned printer marked as a printer while later pulls report it only as paired and visible", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const mac = randomMac();
+    const visible = [{ transport: "bluetooth", localKey: mac, model: "BlueTooth Printer" }];
+    const pairedBluetooth = [{ localKey: mac, name: "BlueTooth Printer" }];
+    const start = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(start);
+    await pull(app, token, {
+      visible,
+      scanned: [scannedMac(mac, { name: "BlueTooth Printer", printerLike: true })],
+      pairedBluetooth,
+    });
+    const expected = { printerLike: true, paired: true, name: "BlueTooth Printer" };
+    expect((await discoveredRows(app)).find((r) => r.localKey === mac)).toMatchObject(expected);
+    for (const at of [2_000, 30_000, 60_000]) {
+      vi.spyOn(Date, "now").mockReturnValue(start + at);
+      await pull(app, token, { visible, pairedBluetooth });
+      expect((await discoveredRows(app)).find((r) => r.localKey === mac)).toMatchObject(expected);
+    }
+  });
+
+  it("takes a later scan's answer over an earlier printer mark", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const mac = randomMac();
+    await pull(app, token, { scanned: [scannedMac(mac, { printerLike: true })] });
+    await pull(app, token, { scanned: [scannedMac(mac)] });
+    const row = (await discoveredRows(app)).find((r) => r.localKey === mac);
+    expect(row).toBeDefined();
+    expect(row).not.toHaveProperty("printerLike");
+  });
+
+  it("lists a paired device on a fresh server before any scan has marked it", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const mac = randomMac();
+    await pull(app, token, {
+      visible: [{ transport: "bluetooth", localKey: mac, model: "BlueTooth Printer" }],
+      pairedBluetooth: [{ localKey: mac, name: "BlueTooth Printer" }],
+    });
+    const row = (await discoveredRows(app)).find((r) => r.localKey === mac);
+    expect(row).toMatchObject({ paired: true });
+    expect(row).not.toHaveProperty("printerLike");
+  });
+
   it("marks paired only while the pairing report is fresh", async () => {
     const app = mountApp();
     const { token } = await joinAndAccept(app);

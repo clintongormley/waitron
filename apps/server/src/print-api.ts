@@ -606,7 +606,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const unpaired = bluetoothCommands.unpaired(agentId, bluetoothOutcomes);
 
       const now = Date.now();
-      // A visible or scanned report replaces the description, never another kind of report's stamp.
+      // A visible or scanned report replaces the description, never another kind of report's stamp;
+      // only a scan classifies a device, so a visible report keeps the printer mark.
       const describedThisPull = new Set<string>();
       const remember = (d: DiscoveredDeviceWire, stamp: "scannedAt" | "visibleAt"): void => {
         const locator = d.ippOnly ? queueKeyOf(d) : undefined;
@@ -615,6 +616,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         discovered.set(key, {
           agentId,
           ...d,
+          ...(stamp === "visibleAt" && prior?.printerLike ? { printerLike: true } : {}),
           ...(describedThisPull.has(key) && prior?.office?.printable && !d.office?.printable
             ? { office: prior.office, pagePrinter: prior.pagePrinter }
             : {}),

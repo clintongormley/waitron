@@ -7478,6 +7478,28 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(text(el, sel("show-all-bluetooth"))).toBe(t("printers.bluetooth_show_all"));
   });
 
+  it("lists a Bluetooth device its agent reports paired without Show all devices", async () => {
+    const device: DiscoveredPrinter = {
+      ...headphones,
+      name: "BlueTooth Printer",
+      paired: true,
+    };
+    const { el } = await mountPairing([device]);
+    await openDiscovery(el);
+    expect(q(el, sel(`discovered-row-${OTHER}`))).not.toBeNull();
+    expect(text(el, sel(`register-${OTHER}`))).toBe(t("action.add"));
+  });
+
+  it("hides the same Bluetooth device, not paired, until Show all devices", async () => {
+    const device: DiscoveredPrinter = { ...headphones, name: "BlueTooth Printer" };
+    const { el } = await mountPairing([device]);
+    await openDiscovery(el);
+    expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
+    q(el, sel("show-all-bluetooth"))!.click();
+    await flush(el);
+    expect(q(el, sel(`discovered-row-${OTHER}`))).not.toBeNull();
+  });
+
   it("keeps a wrongly-described registered printer reachable in its printer row and through Show all", async () => {
     const stored = btPrinter("p4", OTHER, false);
     const device: DiscoveredPrinter = {
@@ -7494,13 +7516,32 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(q(el, sel("printer-row-p4"))).not.toBeNull();
     expect(q(el, sel("forget-pairing-p4"))).not.toBeNull();
     await openDiscovery(el);
-    expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
-    q(el, sel("show-all-bluetooth"))!.click();
-    await flush(el);
+    expect(q(el, sel(`discovered-row-${OTHER}`))).not.toBeNull();
     expect(text(el, sel(`register-${OTHER}`))).toBe("Habilitar");
     await addDiscovered(el, q(el, sel(`register-${OTHER}`))!);
     await flush(el);
     expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p4", { active: true });
+  });
+
+  it("a registered, switched-off printer, not paired and not marked as a printer, is reachable through Show all with Pair", async () => {
+    const stored = btPrinter("p4", OTHER, false);
+    const device: DiscoveredPrinter = {
+      ...headphones,
+      alreadyRegistered: true,
+      printerId: "p4",
+    };
+    const { el } = await mountPairing([device], {
+      listPrinters: vi.fn().mockResolvedValue([...printers, stored]),
+    });
+    await selectTab(el, "printers");
+    await filterPrinters(el, "all");
+    expect(q(el, sel("printer-row-p4"))).not.toBeNull();
+    await openDiscovery(el);
+    expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
+    q(el, sel("show-all-bluetooth"))!.click();
+    await flush(el);
+    expect(text(el, sel(`pair-${OTHER}`))).toBe(t("printers.bluetooth_pair"));
+    expect(q(el, sel(`register-${OTHER}`))).toBeNull();
   });
 
   it("offers Unpair only on a Bluetooth printer its agent reports paired now, switched on or off", async () => {
