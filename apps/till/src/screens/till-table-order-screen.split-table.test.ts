@@ -14,6 +14,7 @@ import type {
 } from "./till-table-order-screen.js";
 import type {
   BillBalance,
+  BillRefundView,
   Draft,
   SplitSources,
   TabLine,
@@ -674,6 +675,45 @@ describe("Split a table's panel", () => {
       expect(textOf(el, "[data-split-keeps]")).toBe("T7 is left with nothing to pay");
     });
 
+    it("a €0.00 dish left, with a paid bill beside, keeps its amount as it does with none", async () => {
+      const free = [dish("water", 1, "0.00"), dish("soup", 2, "10.00")];
+      const el = await mountScreen({
+        bills: [
+          partyBill("b1", 1, "0.00", { status: "settled", total: "9.00" }),
+          partyBill("b2", 2, "10.00", { total: "10.00" }),
+        ],
+        splitRead: read({ b2: free }, { b2: "10.00" }),
+      });
+      await toPanel(el);
+
+      await pickDish(el, "b2", "soup");
+
+      expect(textOf(el, "[data-split-keeps]")).toBe("T7 keeps the rest of Bill 2 · €0.00");
+    });
+
+    const refund = (state: BillRefundView["state"]) => ({
+      payments: [{ refunds: [{ state }] }] as unknown as BillBalance["payments"],
+    });
+
+    it.each([
+      ["still going through", "pending", "T7 keeps the rest of Bill 1 · €20.00"],
+      ["that failed", "failed", "T7 is left with nothing to pay"],
+    ] as const)("a card refund %s on the staying bill: %s", async (_name, state, line) => {
+      const el = await mountScreen({
+        bills: [partyBill("b1", 1, "10.00", { total: "30.00" })],
+        splitRead: read(
+          { b1: soupAndSteak },
+          { b1: "30.00" },
+          { b1: { received: "20.00", ...refund(state) } },
+        ),
+      });
+      await toPanel(el);
+
+      await pickDish(el, "b1", "soup");
+
+      expect(textOf(el, "[data-split-keeps]")).toBe(line);
+    });
+
     it("one left fully paid beside an empty bill keeps the amount", async () => {
       const el = await mountScreen({
         bills: [partyBill("b1", 1, "10.00", { total: "30.00" }), partyBill("b2", 2, "0.00")],
@@ -1069,6 +1109,25 @@ describe("Split a table's panel", () => {
         new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
       );
 
+    it("a busy till takes no count, and one typed before stays", async () => {
+      const el = await mountScreen();
+      await toPanel(el);
+      await typeCount(el, "leaving", "2");
+
+      el.busy = true;
+      await el.updateComplete;
+      await stepper(el, "leaving").updateComplete;
+      expect(stepper(el, "leaving").disabled).toBe(true);
+      expect(stepper(el, "staying").disabled).toBe(true);
+      expect(nativeInput(el, "leaving").disabled).toBe(true);
+
+      el.busy = false;
+      await el.updateComplete;
+      await stepper(el, "leaving").updateComplete;
+      expect(nativeInput(el, "leaving").disabled).toBe(false);
+      expect(nativeInput(el, "leaving").value).toBe("2");
+    });
+
     it("refuses a bad count sent with Enter and dispatches nothing", async () => {
       const el = await mountScreen();
       const sent = heard(el, "split-table");
@@ -1189,6 +1248,37 @@ describe("A803 split: a re-read", () => {
     await settled(el);
 
     expect([...ticked(el).whole]).toEqual(["b2"]);
+  });
+
+  it.each([
+    ["the list of tables", true, '[data-action="split-table"]'],
+    ["the old step's choice of bill", false, '[data-target="t8"]'],
+  ] as const)(
+    "a re-read: the party going closes %s, which names the party",
+    async (_name, live, last) => {
+      const el = await mountScreen({ splitPanelLive: live });
+      await click(el, "[data-move-split]");
+      await click(el, '[data-action="split-table"]');
+      if (last !== '[data-action="split-table"]') await click(el, last);
+      expect(q(el, "[data-split-table]")).not.toBeNull();
+
+      el.party = null;
+      await el.updateComplete;
+
+      expect(q(el, "[data-split-table]")).toBeNull();
+      expect(q(el, "[data-action-panel]")).toBeNull();
+    },
+  );
+
+  it("a re-read: a party with a new count keeps the list of tables", async () => {
+    const el = await mountScreen();
+    await click(el, "[data-move-split]");
+    await click(el, '[data-action="split-table"]');
+
+    el.party = { ...garcia, guestCount: 9 };
+    await el.updateComplete;
+
+    expect(q(el, "[data-split-table]")).not.toBeNull();
   });
 
   it("a re-read: a screen with no party at the first draw has no panel and throws nothing", async () => {

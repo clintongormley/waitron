@@ -135,6 +135,13 @@ const dishBox = (screen: TillTableOrderScreen, billId: string, row: string) =>
     .shadowRoot!.querySelector(`[data-split-bill="${billId}"] till-portion-picker`)!
     .shadowRoot!.querySelector<HTMLInputElement>(`[data-pick="${row}"]`)!;
 const whole = (screen: TillTableOrderScreen) => [...picker(screen).split.whole];
+/** A click on a box out of the page fires no `change`, so the event is sent to reach the screen. */
+const changeOf = (box: HTMLInputElement) =>
+  box.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+const enterOn = (input: HTMLInputElement) =>
+  input.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+  );
 const picks = (screen: TillTableOrderScreen, billId: string) => [
   ...(picker(screen).split.picks.get(billId) ?? []),
 ];
@@ -596,13 +603,11 @@ describe("Split a table's panel out of the page", () => {
     await takeOut(screen);
     oldSplit.click();
     oldBack.click();
-    oldTick.click();
+    changeOf(oldTick);
     oldStep.click();
     oldInput.value = "7";
     oldInput.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-    oldInput.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
-    );
+    enterOn(oldInput);
     await screen.updateComplete;
     expect(app.commands).toEqual([]);
     await putBack(app, screen);
@@ -626,9 +631,10 @@ describe("Split a table's panel out of the page", () => {
     await click(screen, '[data-target="t7"]');
     oldSplit.click();
     oldBack.click();
-    oldTick.click();
+    changeOf(oldTick);
     oldInput.value = "7";
     oldInput.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    enterOn(oldInput);
     await settled(screen);
     expect(app.commands).toEqual([]);
     expect(panelOpen(screen)).toBe(true);

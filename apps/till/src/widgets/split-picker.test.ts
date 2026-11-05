@@ -113,6 +113,7 @@ function source(
     groups: pickGroups(lines, keyFor(lines, balance), balance, new Set()),
     held: options.held ?? null,
     ownUnsent: options.ownUnsent ?? false,
+    refundPending: false,
   };
 }
 

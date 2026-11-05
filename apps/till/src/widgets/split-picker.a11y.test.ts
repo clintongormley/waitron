@@ -92,6 +92,7 @@ function source(
     groups: pickGroups(DISHES, keyOf, balance, new Set()),
     held: over.held ?? null,
     ownUnsent: over.ownUnsent ?? false,
+    refundPending: false,
   };
 }
 

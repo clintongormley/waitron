@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
-import type { BillBalance, Draft, DraftLine, PartyBill, TabLine } from "../api/client.js";
+import type {
+  BillBalance,
+  BillRefundView,
+  Draft,
+  DraftLine,
+  PartyBill,
+  TabLine,
+} from "../api/client.js";
 import { billGross } from "./adjust-target.js";
 import { paidQuantities } from "./bill-payment.js";
 import { tabLinePortionKey } from "./portion-groups.js";
@@ -123,6 +130,7 @@ interface SourceOptions {
   status?: PartyBill["status"];
   held?: SplitSource["held"];
   ownUnsent?: boolean;
+  refundPending?: boolean;
   recalled?: ReadonlySet<string>;
 }
 
@@ -142,6 +150,7 @@ function source(
     groups: pickGroups(lines, keyFor(lines, balance), balance, options.recalled ?? new Set()),
     held: options.held ?? null,
     ownUnsent: options.ownUnsent ?? false,
+    refundPending: options.refundPending ?? false,
   };
 }
 
@@ -583,12 +592,21 @@ describe("A803 selection:", () => {
       expect(leftWithNothingToPay([partPaid({ held: luis })], soupPicked, false)).toBe(false);
     });
 
+    it("false while a card refund on it is going through, picked from or untouched", () => {
+      const covered = source("b1", 1, steakAndSoup, { received: "30.00", refundPending: true });
+      expect(leftWithNothingToPay([partPaid({ refundPending: true })], soupPicked, false)).toBe(
+        false,
+      );
+      expect(leftWithNothingToPay([covered], NOTHING, false)).toBe(false);
+    });
+
     it("false with no balance read, whatever the listed total", () => {
       const unread: SplitSource = {
         bill: bill("b1", 1, { total: "0.00" }),
         groups: pickGroups([], () => null, null, new Set()),
         held: null,
         ownUnsent: false,
+        refundPending: false,
       };
       expect(leftWithNothingToPay([unread], NOTHING, true)).toBe(false);
     });
@@ -605,10 +623,10 @@ describe("A803 selection:", () => {
       expect(leftWithNothingToPay([free], NOTHING, true)).toBe(false);
     });
 
-    it("the rest of a bill that owes nothing and holds no money needs a paid bill beside it", () => {
+    it("the rest of a bill that owes nothing and holds no money stays open, paid bill or not", () => {
       const rest = source("b1", 1, [dish("water", 1, "0.00"), dish("soup", 2, "10.00")]);
       expect(leftWithNothingToPay([rest], soupPicked, false)).toBe(false);
-      expect(leftWithNothingToPay([rest], soupPicked, true)).toBe(true);
+      expect(leftWithNothingToPay([rest], soupPicked, true)).toBe(false);
     });
 
     it("with no bill staying, answers whether a paid bill does", () => {
@@ -664,6 +682,36 @@ describe("A803 selection:", () => {
       );
 
       expect(named(rowsOf(one!, NOTHING))).toEqual([["a"], ["b"]]);
+    });
+
+    it("a bill waits on a refund only while one of its refunds is pending", () => {
+      const refunds = (...states: BillRefundView["state"][]) =>
+        [
+          { refunds: [] },
+          { refunds: states.map((state) => ({ state })) },
+        ] as unknown as BillBalance["payments"];
+      const reading = readOf(
+        { id: "pending", lines: [a] },
+        { id: "finished", lines: [b] },
+        { id: "none", lines: [c] },
+      );
+      reading.bills[0]!.balance.payments = refunds("completed", "pending");
+      reading.bills[1]!.balance.payments = refunds("completed", "failed");
+
+      const sources = splitSourcesFrom(
+        reading,
+        [bill("pending", 1), bill("finished", 2), bill("none", 3)],
+        [],
+        "me",
+        new Set(),
+        keyFor,
+      );
+
+      expect(sources.map((row) => [row.bill.workingOrderId, row.refundPending])).toEqual([
+        ["pending", true],
+        ["finished", false],
+        ["none", false],
+      ]);
     });
 
     it("a dish in recalled is in no row, and counts as this person's own unsent dish", () => {
@@ -848,6 +896,7 @@ describe("A803 selection:", () => {
         groups: pickGroups(lines, () => null, null, new Set()),
         held: null,
         ownUnsent: false,
+        refundPending: false,
       };
 
       expect(splitSummary([unread], wholeOf("b1")).takes.amount).toBe(decimal("8.00"));

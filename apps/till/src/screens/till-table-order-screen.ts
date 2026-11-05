@@ -1442,9 +1442,6 @@ export class TillTableOrderScreen extends LitElement {
   readonly #actionId = {};
   #actionScope?: DraftScope<ActionDraft>;
   #actionBaseline?: ActionDraft;
-  /** The party was replaced since the panel last compared its stored count; kept while out of the
-   * page, where nothing compares it. */
-  #storedGuestsChanged = false;
   #actionLeave?: LeaveCoordinator;
   #actionOpening = 0;
 
@@ -1478,8 +1475,6 @@ export class TillTableOrderScreen extends LitElement {
 
   /** An untouched staying side follows the stored count; a typed one stays, measured against it. */
   #followStoredGuests(): void {
-    if (!this.#storedGuestsChanged || !this.isConnected) return;
-    this.#storedGuestsChanged = false;
     if (this.actionStep !== "split-table-pick") return;
     const stored = this.#savedGuests();
     const baseline = this.#actionBaseline!;
@@ -2093,7 +2088,6 @@ export class TillTableOrderScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("draftStore")) this.#kitchenNoteVisit++;
-    if (changed.has("party")) this.#storedGuestsChanged = true;
     if (this.sentLinePending !== null && this.#sentLine() === undefined)
       this.sentLinePending = null;
     this.#watchDraft();
@@ -5245,9 +5239,11 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #followSplitPanel(refusalChanged: boolean, partySwitched: boolean): void {
+    const onTables = this.actionStep === "split-table" || this.actionStep === "split-table-bill";
     if (
-      this.actionStep === "split-table-pick" &&
-      (partySwitched || !this.#splitPanelHolds(this.splitTableId))
+      (onTables && this.party === null) ||
+      (this.actionStep === "split-table-pick" &&
+        (partySwitched || !this.#splitPanelHolds(this.splitTableId)))
     )
       this.#closeActions();
     const refusal = refusalChanged ? this.splitRefusal : null;
@@ -5385,7 +5381,7 @@ export class TillTableOrderScreen extends LitElement {
       label: fill(t("table.split_guests_at"), { table }),
       text,
       placeholder: "",
-      disabled: false,
+      disabled: this.busy,
       error: this.#splitCountError(text) || refused,
       onChange: (event) => {
         event.stopPropagation();
@@ -5482,8 +5478,10 @@ export class TillTableOrderScreen extends LitElement {
       }
       <div
         class="split-guests"
-        @keydown=${(event: KeyboardEvent) =>
-          submitOnEnter(event, this.renderRoot.querySelector<HTMLElement>("[data-split-confirm]"))}
+        @keydown=${(event: KeyboardEvent) => {
+          if (!this.#actionControlCurrent(event)) return;
+          submitOnEnter(event, this.renderRoot.querySelector<HTMLElement>("[data-split-confirm]"));
+        }}
       >
         ${this.#splitGuestsField("staying", kept, this.splitStaying, (value) => {
           this.splitStaying = value;

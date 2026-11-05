@@ -11918,6 +11918,37 @@ describe("till-app: Split a table retains the guests prompt observation", () => 
   const atTwo = seated({}, { tableIds: ["t4", "t5"] });
   const table5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
 
+  it("the list of tables closes, and the order keeps drawing, when a read finds the party has gone", async () => {
+    const floor = { left: false };
+    let answerMerge = () => {};
+    const { el } = await mountApp({
+      getTablesState: vi.fn(async () =>
+        floor.left
+          ? [table({ state: "open-tab", hasOpenTab: true }), table({ id: "t5", label: "5" })]
+          : [atTwo, table5],
+      ),
+      mergeBills: vi.fn(() => new Promise<void>((resolve) => (answerMerge = resolve))),
+    });
+    const order = await openMesa(el);
+    emit(order, "merge-bills", { fromBillId: "wo-check" });
+    await flush(el);
+    for (const selector of ["[data-move-split]", '[data-action="split-table"]']) {
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>(selector)!);
+      await flush(el);
+    }
+    expect(order.shadowRoot!.querySelector("[data-split-table]")).not.toBeNull();
+
+    floor.left = true;
+    answerMerge();
+    await flush(el, 5);
+
+    expect(order.party).toBeNull();
+    await order.updateComplete;
+    expect(order.shadowRoot!.querySelector("[data-split-table]")).toBeNull();
+    order.requestUpdate();
+    await order.updateComplete;
+  });
+
   async function prompt(el: TillApp, billId = "wo-check") {
     const order = tableOrder(el)!;
     for (const selector of [

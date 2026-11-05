@@ -36,6 +36,8 @@ export interface SplitSource {
   } | null;
   /** This person's own unsent dishes on it: a saved draft, or dishes recalled on screen. */
   ownUnsent: boolean;
+  /** A card refund on it has not finished, so the money it holds is not known yet. */
+  refundPending: boolean;
 }
 
 export interface SplitPicks {
@@ -214,11 +216,11 @@ export function splitSummary(sources: readonly SplitSource[], split: SplitPicks)
 
 /**
  * Whether the staying table owes nothing once the split is pressed: every bill staying owes nothing
- * and one has money received, here or on a paid bill (`anyPaid`). Money received is
- * `floor.received`, so a card in progress does not count. An untouched bill must hold money of its
- * own, which an empty one does not. A bill with unsent dishes counts as owing, as the server leaves
- * it open (`issueIfFullyPaid`), and so does a pick left on a bill paid since, which the split does
- * not finish.
+ * and holds money of its own, and with no bill staying, a bill is paid (`anyPaid`). Money received
+ * is `floor.received`, so a card in progress does not count. A bill holding none stays open, as the
+ * server issues nothing for it. A bill with unsent dishes or a card refund not finished counts as
+ * owing, as the server leaves it open (`issueWhenFullyPaid`), and so does a pick left on a bill paid
+ * since, which the split does not finish.
  */
 export function leftWithNothingToPay(
   sources: readonly SplitSource[],
@@ -229,13 +231,17 @@ export function leftWithNothingToPay(
   const received = (source: SplitSource) => source.groups.floor?.received ?? ZERO;
   const holdsMoney = (source: SplitSource) => compareDecimal(received(source), ZERO) > 0;
   const covers = (source: SplitSource, left: Decimal) =>
-    !source.ownUnsent && source.held === null && compareDecimal(left, received(source)) <= 0;
+    !source.ownUnsent &&
+    !source.refundPending &&
+    source.held === null &&
+    compareDecimal(left, received(source)) <= 0;
   return (
     (anyPaid || [...whole, ...rest].some(holdsMoney)) &&
     whole.every((source) => holdsMoney(source) && covers(source, billTotal(source))) &&
     rest.every(
       (source) =>
         owing(source.bill) &&
+        holdsMoney(source) &&
         covers(source, subtractDecimal(billTotal(source), pickedFrom(source, split))),
     )
   );
@@ -292,6 +298,9 @@ export function splitSourcesFrom(
                 takenFromYou: holder.takenOverFrom?.personId === personId,
               },
         ownUnsent: withOwnDraft.has(billId) || lines.some((line) => recalled.has(line.id)),
+        refundPending: balance.payments.some((payment) =>
+          payment.refunds.some((refund) => refund.state === "pending"),
+        ),
       },
     ];
   });
