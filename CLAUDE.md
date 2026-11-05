@@ -513,6 +513,11 @@ called weaker than its name, the topic file lists what it does not see.
   Guard: `scripts/backup-staging-touchers.test.ts`, weaker than its name — it reads text and never
   checks that a file takes the turn; the turn is in-process only. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#backup-staging-is-touched-only-inside-the-staging-turn).
+- **An open `FileHandle` ends the process when it is collected, so one a route streams also closes
+  on `c.req.raw.signal`'s abort: nothing reads or cancels the body of a connection already gone.**
+  A test that reads only an `app.request()` status leaks the same way. Guard: "every file the copy
+  route opens is closed" in `apps/server/src/handover-source-api.test.ts`, weaker than the rule: this
+  route only. [Receipt](docs/developers/conventions-data.md#an-open-filehandle-ends-the-process-when-it-is-collected).
 - **A duty `bootServer` starts registers its stop on `undoOnFailure` before the next throwing step.**
   The landing listener, started last, is the exception. Guard: `apps/server/src/boot.failed-start.test.ts`,
   weaker than its name: covers only named duties.

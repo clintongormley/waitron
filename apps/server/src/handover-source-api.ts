@@ -14,6 +14,7 @@ import type { CanonicalValue } from "@waitron/membership";
 import { readHandoverOperation, type HandoverOperation } from "@waitron/node-db";
 import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
+import { errnoOf } from "./errno.js";
 import {
   isOperationsBinding,
   offeredAuthoriser,
@@ -82,7 +83,11 @@ async function openIfMatching(
     throw error;
   }
   try {
-    const held = await digestBytes(handle.createReadStream({ start: 0, autoClose: false }));
+    const reading = handle.createReadStream({ start: 0, autoClose: false });
+    // It stays tied to the handle after this read, so a close failing later reaches it as an
+    // error, which would end the process if nothing listened. The read's own failures still throw.
+    reading.on("error", () => {});
+    const held = await digestBytes(reading);
     if (held.sha256 === snapshot.sha256 && held.bytes === snapshot.bytes) return handle;
   } catch (error) {
     await handle.close();
@@ -155,8 +160,9 @@ async function retake(
       throw error;
     }
     return handle;
-  } finally {
+  } catch (error) {
     await rm(retakePath, { force: true });
+    throw error;
   }
 }
 
@@ -274,11 +280,21 @@ export function mountHandoverSourceApi(app: Hono, deps: CaptureDeps, log: Logger
 
   app.post("/api/node/handover/:operationId/final-copy", (c) =>
     run(c, log, async () => {
+      const connection = c.req.raw.signal;
       const operationId = c.req.param("operationId");
       await authorise(c, deps, operationId, "final-copy");
       const { snapshot } = (await captureFinalCopy(deps, operationId)).body;
       const handle = await openFinalCopy(deps, operationId, snapshot);
       const stream = Readable.toWeb(handle.createReadStream({ start: 0 })) as ReadableStream;
+      // Node ends the process when it collects an open file handle, and a connection lost before
+      // the answer is written leaves nothing to read or cancel this stream, which would close it.
+      const closeFile = () => {
+        handle.close().catch((error: unknown) => {
+          log("error", "handover-source.close_failed", { operationId, errno: errnoOf(error) });
+        });
+      };
+      if (connection.aborted) closeFile();
+      else connection.addEventListener("abort", closeFile);
       return c.body(stream, 200, {
         "content-type": "application/octet-stream",
         "content-length": String(snapshot.bytes),

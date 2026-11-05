@@ -5821,3 +5821,29 @@ src/first-setup-resolution-inspection.test.ts` for damaged/missing/symlink refus
 fingerprints and snapshot limits. A large valid database is classified from its SQLite rows even
 when its exact recovery snapshot is over budget. Remaining whole-file recovery reads are tracked
 in [the setup backlog](../backlog/setup.md#recovery-operations-still-buffer-whole-database-files).
+
+## An open FileHandle ends the process when it is collected
+
+On Node v26.13.0, a real listener answering with `Readable.toWeb(handle.createReadStream())`, with
+the client gone before the answer was written and `--expose-gc` forcing a collection, exited 1 with
+`A FileHandle object was closed during garbage collection` and `code: 'ERR_INVALID_STATE'`. With a
+close on the request's abort it printed `survived` and exited 0; so did a download read to its end.
+The file was 2 MB. A 2 KB file exited 0 unfixed too: with nobody reading, `Readable.toWeb` still read
+a 60,000-byte file to its end and closed it, and left a 70,000-byte one open, so a test with a tiny
+file cannot show this.
+
+The cause is `writeFromReadableStream` in `@hono/node-server` 2.1.5: `else if (writable.destroyed)
+return;`. Run with `handover-compare.test.ts`'s two "while the spare waits on a setting" cases, whose
+last wait ends the moment M1 sees a second download, so the teardown drops a request M1 is still
+answering. At the suite's own 50 ms polling, one of seven runs left a handle open. At a 1 ms polling,
+in a scratch copy, all 7 runs before the fix left one open or, under forced collection, raised the
+error, and none of 8 after did.
+
+`c.req.raw.signal` reports a connection lost before it is first read, not only after: a route that
+first read it after the client left saw `aborted: true`, on 2.1.5 (the listener keeps the reason and
+applies it to a controller made later). A finished answer left it `aborted: false`.
+
+A close that fails has its own trap. Closing the descriptor under a handle makes `handle.close()`
+reject `EBADF`, and a stream made with `autoClose: false` stays tied to the handle after its read, so
+it receives that as an `error` event, and with no listener that exited 1 even though the rejection
+was caught. `openIfMatching` keeps a listener on its digest stream for this.
