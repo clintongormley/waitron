@@ -65,12 +65,11 @@ import {
 // sale route. The split and un-join verbs themselves are tested in
 // `split-bill.test.ts` and `split-bill.fiscal.test.ts`.
 let cfg: WithVenueRowId<OriginConfig>;
-let ana: { id: string };
+let staffMember: { id: string };
 // One product so a tab can open with a real line to split/carry across an un-join — `openTab` prices it
 // and the `check_locales` trigger demands its `es-ES` description key match the venue's `es-ES` locale.
-let cafeId: string;
-// The café's offer, and the table_tab zone offering it, where every table here sits.
-let cafeMenuItemId: string;
+let coffeeId: string;
+let coffeeMenuItemId: string;
 let tablesZoneId: string;
 
 const suite = useVenueDb({
@@ -90,7 +89,7 @@ const suite = useVenueDb({
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
-    ana = { id: person!.id };
+    staffMember = { id: person!.id };
     cfg = makeCfg(await venueLocationId(db), nodeId);
     const product = await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
@@ -106,9 +105,9 @@ const suite = useVenueDb({
       await assignCatalogueToVenue(tx, cat.id);
       return p;
     });
-    cafeId = product.id;
+    coffeeId = product.id;
     const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
-    cafeMenuItemId = offers.offerFor(cafeId);
+    coffeeMenuItemId = offers.offerFor(coffeeId);
     tablesZoneId = offers.zoneId;
   },
 });
@@ -168,7 +167,7 @@ async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
       deviceId,
-      personId: ana.id,
+      personId: staffMember.id,
       pin: "5555",
     });
   });
@@ -198,7 +197,7 @@ async function setupTabApp(
     const a = await createTable(tx, cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
     const tabAResult = await openPartyTab(tx, cfg, {
       tableId: a.id,
-      lines: [{ menuItemId: cafeMenuItemId, quantity: aQty }],
+      lines: [{ menuItemId: coffeeMenuItemId, quantity: aQty }],
     });
     return { tabA: tabAResult.tabId, tableA: a.id };
   });
@@ -240,7 +239,7 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
       return id;
     });
     await withTransaction(suite.db, (tx) =>
-      addTabRound(tx, cfg, tabA, [{ menuItemId: offers.offerFor(cafeId), quantity: "2" }]),
+      addTabRound(tx, cfg, tabA, [{ menuItemId: offers.offerFor(coffeeId), quantity: "2" }]),
     );
     const [ticket] = await ticketsOn(tabA);
     expect(ticket).toMatchObject({ lineNo: 2, quantity: 2000 });
@@ -383,7 +382,7 @@ describe("POST /api/bills/:id/merge of a seated party's check back into its tab"
       revision: number;
     };
     await withTransaction(suite.db, (tx) =>
-      writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, ana.id),
+      writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, staffMember.id),
     );
     await kitchenStation(cfg);
     const offers = await withTransaction(suite.db, (tx) =>
@@ -393,7 +392,7 @@ describe("POST /api/bills/:id/merge of a seated party's check back into its tab"
       submissionId: randomUUID(),
       expectedPartyRevision: revision,
       groups: [
-        { lines: [{ menuItemId: offers.offerFor(cafeId), quantity: "3" }], release: "fire" },
+        { lines: [{ menuItemId: offers.offerFor(coffeeId), quantity: "3" }], release: "fire" },
       ],
     });
     expect(round.status).toBe(200);

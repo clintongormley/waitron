@@ -407,7 +407,7 @@ until A977).
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Other private naming sites remain in the till's boot and counter-payment suites and
-  other server till-API (split-bill, groups and move-bill), fiscal-sale and order fixtures. These include accented move-line bindings
+  other server till-API (groups plus shared-fixture consumers in split-bill and move-bill), fiscal-sale and order fixtures. These include accented move-line bindings
   and shared helper consumers such as `made-here.test.ts`.
   Fixture strings remain separate from this naming work. The counter, filing and adjustment
   order-portion suites retain Spanish dish samples under A976; counter and adjustment test
@@ -801,7 +801,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 ## A974. Finish the remaining English names in general code.
 
 - **A974. Finish the remaining English names in general code.** Remaining names include till boot and
-  counter-payment fixtures; server till-API (split-bill, groups and move-bill), fiscal-sale and other order fixtures;
+  counter-payment fixtures; server till-API (groups plus shared-fixture consumers in split-bill and move-bill), fiscal-sale and other order fixtures;
   shared helper consumers and file names.
   Keep accented search fixtures unchanged. Other fixture text stays with A976, including catalogue
   display names, recipe ingredient names and seasonal venue and zone names, printer-screen display
@@ -815,7 +815,8 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 - **A976. Finish the server's English test-venue defaults.** Spanish display samples remain in
   `party-bill-actions.test.ts`, `party-move-bill.test.ts`, `till-api.reprint.test.ts`,
   `order-portions.counter.test.ts`, `order-portions.filing.test.ts`,
-  `order-portions.adjustments.test.ts`, `till-api.transfer.test.ts` and
+  `order-portions.adjustments.test.ts`, `till-api.transfer.test.ts`,
+  `till-api.move-bill.test.ts`, `till-api.split-bill.test.ts` and
   `portion-sale-projection.test.ts`; these belong to A976 rather than the private-name work
   in A974. The counter and adjustment order-portion suites also have Spanish dish words
   in their test descriptions. Bookings’ native suites use English
