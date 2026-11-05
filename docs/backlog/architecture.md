@@ -410,7 +410,7 @@ until A977).
   other server till-API, fiscal-sale and order fixtures, including the order-portion adjustments suite. These include accented move-line bindings
   and shared helper consumers such as `made-here.test.ts`.
   Fixture strings remain separate from this naming work. The counter and filing order-portion
-  suites retain Spanish dish samples and test descriptions under A976.
+  suites retain Spanish dish samples under A976, as do the counter suite's test descriptions.
   Keep accented search fixtures unchanged. String-selected product keys stay with their fixture text
   under A976.
   Catalogue display names, recipe ingredient text, seasonal venue and zone names and printer-screen display labels
@@ -423,6 +423,8 @@ until A977).
   choices carrying such a code before changing it. Its reachability through an installed pack
   has not been established. `git blame` attributes the selection expression to `082553a65`.
 - **A976 — remaining test-venue defaults.** Menu-period rule samples use English names.
+  The counter and filing order-portion suites still have Spanish dish samples, and the counter
+  suite has Spanish dish words in test descriptions.
   The kitchen-note upgrade fixture uses an English operation description.
   Native allergy, kitchen-note and bill-identity suites use English sample location names.
   The bill, party, boot, stream and clock fixtures
@@ -816,8 +818,10 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 ## A976. Finish the server's English test-venue defaults.
 
 - **A976. Finish the server's English test-venue defaults.** Spanish display samples remain in
-  `party-bill-actions.test.ts`, `party-move-bill.test.ts` and `till-api.reprint.test.ts`; these belong
-  to A976 rather than the private-name work in A974. Bookings’ native suites use English
+  `party-bill-actions.test.ts`, `party-move-bill.test.ts`, `till-api.reprint.test.ts`,
+  `order-portions.counter.test.ts` and `order-portions.filing.test.ts`; these belong to A976
+  rather than the private-name work in A974. The counter order-portion suite also has Spanish
+  dish words in its test descriptions. Bookings’ native suites use English
   sample location, operation, contact and note text. Native provisioning and floor-plan-set route
   suites use English venue, operation and menu samples; their Spanish locale and starter-content
   checks remain. UI switch behavior and accessibility suites

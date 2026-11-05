@@ -6673,8 +6673,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A976. Finish the server's English test-venue defaults.**
-  Party bill-action, bill-move and reprint suites still use Spanish display samples; other helpers
-  and screen expectations remain. Low priority.
+  Party bill-action, bill-move, reprint and order-portion counter/filing suites still use Spanish
+  display samples; counter order-portion test descriptions, other helpers and screen expectations remain. Low priority.
   [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).
 
 - **Cloud's cost-test fixtures still carry Spanish operation and street examples.** The two

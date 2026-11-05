@@ -1721,13 +1721,13 @@ describe("A803 portions: raising a dish", () => {
     const bill = await billOf(croquettes("1"), { bound: false });
     await toCounter(bill.billId, bill.partyId);
     const [croquette] = linesOf(bill.billId);
-    const croquetaId = venue.db.all<{ id: string }>(
+    const croquetteId = venue.db.all<{ id: string }>(
       sql`select id from working_order_lines
           where working_order_id = ${bill.billId} and line_no = ${croquette!.lineNo}`,
     )[0]!.id;
 
     await saveLines(bill.billId, [
-      { workingOrderLineId: croquetaId, ...croquettes("1")[0]! },
+      { workingOrderLineId: croquetteId, ...croquettes("1")[0]! },
       ...burgersWithCheese("2"),
     ]);
 
