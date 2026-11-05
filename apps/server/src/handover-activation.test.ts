@@ -8,6 +8,7 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   invoiceSeries,
+  openVenueDatabase,
   readNodeMembership,
   writeNodeMembership,
   type Database,
@@ -17,7 +18,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import { handoverActivations } from "@waitron/handover";
-import { managementSessions, persons } from "@waitron/identity";
+import { hashPassword, managementSessions, persons } from "@waitron/identity";
 import { signDocumentBody, type MembershipNode } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverEvent, readHandoverOperation, readNodeMode } from "@waitron/node-db";
@@ -853,5 +854,306 @@ describe("one activation at a time, and asking again", () => {
     ]);
     expect(wrong.status).toBe(401);
     expect(right.body).toEqual({ activated: true, restarting: true });
+  }, 60_000);
+});
+
+describe("a lost reply, then a retry or a reboot", () => {
+  /** A real close and reopen of the box's own files; the next `spareOn` is the new process. */
+  async function rebooted(store: PlacedSpare): Promise<PlacedSpare> {
+    await store.close();
+    const opened = await openVenueDatabase(dirs().spareVenue);
+    placed = { ...store, venue: opened.venue, node: opened.node, close: () => opened.close() };
+    return placed;
+  }
+  const appRunning = (store: Store, service: Service, run: HandoverActivationDeps["run"]): Hono => {
+    const app = new Hono();
+    mountHandoverActivationApi(app, {
+      node: store.node,
+      nodeId: standby.nodeId,
+      appDb: store.venue,
+      nodePreparation: service,
+      run,
+    });
+    return app;
+  };
+  const everything = async (store: Store) => ({
+    sif: await sifRows(store),
+    allocations: await allocations(store),
+    activations: await activations(store),
+    chart: await readNodeMembership(store.venue),
+  });
+
+  it("a lost activation answer, then a retry with the same operation, answers activated and takes no second name", async () => {
+    const first = await placedSpare();
+    const { app } = spareOn(first);
+    const { input, identity } = await selectName(app);
+    expect((await activate(app, input)).body).toEqual({ activated: true, restarting: true });
+    const before = await everything(first);
+    expect(before.allocations.filter((row) => row.nodeId === standby.nodeId)).toHaveLength(1);
+    const hashes = external.hashes;
+
+    const store = await rebooted(first);
+    const after = spareOn(store);
+    const retry = await activate(after.app, input);
+
+    expect(retry).toEqual({
+      status: 200,
+      cache: "no-store",
+      body: { activated: true, restarting: false },
+    });
+    expect(external.hashes).toBe(hashes);
+    expect(await everything(store)).toEqual(before);
+    expect(after.steps).toEqual([]);
+    expect(before.sif.filter((row) => row.nodeId === standby.nodeId)).toMatchObject([
+      { numeroInstalacion: identity },
+    ]);
+    expect((await operationRow(store))?.state).toBe("activated");
+    expect((await readNodeMode(store.node, standby.nodeId)).mode).toBe("primary");
+  }, 60_000);
+
+  it("after a lost answer, a browser asking for a name again is refused one", async () => {
+    const first = await placedSpare();
+    const { app } = spareOn(first);
+    await activate(app, (await selectName(app)).input);
+    const before = await everything(first);
+
+    const store = await rebooted(first);
+    const answer = await request(spareOn(store).app, "preparation", {
+      moduleOperation: { binding, input: null },
+      signIn,
+      proposal: { action: "clock-challenge" },
+    });
+
+    expect(answer).toMatchObject({
+      status: 409,
+      body: { error: { code: "handover.step_out_of_order" } },
+    });
+    expect(await everything(store)).toEqual(before);
+  }, 60_000);
+
+  it("power lost right after the venue save: the retry finishes the role and activated, with no second name", async () => {
+    const first = await placedSpare();
+    const crashing = spareOn(first);
+    const { input } = await selectName(crashing.app);
+    const crashApp = appRunning(first, crashing.service, (attestation, runner, beforeRestart) =>
+      crashing.run(
+        attestation,
+        async (context, consume) => {
+          await runner(context, consume);
+          throw new Error("power lost");
+        },
+        beforeRestart,
+      ),
+    );
+    expect((await activate(crashApp, input)).status).toBe(500);
+    const before = await everything(first);
+    expect(before.activations).toHaveLength(1);
+    expect(before.chart?.signerNodeId).toBe(standby.nodeId);
+    expect((await operationRow(first))?.state).toBe("filing_assumed");
+    expect((await readNodeMode(first.node, standby.nodeId)).mode).toBe("mirror");
+    const hashes = external.hashes;
+
+    const store = await rebooted(first);
+    const after = spareOn(store);
+    const retry = await activate(after.app, input);
+
+    expect(retry.body).toEqual({ activated: true, restarting: true });
+    expect(external.hashes).toBe(hashes + 1);
+    expect(await everything(store)).toEqual(before);
+    expect(after.steps).toEqual(["role primary", "restart at activated"]);
+    expect((await operationRow(store))?.state).toBe("activated");
+    expect((await readNodeMode(store.node, standby.nodeId)).mode).toBe("primary");
+  }, 60_000);
+
+  it("power lost after the role and before activated: a wrong password records nothing, and retries at once record it once", async () => {
+    const first = await placedSpare();
+    const crashing = spareOn(first);
+    const { input } = await selectName(crashing.app);
+    const crashApp = appRunning(first, crashing.service, (attestation, runner) =>
+      crashing.run(attestation, runner, async () => {
+        throw new Error("power lost");
+      }),
+    );
+    expect((await activate(crashApp, input)).status).toBe(500);
+    const before = await everything(first);
+    expect((await operationRow(first))?.state).toBe("filing_assumed");
+    expect((await readNodeMode(first.node, standby.nodeId)).mode).toBe("primary");
+
+    const store = await rebooted(first);
+    const after = spareOn(store);
+    expect(
+      await activate(after.app, input, { signIn: { email: ADMIN_EMAIL, password: "wrong" } }),
+    ).toMatchObject({ status: 401, body: { error: { code: "password.invalid" } } });
+    expect((await operationRow(store))?.state).toBe("filing_assumed");
+
+    const hashes = external.hashes;
+    const retries = await Promise.all([activate(after.app, input), activate(after.app, input)]);
+
+    expect(retries.map((retry) => retry.body)).toEqual([
+      { activated: true, restarting: false },
+      { activated: true, restarting: false },
+    ]);
+    expect(external.hashes).toBe(hashes + 1);
+    expect(await everything(store)).toEqual(before);
+    expect(after.steps).toEqual([]);
+    expect((await operationRow(store))?.state).toBe("activated");
+  }, 60_000);
+
+  it("a throw right after consume stores neither chart nor row, and a retry activates under the selected name", async () => {
+    const first = await placedSpare();
+    const crashing = spareOn(first);
+    const { input, identity } = await selectName(crashing.app);
+    const before = await everything(first);
+    const throwing = appRunning(first, crashing.service, (attestation, runner, beforeRestart) =>
+      crashing.run(
+        attestation,
+        (context, consume) =>
+          runner(context, async (tx, operations) => {
+            await consume(tx, operations);
+            throw new Error("injected after consume");
+          }),
+        beforeRestart,
+      ),
+    );
+
+    expect((await activate(throwing, input)).status).toBe(500);
+
+    expect(await everything(first)).toEqual(before);
+    expect((await operationRow(first))?.state).toBe("filing_assumed");
+    expect((await readNodeMode(first.node, standby.nodeId)).mode).toBe("mirror");
+
+    expect((await activate(spareOn(first, crashing.service).app, input)).body).toEqual({
+      activated: true,
+      restarting: true,
+    });
+    const own = (await sifRows(first)).filter((row) => row.nodeId === standby.nodeId);
+    expect(own.map((row) => row.numeroInstalacion)).toEqual([identity]);
+    expect(await activations(first)).toHaveLength(1);
+    expect((await allocations(first)).filter((row) => row.nodeId === standby.nodeId)).toHaveLength(
+      1,
+    );
+  }, 60_000);
+
+  it("a reboot after that throw refuses the kept name until the clocks are compared again, and then takes one name", async () => {
+    const first = await placedSpare();
+    const crashing = spareOn(first);
+    const { input } = await selectName(crashing.app);
+    const throwing = appRunning(first, crashing.service, (attestation, runner, beforeRestart) =>
+      crashing.run(
+        attestation,
+        (context, consume) =>
+          runner(context, async (tx, operations) => {
+            await consume(tx, operations);
+            throw new Error("injected after consume");
+          }),
+        beforeRestart,
+      ),
+    );
+    await activate(throwing, input);
+    const before = await everything(first);
+
+    const store = await rebooted(first);
+    const after = spareOn(store);
+    expect(await activate(after.app, input)).toMatchObject({
+      status: 400,
+      body: { error: { code: "sif.allocation_invalid", params: { reason: "clock_stale" } } },
+    });
+    expect(await everything(store)).toEqual(before);
+    expect((await operationRow(store))?.state).toBe("filing_assumed");
+
+    const again = await selectName(after.app);
+    expect((await activate(after.app, again.input)).body).toEqual({
+      activated: true,
+      restarting: true,
+    });
+    const own = (await sifRows(store)).filter((row) => row.nodeId === standby.nodeId);
+    expect(own.map((row) => row.numeroInstalacion)).toEqual([again.identity]);
+    expect(await activations(store)).toHaveLength(1);
+    expect((await allocations(store)).filter((row) => row.nodeId === standby.nodeId)).toHaveLength(
+      1,
+    );
+  }, 60_000);
+
+  it("power lost after the venue save: a fresh name asked for before the retry is not a second name", async () => {
+    const first = await placedSpare();
+    const crashing = spareOn(first);
+    const { input } = await selectName(crashing.app);
+    const crashApp = appRunning(first, crashing.service, (attestation, runner, beforeRestart) =>
+      crashing.run(
+        attestation,
+        async (context, consume) => {
+          await runner(context, consume);
+          throw new Error("power lost");
+        },
+        beforeRestart,
+      ),
+    );
+    await activate(crashApp, input);
+    const before = await everything(first);
+
+    const store = await rebooted(first);
+    const after = spareOn(store);
+    vi.setSystemTime(new Date("2026-10-16T12:50:00Z"));
+    const asked = async (proposal: unknown) =>
+      request(after.app, "preparation", {
+        moduleOperation: { binding, input: null },
+        signIn,
+        proposal,
+      });
+    const challenge = (await asked({ action: "clock-challenge" })).body as { id?: string };
+    const compared = await asked({
+      action: "compare-clocks",
+      browser: { challengeId: challenge.id, instantMs: Date.now() },
+    });
+    const fresh = await asked({
+      action: "select",
+      comparisonId: (compared.body as { id?: string }).id,
+    });
+
+    expect(fresh).toMatchObject({
+      status: 400,
+      body: { error: { code: "sif.allocation_invalid", params: { reason: "minute_in_use" } } },
+    });
+    expect((await activate(after.app, input)).body).toEqual({ activated: true, restarting: true });
+    expect(await everything(store)).toEqual(before);
+  }, 60_000);
+});
+
+describe("one password hash for every failed sign-in", () => {
+  it("an unknown email and a wrong password get the same answer after one password hash each", async () => {
+    const store = await placedSpare();
+    const { app } = spareOn(store);
+    const { input } = await selectName(app);
+    await store.venue.insert(persons).values([
+      {
+        displayName: "Suspended",
+        role: "admin",
+        status: "suspended",
+        passwordHash: hashPassword(PASSWORD),
+        email: "suspended@venue.test",
+      },
+      { displayName: "No password", role: "admin", email: "nopassword@venue.test" },
+    ]);
+    const answers = [];
+    for (const attempt of [
+      { email: "nobody@venue.test", password: PASSWORD },
+      { email: ADMIN_EMAIL, password: "wrong" },
+      { email: "suspended@venue.test", password: PASSWORD },
+      { email: "nopassword@venue.test", password: PASSWORD },
+    ]) {
+      const hashes = external.hashes;
+      const answer = await activate(app, input, { signIn: attempt });
+      expect(external.hashes - hashes).toBe(1);
+      answers.push(answer);
+    }
+    expect(new Set(answers.map((answer) => JSON.stringify(answer))).size).toBe(1);
+    expect(answers[0]).toMatchObject({
+      status: 401,
+      body: { error: { code: "password.invalid" } },
+    });
+
+    const hashes = external.hashes;
+    expect((await activate(app, input)).body).toEqual({ activated: true, restarting: true });
+    expect(external.hashes - hashes).toBe(1);
   }, 60_000);
 });

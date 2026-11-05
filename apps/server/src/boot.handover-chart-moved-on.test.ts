@@ -112,6 +112,8 @@ async function post(path: string, body: unknown): Promise<{ status: number; body
   return { status: response.status, body: await response.json() };
 }
 
+let sentActivation: unknown;
+
 const codeOf = (answer: { body: unknown }) =>
   (answer.body as { error?: { code?: string } }).error?.code;
 
@@ -140,11 +142,21 @@ async function startAndTryToActivate() {
     });
     input = (selected.body as { input: unknown }).input;
   }
-  const activation = await post("activate", { moduleOperation: { binding, input }, signIn });
+  sentActivation = { moduleOperation: { binding, input }, signIn };
+  const activation = await post("activate", sentActivation);
   // Long enough for a duty pass, which would ask at once.
   await new Promise((resolve) => setTimeout(resolve, 500));
   await started.close();
+  return {
+    ...readDisk(),
+    preparation: codeOf(challenge) ?? challenge.status,
+    activation: codeOf(activation) ?? activation.body,
+    restarts,
+  };
+}
 
+/** What a stopped box holds. */
+function readDisk() {
   const { spareVenue } = dirs();
   const venue = new DatabaseSync(join(spareVenue, "venue.db"), { readOnly: true });
   const node = new DatabaseSync(join(spareVenue, "node.db"), { readOnly: true });
@@ -167,15 +179,12 @@ async function startAndTryToActivate() {
       waiting: row.waiting_reason,
       placed: placed.n,
       mode: mode.mode,
-      preparation: codeOf(challenge) ?? challenge.status,
-      activation: codeOf(activation) ?? activation.body,
       ownSif: (
         venue
           .prepare("select count(*) as n from registro_sif where node_id = ?")
           .get(standby.nodeId) as { n: number }
       ).n,
       activations: count("handover_activations"),
-      restarts,
     };
   } finally {
     venue.close();
@@ -235,4 +244,59 @@ describe("a real start over the old file a chart moved on in", () => {
       restarts: ["restart"],
     });
   }, 180_000);
+});
+
+describe("a real restart after activating, then the same request again", () => {
+  const onNodeDb = (statements: string[]) => {
+    const node = new DatabaseSync(join(dirs().spareVenue, "node.db"));
+    try {
+      for (const statement of statements) node.exec(statement);
+    } finally {
+      node.close();
+    }
+  };
+  const activatedRecordLost = [
+    "update node_handover_operations set state = 'filing_assumed'",
+    "delete from node_handover_events where kind = 'activated'",
+  ];
+  const roleLost = [
+    ...activatedRecordLost,
+    "update node_mode set mode = 'mirror', singleton_role = 'secondary'",
+  ];
+
+  it.each([
+    ["the answer lost", []],
+    ["the record of activated lost too", activatedRecordLost],
+    ["the role lost as well", roleLost],
+  ])(
+    "%s: the restarted box answers activated, keeps its one name, and does not restart again",
+    async (_name, lost) => {
+      await fixture.stoppedBeforePlacing();
+      const first = await startAndTryToActivate();
+      expect(first.activation).toEqual({ activated: true, restarting: true });
+      onNodeDb(lost);
+
+      const restarts: string[] = [];
+      beforeServerStarts();
+      started = await startServer(await spareEnv(), undefined, {
+        peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
+        stepdown: { mount: () => {}, restart: () => restarts.push("restart") },
+      });
+      const retry = await post("activate", sentActivation);
+      await started.close();
+
+      expect(retry).toEqual({ status: 200, body: { activated: true, restarting: false } });
+      expect(readDisk()).toEqual({
+        chartTerm: 2,
+        state: "activated",
+        waiting: null,
+        placed: 1,
+        mode: "primary",
+        ownSif: 1,
+        activations: 1,
+      });
+      expect(restarts).toEqual([]);
+    },
+    180_000,
+  );
 });

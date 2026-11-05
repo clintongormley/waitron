@@ -48,6 +48,7 @@ import {
   readHandoverEvent,
   readHandoverOperation,
   readHandoverRestriction,
+  readNodeMode,
   recordHandoverRestrictionTx,
   setNodeMode,
   writeMirrorLink,
@@ -854,6 +855,82 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
     expect((await readHandoverOperation(mainBox.node, boxes.mainId, OP))?.state).toBe(
       "filing_relinquished",
     );
+  }, 180_000);
+
+  it("a reboot of M1 between relinquishment and M2's assumption leaves M1 restricted, and M2's retry of the acceptance gets the same relinquishment", async () => {
+    const ring = loadKeyRing(KEY_ENV);
+    const boxes = await prepared();
+    const mainState = boxes.mainEnv.WAITRON_STATE_DIR!;
+    const spareState = boxes.spareEnv.WAITRON_STATE_DIR!;
+    const indicator = await captureFinalCopy(
+      {
+        venue: mainBox.db,
+        node: mainBox.node,
+        stateDir: mainState,
+        ring,
+        nodeId: boxes.mainId,
+        modules: [],
+      },
+      OP,
+    );
+    const received = join(spareState, "received.db");
+    await copyFile(finalCopyPath(mainState, OP), received);
+    await mkdir(dirname(acceptedCopyPath(spareState, OP)), { recursive: true });
+    await acceptFinalCopy(
+      { node: spareBox.node, ring, nodeId: boxes.spareId, stateDir: spareState },
+      (await readHandoverOperation(spareBox.node, boxes.spareId, OP))!,
+      indicator,
+      received,
+    );
+    beforeServerStarts();
+    const restrictionBefore = await readHandoverRestriction(mainBox.node, boxes.mainId);
+    const acceptance = (await event(spareBox.node, boxes.spareId, "copy_accepted"))!.envelope!;
+
+    // M2's post reaches M1 and M1 gives up filing; the answer never gets back to M2.
+    main = await startServer(boxes.mainEnv, boxes.mainEnv);
+    const lost = await fetch(`http://127.0.0.1:${httpPort()}/api/node/handover/${OP}/acceptance`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: acceptance,
+    });
+    expect(lost.status).toBe(200);
+    const relinquished = await event(mainBox.node, boxes.mainId, "filing_relinquished");
+    expect(relinquished?.envelope).toBe(await lost.text());
+    expect((await readHandoverOperation(spareBox.node, boxes.spareId, OP))?.state).toBe(
+      "copy_accepted",
+    );
+
+    await main.close();
+    main = undefined;
+    main = await startServer(boxes.mainEnv, boxes.mainEnv);
+    const mainPort = httpPort();
+    await refusesSales(mainPort);
+    expect(await readHandoverRestriction(mainBox.node, boxes.mainId)).toEqual(restrictionBefore);
+
+    await boxes.writeSpareChart(`http://127.0.0.1:${mainPort}`);
+    spare = await startServer(boxes.spareEnv, boxes.spareEnv, {
+      peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
+      stepdown: { mount: () => {}, restart: () => {} },
+    });
+
+    await vi.waitFor(
+      async () =>
+        expect(await readHandoverOperation(spareBox.node, boxes.spareId, OP)).toMatchObject({
+          state: "filing_assumed",
+          waitingReason: null,
+        }),
+      { timeout: 60_000, interval: 200 },
+    );
+    expect((await event(spareBox.node, boxes.spareId, "filing_assumed"))?.envelope).toBe(
+      relinquished!.envelope,
+    );
+    expect((await event(mainBox.node, boxes.mainId, "filing_relinquished"))?.eventId).toBe(
+      relinquished!.eventId,
+    );
+    expect((await event(spareBox.node, boxes.spareId, "copy_accepted"))?.envelope).toBe(acceptance);
+    await refusesSales(mainPort);
+    expect(await readHandoverRestriction(mainBox.node, boxes.mainId)).toEqual(restrictionBefore);
+    expect((await readNodeMode(spareBox.node, boxes.spareId)).mode).toBe("mirror");
   }, 180_000);
 
   it("from fetch to acceptance on the real routes, the same bytes through a restart, restricted throughout", async () => {
