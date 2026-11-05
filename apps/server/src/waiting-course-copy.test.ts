@@ -257,8 +257,8 @@ describe("A803 waiting copy: copyHeldGroups", () => {
     const flan = await lineOf(a.billId, "Flan");
     const g = flan.groupId!;
     const bill2 = await moveToNewBill(a.partyId, a.billId, [(await lineOf(a.billId, "Tarta")).id]);
-    const tarta = await lineOf(bill2, "Tarta");
-    const extra = await addExtra(bill2, tarta.id);
+    const cake = await lineOf(bill2, "Tarta");
+    const extra = await addExtra(bill2, cake.id);
     const b = await otherParty();
     const [bFired] = await groupsOf(b);
     expect((await groupsOf(a.partyId)).map((group) => group.displayNumber)).toEqual([1, 2]);
@@ -266,7 +266,7 @@ describe("A803 waiting copy: copyHeldGroups", () => {
     const source = await groupRow(g);
     const ticketsBefore = await ticketsOf([a.billId, bill2]);
 
-    const copies = await copy(bill2, a.partyId, b, [tarta.id]);
+    const copies = await copy(bill2, a.partyId, b, [cake.id]);
 
     const copyId = copies.get(g)!;
     expect([...copies]).toEqual([[g, copyId]]);
@@ -287,7 +287,7 @@ describe("A803 waiting copy: copyHeldGroups", () => {
       createdAt: expect.any(String),
     });
     expect((await linesOf(bill2)).map((line) => [line.id, line.groupId])).toEqual([
-      [tarta.id, copyId],
+      [cake.id, copyId],
       [extra, copyId],
     ]);
     expect((await lineOf(a.billId, "Flan")).groupId).toBe(g);
@@ -300,14 +300,14 @@ describe("A803 waiting copy: copyHeldGroups", () => {
       { names: ["Tarta"], release: "hold" },
       { names: ["Flan"], release: "hold" },
     ]);
-    const tarta = await lineOf(a.billId, "Tarta");
+    const cake = await lineOf(a.billId, "Tarta");
     const flan = await lineOf(a.billId, "Flan");
-    const [g2, g3] = [tarta.groupId!, flan.groupId!];
+    const [g2, g3] = [cake.groupId!, flan.groupId!];
     expect(g2).not.toBe(g3);
     const b = await otherParty();
     const [bFired] = await groupsOf(b);
 
-    const copies = await copy(a.billId, a.partyId, b, [flan.id, tarta.id]);
+    const copies = await copy(a.billId, a.partyId, b, [flan.id, cake.id]);
 
     expect([...copies.keys()]).toEqual([g2, g3]);
     expect(
@@ -331,11 +331,11 @@ describe("A803 waiting copy: copyHeldGroups", () => {
 
   it("A803 waiting copy: copyHeldGroups removes a source group the copy empties, with a removed event naming the mover", async () => {
     const a = await seatWith([{ names: ["Tarta"], release: "hold" }]);
-    const tarta = await lineOf(a.billId, "Tarta");
-    const g = tarta.groupId!;
+    const cake = await lineOf(a.billId, "Tarta");
+    const g = cake.groupId!;
     const b = await otherParty();
 
-    await copy(a.billId, a.partyId, b, [tarta.id]);
+    await copy(a.billId, a.partyId, b, [cake.id]);
 
     expect((await groupRow(g)).state).toBe("removed");
     expect(
@@ -382,11 +382,11 @@ describe("A803 waiting copy: copyHeldGroups", () => {
       const bill2 = await moveToNewBill(a.partyId, a.billId, [
         (await lineOf(a.billId, "Tarta")).id,
       ]);
-      const tarta = await lineOf(bill2, "Tarta");
-      expect(await kitchenItemOf(tarta.id)).toMatchObject({ stationId: grill, firedAt: null });
+      const cake = await lineOf(bill2, "Tarta");
+      expect(await kitchenItemOf(cake.id)).toMatchObject({ stationId: grill, firedAt: null });
       const b = await otherParty();
 
-      const copies = await copy(bill2, a.partyId, b, [tarta.id]);
+      const copies = await copy(bill2, a.partyId, b, [cake.id]);
 
       expect(await holdStationsOf(copies.get(g)!)).toEqual([]);
     } finally {
@@ -435,11 +435,11 @@ describe("A803 waiting copy: copyHeldGroups", () => {
     const a = await seatWith([{ names: ["Flan", "Tarta"], release: "hold" }]);
     const g = (await lineOf(a.billId, "Flan")).groupId!;
     const bill2 = await moveToNewBill(a.partyId, a.billId, [(await lineOf(a.billId, "Tarta")).id]);
-    const tarta = await lineOf(bill2, "Tarta");
+    const cake = await lineOf(bill2, "Tarta");
     const b = await otherParty();
     const before = (await eventsOf(g)).length;
 
-    const copies = await copy(bill2, a.partyId, b, [tarta.id]);
+    const copies = await copy(bill2, a.partyId, b, [cake.id]);
 
     const copyId = copies.get(g)!;
     expect((await eventsOf(g)).slice(before)).toEqual([
@@ -450,7 +450,7 @@ describe("A803 waiting copy: copyHeldGroups", () => {
         kind: "lines_moved",
         actorId: MOVER,
         actorDeviceId: null,
-        detail: { lineIds: [tarta.id], to: copyId },
+        detail: { lineIds: [cake.id], to: copyId },
         createdAt: expect.any(String),
       },
     ]);
@@ -462,7 +462,7 @@ describe("A803 waiting copy: copyHeldGroups", () => {
         kind: "lines_moved",
         actorId: MOVER,
         actorDeviceId: null,
-        detail: { lineIds: [tarta.id], from: g, arrived: true },
+        detail: { lineIds: [cake.id], from: g, arrived: true },
         createdAt: expect.any(String),
       },
     ]);
@@ -474,15 +474,15 @@ describe("A803 waiting copy: copyHeldGroups", () => {
       { names: ["Tarta", "Paella"], release: "hold" },
     ]);
     const burger = await lineOf(a.billId, "Burger");
-    const tarta = await lineOf(a.billId, "Tarta");
-    const paella = await lineOf(a.billId, "Paella");
-    const extra = await addExtra(a.billId, tarta.id);
+    const cake = await lineOf(a.billId, "Tarta");
+    const rice = await lineOf(a.billId, "Paella");
+    const extra = await addExtra(a.billId, cake.id);
     const settings = await inTx(v, (tx) => readChangesAfterSending(tx));
     const recallCommand = await commandFor(v, a.partyId);
     try {
       await inTx(v, async (tx) => {
         await setChangesAfterSending(tx, "held-or-waiting");
-        return recallToDraft(tx, v.cfg, a.partyId, paella.id, {
+        return recallToDraft(tx, v.cfg, a.partyId, rice.id, {
           ...recallCommand,
           operatorId: adminId(),
           expectedEdit: await readBillEditState(tx, a.billId),
@@ -496,14 +496,14 @@ describe("A803 waiting copy: copyHeldGroups", () => {
       });
     }
     const c = await seatWith([{ names: ["Tarta"], release: "hold" }]);
-    const cTarta = await lineOf(c.billId, "Tarta");
+    const otherCake = await lineOf(c.billId, "Tarta");
     const b = await otherParty();
     const linesBefore = await linesOf(a.billId);
     const bGroupsBefore = await groupsOf(b);
     const cLinesBefore = await linesOf(c.billId);
     const cGroupsBefore = await groupsOf(c.partyId);
 
-    const copies = await copy(a.billId, a.partyId, b, [burger.id, paella.id, extra, cTarta.id]);
+    const copies = await copy(a.billId, a.partyId, b, [burger.id, rice.id, extra, otherCake.id]);
 
     expect([...copies]).toEqual([]);
     expect(await linesOf(a.billId)).toEqual(linesBefore);
@@ -622,10 +622,10 @@ function pointedAt<T extends { joinGroupId: string | null; afterGroupId: string 
 describe("A803 waiting copy: copyHeldGroups and drafts", () => {
   it("A803 waiting copy: copyHeldGroups points the moving bill's draft at the copy", async () => {
     const a = await seatWith([{ names: ["Tarta", "Flan", "Paella"], release: "hold" }]);
-    const tarta = await lineOf(a.billId, "Tarta");
+    const cake = await lineOf(a.billId, "Tarta");
     const flan = await lineOf(a.billId, "Flan");
-    const paella = await lineOf(a.billId, "Paella");
-    const g = tarta.groupId!;
+    const rice = await lineOf(a.billId, "Paella");
+    const g = cake.groupId!;
     const draftId = await recall(a.partyId, a.billId, flan.id);
     const [recalledFlan] = await recalledRows(draftId);
     expect(recalledFlan).toMatchObject({ sourceLineId: flan.id, joinGroupId: g, slot: 0 });
@@ -639,7 +639,7 @@ describe("A803 waiting copy: copyHeldGroups and drafts", () => {
     await inTx(v, (tx) =>
       tx.insert(orderDraftRecalledLines).values({
         draftId,
-        sourceLineId: paella.id,
+        sourceLineId: rice.id,
         position: next + 2,
         slot: 2,
         afterGroupId: g,
@@ -655,7 +655,7 @@ describe("A803 waiting copy: copyHeldGroups and drafts", () => {
     ).toHaveLength(2);
     const b = await otherParty();
 
-    const copies = await copy(a.billId, a.partyId, b, [tarta.id]);
+    const copies = await copy(a.billId, a.partyId, b, [cake.id]);
 
     const copyId = copies.get(g)!;
     expect((await groupRow(g)).state).toBe("held");
@@ -688,7 +688,7 @@ describe("A803 waiting copy: copyHeldGroups and drafts", () => {
       { names: ["Tarta"], release: "hold" },
       { names: ["Flan"], release: "hold" },
     ]);
-    const tarta = await lineOf(a.billId, "Tarta");
+    const cake = await lineOf(a.billId, "Tarta");
     const g3 = (await lineOf(a.billId, "Flan")).groupId!;
     const draftId = await openDraft(a.partyId, a.billId);
     await draftLine(draftId, 0, { slot: 0, joinGroupId: g3 });
@@ -696,9 +696,9 @@ describe("A803 waiting copy: copyHeldGroups and drafts", () => {
     const before = await draftLineRows(draftId);
     const b = await otherParty();
 
-    const copies = await copy(a.billId, a.partyId, b, [tarta.id]);
+    const copies = await copy(a.billId, a.partyId, b, [cake.id]);
 
-    expect([...copies.keys()]).toEqual([tarta.groupId]);
+    expect([...copies.keys()]).toEqual([cake.groupId]);
     expect(await draftLineRows(draftId)).toEqual(before);
   });
 
@@ -707,9 +707,9 @@ describe("A803 waiting copy: copyHeldGroups and drafts", () => {
       { names: ["Tarta"], release: "hold" },
       { names: ["Flan"], release: "hold" },
     ]);
-    const tarta = await lineOf(a.billId, "Tarta");
+    const cake = await lineOf(a.billId, "Tarta");
     const flan = await lineOf(a.billId, "Flan");
-    const [g1, g2] = [tarta.groupId!, flan.groupId!];
+    const [g1, g2] = [cake.groupId!, flan.groupId!];
     const draftId = await openDraft(a.partyId, a.billId);
     await draftLine(draftId, 0, { slot: 0, joinGroupId: g1 });
     await draftLine(draftId, 1, { slot: 0, joinGroupId: g2 });
@@ -718,7 +718,7 @@ describe("A803 waiting copy: copyHeldGroups and drafts", () => {
     const before = await draftLineRows(draftId);
     const b = await otherParty();
 
-    const copies = await copy(a.billId, a.partyId, b, [tarta.id, flan.id]);
+    const copies = await copy(a.billId, a.partyId, b, [cake.id, flan.id]);
 
     const [copy1, copy2] = [copies.get(g1)!, copies.get(g2)!];
     expect(copy1).not.toBe(copy2);
@@ -729,8 +729,8 @@ describe("A803 waiting copy: copyHeldGroups and drafts", () => {
 
   it("A803 waiting copy: copyHeldGroups leaves a discarded draft of the moving bill as it was", async () => {
     const a = await seatWith([{ names: ["Tarta"], release: "hold" }]);
-    const tarta = await lineOf(a.billId, "Tarta");
-    const g = tarta.groupId!;
+    const cake = await lineOf(a.billId, "Tarta");
+    const g = cake.groupId!;
     const draftId = await openDraft(a.partyId, a.billId);
     await draftLine(draftId, 0, { slot: 0, joinGroupId: g });
     await inTx(v, (tx) =>
@@ -739,7 +739,7 @@ describe("A803 waiting copy: copyHeldGroups and drafts", () => {
     const before = await draftLineRows(draftId);
     const b = await otherParty();
 
-    const copies = await copy(a.billId, a.partyId, b, [tarta.id]);
+    const copies = await copy(a.billId, a.partyId, b, [cake.id]);
 
     expect(copies.has(g)).toBe(true);
     expect(await draftLineRows(draftId)).toEqual(before);
@@ -1047,7 +1047,7 @@ async function sharedHeldGroup(before: { names: string[]; release: Release }[] =
   const a = await seatWith([...before, { names: ["Flan", "Tarta"], release: "hold" }]);
   const flan = await lineOf(a.billId, "Flan");
   const bill2 = await moveToNewBill(a.partyId, a.billId, [(await lineOf(a.billId, "Tarta")).id]);
-  return { ...a, g: flan.groupId!, flan, bill2, tarta: await lineOf(bill2, "Tarta") };
+  return { ...a, g: flan.groupId!, flan, bill2, cake: await lineOf(bill2, "Tarta") };
 }
 
 describe("A803 waiting copy: what the copy does afterwards", () => {
@@ -1115,22 +1115,22 @@ describe("A803 waiting copy: what the copy does afterwards", () => {
     expect(copyId).not.toBe(a.g);
     const firedAt = async () => [
       (await kitchenItemOf(a.flan.id)).firedAt,
-      (await kitchenItemOf(a.tarta.id)).firedAt,
+      (await kitchenItemOf(a.cake.id)).firedAt,
     ];
     expect(await firedAt()).toEqual([null, null]);
 
     await fire(b, copyId);
 
-    const [flanAfterCopy, tartaAfterCopy] = await firedAt();
+    const [flanAfterCopy, cakeAfterCopy] = await firedAt();
     expect(flanAfterCopy).toBeNull();
-    expect(tartaAfterCopy).not.toBeNull();
+    expect(cakeAfterCopy).not.toBeNull();
     expect((await groupRow(a.g)).state).toBe("held");
 
     await fire(a.partyId, a.g);
 
-    const [flanAfterSource, tartaAfterSource] = await firedAt();
+    const [flanAfterSource, cakeAfterSource] = await firedAt();
     expect(flanAfterSource).not.toBeNull();
-    expect(tartaAfterSource).toBe(tartaAfterCopy);
+    expect(cakeAfterSource).toBe(cakeAfterCopy);
   });
 
   it("A803 waiting copy: firing a copy at a free table asks for the new party's allergy answer first", async () => {
@@ -1289,7 +1289,7 @@ describe("A803 waiting copy: what the copy does afterwards", () => {
     ).toEqual([[a.g, "held", [a.flan.id]]]);
     expect(
       shown.copy.map((group) => [group.id, group.state, group.rows.map((row) => row.lineId)]),
-    ).toEqual([[copyId, "held", [a.tarta.id]]]);
+    ).toEqual([[copyId, "held", [a.cake.id]]]);
     expect([...shown.counts].sort()).toEqual(
       [
         [a.partyId, 1],
@@ -1583,16 +1583,16 @@ describe("A803 waiting copy: kitchen paper", () => {
 
   it("A803 waiting copy: the MOVED slip lists only the moved dishes, the held ones under HOLD with the copy's group", async () => {
     const t = await paperTable(true);
-    const mesa8 = `Mesa 8 (${t.n})`;
+    const table8 = `Mesa 8 (${t.n})`;
     const noticesBefore = new Set(
       (await movedNotices([t.bill1, t.bill2])).map((notice) => notice.id),
     );
 
-    const { copyId, marks } = await moveBill2(t, mesa8);
+    const { copyId, marks } = await moveBill2(t, table8);
 
     expect((await groupRow(copyId)).displayNumber).not.toBe((await groupRow(t.g)).displayNumber);
     expect((await printed(t.grill.printer)).slice(marks.grill)).toEqual([
-      movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, mesa8, [
+      movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, table8, [
         "1.000 x BURG",
         words.hold,
         `${words.group} 2 · DESSERTS`,
@@ -1627,8 +1627,8 @@ describe("A803 waiting copy: kitchen paper", () => {
 
   it("A803 waiting copy: the copy's later FIRE lists only the moved dish, marked FIRE, and the source's only the staying one", async () => {
     const t = await paperTable(true);
-    const mesa8 = `Mesa 8 (${t.n})`;
-    const { partyId, copyId } = await moveBill2(t, mesa8);
+    const table8 = `Mesa 8 (${t.n})`;
+    const { partyId, copyId } = await moveBill2(t, table8);
     await answerNoAllergies(partyId);
     const before = {
       grill: (await printed(t.grill.printer)).length,
@@ -1638,7 +1638,7 @@ describe("A803 waiting copy: kitchen paper", () => {
     await fire(partyId, copyId);
 
     expect((await printed(t.grill.printer)).slice(before.grill)).toEqual([
-      fireTicket(t.grill.name, mesa8, await orderNumberOf(t.bill2), 2, "1.000 x TARTA"),
+      fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1.000 x TARTA"),
     ]);
     expect((await printed(t.pastry.printer)).slice(before.pastry)).toEqual([]);
 
@@ -1676,12 +1676,12 @@ describe("A803 waiting copy: kitchen paper", () => {
   it("A803 waiting copy: a held group whose HOLD ticket never printed adds nothing under HOLD", async () => {
     const t = await paperTable(false);
     expect((await groupRow(t.g)).holdPrintedAt).toBeNull();
-    const mesa8 = `Mesa 8 (${t.n})`;
+    const table8 = `Mesa 8 (${t.n})`;
 
-    const { partyId, copyId, marks } = await moveBill2(t, mesa8);
+    const { partyId, copyId, marks } = await moveBill2(t, table8);
 
     expect((await printed(t.grill.printer)).slice(marks.grill)).toEqual([
-      movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, mesa8, ["1.000 x BURG"]),
+      movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, table8, ["1.000 x BURG"]),
     ]);
     expect((await groupRow(copyId)).holdPrintedAt).toBeNull();
     await answerNoAllergies(partyId);
@@ -1696,8 +1696,8 @@ describe("A803 waiting copy: kitchen paper", () => {
 
   it("A803 waiting copy: Split a table: the leaving bill's MOVED slip lists its held dish under HOLD", async () => {
     const t = await paperTable(true);
-    const mesa8 = `Mesa 8 (${t.n})`;
-    const tableId = await v.table(mesa8);
+    const table8 = `Mesa 8 (${t.n})`;
+    const tableId = await v.table(table8);
     const joining = { operatorId: OPERATOR, expectedPartyRevision: await revisionOf(v, t.partyId) };
     await inTx(v, (tx) => joinTables(tx, v.cfg, t.partyId, tableId, joining));
     const mark = (await printed(t.grill.printer)).length;
@@ -1726,22 +1726,22 @@ describe("A803 waiting copy: kitchen paper", () => {
 
   it("A803 waiting copy: moving the bill again: the second MOVED slip lists the held dish under HOLD with its group's number at the third table", async () => {
     const t = await paperTable(true);
-    const mesa8 = `Mesa 8 (${t.n})`;
-    const mesa9 = `Mesa 9 (${t.n})`;
-    const third = await v.table(mesa9);
+    const table8 = `Mesa 8 (${t.n})`;
+    const table9 = `Mesa 9 (${t.n})`;
+    const third = await v.table(table9);
     // A group already there makes the copy number 3 here against 2 at the second table, so a slip
     // printing the number the dish left behind cannot pass.
     await orderForParty(v, (await seat(v, third)).partyId, ["Agua"]);
-    const first = await moveBill2(t, mesa8);
+    const first = await moveBill2(t, table8);
 
-    const second = await moveBill2(t, mesa9, third);
+    const second = await moveBill2(t, table9, third);
 
     expect(second.copyId).not.toBe(first.copyId);
     expect((await groupRow(second.copyId)).displayNumber).not.toBe(
       (await groupRow(first.copyId)).displayNumber,
     );
     expect((await printed(t.grill.printer)).slice(second.marks.grill)).toEqual([
-      movedSlip(t.grill.name, await orderLineOf(t.bill2), mesa8, mesa9, [
+      movedSlip(t.grill.name, await orderLineOf(t.bill2), table8, table9, [
         "1.000 x BURG",
         words.hold,
         `${words.group} 3 · DESSERTS`,
@@ -1884,17 +1884,17 @@ describe("A803 waiting copy: races", () => {
     const side = winner as "left" | "right";
     expect(await holderNow(tables[side])).toBe(won);
     expect(await holderNow(tables[loser as "left" | "right"])).toBeNull();
-    const tarta = await lineOf(t.bill2, "Tarta");
+    const cake = await lineOf(t.bill2, "Tarta");
     const copies = await groupsOf(won);
     expect(copies.map((group) => [group.id, group.state])).toEqual([
       [(await lineOf(t.bill2, "Burger")).groupId, "fired"],
-      [tarta.groupId, "held"],
+      [cake.groupId, "held"],
     ]);
     expect(
-      (await eventKindsSince([t.g, tarta.groupId!], eventsBefore)).map((e) => [e.groupId, e.kind]),
+      (await eventKindsSince([t.g, cake.groupId!], eventsBefore)).map((e) => [e.groupId, e.kind]),
     ).toEqual([
       [t.g, "lines_moved"],
-      [tarta.groupId, "lines_moved"],
+      [cake.groupId, "lines_moved"],
     ]);
     expect(
       (await movedNoticesOf([t.bill1, t.bill2], noticesBefore)).map((n) => [n.lineName, n.movedTo]),
@@ -1944,7 +1944,7 @@ describe("A803 waiting copy: races", () => {
 
       const { winner } = judge(task, outcomes, trace);
       expect(winner).toBe(order[0]);
-      const tarta = await lineOf(t.bill2, "Tarta");
+      const cake = await lineOf(t.bill2, "Tarta");
       const newPrints = [
         ...(await printed(t.grill.printer)).slice(marks.grill),
         ...(await printed(t.pastry.printer)).slice(marks.pastry),
@@ -1952,18 +1952,18 @@ describe("A803 waiting copy: races", () => {
       if (winner === "move") {
         const won = (await holderNow(tableId))!;
         expect(won).not.toBeNull();
-        expect(await groupRow(tarta.groupId!)).toMatchObject({ partyId: won, state: "held" });
-        expect(await kitchenItemOf(tarta.id)).toMatchObject({ firedAt: null, requestedAt: null });
+        expect(await groupRow(cake.groupId!)).toMatchObject({ partyId: won, state: "held" });
+        expect(await kitchenItemOf(cake.id)).toMatchObject({ firedAt: null, requestedAt: null });
         expect((await groupRow(t.g)).state).toBe("held");
         expect(
-          (await eventKindsSince([t.g, tarta.groupId!], eventsBefore)).map((e) => e.kind),
+          (await eventKindsSince([t.g, cake.groupId!], eventsBefore)).map((e) => e.kind),
         ).toEqual(["lines_moved", "lines_moved"]);
         expect(newPrints).toEqual([`*** ${words.moved} ***`]);
       } else {
         expect(await holderNow(tableId)).toBeNull();
-        expect(tarta.groupId).toBe(t.g);
+        expect(cake.groupId).toBe(t.g);
         expect((await groupRow(t.g)).state).toBe("fired");
-        expect(await kitchenItemOf(tarta.id)).toMatchObject({ firedAt: expect.any(String) });
+        expect(await kitchenItemOf(cake.id)).toMatchObject({ firedAt: expect.any(String) });
         expect((await eventKindsSince([t.g], eventsBefore)).map((e) => e.kind)).toEqual(["fired"]);
         expect(await movedNoticesOf([t.bill1, t.bill2], noticesBefore)).toEqual([]);
         expect(newPrints).toEqual([`*** ${words.fire} ***`, `*** ${words.fire} ***`]);
@@ -2092,14 +2092,14 @@ describe("A803 waiting copy: races", () => {
       task,
     }) => {
       const a = await seatWith([{ names: ["Flan", "Tarta"], release: "hold" }]);
-      const tarta = await lineOf(a.billId, "Tarta");
-      const source = tarta.groupId!;
+      const cake = await lineOf(a.billId, "Tarta");
+      const source = cake.groupId!;
       const tableId = await v.table(`Copy ${++tableNumber}`);
 
       await whileChangesAllowed(async () => {
         const commands = {
           move: await moveOf(a.billId, a.partyId, tableId),
-          recall: await recallOf(a.billId, a.partyId, tarta.id),
+          recall: await recallOf(a.billId, a.partyId, cake.id),
         };
 
         const { outcomes, trace } = await race({
@@ -2112,10 +2112,10 @@ describe("A803 waiting copy: races", () => {
       });
 
       if (order[0] === "move") {
-        await expectCarryWon((await holderNow(tableId))!, a.billId, tarta.id, source);
+        await expectCarryWon((await holderNow(tableId))!, a.billId, cake.id, source);
       } else {
         expect(await holderNow(tableId)).toBeNull();
-        await expectRecallWon(a.partyId, a.billId, tarta.id, source);
+        await expectRecallWon(a.partyId, a.billId, cake.id, source);
       }
     });
   }
@@ -2128,8 +2128,8 @@ describe("A803 waiting copy: races", () => {
       task,
     }) => {
       const a = await seatWith([{ names: ["Flan", "Tarta"], release: "hold" }]);
-      const tarta = await lineOf(a.billId, "Tarta");
-      const source = tarta.groupId!;
+      const cake = await lineOf(a.billId, "Tarta");
+      const source = cake.groupId!;
       const joined = await v.table(`Copy ${++tableNumber}`);
       const joining = {
         operatorId: OPERATOR,
@@ -2144,7 +2144,7 @@ describe("A803 waiting copy: races", () => {
         };
         const commands = {
           split: (tx: Transaction) => splitTable(tx, v.cfg, a.partyId, joined, a.billId, splitting),
-          recall: await recallOf(a.billId, a.partyId, tarta.id),
+          recall: await recallOf(a.billId, a.partyId, cake.id),
         };
 
         const { outcomes, trace } = await race({
@@ -2159,10 +2159,10 @@ describe("A803 waiting copy: races", () => {
       if (order[0] === "split") {
         const won = (await holderNow(joined))!;
         expect(won).not.toBe(a.partyId);
-        await expectCarryWon(won, a.billId, tarta.id, source);
+        await expectCarryWon(won, a.billId, cake.id, source);
       } else {
         expect(await holderNow(joined)).toBe(a.partyId);
-        await expectRecallWon(a.partyId, a.billId, tarta.id, source);
+        await expectRecallWon(a.partyId, a.billId, cake.id, source);
       }
     });
   }
