@@ -46,6 +46,7 @@ import type { SentLineInfo, SentReorderDetail } from "../widgets/sent-orders.js"
 import { sentPanel, type SentSlice } from "../state/sent-panel.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import {
+  conjunctionList,
   addDecimal,
   allowsChangeAfterSending,
   compareDecimal,
@@ -537,6 +538,18 @@ export class TillTableOrderScreen extends LitElement {
     billControlStyles,
     guestsStepperStyles,
     css`
+      .actions[data-split-pick],
+      .split-lines {
+        display: flex;
+        flex-direction: column;
+      }
+      .actions[data-split-pick] {
+        gap: var(--wt-space-4);
+      }
+      .split-lines {
+        gap: var(--wt-space-2);
+      }
+      .split-lines h2,
       .split-summary,
       .split-note {
         margin: 0;
@@ -5126,12 +5139,13 @@ export class TillTableOrderScreen extends LitElement {
     this.#splitRows = undefined;
   }
 
-  /** The panel's rows, or undefined until a read has answered. */
+  /** The panel's rows, or undefined until a read has answered and the person is known: with no person,
+   * every draft would read as someone else's and hold its bill. */
   #splitSources(): SplitSource[] | undefined {
     if (this.splitRead !== null && this.splitRead !== "failed")
       this.#splitAnswered = this.splitRead;
     const read = this.#splitAnswered;
-    if (read === undefined) return undefined;
+    if (read === undefined || this.personId === "") return undefined;
     const inputs: SplitInputs = {
       read,
       bills: this.bills,
@@ -5171,6 +5185,7 @@ export class TillTableOrderScreen extends LitElement {
       name,
       label: fill(t("table.split_guests_at"), { table }),
       text,
+      placeholder: "",
       disabled: false,
       error: this.#splitCountError(text),
       onChange: (event) => {
@@ -5185,8 +5200,7 @@ export class TillTableOrderScreen extends LitElement {
   /** The one line for each table, with its bills in number order. */
   #splitSummaryLines(sources: readonly SplitSource[], leaving: string, kept: string) {
     const { takes, keeps } = splitSummary(sources, this.splitPicks);
-    const list = (parts: string[]) =>
-      new Intl.ListFormat(currentLocale(), { type: "conjunction" }).format(parts);
+    const list = (parts: string[]) => conjunctionList(parts, currentLocale());
     const takesParts = [
       ...takes.whole.map(({ bill }) => billLabel(bill)),
       ...takes.loose.map(({ source: { bill }, count }) =>
@@ -5204,7 +5218,8 @@ export class TillTableOrderScreen extends LitElement {
       anywayNote(sources, this.splitPicks, anyPaid) === "paid"
         ? t("table.split_nothing_to_pay")
         : t("table.split_empty_bill");
-    return html`<p class="split-summary" data-split-takes>
+    return html`<div class="split-lines">
+      <p class="split-summary" data-split-takes>
         ${fill(t("table.split_takes"), {
           table: leaving,
           what: takesParts.length > 0 ? list(takesParts) : t("table.split_empty_bill"),
@@ -5224,7 +5239,8 @@ export class TillTableOrderScreen extends LitElement {
               ${fill(t("table.split_new_bill_note"), { table: leaving })}
             </p>`
           : nothing
-      }`;
+      }
+    </div>`;
   }
 
   #splitPickStep(): TemplateResult {
@@ -5241,12 +5257,14 @@ export class TillTableOrderScreen extends LitElement {
       parseGuestCount(this.splitLeaving) === undefined;
     const readFailed = sources === undefined && this.splitRead === "failed";
     return html`<section class="actions" data-split-pick>
-      <h2 tabindex="-1">
-        ${fill(t("table.split_pick_heading"), { table: leaving, party: this.#partyScope(party) })}
-      </h2>
-      <p class="split-note" data-split-hint>
-        ${fill(t("table.split_pick_hint"), { table: leaving, kept })}
-      </p>
+      <div class="split-lines">
+        <h2 tabindex="-1">
+          ${fill(t("table.split_pick_heading"), { table: leaving, party: this.#partyScope(party) })}
+        </h2>
+        <p class="split-note" data-split-hint>
+          ${fill(t("table.split_pick_hint"), { table: leaving, kept })}
+        </p>
+      </div>
       ${
         sources === undefined
           ? nothing

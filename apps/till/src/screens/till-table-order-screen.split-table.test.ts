@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { PartyAllergyRead } from "@waitron/module";
+import { decimal, formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import type { TillSplitPicker } from "../widgets/split-picker.js";
@@ -14,6 +15,7 @@ import type {
   TableParty,
   TableState,
 } from "../api/client.js";
+import { billLabel } from "../state/bill-state.js";
 import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 function dish(id: string, lineNo: number, price: string, over: Partial<TabLine> = {}): TabLine {
@@ -116,6 +118,17 @@ const board08 = {
   ),
 };
 
+const draft = (billId: string, ownerId: string, ownerName: string): Draft => ({
+  id: `draft-${billId}`,
+  partyId: garcia.id,
+  billId,
+  ownerId,
+  ownerName,
+  revision: 2,
+  lines: [],
+  takenOverFrom: null,
+});
+
 async function mountScreen(over: Partial<TillTableOrderScreen> = {}) {
   const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
     products: [],
@@ -207,10 +220,64 @@ function heard<T>(el: TillTableOrderScreen, type: string): T[] {
   return seen;
 }
 
-beforeEach(() => setLocale("en"));
+beforeEach(() => setLocale("en-GB"));
 afterEach(() => {
   cleanupWidgets();
-  setLocale("en");
+  setLocale("en-GB");
+});
+
+describe("Split a table's panel at phone width", () => {
+  let viewport: [number, number];
+  beforeEach(() => {
+    viewport = [window.innerWidth, window.innerHeight];
+  });
+  afterEach(() => page.viewport(...viewport));
+
+  it("keeps each part apart, with the guest steppers clear of Back and Split", async () => {
+    await page.viewport(390, 844);
+    const el = await mountScreen();
+    await toPanel(el);
+    // The note is the last of the summary lines, so the panel is at its full height.
+    await pickDish(el, "b1", "soup");
+    await Promise.all([
+      stepper(el, "leaving").updateComplete,
+      split(el).updateComplete,
+      bottom(el).updateComplete,
+    ]);
+    expect(window.innerWidth).toBe(390);
+
+    const section = q(el, "[data-split-pick]")!;
+    const token = (name: string) => parseFloat(getComputedStyle(section).getPropertyValue(name));
+    const box = (part: Element) => part.getBoundingClientRect();
+    const hint = q(el, "[data-split-hint]")!;
+    const picker = splitPicker(el)!;
+    const takes = q(el, "[data-split-takes]")!;
+    const keeps = q(el, "[data-split-keeps]")!;
+    const note = q(el, "[data-split-new-bill-note]")!;
+    const guests = q(el, ".split-guests")!;
+    const row = bottom(el);
+    const stepButton = (step: string) =>
+      stepper(el, "leaving").shadowRoot!.querySelector(`[data-step="${step}"]`)!;
+
+    const between = (above: Element, below: Element) => box(below).top - box(above).bottom;
+    const gaps = {
+      hintToPicker: between(hint, picker),
+      pickerToSummary: between(picker, takes),
+      noteToGuests: between(note, guests),
+      guestsToActions: between(guests, row),
+      plusToActions: between(stepButton("1"), row),
+      minusToActions: between(stepButton("-1"), row),
+    };
+    const part = token("--wt-space-4");
+    expect(part).toBeGreaterThan(0);
+    for (const [name, gap] of Object.entries(gaps))
+      expect(gap, `${name} of ${JSON.stringify(gaps)}`).toBeGreaterThanOrEqual(part);
+    // What says what the split will do reads as one part.
+    expect(between(takes, keeps)).toBeLessThan(part);
+    expect(between(keeps, note)).toBeLessThan(part);
+    expect(between(takes, keeps)).toBeGreaterThan(0);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  });
 });
 
 describe("Split a table's panel", () => {
@@ -237,8 +304,12 @@ describe("Split a table's panel", () => {
   });
 
   it.each([
-    ["en", "T8 leaves García (T7, T8)", "Split"],
-    ["es", "T8 se separa de García (T7, T8)", "Separar"],
+    ["en-GB", "T8 leaves García (T7, T8)", "Split"],
+    [
+      "es-ES",
+      fill(t("table.split_pick_heading", "es-ES"), { table: "T8", party: "García (T7, T8)" }),
+      t("table.split_guests_confirm", "es-ES"),
+    ],
   ])(
     "names its heading and Split in %s, and the heading has focus",
     async (locale, heading, action) => {
@@ -292,16 +363,6 @@ describe("Split a table's panel", () => {
   });
 
   it("tells this person's own draft from someone else's", async () => {
-    const draft = (billId: string, ownerId: string, ownerName: string): Draft => ({
-      id: `draft-${billId}`,
-      partyId: garcia.id,
-      billId,
-      ownerId,
-      ownerName,
-      revision: 2,
-      lines: [],
-      takenOverFrom: null,
-    });
     const el = await mountScreen({
       partyDrafts: [draft("b1", "me", "Me"), draft("b2", "ana", "Ana")],
     });
@@ -312,6 +373,25 @@ describe("Split a table's panel", () => {
     expect(sources[0]!.held).toBeNull();
     expect(sources[1]!.ownUnsent).toBe(false);
     expect(sources[1]!.held).toMatchObject({ draftId: "draft-b2", ownerName: "Ana" });
+  });
+
+  it("draws no rows until it knows who the person is, then reads their own draft as theirs", async () => {
+    const el = await mountScreen({ personId: "", partyDrafts: [draft("b2", "me", "Me")] });
+    await toPanel(el);
+
+    expect(splitPicker(el)).toBeNull();
+    expect(split(el).variant).toBe("secondary");
+    expect(split(el).disabled).toBe(true);
+    expect(bottom(el).error).toBe("");
+
+    el.personId = "me";
+    await settled(el);
+
+    const bill2 = splitPicker(el)!.sources.find((source) => source.bill.workingOrderId === "b2")!;
+    expect(bill2.held).toBeNull();
+    expect(bill2.ownUnsent).toBe(true);
+    expect(split(el).variant).toBe("primary");
+    expect(split(el).disabled).toBe(false);
   });
 
   it("labels its two steppers, the staying one from the party's count, the leaving one blank", async () => {
@@ -327,6 +407,23 @@ describe("Split a table's panel", () => {
     expect(stepper(el, "staying").error).toBe("");
     expect(bottom(el).error).toBe("");
   });
+
+  it.each(["en-GB", "es-ES"])(
+    "draws its guest fields with no placeholder in %s",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mountScreen();
+      await toPanel(el);
+
+      for (const side of ["staying", "leaving"] as const) {
+        expect(stepper(el, side).placeholder).toBe("");
+        expect(nativeInput(el, side).hasAttribute("placeholder")).toBe(false);
+      }
+      expect(q(el, "[data-split-pick]")!.textContent).not.toContain(
+        t("receipt.guests_none", locale),
+      );
+    },
+  );
 
   it("the steppers' changes stop at the screen", async () => {
     const el = await mountScreen();
@@ -358,9 +455,30 @@ describe("Split a table's panel", () => {
     await pickDish(el, "b1", "bread");
 
     expect(textOf(el, "[data-split-takes]")).toBe(
-      "T8 takes Bill 2, Bill 3, and 3 dishes from Bill 1 · €109.00",
+      "T8 takes Bill 2, Bill 3 and 3 dishes from Bill 1 · €109.00",
     );
     expect(textOf(el, "[data-split-keeps]")).toBe("T7 keeps the rest of Bill 1 · €67.00");
+  });
+
+  it("joins the summary's list the Spanish way, with no comma before the last part", async () => {
+    setLocale("es-ES");
+    const el = await mountScreen();
+    await toPanel(el);
+
+    await tickBill(el, "b2");
+    await tickBill(el, "b3");
+    await pickDish(el, "b1", "soup");
+    await pickDish(el, "b1", "salad");
+    await pickDish(el, "b1", "bread");
+
+    const bill = (n: number) => billLabel(partyBill(`b${n}`, n, "1.00"));
+    expect(textOf(el, "[data-split-takes]")).toBe(
+      fill(t("table.split_takes", "es-ES"), {
+        table: "T8",
+        what: `${bill(2)}, ${bill(3)} y ${fill(t("table.split_dishes_from", "es-ES"), { count: "3", bill: bill(1) })}`,
+        amount: formatMoney(decimal("109.00"), "es-ES"),
+      }).replace(/\s+/g, " "),
+    );
   });
 
   it("says one dish in the singular", async () => {
@@ -371,7 +489,7 @@ describe("Split a table's panel", () => {
 
     expect(textOf(el, "[data-split-takes]")).toBe("T8 takes 1 dish from Bill 1 · €10.00");
     expect(textOf(el, "[data-split-keeps]")).toBe(
-      "T7 keeps Bill 2, Bill 3, and the rest of Bill 1 · €166.00",
+      "T7 keeps Bill 2, Bill 3 and the rest of Bill 1 · €166.00",
     );
   });
 
@@ -380,7 +498,7 @@ describe("Split a table's panel", () => {
     await toPanel(el);
 
     expect(textOf(el, "[data-split-takes]")).toBe("T8 takes an empty bill · €0.00");
-    expect(textOf(el, "[data-split-keeps]")).toBe("T7 keeps Bill 1, Bill 2, and Bill 3 · €176.00");
+    expect(textOf(el, "[data-split-keeps]")).toBe("T7 keeps Bill 1, Bill 2 and Bill 3 · €176.00");
   });
 
   it("with only paid bills staying the staying line says nothing to pay, not an empty bill", async () => {

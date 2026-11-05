@@ -42,6 +42,8 @@ export function guestsStepper(field: {
   onChange: (event: Event) => void;
   name?: string;
   label?: string;
+  /** What the empty field says; by default that the receipt prints no guests line. */
+  placeholder?: string;
   /** A help badge, placed in the stepper's `help` slot. */
   help?: TemplateResult;
 }): TemplateResult {
@@ -52,7 +54,7 @@ export function guestsStepper(field: {
     .min=${1}
     .max=${MAX_GUEST_COUNT}
     .label=${field.label ?? t("seat.guest_count")}
-    .placeholder=${t("receipt.guests_none")}
+    .placeholder=${field.placeholder ?? t("receipt.guests_none")}
     .decreaseLabel=${(label: string) => t("action.decrease").replace("{label}", label)}
     .increaseLabel=${(label: string) => t("action.increase").replace("{label}", label)}
     .value=${live(field.text)}
