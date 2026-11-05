@@ -6,6 +6,28 @@ export interface OperationBinding {
   readonly targetNodeId: string;
 }
 
+export const OPERATION_BINDING_KEYS = [
+  "module",
+  "action",
+  "eventId",
+  "sourceId",
+  "targetNodeId",
+] as const;
+
+export function isOperationBindingField(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+/** Those five fields and no others, each holding text that is not blank. */
+export function isOperationBinding(value: unknown): value is OperationBinding {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const fields = value as Record<string, unknown>;
+  return (
+    Object.keys(fields).length === OPERATION_BINDING_KEYS.length &&
+    OPERATION_BINDING_KEYS.every((key) => isOperationBindingField(fields[key]))
+  );
+}
+
 declare const operationAuthority: unique symbol;
 export interface OperationAuthority {
   readonly [operationAuthority]: true;

@@ -1,3 +1,8 @@
+import {
+  isOperationBinding,
+  isOperationBindingField,
+  OPERATION_BINDING_KEYS,
+} from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { parseBinding } from "./binding.js";
 import "./errors.js";
@@ -6,7 +11,6 @@ import type { FinalStateIndicator } from "./indicator.js";
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const WHERE = ["node.db", "venue.db", "state", "venue-folder"];
 const CLASS = ["transferred", "source-only", "destination-owned", "rebuildable"];
-const REVISION_BINDING_KEYS = ["module", "action", "eventId", "sourceId", "targetNodeId"];
 
 function refuse(field: string): never {
   throw new AppError("handover.indicator_mismatch", { field });
@@ -77,15 +81,15 @@ function namedOnce(
   });
 }
 
-// As strict as `module-preparation-state.ts`'s own reader: M2 merges these into its file, and a
-// revision that reader refuses would fail every later module operation on M2.
+// M2 merges these into its `module-preparation-state.json`, whose reader holds them to the same
+// rule: one it refuses would fail every later module operation on M2.
 function revision(raw: unknown, field: string): void {
   const entry = objectWith(raw, field, ["binding", "value"]);
-  const binding = objectWith(entry.binding, `${field}.binding`, REVISION_BINDING_KEYS);
-  for (const key of REVISION_BINDING_KEYS) {
-    const value = binding[key];
-    if (typeof value !== "string" || value.trim() === "") refuse(`${field}.binding.${key}`);
-  }
+  if (isOperationBinding(entry.binding)) return;
+  // Past here the only question is which field the refusal names.
+  const binding = objectWith(entry.binding, `${field}.binding`, OPERATION_BINDING_KEYS);
+  const fault = OPERATION_BINDING_KEYS.find((key) => !isOperationBindingField(binding[key]));
+  refuse(`${field}.binding.${fault}`);
 }
 
 function nodeLocalRow(raw: unknown, field: string): Record<string, unknown> {

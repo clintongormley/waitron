@@ -4,7 +4,7 @@ import { AppError, isAppError } from "@waitron/shared";
 import "./errors.js";
 import { type FirstSetupCoordinator, type FirstSetupHold } from "./first-setup-state.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
-import type { OperationBinding } from "@waitron/module";
+import { isOperationBinding, type OperationBinding } from "@waitron/module";
 
 interface Revision {
   binding: OperationBinding;
@@ -34,15 +34,6 @@ function invalid(): never {
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-function validBinding(value: unknown): value is OperationBinding {
-  return (
-    record(value) &&
-    Object.keys(value).length === 5 &&
-    ["module", "action", "eventId", "sourceId", "targetNodeId"].every(
-      (key) => typeof value[key] === "string" && (value[key] as string).trim().length > 0,
-    )
-  );
-}
 function parse(value: unknown): File {
   if (value === null) return { version: 1, revisions: [] };
   if (
@@ -59,7 +50,7 @@ function wellFormedRevision(revision: unknown): revision is Revision {
   return (
     record(revision) &&
     Object.keys(revision).length === 2 &&
-    validBinding(revision.binding) &&
+    isOperationBinding(revision.binding) &&
     Object.hasOwn(revision, "value")
   );
 }
@@ -175,7 +166,7 @@ export function createModulePreparationState(options: Options) {
       }) => Promise<T>,
       hold?: FirstSetupHold,
     ): Promise<T> {
-      if (!validBinding(bindingInput)) return invalid();
+      if (!isOperationBinding(bindingInput)) return invalid();
       const binding = { ...bindingInput };
       const body = () =>
         options.withVenueExclusion(async () => {

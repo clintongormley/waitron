@@ -9,6 +9,38 @@ const binding = {
   targetNodeId: "replacement-1",
 };
 
+describe("isOperationBinding", () => {
+  it("control: takes the five fields", () => {
+    expect(module.isOperationBinding(binding)).toBe(true);
+  });
+
+  it.each(["module", "action", "eventId", "sourceId", "targetNodeId"] as const)(
+    "refuses a binding with %s missing, blank or not text",
+    (key) => {
+      const without = Object.fromEntries(Object.entries(binding).filter(([name]) => name !== key));
+      expect(module.isOperationBinding(without)).toBe(false);
+      expect(module.isOperationBinding({ ...without, other: "text" })).toBe(false);
+      expect(module.isOperationBinding({ ...binding, [key]: "  " })).toBe(false);
+      expect(module.isOperationBinding({ ...binding, [key]: 1 })).toBe(false);
+    },
+  );
+
+  it("refuses a sixth field", () => {
+    expect(module.isOperationBinding({ ...binding, extra: "text" })).toBe(false);
+  });
+
+  it.each([[null], ["text"], [1], [undefined], [Object.values(binding)]])(
+    "refuses %j, which is not an object of fields",
+    (value) => {
+      expect(module.isOperationBinding(value)).toBe(false);
+    },
+  );
+
+  it("names the five fields", () => {
+    expect(module.OPERATION_BINDING_KEYS).toEqual(Object.keys(binding));
+  });
+});
+
 describe("host operation authority", () => {
   it("detaches a recovery-key event from caller mutation and never attributes it to a person", async () => {
     const operator = {

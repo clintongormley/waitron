@@ -283,6 +283,11 @@ const CASES: readonly [string, string, (body: Mutable) => void][] = [
         `${FIRST_REVISION}.binding.${key}`,
         (b) => (rowNamed(b, "module-preparation-state.json").revisions[0].binding[key] = "  "),
       ],
+      [
+        `a retained selection's binding with a ${key} that is not text`,
+        `${FIRST_REVISION}.binding.${key}`,
+        (b) => (rowNamed(b, "module-preparation-state.json").revisions[0].binding[key] = 1),
+      ],
     ],
   ),
   [
