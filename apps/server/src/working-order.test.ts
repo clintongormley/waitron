@@ -199,10 +199,10 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
   const { coffeeId, waterId, catalogueId, zoneId, coffeeOfferId, premiumCoffeeOfferId } =
     await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
-      const bebidas = await createCategory(tx, { name: "ES drinks" });
+      const drinksCategory = await createCategory(tx, { name: "ES drinks" });
       const coffeeProduct = await createProduct(tx, {
         catalogueId: cat.id,
-        categoryId: bebidas.id,
+        categoryId: drinksCategory.id,
         name: "Café",
         pricingUnit: "each",
         unitPrice: "1.50",
@@ -3402,8 +3402,10 @@ describe("basket-wide modifier resolution (perf)", () => {
 
   it("reads the zone's offers once for an edit that re-checks a stored answer and prices a new line", async () => {
     const { cfg, coffeeId, waterId } = await setupVenue();
-    const punto = await withTransaction(db, (tx) => addOptionList(tx, coffeeId, "Cooking"));
-    const answer = { listId: punto.listId, labelId: punto.labelIds[0]! };
+    const cookingOptions = await withTransaction(db, (tx) =>
+      addOptionList(tx, coffeeId, "Cooking"),
+    );
+    const answer = { listId: cookingOptions.listId, labelId: cookingOptions.labelIds[0]! };
     const id = randomUUID();
     await parkProducts(cfg, {
       id,
@@ -4809,15 +4811,21 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     const { cfg, coffeeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const kitchenStation = await createStation(tx, { name: "Cocina", isDefault: true });
-      const grande = await addExtra(tx, catalogueId, coffeeId, "ES large");
-      const avena = await addExtra(tx, catalogueId, coffeeId, "Leche avena");
+      const largeExtra = await addExtra(tx, catalogueId, coffeeId, "ES large");
+      const oatMilkExtra = await addExtra(tx, catalogueId, coffeeId, "Leche avena");
       const { id: orderId } = await placeOrderWith(tx, cfg, [
         {
           productId: coffeeId,
           quantity: "1",
           extras: [
-            { listId: grande.listId, picks: [{ productId: grande.productId, quantity: 1 }] },
-            { listId: avena.listId, picks: [{ productId: avena.productId, quantity: 1 }] },
+            {
+              listId: largeExtra.listId,
+              picks: [{ productId: largeExtra.productId, quantity: 1 }],
+            },
+            {
+              listId: oatMilkExtra.listId,
+              picks: [{ productId: oatMilkExtra.productId, quantity: 1 }],
+            },
           ],
         },
       ]);
@@ -7056,7 +7064,7 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
     catalogueId: string,
     dishId: string,
     opts: { maxPicks?: number; maxQuantity?: number } = {},
-  ): Promise<{ listId: string; uno: string; dos: string }> {
+  ): Promise<{ listId: string; firstProductId: string; secondProductId: string }> {
     const offered = [];
     for (const name of ["Uno", "Dos"]) {
       offered.push(
@@ -7089,7 +7097,7 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
       LOCALE,
     );
     await attachModifierList(tx, dishId, { kind: "extras", id: list.id });
-    return { listId: list.id, uno: offered[0]!.id, dos: offered[1]!.id };
+    return { listId: list.id, firstProductId: offered[0]!.id, secondProductId: offered[1]!.id };
   }
 
   it("prices & persists a pick ×2 on a dish ×3 as a child of combined quantity 6, dish unchanged", async () => {
@@ -7282,8 +7290,8 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
             {
               listId: list.listId,
               picks: [
-                { productId: list.uno, quantity: 1 },
-                { productId: list.dos, quantity: 1 },
+                { productId: list.firstProductId, quantity: 1 },
+                { productId: list.secondProductId, quantity: 1 },
               ],
             },
           ],
@@ -7295,7 +7303,6 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
         .where(eq(workingOrderLines.workingOrderId, okId));
       expect(okLines.filter((l) => l.parentLineId !== null)).toHaveLength(2);
 
-      // same two products, but uno ×2 → tally 2 + 1 = 3 > maxPicks 2 → refused.
       await expect(
         createOfferedOrder(tx, cfg, randomUUID(), [
           {
@@ -7305,8 +7312,8 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
               {
                 listId: list.listId,
                 picks: [
-                  { productId: list.uno, quantity: 2 },
-                  { productId: list.dos, quantity: 1 },
+                  { productId: list.firstProductId, quantity: 2 },
+                  { productId: list.secondProductId, quantity: 1 },
                 ],
               },
             ],
@@ -7598,13 +7605,13 @@ describe("frozen answers through a fractional quantity edit", () => {
       // arithmetic behind keeping a stored line is most likely to go wrong. The answer is an OPTIONS one
       // because it makes no child line — an extras pick on a dish sold by weight is refused, by the
       // test below this one.
-      const taza = await withTransaction(db, async (tx) => {
+      const cupOptions = await withTransaction(db, async (tx) => {
         await catalogue.assignProductUnit(tx, coffeeId, kgUnitId);
         const list = await addOptionList(tx, coffeeId, "Taza", ["ES large"]);
         await republishMenus(tx);
         return list;
       });
-      const options = [{ listId: taza.listId, labelId: taza.labelIds[0]! }];
+      const options = [{ listId: cupOptions.listId, labelId: cupOptions.labelIds[0]! }];
       // The product-priced offer carries no price of its own, so it sells at the product's.
       const menuItemId =
         source === "menu" ? coffeeOfferId : (await counterOffers(cfg)).offerFor(coffeeId);
@@ -8136,14 +8143,14 @@ describe("what a held-order edit preserves and what it replaces", () => {
   it("keeps the line's id and locked price when two options lists change places", async () => {
     const { cfg, zoneId, coffeeId, premiumCoffeeOfferId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
-      const punto = await addOptionList(tx, coffeeId, "Cooking", ["Solo"]);
-      const taza = await addOptionList(tx, coffeeId, "Taza", ["ES large"]);
+      const cookingOptions = await addOptionList(tx, coffeeId, "Cooking", ["Solo"]);
+      const cupOptions = await addOptionList(tx, coffeeId, "Taza", ["ES large"]);
       await republishMenus(tx);
-      return { punto, taza };
+      return { cookingOptions, cupOptions };
     });
     const options = [
-      { listId: seeded.punto.listId, labelId: seeded.punto.labelIds[0]! },
-      { listId: seeded.taza.listId, labelId: seeded.taza.labelIds[0]! },
+      { listId: seeded.cookingOptions.listId, labelId: seeded.cookingOptions.labelIds[0]! },
+      { listId: seeded.cupOptions.listId, labelId: seeded.cupOptions.labelIds[0]! },
     ];
     const id = randomUUID();
     await parkOrder({ db }, cfg, {
@@ -8164,8 +8171,8 @@ describe("what a held-order edit preserves and what it replaces", () => {
     // without disturbing the rest.
     await withTransaction(db, async (tx) => {
       await catalogue.writeProductModifiers(tx, coffeeId, [
-        { kind: "options", id: seeded.taza.listId },
-        { kind: "options", id: seeded.punto.listId },
+        { kind: "options", id: seeded.cupOptions.listId },
+        { kind: "options", id: seeded.cookingOptions.listId },
       ]);
     });
     await db.execute(sql`
@@ -8206,17 +8213,20 @@ describe("what a held-order edit preserves and what it replaces", () => {
     const { cfg, coffeeId, catalogueId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
       const bacon = await addExtraList(tx, catalogueId, coffeeId, "Bacon", { price: "1.00" });
-      const leche = await addExtraList(tx, catalogueId, coffeeId, "Leche", {
+      const milkExtra = await addExtraList(tx, catalogueId, coffeeId, "Leche", {
         price: "0.30",
         maxQuantity: 3,
       });
-      return { bacon, leche };
+      return { bacon, milkExtra };
     });
     // The two picks differ, so a child that took the OTHER pick's count lands on a different
     // quantity — which is what makes the dish x picks arithmetic visible here rather than assumed.
     const extras = [
       { listId: seeded.bacon.listId, picks: [{ productId: seeded.bacon.productId, quantity: 1 }] },
-      { listId: seeded.leche.listId, picks: [{ productId: seeded.leche.productId, quantity: 3 }] },
+      {
+        listId: seeded.milkExtra.listId,
+        picks: [{ productId: seeded.milkExtra.productId, quantity: 3 }],
+      },
     ];
     const id = randomUUID();
     await parkProducts(cfg, {
@@ -8233,7 +8243,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
     // Replacing the whole set, as above.
     await withTransaction(db, async (tx) => {
       await catalogue.writeProductModifiers(tx, coffeeId, [
-        { kind: "extras", id: seeded.leche.listId },
+        { kind: "extras", id: seeded.milkExtra.listId },
         { kind: "extras", id: seeded.bacon.listId },
       ]);
     });
@@ -8275,13 +8285,13 @@ describe("what a held-order edit preserves and what it replaces", () => {
     ).toEqual(
       [
         [copy.id, seeded.bacon.productId, 1000, 100, 100],
-        [copy.id, seeded.leche.productId, 3000, 30, 90],
+        [copy.id, seeded.milkExtra.productId, 3000, 30, 90],
       ].sort((a, b) => String(a[1]).localeCompare(String(b[1]))),
     );
     expect(before.map(row)).toEqual([
       [null, coffeeId, 1000, 150, 150],
       [before[0]!.id, seeded.bacon.productId, 1000, 100, 100],
-      [before[0]!.id, seeded.leche.productId, 3000, 30, 90],
+      [before[0]!.id, seeded.milkExtra.productId, 3000, 30, 90],
     ]);
   });
 
@@ -8496,7 +8506,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
 
   it("keeps the line and its price when the answer itself changed: an answer carries no price", async () => {
     const { cfg, zoneId, coffeeId, premiumCoffeeOfferId } = await setupVenue();
-    const punto = await withTransaction(db, async (tx) => {
+    const cookingOptions = await withTransaction(db, async (tx) => {
       const list = await addOptionList(tx, coffeeId, "Cooking", ["Solo", "Cortado"]);
       await republishMenus(tx);
       return list;
@@ -8509,7 +8519,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
         {
           menuItemId: premiumCoffeeOfferId,
           quantity: "1",
-          options: [{ listId: punto.listId, labelId: punto.labelIds[0]! }],
+          options: [{ listId: cookingOptions.listId, labelId: cookingOptions.labelIds[0]! }],
         },
       ],
     });
@@ -8530,7 +8540,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
           workingOrderLineId: before[0]!.id,
           menuItemId: premiumCoffeeOfferId,
           quantity: "1",
-          options: [{ listId: punto.listId, labelId: punto.labelIds[1]! }],
+          options: [{ listId: cookingOptions.listId, labelId: cookingOptions.labelIds[1]! }],
         },
       ],
     });
@@ -8603,12 +8613,12 @@ describe("what a held-order edit preserves and what it replaces", () => {
    */
   it("keeps the price of a held line whose options list was renamed between the two sends, freezing the new name", async () => {
     const { cfg, zoneId, coffeeId, premiumCoffeeOfferId } = await setupVenue();
-    const punto = await withTransaction(db, async (tx) => {
+    const cookingOptions = await withTransaction(db, async (tx) => {
       const list = await addOptionList(tx, coffeeId, "Cooking", ["Solo"]);
       await republishMenus(tx);
       return list;
     });
-    const options = [{ listId: punto.listId, labelId: punto.labelIds[0]! }];
+    const options = [{ listId: cookingOptions.listId, labelId: cookingOptions.labelIds[0]! }];
     const id = randomUUID();
     await parkOrder({ db }, cfg, {
       id,
@@ -8622,7 +8632,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .orderBy(workingOrderLines.lineNo);
 
     await db.execute(
-      sql`update option_lists set name = 'Renamed staff' where id = ${punto.listId}`,
+      sql`update option_lists set name = 'Renamed staff' where id = ${cookingOptions.listId}`,
     );
     await db.execute(sql`
       update menu_items set gross_price = 9900 where id = ${premiumCoffeeOfferId}`);
@@ -8669,7 +8679,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
    */
   it("refuses a quantity-only edit that names no answer for an active options list", async () => {
     const { cfg, zoneId, coffeeId, premiumCoffeeOfferId } = await setupVenue();
-    const punto = await withTransaction(db, async (tx) => {
+    const cookingOptions = await withTransaction(db, async (tx) => {
       const list = await addOptionList(tx, coffeeId, "Cooking", ["Solo"]);
       await republishMenus(tx);
       return list;
@@ -8682,7 +8692,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
         {
           menuItemId: premiumCoffeeOfferId,
           quantity: "1",
-          options: [{ listId: punto.listId, labelId: punto.labelIds[0]! }],
+          options: [{ listId: cookingOptions.listId, labelId: cookingOptions.labelIds[0]! }],
         },
       ],
     });
@@ -8705,7 +8715,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       }),
     ).rejects.toMatchObject({
       code: "options.label_required",
-      params: { optionListId: punto.listId },
+      params: { optionListId: cookingOptions.listId },
     });
   });
 
@@ -8928,7 +8938,7 @@ describe("editing a saved order prices only what the edit adds", () => {
 
   it("changes one line's options answer through the one-line edit, at its stored price, leaving what the patch omits", async () => {
     const { cfg, zoneId, coffeeId, premiumCoffeeOfferId } = await setupVenue();
-    const punto = await withTransaction(db, async (tx) => {
+    const cookingOptions = await withTransaction(db, async (tx) => {
       const list = await addOptionList(tx, coffeeId, "Cooking", ["Solo", "Cortado"]);
       await republishMenus(tx);
       return list;
@@ -8942,7 +8952,7 @@ describe("editing a saved order prices only what the edit adds", () => {
           menuItemId: premiumCoffeeOfferId,
           quantity: "1",
           note: "Caliente",
-          options: [{ listId: punto.listId, labelId: punto.labelIds[0]! }],
+          options: [{ listId: cookingOptions.listId, labelId: cookingOptions.labelIds[0]! }],
         },
       ],
     });
@@ -8958,7 +8968,7 @@ describe("editing a saved order prices only what the edit adds", () => {
         cfg,
         id,
         1,
-        { options: [{ listId: punto.listId, labelId: punto.labelIds[1]! }] },
+        { options: [{ listId: cookingOptions.listId, labelId: cookingOptions.labelIds[1]! }] },
         0,
       ),
     );
@@ -10044,7 +10054,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
         unitPrice: "1.20",
         vatClass: "general",
       });
-      const [doble] = await setProductVariants(
+      const [doubleVariant] = await setProductVariants(
         tx,
         product.id,
         [
@@ -10060,7 +10070,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
         ],
         LOCALE,
       );
-      return { id: product.id, doble: doble! };
+      return { id: product.id, doubleVariant: doubleVariant! };
     });
     const id = randomUUID();
     await parkProducts(cfg, { id, lines: [{ productId: coffee.id, quantity: "1" }] });
@@ -10068,7 +10078,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
       .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
-    await db.update(products).set({ active: true }).where(eq(products.id, coffee.doble.id));
+    await db.update(products).set({ active: true }).where(eq(products.id, coffee.doubleVariant.id));
     const edit = (quantity: string) =>
       updateProducts(cfg, id, {
         lines: [{ workingOrderLineId: parked!.id, productId: coffee.id, quantity }],
@@ -10145,7 +10155,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
 
   it("refuses raising a menu offer's held line whose product has gained an Active variant", async () => {
     const { cfg, zoneId, coffeeId, coffeeOfferId } = await setupVenue();
-    const [doble] = await withTransaction(db, (tx) =>
+    const [doubleVariant] = await withTransaction(db, (tx) =>
       setProductVariants(
         tx,
         coffeeId,
@@ -10174,7 +10184,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
     await withTransaction(db, async (tx) => {
-      await tx.update(products).set({ active: true }).where(eq(products.id, doble!.id));
+      await tx.update(products).set({ active: true }).where(eq(products.id, doubleVariant!.id));
       await republishMenus(tx);
     });
     const edit = async (quantity: string) =>
