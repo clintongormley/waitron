@@ -28,7 +28,7 @@ export interface PickRow {
   limit: number;
   /** Why no (more) member of this row can be picked, or why it holds more picks than its limit;
    * null when one more can be, or when all are picked within the limit. */
-  blocked: { reason: "paid" } | { reason: "floor"; kept: string } | null;
+  blocked: { reason: "paid" } | { reason: "floor"; kept: string } | { reason: "presented" } | null;
 }
 
 export type Picks = ReadonlySet<string>;
@@ -100,7 +100,7 @@ const pickedOf = (members: readonly TabLine[], picks: Picks) =>
   members.filter((member) => picks.has(member.id)).length;
 
 /** What the picks on unpaid rows take off the bill. */
-function pickedTotal(bill: PickGroups, picks: Picks): Decimal {
+export function pickedTotal(bill: PickGroups, picks: Picks): Decimal {
   return sumDecimals(
     bill.groups
       .filter((group) => !group.paid)

@@ -124,7 +124,7 @@ export class TillPortionPicker extends LitElement {
   }
 
   #reason(row: PickRow): string {
-    if (row.blocked === null) return "";
+    if (row.blocked === null || row.blocked.reason === "presented") return "";
     if (row.blocked.reason === "paid") return t("bill_pay.paid");
     return fill(t("table.move_dishes_floor"), { amount: this.money(row.blocked.kept) });
   }
