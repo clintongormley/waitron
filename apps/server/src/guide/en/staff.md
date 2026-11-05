@@ -29,8 +29,7 @@ Open **Account settings** from the account menu to change your own sign-in detai
 email, password, PIN, passkeys and two-factor settings remain yours to manage.
 
 In **Security**, choose **Add passkey** beside **Passkeys**.
-Follow your password manager’s prompt to add it. Each passkey shows when you added it
-and when you last used it.
+Follow your password manager’s prompt to add it.
 
 ## Download your data {#own-data}
 

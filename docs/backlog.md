@@ -805,10 +805,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **The data table's columns button has no tooltip**
   [Detail](backlog/catalogue.md#the-data-tables-columns-button-has-no-tooltip)
 
-- **A product in more than one category (owner 2026-10-10, A461 amendment 4).** Define the
-  storage, editor and what Move/Remove do to memberships. Products currently has one category;
-  A461 shows existing placements only. This work is not queued.
-
 - **The Products tree's hidden counts may be placed against the page at narrow width** — not measured; left open by A453.
   [Detail](backlog/catalogue.md#the-products-trees-hidden-counts-may-be-placed-against-the-page-at-narrow-width)
 

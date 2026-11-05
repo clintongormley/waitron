@@ -33,8 +33,7 @@ acceso. Puedes seguir gestionando tu correo, contraseña, PIN, llaves de acceso 
 dos pasos.
 
 En **Seguridad**, elige **Añadir passkey** junto a **Passkeys**.
-Sigue las instrucciones de tu gestor de contraseñas para añadirla. Cada passkey muestra
-cuándo la añadiste y cuándo la usaste por última vez.
+Sigue las instrucciones de tu gestor de contraseñas para añadirla.
 
 ## Descargar tus datos {#own-data}
 
