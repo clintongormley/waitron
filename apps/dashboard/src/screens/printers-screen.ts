@@ -3583,34 +3583,6 @@ export class PrintersScreen extends LitElement {
               this.drawerTestSent = false;
             }}
           ></wt-switch>
-          <wt-switch
-            name="printer-portable"
-            label=${t("printers.portable")}
-            .checked=${p.portable}
-            @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
-              e.stopPropagation();
-              this.#editPrinter(p.id, { portable: e.detail.checked });
-            }}
-          ></wt-switch>
-          <wt-combobox
-            name="printer-pickup-roles"
-            searchPlaceholder=${t("categories.combobox_search")}
-            noResultsLabel=${t("categories.combobox_no_results")}
-            label=${t("printers.pickup_roles")}
-            multiple
-            show-empty-option
-            .values=${p.pickupRoles}
-            .countLabel=${() => t("printers.pickup_both")}
-            .options=${[
-              { value: "", label: t("printers.pickup_none") },
-              { value: "receipt", label: t("devices.receipt_printer_now") },
-              { value: "payment_slip", label: t("devices.slip_printer_now") },
-            ]}
-            @wt-change=${(e: CustomEvent<{ values: Printer["pickupRoles"] }>) => {
-              e.stopPropagation();
-              this.#editPrinter(p.id, { pickupRoles: e.detail.values });
-            }}
-          ></wt-combobox>
           ${
             p.hasCashDrawer
               ? html`
@@ -3646,6 +3618,36 @@ export class PrintersScreen extends LitElement {
                 `
               : nothing
           }
+          <wt-switch
+            name="printer-portable"
+            label=${t("printers.portable")}
+            description=${t("printers.portable_hint")}
+            .checked=${p.portable}
+            @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
+              e.stopPropagation();
+              this.#editPrinter(p.id, { portable: e.detail.checked });
+            }}
+          ></wt-switch>
+          <p class="hint">${t("printers.portable_hint")}</p>
+          <wt-combobox
+            name="printer-pickup-roles"
+            searchPlaceholder=${t("categories.combobox_search")}
+            noResultsLabel=${t("categories.combobox_no_results")}
+            label=${t("printers.pickup_roles")}
+            multiple
+            show-empty-option
+            .values=${p.pickupRoles}
+            .countLabel=${() => t("printers.pickup_both")}
+            .options=${[
+              { value: "", label: t("printers.pickup_none") },
+              { value: "receipt", label: t("devices.receipt_printer_now") },
+              { value: "payment_slip", label: t("devices.slip_printer_now") },
+            ]}
+            @wt-change=${(e: CustomEvent<{ values: Printer["pickupRoles"] }>) => {
+              e.stopPropagation();
+              this.#editPrinter(p.id, { pickupRoles: e.detail.values });
+            }}
+          ></wt-combobox>
         </div>
       </div>
       <wt-form-actions slot="footer" .error=${bottom}>

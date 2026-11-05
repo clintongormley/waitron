@@ -1680,7 +1680,7 @@ export const en = {
   "printers.calibration_job_failed": "Not printed: {reason}",
   "printers.calibration_layout": "Set paper width and resolution",
   "printers.calibration_receipt": "Test the receipt",
-  "printers.calibration_drawer": "Does this printer have a cash drawer?",
+  "printers.calibration_drawer": "Cash drawer and portable use",
   "printers.resolution_hint":
     "Print the width test. Choose the last number you can see in full on the ruler, and measure the QR code’s black square without its white border. You do not need to scan it.",
   "printers.ruler_print": "Print width test",
@@ -3341,7 +3341,9 @@ export const en = {
   "equipment.nfc_written": "Sticker written. You can now lock it to prevent changes.",
   "equipment.nfc_locked": "Sticker locked permanently",
   "equipment.nfc_failed": "Hold the sticker still and try again",
-  "printers.portable": "Carried by one device at a time",
+  "printers.portable": "Portable printer",
+  "printers.portable_hint":
+    "Carried by one person, such as a belt printer; one device holds it at a time.",
   "printers.pickup_roles": "When picked up",
   "printers.pickup_both": "Receipt and payment slip",
   "printers.pickup_none": "None",
@@ -5459,7 +5461,7 @@ export const es: Record<StringKey, string> = {
   "printers.calibration_job_failed": "No se ha impreso: {reason}",
   "printers.calibration_layout": "Ajusta el ancho y la resolución",
   "printers.calibration_receipt": "Prueba el recibo",
-  "printers.calibration_drawer": "¿Esta impresora tiene un cajón?",
+  "printers.calibration_drawer": "Cajón portamonedas y uso portátil",
   "printers.resolution_hint":
     "Imprime la prueba de ancho. Elige el último número de la regla que se ve entero y mide el cuadrado negro del código QR sin su borde blanco. No hace falta escanearlo.",
   "printers.ruler_print": "Imprimir prueba de ancho",
@@ -7146,7 +7148,9 @@ export const es: Record<StringKey, string> = {
   "equipment.nfc_written": "Pegatina escrita. Ahora puedes bloquearla para impedir cambios.",
   "equipment.nfc_locked": "Pegatina bloqueada permanentemente",
   "equipment.nfc_failed": "Mantén la pegatina quieta e inténtalo de nuevo",
-  "printers.portable": "La lleva un solo dispositivo a la vez",
+  "printers.portable": "Impresora portátil",
+  "printers.portable_hint":
+    "La lleva una persona, como una impresora de cinturón; la tiene un solo dispositivo a la vez.",
   "printers.pickup_roles": "Al recogerla",
   "printers.pickup_both": "Ticket y justificante de pago",
   "printers.pickup_none": "Ninguno",

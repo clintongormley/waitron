@@ -9714,6 +9714,48 @@ describe("portable printers and their equipment label", () => {
     expect(api.updatePrinter).toHaveBeenCalledWith("p1", { portable: true });
   });
 
+  async function openLastStep(api: DashboardApi): Promise<PrintersScreen> {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openPrinter(el, "p1");
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    return el;
+  }
+
+  it("names the portable switch Portable printer and explains it under the switch", async () => {
+    const el = await openLastStep(stubApi());
+    const toggle = q(el, "wt-switch[name=printer-portable]") as HTMLElementTagNameMap["wt-switch"];
+    expect(toggle.label).toBe(t("printers.portable"));
+    expect(toggle.description).toBe(t("printers.portable_hint"));
+    const hint = toggle.nextElementSibling as HTMLElement;
+    expect(hint.matches("p.hint")).toBe(true);
+    expect(hint.textContent!.trim()).toBe(t("printers.portable_hint"));
+    expect(hint.checkVisibility()).toBe(true);
+  });
+
+  it("heads the last step for both the drawer and portable use", async () => {
+    const el = await openLastStep(stubApi());
+    const step = q(el, "[data-test=calibration-step-3]")!;
+    expect(step.querySelector("h2")!.textContent!.trim()).toBe(t("printers.calibration_drawer"));
+    toggleSwitch(el, '[name="printer-cash-drawer"]', true);
+    await flush(el);
+    const drawerTest = q(el, "[data-test=test-printer-drawer]")!;
+    const portableSwitch = q(el, '[name="printer-portable"]')!;
+    expect(
+      drawerTest.compareDocumentPosition(portableSwitch) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("shows Portable printer on the printer's details", async () => {
+    const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([portable, printers[1]]) });
+    const el = await openDetails(api, PORTABLE_ID);
+    const label = q(el, "[data-test=printer-portable]")!.previousElementSibling!;
+    expect(label.textContent!.trim()).toBe(t("printers.portable"));
+  });
+
   it("the detail says a printer is carried by one device at a time, and which device has it", async () => {
     const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([portable, printers[1]]) });
     const el = await openDetails(api, PORTABLE_ID);
