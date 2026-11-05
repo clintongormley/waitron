@@ -1,12 +1,20 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { quoteIdent } from "@waitron/provisioning";
 import { businessDayBounds } from "@waitron/shared";
 import { installBenchClock } from "./bench-clock.js";
-import { openBenchVenue } from "./bench-venue.js";
+import { openBenchVenue, type BenchVenue } from "./bench-venue.js";
 import { BENCH_PROFILE } from "./profile.js";
 import { tradeDay, type DayResult } from "./trading-day.js";
 
@@ -24,7 +32,7 @@ export interface BuildYearOptions {
   seed?: number;
   /** Called before each bill is seated, with the day's number from 1; a throw stops the build. */
   beforeBill?: (day: number, index: number) => void | Promise<void>;
-  /** Called after each day is finished and copied. */
+  /** Called after each day is finished and copied, with the day's time including the copy. */
   onDay?: (day: number, result: DayResult, ms: number) => void;
 }
 
@@ -59,30 +67,29 @@ export async function buildYear(options: BuildYearOptions): Promise<void> {
     session === undefined ? new Date(dayBounds(dateOf(1)).startAt) : new Date(session.clockAt),
   );
   try {
-    let cookies = session?.deviceCookies;
-    for (let day = (session?.day ?? 0) + 1; day <= days; day++) {
-      const started = performance.now();
-      const venue = await openBenchVenue(working, {
-        seed,
-        ...(cookies === undefined ? {} : { deviceCookies: cookies }),
-      });
-      let result: DayResult;
-      try {
-        result = await tradeDay(venue, dateOf(day), billsPerDay, {
+    // Opened once for the whole build: each open starts attendance discovery again from the first
+    // row of history, which makes every later day slower.
+    const venue = await openBenchVenue(working, {
+      seed,
+      ...(session === undefined ? {} : { deviceCookies: session.deviceCookies }),
+    });
+    try {
+      for (let day = (session?.day ?? 0) + 1; day <= days; day++) {
+        const started = performance.now();
+        const result = await tradeDay(venue, dateOf(day), billsPerDay, {
           beforeBill: (index) => options.beforeBill?.(day, index),
         });
-        cookies = venue.deviceCookies();
-      } finally {
-        await venue.close();
+        await checkpoint(options.out, venue, {
+          day,
+          date: dateOf(day),
+          seed,
+          clockAt: clock.now().toISOString(),
+          deviceCookies: venue.deviceCookies(),
+        });
+        options.onDay?.(day, result, performance.now() - started);
       }
-      checkpoint(options.out, {
-        day,
-        date: dateOf(day),
-        seed,
-        clockAt: clock.now().toISOString(),
-        deviceCookies: cookies,
-      });
-      options.onDay?.(day, result, performance.now() - started);
+    } finally {
+      await venue.close();
     }
     writeVolume(options.out, { seed, days, billsPerDay });
   } finally {
@@ -148,16 +155,21 @@ function copyFolder(from: string, to: string): void {
 }
 
 /**
- * Replaces `last-day/` with a copy of the closed working folder, then the session. A stop at any
+ * Replaces `last-day/` with a copy of the open working folder, then the session. A stop at any
  * point leaves either the old pair or the new one: the copy is made under another name first, and
  * the session names the day the copy holds only once the copy is in place.
  */
-function checkpoint(out: string, session: BenchSession): void {
+async function checkpoint(out: string, venue: BenchVenue, session: BenchSession): Promise<void> {
   const copy = join(out, COPY_DIR);
   const next = `${copy}.next`;
   const old = `${copy}.old`;
   rmSync(next, { recursive: true, force: true });
+  await venue.checkpoint();
+  // Nothing runs between the checkpoint and this synchronous copy, so no write can land in a
+  // write-ahead file the copy then leaves out.
   copyFolder(join(out, WORKING_DIR), next);
+  for (const name of readdirSync(next))
+    if (name.endsWith("-wal") || name.endsWith("-shm")) rmSync(join(next, name));
   rmSync(old, { recursive: true, force: true });
   if (existsSync(copy)) renameSync(copy, old);
   renameSync(next, copy);

@@ -131,6 +131,11 @@ export interface BenchVenue {
   zones: BenchZone[];
   /** Every device's cookie by device id, for saving beside a copy: tokens are stored hashed. */
   deviceCookies(): Record<string, string>;
+  /**
+   * Writes everything both files hold into their main files, leaving their write-ahead files
+   * empty, so a copy of the main files taken before the next write is the whole venue.
+   */
+  checkpoint(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -193,6 +198,11 @@ export async function openBenchVenue(
       ...read,
       managementCookie: `${MANAGEMENT_COOKIE}=${token}`,
       deviceCookies: () => ({ ...cookies }),
+      checkpoint: async () => {
+        for (const file of [store.venue, store.node])
+          if (!(await file.checkpointTruncate()).reclaimed)
+            throw new Error("bench: a checkpoint left rows in a write-ahead file");
+      },
       close: () => store.close(),
     };
   } catch (error) {
