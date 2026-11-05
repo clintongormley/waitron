@@ -6066,6 +6066,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **Three adjustment-portion refusal checks also pass with shortened ID lists.** Qualify the
+  intended mixed-row, note and course refusals with accepting controls, without weakening the
+  existing error-code and unchanged-row assertions.
+  [Detail](backlog/ci.md#three-adjustment-portion-refusal-checks-also-pass-with-shortened-id-lists).
+
 - **The logo retry check can outwait its test deadline** (left open by A1332, #2458). Its 300-frame
   request wait can exceed the unchanged 15-second case deadline when Chromium throttles frames.
   [Detail](backlog/ci.md#the-logo-retry-check-can-outwait-its-test-deadline).
