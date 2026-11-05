@@ -33,6 +33,11 @@ Cloud backs up where its owner says, and nothing derives a folder name from a ve
 
 ## What the box sends today
 
+**2026-11-05 (S18f):** `readNodeLocation` and `tradingContext.locationId` are gone. Boot reads
+`venueLocationId(db)` once, and the backup checks take the id from `readCopyNodeAndVenue`
+(`apps/server/src/restore.ts`). The `locationId` brand stays, for the fiscal golden test. The
+table below is as written on 2026-11-04.
+
 The box reads its `locations` row's id once at start (`readNodeLocation`, `apps/server/src/boot.ts:1742`)
 and hands it out as `tradingContext.locationId`. Where it leaves the box:
 

@@ -1066,7 +1066,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
     it left them. Removing the ones in `till-sale.ts` and `working-order.ts` edits files on the
     invoice path, which the owner lands (S18b). Two test helpers still hand out a node value
     holding the venue row's id, because test files read it from there: `hour-recovery-host.ts`'s
-    `node` (six test files) and `staged-hour-crash.ts`'s (an assertion in
+    `node` and `staged-hour-crash.ts`'s (an assertion in
     `restore-emergency-crash.e2e.test.ts`) (S18f).
   - **The schema slices S20–S28:** the schema changes remain for S20–S28 (S3, #2387). Until the
     schema slices drop `print_jobs.location_id`, `enqueuePrintJob` takes the venue id as an
@@ -1106,7 +1106,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
     (`certificate-install`, `seed-single-venue`, `void-issue-clock`) are S3's. Left as they were
     by F4: rows written under fixed ids that a backup, archive, `trading.env` or assertion names
     (most `recovery*` and `restore*` suites, `hour-promotion`, `hour-recovery`,
-    `rebuild-first-start`, `node-config.location`, `promote-endpoint-e2e`), devices planted under
+    `rebuild-first-start`, `promote-endpoint-e2e`), devices planted under
     a join request's id, cases needing no taxpayer row (`reset-request`), and second-location
     cases whose code slice deletes them.
     Left as they were by F3: venue and node rows under fixed ids that a boot env, `trading.env`,

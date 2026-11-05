@@ -848,6 +848,9 @@ recorder's `locationId?` (`attendance-capture.ts:19`) go. Nothing reads either o
 
 ## S18e — The venue's Cloud id (Waitron side): waits for the venue-id design's approval
 
+**2026-11-05:** the owner approved the design on 2026-11-04. S18e is now held by A1308, because
+it adds a table.
+
 **Not built before the owner approves [the design](../specs/2026-11-04-a1301-venue-id-design.md).**
 Its tasks are written then, against the head of that day, with the owner's answers to the design's
 seven questions. The outline below follows the design's defaults:
@@ -864,7 +867,8 @@ seven questions. The outline below follows the design's defaults:
 3. Backups in the owner's place:
    - the stream and archive folders become the owner's prefix itself;
    - the pointer's same-writer id;
-   - `loadBackupConfig` loses `venueId`;
+   - `loadBackupConfig` loses `venueId`, and S18f's interim `readCopyNodeAndVenue`
+     (`apps/server/src/restore.ts`) stops reading the copy's venue row;
    - the recovery kit, the archive pack, the restore and rebuild reads, and the backup screen.
 4. Boot stops handing out the location id. Under the default schedule that means
    `tradingContext.locationId`; under the cheaper one, S18f's interim `venueLocationId` reads.
@@ -884,7 +888,7 @@ The Cloud lanes' change lands with it (design, "What Cloud must change").
 - `NodeConfig` and `TradingContext`.
 
 `readNodeLocation` is gone. So are `LocationId` and the `locationId` brand
-(`packages/shared/src/ids.ts:11,52`). Line numbers below are the plan head's. Each task re-reads
+(`packages/shared/src/ids.ts:11,52`); the brand stayed (2026-11-05 note under Task S18f-3). Line numbers below are the plan head's. Each task re-reads
 them first: S18e, if it lands first, moves `boot.ts`.
 
 - **Depends on:** S18a–S18d. Under the default schedule also S18e: until it lands,
