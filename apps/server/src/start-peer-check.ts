@@ -27,6 +27,7 @@ import {
   type SilentReason,
   type StartCheckResult,
 } from "./boot-peer-check.js";
+import { finishInterruptedActivation } from "./handover-activation-repair.js";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { abandonHandover, type HandoverRefusal } from "./handover-store.js";
 import type { Logger } from "./logger.js";
@@ -47,14 +48,6 @@ interface NodeDeps {
   nodeId: string;
 }
 
-/**
- * Filled by Task 5.8b once `handover_activations` exists: a destination operation left at
- * `filing_assumed` or `emergency_declared` on a box that is no longer a mirror is recorded
- * `activated`. Runs before `readActivatedFrom`, so that operation's source is in the set.
- */
-export const finishInterruptedActivation: (deps: NodeDeps) => Promise<void> = () =>
-  Promise.resolve();
-
 /** Closes a source operation that is still at `prepared` as `abandoned`, storing `code`. */
 async function closePreparedSource(deps: NodeDeps, code: HandoverRefusal["code"]): Promise<void> {
   const open = await readOpenHandoverOperation(deps.node, deps.nodeId);
@@ -66,9 +59,10 @@ async function closePreparedSource(deps: NodeDeps, code: HandoverRefusal["code"]
  * The repairs a non-mirror box makes before it asks its peers. A source operation still at
  * `prepared` never stepped down (the stepdown writes the next state and the restriction in one
  * node transaction, `handover-stepdown.ts` `writeRestriction`), so no copy of it can have been
- * accepted: it closes as `abandoned`.
+ * accepted: it closes as `abandoned`. A destination's lost `activated` record is written here, ahead
+ * of `readActivatedFrom`, so that operation's source is in the set.
  */
-export async function repairAtStart(deps: NodeDeps): Promise<void> {
+export async function repairAtStart(deps: NodeDeps & { db: Database }): Promise<void> {
   await closePreparedSource(deps, "handover.restarted_before_stepdown");
   await finishInterruptedActivation(deps);
 }

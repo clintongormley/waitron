@@ -1806,7 +1806,7 @@ async function bootServer(
   const initialAxes = await readNodeMode(store.node, config.node.nodeId);
   // A mirror files nothing, so it has nothing to ask its peers before it starts.
   if (initialAxes.mode !== "mirror") {
-    await repairAtStart({ node: store.node, nodeId: config.node.nodeId });
+    await repairAtStart({ db, node: store.node, nodeId: config.node.nodeId });
     const checkPeers = () =>
       seams.peerCheck === undefined
         ? runStartPeerCheck({

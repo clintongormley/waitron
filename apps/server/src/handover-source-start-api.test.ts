@@ -1169,7 +1169,7 @@ describe("one a restart closed before it stepped down", () => {
     await start();
     stepDownAfterOffer.mockClear();
     exchanged = [];
-    await repairAtStart({ node: mainBox.node, nodeId: self });
+    await repairAtStart({ db: mainBox.db, node: mainBox.node, nodeId: self });
 
     expect(await start()).toEqual(refusal(409, "handover.restarted_before_stepdown"));
 
@@ -1845,7 +1845,7 @@ describe("with the real stepdown", () => {
         allowRestrictionWrites();
       }
 
-      await repairAtStart({ node: mainBox.node, nodeId: self });
+      await repairAtStart({ db: mainBox.db, node: mainBox.node, nodeId: self });
       gate = createHandoverGate();
       const nextStart = realBox();
 
