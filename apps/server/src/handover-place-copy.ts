@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { lockVenueDatabase, withNodeTransaction, type NodeDatabase } from "@waitron/db";
 import { parseIndicator, type RetainedRevision } from "@waitron/handover";
+import type { SignedMembershipDocument } from "@waitron/membership";
 import { mergeModulePreparationRevisions } from "@waitron/provisioning";
 import { appendHandoverEventTx, readHandoverEvent, readHandoverOperation } from "@waitron/node-db";
 import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
@@ -22,7 +23,7 @@ import { deleteBackupRoomNote } from "./backup-room-note.js";
 import { errnoOf } from "./errno.js";
 import { acceptedCopyPath } from "./handover-acceptance.js";
 import { digestFileIfPresent, FINAL_STATE_EVENT } from "./handover-capture.js";
-import { movedOnFromSource } from "./handover-chart.js";
+import { oldBoxStillMain } from "./handover-chart.js";
 import { waitHandoverTx } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { isReadableChart } from "./membership-trust.js";
@@ -143,7 +144,7 @@ function holdsMovedOnChart(
     const document: unknown = JSON.parse(text);
     if (document === null) return false;
     if (!isReadableChart(document)) throw new Error("not a readable chart");
-    if (!movedOnFromSource(document, sourceNodeId)) return false;
+    if (oldBoxStillMain(document as SignedMembershipDocument, sourceNodeId)) return false;
     return !acceptedCopyHolds(acceptedPath, text);
   } catch (error) {
     log("warn", "handover-place-copy.old_chart_unreadable", {
