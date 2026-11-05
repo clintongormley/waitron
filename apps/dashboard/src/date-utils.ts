@@ -1,3 +1,6 @@
+import { currentLocale, dateTimeFormat } from "@waitron/dashboard-kit";
+import { fill } from "./i18n/t.js";
+
 export const MS_PER_DAY = 86_400_000;
 
 /** The Monday (YYYY-MM-DD) of the week `dateStr` falls in — mirrors roster-validation's weekStartOf. */
@@ -34,3 +37,27 @@ export function instantAt(day: string, time: string, offsetMinutes: number): str
 }
 
 export { formatIsoMinute } from "@waitron/dashboard-kit";
+
+function sameLocalDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+/** An instant as "Today 13:09", "Yesterday 23:59" or "3 Nov 13:09" ("3 Nov 2025 13:09" in another
+ * year), in the session's language and the browser's zone, on a 24-hour clock. */
+export function formatRecentMinute(iso: string, now: Date = new Date()): string {
+  const at = new Date(iso);
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  const time = `${pad(at.getHours())}:${pad(at.getMinutes())}`;
+  if (sameLocalDay(at, now)) return fill("time.today_at", { time });
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  if (sameLocalDay(at, yesterday)) return fill("time.yesterday_at", { time });
+  const options: Intl.DateTimeFormatOptions =
+    at.getFullYear() === now.getFullYear()
+      ? { day: "numeric", month: "short" }
+      : { day: "numeric", month: "short", year: "numeric" };
+  return `${dateTimeFormat(currentLocale(), options).format(at)} ${time}`;
+}

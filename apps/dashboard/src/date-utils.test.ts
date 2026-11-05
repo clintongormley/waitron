@@ -1,5 +1,12 @@
-import { expect, it } from "vitest";
-import { formatIsoMinute, instantAt, lastEndedQuarter, wallClock } from "./date-utils.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  formatIsoMinute,
+  formatRecentMinute,
+  instantAt,
+  lastEndedQuarter,
+  wallClock,
+} from "./date-utils.js";
+import { currentLocale, setLocale } from "./i18n/t.js";
 
 // Runs in the Node project (vitest.config.ts), whose worker has TZ=America/New_York.
 it("runs with the timezone pinned to America/New_York (guards against a vacuous pass)", () => {
@@ -54,3 +61,65 @@ it.each([
     expect(instantAt(day, time, offset)).toBe(expected);
   },
 );
+
+describe.each(["en", "es"])("formatRecentMinute in %s", (language) => {
+  let previous: string;
+  beforeEach(() => {
+    previous = currentLocale();
+    setLocale(language);
+  });
+  afterEach(() => {
+    setLocale(previous);
+  });
+
+  const words = {
+    en: { today: "Today", yesterday: "Yesterday" },
+    es: { today: "Hoy", yesterday: "Ayer" },
+  }[language]!;
+
+  it("says today with the local time for an instant earlier the same local day", () => {
+    // 18:09 UTC is 13:09 in New York; now is 15:00 New York the same day.
+    expect(formatRecentMinute("2026-11-03T18:09:00Z", new Date("2026-11-03T20:00:00Z"))).toBe(
+      `${words.today} 13:09`,
+    );
+  });
+
+  it("says yesterday for one minute before local midnight, seen one minute after it", () => {
+    // New York midnight on 4 November 2026 (EST) is 05:00 UTC.
+    expect(formatRecentMinute("2026-11-04T04:59:00Z", new Date("2026-11-04T05:01:00Z"))).toBe(
+      `${words.yesterday} 23:59`,
+    );
+  });
+
+  it("says yesterday across a month end", () => {
+    // 1 November 00:30 New York (EDT) is 04:30 UTC; the instant is 31 October 20:00 New York.
+    expect(formatRecentMinute("2026-11-01T00:00:00Z", new Date("2026-11-01T04:30:00Z"))).toBe(
+      `${words.yesterday} 20:00`,
+    );
+  });
+
+  it("gives the short day and month, then the time, for an older date this year", () => {
+    const month = new Intl.DateTimeFormat(currentLocale(), { month: "short" }).format(
+      new Date("2026-11-03T18:09:00Z"),
+    );
+    const text = formatRecentMinute("2026-11-03T18:09:00Z", new Date("2026-11-06T15:00:00Z"));
+    expect(text).toMatch(/\b3\b/);
+    expect(text).toContain(month);
+    expect(text).toMatch(/ 13:09$/);
+    expect(text).not.toContain("2026");
+  });
+
+  it("adds the year for a date in another year", () => {
+    const text = formatRecentMinute("2025-11-03T18:09:00Z", new Date("2026-11-06T15:00:00Z"));
+    expect(text).toContain("2025");
+    expect(text).toMatch(/ 13:09$/);
+  });
+
+  it("reads the local day, not the UTC one", () => {
+    // 02:00 UTC on 5 November is 21:00 on 4 November in New York, the same local day as now;
+    // reading the UTC date would call it another day.
+    expect(formatRecentMinute("2026-11-05T02:00:00Z", new Date("2026-11-05T03:00:00Z"))).toBe(
+      `${words.today} 21:00`,
+    );
+  });
+});

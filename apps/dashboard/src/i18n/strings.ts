@@ -1,4 +1,6 @@
 export const en = {
+  "time.today_at": "Today {time}",
+  "time.yesterday_at": "Yesterday {time}",
   "zone_repair.sign_in": "Sign in as a manager",
   "zone_repair.sign_in_explanation":
     "To confirm the time zone, sign in with an account that can configure the venue. This signs you out and opens sign-in.",
@@ -3753,6 +3755,8 @@ export type StringKey = keyof typeof en;
 
 // Not Partial: an untranslated key fails typecheck rather than falling through to English.
 export const es: Record<StringKey, string> = {
+  "time.today_at": "Hoy {time}",
+  "time.yesterday_at": "Ayer {time}",
   "zone_repair.sign_in": "Iniciar sesión como responsable",
   "zone_repair.sign_in_explanation":
     "Para confirmar la zona horaria, inicia sesión con una cuenta que pueda configurar el local. Se cerrará tu sesión y se abrirá el inicio de sesión.",
