@@ -1948,9 +1948,11 @@ export async function enqueueMovedSlipsFor(
  * now. That paper is its ticket, or its last MOVED notice, which is kept per bill, station and dish
  * name, so two dishes alike on one bill share it. Print jobs are not read: a station with no printer
  * has none. A paper names the tables the dish's sending party held when it printed
- * ({@link readTablesHeldOverTime}), a table that joined in the same millisecond counting as held. A
- * reprint counts for nothing, so a dish reprinted after a join can be told when it need not be. An
- * order with no party or no table keeps its places' names.
+ * ({@link readTablesHeldOverTime}), a table that joined in the same millisecond counting as held and
+ * one that left in it counting as gone, because a floor pass writes its slip in the same millisecond
+ * as the leave and that slip sends the dish on from that table. A reprint counts for nothing, so a
+ * dish reprinted after a join can be told when it need not be. An order with no party or no table
+ * keeps its places' names.
  */
 export async function readNamesOnPaper(
   tx: Transaction,
@@ -2091,7 +2093,7 @@ async function readTablesHeldOverTime(
               (seat) =>
                 seat.partyId === id &&
                 Date.parse(seat.joinedAt) <= at &&
-                (seat.leftAt === null || Date.parse(seat.leftAt) >= at),
+                (seat.leftAt === null || Date.parse(seat.leftAt) > at),
             )
             .map((seat) => seat.tableId),
         );

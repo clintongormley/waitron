@@ -4,7 +4,7 @@ import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   captureError,
   floorTodayJoinTables,
@@ -79,6 +79,7 @@ import {
   type SplitSelection,
 } from "./testing/table-action-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
+import { passGuests } from "./floor-today-parts.js";
 import { discardDraft, readDrafts, type BillEditExpected } from "./order-drafts.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { finishTable } from "./testing/party-close-fixture.js";
@@ -1394,6 +1395,44 @@ describe("A803 split: what the kitchen is told", () => {
 
       expect(await noticesOf([tabId])).toEqual([]);
       expect(await slipsSince(grill, before)).toEqual([]);
+    });
+
+    it("a table that left in the same millisecond a floor pass wrote its slip is not on that slip's paper", async () => {
+      const { v, grill, first, partyId, tabId } = await oneTable(209);
+      await orderForParty(v, partyId, ["Burger"], tabId);
+      const second = await v.table("Mesa 210");
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        await inTx(v, (tx) => passGuests(tx, v.cfg, first, [second], "now"));
+      } finally {
+        vi.useRealTimers();
+      }
+      const [slip] = await db
+        .select({ at: kitchenNotices.createdAt })
+        .from(kitchenNotices)
+        .where(eq(kitchenNotices.workingOrderId, tabId));
+      const [left] = await db
+        .select({ at: partyTables.leftAt })
+        .from(partyTables)
+        .where(and(eq(partyTables.partyId, partyId), eq(partyTables.tableId, first)));
+      expect(left!.at).toBe(slip!.at);
+      expect(await slipsSince(grill, 1)).toEqual([
+        movedSlip("Grill", await justOrderLine(tabId), "Mesa 209", "Mesa 210", ["1.000 x BURG"]),
+      ]);
+      await join(v, partyId, first);
+      const before = (await printedBy(grill)).length;
+
+      await splitPicked(v, partyId, second, { wholeBillIds: [], loose: [] });
+
+      expect(await noticesOf([tabId])).toEqual([
+        { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 210" },
+        { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 209" },
+      ]);
+      expect(await slipsSince(grill, before)).toEqual([
+        movedSlip("Grill", await justOrderLine(tabId), "Mesa 210, 209", "Mesa 209", [
+          "1.000 x BURG",
+        ]),
+      ]);
     });
 
     it("one bill holding a dish from before a join and one from after tells only the first, on one slip", async () => {

@@ -523,7 +523,11 @@ Changing from B to A later removes one call in `splitTable` and changes those th
     - **Which tables that paper names:** those the dish's sending party held at that time, by
       `party_tables.joined_at` and `left_at`. The sending party is its group's `number_party_id`, else the
       bill's party. A table that joined in the same millisecond counts as held, since the clock cannot say
-      which came first; the cost is a missed slip, only for a join in the same millisecond as the send. Times
+      which came first; the cost is a missed slip, only for a join in the same millisecond as the send. A table
+      that left in the same millisecond a paper was written counts as gone from that paper, because a floor pass
+      writes its slip in the same millisecond as the leave and that slip sends the dish on from that table
+      (`De: Mesa 209`, `A: Mesa 210`). The cost, read and not run, is an extra slip, since a paper with fewer
+      names can only tell a dish more often. Times
       are compared as instants (`Date.parse`), not as text, so no spelling rule is leaned on.
     - **A party combined away:** `closePartyTables` deletes a closed party's rows and keeps only
       `parties.table_names`, the label of every table it ever held, with no times. So what a paper printed
@@ -568,9 +572,6 @@ Changing from B to A later removes one call in `splitTable` and changes those th
       which the driver's ruling leaves as it was. Ran with the group written directly to its tables, not by a
       floor route: Burger's ticket says Mesa 740, Mesa 741 and 742 join, all grouped as Terraza, 740 leaves:
       `notices [] slips []`.
-    - **A table that left in the same millisecond as the slip that its leaving printed** counts as held at
-      that slip, so if it comes back and the slip's own table leaves, nothing prints. A **missed slip**, also on
-      the open party's path: 1 of the 6,468 judgements in the random histories, a floor pass (R15).
     - **A dish told at one station, then rerouted:** its new station's ticket and its old MOVED notice are not
       read, so a later split prints an extra slip at the new station. Ran: Burger told `Mesa 542`, rerouted
       to Bar, Mesa 543 joins and leaves: a MOVED slip at Bar, none at Grill, though Bar's ticket says Mesa 542.
@@ -1554,6 +1555,7 @@ Waits for Question 2. Built on its default; the PR cannot land until it is answe
     - The leaving table's shown name in place of no table (1 red) → "a listed table leaves and the group…".
   - `joined_at` compared with `<` → "a table that joined in the same millisecond the dish was sent counts as on its ticket".
   - `left_at` not read → "a table that had left before the dish was sent and came back after is not on its ticket".
+  - `left_at` compared with `>=` → "a table that left in the same millisecond a floor pass wrote its slip is not on that slip's paper", whose clock is held still over the pass.
   - The bill's party in place of the group's `number_party_id` → "the table of the party that took the guests leaves: only its dish is told".
   - A closed party answering for all time → "a dish its combined-away party held and fired after the combine goes by the tables at that firing", "told once, the dish goes by the slip…" and "told once for the same paper…".
   - HOLD paper's time before the fire ticket's → "a held dish fired after the join is not told, its fire ticket naming the other table".
@@ -1575,6 +1577,7 @@ Waits for Question 2. Built on its default; the PR cannot land until it is answe
 - [ ] **Record pass.** Append "## Build record (4c)" to this plan: what was built versus planned, departures with reasons, line numbers that moved, the control table.
 - [ ] PR body in plain English: what the waiter and the kitchen see; no venue reset, no schema change; "Changed test checks" (every row), "Moved till-app cases" and "Deleted checks"; "For the owner": Questions 1 and 2 hold landing until answered, and the lane lands it after that; Question 3's default, naming the two rulings; and, in plain words, that the route now issues an invoice for a bill it leaves fully paid, by the function Move dishes calls, no fiscal function changed, and that **one split can issue more than one invoice in one transaction when loose picks finish several part-paid bills**, naming the two cases that pin it in `split-table.fiscal.test.ts`: "two loose sources left paid make two invoices, in bill-number order, the second chained on the first" and "a refusal at the second invoice leaves no sale and no record, and takes no number". Say also that the bill the old `billId` request names now gets a zone check too, where before only the party did. Say also that a bill someone else's order reaches stays ticked and holds Split (D21), naming Task 12f's title. Then `/finish-branch` with this plan named.
   - "For the owner" also says: a dish of a combined party is told the first time any of that party's tables leaves, so a cook can get a slip for a dish whose table did not change, as the price of no missed slip in those histories.
+  - "For the owner" also says: a ticket naming one table is not told when that table leaves a group whose name stays, because nothing records when a group got its name; D6 already states it.
 - [ ] Ledger `Status: in progress` until landed.
 
 ## Task list and sizes
@@ -1760,13 +1763,13 @@ empty after each. Free memory read 74% before the browser run.
 
   | Rule | Correct | Extra slip | Missed slip |
   | --- | --- | --- | --- |
-  | **This rule, the real code** | 5,942 | 525 | **1** |
+  | **This rule, the real code, at `90bf56cd57`** | 5,942 | 525 | **1**, since fixed (below) |
   | The earliest table still here (the rule before) | 6,198 | 202 | 68 |
   | Every listed table still here, falling through (the first form) | 6,308 | 1 | 159 |
 
   Extra slips per dish under this rule: 458 dishes had one, 32 had two, one had three. Without a combine earlier in the history: no miss, and 6 extras from 3 histories, each history with a floor pass; traced in one, the notice at `49.246Z` and the table's join at `49.247Z`, which is D6's floor-pass limit.
 
-  **The one missed slip is not a combined party's paper.** Paper `Mesa 4`, after `Mesa 5`, Mesa 4 left. It did not repeat on three replays of the seed, so that history ran 3,000 more times: 84 misses in 9,000 judgements, all 84 printing `paper Mesa 4, after Mesa 5` and each with a table's `left_at` equal to the last notice's time. One of them: `["9df2","Mesa 5","59.731Z","59.780Z"]` and the notice `["BURG","Mesa 4","59.780Z"]`, Mesa 5 then rejoining at `59.786Z`. The floor pass that moved the guests off Mesa 5 wrote its slip in the same millisecond, and `left_at >= at` counts Mesa 5 as held at that slip. In the copy only, `>` in place of `>=` printed no miss in 9,000 judgements of the same history, with the block green (`Tests 33 passed`); the sweep was not run on that edit, and it is not in the code, since the ruling leaves an open party's path as it was.
+  **The one missed slip is not a combined party's paper.** Paper `Mesa 4`, after `Mesa 5`, Mesa 4 left. It did not repeat on three replays of the seed, so that history ran 3,000 more times: 84 misses in 9,000 judgements, all 84 printing `paper Mesa 4, after Mesa 5` and each with a table's `left_at` equal to the last notice's time. One of them: `["9df2","Mesa 5","59.731Z","59.780Z"]` and the notice `["BURG","Mesa 4","59.780Z"]`, Mesa 5 then rejoining at `59.786Z`. The floor pass that moved the guests off Mesa 5 wrote its slip in the same millisecond, and `left_at >= at` counts Mesa 5 as held at that slip. The driver then ruled that a table leaving in that millisecond is gone from that paper, so the code now compares with `>`. Seed 931 replayed in a throwaway copy of the fix, the two rules side by side with nothing else running: `>` 0 misses in 6,000 judgements, `>=` 10 in 6,000, all 10 `paper Mesa 4, after Mesa 5`. An earlier run with the move sweep beside it printed 0 under both (9,000 and 3,000 judgements), so that run shows nothing and is not counted. The 3,000 seeds were not run again, so the table above stays as measured at `90bf56cd57`.
 
   Limits, as the review's: the mix is built to combine parties often, so these counts compare rules and do not predict how often this happens in a restaurant. Not in the generator: named groups and today's merges, held dishes, reprints, moving loose dishes, two dishes alike. Each history has at most seven dishes. Timing varies between runs, so counts that turn on a millisecond vary too. Everything called functions directly, not routes. The clock was never stepped.
 
