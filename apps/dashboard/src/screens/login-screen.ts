@@ -264,7 +264,6 @@ export class LoginScreen extends LitElement {
   private rememberedEmail = this.rememberedLogin?.email;
   private offerAfterLogin = false;
   private completedLogin: CompletedLogin | null = null;
-  @state() private passkeyName = "";
   @state() private passkeyFactorRequired = false;
   @state() private rememberEmail = this.rememberedLogin?.persistent ?? false;
   @state() private passwordVisible = false;
@@ -416,9 +415,7 @@ export class LoginScreen extends LitElement {
       case "factor":
         return new Set(["one-time-code"]);
       case "setup-passkey":
-        return new Set(
-          this.passkeyFactorRequired ? ["passkey-name", "one-time-code"] : ["passkey-name"],
-        );
+        return new Set(this.passkeyFactorRequired ? ["one-time-code"] : []);
       default:
         return new Set();
     }
@@ -448,8 +445,6 @@ export class LoginScreen extends LitElement {
       // On the code step the password is not shown, so this reaches the message above the action.
       if (this.password === "") errors.password = t("form.password_required");
     } else if (this.step === "setup-passkey") {
-      if (this.passkeyName.trim().length > 80)
-        errors["passkey-name"] = t("profile.passkey_name_too_long");
       if (this.passkeyFactorRequired && this.secondFactor === "")
         errors["one-time-code"] = t("form.factor_required");
     }
@@ -526,7 +521,7 @@ export class LoginScreen extends LitElement {
 
   #clearSecrets(): void {
     for (const input of this.shadowRoot?.querySelectorAll<HTMLElementTagNameMap["wt-input"]>(
-      'wt-input[name="password"], wt-input[name="new-password"], wt-input[name="new-pin"], wt-input[name="one-time-code"], wt-input[name="passkey-name"]',
+      'wt-input[name="password"], wt-input[name="new-password"], wt-input[name="new-pin"], wt-input[name="one-time-code"]',
     ) ?? [])
       input.value = "";
     this.password = "";
@@ -536,7 +531,6 @@ export class LoginScreen extends LitElement {
     this.passwordVisible = false;
     this.newPasswordVisible = false;
     this.pinVisible = false;
-    this.passkeyName = "";
     this.passkeyFactorRequired = false;
     this.attempted = false;
     this.refusalField = null;
@@ -802,7 +796,6 @@ export class LoginScreen extends LitElement {
     this.pin = "";
     this.passkeyFactorRequired = this.factorMode === "recovery";
     if (this.passkeyFactorRequired) this.secondFactor = "";
-    this.passkeyName = "";
   }
 
   /**
@@ -844,7 +837,6 @@ export class LoginScreen extends LitElement {
       await this.api.passkeyRegisterVerify({
         challengeHandle,
         response,
-        name: this.passkeyName.trim(),
       });
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
       await this.#resolvePasskeyOffer(this.completedLogin);
@@ -863,14 +855,11 @@ export class LoginScreen extends LitElement {
         return;
       }
       const code = codeOf(error, "passkey.verification_failed");
-      const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
       if (code === "totp.invalid") {
         this.passkeyFactorRequired = true;
         this.secondFactor = "";
         this.#refuse(code, "one-time-code");
-      } else if (code === "profile.invalid" && field === "passkeyName")
-        this.#refuse(code, "passkey-name");
-      else this.errorKey = code;
+      } else this.errorKey = code;
     } finally {
       if (attempt === this.passkeyAttempt) this.busy = false;
     }
@@ -1348,20 +1337,6 @@ export class LoginScreen extends LitElement {
                 <h1>${t("account.offer_passkey")}</h1>
                 ${this.#renderLoginContext(false)}
                 <p>${t("account.passkey_optional")}</p>
-                <wt-input
-                  class="field"
-                  name="passkey-name"
-                  autocomplete="off"
-                  label=${t("profile.passkey_name")}
-                  .value=${this.passkeyName}
-                  error=${fieldError("passkey-name")}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    event.stopPropagation();
-                    this.passkeyName = event.detail.value;
-                    this.#dismissRefusal("passkey-name");
-                  }}
-                  @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]"))}
-                ></wt-input>
                 ${
                   this.passkeyFactorRequired
                     ? html`<wt-input

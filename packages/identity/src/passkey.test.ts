@@ -106,7 +106,7 @@ const finish = (token: string, challengeHandle: string, name?: unknown) =>
       managementSessionId: token,
       challengeHandle,
       response: {} as never,
-      name,
+      ...{ name },
       rpId: "localhost",
       origin: "http://localhost",
     }),
@@ -233,21 +233,20 @@ describe("passkey registration", () => {
     expect(begun.options.pubKeyCredParams.map((p) => p.alg)).toEqual([-8, -7, -257]);
   });
 
-  it.each([
-    ["  Work laptop  ", "Work laptop"],
-    ["   ", null],
-    [undefined, null],
-    ["x".repeat(80), "x".repeat(80)],
-  ])("stores the optional passkey name %j", async (name, expected) => {
-    const { personId, token } = await openManagementSession(suite.db, "admin");
-    mockVerify.mockResolvedValue(verified("cred-named"));
-    const begun = await begin(token);
-    await finish(token, begun.challengeHandle, name);
-    const [credential] = await run((tx) =>
-      tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
-    );
-    expect(credential).toHaveProperty("name", expected);
-  });
+  it.each(["Work laptop", " ", undefined, "x".repeat(81), 123, null])(
+    "ignores a supplied name %j and stores the verified password manager",
+    async (name) => {
+      const { personId, token } = await openManagementSession(suite.db, "admin");
+      mockVerify.mockResolvedValue(verified("cred-named", undefined, GOOGLE));
+      const begun = await begin(token);
+      await finish(token, begun.challengeHandle, name);
+      const [credential] = await run((tx) =>
+        tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
+      );
+      expect(credential).toHaveProperty("name", "Google Password Manager");
+      expect(credential).toHaveProperty("aaguid", GOOGLE);
+    },
+  );
 
   it("keeps the identifier of the password manager that made the passkey", async () => {
     const { personId, token } = await openManagementSession(suite.db, "admin");
@@ -258,11 +257,11 @@ describe("passkey registration", () => {
       tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
     );
     expect(credential).toHaveProperty("aaguid", GOOGLE);
-    expect(credential).toHaveProperty("name", "Work laptop");
+    expect(credential).toHaveProperty("name", "Google Password Manager");
   });
 
   it.each([["   "], [undefined]])(
-    "names a passkey given the name %j after the password manager that made it",
+    "uses the verified provider name for the absent or blank client value %j",
     async (name) => {
       const { personId, token } = await openManagementSession(suite.db, "admin");
       mockVerify.mockResolvedValue(verified("cred-unnamed", undefined, GOOGLE));
@@ -275,7 +274,7 @@ describe("passkey registration", () => {
     },
   );
 
-  it("leaves an unnamed passkey unnamed when its password manager is not on the list", async () => {
+  it("stores no name when the verified password manager is unknown", async () => {
     const { personId, token } = await openManagementSession(suite.db, "admin");
     const unknown = "12345678-1234-1234-1234-123456789abc";
     mockVerify.mockResolvedValue(verified("cred-unknown-provider", undefined, unknown));
@@ -287,20 +286,6 @@ describe("passkey registration", () => {
     expect(credential).toHaveProperty("aaguid", unknown);
     expect(credential).toHaveProperty("name", null);
   });
-
-  it.each(["x".repeat(81), 123, null])(
-    "refuses an invalid passkey name %j before registering",
-    async (name) => {
-      const { token } = await openManagementSession(suite.db, "admin");
-      mockVerify.mockResolvedValue(verified("cred-invalid-name"));
-      const begun = await begin(token);
-      await expect(finish(token, begun.challengeHandle, name)).rejects.toMatchObject({
-        code: "profile.invalid",
-        params: { field: "passkeyName" },
-      });
-      expect(mockVerify).not.toHaveBeenCalled();
-    },
-  );
 
   it("requires user verification on the registration verify (requireUserVerification: true)", async () => {
     const { token } = await openManagementSession(suite.db, "admin");

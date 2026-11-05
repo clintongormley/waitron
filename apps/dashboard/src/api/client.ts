@@ -2820,9 +2820,7 @@ export class DashboardApi {
     );
   }
 
-  passkeyRegisterVerify(
-    body: PasskeyVerification & { name?: string },
-  ): Promise<{ credentialId: string }> {
+  passkeyRegisterVerify(body: PasskeyVerification): Promise<{ credentialId: string }> {
     return this.#request<{ credentialId: string }>(
       "/management-api/passkey/register/verify",
       "POST",

@@ -28,6 +28,9 @@ account exists or can sign in. Resetting a password does not enable a disabled a
 Open **Account settings** from the account menu to change your own sign-in details. Your own
 email, password, PIN, passkeys and two-factor settings remain yours to manage.
 
+In **Security**, choose **Add passkey** beside **Passkeys**.
+Follow your password manager’s prompt to add it.
+
 ## Download your data {#own-data}
 
 Open **Account settings** from the account menu and, on **Your details**, press **Download**

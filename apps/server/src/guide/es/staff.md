@@ -32,6 +32,9 @@ Abre **Configuración de la cuenta** desde el menú de cuenta para cambiar tus p
 acceso. Puedes seguir gestionando tu correo, contraseña, PIN, llaves de acceso y verificación en
 dos pasos.
 
+En **Seguridad**, elige **Añadir passkey** junto a **Passkeys**.
+Sigue las instrucciones de tu gestor de contraseñas para añadirla.
+
 ## Descargar tus datos {#own-data}
 
 Abre **Configuración de la cuenta** desde el menú de cuenta y, en **Tus datos**, pulsa

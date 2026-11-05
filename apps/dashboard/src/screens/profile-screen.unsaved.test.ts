@@ -91,7 +91,7 @@ for (const [action, field] of [
   ["recovery-codes", "totp"],
   ["disable-authenticator", "currentPassword"],
   ["unlink-google", "currentPassword"],
-  ["add-passkey", "passkeyName"],
+  ["add-passkey", "currentPassword"],
   ["confirm-email", "setupCode"],
   ["setup-google", "currentPassword"],
   ["setup-authenticator", "currentPassword"],
@@ -421,7 +421,7 @@ for (const action of ["recovery-codes", "setup-google", "confirm-email"] as cons
   }
 }
 
-it("passkey enrollment submits the captured name and preserves a newer unsubmitted name", async () => {
+it("passkey enrollment preserves newer unsubmitted identity proof", async () => {
   let resolve!: () => void;
   let received: unknown;
   vi.spyOn(navigator.credentials, "create").mockResolvedValue({
@@ -459,11 +459,11 @@ it("passkey enrollment submits the captured name and preserves a newer unsubmitt
   await click(screen, "add-passkey");
   change(screen, "currentPassword", "proof");
   change(screen, "totp", "123456");
-  change(screen, "passkeyName", "  Desk  ");
   await click(screen, "save");
-  change(screen, "passkeyName", "Phone");
+  change(screen, "currentPassword", "newer proof");
   resolve();
-  await expect.poll(() => (received as { name?: string } | undefined)?.name).toBe("Desk");
+  await expect.poll(() => received).toEqual(expect.objectContaining({ challengeHandle: "handle" }));
+  expect(received).not.toHaveProperty("name");
   await expect
     .poll(
       () =>
@@ -471,9 +471,9 @@ it("passkey enrollment submits the captured name and preserves a newer unsubmitt
           .disabled,
     )
     .toBe(false);
-  expect(value(screen, "passkeyName")).toBe("Phone");
+  expect(value(screen, "currentPassword")).toBe("newer proof");
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  change(screen, "passkeyName", "Desk");
+  change(screen, "currentPassword", "proof");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 it("a disconnected passkey editor never opens a browser ceremony from a late options reply", async () => {

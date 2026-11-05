@@ -190,19 +190,11 @@ export async function finishPasskeyRegistration(
     managementSessionId: string;
     challengeHandle: string;
     response: RegistrationResponseJSON;
-    name?: unknown;
     rpId: string;
     origin: string;
   },
 ): Promise<{ credentialId: string }> {
   const { personId } = await resolveManagementSession(tx, input.managementSessionId);
-  if (
-    input.name !== undefined &&
-    (typeof input.name !== "string" || input.name.trim().length > 80)
-  ) {
-    throw new AppError("profile.invalid", { field: "passkeyName" });
-  }
-  const name = typeof input.name === "string" ? input.name.trim() || null : null;
   const expectedChallenge = await consumeChallenge(tx, input.challengeHandle, {
     purpose: "registration",
     personId,
@@ -231,7 +223,7 @@ export async function finishPasskeyRegistration(
     await tx.insert(webauthnCredentials).values({
       personId,
       credentialId: cred.id,
-      name: name ?? passkeyProviderName(aaguid),
+      name: passkeyProviderName(aaguid),
       aaguid,
       publicKey: b64url(cred.publicKey),
       counter: cred.counter,

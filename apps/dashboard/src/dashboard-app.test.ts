@@ -4085,7 +4085,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         step,
         email: "typed@example.com",
         password: "current secret",
-        passkeyName: "Work laptop",
+        secondFactor: "123456",
       });
       await flush(el);
       emit(loginChooser(el)!, "wt-locale-selected", { code: "en-GB" });
@@ -4100,7 +4100,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
       expect(screen).toMatchObject({
         step,
         password: "current secret",
-        passkeyName: "Work laptop",
+        secondFactor: "123456",
       });
       expect(api.putLocale).not.toHaveBeenCalled();
     },

@@ -190,7 +190,7 @@ describe("your profile", () => {
     await expectNoA11yViolations(host);
   });
 
-  it("shows Add passkey beside the Security tab and not inside its panel", async () => {
+  it("shows Add passkey in Security and hides it with the panel", async () => {
     const { el } = await mount();
     const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
     expect(el.shadowRoot!.querySelector('[data-test="add-passkey"]')!.checkVisibility()).toBe(
@@ -198,8 +198,8 @@ describe("your profile", () => {
     );
     tabs.shadowRoot!.querySelector<HTMLElement>('[role="tab"][data-key="security"]')!.click();
     await flush(el);
-    expect(tabs.querySelector('[slot="actions"] [data-test="add-passkey"]')).not.toBeNull();
-    expect(tabs.querySelector('[slot="security"] [data-test="add-passkey"]')).toBeNull();
+    expect(tabs.querySelector('[slot="actions"] [data-test="add-passkey"]')).toBeNull();
+    expect(tabs.querySelector('[slot="security"] [data-test="add-passkey"]')).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[data-test="add-passkey"]')!.checkVisibility()).toBe(true);
   });
 
@@ -209,7 +209,7 @@ describe("your profile", () => {
     { locale: "es-ES", width: 310 },
     { locale: "es-ES", width: 390 },
   ])(
-    "keeps the Security tab level with Add passkey on a $width px screen, its start in view and all of it in view where it fits ($locale)",
+    "keeps the Passkeys heading level with Add passkey on a $width px screen ($locale)",
     async ({ locale, width }) => {
       const before = currentLocale();
       setLocale(locale);
@@ -226,15 +226,18 @@ describe("your profile", () => {
         const selected = tabs
           .shadowRoot!.querySelector('[aria-selected="true"]')!
           .getBoundingClientRect();
-        const action = tabs
-          .querySelector('[slot="actions"] [data-test="add-passkey"]')!
+        const add = tabs.querySelector('[slot="security"] [data-test="add-passkey"]')!;
+        const action = add.getBoundingClientRect();
+        const heading = add
+          .closest(".action-row")!
+          .querySelector(".field-value")!
           .getBoundingClientRect();
         expect(selected.left).toBeGreaterThanOrEqual(strip.left - 1);
         // A tab wider than its strip can only show its start; how wide either is depends on fonts.
         if (selected.width <= strip.width)
           expect(selected.right).toBeLessThanOrEqual(strip.right + 1);
         expect(
-          Math.abs(action.top + action.height / 2 - (selected.top + selected.height / 2)),
+          Math.abs(action.top + action.height / 2 - (heading.top + heading.height / 2)),
         ).toBeLessThanOrEqual(1);
       } finally {
         setLocale(before);
@@ -463,18 +466,6 @@ describe("your profile", () => {
     });
   });
 
-  it("explains an overlong passkey name before starting registration", async () => {
-    const { el, api } = await mount();
-    await click(el, "add-passkey");
-    input(el, "currentPassword", "current");
-    input(el, "passkeyName", "x".repeat(81));
-    await click(el, "save");
-    expect(api.passkeyRegisterOptions).not.toHaveBeenCalled();
-    expect(
-      el.shadowRoot!.querySelector("wt-input[name=passkeyName]")!.getAttribute("error"),
-    ).toContain("80");
-    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-  });
   it("starts Google linking when the installation is configured", async () => {
     const { el, api } = await mount();
     await click(el, "setup-google");
@@ -625,7 +616,6 @@ describe("your profile", () => {
     const warn = vi.spyOn(console, "warn");
     const { el, api } = await mount();
     await click(el, "add-passkey");
-    input(el, "passkeyName", "  Work laptop  ");
     input(el, "currentPassword", "current");
     await click(el, "save");
     expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({ currentPassword: "current" });
@@ -642,7 +632,6 @@ describe("your profile", () => {
     });
     expect(api.passkeyRegisterVerify).toHaveBeenCalledWith({
       challengeHandle: "handle",
-      name: "Work laptop",
       response: {
         id: "new-credential",
         rawId: "AQ",
@@ -1481,7 +1470,7 @@ describe("your profile — errors at the bottom of the form, not above it", () =
   it("keeps a refusal whose params name a field the form does not show in the bottom message", async () => {
     const saveProfile = vi
       .fn()
-      .mockRejectedValue({ code: "profile.invalid", params: { field: "passkeyName" } });
+      .mockRejectedValue({ code: "profile.invalid", params: { field: "pin" } });
     const { el } = await mount({ saveProfile });
     await editDetails(el);
     input(el, "displayName", "Alex R");
@@ -1490,17 +1479,17 @@ describe("your profile — errors at the bottom of the form, not above it", () =
     expect(await nativeSaveDisabled(el)).toBe(false);
   });
 
-  it("puts a refused passkey name under its field, leaving Save working", async () => {
+  it("keeps a passkey refusal for an unshown field beside Add", async () => {
     const { el } = await mount({
       passkeyRegisterVerify: vi
         .fn()
-        .mockRejectedValue({ code: "profile.invalid", params: { field: "passkeyName" } }),
+        .mockRejectedValue({ code: "profile.invalid", params: { field: "displayName" } }),
     });
     await click(el, "add-passkey");
-    input(el, "passkeyName", "Work laptop");
     input(el, "currentPassword", "current");
     await click(el, "save");
-    expect(field(el, "passkeyName").error).toBe(codeMessage("profile.invalid"));
+    expect(el.shadowRoot!.querySelector("[name=passkeyName]")).toBeNull();
+    expect(await bottomOf(el)).toBe(codeMessage("profile.invalid"));
     expect(field(el, "currentPassword").error).toBe("");
     expect(await nativeSaveDisabled(el)).toBe(false);
   });
@@ -1806,5 +1795,64 @@ describe("your profile — a save's message across an outage", () => {
     liveData.refresh();
     await vi.waitFor(() => expect(displayName(el)).toBe("Back again"));
     expect(await bottomOf(el)).toBe(codeMessage("passkey.already_registered"));
+  });
+});
+
+describe("A403 passkey controls", () => {
+  it("offers Add after identity proof without asking for a passkey name", async () => {
+    const { el } = await mount();
+    await click(el, "add-passkey");
+    expect(el.shadowRoot!.querySelector("wt-input[name=passkeyName]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=save]")!.textContent!.trim()).toBe(
+      t("action.add"),
+    );
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
+  });
+
+  it.each([0, 1])("keeps Add on the Passkeys heading with %s registered keys", async (count) => {
+    const profile = await apiStub().getProfile();
+    const { el } = await mount({
+      getProfile: vi
+        .fn()
+        .mockResolvedValue({ ...profile, passkeys: profile.passkeys.slice(0, count) }),
+    });
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    tabs.shadowRoot!.querySelector<HTMLElement>('[role="tab"][data-key="security"]')!.click();
+    await flush(el);
+    const add =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=add-passkey]")!;
+    const row = add.closest(".action-row");
+    expect(row?.textContent).toContain(t("profile.passkeys"));
+    expect(add.variant).toBe("secondary");
+    expect(add.checkVisibility()).toBe(true);
+    const heading = row!.querySelector(".field-value")!.getBoundingClientRect();
+    const button = add.getBoundingClientRect();
+    expect(
+      Math.abs(button.top + button.height / 2 - (heading.top + heading.height / 2)),
+    ).toBeLessThanOrEqual(1);
+    if (count === 0) {
+      const hint = el.shadowRoot!.querySelector<HTMLElement>(".hint")!;
+      expect(row!.contains(hint)).toBe(true);
+      expect(hint.getBoundingClientRect().top).toBeGreaterThanOrEqual(button.bottom);
+      expect(Math.abs(hint.getBoundingClientRect().right - button.right)).toBeLessThanOrEqual(1);
+      const bottom = row!.getBoundingClientRect().bottom - hint.getBoundingClientRect().bottom;
+      expect(bottom).toBeGreaterThanOrEqual(12);
+    }
+  });
+
+  it.each([
+    ["en-GB", "Added 09/09/2026"],
+    ["es-ES", "Añadida el 9/9/2026"],
+  ])("labels the added date in %s", async (locale, expected) => {
+    const before = currentLocale();
+    setLocale(locale);
+    try {
+      const { el } = await mount();
+      expect(el.shadowRoot!.querySelector(".passkey-item")!.textContent).toContain(expected);
+    } finally {
+      setLocale(before);
+    }
   });
 });

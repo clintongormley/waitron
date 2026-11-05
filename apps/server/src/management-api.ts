@@ -724,17 +724,15 @@ async function requireListedPrinters(
 /** A malformed challenge handle would just miss in the `text` id column, so it is refused here. */
 async function parsePasskeyVerifyBody(
   c: Context,
-): Promise<{ challengeHandle: string; response: object; name?: unknown }> {
-  const body = await readJsonBody<{ challengeHandle?: string; response?: unknown; name?: unknown }>(
-    c,
-  );
+): Promise<{ challengeHandle: string; response: object }> {
+  const body = await readJsonBody<{ challengeHandle?: string; response?: unknown }>(c);
   if (typeof body.challengeHandle !== "string" || !isUuid(body.challengeHandle)) {
     throw new AppError("management.request_invalid", { field: "challengeHandle" });
   }
   if (typeof body.response !== "object" || body.response === null) {
     throw new AppError("management.request_invalid", { field: "response" });
   }
-  return { challengeHandle: body.challengeHandle, response: body.response, name: body.name };
+  return { challengeHandle: body.challengeHandle, response: body.response };
 }
 
 export interface MountedManagementApi {
@@ -1882,14 +1880,13 @@ export function mountManagementApi(
   app.post("/management-api/passkey/register/verify", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const { challengeHandle, response, name } = await parsePasskeyVerifyBody(c);
+      const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
       const out = await withTransaction(deps.db, async (tx) => {
         await readOwnProfile(tx, { managementSessionId: sessionId });
         return finishPasskeyRegistration(tx, {
           managementSessionId: sessionId,
           challengeHandle,
           response: response as never,
-          name,
           rpId: deps.rpId,
           origin: deps.origin,
         });
