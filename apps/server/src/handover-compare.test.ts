@@ -184,6 +184,18 @@ function alter(path: string, statement: string): void {
   }
 }
 
+/** One page overwritten, at the same size, where the named table's rows start. */
+async function damageRootPage(path: string, table: string): Promise<void> {
+  const copy = new DatabaseSync(path, { readOnly: true });
+  const { rootpage } = copy
+    .prepare("select rootpage from sqlite_schema where name = ?")
+    .get(table) as { rootpage: number };
+  copy.close();
+  const file = await open(path, "r+");
+  await file.write(Buffer.alloc(4096, 0xff), 0, 4096, (rootpage - 1) * 4096);
+  await file.close();
+}
+
 type Envelope = SignedHandoverEnvelope<FinalStateIndicator>;
 
 /**
@@ -855,6 +867,68 @@ describe("compareFinalCopy", () => {
       expect(found).toEqual({ bytesAndIntegrity: true });
     });
 
+    it("a page a summary reads, damaged on a kept file, answers once, then is refused so it is fetched again", async () => {
+      const r = await rig();
+      const found: CopyFileChecks = {};
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual({ ok: true });
+      await damageRootPage(r.path, "registros_facturacion");
+      expect(await r.compareRow(r.indicator, {}, found)).toMatchObject({
+        reason: "handover.summary_unreadable",
+      });
+      expect(found).toEqual({});
+      // Failing case: `summary_unreadable` on every try, and the file never fetched again.
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual(refused("handover.copy_mismatch"));
+    });
+
+    it("a summary's passing fault on a kept sound file costs one more read and thread, then it passes", async () => {
+      const r = await rig();
+      const summarise = vi.fn(async (): Promise<CanonicalValue> => ({}));
+      const flaky: WaitronModule = {
+        ...ALL_MODULES[0]!,
+        name: "flaky",
+        handover: { summarise, checkCopy: async () => "ok" },
+      };
+      const modules = [...ALL_MODULES, flaky];
+      const envelope = r.resigned((body) => {
+        body.snapshot.modules.push({ name: "flaky", version: flaky.version });
+        body.modulesSummary.flaky = {};
+      });
+      const found: CopyFileChecks = {};
+      expect(await r.compareRow(envelope, { modules }, found)).toEqual({ ok: true });
+      summarise.mockRejectedValueOnce(new Error("a passing fault"));
+      fileReads.paths.length = 0;
+      integrityThreads.paths.length = 0;
+      expect(await r.compareRow(envelope, { modules }, found)).toMatchObject({
+        reason: "handover.summary_unreadable",
+      });
+      expect(found).toEqual({});
+      expect(await r.compareRow(envelope, { modules }, found)).toEqual({ ok: true });
+      expect(fileReads.paths).toEqual([r.path]);
+      expect(integrityThreads.paths).toEqual([r.path]);
+    });
+
+    it("a summary refused on a first try keeps what that try read: nothing was remembered before it", async () => {
+      const r = await rig();
+      const flaky: WaitronModule = {
+        ...ALL_MODULES[0]!,
+        name: "flaky",
+        handover: {
+          summarise: async () => {
+            throw new Error("a fault");
+          },
+          checkCopy: async () => "ok",
+        },
+      };
+      const envelope = r.resigned((body) => {
+        body.snapshot.modules.push({ name: "flaky", version: flaky.version });
+      });
+      const found: CopyFileChecks = {};
+      expect(
+        await r.compareRow(envelope, { modules: [...ALL_MODULES, flaky] }, found),
+      ).toMatchObject({ reason: "handover.summary_unreadable" });
+      expect(found).toEqual({ bytesAndIntegrity: true, moduleChecks: null });
+    });
+
     it("what only the spare's own files say is read every time", async () => {
       const r = await rig();
       const found: CopyFileChecks = {};
@@ -1105,7 +1179,7 @@ describe("compareFinalCopy", () => {
 
     it("a row for this box with this box's key is enough, whatever else the row holds", async () => {
       const r = await rig();
-      alter(r.path, `update nodes set location_id = 'gone' where id = '${r.m2.nodeId}'`);
+      alter(r.path, `update nodes set name = 'Elsewhere' where id = '${r.m2.nodeId}'`);
       expect(await r.compareRow(await r.resignedForFile())).toEqual({ ok: true });
     });
 
@@ -1478,6 +1552,21 @@ describe("the spare's duty runs the real comparison", () => {
     expect(seen[0]).not.toBe(seen[1]);
     expect(seen[0]).toEqual({});
   }, 60_000);
+
+  it("a page a summary reads, damaged while the spare waits on a setting, is fetched again", async () => {
+    const r = await dutyRig();
+    await writeFile(join(r.m2State, "backup.env"), SETTINGS);
+    await r.start({ compareRetryMs: 30 });
+    await vi.waitFor(
+      async () => expect((await r.row()).waitingReason).toBe("handover.backup_settings_differ"),
+      { timeout: 15_000 },
+    );
+    expect(r.copyReads()).toBe(1);
+    await damageRootPage(r.path, "registros_facturacion");
+    await rm(join(r.m2State, "backup.env"));
+    // Failing case: the count stays at 1, waiting on `summary_unreadable` until the box restarts.
+    await vi.waitFor(() => expect(r.copyReads()).toBeGreaterThan(1), { timeout: 15_000 });
+  });
 
   it("a kept file turned to noise while the spare waits on a setting is fetched again", async () => {
     const r = await dutyRig();

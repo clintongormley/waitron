@@ -110,10 +110,20 @@ export async function compareFinalCopy(
     return refuse("handover.indicator_mismatch", { field: "binding" });
   }
   const remembered = found.bytesAndIntegrity === true;
+  // After a throw or an unreadable summary the file may be what failed, and only reading it from
+  // nothing would say so.
   try {
-    return await compareFile(deps, operation, body, copyPath, { found, signal }, remembered);
+    const answer = await compareFile(
+      deps,
+      operation,
+      body,
+      copyPath,
+      { found, signal },
+      remembered,
+    );
+    if (remembered && !answer.ok && answer.reason === "handover.summary_unreadable") forget(found);
+    return answer;
   } catch (error) {
-    // The file may be what failed, and only reading it from nothing would say so.
     if (remembered) forget(found);
     throw error;
   }
