@@ -60,8 +60,7 @@ type Field =
   | "pin"
   | "confirmPin"
   | "totp"
-  | "setupCode"
-  | "passkeyName";
+  | "setupCode";
 const emptyFields = (): Record<Field, string> => ({
   displayName: "",
   firstNames: "",
@@ -76,7 +75,6 @@ const emptyFields = (): Record<Field, string> => ({
   confirmPin: "",
   totp: "",
   setupCode: "",
-  passkeyName: "",
 });
 
 const DAY = { year: "numeric", month: "numeric", day: "numeric" } as const;
@@ -141,6 +139,13 @@ export class ProfileScreen extends LitElement {
         right: 0;
         border-top: 1px solid var(--wt-color-border);
       }
+      .action-row.passkeys-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+      .passkeys-row .hint {
+        grid-column: 1 / -1;
+      }
       .row {
         display: flex;
         flex-direction: column;
@@ -175,13 +180,6 @@ export class ProfileScreen extends LitElement {
         font-weight: var(--wt-font-weight-normal);
         color: var(--wt-color-text-muted);
       }
-      /* A card action stays visually calm (the shared secondary look) until you interact with it —
-         width-driven, so ch is the right unit (same reasoning as dashboard-app.ts's own
-         --dashboard-sidebar-width). 12ch comfortably clears "Disable"/"Replace"/"Confirm", the
-         longest labels here, so EVERY action clamps to the same width regardless of its own text —
-         8ch used to just barely fit the longest ones, so they still set their own (wider) width
-         instead of sharing one. The colour appears only via wt-button's exposed button part on
-         hover, never at rest, so a row of these reads as one calm, evenly-sized set of actions. */
       .card-action {
         min-width: 12ch;
       }
@@ -272,7 +270,6 @@ export class ProfileScreen extends LitElement {
       lastNames: fields.lastNames.trim(),
       telephone: fields.telephone.trim(),
       email: fields.email.trim(),
-      passkeyName: fields.passkeyName.trim(),
     };
     const value = emptyFields();
     for (const field of this.#shownFields()) value[field] = normalized[field];
@@ -531,7 +528,6 @@ export class ProfileScreen extends LitElement {
       add("firstNames", "lastNames", "displayName", "email", "telephone", "locale");
     if (this.needsCredentials)
       add("currentPassword", ...(this.profile?.hasTotp ? ["totp" as const] : []));
-    if (this.mode === "passkey") add("passkeyName");
     if (this.mode === "password") add("password", "confirmPassword");
     if (this.mode === "pin") add("pin", "confirmPin");
     if (this.mode === "email" || (this.mode === "totp" && this.totpSetup !== null))
@@ -544,8 +540,6 @@ export class ProfileScreen extends LitElement {
     const errors: Partial<Record<Field, string>> = {};
     if (this.mode === "details") Object.assign(errors, this.#detailsErrors());
 
-    if (this.mode === "passkey" && f.passkeyName.trim().length > 80)
-      errors.passkeyName = t("profile.passkey_name_too_long");
     if (this.needsCredentials) {
       if (!f.currentPassword) errors.currentPassword = t("form.password_required");
       if (this.profile!.hasTotp && !f.totp) errors.totp = t("profile.code_required");
@@ -679,7 +673,7 @@ export class ProfileScreen extends LitElement {
       } else if (this.mode === "unlink-google") {
         await this.api.unlinkGoogle(credentials);
       } else if (this.mode === "passkey") {
-        await this.#addPasskey(credentials, f.passkeyName.trim(), active);
+        await this.#addPasskey(credentials, active);
       } else if (this.mode === "email") {
         await this.api.confirmProfileEmail(f.setupCode);
       }
@@ -779,7 +773,6 @@ export class ProfileScreen extends LitElement {
   }
   async #addPasskey(
     credentials: { currentPassword?: string; totp?: string },
-    name: string,
     active: () => boolean,
   ): Promise<void> {
     const { challengeHandle, options } = await this.api.passkeyRegisterOptions(credentials);
@@ -791,7 +784,6 @@ export class ProfileScreen extends LitElement {
     await this.api.passkeyRegisterVerify({
       challengeHandle,
       response,
-      name,
     });
   }
   #modalHeading(): string {
@@ -839,16 +831,6 @@ export class ProfileScreen extends LitElement {
         ]}
         @wt-tab-change=${(event: CustomEvent<{ value: string }>) => this.#selectTab(event)}
       >
-        <div slot="actions">
-          <wt-button
-            data-test="add-passkey"
-            variant="primary"
-            ?hidden=${this.activeTab !== "security"}
-            ?disabled=${this.busy}
-            @click=${() => this.#edit("passkey")}
-            >${t("staff.add_passkey")}</wt-button
-          >
-        </div>
         <div slot="details">
           <div class="row">
             <span class="field-label">${t("person.display_name")}</span>
@@ -956,47 +938,51 @@ export class ProfileScreen extends LitElement {
             >
           </div>
 
-          <div class="action-row">
+          <div class="action-row passkeys-row">
             <span class="field-value">${t("profile.passkeys")}</span>
+            <wt-button
+              data-test="add-passkey"
+              class="card-action accent-primary"
+              ?disabled=${this.busy}
+              @click=${() => this.#edit("passkey")}
+              >${t("staff.add_passkey")}</wt-button
+            >
+            ${p.passkeys.length === 0 ? html`<span class="field-meta hint">${t("profile.no_passkeys")}</span>` : nothing}
           </div>
-          ${
-            p.passkeys.length === 0
-              ? html`<p class="hint">${t("profile.no_passkeys")}</p>`
-              : p.passkeys.map((key, index) => {
-                  const name =
-                    key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1));
-                  const created = inLocale(key.createdAt, DAY);
-                  const lastUsed =
-                    key.lastUsedAt === null
-                      ? t("profile.passkey_never_used")
-                      : t("profile.passkey_last_used").replace(
-                          "{time}",
-                          inLocale(key.lastUsedAt, DAY_AND_TIME),
-                        );
-                  const provider =
-                    key.provider === null || key.provider === name ? nothing : `${key.provider} · `;
-                  return html`<div class="action-row passkey-item">
-                    <div class="text">
-                      <span class="passkey-text">${name} · ${created}</span>
-                      <span class="field-meta"
-                        >${provider}<span class="passkey-use">${lastUsed}</span></span
-                      >
-                    </div>
-                    ${
-                      p.hasPassword
-                        ? html`<wt-button
-                            data-test="remove-passkey"
-                            class="card-action accent-danger"
-                            ?disabled=${this.busy}
-                            aria-label=${fill("profile.remove_passkey_name", { name })}
-                            @click=${() => this.#edit("remove", key.id)}
-                            >${t("action.remove")}</wt-button
-                          >`
-                        : nothing
-                    }
-                  </div>`;
-                })
-          }
+          ${p.passkeys.map((key, index) => {
+            const name =
+              key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1));
+            const created = fill("profile.passkey_added", { date: inLocale(key.createdAt, DAY) });
+            const lastUsed =
+              key.lastUsedAt === null
+                ? t("profile.passkey_never_used")
+                : t("profile.passkey_last_used").replace(
+                    "{time}",
+                    inLocale(key.lastUsedAt, DAY_AND_TIME),
+                  );
+            const provider =
+              key.provider === null || key.provider === name ? nothing : `${key.provider} · `;
+            return html`<div class="action-row passkey-item">
+              <div class="text">
+                <span class="passkey-text">${name} · ${created}</span>
+                <span class="field-meta"
+                  >${provider}<span class="passkey-use">${lastUsed}</span></span
+                >
+              </div>
+              ${
+                p.hasPassword
+                  ? html`<wt-button
+                      data-test="remove-passkey"
+                      class="card-action accent-danger"
+                      ?disabled=${this.busy}
+                      aria-label=${fill("profile.remove_passkey_name", { name })}
+                      @click=${() => this.#edit("remove", key.id)}
+                      >${t("action.remove")}</wt-button
+                    >`
+                  : nothing
+              }
+            </div>`;
+          })}
 
           <div class="action-row">
             <div class="text">
@@ -1115,7 +1101,6 @@ export class ProfileScreen extends LitElement {
               ${autofillUsername(p.email)}${this.#input("currentPassword", "profile.current_password", "password", "current-password")}${p.hasTotp ? this.#input("totp", "profile.totp", "text", "one-time-code") : nothing}`
           : nothing
       }
-      ${this.mode === "passkey" ? this.#input("passkeyName", "profile.passkey_name", "text", "off", false) : nothing}
       ${this.mode === "password" ? html`${this.#input("password", "account.new_password", "password", "new-password")}${this.#input("confirmPassword", "account.confirm_password", "password", "new-password")}` : nothing}
       ${this.mode === "pin" ? html`${this.#input("pin", "account.new_pin", "password", "off")}${this.#input("confirmPin", "account.confirm_pin", "password", "off")}` : nothing}
       ${
@@ -1190,7 +1175,7 @@ export class ProfileScreen extends LitElement {
                   data-test="save"
                   ?disabled=${s.unchanged || this.busy || form.blocked}
                   @click=${() => void this.#save()}
-                  >${t(this.mode === "remove" ? "action.remove" : "action.save")}</wt-button
+                  >${t(this.mode === "remove" ? "action.remove" : this.mode === "passkey" ? "action.add" : "action.save")}</wt-button
                 >`
           }
         </wt-form-actions>

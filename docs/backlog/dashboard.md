@@ -336,34 +336,18 @@ Not observed in a real password manager — the tests replace the browser's meth
   signals read beside the profile reload); folding the signal data into the profile response would
   remove it.
 
-## A403 — sign-in and passkey fixes (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room):
+## Account notification clipping remains unconfirmed
 
-1. **Remove the passkey name field.** Each passkey already shows which password manager holds it
-     (C100, #945), so a name typed by the person is no longer needed. The field is in two places:
-     the Add passkey dialog on the Profile screen (`apps/dashboard/src/screens/profile-screen.ts`)
-     and the one-time passkey offer after a password sign-in
-     (`apps/dashboard/src/screens/login-screen.ts`). Both go, with the 80-character check in
-     `finishPasskeyRegistration` (`packages/identity/src/passkey.ts`). When nothing is typed, the
-     server already stores the password manager's name as the passkey's name
-     (`passkeyProviderName`), and the list falls back to "Passkey N" only for a password manager it
-     does not know. Whether the stored name column stays, holding that password manager name, or
-     goes is the implementer's call; nothing is live, so no existing names need carrying forward.
+A403 could not reproduce the owner's cut-off top-right message with the shell's declined-payment
+alert, in English and Spanish, light and dark, at 390 and 1280 pixels. The toast and its message
+fit inside the measured viewport in those eight cases. Its positioning is unchanged. A capture
+or repeatable trigger is still needed to identify the message that was clipped.
 
-  Added by the owner, 2026-10-14, from screenshots of Profile → Security:
+## Passkey name column after A760
 
-  2. **Add passkey belongs to the Passkeys row.** Today it is a solid blue button at the end of the
-     tab bar, beside "Your details" and "Security". Move it onto the Passkeys heading line, on the
-     right where Change and Set up sit on their rows, and draw it quiet (outlined) like them. It
-     stays on the heading line when passkeys are listed, with the list below it.
-  3. **The Passkeys row has no space under it.** With no passkeys, the divider sits directly under
-     "You haven't added a passkey yet."; every other row has padding above and below its text.
-  4. **Say what the passkey's date is.** A listed passkey reads "Google Password Manager ·
-     14/10/2026" over "Never used": the second line is labelled and the date is not. Label it as
-     the date the passkey was added.
-  5. **The Add passkey dialog's button says "Save"; make it "Add".**
-  6. **A message box was cut off at the top-right edge of the window** in the same screenshot —
-     only its first letters showed. Not yet known whether it is a notification placed partly
-     off-screen or only a narrow window; reproduce before fixing.
+A403 removes the typed passkey name. Under the A1308 schema hold, the stored name column remains;
+new registrations fill it with the detected password manager's name, or null for an unknown manager.
+After A760, decide whether to remove the redundant column and read the provider directly.
 
 ## Review every permission: fewer, coarser, and consistently named
 

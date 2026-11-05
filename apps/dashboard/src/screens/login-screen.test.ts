@@ -245,8 +245,9 @@ describe("login-screen", () => {
   });
 
   it("clears enrollment errors and returns to password entry after Skip", async () => {
-    const { el } = await mountPasskeyOffer();
-    input(el, "passkey-name", "x".repeat(81));
+    const { el } = await mountPasskeyOffer({
+      passkeyRegisterOptions: vi.fn().mockRejectedValue({ code: "passkey.verification_failed" }),
+    });
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]")!.click();
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=skip-passkey]")!.click();
@@ -294,18 +295,6 @@ describe("login-screen", () => {
       rememberEmail: true,
       rememberedEmail: "saved@example.test",
     });
-  });
-
-  it("explains an overlong passkey name before requesting registration", async () => {
-    const { el, api } = await mountPasskeyOffer({ passkeyRegisterOptions: vi.fn() });
-    input(el, "passkey-name", "x".repeat(81));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]")!.click();
-    await flush(el);
-    expect(api.passkeyRegisterOptions).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector("wt-input[name=passkey-name]")?.getAttribute("error")).toBe(
-      t("profile.passkey_name_too_long"),
-    );
-    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   });
 
   it.each([
@@ -415,7 +404,7 @@ describe("login-screen", () => {
     expect((el as unknown as { actionValidated: boolean }).actionValidated).toBe(false);
   });
 
-  it("offers a named passkey after activation and uses the newly set password for registration", async () => {
+  it("offers a passkey after activation and uses the newly set password for registration", async () => {
     history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
     const api = stubApi({
       passkeyRegisterOptions: vi.fn().mockResolvedValue({
@@ -451,7 +440,6 @@ describe("login-screen", () => {
     await flush(el);
     expect(loggedIn).not.toHaveBeenCalled();
     expect(navigator.credentials.create).not.toHaveBeenCalled();
-    input(el, "passkey-name", " Work laptop ");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]")!.click();
     await flush(el);
     expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({
@@ -459,7 +447,6 @@ describe("login-screen", () => {
     });
     expect(api.passkeyRegisterVerify).toHaveBeenCalledWith({
       challengeHandle: "register",
-      name: "Work laptop",
       response: expect.objectContaining({ id: "new-key" }),
     });
     expect(loggedIn).toHaveBeenCalledTimes(1);
@@ -2067,10 +2054,9 @@ describe("login-screen: the passkey offer after sign-in", () => {
     });
   }
 
-  it("adds the passkey when Enter is pressed in its name", async () => {
+  it("adds the passkey from the offer's explicit action", async () => {
     const { el, api } = await offer();
-    input(el, "passkey-name", "Laptop");
-    pressEnter(el, "passkey-name");
+    click(el, "setup-passkey");
     await flush(el);
     expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({
       currentPassword: "correct horse battery",
@@ -2553,15 +2539,6 @@ describe("login-screen: errors at the bottom of the form, not above it", () => {
       message: t("form.factor_required"),
     },
     {
-      name: "passkey offer",
-      open: async () => (await mountPasskeyOffer({ passkeyRegisterOptions: vi.fn(never) })).el,
-      field: "passkey-name",
-      action: "setup-passkey",
-      bad: "x".repeat(81),
-      good: "Laptop",
-      message: t("profile.passkey_name_too_long"),
-    },
-    {
       name: "account setup",
       open: async () => {
         history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
@@ -2667,23 +2644,6 @@ describe("login-screen: errors at the bottom of the form, not above it", () => {
       field: "new-pin",
       action: "complete-account",
       code: "pin.too_short",
-    },
-    {
-      name: "a refused passkey name",
-      open: async () => {
-        const { el } = await mountPasskeyOffer({
-          passkeyRegisterOptions: vi
-            .fn()
-            .mockRejectedValue({ code: "profile.invalid", params: { field: "passkeyName" } }),
-        });
-        input(el, "passkey-name", "Work laptop");
-        click(el, "setup-passkey");
-        await flush(el);
-        return el;
-      },
-      field: "passkey-name",
-      action: "setup-passkey",
-      code: "profile.invalid",
     },
   ];
 
@@ -2802,7 +2762,7 @@ describe("login-screen: errors at the bottom of the form, not above it", () => {
     });
     click(el, "setup-passkey");
     await flush(el);
-    expect(field(el, "passkey-name").error).toBe("");
+    expect(el.shadowRoot!.querySelector("[name=passkey-name]")).toBeNull();
     expect(await bottomOf(el)).toBe(codeMessage("profile.invalid"));
     expect(await nativeDisabled(el, "setup-passkey")).toBe(false);
   });
@@ -4281,3 +4241,12 @@ it.each(["en-GB", "es-ES"])(
     }
   },
 );
+
+it("A403 offers passkey enrollment without asking for a name", async () => {
+  const { el } = await mountPasskeyOffer();
+  expect(el.shadowRoot!.querySelector("wt-input[name=passkey-name]")).toBeNull();
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=setup-passkey]")!
+      .disabled,
+  ).toBe(false);
+});

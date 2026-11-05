@@ -205,7 +205,7 @@ async function registerPasskey(
   app: Hono,
   cookie: string,
   credentialId: string,
-  extra: { aaguid?: string; name?: string } = {},
+  extra: { aaguid?: string; name?: unknown } = {},
 ): Promise<void> {
   const options = await app.request("/management-api/passkey/register/options", {
     method: "POST",
@@ -279,7 +279,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     expect(creds[0]).toMatchObject({
       credential_id: "cred-abc",
       person_id: managerId,
-      name: "Work laptop",
+      name: null,
     });
   });
 
@@ -477,7 +477,7 @@ describe("the profile's passkey list", () => {
     });
     await registerPasskey(app, cookie, "cred-spare", {
       aaguid: "12345678-1234-1234-1234-123456789abc",
-      name: "Spare key",
+      name: "x".repeat(81),
     });
 
     const options = await app.request("/management-api/passkey/auth/options", { method: "POST" });
@@ -501,7 +501,7 @@ describe("the profile's passkey list", () => {
       provider: "Google Password Manager",
     });
     expect(byName.get("Google Password Manager")!.lastUsedAt! >= before).toBe(true);
-    expect(byName.get("Spare key")).toMatchObject({ provider: null, lastUsedAt: null });
+    expect(byName.get(null)).toMatchObject({ provider: null, lastUsedAt: null });
   });
 });
 

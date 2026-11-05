@@ -4557,9 +4557,13 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   open:** not observed in a real password manager — the tests replace the browser's methods.
   [Detail](backlog/dashboard.md#the-browsers-password-manager-is-told-which-passkeys-waitron-still-accepts-c101-948--still-open)
 
-- **A403 — sign-in and passkey fixes (owner, 2026-10-08; open; low priority; not queued — owner
-  2026-10-08: take it from here when a lane has room):**
-  [Detail](backlog/dashboard.md#a403--sign-in-and-passkey-fixes-owner-2026-10-08-open-low-priority-not-queued--owner-2026-10-08-take-it-from-here-when-a-lane-has-room)
+- **Account notification clipping remains unconfirmed:** A403's eight language/theme/width checks
+  did not reproduce the owner's cut-off message. Retain the report until its trigger is identified.
+  [Detail](backlog/dashboard.md#account-notification-clipping-remains-unconfirmed)
+
+- **Passkey name column after A760:** A403 keeps the column under the schema hold; new registrations
+  use the detected password manager. Decide whether to remove it after the hold.
+  [Detail](backlog/dashboard.md#passkey-name-column-after-a760)
 
 - **Review every permission: fewer, coarser, and consistently named**
   [Detail](backlog/dashboard.md#review-every-permission-fewer-coarser-and-consistently-named)

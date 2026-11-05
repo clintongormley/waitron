@@ -268,8 +268,8 @@ it("disconnect clears typed secrets", async () => {
   expect(unload()).toBe(false);
 });
 
-it.each(["name", "code"])(
-  "optional passkey setup with an edited %s signs in on Skip without asking",
+it.each(["empty", "code"])(
+  "optional passkey setup with %s input signs in on Skip without asking",
   async (field) => {
     const { app, screen } = await mount("/manage/", {
       login: async () => ({ personId: "p1", offerPasskey: true }),
@@ -280,14 +280,16 @@ it.each(["name", "code"])(
     await password(screen);
     await change(screen, "password", "synthetic password");
     await click(screen, "submit");
-    await expect.poll(() => screen.shadowRoot!.querySelector("[name=passkey-name]")).not.toBeNull();
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("[data-test=setup-passkey]"))
+      .not.toBeNull();
     if (field === "code") {
       await click(screen, "setup-passkey");
       await expect
         .poll(() => screen.shadowRoot!.querySelector("[name=one-time-code]"))
         .not.toBeNull();
       await change(screen, "one-time-code", "123456");
-    } else await change(screen, "passkey-name", "Synthetic laptop");
+    }
     expect(unload()).toBe(false);
     const results: boolean[] = [];
     screen.addEventListener("logged-in", () => results.push(unload()));
@@ -488,20 +490,20 @@ function registrationApi(seen: Promise<void>, verifies: unknown[]): Partial<Dash
     passkeyOfferSeen: async () => seen,
   } as Partial<DashboardApi>;
 }
-it("a saved passkey name is sent, with no unload warning, before the offer bookkeeping answers", async () => {
+it("a passkey is verified without a name or unload warning before offer bookkeeping answers", async () => {
   const seen = deferred<void>();
   const verifies: unknown[] = [];
   const { screen } = await mount("/manage/", registrationApi(seen.promise, verifies));
   await password(screen);
   await change(screen, "password", "synthetic password");
   await click(screen, "submit");
-  await expect.poll(() => screen.shadowRoot!.querySelector("[name=passkey-name]")).not.toBeNull();
-  await change(screen, "passkey-name", "Synthetic laptop");
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=setup-passkey]"))
+    .not.toBeNull();
   await click(screen, "setup-passkey");
   await expect.poll(() => verifies.length).toBe(1);
-  expect(verifies).toEqual([
-    expect.objectContaining({ name: "Synthetic laptop", challengeHandle: "synthetic" }),
-  ]);
+  expect(verifies).toEqual([expect.objectContaining({ challengeHandle: "synthetic" })]);
+  expect(verifies[0]).not.toHaveProperty("name");
   expect(unload()).toBe(false);
   seen.resolve();
   await expect.poll(() => screen.shadowRoot!.querySelector("[name=password]")).not.toBeNull();
@@ -532,7 +534,7 @@ for (const locale of ["en-GB", "es-ES"])
         expect(unload()).toBe(false);
       });
 
-it("a passkey verified with its submitted name signs in even after the name was changed", async () => {
+it("a verified passkey signs in with no unload warning while its answer is pending", async () => {
   const verify = deferred<{ credentialId: string }>();
   const requests: unknown[] = [];
   const { app, screen } = await mount("/manage/", {
@@ -545,16 +547,18 @@ it("a passkey verified with its submitted name signs in even after the name was 
   await password(screen);
   await change(screen, "password", "synthetic password");
   await click(screen, "submit");
-  await expect.poll(() => screen.shadowRoot!.querySelector("[name=passkey-name]")).not.toBeNull();
-  await change(screen, "passkey-name", "Submitted laptop");
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=setup-passkey]"))
+    .not.toBeNull();
   await click(screen, "setup-passkey");
   await expect.poll(() => requests.length).toBe(1);
-  await change(screen, "passkey-name", "Newer laptop");
+  expect(unload()).toBe(false);
   const results: boolean[] = [];
   screen.addEventListener("logged-in", () => results.push(unload()));
   verify.resolve({ credentialId: "synthetic-key" });
   await expect.poll(() => results).toEqual([false]);
-  expect(requests).toEqual([expect.objectContaining({ name: "Submitted laptop" })]);
+  expect(requests).toEqual([expect.objectContaining({ challengeHandle: "synthetic" })]);
+  expect(requests[0]).not.toHaveProperty("name");
   expect(asked(app)).toBe(false);
 });
 it("a successful autofill passkey sends the authenticated event with no unload warning", async () => {
@@ -592,7 +596,7 @@ it("a successful autofill passkey sends the authenticated event with no unload w
   await expect.poll(() => dirtiness).toEqual([false]);
 });
 
-it.each(["email", "password", "new-password", "new-pin", "one-time-code", "passkey-name"])(
+it.each(["email", "password", "new-password", "new-pin", "one-time-code"])(
   "%s input never installs the unload warning nor holds navigation",
   async (name) => {
     const action = name.startsWith("new-");
@@ -607,7 +611,7 @@ it.each(["email", "password", "new-password", "new-pin", "one-time-code", "passk
     );
     if (!action && name !== "email") {
       await password(screen);
-      if (name === "one-time-code" || name === "passkey-name") {
+      if (name === "one-time-code") {
         await change(screen, "password", "synthetic password");
         await click(screen, "submit");
         await expect.poll(() => screen.shadowRoot!.querySelector(`[name=${name}]`)).not.toBeNull();

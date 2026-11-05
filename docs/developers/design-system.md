@@ -2676,7 +2676,8 @@ form's own checks disable the action; an error that comes back from a request ne
   action quiet and disabled until something changes (enabled at once if it opens already savable),
   and any other form has it enabled unless it waits for a choice, a selection or a load (below).
 
-A form's submit button says Save whether the form creates or edits. "Add …" belongs to the dialog's
+A form's submit button says Save whether the form creates or edits. The Add passkey dialog says Add
+(owner, A403). "Add …" belongs to the dialog's
 title and to the button that opens a create dialog. The owner kept Add on a discovered printer's
 Add, the home shortcut picker and the till's Add bill (owner, 2026-10-12, A546). A546 also kept it,
 without an owner decision, on a discovered card reader's Add, the Add products and Add to menus
@@ -4048,8 +4049,8 @@ asking before sign-in whether an account exists or holds a passkey. Signing in w
 no offer, because the person already holds one, and a Google sign-in ends in a redirect the login
 screen never reads a response from, so it makes none either.
 
-Ask for a recognizable passkey name on the offer screen. When the sign-in that led there used a
-recovery code rather than an authenticator code, ask for a current authenticator code too, before
+When the sign-in that led to the offer used a recovery code rather than an authenticator code,
+ask for a current authenticator code before
 registering anything. Both ways out — adding a passkey and skipping — record that the offer has been
 settled, so it is made once rather than at every sign-in, and both then sign the person in.
 Recording is bookkeeping and never a gate: when it fails, sign the person in anyway, because the
@@ -4061,6 +4062,9 @@ a manual fallback, and enables the factor only after the server accepts a curren
 Every authenticated dashboard banner includes a way to reach **Your profile** — the account menu's
 "Account settings" item — including for staff with their two-page sidebar. Profile edits cannot expose role
 or suspension controls.
+Passkey enrollment asks for no typed name. On Security, the quiet Add passkey action shares the
+Passkeys heading line; an empty-list hint sits beneath it with the row’s bottom padding. Listed
+keys label their added date. The enrollment dialog’s primary action says Add.
 
 ### Empty slots don't reserve space
 
