@@ -33,7 +33,8 @@ const ZERO = decimal("0");
 /**
  * A table's bills, each with a tick for the whole bill and its dishes to tick. It holds no picks of
  * its own: each change is a `split-picks` event with the next selection, and the screen hands it
- * back. A bill someone else's unsent order holds draws that person's row and no dishes.
+ * back. A bill someone else's unsent order holds draws that person's row and no dishes. When a read
+ * takes away the last bill while focus is on it, `split-bills-gone` asks the screen to place focus.
  */
 @customElement("till-split-picker")
 export class TillSplitPicker extends LitElement {
@@ -133,9 +134,24 @@ export class TillSplitPicker extends LitElement {
   override willUpdate(changed: PropertyValues<this>): void {
     if (!changed.has("sources")) return;
     const active = (this.renderRoot as ShadowRoot).activeElement;
-    if (active?.localName !== "till-portion-picker") return;
-    const billId = active.closest<HTMLElement>("[data-split-bill]")?.dataset.splitBill;
-    if (billId !== undefined) void this.focusTakeOver(billId);
+    const billId = active?.closest<HTMLElement>("[data-split-bill]")?.dataset.splitBill;
+    if (billId === undefined) return;
+    const stillDrawn = this.sources.some((source) => source.bill.workingOrderId === billId);
+    if (!stillDrawn) void this.#leaveGoneBill(changed.get("sources") ?? [], billId);
+    else if (active?.localName === "till-portion-picker") void this.focusTakeOver(billId);
+  }
+
+  /** Bills are drawn by position, so focus would otherwise stay on whatever now sits there, a dish of
+   * another bill that a Space would tick, or fall to the page. */
+  async #leaveGoneBill(before: readonly SplitSource[], billId: string): Promise<void> {
+    const position = before.findIndex((source) => source.bill.workingOrderId === billId);
+    const next = this.sources[Math.min(position, this.sources.length - 1)];
+    if (next !== undefined) {
+      await this.focusBill(next.bill.workingOrderId);
+      return;
+    }
+    await this.updateComplete;
+    this.dispatchEvent(new CustomEvent("split-bills-gone", { bubbles: true, composed: true }));
   }
 
   #emit(split: SplitPicks): void {

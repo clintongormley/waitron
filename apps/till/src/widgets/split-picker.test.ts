@@ -374,6 +374,59 @@ describe("till-split-picker", () => {
       .toBe(q(el, '[data-split-take-over="b1"]'));
   });
 
+  describe("a read that takes away the bill holding focus", () => {
+    const two = () => [source("b1", 1, DISHES), source("b2", 2, DISHES)];
+    const active = (el: TillSplitPicker) => el.shadowRoot!.activeElement;
+
+    it("from a dish of the first bill, focus goes to the next bill's tick, not its dish", async () => {
+      const [first, second] = two();
+      const { el } = await picker([first!, second!]);
+      rowTick(el, "b1", "c1").focus();
+      el.sources = [second!];
+      await expect.poll(() => active(el) === header(el, "b2")).toBe(true);
+      expect(inner(el, "b2")!.shadowRoot!.activeElement).toBeNull();
+    });
+
+    it("from the last bill's tick, focus goes to the bill now last", async () => {
+      const [first, second] = two();
+      const { el } = await picker([first!, second!]);
+      header(el, "b2").focus();
+      el.sources = [first!];
+      await expect.poll(() => active(el) === header(el, "b1")).toBe(true);
+    });
+
+    it("to a bill someone else holds, focus goes to its Take over", async () => {
+      const [first] = two();
+      const { el } = await picker([first!, source("b2", 2, DISHES, { held: luis })]);
+      header(el, "b1").focus();
+      el.sources = [source("b2", 2, DISHES, { held: luis })];
+      await expect.poll(() => active(el) === q(el, '[data-split-take-over="b2"]')).toBe(true);
+    });
+
+    it("with no bill left, it says so for the screen to place focus", async () => {
+      const [first] = two();
+      const { el } = await picker([first!]);
+      const seen: Event[] = [];
+      el.addEventListener("split-bills-gone", (event) => seen.push(event));
+      header(el, "b1").focus();
+      el.sources = [];
+      await expect.poll(() => seen.length).toBe(1);
+      expect(seen[0]!.bubbles).toBe(true);
+      expect(seen[0]!.composed).toBe(true);
+    });
+
+    it("with focus elsewhere, nothing moves and nothing is said", async () => {
+      const [first, second] = two();
+      const { el } = await picker([first!, second!]);
+      const seen: Event[] = [];
+      el.addEventListener("split-bills-gone", (event) => seen.push(event));
+      el.sources = [];
+      await el.updateComplete;
+      expect(active(el)).toBeNull();
+      expect(seen).toHaveLength(0);
+    });
+  });
+
   it("a holder with no name draws the unnamed words", async () => {
     const { el } = await picker([source("b1", 1, DISHES, { held: nobody })]);
     expect(billText(el, "b1")).toContain(t("table.others_draft_unnamed"));

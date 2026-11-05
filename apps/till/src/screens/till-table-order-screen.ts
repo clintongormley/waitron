@@ -5615,6 +5615,10 @@ export class TillTableOrderScreen extends LitElement {
                   if (this.splitAsking) this.#leaveSplitQuestion();
                   this.#actionScope?.changed();
                 }}
+                @split-bills-gone=${(event: Event) => {
+                  event.stopPropagation();
+                  this.renderRoot.querySelector<HTMLElement>("[data-split-pick] h2")?.focus();
+                }}
                 @split-take-over=${(event: CustomEvent<SplitTakeOverDetail>) => {
                   event.stopPropagation();
                   if (!this.#actionControlCurrent(event)) return;

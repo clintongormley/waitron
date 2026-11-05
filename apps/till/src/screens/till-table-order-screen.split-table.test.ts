@@ -2976,3 +2976,16 @@ describe("A803 split: a read and a selected bill", () => {
     expect(sent).toHaveLength(1);
   });
 });
+
+describe("Split a table's panel when a read leaves no bill", () => {
+  it("takes focus from the tick that went to the panel's heading", async () => {
+    const el = await mountScreen();
+    await toPanel(el);
+    const tick =
+      splitPicker(el)!.shadowRoot!.querySelector<HTMLInputElement>('[data-split-tick="b1"]')!;
+    tick.focus();
+    el.splitRead = read({}, {});
+    await settled(el);
+    await expect.poll(() => el.shadowRoot!.activeElement?.localName).toBe("h2");
+  });
+});
