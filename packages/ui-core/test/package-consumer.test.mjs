@@ -2,10 +2,22 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtemp, cp, readFile, writeFile, rm, realpath } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+  mkdtemp,
+  mkdir,
+  cp,
+  readFile,
+  writeFile,
+  rm,
+  realpath,
+  readdir,
+  symlink,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import process from "node:process";
+import { URL, fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { test } from "node:test";
 import { build } from "esbuild";
@@ -17,18 +29,90 @@ const root = dirname(import.meta.dirname);
 const command = (args, cwd = root) =>
   run("pnpm", args, { cwd, timeout: 90000, maxBuffer: 4 * 1024 * 1024 });
 
-test("a packed release works in an independent browser consumer", { timeout: 170000 }, async () => {
+const variants = process.env.UI_PACKAGE_TARBALL ? ["registry"] : ["workspace", "registry"];
+for (const variant of variants)
+  test(`a ${variant} release works in an independent browser consumer`, { timeout: 170000 }, () =>
+    verifyPackage(variant),
+  );
+
+async function verifyPackage(variant) {
   const dir = await mkdtemp(join(tmpdir(), "waitron-ui-consumer-"));
   let browser;
   let server;
   try {
     const source = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
-    await command(["pack", "--pack-destination", dir]);
-    const tarball = `waitron-ui-core-${source.version}.tgz`;
+    const checkout = join(root, "../..");
+    const gitEnv = Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+    );
+    const { stdout: currentCommit } = await run("git", ["rev-parse", "HEAD"], {
+      cwd: checkout,
+      env: gitEnv,
+      timeout: 10000,
+    });
+    const expectedCommit = process.env.UI_PACKAGE_SOURCE_COMMIT || currentCommit.trim();
+    const packageName = variant === "registry" ? "@waitron-io/ui-core" : source.name;
+    const tarball =
+      variant === "registry"
+        ? "waitron-io-ui-core-0.2.0.tgz"
+        : `waitron-ui-core-${source.version}.tgz`;
+    if (variant === "workspace") await command(["pack", "--pack-destination", dir]);
+    else if (process.env.UI_PACKAGE_TARBALL)
+      await cp(process.env.UI_PACKAGE_TARBALL, join(dir, tarball));
+    else {
+      const checkout = join(root, "../..");
+      const env = Object.fromEntries(
+        Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+      );
+      const { stdout: commit } = await run("git", ["rev-parse", "HEAD"], {
+        cwd: checkout,
+        env,
+        timeout: 10000,
+      });
+      const stage = join(dir, "stage");
+      await mkdir(stage);
+      await run(
+        process.execPath,
+        [
+          fileURLToPath(new URL("../../../scripts/release/prepare-ui.mjs", import.meta.url)),
+          checkout,
+          stage,
+          "--release-version",
+          "0.2.0",
+          "--source-commit",
+          commit.trim(),
+        ],
+        { env, timeout: 120000, maxBuffer: 4 * 1024 * 1024 },
+      );
+      await cp(join(stage, tarball), join(dir, tarball));
+    }
     const { stdout } = await run("tar", ["-xOf", join(dir, tarball), "package/package.json"], {
       timeout: 10000,
     });
     const packed = JSON.parse(stdout);
+    assert.equal(packed.name, packageName);
+    if (variant === "registry") {
+      assert.match(packed.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+      if (process.env.UI_PACKAGE_RELEASE_VERSION)
+        assert.equal(packed.version, process.env.UI_PACKAGE_RELEASE_VERSION);
+      assert.equal(packed.waitronSource.commit, expectedCommit);
+      assert.deepEqual(packed.repository, {
+        type: "git",
+        url: "https://github.com/waitron-io/waitron-cloud.git",
+      });
+      assert.equal(
+        packed.homepage,
+        `https://github.com/clintongormley/waitron/tree/${expectedCommit}/packages/ui-core`,
+      );
+      assert.deepEqual(packed.publishConfig, {
+        registry: "https://npm.pkg.github.com",
+        access: "restricted",
+      });
+      assert.equal(packed.waitronSource.version, source.version);
+      assert.equal(packed.waitronSource.repository, "clintongormley/waitron");
+      assert.match(packed.waitronSource.commit, /^[a-f0-9]{40}$/);
+      for (const key of ["private", "scripts", "devDependencies"]) assert(!(key in packed));
+    }
     assert.equal(
       packed.exports["."].import,
       "./dist/index.js",
@@ -61,20 +145,29 @@ test("a packed release works in an independent browser consumer", { timeout: 170
       }
     }
     await cp(join(root, "test/consumer"), dir, { recursive: true });
+    if (variant === "registry") {
+      for (const file of ["main.ts", "input-only.ts"]) {
+        const path = join(dir, file);
+        await writeFile(
+          path,
+          (await readFile(path, "utf8")).replaceAll("@waitron/ui-core", packageName),
+        );
+      }
+    }
     const lit = JSON.parse(await readFile(join(root, "node_modules/lit/package.json"), "utf8"));
     await writeFile(
       join(dir, "package.json"),
       JSON.stringify({
         private: true,
         type: "module",
-        dependencies: { "@waitron/ui-core": `file:./${tarball}`, lit: lit.version },
+        dependencies: { [packageName]: `file:./${tarball}`, lit: lit.version },
       }),
     );
     await command(
       ["install", "--ignore-workspace", "--no-frozen-lockfile", "--ignore-scripts"],
       dir,
     );
-    const installed = join(dir, "node_modules/@waitron/ui-core");
+    const installed = join(dir, "node_modules", packageName);
     assert(
       (await realpath(installed)).startsWith(await realpath(dir)),
       "package must not link back to the workspace",
@@ -200,7 +293,7 @@ test("a packed release works in an independent browser consumer", { timeout: 170
       assert.deepEqual(violations, []);
       if (process.env.UI_PACKAGE_SCREENSHOTS)
         await page.screenshot({
-          path: join(process.env.UI_PACKAGE_SCREENSHOTS, `${theme}.png`),
+          path: join(process.env.UI_PACKAGE_SCREENSHOTS, `${variant}-${theme}.png`),
           fullPage: true,
         });
     }
@@ -229,4 +322,47 @@ test("a packed release works in an independent browser consumer", { timeout: 170
       await rm(dir, { recursive: true, force: true });
     }
   }
-});
+}
+
+test(
+  "JavaScript builds have identical bytes in different checkout directories",
+  { timeout: 60000 },
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), "waitron-ui-portable-"));
+    try {
+      const results = [];
+      for (const name of ["first", "second"]) {
+        const checkout = join(directory, name);
+        const destination = join(checkout, "packages/ui-core");
+        await mkdir(join(destination, "scripts"), { recursive: true });
+        for (const file of ["package.json", "tsconfig.json", "scripts/build.mjs"])
+          await cp(join(root, file), join(destination, file));
+        await cp(join(root, "src"), join(destination, "src"), { recursive: true });
+        for (const file of ["tsconfig.base.json", "LICENSE", "LICENSE-GRANTS.md"])
+          await cp(join(root, "../..", file), join(checkout, file));
+        await symlink(join(root, "node_modules"), join(destination, "node_modules"), "dir");
+        await run(process.execPath, ["scripts/build.mjs"], {
+          cwd: destination,
+          timeout: 20000,
+          maxBuffer: 4 * 1024 * 1024,
+        });
+        const files = (await readdir(join(destination, "dist"), { recursive: true }))
+          .filter((file) => file.endsWith(".js"))
+          .sort();
+        const bytes = {};
+        for (const file of files)
+          bytes[file] = createHash("sha512")
+            .update(await readFile(join(destination, "dist", file)))
+            .digest("hex");
+        results.push(bytes);
+      }
+      assert.deepEqual(
+        results[0],
+        results[1],
+        "checkout directory must not affect JavaScript bytes or chunk filenames",
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);

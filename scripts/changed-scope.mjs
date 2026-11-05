@@ -46,6 +46,7 @@ const ROOT_SCOPE_PREFIXES = ["scripts/", ".husky/", ".github/"];
  * script fed from a pipe in ci.yml, is invisible to it.
  */
 export const ROOT_SCOPE_CONSUMERS = new Map([
+  ["scripts/release/prepare-ui.mjs", ["packages/ui-core"]],
   [
     "scripts/run-with-deadline.mjs",
     [
