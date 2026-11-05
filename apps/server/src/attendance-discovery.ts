@@ -1,5 +1,6 @@
 import "./errors.js";
 import { randomUUID } from "node:crypto";
+import { lstat } from "node:fs/promises";
 import { and, asc, eq, sql, type SQL } from "drizzle-orm";
 import { billPayments, readVenueClock, venueLocationId, type Transaction } from "@waitron/db";
 import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
@@ -187,15 +188,54 @@ async function endpoints(tx: Transaction) {
   return result;
 }
 
-/** Call once for each open-store generation; retained SQLite rowids are not restore identities. */
+/**
+ * Check the pre-migration cookie because boot rebuilds change-feed triggers on every start.
+ * File replacement, prior schema changes and new migrations invalidate saved row positions.
+ */
 export async function beginAttendanceDiscovery(
   tx: Transaction,
-  scope: { generation: string },
+  scope: {
+    generation: string;
+    schemaVersionBeforeMigrations?: number;
+    migrationVersions?: Readonly<Record<string, number>>;
+  },
 ): Promise<void> {
   if (!scope.generation)
     throw new AppError("attendance.invalid", { reason: "empty discovery generation" });
   const clock = await readVenueClock(tx);
   const venueId = await venueLocationId(tx);
+  const database = (
+    await tx.execute<{ name: string; file: string }>(sql`pragma database_list`)
+  ).rows.find((row) => row.name === "main")!.file;
+  const file = await lstat(database, { bigint: true });
+  const schemaVersion = (await tx.execute<{ schema_version: number }>(sql`pragma schema_version`))
+    .rows[0]!.schema_version;
+  const identity = [
+    file.dev.toString(),
+    file.ino.toString(),
+    file.birthtimeNs.toString(),
+    Object.entries(scope.migrationVersions ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+  ];
+  const store = JSON.stringify([...identity, schemaVersion]);
+  const previousStore = JSON.stringify([
+    ...identity,
+    scope.schemaVersionBeforeMigrations ?? schemaVersion,
+  ]);
+  const scans = await tx.select().from(attendanceSourceState).where(scanScope(venueId));
+  const saved = scans.find((scan) => scan.source === "rota" && scan.key === "shifts");
+  if (
+    saved?.fingerprint &&
+    (JSON.parse(saved.fingerprint) as { store?: string }).store === previousStore
+  ) {
+    if (store !== previousStore)
+      await tx
+        .update(attendanceSourceState)
+        .set({
+          fingerprint: JSON.stringify({ ...(JSON.parse(saved.fingerprint) as object), store }),
+        })
+        .where(eq(attendanceSourceState.id, saved.id));
+    return;
+  }
   await tx.delete(attendanceSourceState).where(scanScope(venueId));
   for (const endpoint of await endpoints(tx)) {
     await tx.insert(attendanceSourceState).values({
@@ -206,7 +246,9 @@ export async function beginAttendanceDiscovery(
       cursor: 0,
       completed: endpoint.endpoint === 0,
       fingerprint:
-        endpoint.source === "rota" && endpoint.key === "shifts" ? JSON.stringify({ clock }) : null,
+        endpoint.source === "rota" && endpoint.key === "shifts"
+          ? JSON.stringify({ clock, store })
+          : null,
     });
   }
 }
@@ -408,7 +450,11 @@ export async function discoverAttendanceDays(
     JSON.stringify((JSON.parse(rotaScan.fingerprint) as { clock: unknown }).clock) !==
       JSON.stringify(clock)
   ) {
-    const fingerprint = JSON.stringify({ clock, fromAt: scope.now.toISOString() });
+    const fingerprint = JSON.stringify({
+      ...(JSON.parse(rotaScan.fingerprint) as object),
+      clock,
+      fromAt: scope.now.toISOString(),
+    });
     await tx
       .update(attendanceSourceState)
       .set({ cursor: 0, completed: rotaScan.endpoint === 0, fingerprint })
@@ -448,7 +494,10 @@ export async function discoverAttendanceDays(
     const completed = cursor === scan.endpoint;
     const fingerprint =
       completed && scan.source === "rota" && scan.key === "shifts"
-        ? JSON.stringify({ clock })
+        ? JSON.stringify({
+            clock,
+            store: (JSON.parse(scan.fingerprint ?? "{}") as { store?: string }).store,
+          })
         : scan.fingerprint;
     await tx
       .update(attendanceSourceState)

@@ -4946,6 +4946,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   selected person while a proposal is open leaves both Hours suites green. Add a controlled
   summary-removal case that checks the retained subject and blocked draft.
 
+- **Read attendance facts by the requested day.** Narrow the source queries in
+  `apps/server/src/attendance-facts.ts` while preserving late corrections, original request times
+  and pending payment outcomes.
+
 - **Workforce period reads still load complete history.** Narrow them without losing late or
   cross-period corrections; retain the new latest-instant and person-scoped reads. The remaining query paths are in
   [workforce detail](backlog/workforce.md#a10-period-read-cost).

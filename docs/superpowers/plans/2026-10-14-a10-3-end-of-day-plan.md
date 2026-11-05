@@ -1,5 +1,7 @@
 # A10-3: End-of-business-day implementation plan
 
+> **2026-11-05, A1343:** The startup reset rule below is superseded by reuse tied to the database file identity, the pre-migration SQLite schema version and applied migration versions. The restart, interrupted-bootstrap, VACUUM and archive-restore cases live in `apps/server/src/attendance-discovery.test.ts`, `boot.attendance.test.ts` and `attendance-restore.test.ts`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use **superpowers:executing-plans** to implement this plan inline, task by task. Steps use checkboxes. RUNNER requires this separate planning invocation; the driver performs a fresh-context plan review before implementation. Do not dispatch an implementer/reviewer or request human plan approval. This invocation writes only this plan, without commits or campaign-state edits.
 
 **Goal:** Process completed business days, append forgotten finishes when the recorded timeline supports them, discover missing clock records, retain worker questions and attempt one reminder per missing shift through venue email.

@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { sql } from "drizzle-orm";
 import { newId, openVenueDatabase, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -140,6 +141,32 @@ async function restore() {
   return openVenueDatabase(venueDir);
 }
 describe("attendance after restoring database contents", () => {
+  it("rescans a replaced database file even when its schema cookie matches the source", async () => {
+    await settle(suite.db);
+    const sourceSchema = suite.db.execute<{ schema_version: number }>(sql`pragma schema_version`)
+      .rows[0]!.schema_version;
+    const before = await snapshot(suite.db);
+    const restored = await restore();
+    try {
+      expect(Number.isSafeInteger(sourceSchema)).toBe(true);
+      await restored.venue.execute(sql.raw(`pragma schema_version = ${sourceSchema}`));
+      await withTransaction(restored.venue, (tx) =>
+        beginAttendanceDiscovery(tx, { generation: "replaced-same-schema" }),
+      );
+      const scans = (await restored.venue.select().from(attendanceSourceState)).filter(
+        (row) => row.recordKind === "scan",
+      );
+      expect(
+        scans.every((row) => row.generation === "replaced-same-schema" && row.cursor === 0),
+      ).toBe(true);
+      expect(await pass(restored.venue)).toEqual({ processed: false, more: true });
+      await settle(restored.venue);
+      expect(await snapshot(restored.venue)).toEqual(before);
+    } finally {
+      await restored.close();
+    }
+  });
+
   it.each([false, true])(
     "restarts persisted scans and retains exactly one legal finish (previously settled: %s)",
     async (completed) => {

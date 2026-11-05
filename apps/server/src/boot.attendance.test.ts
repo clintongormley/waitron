@@ -105,7 +105,7 @@ for (const enabled of [true, false]) {
     }
     it(
       enabled
-        ? "starts both real duties, catches up, captures a real login and reopens with a new discovery generation"
+        ? "starts both real duties, catches up, captures a real login and reopens with retained discovery progress"
         : "starts neither duty and makes no workforce SQL query on a real login",
       async () => {
         const f = await prepared();
@@ -230,7 +230,7 @@ for (const enabled of [true, false]) {
             const reopened = (await suite.db.select().from(attendanceSourceState)).find(
               (s) => s.recordKind === "scan",
             )!.generation;
-            expect(reopened).not.toBe(generation);
+            expect(reopened).toBe(generation);
             await server.close();
             server = undefined;
             beforeServerStarts();
