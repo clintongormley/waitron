@@ -782,7 +782,7 @@ export const en = {
   "printers.preview_empty": "This job has no printable content.",
   "printers.discovery_hint": "Searching for network, USB and Bluetooth printers.",
   "printers.add_help":
-    "Waitron lists the printers its print agents find. Not listed? Check it is on, or type its address under Check a known address.",
+    "Waitron lists the printers its print agents find. Not listed? Check it is on; for a network printer, type its address under Check a known address.",
   "printers.seen_on": "Seen on",
   "catalogue_settings.default_vat": "VAT class for new products",
   "catalogue_settings.invalid": "Choose a VAT class for new products.",
@@ -4548,7 +4548,7 @@ export const es: Record<StringKey, string> = {
   "printers.preview_empty": "Este trabajo no contiene contenido imprimible.",
   "printers.discovery_hint": "Buscando impresoras de red, USB y Bluetooth.",
   "printers.add_help":
-    "Waitron muestra las impresoras que encuentran sus agentes de impresión. ¿No aparece? Comprueba que esté encendida o escribe su dirección en Comprobar una dirección conocida.",
+    "Waitron muestra las impresoras que encuentran sus agentes de impresión. ¿No aparece? Comprueba que esté encendida; si es de red, escribe su dirección en Comprobar una dirección conocida.",
   "printers.seen_on": "Detectada en",
   "catalogue_settings.default_vat": "Clase de IVA para productos nuevos",
   "catalogue_settings.invalid": "Elige una clase de IVA para productos nuevos.",

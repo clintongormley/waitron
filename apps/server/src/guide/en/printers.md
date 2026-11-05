@@ -8,7 +8,7 @@ you like, and choose **Add** again; calibration opens next. An office printer sh
 printer** instead.
 
 A Bluetooth printer must be in pairing mode first. Choose **Pair and add** beside it, enter its
-PIN, and choose **Add** when it is paired.
+PIN and choose **Pair and add** again. Once it is paired, the name dialog opens: choose **Add**.
 
 If a network printer is not found, open **Check a known address**, type its IP address and choose
 **Connect**.

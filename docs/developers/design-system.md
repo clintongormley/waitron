@@ -3026,7 +3026,8 @@ and nothing guards it across screens:
   `theme-name-dialog.unsaved.test.ts` beside it;
 - A231q: the mail server settings form (`apps/dashboard/src/widgets/email-settings-form.ts`); the
   order detail's invoice email form (`apps/dashboard/src/widgets/invoice-email-dialog.ts`); an office
-  printer's Add (`apps/dashboard/src/widgets/page-printer-add.ts`); the office printers panel's
+  printer's Add (`apps/dashboard/src/widgets/page-printer-add.ts`), which opens already savable when
+discovery found a name; the office printers panel's
   Rename (`apps/dashboard/src/widgets/page-printers-panel.ts`); and the
   till's invoice email form (`apps/till/src/widgets/invoice-email-dialog.ts`). Each has a sibling
   `*.unsaved.test.ts`;
@@ -3089,6 +3090,9 @@ These open already savable:
   filled in from them, and turning them back on is itself the change (`#applyAction` in
   `apps/dashboard/src/screens/backup-screen.ts`);
 - the printers' name dialog (Add, or Enable for a switched-off printer): pressing it is the add;
+- an office printer's Add as A4 printer, when discovery found a name or address: the dialog opens
+  holding it, and pressing Add is the add (`suggestedName` in
+  `apps/dashboard/src/widgets/page-printer-add.ts`); with nothing found it opens quiet;
 - the theme name dialog's Make a copy and Save as new theme…: pressing Save is the copy
   (`savableAtOpen`, `apps/dashboard/src/widgets/theme-name-dialog.ts`);
 - the note dialog's Mark handled: marking the list handled is the action, and the note is optional
@@ -3277,8 +3281,10 @@ render must not replace it while you are answering the question. Route Cancel, c
 an existing backdrop action through `requestClose(reason)`. Native Escape uses the same gate,
 including after a focused control was disabled (a field disabled while its save is sent) and
 Chromium dropped focus to the page body: the most recently opened dialog still open is asked when it
-has a `beforeClose` (`packages/ui/src/components/wt-dialog.test.ts`, "still asks its guard on
-Escape once its focused field is disabled"). The
+has a `beforeClose`, unless the page already handled the key or something Escape reaches first is
+open above it — a popover that is not manual, such as a row menu, or a modal `<dialog>` that is not
+a wt-dialog's (`packages/ui/src/components/wt-dialog.test.ts`, "still asks its guard on Escape once
+its focused field is disabled" and the "page-body Escape" cases). The
 dialog stays open while asking, and a later answer cannot close a different opening. `closeAfter("saved")` and
 `closeAfter("security")` bypass a pending question for a successful write or forced teardown.
 An owner's `open` binding still controls rendering; it is not a user-dismissal path. The floor

@@ -288,9 +288,14 @@ not measured on the box.
 It needs the fixed image on the box first: run
 `docker compose exec print-agent bluetoothctl --timeout 6 scan on`, then
 `docker compose exec print-agent bluetoothctl devices`, and record how many devices are listed
-and where the printer falls among them; then open Add a printer repeatedly, record on which scan
-the printer is first marked, and look for `bluetooth info failed` lines in
-`docker compose logs print-agent`.
+and where the printer falls among them; then unpair the printer, since Add a printer now lists a
+paired Bluetooth device whether or not a scan marked it (A404), open Add a printer repeatedly,
+record on which scan it is first listed without Show all devices, and look for
+`bluetooth info failed` lines in `docker compose logs print-agent`.
+
+A404 (2026-11-05) found that each plain report from the agent dropped the printer mark an earlier
+scan had set, which hid a paired printer between scans; that may also explain this entry (not
+checked on the box).
 
 ## Adding a language to the venue also means adding its printer captions, and a language written outside the Latin letters means widening the font table
 
@@ -587,10 +592,8 @@ only the app keeps from deletion; no trigger protects it either.
 
 ## Seen while looking at every modal at 1024px, not changed
 
-- **Seen while looking at every modal at 1024px, not changed:** the printers screen's list of
-  discovered printers keeps its details column capped (`min(28vw, 24dvh)`), so the details wrap
-  while half the row stands empty; and the till's option picker, 1024px wide on a 1280px screen,
-  puts each price far from its name (which adds to the "prices are not a column" item in the till
+- **Seen while looking at every modal at 1024px, not changed:** the till's option picker, 1024px
+  wide on a 1280px screen, puts each price far from its name (which adds to the "prices are not a column" item in the till
   layout pass, under A4). _2026-10-05 (W70): the picker is now the standard size, 672px wide at 1280._
 
 ## A drawer kick for a USB printer that is not connected waits with no expiry
@@ -706,6 +709,11 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   (`packages/layouts/src/theme-configuration.ts`); a receipt is not.
 
 ## Decisions and deliberate limits
+
+- **Add a printer lists every Bluetooth device its agent reports paired (A404, 2026-11-05).** The
+  owner asked that a paired printer stay listed. The paired report is everything
+  `bluetoothctl devices Paired` prints on the agent's machine, so a paired keyboard or headphones
+  on an agent's own computer shows too, with Add.
 
 - **The guest count is `guestCount` (A988, 2026-10-27).** A party's or a receipt's number of
   guests is `guestCount` in every till request and in the `sale_receipt_guests` drizzle
@@ -902,6 +910,9 @@ construct a friendly computer name from a printer label. See the
   failure but still says "Add a printer first.", because the shared query code does not say which
   read failed; and Cancel in that window clears the
   screen's message without putting back a read failure that is still standing (read, not run).
+  Add a printer's discovered list says "No printers found. Check that the printer is on and
+  connected, then scan again." after a failed read, beside the dialog's refresh-failed message
+  (read, not run).
 
 ## Loose ends left by C107 (#974)
 

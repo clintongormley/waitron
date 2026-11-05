@@ -207,7 +207,7 @@ text; "removed" deletes the key from both catalogues.
 | 1 | `printers.scan_empty` | new | No printers found yet. Still searching… | Aún no se ha encontrado ninguna impresora. Seguimos buscando… |
 | 1 | `printers.no_discovered` | changed | No printers found. Check that the printer is on and connected, then scan again. | No se ha encontrado ninguna impresora. Comprueba que esté encendida y conectada, y vuelve a buscar. |
 | 8 | `printers.bluetooth_pair_note` | changed | A Bluetooth printer must be in pairing mode before you add it. | Una impresora Bluetooth debe estar en modo de emparejamiento antes de añadirla. |
-| guide | `printers.add_help` | new | Waitron lists the printers its print agents find. Not listed? Check it is on, or type its address under Check a known address. | Waitron muestra las impresoras que encuentran sus agentes de impresión. ¿No aparece? Comprueba que esté encendida o escribe su dirección en Comprobar una dirección conocida. |
+| guide | `printers.add_help` | new | Waitron lists the printers its print agents find. Not listed? Check it is on; for a network printer, type its address under Check a known address. | Waitron muestra las impresoras que encuentran sus agentes de impresión. ¿No aparece? Comprueba que esté encendida; si es de red, escribe su dirección en Comprobar una dirección conocida. |
 | 2 | `printers.ruler_print` | changed | Print width test | Imprimir prueba de ancho |
 | 2 | `printers.resolution_hint` | changed | Print the width test. Choose the last number you can see in full on the ruler, and measure the QR code’s black square without its white border. You do not need to scan it. | Imprime la prueba de ancho. Elige el último número de la regla que se ve entero y mide el cuadrado negro del código QR sin su borde blanco. No hace falta escanearlo. |
 | 2 | `printers.qr_square` | new | QR code’s black square | Cuadrado negro del código QR |
@@ -560,7 +560,7 @@ PR 2:
   printer** instead.
 
   A Bluetooth printer must be in pairing mode first. Choose **Pair and add** beside it, enter its
-  PIN, and choose **Add** when it is paired.
+  PIN and choose **Pair and add** again. Once it is paired, the name dialog opens: choose **Add**.
 
   If a network printer is not found, open **Check a known address**, type its IP address and choose
   **Connect**.
@@ -579,7 +579,8 @@ PR 2:
   oficina muestra en su lugar **Añadir como impresora A4**.
 
   Una impresora Bluetooth debe estar antes en modo de emparejamiento. Elige **Emparejar y añadir**
-  junto a ella, introduce su PIN y elige **Añadir** cuando esté emparejada.
+  junto a ella, introduce su PIN y vuelve a elegir **Emparejar y añadir**. Cuando esté emparejada, se
+  abre el diálogo del nombre: elige **Añadir**.
 
   Si no aparece una impresora de red, abre **Comprobar una dirección conocida**, escribe su dirección
   IP y elige **Conectar**.
