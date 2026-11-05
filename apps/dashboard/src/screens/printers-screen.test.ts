@@ -5983,6 +5983,16 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     expect(q(el, "[data-test=printer-row-p1]")).not.toBeNull();
   });
 
+  it("shows a failed list load once, on the page, while no printer's details are open", async () => {
+    const api = stubApi({
+      listPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    expect(el.shadowRoot!.querySelectorAll("[data-test=printer-refresh-error]")).toHaveLength(1);
+    expect(q(el, "[data-test=printer-details-modal] [data-test=printer-refresh-error]")).toBeNull();
+  });
+
   it("clears a failed refresh's message once the server answers again", async () => {
     const api = Object.assign(stubApi(), { liveData: new LiveData() });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });

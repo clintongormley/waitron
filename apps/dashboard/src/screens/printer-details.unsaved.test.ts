@@ -245,6 +245,27 @@ for (const owner of ["name", "host"] as const) {
   });
 }
 
+it("a save whose refresh fails shows the failed read and its retry inside the details window", async () => {
+  let reads = 0;
+  const { screen } = await mount({
+    listPrinters: async () => {
+      if (++reads === 1) return [printer];
+      throw { code: "connection.failed" };
+    },
+  });
+  await open(screen);
+  change(screen, "name", "New kitchen");
+  saveDetailsEdit(screen);
+  await expect.poll(() => reads).toBe(2);
+  await expect
+    .poll(() => q(screen, "[data-test=printer-details-body] [data-test=printer-refresh-error]"))
+    .not.toBeNull();
+  expect(screen.shadowRoot!.querySelectorAll("[data-test=printer-refresh-error]")).toHaveLength(1);
+  expect(
+    q(screen, "[data-test=printer-details-body] [data-test=refresh-printer-lists]"),
+  ).not.toBeNull();
+});
+
 it("a save whose refresh fails keeps both fields' newer input dirty", async () => {
   let finish!: () => void;
   let reads = 0;
@@ -303,6 +324,39 @@ it("a Save whose draft a live change has made equal to the printer sends nothing
   expect(sent).toBe(0);
   expect(unload()).toBe(false);
 });
+
+for (const owner of ["name", "host"] as const) {
+  const other = owner === "name" ? "host" : "name";
+  it(`a ${owner}-only Save keeps the ${other} another session changed while the form was open`, async () => {
+    const liveData = new LiveData();
+    let current: Printer = printer;
+    let reads = 0;
+    let submitted: unknown;
+    const { screen } = await mount({
+      liveData,
+      listPrinters: async () => {
+        reads++;
+        return [current];
+      },
+      updatePrinter: async (_id, body) => {
+        submitted = body;
+      },
+    } as Partial<DashboardApi>);
+    await open(screen);
+    change(screen, owner, owner === "name" ? "New kitchen" : "10.0.0.88");
+    current =
+      owner === "name" ? { ...printer, host: "10.0.0.77" } : { ...printer, name: "Remote name" };
+    const before = reads;
+    liveData.invalidate([{ type: "printers", id: "p1" }]);
+    await expect.poll(() => reads).toBeGreaterThan(before);
+    await screen.updateComplete;
+    saveDetailsEdit(screen);
+    await expect.poll(() => submitted).not.toBeUndefined();
+    expect(submitted).toEqual(
+      owner === "name" ? { name: "New kitchen" } : { host: "10.0.0.88", port: 9100 },
+    );
+  });
+}
 
 for (const owner of ["name", "host"] as const) {
   for (const route of ["close", "back", "navigation"] as const) {

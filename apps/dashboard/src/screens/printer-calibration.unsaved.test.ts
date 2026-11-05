@@ -3,6 +3,7 @@ import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, registerIcons, type WtModal } from "@waitron/ui";
 import type { DashboardApi, Printer } from "../api/client.js";
+import { LiveData } from "@waitron/dashboard-kit";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -255,6 +256,22 @@ it("calibration success commits before a refused refresh", async () => {
   expect(unload()).toBe(false);
   expect(modal(screen)).toBeNull();
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+});
+it("a failed read while calibration is open over the details window shows once, in calibration", async () => {
+  const liveData = new LiveData();
+  let reads = 0;
+  const { screen } = await mount({
+    liveData,
+    listPrinters: async () => {
+      if (++reads > 1) throw { code: "connection.failed" };
+      return [printer, other];
+    },
+  } as Partial<DashboardApi>);
+  liveData.invalidate([{ type: "printers", id: "p1" }]);
+  await expect
+    .poll(() => q(screen, "[data-test=edit-printer-modal] [data-test=printer-refresh-error]"))
+    .not.toBeNull();
+  expect(screen.shadowRoot!.querySelectorAll("[data-test=printer-refresh-error]")).toHaveLength(1);
 });
 it("a refused calibration save preserves settings and warning", async () => {
   const { app, screen } = await mount({
