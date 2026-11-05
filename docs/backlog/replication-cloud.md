@@ -621,8 +621,10 @@ and cloud operations. See [documentation ownership](../cloud-ownership.md).
 Build approved;
 exact D560 G1 mapping accepted for isolated planning only.
 Full appliance/host acceptance, approval/provisioning/PP consumers, signed corpus
-and E's matching D136 routing record remain open. E's next execution step is
-**BLOCKED on G7 real-host evidence: Docker/bench with the owner, 3 November 2026**.
+and E's matching D136 routing record remain open. Docker is available. The
+[5 November host evidence](../operations/a951-host-evidence.md) records preliminary
+socket/confinement probes and the actual test-box profile. Reconcile the proposed
+Ubuntu 24.04 target with that box's Ubuntu 26.04 before native host qualification.
 Admission CLOSED; other scoped gates remain.
 
 All five cuts of the [plan](../superpowers/plans/2026-10-22-a951-connection.md)
@@ -644,8 +646,11 @@ Keep the remaining work separate:
   separate from helper replay and observation/custody progress. Stops win over
   prepared commits and late opens. Intact reboot, damaged-state recovery and
   reconnect after a local stop keep their separate authenticated requirements.
-- **G7 real host, E:** the next A951 execution step remains **BLOCKED on
-  Docker/bench with the owner on 3 November 2026**. Obtain populated exact
+- **G7 real host, E:** the Docker availability wait has ended. Mac Docker Desktop
+  is an isolated fixture, outside the proposed native host profile. The existing
+  x86_64/systemd/AppArmor test box runs Ubuntu 26.04, whereas the immutable proposal
+  names 24.04; return an explicit engineering successor rather than silently
+  accepting it or reinstalling the box. Obtain populated exact
   host/build/image/profile/unit/mount pins, GUARD16's complete bounded inventory,
   protected-store/participant evidence and network/listener-custody measurements.
   Qualify full-budget closure, crash/stop races and suspension separately.

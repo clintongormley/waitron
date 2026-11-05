@@ -6023,8 +6023,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   integration (2026-09-24; #638, #808).
 
 - **A951. The box's lasting tunnel and public-certificate client.** Build approved;
-  exact D560 G1 mapping accepted for isolated planning only. E's next execution step is
-  **BLOCKED on G7 real-host evidence: Docker/bench with the owner, 3 November 2026**.
+  exact D560 G1 mapping accepted for isolated planning only. Docker is available;
+  preliminary socket/confinement probes ran on 5 November. Reconcile the proposed
+  Ubuntu 24.04 host profile with the existing Ubuntu 26.04 test box, then complete
+  native custody, G1 consumers and the remaining qualification gates.
+  [Host evidence and next steps](operations/a951-host-evidence.md).
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
 - **Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side
