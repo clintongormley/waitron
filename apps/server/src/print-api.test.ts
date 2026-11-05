@@ -4358,6 +4358,23 @@ describe("Bluetooth Pair and Forget commands", () => {
     expect(row).not.toHaveProperty("paired");
   });
 
+  it("drops the paired report's printer answer once that report is no longer fresh", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const mac = randomMac();
+    const start = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(start);
+    await pull(app, token, { pairedBluetooth: [{ localKey: mac, printerLike: true }] });
+    vi.spyOn(Date, "now").mockReturnValue(start + 10_000);
+    await pull(app, token, { scanned: [scannedMac(mac)] });
+
+    vi.spyOn(Date, "now").mockReturnValue(start + 15_001);
+    const row = (await discoveredRows(app)).find((r) => r.localKey === mac);
+    expect(row).toBeDefined();
+    expect(row).not.toHaveProperty("paired");
+    expect(row).not.toHaveProperty("printerLike");
+  });
+
   it("keeps printerLike only when the agent sent exactly true", async () => {
     const app = mountApp();
     const { token } = await joinAndAccept(app);

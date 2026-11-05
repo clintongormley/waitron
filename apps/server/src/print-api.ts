@@ -1014,7 +1014,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             office,
             // The page-printer POST reads only the named agent's own report (findPagePrinterDiscovery).
             officeLent: office !== e.office ? (true as const) : undefined,
-            printerLike: address === undefined ? undefined : (e.printerLike ?? e.pairedPrinterLike),
+            printerLike:
+              address === undefined
+                ? undefined
+                : (e.printerLike ?? (isListed(e.pairedAt, now) ? e.pairedPrinterLike : undefined)),
             paired:
               address !== undefined && isListed(e.pairedAt, now) ? (true as const) : undefined,
             bluetoothCommand:

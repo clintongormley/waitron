@@ -1,7 +1,7 @@
 import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import type { BluetoothHost } from "./bluetooth.js";
+import { type BluetoothHost, createBluetoothctlHost } from "./bluetooth.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DiscoveredDevice, WireJob } from "@waitron/print-agent";
 import {
@@ -357,6 +357,95 @@ describe("createLinuxDevices — pairedBluetooth()", () => {
     expect(await devices.pairedBluetooth()).toStrictEqual([
       { localKey: "5A:4A:45:D4:FB:BB", name: "BlueTooth Printer" },
     ]);
+  });
+
+  it("logs why telling their kind failed", async () => {
+    const warn = vi.fn();
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      log: { info: vi.fn(), warn, error: vi.fn() },
+      bluetooth: fakeBluetooth({
+        paired: async () => [{ mac: "5A:4A:45:D4:FB:BB" }],
+        printerKinds: async () => {
+          throw new Error("no answer");
+        },
+      }),
+    });
+    await devices.pairedBluetooth();
+    expect(warn).toHaveBeenCalledExactlyOnceWith("paired bluetooth kinds failed", {
+      error: "no answer",
+    });
+  });
+
+  // The listing and the wait for kinds share one deadline; a clock that stepped back leaves the
+  // whole deadline, never more.
+  it.each([
+    ["a listing that took 2 seconds", 2_000, 1_000],
+    ["a listing that took the whole deadline", 3_000, 0],
+    ["a listing that outran it", 3_500, 0],
+    ["a clock that stepped back", -60_000, 3_000],
+  ])(
+    "waits for kinds only for what the listing left of the deadline (%s)",
+    async (_case, listingTook, waited) => {
+      let clock = 0;
+      const waits: number[] = [];
+      const devices = createLinuxDevices({
+        sysfsRoot: root,
+        now: () => clock,
+        bluetoothListTimeoutMs: 3_000,
+        bluetooth: fakeBluetooth({
+          paired: async () => {
+            clock += listingTook;
+            return [{ mac: "5A:4A:45:D4:FB:BB" }];
+          },
+          printerKinds: async (_macs, waitMs) => {
+            waits.push(waitMs);
+            return new Map();
+          },
+        }),
+      });
+      await devices.pairedBluetooth();
+      expect(waits).toStrictEqual([waited]);
+    },
+  );
+
+  it("answers within one listing deadline when `info` hangs, and carries its late answer in the next report", async () => {
+    vi.useFakeTimers();
+    try {
+      const OWNER = "5A:4A:45:D4:FB:BB";
+      let answer!: (text: string) => void;
+      const run = vi.fn(async (args: string[]) => {
+        if (args[0] === "devices") {
+          await new Promise((resolve) => setTimeout(resolve, 2_000));
+          return `Device ${OWNER} BlueTooth Printer\n`;
+        }
+        return new Promise<string>((resolve) => {
+          answer = resolve;
+        });
+      });
+      const devices = createLinuxDevices({
+        sysfsRoot: root,
+        bluetoothListTimeoutMs: 3_000,
+        bluetooth: createBluetoothctlHost({ run, listTimeoutMs: 3_000 }),
+      });
+      let first: unknown;
+      void devices.pairedBluetooth().then((report) => {
+        first = report;
+      });
+      await vi.advanceTimersByTimeAsync(2_999);
+      expect(first).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(first).toStrictEqual([{ localKey: OWNER, name: "BlueTooth Printer" }]);
+      answer("Device 5A:4A:45:D4:FB:BB (public)\n\tIcon: printer\n");
+      const second = devices.pairedBluetooth();
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(await second).toStrictEqual([
+        { localKey: OWNER, name: "BlueTooth Printer", printerLike: true },
+      ]);
+      expect(run.mock.calls.filter(([args]) => args[0] === "info")).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("throws when the listing fails, and records the Bluetooth side as unavailable", async () => {

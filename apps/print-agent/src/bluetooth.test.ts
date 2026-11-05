@@ -186,6 +186,17 @@ describe("parseBluetoothctlInfo", () => {
     ).toStrictEqual({});
   });
 
+  it("says when an answer carries no icon, class or profile to judge by", () => {
+    expect(parseBluetoothctlInfo(info("Paired: yes", "ServicesResolved: no"))).toStrictEqual({
+      unclassified: true,
+    });
+    // Present but unreadable is no better than absent.
+    expect(
+      parseBluetoothctlInfo(info("Icon:", "Class: not-a-number", "UUID: Serial Port")),
+    ).toStrictEqual({ unclassified: true });
+    expect(parseBluetoothctlInfo(info("Class: 0x00000000 (0)"))).toStrictEqual({});
+  });
+
   it("reads coloured, CR-terminated lines and ignores malformed ones", () => {
     const text =
       "\x1b[0;94mDevice 11:22:33:44:55:66\x1b[0m (public)\r\n" +
@@ -562,6 +573,8 @@ describe("createBluetoothctlHost — printerKinds() tells paired printers from o
   );
   const infoCalls = (run: ReturnType<typeof vi.fn<Run>>) =>
     run.mock.calls.filter(([args]) => args[0] === "info");
+  // Longer than any fake here takes.
+  const WAIT = 60_000;
 
   it("asks `info` once for each paired device, under the listing's deadline, and remembers the answer", async () => {
     const run = vi.fn<Run>(async (args) => (args[1] === OWNER ? OWNER_PRINTER_INFO : HEADSET_INFO));
@@ -570,8 +583,8 @@ describe("createBluetoothctlHost — printerKinds() tells paired printers from o
       [OWNER, true],
       [HEADSET, false],
     ]);
-    expect(await host.printerKinds([OWNER, HEADSET])).toStrictEqual(expected);
-    expect(await host.printerKinds([OWNER, HEADSET])).toStrictEqual(expected);
+    expect(await host.printerKinds([OWNER, HEADSET], WAIT)).toStrictEqual(expected);
+    expect(await host.printerKinds([OWNER, HEADSET], WAIT)).toStrictEqual(expected);
     expect(infoCalls(run)).toStrictEqual([
       [["info", OWNER], { timeoutMs: 3_000 }],
       [["info", HEADSET], { timeoutMs: 3_000 }],
@@ -588,7 +601,7 @@ describe("createBluetoothctlHost — printerKinds() tells paired printers from o
     const host = createBluetoothctlHost({ run });
     await host.scan();
     run.mockClear();
-    expect(await host.printerKinds([OWNER, HEADSET])).toStrictEqual(
+    expect(await host.printerKinds([OWNER, HEADSET], WAIT)).toStrictEqual(
       new Map([
         [OWNER, true],
         [HEADSET, false],
@@ -607,8 +620,8 @@ describe("createBluetoothctlHost — printerKinds() tells paired printers from o
       return OWNER_PRINTER_INFO;
     });
     const host = createBluetoothctlHost({ run, log });
-    expect(await host.printerKinds([OWNER])).toStrictEqual(new Map());
-    expect(await host.printerKinds([OWNER])).toStrictEqual(new Map());
+    expect(await host.printerKinds([OWNER], WAIT)).toStrictEqual(new Map());
+    expect(await host.printerKinds([OWNER], WAIT)).toStrictEqual(new Map());
     expect(infoCalls(run)).toHaveLength(1);
     expect(log.warn).toHaveBeenCalledExactlyOnceWith("bluetooth info failed", {
       address: OWNER,
@@ -616,7 +629,7 @@ describe("createBluetoothctlHost — printerKinds() tells paired printers from o
     });
     fail = false;
     await host.scan();
-    expect(await host.printerKinds([OWNER])).toStrictEqual(new Map([[OWNER, true]]));
+    expect(await host.printerKinds([OWNER], WAIT)).toStrictEqual(new Map([[OWNER, true]]));
   });
 
   it("asks about at most as many devices at once as a scan does", async () => {
@@ -626,8 +639,145 @@ describe("createBluetoothctlHost — printerKinds() tells paired printers from o
     );
     const run = vi.fn<Run>(async () => HEADSET_INFO);
     const host = createBluetoothctlHost({ run });
-    expect((await host.printerKinds(many)).size).toBe(MAX_BLUETOOTH_INFO_DEVICES);
-    expect((await host.printerKinds(many)).size).toBe(10);
+    expect((await host.printerKinds(many, WAIT)).size).toBe(MAX_BLUETOOTH_INFO_DEVICES);
+    expect((await host.printerKinds(many, WAIT)).size).toBe(10);
+  });
+});
+
+describe("createBluetoothctlHost — printerKinds() and scan() share their `info` requests", () => {
+  const OWNER = "5A:4A:45:D4:FB:BB";
+  const infoCalls = (run: ReturnType<typeof vi.fn<Run>>) =>
+    run.mock.calls.filter(([args]) => args[0] === "info");
+  const WAIT = 60_000;
+  const listing = (macs: string[]) =>
+    macs.map((m) => `Device ${m} Thing ${m.slice(-2)}`).join("\n");
+  const macrotask = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("never runs more than eight `info` at once between them, nor two of one address", async () => {
+    const paired = Array.from({ length: 8 }, (_, i) => `AA:BB:CC:DD:E1:0${i}`);
+    const others = ["AA:BB:CC:DD:E2:01", "AA:BB:CC:DD:E2:02"];
+    const held: Array<() => void> = [];
+    const running = new Map<string, number>();
+    let peak = 0;
+    let sameAddressTwice = false;
+    const run = vi.fn<Run>((args) => {
+      if (args.includes("scan")) return Promise.resolve("");
+      // The scan's own addresses come first, so it would start them if the slots were its own.
+      if (args[0] === "devices") return Promise.resolve(listing([...others, ...paired]));
+      const mac = args[1]!;
+      if ((running.get(mac) ?? 0) > 0) sameAddressTwice = true;
+      running.set(mac, (running.get(mac) ?? 0) + 1);
+      peak = Math.max(
+        peak,
+        [...running.values()].reduce((a, b) => a + b, 0),
+      );
+      return new Promise<string>((resolve) =>
+        held.push(() => {
+          running.set(mac, running.get(mac)! - 1);
+          resolve(info("Icon: phone"));
+        }),
+      );
+    });
+    const host = createBluetoothctlHost({ run });
+    const kinds = host.printerKinds(paired, WAIT);
+    await vi.waitFor(() => expect(held).toHaveLength(8));
+    const scanning = host.scan();
+    await vi.waitFor(() => expect(run).toHaveBeenCalledWith(["devices"]));
+    await macrotask();
+    for (const release of held) release();
+    expect((await scanning).map((d) => d.localKey)).toStrictEqual([...others, ...paired]);
+    expect((await kinds).size).toBe(8);
+    expect(peak).toBe(8);
+    expect(sameAddressTwice).toBe(false);
+    expect(infoCalls(run)).toHaveLength(8);
+  });
+
+  it("does not let a paired report's late failure undo a scan's answer: the scan waits for the `info` already running", async () => {
+    let first: ReturnType<typeof deferred> | undefined;
+    const run = vi.fn<Run>((args) => {
+      if (args.includes("scan")) return Promise.resolve("");
+      if (args[0] === "devices") return Promise.resolve(`Device ${OWNER} BlueTooth Printer\n`);
+      if (first === undefined) {
+        first = deferred();
+        return first.promise;
+      }
+      return Promise.resolve(OWNER_PRINTER_INFO);
+    });
+    const host = createBluetoothctlHost({ run });
+    const kinds = host.printerKinds([OWNER], WAIT);
+    const scanning = host.scan();
+    await vi.waitFor(() => expect(run).toHaveBeenCalledWith(["devices"]));
+    await macrotask();
+    expect(infoCalls(run)).toHaveLength(1);
+    first!.reject(new Error("killed"));
+    expect(await kinds).toStrictEqual(new Map());
+    expect((await scanning)[0]?.printerLike).toBeUndefined();
+    expect(await host.printerKinds([OWNER], WAIT)).toStrictEqual(new Map());
+    expect((await host.scan())[0]?.printerLike).toBe(true);
+    expect(await host.printerKinds([OWNER], WAIT)).toStrictEqual(new Map([[OWNER, true]]));
+    expect(infoCalls(run)).toHaveLength(2);
+  });
+
+  it("waits for answers only as long as it is told, and gives a late answer to the next report", async () => {
+    vi.useFakeTimers();
+    try {
+      const held = deferred();
+      const run = vi.fn<Run>(() => held.promise);
+      const host = createBluetoothctlHost({ run, listTimeoutMs: 3_000 });
+      let kinds: Map<string, boolean> | undefined;
+      void host.printerKinds([OWNER], 1_000).then((k) => {
+        kinds = k;
+      });
+      await vi.advanceTimersByTimeAsync(999);
+      expect(kinds).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(kinds).toStrictEqual(new Map());
+      held.resolve(OWNER_PRINTER_INFO);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await host.printerKinds([OWNER], 0)).toStrictEqual(new Map([[OWNER, true]]));
+      expect(infoCalls(run)).toStrictEqual([[["info", OWNER], { timeoutMs: 3_000 }]]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not wait at all with no time left, but still asks", async () => {
+    const held = deferred();
+    const run = vi.fn<Run>(() => held.promise);
+    const host = createBluetoothctlHost({ run });
+    expect(await host.printerKinds([OWNER], 0)).toStrictEqual(new Map());
+    expect(infoCalls(run)).toHaveLength(1);
+    held.resolve(OWNER_PRINTER_INFO);
+  });
+
+  it("leaves out a device whose answer has nothing to judge by, and leaves asking again to a scan", async () => {
+    const HEADSET = "AA:BB:CC:DD:EE:01";
+    const BARE = "AA:BB:CC:DD:EE:02";
+    let bare = info("Paired: yes", "ServicesResolved: no");
+    const run = vi.fn<Run>(async (args) => {
+      if (args.includes("scan")) return "";
+      if (args[0] === "devices") return listing([OWNER, HEADSET, BARE]);
+      if (args[1] === OWNER) return OWNER_PRINTER_INFO;
+      if (args[1] === HEADSET) return info("Class: 0x00240404 (2360324)", "Icon: audio-headset");
+      return bare;
+    });
+    const host = createBluetoothctlHost({ run });
+    const told = new Map([
+      [OWNER, true],
+      [HEADSET, false],
+    ]);
+    expect(await host.printerKinds([OWNER, HEADSET, BARE], WAIT)).toStrictEqual(told);
+    expect(await host.printerKinds([OWNER, HEADSET, BARE], WAIT)).toStrictEqual(told);
+    expect(infoCalls(run).filter(([args]) => args[1] === BARE)).toHaveLength(1);
+    expect((await host.scan()).find((d) => d.localKey === BARE)).toStrictEqual({
+      transport: "bluetooth",
+      localKey: BARE,
+      name: "Thing 02",
+    });
+    expect(infoCalls(run).filter(([args]) => args[1] === BARE)).toHaveLength(2);
+    bare = info("Icon: printer");
+    await host.scan();
+    expect(await host.printerKinds([BARE], WAIT)).toStrictEqual(new Map([[BARE, true]]));
   });
 });
 
