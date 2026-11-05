@@ -429,22 +429,22 @@ const HOST_FAILED_LINE = '{"ok":false,"reason":"host_failed"}\n';
  */
 export async function handleHostRequest(line, adapters) {
   try {
-    if (
-      !exactRecord(adapters, ADAPTER_NAMES) ||
-      !ADAPTER_NAMES.every((name) => typeof adapters[name] === "function")
-    ) {
+    const keys = Reflect.ownKeys(/** @type {object} */ (adapters));
+    if (keys.length !== ADAPTER_NAMES.length || !ADAPTER_NAMES.every((name) => keys.includes(name)))
       return HOST_FAILED_LINE;
-    }
+    // Read once and called without `this`, so what runs is what was checked.
+    /** @type {Record<string, unknown>} */
+    const table = Object.fromEntries(ADAPTER_NAMES.map((name) => [name, adapters[name]]));
+    if (!ADAPTER_NAMES.every((name) => typeof table[name] === "function")) return HOST_FAILED_LINE;
+    const { log, ...requestAdapters } = /** @type {HostAdapters} */ (table);
     const parsed = parseHostRequest(line);
     if (!parsed.ok) return `${asciiJson(parsed)}\n`;
     const { verb, fields, actor } = parsed.request;
     const permission = actor.source === "person" ? VERB_PERMISSION[verb] : null;
     // Awaited first, so no change happens that the log did not record.
-    await adapters.log(Object.freeze({ verb, actor, permission }));
-    const name = VERB_ADAPTER[verb];
-    const answer = await (FIELD_KEYS[verb].length === 0
-      ? adapters[name]()
-      : adapters[name](fields));
+    await log(Object.freeze({ verb, actor, permission }));
+    const run = requestAdapters[VERB_ADAPTER[verb]];
+    const answer = await (FIELD_KEYS[verb].length === 0 ? run() : run(fields));
     const copy = JSON.parse(JSON.stringify(answer));
     if (copy?.ok === false && !REPLY_REFUSALS[verb].includes(copy.reason)) return HOST_FAILED_LINE;
     return formatHostReply(verb, copy);

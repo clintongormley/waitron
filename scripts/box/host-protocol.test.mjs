@@ -1768,3 +1768,100 @@ describe("the canary password", () => {
     expectNoCanary(answer);
   });
 });
+
+describe("handleHostRequest reads each adapter once and calls the one it checked", () => {
+  it("calls the original networkJoin when log replaces it on the adapters object", async () => {
+    /** @type {unknown[]} */
+    const stolen = [];
+    const replacement = vi.fn((fields) => {
+      stolen.push(fields.psk);
+      return { ok: true };
+    });
+    /** @type {ReturnType<typeof fakeAdapters>} */
+    let fake;
+    fake = fakeAdapters({
+      log: () => {
+        fake.adapters.networkJoin = replacement;
+      },
+    });
+    const original = fake.adapters.networkJoin;
+    expect(await handleHostRequest(CANARY_LINE, fake.adapters)).toBe('{"ok":true}\n');
+    expect(original).toHaveBeenCalledTimes(1);
+    expect(replacement).not.toHaveBeenCalled();
+    expect(stolen).toEqual([]);
+  });
+
+  it("does not hand log the adapters object as this", async () => {
+    /** @type {unknown[]} */
+    const stolen = [];
+    const { adapters } = fakeAdapters();
+    const original = adapters.networkJoin;
+    adapters.log = function () {
+      if (this) {
+        this.networkJoin = (fields) => {
+          stolen.push(fields.psk);
+          return { ok: true };
+        };
+      }
+    };
+    expect(await handleHostRequest(CANARY_LINE, adapters)).toBe('{"ok":true}\n');
+    expect(original).toHaveBeenCalledTimes(1);
+    expect(stolen).toEqual([]);
+  });
+
+  it("reads each adapter exactly once", async () => {
+    const { adapters } = fakeAdapters();
+    /** @type {Record<string, number>} */
+    const reads = {};
+    const counted = {};
+    for (const name of ADAPTER_NAMES) {
+      reads[name] = 0;
+      Object.defineProperty(counted, name, {
+        enumerable: true,
+        get: () => {
+          reads[name] += 1;
+          return adapters[name];
+        },
+      });
+    }
+    expect(await handleHostRequest(CANARY_LINE, /** @type {any} */ (counted))).toBe(
+      '{"ok":true}\n',
+    );
+    expect(reads).toEqual(Object.fromEntries(ADAPTER_NAMES.map((name) => [name, 1])));
+  });
+
+  it.each([
+    [
+      "a hidden log beside an extra key",
+      () => {
+        const fake = fakeAdapters();
+        const { log } = fake.adapters;
+        delete fake.adapters.log;
+        Object.defineProperty(fake.adapters, "log", { enumerable: false, value: log });
+        fake.adapters.clockSet = vi.fn();
+        return fake;
+      },
+    ],
+    [
+      "an extra symbol key",
+      () => {
+        const fake = fakeAdapters();
+        fake.adapters[Symbol("clockSet")] = vi.fn();
+        return fake;
+      },
+    ],
+  ])("answers host_failed for %s and calls nothing", async (_name, make) => {
+    const { adapters, calls } = make();
+    expect(await handleHostRequest(READ_LINE, /** @type {any} */ (adapters))).toBe(HOST_FAILED);
+    expect(calls).toEqual([]);
+  });
+
+  it("answers host_failed for a refusal carrying an extra key, without the canary", async () => {
+    const { adapters } = fakeAdapters({
+      networkJoin: () => ({ ok: false, reason: "busy", psk: CANARY }),
+    });
+    const answer = await handleHostRequest(CANARY_LINE, adapters);
+    expect(answer).toBe(HOST_FAILED);
+    expectNoCanary(answer);
+  });
+});
