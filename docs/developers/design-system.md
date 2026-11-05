@@ -3300,7 +3300,8 @@ with `render(copy)` and resolve that same coordinator from a connected descendan
 `leaveCoordinatorFor(element)`; the request crosses shadow roots and stops at the nearest shell.
 Dispose each form scope when its owner leaves. The controller disposes its registry on shell
 disconnect and creates a new one on reconnect. Call its `forceReset()` for a forced security exit;
-that call also tolerates a shell whose teardown has already run.
+that call also tolerates a shell whose teardown has already run. `isAsking()` says whether a leave
+question is on screen, for code about to change something that question covers.
 
 For an action that leaves every registered editor, call
 `coordinator.request({ scopes: "all", reason, proceed })`. Keep editing preserves every selected

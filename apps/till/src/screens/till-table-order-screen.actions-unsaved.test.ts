@@ -5,7 +5,11 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { PartyBill, TableParty, TabLine, TableState } from "../api/client.js";
 import "./till-table-order-screen.js";
-import type { TillTableOrderScreen } from "./till-table-order-screen.js";
+import type {
+  SplitRefusal,
+  SplitRefusalDeclinedDetail,
+  TillTableOrderScreen,
+} from "./till-table-order-screen.js";
 
 const party: TableParty = {
   kitchenNote: { scope: { partyId: "party" }, note: null, revision: 0, ownerRevision: 0 },
@@ -744,4 +748,142 @@ it("A803 move dishes unsaved: Move releases the protection before it sends", asy
   ]);
   expect(app.protectionAtSubmit).toEqual([false]);
   expect((await question(app)).open).toBe(false);
+});
+
+const lateRefusal: SplitRefusal = {
+  tableId: "t2",
+  selection: { wholeBillIds: ["other"], loose: [] },
+  staying: "2",
+  leaving: "1",
+  message: "Refused",
+};
+function declinedOn(screen: TillTableOrderScreen) {
+  const told: SplitRefusalDeclinedDetail[] = [];
+  screen.addEventListener("split-refusal-declined", (event) =>
+    told.push((event as CustomEvent<SplitRefusalDeclinedDetail>).detail),
+  );
+  return told;
+}
+async function refuseLate(screen: TillTableOrderScreen) {
+  screen.splitRefusal = lateRefusal;
+  await screen.updateComplete;
+}
+const splitPanelOpen = (screen: TillTableOrderScreen) =>
+  screen.shadowRoot!.querySelector("[data-split-pick]") !== null;
+
+it("A803 late refusal: Move dishes holding a pick stays, with the pick, and the app is told it was declined", async () => {
+  const { app, screen } = await mount("move-dishes");
+  const told = declinedOn(screen);
+  await pickDish(screen);
+
+  await refuseLate(screen);
+
+  expect(moveOpen(screen)).toBe(true);
+  expect(splitPanelOpen(screen)).toBe(false);
+  expect(movePicks(screen)).toEqual(new Set(["line-1"]));
+  expect(unload()).toBe(true);
+  expect((await question(app)).open).toBe(false);
+  expect(told).toEqual([{ refusal: lateRefusal }]);
+  expect(told[0]!.refusal).toBe(lateRefusal);
+
+  await click(screen, "[data-action-back]");
+  await answer(app, "keep");
+  expect(moveOpen(screen)).toBe(true);
+  expect(movePicks(screen)).toEqual(new Set(["line-1"]));
+  expect(told).toHaveLength(1);
+});
+it("A803 late refusal: a destination chosen on Move dishes is work too", async () => {
+  const { screen } = await mount("move-dishes");
+  const told = declinedOn(screen);
+  await click(screen, '[data-move-dishes-to="other"]');
+
+  await refuseLate(screen);
+
+  expect(splitPanelOpen(screen)).toBe(false);
+  expect(pressedTo(screen)).toEqual(["other"]);
+  expect(told).toHaveLength(1);
+});
+it("A803 late refusal: Move dishes' leave question stays open, and Discard still answers it", async () => {
+  const { app, screen } = await mount("move-dishes");
+  const told = declinedOn(screen);
+  await pickDish(screen);
+  await click(screen, "[data-action-back]");
+  const asked = await question(app);
+  expect(asked.open).toBe(true);
+
+  await refuseLate(screen);
+  await app.updateComplete;
+
+  expect(asked.open).toBe(true);
+  expect(splitPanelOpen(screen)).toBe(false);
+  expect(moveOpen(screen)).toBe(true);
+  expect(movePicks(screen)).toEqual(new Set(["line-1"]));
+  expect(told).toEqual([{ refusal: lateRefusal }]);
+
+  await answer(app, "discard");
+  await expect.poll(() => moveOpen(screen)).toBe(false);
+  expect(splitPanelOpen(screen)).toBe(false);
+});
+it("A803 late refusal: a question another part of the till opened stays open over an untouched step", async () => {
+  const { app, screen } = await mount("move-dishes");
+  const told = declinedOn(screen);
+  const elsewhere = app.leave.coordinator.register<string>({
+    id: {},
+    current: () => "typed",
+    snapshot: (value) => value,
+    equal: () => false,
+    restore() {},
+  });
+  const leaving = app.leave.coordinator.request({
+    scopes: "all",
+    reason: "navigation",
+    proceed() {},
+  });
+  const asked = await question(app);
+  expect(asked.open).toBe(true);
+
+  await refuseLate(screen);
+  await app.updateComplete;
+
+  expect(asked.open).toBe(true);
+  expect(splitPanelOpen(screen)).toBe(false);
+  expect(moveOpen(screen)).toBe(true);
+  expect(told).toEqual([{ refusal: lateRefusal }]);
+
+  await answer(app, "keep");
+  expect(await leaving).toBe("kept");
+  elsewhere.dispose();
+});
+it.each([
+  ["Move dishes opened and left untouched", "move-dishes", false],
+  ["Move dishes with its only pick taken back", "move-dishes", true],
+  ["the bill picker of Merge bills", "merge", false],
+] as const)(
+  "A803 late refusal: %s gives way to the panel",
+  async (_name, verb, pickedThenUnpicked) => {
+    const { app, screen } = await mount(verb);
+    const told = declinedOn(screen);
+    if (pickedThenUnpicked) {
+      await pickDish(screen);
+      await pickDish(screen);
+    }
+
+    await refuseLate(screen);
+
+    expect(splitPanelOpen(screen)).toBe(true);
+    expect(moveOpen(screen)).toBe(false);
+    expect(told).toEqual([]);
+    expect((await question(app)).open).toBe(false);
+  },
+);
+it("A803 late refusal: with no step open the panel reopens and nothing is declined", async () => {
+  const { el: app } = await mountWidget<ActionsLeaveApp>("actions-leave-test-app", {});
+  const screen = app.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+  await screen.updateComplete;
+  const told = declinedOn(screen);
+
+  await refuseLate(screen);
+
+  expect(splitPanelOpen(screen)).toBe(true);
+  expect(told).toEqual([]);
 });

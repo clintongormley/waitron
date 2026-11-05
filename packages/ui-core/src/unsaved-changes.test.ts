@@ -29,6 +29,54 @@ it("an already aborted leave neither asks nor restores or continues", async () =
   expect(d.restored).toEqual([]);
 });
 
+it("isAsking is true only while a question waits for its answer", async () => {
+  const f = fixture();
+  const d = draft(f.coordinator, "saved");
+  expect(f.coordinator.isAsking()).toBe(false);
+
+  let during: boolean | undefined;
+  const clean = f.coordinator.request({
+    scopes: [d.id],
+    reason: "navigation",
+    proceed: () => {
+      during = f.coordinator.isAsking();
+    },
+  });
+  expect(during).toBe(false);
+  await clean;
+
+  d.set("edited");
+  f.defer();
+  let proceeding: boolean | undefined;
+  const asked = f.coordinator.request({
+    scopes: [d.id],
+    reason: "navigation",
+    proceed: () => {
+      proceeding = f.coordinator.isAsking();
+    },
+  });
+  expect(f.coordinator.isAsking()).toBe(true);
+
+  f.answer("discard");
+  expect(await asked).toBe("proceeded");
+  expect(proceeding).toBe(false);
+  expect(f.coordinator.isAsking()).toBe(false);
+
+  d.set("edited");
+  f.defer();
+  const controller = new AbortController();
+  const abandoned = f.coordinator.request({
+    scopes: [d.id],
+    reason: "navigation",
+    signal: controller.signal,
+    proceed() {},
+  });
+  expect(f.coordinator.isAsking()).toBe(true);
+  controller.abort();
+  expect(await abandoned).toBe("stale");
+  expect(f.coordinator.isAsking()).toBe(false);
+});
+
 it("an abandoned navigation aborts its question without restoring the draft", async () => {
   const f = fixture();
   const d = draft(f.coordinator, "saved");

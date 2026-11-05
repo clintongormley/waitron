@@ -309,6 +309,12 @@ export type SplitRefusal = {
   | { selection: SplitSelection; field?: undefined; message: string | TemplateResult }
 );
 
+/** `split-refusal-declined`: the panel did not reopen because the waiter has other work open, so
+ * nothing on screen has said the refusal and the app says it on its banner. */
+export interface SplitRefusalDeclinedDetail {
+  refusal: SplitRefusal;
+}
+
 interface DraftMoveOpening {
   scope: string;
   groups: string;
@@ -328,6 +334,18 @@ function sameBillPicks(a: ReadonlyMap<string, Picks>, b: ReadonlyMap<string, Pic
       const other = b.get(id);
       return other !== undefined && samePicks(picks, other);
     })
+  );
+}
+
+function sameActionDraft(a: ActionDraft, b: ActionDraft): boolean {
+  return (
+    a.tableId === b.tableId &&
+    a.moveTo === b.moveTo &&
+    samePicks(a.picks, b.picks) &&
+    samePicks(a.whole, b.whole) &&
+    sameBillPicks(a.billPicks, b.billPicks) &&
+    sameGuestCount(a.staying, b.staying) &&
+    sameGuestCount(a.leaving, b.leaving)
   );
 }
 
@@ -1428,6 +1446,8 @@ export class TillTableOrderScreen extends LitElement {
   #splitObserved: string | null = "";
   /** The last read this panel saw answer: a later failed read keeps its rows. */
   #splitAnswered?: SplitSources;
+  /** A refusal the panel did not reopen for, until the app can be told. */
+  #splitDeclined?: SplitRefusal;
   #splitRows?: { inputs: SplitInputs; sources: SplitSource[] };
   @state() private moveDishesPicks: Picks = new Set();
   /** Where Move dishes… sends the picks: a bill's id, null for a new bill, undefined while none is
@@ -1508,14 +1528,7 @@ export class TillTableOrderScreen extends LitElement {
         whole: new Set(value.whole),
         billPicks: new Map(value.billPicks),
       }),
-      equal: (a, b) =>
-        a.tableId === b.tableId &&
-        a.moveTo === b.moveTo &&
-        samePicks(a.picks, b.picks) &&
-        samePicks(a.whole, b.whole) &&
-        sameBillPicks(a.billPicks, b.billPicks) &&
-        sameGuestCount(a.staying, b.staying) &&
-        sameGuestCount(a.leaving, b.leaving),
+      equal: sameActionDraft,
       restore: (value) => {
         this.splitTableId = value.tableId;
         this.moveDishesPicks = new Set(value.picks);
@@ -2209,6 +2222,7 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchAutomaticRouting();
     this.#sizeDraftBar();
     this.#observeSplit();
+    this.#tellSplitDeclined();
     if (!this.#offerTaken) return;
     this.#offerTaken = false;
     const offered = this.#offeredCancel;
@@ -5252,17 +5266,34 @@ export class TillTableOrderScreen extends LitElement {
       "selection" in refusal &&
       !partySwitched &&
       this.#splitPanelHolds(refusal.tableId)
-    )
-      this.#reopenSplitPick(refusal);
+    ) {
+      if (this.#actionsHoldWork()) this.#splitDeclined = refusal;
+      else this.#reopenSplitPick(refusal);
+    }
     this.#tidySplit();
+  }
+
+  /** Read directly from the baseline, since a screen out of the page has no scope to ask. A question
+   * is checked anywhere in the till: replacing this step's scope would close one covering it. */
+  #actionsHoldWork(): boolean {
+    const baseline = this.#actionBaseline;
+    return (
+      (baseline !== undefined && !sameActionDraft(baseline, this.#actionPayload())) ||
+      leaveCoordinatorFor(this)?.isAsking() === true
+    );
+  }
+
+  /** Dispatched only in the page, so the app hears it however long the screen was out. */
+  #tellSplitDeclined(): void {
+    const refusal = this.#splitDeclined;
+    if (refusal === undefined || !this.isConnected) return;
+    this.#splitDeclined = undefined;
+    this.#dispatch("split-refusal-declined", { refusal } satisfies SplitRefusalDeclinedDetail);
   }
 
   /** Unsaved work is measured from a panel opened afresh, so what comes back is protected. */
   #reopenSplitPick(refusal: Extract<SplitRefusal, { selection: SplitSelection }>): void {
-    this.#retireActions();
-    this.#resetSplitPick();
-    this.#relocationPrompt = null;
-    this.actionVerb = null;
+    this.#closeActions();
     this.actionStep = "split-table-pick";
     this.splitTableId = refusal.tableId;
     this.splitPicks = {
@@ -5301,7 +5332,12 @@ export class TillTableOrderScreen extends LitElement {
       ]),
     );
     const { split } = tidySplit(before, sources, picks);
-    if (this.splitAsking && !nothingStays(sources, split)) this.#leaveSplitQuestion();
+    if (this.splitAsking && !nothingStays(sources, split)) {
+      const active = (this.renderRoot as ShadowRoot).activeElement;
+      this.#leaveSplitQuestion();
+      if (active?.matches("[data-split-move-guests], [data-split-anyway]"))
+        void this.#focusOnceDrawn("[data-split-confirm]");
+    }
     if (samePicks(split.whole, picks.whole) && sameBillPicks(split.picks, picks.picks)) return;
     this.splitPicks = split;
     this.#actionScope?.changed();
@@ -5524,6 +5560,7 @@ export class TillTableOrderScreen extends LitElement {
                   data-split-anyway
                   slot="secondary"
                   variant="secondary"
+                  ?disabled=${countsBad}
                   @click=${(event: Event) => void this.#confirmSplitPick(event, true)}
                 >
                   ${t("table.split_anyway")}
@@ -5553,7 +5590,7 @@ export class TillTableOrderScreen extends LitElement {
       anywayNote(sources, this.splitPicks, this.#anyBillPaid()) === "paid"
         ? t("table.split_anyway_note_paid")
         : t("table.split_anyway_note");
-    return html`<div class="split-lines">
+    return html`<div class="split-lines" role="alert">
       <p class="split-summary" data-split-question>
         ${fill(t("table.split_nothing_stays"), { kept, table: leaving })}
       </p>
@@ -5593,7 +5630,6 @@ export class TillTableOrderScreen extends LitElement {
     const staying = parseGuestCount(this.splitStaying);
     const leaving = parseGuestCount(this.splitLeaving);
     if (staying === undefined || leaving === undefined) {
-      if (this.splitAsking) this.#leaveSplitQuestion();
       await this.updateComplete;
       const section = this.renderRoot.querySelector("[data-split-pick]");
       if (section !== null) await focusFirstInvalid(section);

@@ -792,9 +792,9 @@ describe("Split a table's panel", () => {
 
     await pickDish(el, "b1", "soup");
 
-    expect(textOf(el, "[data-split-new-bill-note]")).toBe(
-      "Los platos sueltos van en una cuenta nueva en T8.",
-    );
+    const note = fill(t("table.split_new_bill_note", "es-ES"), { table: "T8" });
+    expect(note).not.toBe(fill(t("table.split_new_bill_note", "en-GB"), { table: "T8" }));
+    expect(textOf(el, "[data-split-new-bill-note]")).toBe(note);
   });
 
   it.each([
@@ -1192,6 +1192,17 @@ const ticked = (el: TillTableOrderScreen) => splitPicker(el)!.split;
 const refusalLine = (el: TillTableOrderScreen) => q(el, "[data-split-refusal]");
 const inPanel = (el: TillTableOrderScreen) => q(el, "[data-action-panel]") !== null;
 
+/** What a token comes to on a `property` under the screen, for comparing a computed style with. */
+function resolved(el: TillTableOrderScreen, property: "color" | "marginTop", token: string) {
+  const probe = document.createElement("span");
+  probe.style.display = "block";
+  probe.style[property] = `var(${token})`;
+  el.shadowRoot!.append(probe);
+  const value = getComputedStyle(probe)[property];
+  probe.remove();
+  return value;
+}
+
 /** The screen's focus, read through its shadow root. */
 const focused = (el: TillTableOrderScreen) => el.shadowRoot!.activeElement as HTMLElement | null;
 
@@ -1219,6 +1230,42 @@ describe("A803 split: a re-read", () => {
       .shadowRoot!.querySelector('[data-split-bill="b1"] till-portion-picker')!
       .shadowRoot!.querySelector('[data-pick-row="salad"]')!;
     expect(salad.textContent).toContain(t("bill_pay.paid"));
+  });
+
+  it("a re-read: two of four picked, one paid elsewhere, two are still picked", async () => {
+    const beer = (id: string, lineNo: number) =>
+      dish(id, lineNo, "5.00", { name: "Beer", productId: "beer", menuItemId: "offer-beer" });
+    const rows = [
+      beer("c1", 1),
+      beer("c2", 2),
+      beer("c3", 3),
+      beer("c4", 4),
+      dish("tea", 5, "5.00"),
+    ];
+    const el = await mountScreen({
+      bills: [partyBill("b1", 1, "25.00")],
+      splitRead: read({ b1: rows }, { b1: "25.00" }),
+    });
+    await toPanel(el);
+    await pickDish(el, "b1", "c1");
+    const fewer = () =>
+      splitPicker(el)!
+        .shadowRoot!.querySelector('[data-split-bill="b1"] till-portion-picker')!
+        .shadowRoot!.querySelector<HTMLElement>('[data-pick-dec="c1"]')!;
+    fewer().click();
+    await settled(el);
+    fewer().click();
+    await settled(el);
+    expect([...ticked(el).picks.get("b1")!].sort()).toEqual(["c1", "c2"]);
+
+    el.splitRead = read(
+      { b1: rows },
+      { b1: "25.00" },
+      { b1: { received: "5.00", paidLines: [{ lineId: "c1", lineNo: 1, paidQuantity: "1.000" }] } },
+    );
+    await settled(el);
+
+    expect([...ticked(el).picks.get("b1")!].sort()).toEqual(["c2", "c3"]);
   });
 
   it.each([
@@ -1338,7 +1385,7 @@ describe("A803 split: what the app observes", () => {
     expect(seen).toHaveLength(3);
   });
 
-  it("observe: a refusal reopening the panel fires, even for the set last observed", async () => {
+  it("observe: a refusal reopening the panel fires, with the prompt and what came back", async () => {
     const { el, seen, prompt } = await opened();
     await tickBill(el, "b3");
     await typeCount(el, "leaving", "2");
@@ -1354,6 +1401,31 @@ describe("A803 split: what the app observes", () => {
     expect(seen).toHaveLength(2);
     expect(seen[1]).toEqual({ prompt, billIds: ["b3"] });
     expect(seen[1]!.prompt).toBe(prompt);
+  });
+
+  it("observe: a refusal reopening the panel with nothing ticked fires, even for the set last observed", async () => {
+    const { el, seen, prompt } = await opened();
+    await typeCount(el, "leaving", "2");
+    split(el).click();
+    await settled(el);
+    expect(inPanel(el)).toBe(false);
+    expect(seen).toEqual([]);
+
+    await refuse(el, reopenedAt({ selection: { wholeBillIds: [], loose: [] }, prompt }));
+
+    expect(seen).toEqual([{ prompt, billIds: [] }]);
+  });
+
+  it("observe: a refusal reopening the panel with no prompt tells the app nothing", async () => {
+    const { el, seen } = await opened();
+    await typeCount(el, "leaving", "2");
+    split(el).click();
+    await settled(el);
+
+    await refuse(el, reopenedAt());
+
+    expect(inPanel(el)).toBe(true);
+    expect(seen).toEqual([]);
   });
 
   it("observe: a count change does not fire", async () => {
@@ -1493,6 +1565,10 @@ describe("A803 split: reopening with a refusal", () => {
     expect(getComputedStyle(action).display).toBe("block");
     expect(getComputedStyle(part).display).toBe("block");
     expect(getComputedStyle(action).borderTopStyle).toBe("none");
+    expect(getComputedStyle(refusalLine(el)!).color).toBe(
+      resolved(el, "color", "--wt-color-danger"),
+    );
+    expect(getComputedStyle(action).marginTop).toBe(resolved(el, "marginTop", "--wt-space-2"));
   });
 
   it("reopen: a bill a re-read took away before the panel came back has lost its tick", async () => {
@@ -1541,6 +1617,28 @@ describe("A803 split: reopening with a refusal", () => {
   it("reopen: a screen drawn afresh does not reopen for a refusal the app still holds", async () => {
     const el = await mountScreen({ splitRefusal: reopenedAt() });
     expect(inPanel(el)).toBe(false);
+  });
+
+  it("reopen: a Move guests the app is still delaying sends nothing once the panel has reopened", async () => {
+    const el = await mountScreen();
+    let ready: (() => void) | undefined;
+    el.addEventListener("table-relocation-open", (event) => {
+      event.preventDefault();
+      ready = (event as CustomEvent<{ ready: () => void }>).detail.ready;
+    });
+    const moved = heard(el, "move-guests");
+    await click(el, "[data-move-split]");
+    await click(el, '[data-action="move"]');
+    await click(el, '[data-target="t8"]');
+    expect(ready).toBeDefined();
+
+    await refuse(el, reopenedAt());
+    expect(q(el, "[data-split-pick]")).not.toBeNull();
+    ready!();
+    await settled(el);
+
+    expect(moved).toEqual([]);
+    expect(q(el, "[data-split-pick]")).not.toBeNull();
   });
 
   it("reopen: the panel takes focus when a refusal brings it back", async () => {
@@ -1632,13 +1730,16 @@ describe("A803 split: Everything ticked", () => {
     const { el } = await everythingTicked();
     split(el).click();
     await settled(el);
-    expect(textOf(el, "[data-split-question]")).toBe(
-      "No quedaría nada en T7. ¿Mover los clientes a T8?",
+    const names = { kept: "T7", table: "T8" };
+    const inSpanish = (key: Parameters<typeof t>[0]) => fill(t(key, "es-ES"), names);
+    for (const key of ["table.split_nothing_stays", "table.split_anyway_note"] as const)
+      expect(inSpanish(key)).not.toBe(fill(t(key, "en-GB"), names));
+    expect(t("table.split_anyway", "es-ES")).not.toBe(t("table.split_anyway", "en-GB"));
+    expect(textOf(el, "[data-split-question]")).toBe(inSpanish("table.split_nothing_stays"));
+    expect(textOf(el, "[data-split-anyway-note]")).toBe(inSpanish("table.split_anyway_note"));
+    expect(q(el, "[data-split-anyway]")!.textContent!.trim()).toBe(
+      t("table.split_anyway", "es-ES"),
     );
-    expect(textOf(el, "[data-split-anyway-note]")).toBe(
-      "Separar igualmente deja T7 con una cuenta vacía.",
-    );
-    expect(q(el, "[data-split-anyway]")!.textContent!.trim()).toBe("Separar igualmente");
   });
 
   it("Everything ticked: the paid note's Spanish words", async () => {
@@ -1646,9 +1747,9 @@ describe("A803 split: Everything ticked", () => {
     const { el } = await paidStays();
     split(el).click();
     await settled(el);
-    expect(textOf(el, "[data-split-anyway-note]")).toBe(
-      "Separar igualmente deja T7 sin nada que pagar.",
-    );
+    const note = fill(t("table.split_anyway_note_paid", "es-ES"), { kept: "T7" });
+    expect(note).not.toBe(fill(t("table.split_anyway_note_paid", "en-GB"), { kept: "T7" }));
+    expect(textOf(el, "[data-split-anyway-note]")).toBe(note);
   });
 
   async function paidStays() {
@@ -1736,18 +1837,27 @@ describe("A803 split: Everything ticked", () => {
     expect(inPanel(el)).toBe(false);
   });
 
-  it("Everything ticked: a count made bad under the question stops Split anyway, marked, back at Split", async () => {
+  it("Everything ticked: a count made bad under the question disables Split anyway, marked, until it is fixed", async () => {
     const { el, sent } = await everythingTicked();
     split(el).click();
     await settled(el);
+    const anyway = () => q<HTMLElement & { disabled: boolean }>(el, "[data-split-anyway]")!;
+    expect(anyway().disabled).toBe(false);
+
     await typeCount(el, "leaving", "abc");
 
-    q(el, "[data-split-anyway]")!.click();
-    await settled(el);
-
-    expect(sent).toEqual([]);
-    expect(q(el, "[data-split-question]")).toBeNull();
+    expect(anyway().disabled).toBe(true);
     expect(stepper(el, "leaving").error).toBe(t("seat.guest_count_invalid"));
+    expect(bottom(el).error).toBe(t("form.fix_fields"));
+    expect(q(el, "[data-split-question]")).not.toBeNull();
+    expect(sent).toEqual([]);
+
+    await typeCount(el, "leaving", "2");
+
+    expect(anyway().disabled).toBe(false);
+    anyway().click();
+    await settled(el);
+    expect(sent).toHaveLength(1);
   });
 
   it("Everything ticked: Enter from a stepper under the question sends nothing and moves no one", async () => {
@@ -1799,6 +1909,52 @@ describe("A803 split: Everything ticked", () => {
 
     expect(q(el, "[data-split-question]")).toBeNull();
     expect(sent).toEqual([]);
+  });
+
+  it("Everything ticked: focus goes to Split when a read takes the question and its button away", async () => {
+    const { el } = await everythingTicked();
+    split(el).click();
+    await settled(el);
+    expect(focused(el)?.matches("[data-split-move-guests]")).toBe(true);
+
+    el.bills = [...board08.bills, partyBill("b4", 4, "10.00")];
+    el.splitRead = {
+      bills: [
+        ...board08.splitRead.bills,
+        ...read({ b4: [dish("tea", 7, "10.00")] }, { b4: "10.00" }).bills,
+      ],
+    };
+    await settled(el);
+
+    await expect.poll(() => focused(el)?.matches("[data-split-confirm]")).toBe(true);
+  });
+
+  it("Everything ticked: a read leaving the question does not take focus from elsewhere", async () => {
+    const { el } = await everythingTicked();
+    split(el).click();
+    await settled(el);
+    nativeInput(el, "leaving").focus();
+
+    el.bills = [...board08.bills, partyBill("b4", 4, "10.00")];
+    el.splitRead = {
+      bills: [
+        ...board08.splitRead.bills,
+        ...read({ b4: [dish("tea", 7, "10.00")] }, { b4: "10.00" }).bills,
+      ],
+    };
+    await settled(el);
+
+    expect(q(el, "[data-split-question]")).toBeNull();
+    expect(focused(el)?.matches("wt-number-stepper")).toBe(true);
+  });
+
+  it("Everything ticked: the question and its note are announced", async () => {
+    const { el } = await everythingTicked();
+    split(el).click();
+    await settled(el);
+    const announced = q(el, "[data-split-question]")!.closest('[role="alert"]')!;
+    expect(announced).not.toBeNull();
+    expect(announced.contains(q(el, "[data-split-anyway-note]"))).toBe(true);
   });
 
   it.each([
