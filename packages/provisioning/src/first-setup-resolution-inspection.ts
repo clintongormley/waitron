@@ -133,7 +133,7 @@ export function createFirstSetupResolutionInspection(
     async recheckEmptyDatabase(roots: FirstSetupRoots, requiredSets: readonly string[]) {
       const inspected = await inspectDatabase(
         roots,
-        await artifact(roots.venueDir, "venue.db", Infinity, false, false),
+        await artifact(roots.venueDir, "venue.db", 128 * 1024 * 1024, false),
         options.migrationsRoot ?? null,
         [...(options.expectedMigrationSets ?? []), ...requiredSets],
       );
@@ -366,7 +366,11 @@ export function createFirstSetupResolutionInspection(
         password: repair == null ? ("uncheckable" as const) : ("checkable" as const),
         revision: repair?.state.revision ?? null,
         ownerGeneration: repair?.state.ownerGeneration ?? null,
-        repairEligible: pair === "repairable" && emptyDatabase && noOtherEvidence,
+        repairEligible:
+          pair === "repairable" &&
+          emptyDatabase &&
+          noOtherEvidence &&
+          artifacts.some((entry) => entry.name === "venue.db" && entry.status === "present"),
         artifacts,
       };
       return {

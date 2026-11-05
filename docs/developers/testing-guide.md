@@ -2972,6 +2972,18 @@ Without the ordering change, the comparison reports `venue.db-wal` changing from
 of an empty file. Sample the files after the inspection connection closes; keep the snapshot,
 password and exact-commit checks.
 
+## Match file-read probes against physical paths
+
+Resolve a temporary root with `realpath` before comparing intercepted filesystem paths. On macOS,
+`tmpdir()` can return `/var/folders/...` while setup opens the same file through
+`/private/var/folders/...`. A string comparison against the unresolved spelling misses that read.
+
+Measured in A1334's disposable control: restoring only the old full-inspection startup path made
+the unresolved-path growth test pass. The same startup code with a physically resolved fixture
+failed with four forbidden `readFile` calls. The corrected startup passed the resolved-path test.
+The executable regression is `apps/server/src/first-setup-growth.test.ts`; the paired control
+logs remain in Lane F's A1334 receipts.
+
 ## Pin release metadata beside a built command's fixed clock
 
 A child command fixed to yesterday can refuse today's build before reaching the behavior you want

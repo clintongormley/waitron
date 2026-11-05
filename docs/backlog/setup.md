@@ -700,7 +700,8 @@ whole-file reads are separate work:
 
 - `packages/provisioning/src/first-setup-resolution-inspection.ts` fingerprints `venue.db` and its
   WAL for the repair inspection and captures originals with `readFile`. Each database artifact is
-  capped at 128 MiB. The resolution archive in `first-setup-resolution.ts` also caps total original
+  capped at 128 MiB. The unused `recheckEmptyDatabase` reader also retains its whole-file
+  128 MiB check. The resolution archive in `first-setup-resolution.ts` also caps total original
   bytes at 128 MiB. Keep content-change detection and the archive's validation when replacing
   those buffers. A1159's Start again work remains open.
 - `packages/provisioning/src/first-setup-start-again-deletion.ts` (`sha256`) reads whole files for
@@ -712,6 +713,17 @@ whole-file reads are separate work:
   collect an archive of up to 512 MiB in memory (`cloud-recovery.ts`). Setup recovery uploads buffer
   archives within their 256 MiB upload limit (`setup-api.ts`, `setup-recovery-preparation-api.ts`).
   These are transfer limits and buffers, not ordinary-start database admission.
+
+An oversized committed attempt's Finish request now passes the readable-database gate and refuses
+later with `setup.not_ready` (HTTP 503); the old size classification refused
+`setup.attempt_uncertain` (409). The whole-branch review ran both versions and found no publication
+or state change. Trace the Finish page's actual wording and preserve the refusal while giving an
+actionable explanation if this size limit is reached. The review did not establish a normal way
+for an unpublished setup to reach that size.
+
+The archive's total-original byte cap lacks an isolated behavioural control: removing that check
+survived the existing suites in review. Add a case that discriminates this limit from the other
+artifact limits when replacing the snapshot buffers.
 
 Local scheduled backups and local file restoration already pass files and stream database chunks;
 see [the developer convention](../developers/conventions-data.md#local-backup-and-restore-pass-database-files).

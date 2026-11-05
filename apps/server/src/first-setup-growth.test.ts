@@ -1,6 +1,6 @@
 import * as filesystem from "node:fs/promises";
 import { randomBytes, createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -66,7 +66,7 @@ afterEach(async () => {
 });
 
 it("keeps starting after a real first setup grows beyond 128 MiB", async () => {
-  const root = await mkdtemp(join(tmpdir(), "first-setup-growth-"));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "first-setup-growth-")));
   dirs.push(root);
   const stateDir = join(root, "state"),
     venueDir = join(root, "venue"),

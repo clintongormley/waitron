@@ -5799,10 +5799,10 @@ and a 3,715,072-byte database restarted in trading mode. Inserting 124 synthetic
 into the existing image table grew it to 134,590,464 bytes; SQLite's quick check returned `ok`.
 Before the fix, the next start served setup status (HTTP 200) where trading mode has no setup
 endpoint (HTTP 404). After the fix, two large-file restarts reach trading mode and health answers
-200. A further small-file restart and both large-file restarts forbid application `readFile` and
-`createReadStream` calls on the database and its WAL. The test substitutes certificate validation,
+200. A further small-file restart and both large-file restarts forbid file-handle `readFile` and
+`createReadStream` calls on the database and its WAL. The test substitutes certificate validation/sealing,
 AEAT clock/readiness responses and submission, and suppresses the publication's process stop;
-setup, files, SQLite, entry routing and trading boot remain real. It sends no external filing.
+setup, files, SQLite, entry routing and trading boot remain real.
 
 A separate four-photo probe ran real `prepareImage` and `uploadImage` writes. Four independent
 1600×1600 random-noise PNGs produced 7,018,348 stored WebP bytes, growing the checkpointed database
