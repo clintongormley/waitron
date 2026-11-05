@@ -1280,6 +1280,10 @@ export const en = {
   "table.split_table_heading": "Split a table off {party}:",
   "table.split_table_bill_heading": "{table} leaves {party}. Which bill goes with it?",
   "table.split_no_bill": "No bill, start an empty one",
+  "table.split_bill_part_paid": "{amount} paid",
+  "table.split_take_over_first": "You can tick this bill once you take the order over.",
+  "table.split_presented": "Presented: this bill goes whole or stays.",
+  "table.split_own_unsent": "Your unsent dishes go only with the whole bill.",
   "table.name_title": "Name the party at {tables}",
   "table.bill_name_title": "Name this bill: {bill}",
   "table.bill_name_taken_over":
@@ -3140,6 +3144,10 @@ export const es: Record<StringKey, string> = {
   "table.split_table_heading": "Separar una mesa de {party}:",
   "table.split_table_bill_heading": "{table} se separa de {party}. ¿Qué cuenta se lleva?",
   "table.split_no_bill": "Sin cuenta, empezar una vacía",
+  "table.split_bill_part_paid": "{amount} pagados",
+  "table.split_take_over_first": "Podrás marcar esta cuenta cuando tomes el pedido.",
+  "table.split_presented": "Presentada: esta cuenta se va entera o se queda.",
+  "table.split_own_unsent": "Tus platos sin enviar solo se van con la cuenta entera.",
   "table.name_title": "Poner nombre a los clientes de {tables}",
   "table.bill_name_title": "Poner nombre a esta cuenta: {bill}",
   "table.bill_name_taken_over":

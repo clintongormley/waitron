@@ -17,6 +17,35 @@ import {
 } from "../state/portion-selection.js";
 import { trimQuantity } from "./dish-format.js";
 
+/** The picker's ticks: the bill header beside a row of them draws the same box. */
+export const tickStyles = css`
+  input {
+    flex: none;
+    inline-size: var(--wt-space-5);
+    block-size: var(--wt-space-5);
+    margin: 0;
+    accent-color: var(--wt-color-primary);
+  }
+  /* The browser's own disabled box is too faint to see on the light page. */
+  input:disabled {
+    appearance: none;
+    border: 1px solid var(--wt-color-text-muted);
+    border-radius: var(--wt-radius-sm);
+    background: var(--wt-color-track);
+  }
+  input:disabled:checked {
+    display: grid;
+    place-content: center;
+    background: var(--wt-color-text-muted);
+  }
+  input:disabled:checked::after {
+    content: "✓";
+    color: var(--wt-color-bg);
+    font-size: var(--wt-font-size-sm);
+    line-height: 1;
+  }
+`;
+
 /**
  * One bill's dishes as ticks, identical portions as one row with a count, and the reason a dish
  * cannot be picked beside it. It holds no picks of its own: each change is a `portion-picks` event
@@ -30,6 +59,7 @@ export class TillPortionPicker extends LitElement {
   }
   static override styles = [
     baseStyles,
+    tickStyles,
     css`
       :host {
         display: block;
@@ -53,21 +83,15 @@ export class TillPortionPicker extends LitElement {
       label:has(input:disabled) {
         cursor: default;
       }
-      input {
-        flex: none;
-        inline-size: var(--wt-space-5);
-        block-size: var(--wt-space-5);
-        margin: 0;
-        accent-color: var(--wt-color-primary);
+      /* A tick still works on this row, so its text keeps a readable contrast: at
+         --wt-opacity-disabled it fails axe on the light page. */
+      .quiet label {
+        color: var(--wt-color-text-muted);
       }
-      /* The browser's own disabled box is too faint to see on the light page. A disabled tick is
-         never checked (a row holding picks keeps its tick so it can be cleared), so only the empty
-         box is drawn. */
-      input:disabled {
-        appearance: none;
-        border: 1px solid var(--wt-color-text-muted);
-        border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-track);
+      .pale .name,
+      .pale .qty,
+      .pale .amount {
+        opacity: var(--wt-opacity-disabled);
       }
       .name {
         flex: 1;
@@ -107,6 +131,9 @@ export class TillPortionPicker extends LitElement {
   ];
   @property({ attribute: false }) rows: readonly PickRow[] = [];
   @property({ attribute: false }) picks: Picks = new Set();
+  /** The whole bill is chosen: every row draws ticked with no stepper, whatever `picks` holds, and
+   * unticking a row emits the other rows' members. */
+  @property({ type: Boolean }) whole = false;
   /** Names a dish or an extra. */
   @property({ attribute: false }) nameOf: (line: TabLine) => string = (line) => line.name ?? "";
   @property({ attribute: false }) money: (amount: string) => string = (amount) => amount;
@@ -121,6 +148,13 @@ export class TillPortionPicker extends LitElement {
     );
     // Puts the tick back to what `picks` says when the screen does not redraw after the event.
     this.requestUpdate();
+  }
+
+  #toggled(row: PickRow): Picks {
+    if (!this.whole) return toggleRow(row, this.picks);
+    return new Set(
+      this.rows.filter((other) => other !== row).flatMap((other) => other.members.map((m) => m.id)),
+    );
   }
 
   #reason(row: PickRow): string {
@@ -140,7 +174,19 @@ export class TillPortionPicker extends LitElement {
 
   #row(row: PickRow): TemplateResult {
     const id = row.members[0]!.id;
-    const count = row.blocked?.reason === "paid" ? 0 : pickedCount(row, this.picks);
+    const count = this.whole
+      ? row.members.length
+      : row.blocked?.reason === "paid"
+        ? 0
+        : pickedCount(row, this.picks);
+    const stepped = row.counted && count > 0 && !this.whole;
+    const off = row.blocked !== null && (count === 0 || this.whole);
+    const look =
+      row.blocked?.reason === "presented" || (this.whole && off)
+        ? "pale"
+        : this.whole
+          ? "quiet"
+          : "";
     const dish = this.#what(row.members[0]!);
     const extras = row.extras.map((extra) => this.#what(extra));
     const name = [dish, ...extras].join(", ");
@@ -150,28 +196,28 @@ export class TillPortionPicker extends LitElement {
       multiplyDecimal(decimal(row.each), decimal(String(count > 0 ? count : row.members.length))),
       MONEY_SCALE,
     );
-    return html`<div class="row" data-pick-row=${id}>
+    return html`<div class="row ${look}" data-pick-row=${id}>
       <label>
         <input
           type="checkbox"
           data-pick=${id}
           .checked=${live(count > 0)}
-          ?disabled=${row.blocked !== null && count === 0}
+          ?disabled=${off}
           aria-describedby=${reason === "" ? nothing : reasonId}
-          @change=${() => this.#emit(toggleRow(row, this.picks))}
+          @change=${() => this.#emit(this.#toggled(row))}
         />
         <span class="name"
           >${dish}${extras.map((extra) => html`<span class="extra">${extra}</span>`)}</span
         >
         ${
-          row.counted && count === 0
+          row.counted && !stepped
             ? html`<span class="qty" data-pick-qty=${id}>${row.members.length}</span>`
             : nothing
         }
         <span class="amount" data-pick-amount=${id}>${this.money(amount)}</span>
       </label>
       ${reason === "" ? nothing : html`<p class="reason" id=${reasonId}>${reason}</p>`}
-      ${row.counted && count > 0 ? this.#stepper(row, count, name, reason) : nothing}
+      ${stepped ? this.#stepper(row, count, name, reason) : nothing}
     </div>`;
   }
 

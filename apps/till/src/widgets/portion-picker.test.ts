@@ -498,3 +498,105 @@ describe("till-portion-picker", () => {
     expect(empty.el.shadowRoot!.querySelector('input[type="checkbox"]')).toBeNull();
   });
 });
+
+describe("till-portion-picker whole", () => {
+  const WHOLE_LINES = [...CANAS, dish("h1", 5, "Ham", "9.00")];
+  const PAID = balance("14.00", "9.00", [{ lineId: "h1", lineNo: 5, paidQuantity: "1.000" }]);
+  const LINES_PAID = [line("c1", 1), dish("h1", 5, "Ham", "9.00")];
+
+  async function whole(lines: readonly TabLine[], paid: BillBalance | null = null) {
+    const { el } = await mountWidget<TillPortionPicker>("till-portion-picker", {
+      rows: rowsOf(lines, paid, new Set()),
+      picks: new Set(),
+      whole: true,
+      nameOf,
+      money,
+    });
+    const emitted: string[][] = [];
+    el.addEventListener("portion-picks", (event) => {
+      emitted.push((event as CustomEvent<{ picks: string[] }>).detail.picks);
+    });
+    return { el, emitted };
+  }
+
+  it("board 08: every row draws ticked and quiet with no stepper, keeping its count and amount", async () => {
+    const { el } = await whole(WHOLE_LINES);
+    expect(tick(el, "c1").checked).toBe(true);
+    expect(tick(el, "c1").disabled).toBe(false);
+    expect(tick(el, "h1").checked).toBe(true);
+    expect(dec(el, "c1")).toBeNull();
+    expect(inc(el, "c1")).toBeNull();
+    expect(q(el, '[data-pick-count="c1"]')).toBeNull();
+    expect(q(el, '[data-pick-qty="c1"]')!.textContent!.trim()).toBe("4");
+    expect(q(el, '[data-pick-amount="c1"]')!.textContent!.trim()).toBe(money("20.00"));
+    const nameBox = q(el, '[data-pick-row="c1"] .name')!;
+    const muted = document.createElement("span");
+    muted.style.color = "var(--wt-color-text-muted)";
+    el.shadowRoot!.append(muted);
+    expect(getComputedStyle(nameBox).color).toBe(getComputedStyle(muted).color);
+    expect(getComputedStyle(tick(el, "c1")).opacity).toBe("1");
+  });
+
+  it("unticking a row emits every other row's members, in line order", async () => {
+    const { el, emitted } = await whole([
+      dish("h1", 1, "Ham", "9.00"),
+      ...CANAS.map((c, i) => ({ ...c, lineNo: i + 2 })),
+    ]);
+    await userEvent.click(tick(el, "c1"));
+    expect(emitted).toEqual([["h1"]]);
+    const again = await whole(WHOLE_LINES);
+    await userEvent.click(tick(again.el, "h1"));
+    expect(again.emitted).toEqual([["c1", "c2", "c3", "c4"]]);
+  });
+
+  it("a paid row is ticked and disabled with its reason, and is never among the picks emitted", async () => {
+    const { el, emitted } = await whole(LINES_PAID, PAID);
+    const paid = tick(el, "h1");
+    expect(paid.checked).toBe(true);
+    expect(paid.disabled).toBe(true);
+    const reason = el.shadowRoot!.getElementById(paid.getAttribute("aria-describedby")!);
+    expect(reason!.textContent).toBe(t("bill_pay.paid"));
+    expect(getComputedStyle(q(el, '[data-pick-row="h1"] .name')!).opacity).toBe("0.5");
+    await userEvent.click(tick(el, "c1"));
+    expect(emitted).toEqual([[]]);
+  });
+
+  it("a tick the screen does not answer goes back to ticked", async () => {
+    const { el, emitted } = await whole(WHOLE_LINES);
+    await userEvent.click(tick(el, "h1"));
+    expect(emitted).toHaveLength(1);
+    await el.updateComplete;
+    expect(tick(el, "h1").checked).toBe(true);
+  });
+
+  it("a presented row is greyed: unticked and disabled outside a whole bill, ticked and disabled inside one", async () => {
+    const presented = rowsOf(CANAS, null, new Set()).map((row) => ({
+      ...row,
+      limit: 0,
+      blocked: { reason: "presented" as const },
+    }));
+    const { el } = await mountWidget<TillPortionPicker>("till-portion-picker", {
+      rows: presented,
+      picks: new Set(),
+      nameOf,
+      money,
+    });
+    expect(tick(el, "c1").checked).toBe(false);
+    expect(tick(el, "c1").disabled).toBe(true);
+    expect(getComputedStyle(q(el, '[data-pick-row="c1"] .name')!).opacity).toBe("0.5");
+    el.whole = true;
+    await el.updateComplete;
+    expect(tick(el, "c1").checked).toBe(true);
+    expect(tick(el, "c1").disabled).toBe(true);
+  });
+
+  it("outside a whole bill a row is not pale", async () => {
+    const { el } = await picker(CANAS);
+    const nameBox = q(el, '[data-pick-row="c1"] .name')!;
+    expect(getComputedStyle(nameBox).opacity).toBe("1");
+    const muted = document.createElement("span");
+    muted.style.color = "var(--wt-color-text-muted)";
+    el.shadowRoot!.append(muted);
+    expect(getComputedStyle(nameBox).color).not.toBe(getComputedStyle(muted).color);
+  });
+});

@@ -216,4 +216,30 @@ describe.each(["light", "dark"] as const)("A803 picker a11y (%s theme)", (theme)
     const best = Math.max(...painted.map((pixel) => contrast(pixel, page_)));
     expect(best).toBeGreaterThanOrEqual(3);
   });
+
+  const PAID_LINES = [line("c1", 1), STEAK];
+  const PAID_ROWS = balance("37.00", "32.00", [{ lineId: "s1", lineNo: 5, paidQuantity: "1.000" }]);
+
+  it("a whole bill with a paid row has no violations", async () => {
+    const { host } = await mountWidget<TillPortionPicker>(
+      "till-portion-picker",
+      { rows: rowsOf(PAID_LINES, PAID_ROWS, new Set()), whole: true, nameOf, money },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("a paid row's ticked, disabled box stands out from the page at 3:1", async () => {
+    const { el, host } = await mountWidget<TillPortionPicker>(
+      "till-portion-picker",
+      { rows: rowsOf(PAID_LINES, PAID_ROWS, new Set()), whole: true, nameOf, money },
+      theme,
+    );
+    const box = el.shadowRoot!.querySelector<HTMLInputElement>('[data-pick="s1"]')!;
+    expect(box.disabled).toBe(true);
+    expect(box.checked).toBe(true);
+    const page_ = rgb(getComputedStyle(host).backgroundColor);
+    const painted = await paintedIn(host, box.getBoundingClientRect());
+    expect(Math.max(...painted.map((pixel) => contrast(pixel, page_)))).toBeGreaterThanOrEqual(3);
+  });
 });

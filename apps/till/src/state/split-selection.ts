@@ -167,7 +167,8 @@ export function heldSelected(sources: readonly SplitSource[], split: SplitPicks)
   );
 }
 
-const billTotal = (source: SplitSource) => source.groups.floor?.total ?? decimal(source.bill.total);
+export const billTotal = (source: SplitSource) =>
+  source.groups.floor?.total ?? decimal(source.bill.total);
 
 const money = (values: readonly Decimal[]) => toScale(sumDecimals(values), MONEY_SCALE);
 
