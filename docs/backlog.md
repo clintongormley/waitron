@@ -4140,8 +4140,9 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   [Detail](backlog/payments.md#a875-check-two-writes-the-bill-payments-design-says-a-pending-card-refund-refuses)
 
 - **The SumUp Solo experiments.** Still open after the 5 November session: signature-required
-  cards, the statement/returned-fee check, remaining connection probes and a second standalone
-  machine sample. The unexpected full refund from decimal `0.40` has no established cause.
+  cards, pending-reference lookup, the statement/fee check, remaining connection
+  probes and a second standalone machine sample. The reported decimal-`0.40` probe refunded the
+  full payment, but its request bytes were not saved and the cause is unknown.
   No further paid request unattended.
   [Detail](backlog/payments.md#the-sumup-solo-experiments)
 

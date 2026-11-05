@@ -3,9 +3,10 @@
 **2026-11-05, A949:** the owner and watcher completed the Solo session. Read
 [the November results](#10-a949-solo-session-2026-11-05) before using the older instructions below.
 Affiliate checkout and lookup after payment worked; repeating the reference started another
-checkout. Integer `40` refunded EUR 0.40, while decimal `0.40` unexpectedly refunded EUR 1.00.
+checkout. The reported integer-`40` probe refunded EUR 0.40; the reported decimal-`0.40` probe refunded
+EUR 1.00. The request bytes were not retained.
 Fresh refunds also returned a temporary-balance refusal. Signature handling and the later
-statement check remain open. This write-up makes no further payment or refund request.
+statement check remain open. The read-only follow-up below makes three GET requests and no payment or refund request.
 
 **Date written:** 2026-09-10. **Runs from:** 2026-09-11.
 **Status:** IN PROGRESS (2026-09-11). Setup 0.2–0.6 are run and recorded below: the Solo is paired
@@ -947,7 +948,10 @@ request bodies, not which units today's SumUp service applies. No test or produc
    checkout means vendor deduplication failed this probe. Cancel it without paying again and
    record which transaction the reference lookup returns. Do not infer deduplication from the
    reader rejecting a simultaneous checkout as busy. Run §3b separately for the retry schedule.
-4. Re-test refund units on a fresh EUR 1 capture. Read its refund events and refundable amount
+4. **Historical checklist, superseded 2026-11-05:** do not repeat the decimal request below.
+   The reported decimal probe refunded the full payment; request bytes were not saved. Read
+   [§10.3](#103-refund-requests-and-the-unexpected-decimal-result) before any new operator plan.
+   Re-test refund units on a fresh EUR 1 capture. Read its refund events and refundable amount
    first, send `{"amount":0.40}` once, then read both again. A new EUR 0.40 event and a EUR 0.60
    balance support the current major-unit description. A `201` with no movement does not prove a
    refund. If the answer is uncertain, read back and stop; do not resend. Use a separate fresh
@@ -1045,7 +1049,10 @@ For the hands-on session, follow §8's detailed predictions and read-backs:
    listener (§§2a/3a). Read the reference before and after the tap; retain response ids and
    callback headers. After completion, repeat the reference once (§2b), cancel any new checkout
    without paying, then read the reference again.
-3. Use two separate fresh EUR 1 captures for §8's `0.40` versus `40` partial-refund controls.
+3. **Historical checklist, superseded 2026-11-05:** do not repeat the decimal control below;
+   read [§10.3](#103-refund-requests-and-the-unexpected-decimal-result). Request bytes were not
+   saved, and the reported decimal probe refunded the full payment.
+   Use two separate fresh EUR 1 captures for §8's `0.40` versus `40` partial-refund controls.
    Read events and refundable amounts before and after each single request. Stop and read back
    an uncertain answer; do not repeat its refund. Use another capture for the immediate full refund.
 4. With a known signature-required card, record the Solo's prompts, signature/merchant actions
@@ -1063,8 +1070,9 @@ is claimed. The reconciler, W44 and the three backup-machine paths remain open.
 
 The owner operated the reader and phone app; the watcher sent the requests and captured the
 responses. This section records that session, rather than a new unattended experiment. The Solo
-was `rdr_053SG4NG3J80AV0YHBK79MB7A7`, firmware `3.3.43.9`, on Wi-Fi. The first saved status
-read was `ONLINE`, `IDLE`. Times below are UTC.
+was `rdr_053SG4NG3J80AV0YHBK79MB7A7`, firmware `3.3.43.9`, on Wi-Fi, according to the watcher's
+11:50 handoff; the saved files do not include the id or firmware. The first saved status read
+was `ONLINE`, `IDLE`. Times below are UTC.
 
 The local record is `~/waitron-campaign-f/receipts/a949-solo-20261105/`. It contains
 `session.log`, `hooks-summary.txt`, `hook-step1.txt`, `hook-step2.txt`, `history.log` and
@@ -1079,28 +1087,36 @@ The affiliate checkout at `10:08:29` returned `201`, checkout
 `c5416b3f-3375-4e61-abeb-efed24f24d70`, client transaction
 `ba33b64e-f2df-4abe-9a8f-37e95b7386cf`. Lookup by the supplied foreign reference before the tap
 returned `404`, `{"message":"Resource not found","error_code":"NOT_FOUND"}`. This first
-immediate lookup did not find a pending transaction. A separate checkout later returned `PENDING`
-while waiting for the card, then `SUCCESSFUL`.
+immediate lookup did not find a pending transaction. A separate checkout later returned
+`PENDING` while waiting for the card, then `SUCCESSFUL`, but the log does not retain the lookup
+key used for those polls. Lookup of a pending payment by our supplied reference therefore
+remains open.
 
-The successful payment's detail carried the original `foreign_transaction_id`. The saved history
-projections show null for that field, including API payments whose detail was found by it. A
-reconciler cannot assume this projection supplies the reference; it needs the detail lookup.
+The successful payment's detail carried the original `foreign_transaction_id`; the handoff
+reports successful lookup by that reference after payment. The saved history projections show
+null for that field on other API payments. The log retains neither the history query/projection
+nor raw history rows for those payments. These captures cannot establish whether the unfiltered
+history response carries the reference, so a reconciler must verify that response shape before
+choosing history versus detail lookup.
 
 Repeating the same reference at `10:08:54` returned `201` and a different checkout,
 `7fff31f4-ebc8-4ba5-a7f7-996d8817d820`. The owner saw another payment request. No second payment
 was taken. The saved poll at `10:10:02` read `failed`, reader `IDLE`, about 68 seconds after
-creation; the failed callback is dated `10:10:01`. The owner saw a refusal, but did not establish
-whether they had cancelled it. This is not a measured cancellation or a universal checkout expiry.
-Lookup by the repeated foreign reference still returned the first, paid transaction.
+creation; the failed callback is dated `10:10:01`. The owner saw a refusal, but did not
+establish whether they had cancelled it. This is not a measured cancellation or a universal
+checkout expiry. Lookup by the repeated foreign reference still returned the first, paid
+transaction.
 
 This probe defeats vendor deduplication on that reference. It does not establish what lookup
 would return if two checkouts under one reference were both paid. Recovery must read before
-considering another send, and must not treat a missing early lookup as permission to charge again.
+considering another send, and must not treat a missing early lookup as permission to charge
+again.
 
-### 10.2 Callback headers and one observed retry
+### 10.2 Callback headers and one delayed delivery
 
 The first successful callback arrived at about `10:08:36`, roughly six seconds after the tap
-according to the operator handoff. Its saved body includes:
+according to the operator handoff. That figure also fits the transaction timestamp, which can
+precede the tap; no independent tap-time record was saved. Its saved body includes:
 
 ```json
 {
@@ -1118,32 +1134,38 @@ according to the operator handoff. Its saved body includes:
 
 `hook-step1.txt` retains the received header block with IP values omitted. It includes
 `User-Agent: sumup/webhook-client/1.0.0`, `Content-Type: application/json`, `Traceparent`,
-forwarding and Cloudflare headers. None of its header names contains `signature`, `hmac` or `sig`.
-That delivery supplied no signature-like header. It does not establish that every Solo callback
-is unsigned. The unpaid repeated checkout's callback carried `status: failed` and
+forwarding and Cloudflare headers. None of its header names contains `signature`, `hmac` or
+`sig`. That delivery supplied no signature-like header. It does not establish that every Solo
+callback is unsigned. The unpaid repeated checkout's callback carried `status: failed` and
 `transaction_id: null`.
 
 For the retry probe the listener was down and the tunnel answered `502`. The owner tapped at
 about `10:14:20`; the listener returned about 90 seconds later. One callback arrived at
 `10:16:19`, retaining payload timestamp `10:14:26.711119Z`. That is about 112 seconds after the
-event timestamp, or 119 seconds after the reported tap. The first failed delivery's exact time
-and the number of attempts during the outage are not in the saved record. No further delivery
-was observed by `10:39:45`, according to the handoff. This establishes one delayed delivery,
-not a retry count or schedule. Keep callbacks as prompts to verify the outcome through the API.
+event timestamp. The reported tap time rounds from the transaction timestamp `10:14:19.825`; it
+is an operator report, not an independent tap measurement. The raw record establishes a
+successful poll by `10:14:25`. No failed delivery attempt's exact time or count is saved. No
+further delivery was observed by `10:39:45`, according to the handoff. This establishes one
+delayed delivery, not a retry count or schedule. Keep callbacks as prompts to verify the outcome
+through the API.
 
 ### 10.3 Refund requests and the unexpected decimal result
 
-The integer control on transaction `efaf3154-254e-4730-a280-616f780b053d` sent
-`{"amount":40}` at `10:12:37`. It returned `201`; the read eight seconds later showed a
-`REFUND` event of `0.4` and refund-link `max_amount: 0.6`. This supports sending integer cents
-for that partial refund, as both current Waitron refund methods do through `toMinorUnits`.
+The integer control on transaction `efaf3154-254e-4730-a280-616f780b053d` is labelled
+`refund 40` at `10:12:37`; the watcher reports a request body of `{"amount":40}`. It returned
+`201`; the read eight seconds later showed a `REFUND` event of `0.4` and refund-link
+`max_amount: 0.6`. This supports sending integer cents for that partial refund, as both current
+Waitron refund methods do through `toMinorUnits`.
 
-The decimal probe on `33de4693-e20b-421e-872f-845b3988691f` first sent `{"amount":0.40}`
-at `10:10:36`. It returned `409` with the explanation quoted below. After read-backs, the watcher
-resent it at `10:11:12`; that request returned `201`. The subsequent detail showed a
-`REFUND` event of **1.0**, and no refund link. The full payment was refunded. Neither §8's
-major-unit prediction nor its silent-zero prediction anticipated this. The cause is unknown;
-it is not evidence for a truncation rule. September's no-movement observation in §4b remains a
+The decimal probe on `33de4693-e20b-421e-872f-845b3988691f` is labelled `refund 0.40` at
+`10:10:36`; the watcher reports a body of `{"amount":0.40}`. It returned `409` with the
+explanation quoted below. After read-backs, the watcher reports resending that body at
+`10:11:12`; that request returned `201`. The subsequent detail showed a `REFUND` event of
+**1.0**, and no refund link. The full payment was refunded. Neither §8's major-unit prediction
+nor its silent-zero prediction anticipated this. The request bytes were not saved for either
+probe. An omitted or malformed amount on the resend is therefore not excluded, and an empty body
+is also used for a full refund. The cause is unknown; this record is not evidence for a
+decimal-conversion or truncation rule. September's no-movement observation in §4b remains a
 historical result, superseded as guidance by this observation. Waitron does not send decimal
 `0.40` on either current refund method.
 
@@ -1160,9 +1182,11 @@ The first decimal request returned HTTP `409` with this exact `detail`:
 
 > Not enough available balance to perform the operation at the moment
 
-The same payment was accepted later. A separate full-refund probe on `43d6b267-…` returned
-`409` eight times before a later request returned `201` and a EUR 1.00 refund event.
-The saved times need two different clocks kept separate:
+The same payment was accepted later. A separate full-refund probe on `43d6b267-…` returned `409`
+eight times before a later request returned `201` and a EUR 1.00 refund event. The handoff
+reports the same explanation, but those saved response snippets are truncated, including two
+that show no `detail`; only the earlier decimal probe retains the full sentence. The saved times
+need two different clocks kept separate:
 
 | Payment | First saved successful poll | Refused request times | Accepted request |
 | --- | --- | --- | --- |
@@ -1170,17 +1194,17 @@ The saved times need two different clocks kept separate:
 | `efaf3154-…` | `10:12:01` | None in the saved integer control | `10:12:37` |
 | `43d6b267-…` | `10:13:04` | `10:13:05`, `:10`, `:15`, `:21`, `:26`, `:32`, `:37`, `:42` | `10:13:59` |
 
-For `33de…`, those requests were 7 and 43 seconds after the first saved successful poll.
-For `efaf…`, acceptance was 36 seconds after that poll. For `43d6…`, the transaction timestamp
-was `10:12:59.032`, so the handoff's refusal ages of about 6–43 seconds and acceptance at
-60 seconds are measured from that timestamp, not a recorded tap. The runbook's September
-control already shows that a transaction timestamp can precede the tap. These observations do
-not establish a safe fixed delay.
+For `33de…`, those requests were 7 and 43 seconds after the first saved successful poll. For
+`efaf…`, acceptance was 36 seconds after that poll. For `43d6…`, the transaction timestamp was
+`10:12:59.032`, so the handoff's refusal ages of about 6–43 seconds and acceptance at 60 seconds
+are measured from that timestamp, not a recorded tap. The runbook's September control already
+shows that a transaction timestamp can precede the tap. These observations do not establish a
+safe fixed delay.
 
 A `PAYOUT` event on `33de…` was stamped `10:10:39`, about ten seconds after the successful poll.
 `43d6…`'s was stamped `10:13:50.946`, about 52 seconds after its transaction timestamp. The
-integer control succeeded without a payout event in its saved read-back. Neither a cause for
-the temporary balance refusal nor a payout-based readiness rule was established.
+integer control succeeded without a payout event in its saved read-back. Neither a cause for the
+temporary balance refusal nor a payout-based readiness rule was established.
 
 ### 10.5 Current Waitron path and proposed correction
 
@@ -1201,8 +1225,8 @@ existing tests below. It is not a live refund through Waitron or one end-to-end 
 
 The `provider.test.ts` 409 case asserts the exact refusal object. The bill and settled-tender
 suites check first-send documented refusals, failed state and the absence of recorded money
-returned; their existing fixtures use 400, not this actual 409 body. The HTTP-client suite checks
-integer request bodies and event parsing. Commands run for this write-up:
+returned; their existing fixtures use 400, not this actual 409 body. The HTTP-client suite
+checks integer request bodies and event parsing. Commands run for this write-up:
 
 ```text
 pnpm --filter @waitron/payments-sumup exec vitest run --project node src/sumup-client.test.ts src/provider.test.ts
@@ -1211,21 +1235,28 @@ pnpm --filter @waitron/server exec vitest run src/tender-refunds.test.ts src/bil
 210 passed
 ```
 
-Proposed follow-up: preserve a bounded, recognised reason for this specific balance refusal,
-and tell staff the provider cannot refund it yet, that this attempt returned no money, and
-that they can try a new refund later. Keep a definite first-send refusal distinct from an
-uncertain outcome; never automatically resend an uncertain SumUp refund, and do not classify
-all 409 explanations as temporary. Add real-client HTTP-body tests and both staff paths before
-changing behaviour. First check whether the existing records can carry that reason; any new
-column or table waits for the A1308 hold to end. This change records the proposal and corrects
-stale comments; it changes no refund behaviour.
+Proposed follow-up: preserve a bounded, recognised reason for this specific balance refusal, and
+tell staff the provider cannot refund it yet, that this attempt returned no money, and that they
+can try a new refund later. Keep a definite first-send refusal distinct from an uncertain
+outcome; never automatically resend an uncertain SumUp refund, and do not classify all 409
+explanations as temporary. Add real-client HTTP-body tests and both staff paths before changing
+behaviour. First check whether the existing records can carry that reason; any new column or
+table waits for the A1308 hold to end. This change records the proposal and corrects stale
+comments; it changes no refund behaviour.
 
-For detecting refunds, current `refundEventsOf` reads `transaction_events` or `events`, filters
-`REFUND` events and maps their status. `lookupRefund` uses those events, their amount and identity
-rather than treating the original payment's `SUCCESSFUL` status as a refund outcome. The saved
-full-refund detail still reads `SUCCESSFUL`, `refunded_amount: null`, with a `REFUND` event and no
-refund link. `history.log` also contains separate `type: REFUND` rows sharing the payment's
-`transaction_code` and `client_transaction_id`. Keep those rows distinct when matching or summing.
+For detecting refunds, current `refundEventsOf` prefers `transaction_events` when present,
+otherwise `events`, and requires each retained `REFUND` event to have an id, numeric amount and
+timestamp. `lookupRefund` uses those events, their amount and identity rather than treating the
+original payment's `SUCCESSFUL` status as a refund outcome. The saved full-refund projection
+contains ids in `events` but no ids in `transaction_events`. Replaying it through the real
+client produces no refund events; removing `transaction_events`, or adding an id there, retains
+one refund in each control. The projection cannot establish whether the original response lacked
+those ids. The fresh raw read-back in §10.7 includes the ids and matches through the real
+adapter. The replay gap belongs to the saved projection; it does not establish a live parser
+fault. No parser change is made. The saved full-refund detail still reads `SUCCESSFUL`,
+`refunded_amount: null`, with a `REFUND` event and no refund link. `history.log` also contains
+separate `type: REFUND` rows sharing the payment's `transaction_code` and
+`client_transaction_id`. Keep those rows distinct when matching or summing.
 
 ### 10.6 Phone-app samples, fees and work still open
 
@@ -1243,30 +1274,73 @@ These are phone-app samples, not a payment from a second standalone Solo, and do
 that separate-machine path.
 
 The handoff records a fee of EUR 0.02 on EUR 1.00, EUR 1.10 and EUR 1.20; the retained detail
-also shows EUR 0.02 on both phone-app payments. Payout events remain `SCHEDULED` beside refund
-events. Whether the customer's charge is reversed or separately credited, and whether SumUp
-returns the fee, still need the owner's later statement check (§4c).
+also shows EUR 0.02 on both phone-app payments. The saved `events` array reports payout
+`SCHEDULED` beside refund events, while the same payment's `transaction_events` reports payout
+`PENDING`. Neither representation is a settlement statement. Whether the customer's charge is
+reversed or separately credited, and whether SumUp returns the fee, still need the owner's later
+statement check (§4c).
 
 No signature-required card was available, so capture, merchant acceptance and retention remain
-open. SIM-only Cloud API delivery, offline-mode limits, the busy-reader and termination probes
-also remain unmeasured by this session. Do not repeat paid steps unattended. The reconciler,
-W44's durable reversal work and the three outage cases remain design/build work. A design that
-needs tables stops at design until A760 lands under the A1308 hold. The two temporary keys can
-be revoked by the owner once this write-up no longer needs authenticated reads; this write-up
-uses only the saved record and does not require them.
+open. Pending-payment lookup by supplied reference also remains open; §10.7 supplies the raw
+history/refund read-backs that the original projections lacked. SIM-only Cloud API delivery,
+offline-mode limits, the busy-reader and termination probes also remain unmeasured by this
+session. Do not repeat paid steps unattended. The reconciler, W44's durable reversal work and
+the three outage cases remain design/build work. A design that needs tables stops at design
+until A760 lands under the A1308 hold. The two temporary keys are no longer needed by this
+continuation after §10.7's three read-only requests; the watcher has been told so the owner can
+revoke them.
 
-### 10.7 Provenance for this continuation
+### 10.7 Read-only follow-up, 11:42 UTC
+
+The review identified two limits in the projected record: missing ids in the preferred refund
+array, and an unretained history projection. Three authenticated GET requests at `11:42:22`
+returned `200`: transaction detail for `33de4693-…`, detail for `efaf3154-…`, and
+`transactions/history?limit=25&order=descending`. No checkout, refund, termination or pairing
+request was sent. Credentials and authorisation headers were not logged.
+
+Both raw details contain ids, timestamps, numeric amounts and status in their
+`transaction_events` refund rows. They retain the original payment's `SUCCESSFUL` status and
+`refunded_amount: null`, with these refunds:
+
+| Payment | REFUND id | Amount | Status |
+| --- | --- | --- | --- |
+| `33de4693-…` | `11679578449` | EUR 1.00 | `REFUNDED` |
+| `efaf3154-…` | `11679591970` | EUR 0.40 | `REFUNDED` |
+
+A temporary replay through the real `sumupClient` and `SumUpCloudProvider.lookupRefund` returns
+`match`, `completed` and the exact refund id for each saved raw response. Changing the requested
+amount to EUR 999 or excluding that id returns `none`. Four temporary cases passed: the
+projected capture with controls, the 409 body, and each raw refund with amount/id controls. The
+probes use injected HTTP responses, not another provider call, and write no database rows. This
+qualifies parsing and matching of these two current responses, not the whole staff refund
+workflow or every SumUp response shape.
+
+The raw history response has 19 rows, including the first affiliate payment from §10.1, and none
+carries a `foreign_transaction_id` key. Both freshly read transaction details carry their
+supplied reference. A reconciler using this response needs the detail lookup to obtain that
+reference. This is a measured response shape, not a guarantee about future API versions.
+
+The private local receipt is
+`~/waitron-campaign-f/receipts/a949-writeup-20261105/readonly-followup/`. Its manifest records
+GET paths, UTC times, statuses and SHA-256 hashes. Complete responses stay in files with mode
+`0600` outside the repository; only the selected fields above are reproduced here. These reads
+cannot recover the earlier request bytes, prove a signature flow or settle statement fees.
+
+### 10.8 Provenance for this continuation
 
 | Claim | Source's own words or fields | Receipt and limit |
 | --- | --- | --- |
+| Reader identity and firmware | `rdr_053SG4NG3J80AV0YHBK79MB7A7`, `3.3.43.9`, Wi-Fi | Watcher's 11:50 handoff header; id and firmware absent from the saved captures. |
 | Affiliate acceptance and duplicate creation | `HTTP 201`; two distinct `checkout_id` values | `session.log` steps 1–2. The repeat was not paid. |
-| Lookup timing | `Resource not found`, `HTTP 404`; later `PENDING` and `SUCCESSFUL` | `session.log` steps 1 and 3. No guarantee about when a pending row becomes visible. |
+| Lookup timing | `Resource not found`, `HTTP 404`; later `PENDING` and `SUCCESSFUL` | `session.log` steps 1 and 3. The first label and handoff identify a foreign-reference lookup; later poll keys were not saved. Pending lookup by that reference remains open. |
 | Callback shape and headers | `solo.transaction.updated`, `status: successful`; `sumup/webhook-client/1.0.0` | `hook-step1.txt`; failed body in `hook-step2.txt`. No signature-like header on the saved first delivery. |
 | Delayed delivery | `fed7fad4`, event `76966fba`, timestamp `2026-11-05T10:14:26.711119Z` | `hooks-summary.txt` arrival filename `10:16:19`; outage/end-watch times from watcher 11:50. Failed attempt count unavailable. |
-| Integer and decimal refund outcomes | `amount: 0.4`, `max_amount: 0.6`; decimal probe's `amount: 1.0`, `status: REFUNDED` | `session.log` steps 3–4. Decimal cause unknown; refused requests were resent. |
-| Temporary refund refusal | The exact 409 `detail` quoted in §10.4 | `session.log` steps 3 and 5. Later request accepted; no fixed delay or causal explanation established. |
-| Refund representation | `status: SUCCESSFUL`, `refunded_amount: null`, `type: REFUND` | `session.log` steps 3/5 and `history.log`. Distinguish events, refund rows and original payments. |
+| Integer and decimal refund outcomes | `amount: 0.4`, `max_amount: 0.6`; decimal probe's `amount: 1.0`, `status: REFUNDED` | `session.log` steps 3–4 labels plus watcher 11:50 request-body report. Request bytes absent; omitted/malformed amount not excluded. Decimal cause unknown; refusals were resent. |
+| Temporary refund refusal | The exact 409 `detail` quoted in §10.4 | Full wording in `session.log` step 3; step 5 snippets truncated, same explanation reported by watcher 11:50. No fixed delay or cause established. |
+| Refund representation | `status: SUCCESSFUL`, `refunded_amount: null`, `type: REFUND` | `session.log` steps 3/5 and `history.log`; complete detail/history GET responses and real-adapter replay in §10.7 resolve the original projection's missing ids. |
+| Current reference visibility | No `foreign_transaction_id` key in 19 history rows; supplied references in both detail responses | Three GET receipts in §10.7, 11:42 UTC. Pending-reference lookup is still unmeasured. |
 | Phone-app reference and fee | `payment_type: POS`, `product_summary: "1 x Some ref "`, `fee_amount: 0.02` | `history.log`, `standalone-detail.log`; editable VAT and typed-reference action from watcher 11:50. |
 
 These local captures and operator observations are the sources for the November measurements.
-No newly fetched vendor documentation or additional authenticated request is claimed.
+§10.7 separately records three authenticated read-only requests and real-adapter replays. No
+newly fetched vendor documentation or paid operation is claimed.
