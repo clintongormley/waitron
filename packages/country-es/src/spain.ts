@@ -6,7 +6,7 @@ import type {
 } from "@waitron/country";
 
 import { SPAIN_HOLIDAY_CALENDAR } from "./holidays.js";
-import { SPAIN_RECEIPT_LABELS } from "./receipt-labels.js";
+import { SPAIN_RECEIPT_LABELS, SPAIN_RECEIPT_SAMPLE_ITEMS } from "./receipt-labels.js";
 
 export type SpanishNifKind = "personal" | "foreigner" | "tax-assigned-personal" | "entity";
 export type SpanishPhoneKind = "mobile" | "geographic";
@@ -320,6 +320,7 @@ export const SPAIN: CountryPack = {
   timeZones: ["Europe/Madrid", "Atlantic/Canary"],
   invoiceLocales: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
   receiptLabels: SPAIN_RECEIPT_LABELS,
+  receiptSampleItems: SPAIN_RECEIPT_SAMPLE_ITEMS,
   officialLocales: ["es-ES", "ca-ES", "ca-ES-valencia", "gl-ES", "eu-ES"],
   requiredContentLocales: ["es-ES"],
   moduleIds: ["workforce-es"],

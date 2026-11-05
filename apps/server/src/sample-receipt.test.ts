@@ -1,4 +1,5 @@
-import { receiptLabelsFor } from "@waitron/country-packs";
+import { receiptLabelsFor, receiptSampleItemsFor } from "@waitron/country-packs";
+import { prepareText } from "@waitron/printing";
 import { describe, expect, it } from "vitest";
 import { formatSampleReceipt, sampleSale, sampleDocument } from "./sample-receipt.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
@@ -14,12 +15,28 @@ describe("formatSampleReceipt", () => {
       const labels = receiptLabelsFor(locale);
       expect(sale.locale).toBe(locale);
       expect(document.invoiceLocale).toBe(locale);
-      expect(document.result).toEqual(sale);
+      const dishes = receiptSampleItemsFor(locale);
+      const { lines, total, vatBreakdown, tender } = document.result;
+      expect({ ...document.result, lines: sale.lines, total: sale.total }).toEqual({
+        ...sale,
+        vatBreakdown,
+        tender,
+      });
+      expect(lines).toEqual([
+        ...sale.lines,
+        ...dishes.map((name) => ({
+          descriptions: { [locale]: name },
+          quantity: "1",
+          gross: "2.20",
+        })),
+      ]);
+      if (dishes.length === 0) expect(document.result).toEqual(sale);
+      else expect(total).not.toBe(sale.total);
       expect(sale.lines[0]!.descriptions).toEqual({ [locale]: labels.sampleItemName });
       expect(sale.orderLabel).toBe(labels.sampleTableLabel);
       expect(sale.invoiceNumber).toBe(labels.sampleInvoiceNumber);
       expect(document.issuer.venueName).toBe(labels.sampleIssuerName);
-      expect(document.receipt.footerMessage).toBe(labels.sampleFooter);
+      expect(document.receipt.footerMessage).toBeUndefined();
       expect(sale.qr).toBe("https://example.invalid/waitron/sample-receipt");
       expect(sale.qrText).toEqual(WORDS);
       const text = printedLines(
@@ -29,7 +46,6 @@ describe("formatSampleReceipt", () => {
       expect(text).toContain(labels.practice);
       expect(text).toContain(labels.cash);
       expect(text).toContain(labels.sampleItemName);
-      expect(text).toContain(labels.sampleFooter);
     },
   );
 
@@ -61,9 +77,46 @@ describe("formatSampleReceipt", () => {
     const text = printedLines(bytes).join("\n");
     expect(text.match(/PRUEBA - SIN COBRO REAL/g)).toHaveLength(2);
     expect(text).toContain("Café y tostada");
-    expect(text).toContain("5,50 €");
+    expect(text).toContain("16,50 €");
     expect(text).toContain("MUESTRA/1");
-    expect(text).toContain("Café, jamón, niño, pingüino · 5 €");
+    expect(text).not.toContain("pingüino");
+  });
+
+  it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"])(
+    "draws every sample dish of %s without changing a letter",
+    (locale) => {
+      const names = receiptSampleItemsFor(locale);
+      for (const name of names) expect(prepareText(name), name).toBe(name.normalize("NFC"));
+      const wide = printedLines(
+        formatSampleReceipt({ paperWidth: "80mm", resolution: "203dpi" }, WORDS, locale),
+      ).join("\n");
+      for (const name of names) expect(wide, name).toContain(name);
+      expect(wide).not.toContain("pingüino");
+      const narrow = printedLines(
+        formatSampleReceipt({ paperWidth: "58mm", resolution: "203dpi" }, WORDS, locale),
+      )
+        .join(" ")
+        .replace(/ +/g, " ");
+      for (const name of names) expect(narrow, name).toContain(name);
+    },
+  );
+
+  it("totals the five Spanish sample dishes with the first dish, and gives change from 20", () => {
+    const lines = printedLines(
+      formatSampleReceipt({ paperWidth: "80mm", resolution: "203dpi" }, undefined, "es-ES"),
+    );
+    expect(receiptSampleItemsFor("es-ES")).toHaveLength(5);
+    for (const pattern of [
+      /^TOTAL +16,50 €$/,
+      /^Base imponible 10% +15,00 €$/,
+      /^IVA 10% +1,50 €$/,
+      /^Efectivo +20,00 €$/,
+      /^Cambio +3,50 €$/,
+    ])
+      expect(
+        lines.some((line) => pattern.test(line.trim())),
+        String(pattern),
+      ).toBe(true);
   });
 
   it("puts the fiscal backend's words around the sample QR", () => {

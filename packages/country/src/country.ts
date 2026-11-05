@@ -109,7 +109,6 @@ export const RECEIPT_LABEL_KEYS = [
   "refundTotal",
   "sampleIssuerName",
   "sampleInvoiceNumber",
-  "sampleFooter",
   "sampleTableLabel",
   "sampleItemName",
 ] as const;
@@ -137,6 +136,8 @@ export interface CountryPack {
   readonly invoiceLocales: readonly string[];
   /** Resource locales can include display translations beyond the offered invoice locales. */
   readonly receiptLabels?: Readonly<Record<string, ReceiptLabels>>;
+  /** Dish names a sample receipt adds, per receipt language, using between them every accented letter the language writes. */
+  readonly receiptSampleItems?: Readonly<Record<string, readonly string[]>>;
   readonly officialLocales?: readonly string[];
   readonly requiredContentLocales?: readonly string[];
   readonly moduleIds: readonly string[];

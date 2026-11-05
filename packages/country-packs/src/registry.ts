@@ -23,6 +23,7 @@ import {
 import {
   SPAIN,
   SPAIN_RECEIPT_LABELS,
+  SPAIN_RECEIPT_SAMPLE_ITEMS,
   SPAIN_RECIPIENT_REGION_NAMES,
   SPAIN_RECIPIENT_IDENTIFIER_POLICY,
   SPAIN_RECIPIENT_IDENTIFIER_LABELS,
@@ -180,6 +181,8 @@ export function resolveInstalledStartingContentLanguages(
 export const FALLBACK_RECEIPT_LOCALE = SPAIN.defaultLocale;
 const FALLBACK_RECEIPT_LABELS: ReceiptLabels =
   SPAIN_RECEIPT_LABELS[SPAIN.defaultLocale as keyof typeof SPAIN_RECEIPT_LABELS];
+const FALLBACK_RECEIPT_SAMPLE_ITEMS: readonly string[] =
+  SPAIN_RECEIPT_SAMPLE_ITEMS[SPAIN.defaultLocale as keyof typeof SPAIN_RECEIPT_SAMPLE_ITEMS];
 
 /** The receipt languages the venue's installed country pack offers, and the one it fixes, if any. */
 export function resolveInstalledReceiptLanguageRules(input: VenueGeography): ReceiptLanguageRules {
@@ -195,6 +198,15 @@ export function receiptLabelsFor(locale: string): ReceiptLabels {
     if (labels !== undefined) return labels;
   }
   return FALLBACK_RECEIPT_LABELS;
+}
+
+/** Exact resource lookup, falling back as `receiptLabelsFor` does. */
+export function receiptSampleItemsFor(locale: string): readonly string[] {
+  for (const pack of COUNTRY_PACKS) {
+    const items = pack.receiptSampleItems?.[locale];
+    if (items !== undefined) return items;
+  }
+  return FALLBACK_RECEIPT_SAMPLE_ITEMS;
 }
 
 function regionNameFor(code: string, locale: string): string | undefined {

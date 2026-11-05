@@ -194,7 +194,7 @@ the provisioned station breaks that lookup; finding it by `is_default` (as `dev-
 | `apps/server/src/invoice-selection.ts:31` | Spain-only check in general code: a full-invoice address must end with «España», or staff get `invoice.recipient_invalid`. Home: `country-es`, beside the tax ID check it already uses |
 | `packages/ui/demo/main.ts:66–274` | About 45 Spanish strings in the ui package's developer showcase («Cobrar», «Modo formación»); not shipped, not scanned |
 | `apps/setup/src/receipt-languages.ts:6–9` | «Español», «Català», «Galego», «Euskara» on setup's review screen; the venue screen shows translated labels instead, so the two disagree |
-| `apps/server/src/printer-test-page.ts:19`, `sample-receipt.ts:38` | «Café, jamón, niño · 5 € · ¿Sí? ¡Sí!» and «…pingüino · 5 €» — character samples printed in every language |
+| `apps/server/src/i18n/printer-test-page.ts:3` | «Café, jamón, niño · 5 € · ¿Sí? ¡Sí!» — the printer test page's character sample, printed in every language |
 | `apps/server/scripts/receipt-look.ts` | A developer tool drawing Spanish sample receipts as pictures; never run by CI, writes no database |
 | `apps/server/README.md:152–156` | Example setup values «Mostrador», «Calle Mayor 1» |
 | `apps/server/scripts/cloud-translation-vectors.ts:36` | `{ ca: "Cigaló", es: "Carajillo" }` — sample translation in the Cloud contract's test data; translation is its subject |
