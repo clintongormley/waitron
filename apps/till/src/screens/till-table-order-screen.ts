@@ -184,7 +184,7 @@ import {
 } from "../state/portion-selection.js";
 import "../widgets/portion-picker.js";
 import "../widgets/split-picker.js";
-import type { TillSplitPicker } from "../widgets/split-picker.js";
+import type { SplitTakeOverDetail, TillSplitPicker } from "../widgets/split-picker.js";
 import {
   leftWithNothingToPay,
   anywayNote,
@@ -244,7 +244,16 @@ export interface OtherDraft {
 export interface TakeOverDraftDetail {
   draftId: string;
   revision: number;
+  /** Set when Split a table's panel asked, with that panel's prompt: the bill the draft is on. */
+  billId?: string;
+  prompt?: object;
 }
+
+/** A bill-less draft comes from the order screen, a bill's from Split a table's panel. */
+type TakeOverAsked = Pick<OtherDraft, "id" | "revision"> & {
+  ownerName: string | null;
+  billId?: string;
+};
 
 export interface SplitDraftSourceDetail {
   store: WorkingOrderStore;
@@ -1446,6 +1455,8 @@ export class TillTableOrderScreen extends LitElement {
   @state() private splitCountRefusal: { field: SplitSide; message: string } | null = null;
   /** A refusal naming no count, until Split is pressed. */
   @state() private splitMessage: string | TemplateResult | null = null;
+  /** Its own field: a refused take-over leaves a bill held, and a held bill clears {@link splitMessage}. */
+  @state() private splitTakeOverMessage: string | TemplateResult | null = null;
   /** Split was pressed with nothing left to stay, so the panel asks what to do. */
   @state() private splitAsking = false;
   #splitPrompt?: object;
@@ -1588,11 +1599,13 @@ export class TillTableOrderScreen extends LitElement {
   /** Moved on by the app each time a take-over it was asked for has answered, or failed. */
   @property({ attribute: false }) takeOversAnswered = 0;
   /** The draft whose take-over has just answered, until its dialog has closed. */
-  #takeOverAnswered?: string;
+  #takeOverAnswered?: TakeOverAsked;
   /** The draft whose take-over is being asked about. */
-  @state() private takeOverPending: OtherDraft | null = null;
+  @state() private takeOverPending: TakeOverAsked | null = null;
   /** {@link takeOversAnswered} when a take-over was sent; unset while none is out. */
   @state() private takeOverSent: number | null = null;
+  /** Why the app refused a take-over the panel asked for, read when {@link takeOversAnswered} moves. */
+  @property({ attribute: false }) splitTakeOverRefusal: string | TemplateResult | null = null;
   /** The bill a quiet Pay was tapped on, while it still has unsent dishes. */
   @state() private payUnsentFor: { billId: string | undefined } | null = null;
 
@@ -2138,7 +2151,9 @@ export class TillTableOrderScreen extends LitElement {
       this.#draftMoveOpening = undefined;
     }
     if (this.takeOverSent !== null && this.takeOversAnswered !== this.takeOverSent) {
-      this.#takeOverAnswered = this.takeOverPending?.id;
+      this.#takeOverAnswered = this.takeOverPending ?? undefined;
+      if (this.#takeOverAnswered?.billId !== undefined)
+        this.splitTakeOverMessage = this.splitTakeOverRefusal;
       this.takeOverSent = null;
       this.takeOverPending = null;
     }
@@ -3365,9 +3380,15 @@ export class TillTableOrderScreen extends LitElement {
     this.#takeOverAnswered = undefined;
     if (taken === undefined) return;
     await this.updateComplete;
-    const still = this.otherDrafts.some((other) => other.id === taken);
+    if (taken.billId !== undefined) {
+      await this.renderRoot
+        .querySelector<TillSplitPicker>("till-split-picker")
+        ?.focusBill(taken.billId);
+      return;
+    }
+    const still = this.otherDrafts.some((other) => other.id === taken.id);
     this.renderRoot
-      .querySelector<HTMLElement>(still ? `[data-take-over="${taken}"]` : "#draft-title")
+      .querySelector<HTMLElement>(still ? `[data-take-over="${taken.id}"]` : "#draft-title")
       ?.focus();
   }
 
@@ -3376,7 +3397,16 @@ export class TillTableOrderScreen extends LitElement {
     const other = this.takeOverPending;
     if (other === null || this.takeOverSent !== null) return;
     this.takeOverSent = this.takeOversAnswered;
-    const detail: TakeOverDraftDetail = { draftId: other.id, revision: other.revision };
+    const detail: TakeOverDraftDetail = {
+      draftId: other.id,
+      revision: other.revision,
+      ...(other.billId === undefined
+        ? {}
+        : {
+            billId: other.billId,
+            ...(this.#splitPrompt === undefined ? {} : { prompt: this.#splitPrompt }),
+          }),
+    };
     this.#dispatch("take-over-draft", detail);
   }
 
@@ -5264,6 +5294,7 @@ export class TillTableOrderScreen extends LitElement {
     this.splitAttempted = false;
     this.splitCountRefusal = null;
     this.splitMessage = null;
+    this.splitTakeOverMessage = null;
     this.splitAsking = false;
     this.#splitPrompt = undefined;
     this.#splitAnswered = undefined;
@@ -5613,6 +5644,8 @@ export class TillTableOrderScreen extends LitElement {
       );
     const held = this.#splitHeld(sources);
     const message = held.length > 0 ? this.#splitTakenSentence(held) : this.splitMessage;
+    // A take-over's answer reaches the drafts before its record is replaced; Split waits for both.
+    const holding = held.length > 0 || this.takeOverSent !== null;
     const countsBad =
       parseGuestCount(this.splitStaying) === undefined ||
       parseGuestCount(this.splitLeaving) === undefined;
@@ -5640,6 +5673,13 @@ export class TillTableOrderScreen extends LitElement {
                   this.splitPicks = event.detail.split;
                   if (this.splitAsking) this.#leaveSplitQuestion();
                   this.#actionScope?.changed();
+                }}
+                @split-take-over=${(event: CustomEvent<SplitTakeOverDetail>) => {
+                  event.stopPropagation();
+                  if (!this.#actionControlCurrent(event) || this.takeOverSent !== null) return;
+                  const { billId, draftId, revision, ownerName } = event.detail;
+                  this.splitTakeOverMessage = null;
+                  this.takeOverPending = { id: draftId, revision, ownerName, billId };
                 }}
               ></till-split-picker>
               ${this.#splitSummaryLines(sources, leaving, kept)}`
@@ -5676,6 +5716,13 @@ export class TillTableOrderScreen extends LitElement {
               ${message}
             </p>`
       }
+      ${
+        this.splitTakeOverMessage === null
+          ? nothing
+          : html`<p class="form-message" role="alert" data-split-take-over-refusal>
+              ${this.splitTakeOverMessage}
+            </p>`
+      }
       <wt-form-actions
         .error=${
           readFailed
@@ -5706,10 +5753,8 @@ export class TillTableOrderScreen extends LitElement {
                 </wt-button>`
             : html`<wt-button
                 data-split-confirm
-                variant=${sources === undefined || held.length > 0 ? "secondary" : "primary"}
-                ?disabled=${
-                  sources === undefined || held.length > 0 || (this.splitAttempted && countsBad)
-                }
+                variant=${sources === undefined || holding ? "secondary" : "primary"}
+                ?disabled=${sources === undefined || holding || (this.splitAttempted && countsBad)}
                 @click=${(event: Event) => void this.#confirmSplitPick(event)}
               >
                 ${t("table.split_guests_confirm")}
@@ -5757,10 +5802,17 @@ export class TillTableOrderScreen extends LitElement {
     if (!this.#actionControlCurrent(event)) return;
     const sources = this.#splitSources();
     const tableId = this.splitTableId;
-    if (sources === undefined || tableId === null || this.#splitHeld(sources).length > 0) return;
+    if (
+      sources === undefined ||
+      tableId === null ||
+      this.takeOverSent !== null ||
+      this.#splitHeld(sources).length > 0
+    )
+      return;
     this.splitAttempted = true;
     this.splitCountRefusal = null;
     this.splitMessage = null;
+    this.splitTakeOverMessage = null;
     const staying = parseGuestCount(this.splitStaying);
     const leaving = parseGuestCount(this.splitLeaving);
     if (staying === undefined || leaving === undefined) {

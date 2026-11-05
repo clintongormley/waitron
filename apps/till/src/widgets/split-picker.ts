@@ -119,6 +119,15 @@ export class TillSplitPicker extends LitElement {
     button?.focus();
   }
 
+  /** After a take-over's dialog: its row's button while the bill has one, and otherwise its tick. */
+  async focusBill(billId: string): Promise<void> {
+    await this.focusTakeOver(billId);
+    if (this.renderRoot.querySelector(`[data-split-take-over="${CSS.escape(billId)}"]`) === null)
+      this.renderRoot
+        .querySelector<HTMLElement>(`[data-split-tick="${CSS.escape(billId)}"]`)
+        ?.focus();
+  }
+
   /** A bill's dishes give way to its take-over row, which would drop focus held among them. A bill
    * still drawing its dishes has no such row, so its focus stays. */
   override willUpdate(changed: PropertyValues<this>): void {

@@ -652,6 +652,7 @@ export class DraftSync {
     }
     if (this.#ended || read !== this.#reads) return "failed";
     this.#unsaved = false;
+    this.#recordTakeOver(taken, draftId);
     this.applyBillSnapshot(taken, read);
     return "taken";
   }

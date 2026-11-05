@@ -3080,6 +3080,413 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     });
   });
 
+  describe("take-over rows", () => {
+    const luisOn = (billId: string): Draft => ({
+      ...savedDraft(billId, "p2", "Luis"),
+      lines: [
+        {
+          id: `luis-${billId}`,
+          sourceLineId: null,
+          source: null,
+          menuItemId: "offer-flan",
+          variantId: null,
+          menuVersionId: null,
+          options: [],
+          extras: [],
+          note: null,
+          quantity: "1.000",
+          courseId: null,
+          noMerge: false,
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
+          unavailable: false,
+        },
+      ],
+    });
+    const row = (el: TillApp, billId: string) =>
+      picker(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        `[data-split-take-over="${billId}"]`,
+      );
+    const dialog = (el: TillApp) =>
+      q<HTMLElementTagNameMap["wt-dialog"]>(el, "[data-take-over-dialog]")!;
+    const footRefusal = (el: TillApp) =>
+      q(el, "[data-split-take-over-refusal]")?.textContent?.replace(/\s+/g, " ").trim();
+    const heldWords = () => t("table.split_taken").replace("{who}", "Luis");
+    const sentEdits = () => api.splitTable!.mock.calls[0]![4];
+    const b2Taken = { billId: "b2", editorVersion: 2, draftId: "draft-b2", draftRevision: 2 };
+
+    async function asked(el: TillApp, billId = "b2"): Promise<void> {
+      row(el, billId)!.click();
+      await flush(el);
+    }
+
+    async function taken(el: TillApp, billId = "b2"): Promise<void> {
+      await asked(el, billId);
+      await press(el, "[data-take-over-confirm]");
+      await flush(el, 6);
+    }
+
+    /** Another till's order reaches a bill the waiter has already ticked. */
+    async function tickedThenHeld(over: Record<string, unknown> = {}) {
+      const el = await panelWith(over);
+      await tick(el, "b2");
+      server.drafts.push(luisOn("b2"));
+      await refreshDrafts(el);
+      expect(row(el, "b2")).not.toBeNull();
+      expect(tickBox(el, "b2").checked).toBe(true);
+      expect(splitButton(el).disabled).toBe(true);
+      return el;
+    }
+
+    function expectStillHeld(el: TillApp): void {
+      expect(row(el, "b2")).not.toBeNull();
+      expect(tickBox(el, "b2").checked).toBe(true);
+      expect(refusal(el)!.textContent).toContain(heldWords());
+      expect(splitButton(el).variant).toBe("secondary");
+      expect(splitButton(el).disabled).toBe(true);
+    }
+
+    it("take-over: a row's button opens the screen's dialog, naming the holder, and Cancel sends nothing", async () => {
+      server.drafts.push(luisOn("b2"));
+      const el = await panelWith({});
+
+      await asked(el);
+      expect(dialog(el).open).toBe(true);
+      expect(q(el, "[data-take-over-body]")!.textContent).toContain("Luis");
+
+      await press(el, "[data-take-over-cancel]");
+      expect(dialog(el).open).toBe(false);
+      expect(server.takeOverDraft).not.toHaveBeenCalled();
+      expect(row(el, "b2")).not.toBeNull();
+    });
+
+    it("take-over: another bill's sends that bill's own edit, not the on-screen bill's", async () => {
+      server.drafts.push(luisOn("b2"));
+      const el = await panelWith({});
+
+      await taken(el);
+
+      expect(server.takeOverDraft).toHaveBeenCalledExactlyOnceWith(
+        "v1",
+        "draft-b2",
+        {
+          revision: 1,
+          expectedEdit: {
+            billId: "b2",
+            editorVersion: 1,
+            draftId: "draft-b2",
+            draftRevision: 1,
+          },
+          submissionId: expect.any(String),
+        },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+      expect(row(el, "b2")).toBeNull();
+      expect(tableOrder(el)!.orderId).toBe("wo-4");
+    });
+
+    it("take-over: the bill on screen goes through the sync's own take-over, and its row goes", async () => {
+      server.drafts.push(luisOn("wo-4"));
+      const el = await panelWith({});
+      const reads = api.listDrafts!.mock.calls.length;
+
+      await taken(el, "wo-4");
+
+      expect(server.takeOverDraft).toHaveBeenCalledOnce();
+      expect(server.takeOverDraft.mock.calls[0]![2].expectedEdit.billId).toBe("wo-4");
+      // takeOverOn reads after its answer; the on-screen take-over applies the answer alone.
+      expect(api.listDrafts!.mock.calls.length).toBe(reads);
+      expect(row(el, "wo-4")).toBeNull();
+      expect(tickBox(el, "wo-4").disabled).toBe(false);
+    });
+
+    it("take-over: the bill on screen, ticked, keeps its tick and sends once with the new state", async () => {
+      const el = await panelWith({});
+      await tick(el, "wo-4");
+      server.drafts.push(luisOn("wo-4"));
+      await refreshDrafts(el);
+      expect(splitButton(el).disabled).toBe(true);
+
+      await taken(el, "wo-4");
+
+      expect(tickBox(el, "wo-4").checked).toBe(true);
+      expect(splitButton(el).disabled).toBe(false);
+      await pressSplit(el);
+      expect(api.splitTable).toHaveBeenCalledOnce();
+      expect(sentEdits()).toEqual([
+        { billId: "wo-4", editorVersion: 2, draftId: "draft-wo-4", draftRevision: 2 },
+      ]);
+    });
+
+    it("take-over: the confirm stays off while one is out, and the dialog closes on its answer, a refusal included", async () => {
+      server.drafts.push(luisOn("b2"));
+      let refuse!: (error: unknown) => void;
+      const el = await panelWith({});
+      server.takeOverDraft.mockImplementationOnce(
+        () => new Promise((_, reject) => (refuse = reject)),
+      );
+      const answered = tableOrder(el)!.takeOversAnswered;
+
+      await asked(el);
+      await press(el, "[data-take-over-confirm]");
+      expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-take-over-confirm]")!.disabled).toBe(
+        true,
+      );
+      expect(dialog(el).open).toBe(true);
+
+      refuse({ code: "draft.out_of_date", status: 409 });
+      await flush(el, 6);
+      expect(tableOrder(el)!.takeOversAnswered).toBe(answered + 1);
+      expect(dialog(el).open).toBe(false);
+    });
+
+    describe.each<Binding>(["desktop", "handheld"])("refused, %s", (binding) => {
+      it("take-over: says so at the foot and not the banner, beside the held sentence", async () => {
+        server.bills.add("b2");
+        const el = await mounted(binding);
+        await toPanel(el);
+        await tick(el, "b2");
+        server.drafts.push(luisOn("b2"));
+        await refreshDrafts(el);
+        server.takeOverDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
+
+        await taken(el);
+
+        expect(footRefusal(el)).toBe(t("table.take_over_changed"));
+        expect(banner(el)).toBeNull();
+        expectStillHeld(el);
+      });
+    });
+
+    it("take-over: a refusal on a ticked bill shows both lines at once, still held, and nothing is sent", async () => {
+      const el = await tickedThenHeld();
+      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.not_found", status: 404 });
+
+      await taken(el);
+
+      expect(footRefusal(el)).toBe(t("table.take_over_gone"));
+      expectStillHeld(el);
+      expect(banner(el)).toBeNull();
+
+      await refreshDrafts(el);
+      expect(footRefusal(el)).toBe(t("table.take_over_gone"));
+      expectStillHeld(el);
+
+      splitButton(el).click();
+      await flush(el, 6);
+      expect(api.splitTable).not.toHaveBeenCalled();
+    });
+
+    it('take-over: "failed" says table.error at the foot, still held, nothing sent', async () => {
+      const el = await tickedThenHeld();
+      server.takeOverDraft.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+      await taken(el);
+
+      expect(footRefusal(el)).toBe(t("table.error"));
+      expectStillHeld(el);
+      expect(banner(el)).toBeNull();
+      splitButton(el).click();
+      await flush(el, 6);
+      expect(api.splitTable).not.toHaveBeenCalled();
+    });
+
+    it("take-over: the next take-over pressed clears the refusal", async () => {
+      const el = await tickedThenHeld();
+      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.not_found", status: 404 });
+      await taken(el);
+      expect(footRefusal(el)).not.toBeUndefined();
+
+      await asked(el);
+
+      expect(footRefusal(el)).toBeUndefined();
+    });
+
+    it("take-over: closing the panel clears the refusal", async () => {
+      server.drafts.push(luisOn("b2"));
+      const el = await panelWith({});
+      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.not_found", status: 404 });
+      await taken(el);
+      expect(footRefusal(el)).not.toBeUndefined();
+
+      await backAndAgain(el);
+
+      expect(footRefusal(el)).toBeUndefined();
+    });
+
+    it("take-over: a refusal goes when Split is pressed on the bills left, and does not come back with the panel a refused split reopens", async () => {
+      const el = await tickedThenHeld({
+        splitTable: vi.fn().mockRejectedValue({ code: "table.not_shared" }),
+      });
+      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.not_found", status: 404 });
+      await taken(el);
+      await tick(el, "b2");
+      await tick(el, "wo-4");
+      expect(footRefusal(el)).not.toBeUndefined();
+
+      await pressSplit(el);
+
+      expect(api.splitTable).toHaveBeenCalledOnce();
+      expect(q(el, "[data-split-pick]")).not.toBeNull();
+      expect(footRefusal(el)).toBeUndefined();
+    });
+
+    it("take-over: focus goes to the row's button while it is still there", async () => {
+      const el = await tickedThenHeld();
+      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.not_found", status: 404 });
+
+      await taken(el);
+
+      await expect
+        .poll(() => picker(el)!.shadowRoot!.activeElement?.getAttribute("data-split-take-over"))
+        .toBe("b2");
+    });
+
+    it("take-over: focus goes to the bill's tick once its row has gone", async () => {
+      const el = await tickedThenHeld();
+
+      await taken(el);
+
+      await expect
+        .poll(() => picker(el)!.shadowRoot!.activeElement?.getAttribute("data-split-tick"))
+        .toBe("b2");
+    });
+
+    it("take-over: a tick taken afterwards records the new state, so Split sends with no refusal", async () => {
+      server.drafts.push(luisOn("b2"));
+      const el = await panelWith({});
+      expect(tickBox(el, "b2").disabled).toBe(true);
+
+      await taken(el);
+      expect(tickBox(el, "b2").disabled).toBe(false);
+      await tick(el, "b2");
+      await pressSplit(el);
+
+      expect(api.splitTable).toHaveBeenCalledOnce();
+      expect(sentEdits()).toEqual([b2Taken]);
+      expect(refusal(el)).toBeNull();
+    });
+
+    it("take-over: a bill ticked whole keeps its tick, Split is held until the answer, and the first press sends once with the new state", async () => {
+      const el = await tickedThenHeld();
+
+      await taken(el);
+
+      expect(tickBox(el, "b2").checked).toBe(true);
+      expect(row(el, "b2")).toBeNull();
+      expect(refusal(el)).toBeNull();
+      expect(splitButton(el).variant).toBe("primary");
+      expect(splitButton(el).disabled).toBe(false);
+
+      await pressSplit(el);
+
+      expect(refusal(el)).toBeNull();
+      expect(api.splitTable).toHaveBeenCalledOnce();
+      expect(api.splitTable!.mock.calls[0]![2]).toEqual(whole("b2"));
+      expect(sentEdits()).toEqual([b2Taken]);
+    });
+
+    it("take-over: a bill with picks keeps them, and sends once with the new state", async () => {
+      const el = await panelWith({
+        getSplitSources: vi.fn().mockResolvedValue({
+          bills: [
+            { billId: "wo-4", lines: [dish("soup", 1)], balance: balance("wo-4", "10.00") },
+            {
+              billId: "b2",
+              lines: [dish("steak", 1), dish("chips", 2)],
+              balance: balance("b2", "20.00"),
+            },
+          ],
+        } satisfies SplitSources),
+      });
+      await pickDish(el, "b2", "steak");
+      expect(tickBox(el, "b2").indeterminate).toBe(true);
+      server.drafts.push(luisOn("b2"));
+      await refreshDrafts(el);
+      expect(row(el, "b2")).not.toBeNull();
+
+      await taken(el);
+
+      expect(tickBox(el, "b2").indeterminate).toBe(true);
+      expect(
+        dishRows(el, "b2").querySelector<HTMLInputElement>('[data-pick="steak"]')!.checked,
+      ).toBe(true);
+      await pressSplit(el);
+
+      expect(api.splitTable).toHaveBeenCalledOnce();
+      expect(sentEdits()).toEqual([b2Taken]);
+    });
+
+    it("take-over: Split stays held between the take-over's own answer and the read after it", async () => {
+      const el = await tickedThenHeld();
+      let release!: () => void;
+      const reading = new Promise<void>((resolve) => (release = resolve));
+      api.listDrafts!.mockImplementationOnce(async (partyId: string) => {
+        await reading;
+        return server.listDrafts(partyId);
+      });
+
+      await taken(el);
+      expect(server.takeOverDraft).toHaveBeenCalledOnce();
+      // The sync already holds the answer, so any redraw now would draw the bill as no longer held.
+      el.requestUpdate();
+      await flush(el);
+
+      expect(splitButton(el).disabled).toBe(true);
+      expect(splitButton(el).variant).toBe("secondary");
+      splitButton(el).click();
+      await flush(el);
+      expect(api.splitTable).not.toHaveBeenCalled();
+
+      release();
+      await flush(el, 6);
+
+      expect(splitButton(el).disabled).toBe(false);
+      expect(splitButton(el).variant).toBe("primary");
+    });
+
+    it("take-over: with the read after it failing, the row goes with no message, other bills' rows stay as last read, and the first press sends once", async () => {
+      const three = [...bills(), partyBill("b3", 3, "30.00")];
+      const el = await panelWith({
+        getPartyBills: vi.fn().mockResolvedValue(three),
+        getSplitSources: vi.fn().mockResolvedValue({
+          bills: [
+            ...answered().bills,
+            { billId: "b3", lines: [dish("flan", 1)], balance: balance("b3", "30.00") },
+          ],
+        } satisfies SplitSources),
+      });
+      server.bills.add("b3");
+      server.drafts.push({ ...luisOn("b3"), ownerName: "Eva", ownerId: "p3" });
+      await refreshDrafts(el);
+      await tick(el, "b2");
+      server.drafts.push(luisOn("b2"));
+      await refreshDrafts(el);
+      expect(row(el, "b2")).not.toBeNull();
+      expect(row(el, "b3")).not.toBeNull();
+
+      server.drafts.splice(
+        server.drafts.findIndex((draft) => draft.billId === "b3"),
+        1,
+      );
+      api.listDrafts!.mockRejectedValue(new TypeError("Failed to fetch"));
+      await taken(el);
+
+      expect(row(el, "b2")).toBeNull();
+      expect(row(el, "b3")).not.toBeNull();
+      expect(tickBox(el, "b2").checked).toBe(true);
+      expect(footRefusal(el)).toBeUndefined();
+      expect(refusal(el)).toBeNull();
+      expect(banner(el)).toBeNull();
+
+      await pressSplit(el);
+
+      expect(api.splitTable).toHaveBeenCalledOnce();
+      expect(sentEdits()).toEqual([b2Taken]);
+    });
+  });
+
   describe("a party with no bill", () => {
     const noBill = party({ tableIds: ["t4", "t5"], billCount: 0, openingBillId: null });
     const noBillApi = () => ({

@@ -3227,6 +3227,8 @@ export class TillApp extends LitElement {
   @state() private groupCommandBusy = false;
   /** Moved on each time a take-over the table screen asked for has answered, or failed. */
   @state() private takeOversAnswered = 0;
+  /** Why the take-over Split a table's panel asked for was refused. */
+  @state() private splitTakeOverRefusal: string | TemplateResult | null = null;
   /** Finish table was refused because a bill of the party is unpaid. */
   @state() private finishRefused = false;
   /** A name the server refused for the party, and why, which the table screen shows beside its field. */
@@ -11946,19 +11948,42 @@ export class TillApp extends LitElement {
   };
 
   async #onTakeOverDraft(event: Event): Promise<void> {
-    const { draftId, revision } = (event as CustomEvent<TakeOverDraftDetail>).detail;
+    const { draftId, revision, billId, prompt } = (event as CustomEvent<TakeOverDraftDetail>)
+      .detail;
     const sync = this.#draftSync;
+    this.splitTakeOverRefusal = null;
+    const refuse = (said: CounterError) => {
+      if (billId === undefined) this.errorKey = said;
+      else {
+        this.errorKey = undefined;
+        this.splitTakeOverRefusal = errorText(
+          said,
+          this.tableMenus,
+          this.tables,
+          undefined,
+          this.checkTimeOffered,
+          "panel",
+        );
+      }
+    };
     try {
       if (sync === undefined) {
-        this.errorKey = "table.error";
+        refuse("table.error");
         return;
       }
       this.errorKey = undefined;
-      const outcome = await sync.takeOver(draftId, revision);
-      if (sync !== this.#draftSync || outcome === "taken") return;
-      if (outcome === "unsaved") this.errorKey ??= "table.error";
-      else if (outcome === "failed") this.errorKey = "table.error";
-      else this.errorKey = takeOverRefusalError(outcome.refused);
+      const outcome =
+        billId === undefined || billId === sync.billId
+          ? await sync.takeOver(draftId, revision)
+          : await sync.takeOverOn(billId, draftId, revision);
+      if (sync !== this.#draftSync) return;
+      if (outcome === "taken" || (typeof outcome === "object" && "taken" in outcome)) {
+        if (billId !== undefined && prompt !== undefined) this.#observeTakenOver(prompt, billId);
+        return;
+      }
+      if (outcome === "unsaved") refuse(this.errorKey ?? "table.error");
+      else if (outcome === "failed") refuse("table.error");
+      else refuse(takeOverRefusalError(outcome.refused));
     } finally {
       this.takeOversAnswered += 1;
     }
@@ -15717,6 +15742,12 @@ export class TillApp extends LitElement {
         ]),
       ),
     );
+  }
+
+  /** The waiter has just acted on this state, so the next press compares against it. */
+  #observeTakenOver(prompt: object, billId: string): void {
+    const observed = this.#splitObservations.get(prompt);
+    if (observed?.has(billId) === true) observed.set(billId, this.#billEditIfReady(billId));
   }
 
   /** The first selected bill whose edit state is not what it was when the waiter ticked it. */
@@ -19660,6 +19691,7 @@ export class TillApp extends LitElement {
       .candidateReviewAllowed=${this.#draftSync?.billStatus === "open" && (this.#draftSync.edit?.editorId === null || this.#draftSync?.edit?.editorId === this.operatorPersonId)}
       .candidateReviewBusy=${this.resolvingDraftCandidate === this.#draftSync}
       .takeOversAnswered=${this.takeOversAnswered}
+      .splitTakeOverRefusal=${this.splitTakeOverRefusal}
       .party=${this.orderParty}
       .allergyView=${this.tableAllergyView}
       .kitchenNote=${this.orderParty?.kitchenNote.note ?? null}
@@ -19807,6 +19839,7 @@ export class TillApp extends LitElement {
           .candidateReviewAllowed=${this.#draftSync?.billStatus === "open" && (this.#draftSync.edit?.editorId === null || this.#draftSync?.edit?.editorId === this.operatorPersonId)}
           .candidateReviewBusy=${this.resolvingDraftCandidate === this.#draftSync}
           .takeOversAnswered=${this.takeOversAnswered}
+          .splitTakeOverRefusal=${this.splitTakeOverRefusal}
           .party=${this.orderParty}
           .allergyView=${this.tableAllergyView}
           .kitchenNote=${this.orderParty?.kitchenNote.note ?? null}
