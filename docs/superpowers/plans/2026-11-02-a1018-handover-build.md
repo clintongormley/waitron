@@ -1765,7 +1765,8 @@ The build departed from the task texts above in these ways; the task texts are l
   gives no F. A peer's open operation that names this box as its source still does
   (`operationFences`, `apps/server/src/boot-peer-check.ts`). Without one, that box does not take the
   restricted start or show its page. It comes up fenced by the held chart instead: `boot.ts` demotes its singleton role to secondary, `singletonPass` runs no
-  filing on a secondary, and `/api/node` reports `acceptingSales: false`.
+  filing on a secondary, `/api/node` reports `acceptingSales: false`, and its card sweep asks no
+  provider (`fencedOrMirror`).
 - **A wait ends in the same process (Ruling R14).** Carrying on, and a peer's later answer, go on
   with the start in the process that waited: the waiting start closes its own app, listeners and
   15-second re-ask timer first. So "for this start only" (decision 10) is the process's life, and
