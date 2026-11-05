@@ -688,7 +688,6 @@ describe("cash reservation without the optional payments module", () => {
       invoiceLocales: ["en-GB"],
       operationDescription: "Meals",
     });
-    const cashLocationId = locationId(await venueLocationId(db));
     const cashNodeId = await seedNode(db);
     const { deviceId } = await seedDevice(db);
     const [series] = await db
@@ -721,7 +720,7 @@ describe("cash reservation without the optional payments module", () => {
     const answer = await withTransaction(db, (tx) =>
       reserveTenderRefund(
         tx,
-        { ...cfg, nodeId: cashNodeId, locationId: cashLocationId, origin: deviceOrigin(deviceId) },
+        { ...cfg, nodeId: cashNodeId, origin: deviceOrigin(deviceId) },
         sale!.id,
         request(tender!.id),
         ACTOR,

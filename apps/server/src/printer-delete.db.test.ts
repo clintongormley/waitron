@@ -36,7 +36,6 @@ import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
   jobOrigin,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId,
   type DeleteImpact,
@@ -589,7 +588,6 @@ describe("the printer delete impact", () => {
     const [series] = await suite.db.select().from(invoiceSeries);
     const tillCfg: TradingContext = {
       nodeId: brandNodeId(series!.nodeId),
-      locationId: brandLocationId(v.cfg.locationId),
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
       tipsEnabled: false,

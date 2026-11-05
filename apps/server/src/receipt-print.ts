@@ -177,7 +177,7 @@ async function readDevicePrinters(
 /** Use the filed issuer where available and the current optional trim, address and logo. */
 async function buildReceiptBytes(
   tx: Transaction,
-  cfg: Pick<TradingContext, "locationId" | "practiceMode">,
+  cfg: Pick<TradingContext, "practiceMode">,
   ticket: TillSaleResult,
   saleId: string,
   duplicate: boolean,
@@ -326,7 +326,7 @@ export async function enqueueReceiptReprint(
 /** A receipt copy is a document job; the cash drawer has its own audited job. */
 export async function enqueueReceiptCopy(
   tx: Transaction,
-  cfg: Pick<TradingContext, "locationId" | "practiceMode">,
+  cfg: Pick<TradingContext, "practiceMode">,
   ticket: TillSaleResult,
   saleId: string,
   printer: { id: string } & EscSetting,
@@ -349,7 +349,7 @@ export async function enqueueReceiptCopy(
  */
 export async function enqueueInvoiceReceipt(
   tx: Transaction,
-  cfg: Pick<TradingContext, "locationId" | "practiceMode">,
+  cfg: Pick<TradingContext, "practiceMode">,
   ticket: TillSaleResult,
   saleId: string,
   printer: { id: string } & EscSetting,

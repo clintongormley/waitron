@@ -1,5 +1,5 @@
 import type { Decimal, DeviceOrigin, Origin } from "@waitron/shared";
-import type { NodeConfig } from "./node-config.js";
+import type { NodeIdentityConfig } from "./node-config.js";
 import type { TillAppSettings } from "./till-config.js";
 
 export interface FiscalRuntimeContext {
@@ -14,7 +14,7 @@ export interface RequestEffects {
 }
 
 export interface TradingContext
-  extends NodeConfig, TillAppSettings, FiscalRuntimeContext, RequestEffects {
+  extends NodeIdentityConfig, TillAppSettings, FiscalRuntimeContext, RequestEffects {
   /** Fiscal values and hashes must not depend on this flag. */
   practiceMode?: boolean;
 }

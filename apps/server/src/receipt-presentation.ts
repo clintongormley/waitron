@@ -9,7 +9,7 @@ import { readVenueLogoName } from "./receipt-venue-logo.js";
 
 export async function readReceiptPresentation(
   tx: Transaction,
-  cfg: Pick<TradingContext, "locationId">,
+  cfg: Pick<TradingContext, never>,
   saleId: string,
   printedLanguage: string,
 ): Promise<

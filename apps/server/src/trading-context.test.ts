@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { decimal, deviceId, locationId, nodeId } from "@waitron/shared";
+import { decimal, deviceId, nodeId } from "@waitron/shared";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import { requestCfg, storedDeviceOrigin } from "./request-config.js";
 import { sendingCfg } from "./made-here.js";
@@ -8,7 +8,6 @@ import { sendingCfg } from "./made-here.js";
 function context(): TradingContext {
   return {
     nodeId: nodeId("7a2b8c63-4d2c-4e3b-8c9f-2a3b4c5d6e7f"),
-    locationId: locationId("9c4d0e85-6f4e-4a5d-8e1b-4c5d6e7f8091"),
     locale: "ca-ES",
     invoiceLocales: ["ca-ES"],
     localeOverride: "ca-ES",
@@ -28,7 +27,6 @@ describe("trading context", () => {
     const device = deviceId("0f0e0d0c-0b0a-4908-8706-050403020100");
     expect(requestCfg(cfg, { deviceId: device })).toEqual({
       nodeId: "7a2b8c63-4d2c-4e3b-8c9f-2a3b4c5d6e7f",
-      locationId: "9c4d0e85-6f4e-4a5d-8e1b-4c5d6e7f8091",
       locale: "ca-ES",
       invoiceLocales: ["ca-ES"],
       localeOverride: "ca-ES",

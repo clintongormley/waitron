@@ -10,7 +10,7 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { persons, hashPin, startManagementSession } from "@waitron/identity";
 import { readRasterText } from "@waitron/printing";
 import { cardReaders, DEMO_READER_ID } from "@waitron/payments";
-import { formatEquipmentCode, locationId, nodeId } from "@waitron/shared";
+import { formatEquipmentCode, nodeId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountPrintApi } from "./print-api.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -73,7 +73,6 @@ beforeEach(async () => {
       db: suite.db,
       cfg: {
         nodeId: nodeId(randomUUID()),
-        locationId: locationId(venueId),
         locale: "en-GB",
         invoiceLocales: ["en-GB"],
         tipsEnabled: false,

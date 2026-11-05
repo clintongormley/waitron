@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import nodemailer from "nodemailer";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { withTransaction, venueLocationId } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -19,7 +19,7 @@ import {
 import { applyHistoricalTestVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import "@waitron/payments-sumup";
-import { AppError, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { AppError, nodeId as brandNodeId } from "@waitron/shared";
 import { createErrorBoundary, MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 import { createAccountEmailSender, type AccountEmailSender } from "./account-email.js";
@@ -166,10 +166,8 @@ async function setupVenue(): Promise<{ adminId: string; clerkId: string }> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(suite.db);
   venueCfg = {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venueId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

@@ -1,12 +1,12 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { expect, it } from "vitest";
 import { Hono } from "hono";
-import { CORE_MIGRATIONS, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, persons, sessions, IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { mountTillApi } from "./till-api.js";
 import { DEV_DEVICE_HEADER } from "./device-session.js";
 import { systemClock } from "./till-backend.js";
@@ -19,7 +19,6 @@ it("signs in normally in a venue where workforce has never been migrated", async
     invoiceLocales: ["en"],
     operationDescription: "Restaurant",
   });
-  const placeId = locationId(await venueLocationId(suite.db));
   const node = await seedNode(suite.db);
   const device = await seedDevice(suite.db);
   const [person] = await suite.db
@@ -44,7 +43,6 @@ it("signs in normally in a venue where workforce has never been migrated", async
       clock,
       cfg: {
         nodeId: nodeId(node),
-        locationId: placeId,
         locale: "en",
         invoiceLocales: ["en"],
         tipsEnabled: false,

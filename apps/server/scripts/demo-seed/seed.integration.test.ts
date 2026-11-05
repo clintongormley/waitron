@@ -21,7 +21,6 @@ import { computeDailyClose } from "@waitron/reporting";
 import {
   compareDecimal,
   decimal,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   jobOrigin,
   MEDIA_FILENAME,
@@ -61,7 +60,6 @@ function tillConfigFor(venue: Venue): OriginConfig {
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
     locale: SEED_INVOICE_LOCALE[LOCALE],
     invoiceLocales: [SEED_INVOICE_LOCALE[LOCALE]],
     tipsEnabled: false,

@@ -221,7 +221,6 @@ it.each([
       });
       expect(observed.cfg).toMatchObject({
         nodeId: NODE,
-        locationId: LOCATION,
         simplifiedInvoiceLimit: null,
         operationDescriptionRequired: false,
       });
@@ -268,7 +267,6 @@ it.each([
       });
       expect(observed.cfg).toMatchObject({
         nodeId: NODE,
-        locationId: LOCATION,
         locale: "en-GB",
         invoiceLocales: ["en-GB"],
         tipsEnabled: true,
@@ -372,7 +370,7 @@ it.each(["mirror", "primary"] as const)(
         nodeId: NODE,
         acceptingSales: mode === "primary",
       });
-      expect(observed.cfg).toMatchObject({ nodeId: NODE, locationId: LOCATION });
+      expect(observed.cfg).toMatchObject({ nodeId: NODE });
       expect(observed.orders?.cfg).toStrictEqual({ nodeId: mode === "mirror" ? originNode : NODE });
       expect(observed.orders?.tradingContext).toBe(observed.cfg);
       expect(observed.customers?.tradingContext).toBe(observed.cfg);

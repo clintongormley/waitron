@@ -121,7 +121,6 @@ async function populate(db: Database) {
   await db.execute(sql`insert into kitchen_timing_defaults (location_id) values (${locationId})`);
   const cfg: TradingContext = {
     nodeId,
-    locationId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

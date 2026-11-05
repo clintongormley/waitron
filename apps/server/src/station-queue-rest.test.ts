@@ -16,7 +16,7 @@ import type { FiscalBackend } from "@waitron/fiscal";
 import { loginWithPin, persons } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { listStationQueue } from "./working-order.js";
 import { updateStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
@@ -257,7 +257,6 @@ describe("station queue bump mode", () => {
     const nodeId = await seedNode(db);
     const cfg: TradingContext = {
       nodeId: brandNodeId(nodeId),
-      locationId: brandLocationId(locationId),
       locale: LOCALE,
       invoiceLocales: [LOCALE],
       tipsEnabled: false,

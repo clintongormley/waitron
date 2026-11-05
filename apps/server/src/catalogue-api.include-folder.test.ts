@@ -1,13 +1,13 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import type { DocumentMember, MenuPreview, MenuStructureNode } from "@waitron/catalogue";
 import { MEDIA_MIGRATIONS, mediaImages } from "@waitron/media";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
@@ -17,7 +17,6 @@ import "./errors.js";
 const PHOTO = `${"a".repeat(64)}.jpg`;
 const NOT_IN_LIBRARY = `${"b".repeat(64)}.jpg`;
 
-let locationId: string;
 let managerCookie: string;
 let staffCookie: string;
 
@@ -34,7 +33,6 @@ const suite = useVenueDb({
       operationDescription: "Venta",
       timeZone: "Europe/Madrid",
     });
-    locationId = await venueLocationId(db);
     await db.insert(mediaImages).values({ filename: PHOTO, names: { es: "Copas" } });
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [manager] = await tx
@@ -64,7 +62,6 @@ function mountApp(): Hono {
       db: suite.db,
       venueCfg: {
         nodeId: brandNodeId("11111111-1111-4111-8111-111111111111"),
-        locationId: brandLocationId(locationId),
         locale: "es-ES",
         invoiceLocales: ["es-ES"],
         tipsEnabled: false,

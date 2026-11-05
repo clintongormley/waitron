@@ -17,7 +17,7 @@ import {
 import { loadKeyRing } from "@waitron/credentials";
 import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@waitron/core";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
-import { decimal, deviceOrigin, locationId, nodeId } from "@waitron/shared";
+import { decimal, deviceOrigin, nodeId } from "@waitron/shared";
 import {
   getPaymentByRef,
   insertCapturedPayment,
@@ -70,7 +70,6 @@ async function setup() {
       clock: systemClock(),
       cfg: {
         nodeId: nodeId(seeded.nodeId),
-        locationId: locationId(seeded.locationId),
         locale: "es-ES",
         invoiceLocales: ["es-ES"],
         tipsEnabled: false,

@@ -2956,7 +2956,6 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     const cfg: TradingContext = {
       ...loadNodeIdentity(TILL_ENV),
       ...loadTillAppSettings(TILL_ENV),
-      locationId: brandLocationId(TILL_LOCATION_ID),
       simplifiedInvoiceLimit: null,
     };
     const enrolDevice = async (name: string): Promise<string> => {

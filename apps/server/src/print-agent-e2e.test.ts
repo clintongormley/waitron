@@ -10,13 +10,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  printJobs,
-  printers,
-  withTransaction,
-  venueLocationId,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, printJobs, printers, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -37,7 +31,7 @@ import {
   type PrinterTarget,
 } from "@waitron/print-agent";
 import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountPrintApi } from "./print-api.js";
 import { mountJoinApi } from "./join-api.js";
@@ -61,7 +55,6 @@ const BASE = "http://waitron.e2e";
 // match for the server to judge the usb job eligible for this box.
 const USB_SERIAL = "USB-SN-E2E";
 
-let locationId: string;
 let cfg: TradingContext;
 let managerCookie: string;
 
@@ -75,11 +68,9 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });
-    locationId = await venueLocationId(db);
     // Knock and accept must share this one cfg: every join-request statement filters by node.
     cfg = {
       nodeId: brandNodeId(randomUUID()),
-      locationId: brandLocationId(locationId),
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
       tipsEnabled: false,

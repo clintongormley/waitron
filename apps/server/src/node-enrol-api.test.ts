@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { authenticateAgent } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import type { EnrolRateLimiter } from "./enrol-rate-limit.js";
 import type { TradingContext } from "./trading-context.js";
@@ -46,18 +46,15 @@ async function seedTenantWithLocation(): Promise<Tenant> {
   return { locationId: await venueLocationId(suite.db) };
 }
 
-let tenantA: Tenant;
-
 beforeAll(async () => {
-  tenantA = await seedTenantWithLocation();
+  await seedTenantWithLocation();
 });
 
 /** A fresh nodeId per call keeps each mounted app's enrol row independent, because this suite does
  * not reset between tests. */
-function cfgOf(tenant: Tenant): TradingContext {
+function cfgOf(): TradingContext {
   return {
     nodeId: brandNodeId(randomUUID()),
-    locationId: brandLocationId(tenant.locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
@@ -69,7 +66,7 @@ function buildApp(opts: { isPrimary?: boolean; limiter?: EnrolRateLimiter } = {}
   app: Hono;
   cfg: TradingContext;
 } {
-  const cfg = cfgOf(tenantA);
+  const cfg = cfgOf();
   const app = new Hono();
   mountNodeEnrolApi(
     app,

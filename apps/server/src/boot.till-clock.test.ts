@@ -13,7 +13,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CORE_MIGRATIONS, stampDeployment, writeNodeMembership } from "@waitron/db";
 import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { Hono } from "hono";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import { ALL_MODULES } from "./modules.js";
@@ -209,7 +209,6 @@ describe("clock handler absence with identity and workforce absent", () => {
         clock: systemClock(),
         cfg: {
           nodeId: nodeId("10000000-0000-4000-8000-000000000001"),
-          locationId: locationId("20000000-0000-4000-8000-000000000001"),
           locale: "en",
           invoiceLocales: ["en"],
           tipsEnabled: false,

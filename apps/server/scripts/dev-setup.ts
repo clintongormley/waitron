@@ -22,7 +22,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { planVenue } from "@waitron/provisioning";
 import { getCountryPack } from "@waitron/country-packs";
 import { parseModuleConfig } from "@waitron/module";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { ALL_MODULES } from "../src/modules.js";
 import { venueModuleConfig } from "../src/provision.js";
 import { writeModuleConfig } from "../src/module-config.js";
@@ -282,7 +282,6 @@ async function seedDemoDevices(
 ): Promise<void> {
   const cfg: TradingContext = {
     nodeId: brandNodeId(ids.nodeId),
-    locationId: brandLocationId(ids.locationId),
     locale: receiptLocale,
     invoiceLocales: [receiptLocale],
     tipsEnabled: false,

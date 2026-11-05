@@ -26,7 +26,6 @@ import {
   invoiceSeries,
   openVenueDatabase,
   sales,
-  venueLocationId,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -54,7 +53,7 @@ import {
   START_AGAIN_ADMIN_PASSWORD,
   startAgainAttempt,
 } from "@waitron/provisioning/testing/start-again-attempt";
-import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import { openVenueStore } from "@waitron/store";
 import { WorkforceBackend } from "@waitron/workforce";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -277,7 +276,6 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     store = await openVenueDatabase(venueDir);
     db = store.venue;
     await seedVenue(db, { name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Sale" });
-    const venueId = await venueLocationId(db);
     manager = await seedPerson("manager", "Marta");
     supervisor = await seedPerson("supervisor", "Sergio");
     admin = await seedPerson("admin", "Ana");
@@ -449,7 +447,6 @@ describe("the Box status read and free-space deletion on a real full disk", () =
         backend: new FakeFiscalBackend(db),
         tradingContext: {
           nodeId: brandNodeId(nodeId),
-          locationId: brandLocationId(venueId),
           locale: "en-GB",
           invoiceLocales: ["en-GB"],
           tipsEnabled: false,
