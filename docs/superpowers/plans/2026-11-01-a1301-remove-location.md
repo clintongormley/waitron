@@ -434,7 +434,7 @@ function no longer reads the scope. It fails before the change. It is marked
     so they wait for the design's approval. Under the cheaper schedule the S18 plan asks the owner
     about, only S28 does.
 - **2026-11-05:** S18a–S18d and S18f have landed (#2443, #2447, #2450, #2451, #2453, and S18f
-  (#TBD)). S18e is held by A1308, because it adds a table.
+  (#2467)). S18e is held by A1308, because it adds a table.
 
 ## Notes for the S13–S15 plans
 
