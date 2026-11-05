@@ -78,9 +78,7 @@ export function findReuse(context, api, workflow) {
       candidate.head_commit.tree_id === head.tree.sha;
     if (!admitted(run)) return null;
 
-    const evidence = api(
-      `${prefix}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`,
-    );
+    const evidence = readJobs(api, `${prefix}/actions/runs/${run.id}/attempts/${run.run_attempt}`);
     const { jobs, total_count: count } = evidence;
     if (
       !Array.isArray(jobs) ||
@@ -146,8 +144,9 @@ export function findReuse(context, api, workflow) {
       candidate.run_attempt === main.run_attempt &&
       candidate.head_commit.tree_id === base.tree.sha;
     if (!mainAdmitted(main)) return null;
-    const mainEvidence = api(
-      `${prefix}/actions/runs/${main.id}/attempts/${main.run_attempt}/jobs?per_page=100`,
+    const mainEvidence = readJobs(
+      api,
+      `${prefix}/actions/runs/${main.id}/attempts/${main.run_attempt}`,
     );
     const mainJobs = mainEvidence.jobs;
     if (
@@ -179,6 +178,32 @@ export function findReuse(context, api, workflow) {
   } catch {
     return null;
   }
+}
+
+function readJobs(api, attempt) {
+  const path = `${attempt}/jobs?per_page=30`;
+  const first = api(path);
+  const count = first.total_count;
+  if (
+    !positiveInteger(count) ||
+    !Array.isArray(first.jobs) ||
+    !first.jobs.length ||
+    first.jobs.length > 30
+  )
+    throw new Error("Invalid jobs page");
+  const jobs = [...first.jobs];
+  for (let page = 2; jobs.length < count; page++) {
+    const next = api(`${path}&page=${page}`);
+    if (
+      next.total_count !== count ||
+      !Array.isArray(next.jobs) ||
+      !next.jobs.length ||
+      next.jobs.length > 30
+    )
+      throw new Error("Incomplete jobs listing");
+    jobs.push(...next.jobs);
+  }
+  return { jobs, total_count: count };
 }
 
 function githubApi(path) {

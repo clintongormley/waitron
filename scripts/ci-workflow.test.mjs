@@ -1048,6 +1048,11 @@ describe("the `ci` aggregate's verdict", () => {
 // first creates held, waits for release (giving up after 1200 polls 50 ms apart), and creates
 // finished as it ends.
 const GH_STUB = `#!/usr/bin/env bash
+if [ -n "\${GH_STUB_SMALL_PAGES:-}" ]; then
+  case "$*" in
+    *jobs?per_page=100*) echo 'HTTP 502' >&2; exit 1 ;;
+  esac
+fi
 if [ -n "\${GH_STUB_HOLD:-}" ]; then
   : > "$STUB_DIR/held"
   for ((i = 0; i < 1200; i++)); do
@@ -1181,6 +1186,35 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
     readFileSync(join(lastStateDir, `args.${n}`), "utf8")
       .split("\n")
       .filter(Boolean);
+
+  it(
+    "reads smaller pages after size-sensitive 502s without accepting partial or failed evidence",
+    () => {
+      const options = { identity: { GH_STUB_SMALL_PAGES: "1" } };
+      const needs = needsFor("lint", "test-heavy");
+      const pages =
+        page([apiJob("lint", "success")], 2) +
+        "\n" +
+        page([apiJob("test-heavy (1)", "success")], 2);
+      const passed = runCrossCheck(needs, [pages], options);
+      expect(passed.status, passed.output).toBe(0);
+      const partial = runCrossCheck(needs, [page([apiJob("lint", "success")], 2)], options);
+      expect(partial.status, partial.output).not.toBe(0);
+      expect(partial.output).toContain("read 1 of 2 jobs");
+      const failed = runCrossCheck(
+        needs,
+        [
+          page([apiJob("lint", "success")], 2) +
+            "\n" +
+            page([apiJob("test-heavy (1)", "failure")], 2),
+        ],
+        options,
+      );
+      expect(failed.status, failed.output).not.toBe(0);
+      expect(failed.output).toContain("not succeeded or skipped: test-heavy (1)");
+    },
+    FOUR_RUNS_TEST_TIMEOUT_MS,
+  );
 
   const finishedJob = (name) => ({
     ...apiJob(name, null, "in_progress"),
@@ -1593,7 +1627,7 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
       const args = argsOfCall(1);
       expect(args).toContain("api");
       expect(args).toContain("--paginate");
-      expect(args).toContain("repos/o/r/actions/runs/123/attempts/2/jobs?per_page=100");
+      expect(args).toContain("repos/o/r/actions/runs/123/attempts/2/jobs?per_page=30");
     },
     ONE_RUN_TEST_TIMEOUT_MS,
   );

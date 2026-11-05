@@ -3902,7 +3902,7 @@ jobs:
             if ((try > 1)); then sleep "$delay"; fi
             verdict=retry
             report=""
-            if ! pages=$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100"); then
+            if ! pages=$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=30"); then
               reason="the jobs API call failed"
             elif ! report=$(jq -sc '. as $pages | '"$judge" <<<"$pages"); then
               reason="the jobs API answer could not be read"

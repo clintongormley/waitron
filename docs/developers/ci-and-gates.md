@@ -1306,12 +1306,12 @@ repository's main branch with its head in the same repository. Both commit respo
 the requested commits and have the same valid tree id. The latest exact-head PR run must belong
 to this repository and the current CI workflow id and path, and be completed with success.
 
-The verifier reads that run's exact attempt. Its jobs must form a complete single API page,
+The verifier reads that run's exact attempt. Its jobs must form a complete API listing,
 cover every current workflow job, have distinct names and the expected run, attempt and head,
 and all be completed with success or an intentional skip. Changes, lint, root-guards and ci
 must each have one successful entry. It re-reads the source run afterwards; a changed attempt
-or unsuccessful result refuses reuse. Missing evidence, API errors, more than one page of runs
-or jobs, direct pushes, release tags, manual dispatches and different trees retain normal CI.
+or unsuccessful result refuses reuse. Missing evidence, API errors, more than one page of runs,
+direct pushes, release tags, manual dispatches and different trees retain normal CI.
 The pushed commit must have exactly one parent, whose latest main push run must also be
 complete and successful. The verifier checks that parent's commit, repository, workflow,
 branch, tree and exact attempt. Every current job must be present with distinct names, and
@@ -1320,6 +1320,12 @@ refuse this proof of a full run. It re-reads the main run after its jobs to reje
 attempt. A docs-only parent run or an older green run behind a newer red one is insufficient.
 This conservative rule can repeat the suite after a reused or docs-only run. It prevents a
 scoped PR result from concealing an unfinished or failed main test of unrelated code.
+
+Job listings use 30 records per page. The reuse verifier reads the admitted PR attempt and
+parent main attempt page by page, checking that each page retains the first page's total count.
+An empty page before that total is reached refuses reuse; the combined listing still has to
+pass every identity, completeness, unique-name and result check above. Other API listings
+retain their single-page policy.
 
 Each API command has a 15-second timeout; the workflow step has a three-minute limit. An
 unexpected process failure fails changes rather than creating permission to skip checks.
@@ -1369,6 +1375,27 @@ Keep that result distinct from a run proving publication after this correction.
 | [GitHub workflow jobs API](https://docs.github.com/en/rest/actions/workflow-jobs#list-jobs-for-a-workflow-run-attempt) | “List jobs for a workflow run attempt” | Fetch jobs from the admitted attempt rather than combining attempts. |
 | [GitHub commits API](https://docs.github.com/en/rest/commits/commits#list-pull-requests-associated-with-a-commit) | “List pull requests associated with a commit” | Find the associated PR, then check its repository, merge and head rather than trusting association alone. |
 | [GitHub job dependencies](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-jobs) | “a failure or skip applies to all jobs in the dependency chain” | Override implicit status evaluation after intentional skips while retaining the explicit successful aggregate requirement. |
+
+### Smaller job-list pages after HTTP 502 responses (A1340)
+
+On 5 November 2026, [main run 42051923779](https://github.com/clintongormley/waitron/actions/runs/42051923779),
+attempt 2, reached its twelve-minute summary limit while the jobs API returned HTTP 502.
+The retained paired driver requests show `per_page=100` returning `Server Error (HTTP 502)`
+and `per_page=30` returning 30 records with `total_count=84`; pagination then recovered 84 jobs.
+A later listing included the skipped publish job as an 85th record. The GitHub-side cause is
+unknown. A 1 November campaign receipt for run `41320048947`, attempt 2, records the same
+100-record failure and recovery using 10-record pages.
+
+The aggregate now asks for 30-record pages through `gh api --paginate`. It retains its existing
+jq verdict, 21 tries, thirty-second delay, twelve-minute step and fifteen-minute job limits.
+An incomplete combined listing still retries and ultimately fails. The reuse verifier uses
+the same smaller page size for both source attempts; an API failure falls back to normal CI.
+This handles the reproduced page-size sensitivity without claiming recovery from every 502.
+
+Run `pnpm exec vitest run scripts/ci-reuse.test.mjs scripts/ci-workflow.test.mjs` for the
+controlled qualification. The API stub refuses 100-record job requests. Complete smaller-page
+answers succeed; partial listings, later failed jobs and invalid reuse evidence are refused.
+These checks exercise the local consumers, not GitHub's service-side failure mechanism.
 
 ### Two pushes to `main` must never share a concurrency group
 
