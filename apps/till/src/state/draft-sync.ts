@@ -133,6 +133,10 @@ export interface DraftRefused {
 
 export type TakeOverOutcome = "taken" | "failed" | "unsaved" | DraftRefused;
 
+/** `reloaded` says whether the read after the take-over counted; the bill's own row and edit state
+ * come from the take-over's answer either way. */
+export type TakeOverOnOutcome = { taken: true; reloaded: boolean } | DraftRefused | "failed";
+
 export type DraftCommandOutcome<T> =
   { applied: T; reloaded: boolean } | "failed" | "unsaved" | DraftRefused;
 
@@ -541,11 +545,18 @@ export class DraftSync {
       null;
     if ((draft === null) !== (edit.draftId === null)) return false;
     const previous = new Map(this.#billEdits.map((edit) => [edit.billId, edit]));
+    const newerThanRead = new Set<string>();
     this.#billEdits = answer.billEdits.map((edit) => {
       const known = previous.get(edit.billId);
-      return known !== undefined && this.#olderEdit(edit, known) ? known : { ...edit };
+      if (known === undefined || !this.#olderEdit(edit, known)) return { ...edit };
+      newerThanRead.add(edit.billId);
+      return known;
     });
-    this.partyDrafts = answer.drafts;
+    // A bill's rows stay with its edit state, or a read older than a take-over brings the old owner back.
+    this.partyDrafts = [
+      ...answer.drafts.filter((row) => !newerThanRead.has(row.billId)),
+      ...this.partyDrafts.filter((row) => newerThanRead.has(row.billId)),
+    ];
     this.applyBillSnapshot({ draft, edit }, read);
     this.#recoveryRequired = false;
     this.#unlockRecovery?.();
@@ -645,16 +656,17 @@ export class DraftSync {
     return "taken";
   }
 
-  /** Takes over a draft on a bill not on screen, so nothing here locks or replaces that screen's
-   * lines. The read goes through `load`, because a read inside a command would end its recovery. */
-  async takeOverOn(billId: string, draftId: string, revision: number): Promise<TakeOverOutcome> {
+  /** Takes over a draft on a bill not on screen; the bill on screen keeps `takeOver`. The read goes
+   * through `load`, because a read inside a command would end its recovery. */
+  async takeOverOn(billId: string, draftId: string, revision: number): Promise<TakeOverOnOutcome> {
     if (this.#ended || this.#correctingPlaces || this.#recoveryRequired || this.store.sending)
       return "failed";
     const expectedEdit = this.expectedEditFor(billId);
     if (expectedEdit === null) return "failed";
     const limit = limited(this.#options.requestLimitMs);
+    let taken: BillDraftSnapshot;
     try {
-      await this.#options.api.takeOverDraft(
+      taken = await this.#options.api.takeOverDraft(
         this.partyId,
         draftId,
         { revision, expectedEdit, submissionId: crypto.randomUUID() },
@@ -662,14 +674,30 @@ export class DraftSync {
       );
     } catch (error) {
       if (this.#ended) return "failed";
-      await this.load();
-      return asRefusal(error) ?? "failed";
+      await this.#readAfterTakeOver();
+      return this.#ended ? "failed" : (asRefusal(error) ?? "failed");
     } finally {
       limit.done();
     }
     if (this.#ended) return "failed";
-    await this.load();
-    return this.#ended ? "failed" : "taken";
+    this.#recordTakeOver(taken, draftId);
+    const reloaded = await this.#readAfterTakeOver();
+    return this.#ended ? "failed" : { taken: true, reloaded };
+  }
+
+  #recordTakeOver({ draft, edit }: BillDraftSnapshot, draftId: string): void {
+    if (this.#olderEdit(edit, this.expectedEditFor(edit.billId))) return;
+    this.#billEdits = [...this.#billEdits.filter((row) => row.billId !== edit.billId), { ...edit }];
+    this.partyDrafts = [
+      ...this.partyDrafts.filter((row) => row.id !== draftId),
+      ...(draft === null ? [] : [draft]),
+    ];
+  }
+
+  /** A read overtaking a save's answer would take the till's own save for someone else's change. */
+  async #readAfterTakeOver(): Promise<boolean> {
+    await this.#queue;
+    return this.#ended ? false : this.load();
   }
 
   /** Source commands change stored bill rows and their draft together. No edit or save may use

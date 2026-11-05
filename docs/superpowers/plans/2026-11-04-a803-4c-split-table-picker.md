@@ -766,12 +766,14 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   bill still owing, or the paid bill if none is, because a bill still owing is what the waiter is working on.
 
 - **D18 Take-over rows.** `DraftSync` gains `partyDrafts` (the last `listDrafts` answer's drafts) and
-  `takeOverOn(billId, draftId, revision)`: `api.takeOverDraft` with `expectedEditFor(billId)`, then its
-  own `#load()`. The on-screen bill keeps `takeOver`. The row is
+  `takeOverOn(billId, draftId, revision)`: `api.takeOverDraft` with `expectedEditFor(billId)`; it writes that
+  answer's `{draft, edit}` into `partyDrafts` and the bill's edit state, waits for a save that is out, then
+  reads through `load()`. It answers `{ taken: true; reloaded: boolean } | DraftRefused | "failed"`. The
+  on-screen bill keeps `takeOver`: the app calls it when `billId === sync.billId`. The row is
   `table.others_draft`'s words, under the bill's own header, with the existing `table.take_over` button and
   `#takeOverDialog` (no new dialog, no bulk take-over; A773 §6). `held.takenFromYou` rows use `table.draft_taken_by`'s words as the
   order screen does. When a selected bill is taken over from the panel, the app replaces that bill's
-  observation (D20) once `takeOverOn`'s read has answered, and the bill keeps its tick and picks (D21).
+  observation (D20) once `takeOverOn` has answered, and the bill keeps its tick and picks (D21).
 
 - **D19 A590.** The app gains `floorCarried: ReadonlyMap<string, { revision; answeredAt }>`. On a
   split's answer, before `#reloadTables` starts, each `zoneRevisions` entry is stored with
@@ -807,7 +809,7 @@ Changing from B to A later removes one call in `splitTable` and changes those th
     refused (`till-app-parties.test.ts:12078`). Every other refusal retakes the composition and clears the
     observations after its re-read, and the reopened panel's `split-table-observe` records new ones, because
     the waiter is now looking at the new state and must be able to retry.
-  - A take-over from the panel replaces that bill's record with what its read shows, because the waiter
+  - A take-over from the panel replaces that bill's record with `expectedEditFor` after the take-over, because the waiter
     has just acted on that state (D18, Task 12e).
   - Worked example: Clint ticks Bill 2 whole while its unsent order is his own. His other device saves more
     dishes to it. The till's next read picks that up; Clint presses Split; the till says "Bill 2 changed
@@ -1455,7 +1457,7 @@ This is D21 on the screen. The app's half, through a real read, is Task 12f.
 
 **Files.** `apps/till/src/till-app.ts`, screen, `till-app-split-table.test.ts`.
 
-- [ ] **Failing tests.** `split-take-over` opens the screen's take-over dialog; confirming calls `sync.takeOverOn`; `takeOversAnswered` moves on; a refusal shows `takeOverRefusalError` at the panel's foot, not the banner; the row goes after a successful read; `#takeOverClosed` focuses the row's button while it is still there and the bill's tick otherwise; a tick taken after the take-over records the new state, so Split sends with no refusal. **A bill already ticked when taken over** keeps its tick and picks, its record is replaced once the read has answered, Split is held until then, and the first press sends once with the new `editorVersion`, `draftId` and `draftRevision`. The same after a refused take-over: still held, nothing sent.
+- [ ] **Failing tests.** `split-take-over` opens the screen's take-over dialog; confirming calls `sync.takeOverOn`, or `sync.takeOver` when `billId === sync.billId`, the bill on screen; `takeOversAnswered` moves on in a `finally`, as `#onTakeOverDraft` does; a refusal shows `takeOverRefusalError` at the panel's foot, not the banner; the row goes on the take-over's answer, `{ taken: true }` whichever value `reloaded` has; `#takeOverClosed` focuses the row's button while it is still there and the bill's tick otherwise; a tick taken after the take-over records the new state, so Split sends with no refusal. **A bill already ticked when taken over** keeps its tick and picks, its record is replaced from `expectedEditFor(billId)` once `takeOverOn` has answered, Split is held until then and released on `taken`, and the first press sends once with the new `editorVersion`, `draftId` and `draftRevision`. **Taken with the read failing** (`reloaded: false`): the same, the row gone and no message, and other bills' rows stay as last read, as Task 11a's rule for a read failing after one has answered. After a refused take-over or `"failed"`: still held, nothing sent.
 - [ ] **RED.** `pnpm --filter @waitron/till exec vitest run src/till-app-split-table.test.ts -t 'take-over'`.
 - [ ] **Implement.** D18. The screen's `takeOverPending` learns a `billId`, or a bill-less draft keeps today's path.
 - [ ] **GREEN.** The file; `src/screens/till-table-order-screen.test.ts` take-over cases unedited.
