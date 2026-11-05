@@ -227,11 +227,11 @@ export function createNodeOperationPreparation(options: {
     if (retained === "another_source") return invalid(promote);
     if (retained === "this_source") return;
     const { operatorId } = readOperationAuthority(authority, promote)!;
-    const step = (
+    const step = <T>(
       action: "reserve" | "establish",
       input: unknown,
-      body: (tx: Transaction, operation: ReturnType<typeof moduleOperationFor>) => Promise<void>,
-    ) => {
+      body: (tx: Transaction, operation: ReturnType<typeof moduleOperationFor>) => Promise<T>,
+    ): Promise<T> => {
       const binding = Object.freeze({ ...promote, action });
       return withOperationAuthority(binding, operatorId, (stepAuthority) =>
         scopes.run({ binding, authority: stepAuthority, verifier: undefined }, () =>
@@ -249,10 +249,9 @@ export function createNodeOperationPreparation(options: {
       );
     };
     const source = { ...node, nodeId: promote.sourceId as ProvisionedNode["nodeId"] };
-    let state: unknown;
-    await step("reserve", setup.reserveInput, async (tx, operation) => {
-      state = (await standby.reserve(tx, source, node, operation)).state;
-    });
+    const { state } = await step("reserve", setup.reserveInput, (tx, operation) =>
+      standby.reserve(tx, source, node, operation),
+    );
     await step("establish", state, (tx, operation) =>
       standby.establish(tx, node, state, operation),
     );
@@ -267,6 +266,30 @@ export function createNodeOperationPreparation(options: {
     if (contribution?.recovery === undefined) return invalid(binding);
     return contribution.recovery({ binding: { ...binding }, authority }, proposal, client);
   };
+  const prepareWith =
+    (before?: (binding: OperationBinding, authority: OperationAuthority) => Promise<void>) =>
+    async (
+      suppliedBinding: OperationBinding,
+      credentials: unknown,
+      context: Context,
+      proposal: unknown,
+      client: OperationClient,
+      afterSignIn?: () => Promise<void>,
+    ): Promise<unknown> => {
+      const binding = Object.freeze({ ...suppliedBinding });
+      if (binding.action !== "promote") return invalid(binding);
+      const held = structuredClone(proposal);
+      return invoke(
+        binding,
+        credentials,
+        context,
+        async (authority) => {
+          await before?.(binding, authority);
+          return prepareStep(binding, authority, held, client);
+        },
+        afterSignIn,
+      );
+    };
   return {
     // Read from the configured modules: a module's `recovery` can exist only once configured.
     hasRecoveryOperation: modules.some((module) => module.operations?.recovery !== undefined),
@@ -310,48 +333,9 @@ export function createNodeOperationPreparation(options: {
         actions,
       );
     },
-    async prepare(
-      suppliedBinding: OperationBinding,
-      credentials: unknown,
-      context: Context,
-      proposal: unknown,
-      client: OperationClient,
-      afterSignIn?: () => Promise<void>,
-    ): Promise<unknown> {
-      const binding = Object.freeze({ ...suppliedBinding });
-      if (!["promote"].includes(binding.action)) return invalid(binding);
-      const held = structuredClone(proposal);
-      return invoke(
-        binding,
-        credentials,
-        context,
-        (authority) => prepareStep(binding, authority, held, client),
-        afterSignIn,
-      );
-    },
+    prepare: prepareWith(),
     /** `prepare`, after making sure the setup a promotion reads exists, on the one sign-in. */
-    async prepareWithDormantSetup(
-      suppliedBinding: OperationBinding,
-      credentials: unknown,
-      context: Context,
-      proposal: unknown,
-      client: OperationClient,
-      afterSignIn?: () => Promise<void>,
-    ): Promise<unknown> {
-      const binding = Object.freeze({ ...suppliedBinding });
-      if (binding.action !== "promote") return invalid(binding);
-      const held = structuredClone(proposal);
-      return invoke(
-        binding,
-        credentials,
-        context,
-        async (authority) => {
-          await writeDormantSetup(binding, authority);
-          return prepareStep(binding, authority, held, client);
-        },
-        afterSignIn,
-      );
-    },
+    prepareWithDormantSetup: prepareWith(writeDormantSetup),
     async withOperation<T>(
       operation: RecoveryOperationInput,
       credentials: unknown,
