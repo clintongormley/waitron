@@ -377,6 +377,14 @@ PR 2:
   printer's format, renders the sample sale and writes no delivery row" — compares the rendered sale
   with `sampleDocument(...).result` instead of `sampleSale(...)`: the A4 test page is built from
   `sampleDocument`, which now adds the dishes.
+- **2026-11-05, the owner's rule between TOTAL and the VAT lines:** `apps/server/src/receipt-document.test.ts`'s
+  two A663 layout cases and `apps/server/src/receipt-ticket.test.ts`'s "a comped or discounted
+  dish" slice now expect the rule after TOTAL.
+- **2026-11-05, the dialog's help badge:** `packages/ui/src/components/wt-help-tooltip.slots.test.ts`
+  "wt-dialog: with help on the badge hangs over the heading's top trailing corner" — renamed, and
+  the badge's expected centre moves half a badge past the heading's end; and "wt-dialog: a
+  help-mode badge takes no room, off or on" is renamed "…leaves the heading's box unchanged, off or
+  on", its assertions unchanged.
 
 ---
 
@@ -887,7 +895,8 @@ This task needs the guide's `calibrate` section, so do Task 9 Step 1 first, then
   put TOTAL straight after the items, then the rates, with no rule between them. Owner to say
   whether one is wanted; it would change every printed simplified receipt." Leave the entry "While a
   discovery window is open, a device not reported within 45 seconds drops off the list" — still
-  true for unpaired devices.
+  true for unpaired devices. **2026-11-05:** the owner chose the line, so no open entry is added;
+  the decision is recorded in `docs/backlog/printers.md`'s decisions.
 - [ ] **Step 4: Look at it.** As in Task 4 Step 6: screenshots of calibration steps 1 and 3 in both
   themes, at 1280 × 800 and 390 × 844, English and Spanish, before and after answering step 1, and
   the guide page. And the paper: in a throwaway `apps/server` test print
@@ -897,4 +906,5 @@ This task needs the guide's `calibrate` section, so do Task 9 Step 1 first, then
 - [ ] **Step 5: Commit** — `git commit -s -m "A printers guide section for calibration, and A404 removed from the backlog with its one open question"`.
   Then `/finish-branch` with PR 2's worktree, naming this plan. The PR description lists the
   changed assertions, what goes beyond the spec, the New words tables, and asks the owner the
-  TOTAL-rule question.
+  TOTAL-rule question. **2026-11-05:** answered (the line is drawn), so the PR description reports
+  the decision instead.

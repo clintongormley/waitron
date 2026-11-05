@@ -3878,7 +3878,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   until its next report; 45 seconds does not cover every scan pass (C102, #953).
 
 - **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority; not queued —
-  owner 2026-10-08: take it from here when a lane has room; after A404).**
+  owner 2026-10-08: take it from here when a lane has room).**
   [Detail](backlog/printers.md#a405--printer-details-and-the-print-queue)
 
 - **Loose ends left by A662 (#1803).**

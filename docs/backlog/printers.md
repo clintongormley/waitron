@@ -343,7 +343,7 @@ those letters (not checked).
 
 ## A405 — printer details and the print queue
 
-- **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room; after A404).** A modal means the printer page is no longer a sub-page, so the owner
+- **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room).** A modal means the printer page is no longer a sub-page, so the owner
   dropped lane B's A398 redraw of the printer page's heading (2026-10-08).
   1. **Printer details become a modal, viewing and editing both.** Today's page is badly laid out:
      Edit opens the name field off to the right, away from the title it changes; whether the

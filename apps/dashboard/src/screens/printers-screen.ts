@@ -373,8 +373,7 @@ export class PrintersScreen extends LitElement {
         flex: 1 1 calc(var(--wt-space-6) * 6);
         min-width: 0;
       }
-      .field-row > [name$="port"],
-      .field-row > wt-button {
+      .field-row > [name$="port"] {
         flex: 0 1 calc(var(--wt-space-6) * 4);
       }
       .print-row {

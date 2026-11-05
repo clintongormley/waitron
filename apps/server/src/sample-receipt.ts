@@ -18,8 +18,9 @@ import type { ReceiptDocumentInput } from "./receipt-document.js";
 const SAMPLE_QR = "https://example.invalid/waitron/sample-receipt";
 
 /**
- * The sale a sample or preview receipt shows: it was never filed. It carries a sample QR only when
- * the venue's fiscal backend has words to print around one, as a filed sale's receipt would.
+ * The sale a receipt preview shows, and the base `sampleDocument` adds the sample dishes to: it was
+ * never filed. It carries a sample QR only when the venue's fiscal backend has words to print around
+ * one, as a filed sale's receipt would.
  */
 export function sampleSale(
   qrText: ReceiptQrText | undefined,

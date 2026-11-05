@@ -5,6 +5,8 @@
 > `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../packages/reporting/examples/modelo-303.md)
 > carries the reporting example. References below describe the earlier scripts.
 
+_2026-11-05, A404: the sample receipt's character-probe footer is gone; its accented letters now come from per-language sample dishes in `country-es`._
+
 _2026-11-03, A968: the guide frame's words and the recovery page's words now live in `apps/server/src/i18n/guide-pages.ts` and `apps/server/src/i18n/recovery-page.ts`; the two rows below record their earlier location._
 
 _2026-10-29, A964: kitchen-ticket frames and collection-number captions now live in `apps/server/src/i18n/kitchen-ticket.ts` and read the saved default content language at rendering. Spanish selects Spanish; other defaults or missing settings select English. Recorded names, frozen allergy translations and unit selection keep their own inputs. The inline-wording and `WAITRON_TILL_LOCALE` findings below describe the earlier tree._

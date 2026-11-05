@@ -271,7 +271,7 @@ async function openDialog(
 const dialogMarkup = (badge: string) =>
   `<wt-dialog heading="Void sale">${badge}<p>This will create a corrective record.</p></wt-dialog>`;
 
-test("wt-dialog: a help-mode badge takes no room, off or on", async () => {
+test("wt-dialog: a help-mode badge leaves the heading's box unchanged, off or on", async () => {
   const bare = await openDialog(dialogMarkup(""));
   const without = boxOf(bare.heading!);
   cleanup();
