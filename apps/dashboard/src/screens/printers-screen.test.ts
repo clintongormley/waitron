@@ -14,6 +14,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
+import { formatRecentMinute } from "../date-utils.js";
 import type {
   DashboardApi,
   DiscoveredPrinter,
@@ -1644,7 +1645,7 @@ describe("printers-screen", () => {
   );
 
   it("renders each printer's transport and derived connection mode", async () => {
-    const api = stubApi();
+    const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
 
@@ -1667,7 +1668,7 @@ describe("printers-screen", () => {
     await flush(el);
     q(el, "[data-test=printer-row-p3]")!.click();
     await flush(el);
-    expect(text(el, "[data-test=printer-connection-p3]")).toBe("Puede cambiar de agente");
+    expect(text(el, "[data-test=printer-detail-connected-through]")).toBe("Cocina agent");
   });
 
   it("ignores saved sort and filter settings for removed printer columns", async () => {
@@ -4193,31 +4194,119 @@ it("does not rewrite a route outside Printers while a name draft is open", async
   expect(location.pathname).toBe("/manage/devices");
 });
 
-it("opens status first and resets independent printer sections on navigation", async () => {
+it("shows each fact once, label beside value, in Status, Connection and Paper and drawer", async () => {
+  await page.viewport(1280, 800);
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi(),
   });
   await flush(el);
-  const disclosure = (name: string) => q(el, `[data-test=printer-section-${name}]`)!;
-  expect(disclosure("status").hasAttribute("open")).toBe(true);
-  expect(disclosure("connection").hasAttribute("open")).toBe(false);
-  expect(disclosure("calibration").hasAttribute("open")).toBe(false);
-  expect(disclosure("connection").textContent).toContain("10.0.0.9:9100");
-  expect(disclosure("calibration").textContent).toContain(t("printers.profiles"));
-  disclosure("connection").shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+  const modal = q(el, "[data-test=printer-details-modal]")!;
+  expect(modal.querySelector("wt-disclosure")).toBeNull();
+  expect([...modal.querySelectorAll("h3")].map((h) => h.textContent!.trim())).toEqual([
+    t("printers.status"),
+    t("printers.connection"),
+    t("printers.details_paper"),
+  ]);
+  const active = t("printers.status_active");
+  const sayingActive = [...modal.querySelectorAll<HTMLElement>("*")].filter(
+    (node) =>
+      [...node.childNodes].some(
+        (child) => child.nodeType === Node.TEXT_NODE && child.textContent!.trim() === active,
+      ) || node.getAttribute("label") === active,
+  );
+  expect(sayingActive.map((node) => node.getAttribute("name"))).toEqual(["printer-detail-active"]);
+  expect(modal.querySelector("h1")).toBeNull();
+  const value = q(el, "[data-test=printer-detail-pending]")!;
+  const label = value.previousElementSibling as HTMLElement;
+  expect(label.textContent!.trim()).toBe(t("printers.pending_jobs"));
+  expect(
+    Math.abs(label.getBoundingClientRect().top - value.getBoundingClientRect().top),
+  ).toBeLessThanOrEqual(2);
+  expect(label.getBoundingClientRect().right).toBeLessThanOrEqual(
+    value.getBoundingClientRect().left,
+  );
+});
+
+it.each(["en", "es-ES"] as const)(
+  "names the agent a USB or Bluetooth printer is connected through (%s)",
+  async (locale) => {
+    const before = currentLocale();
+    setLocale(locale);
+    try {
+      const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered) });
+      history.replaceState(null, "", "/manage/printers/view/printers/printer/p3");
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await flush(el);
+      const row = q(el, "[data-test=printer-detail-connected-through]")!;
+      expect(row.textContent!.trim()).toBe("Cocina agent");
+      expect((row.previousElementSibling as HTMLElement).textContent!.trim()).toBe(
+        locale === "en" ? "Connected through" : "Conectada a través de",
+      );
+      expect(el.shadowRoot!.textContent).not.toMatch(
+        /Can roam between agents|Puede cambiar de agente/,
+      );
+      vi.mocked(api.listDiscoveredPrinters).mockResolvedValue([]);
+      cleanupWidgets();
+      history.replaceState(null, "", "/manage/printers/view/printers/printer/p3");
+      const again = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await flush(again.el);
+      expect(text(again.el, "[data-test=printer-detail-connected-through]")).toBe(
+        t("printers.agent_unknown"),
+      );
+    } finally {
+      setLocale(before);
+    }
+  },
+);
+
+it("says a network printer may print through any venue agent", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
   await flush(el);
-  expect(disclosure("status").hasAttribute("open")).toBe(true);
-  expect(disclosure("connection").hasAttribute("open")).toBe(true);
-  disclosure("status").shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+  expect(text(el, "[data-test=printer-connection-p1]")).toBe(t("printers.connection_network"));
+  expect(text(el, "[data-test=printer-detail-address]")).toBe("10.0.0.9:9100");
+  expect(q(el, "[data-test=printer-detail-connected-through]")).toBeNull();
+});
+
+it("reads today's last print as Today and the time", async () => {
+  // An hour ago, but never before today's local midnight, so the case is Today at any hour.
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const lastPrintAt = new Date(
+    Math.max(Date.now() - 60 * 60 * 1000, midnight.getTime()),
+  ).toISOString();
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi({
+      listPrinters: vi
+        .fn()
+        .mockResolvedValue(
+          printers.map((p) => (p.id === "p1" ? { ...p, lastPrintAt, lastPrintAgentId: "a1" } : p)),
+        ),
+    }),
+  });
   await flush(el);
-  expect(disclosure("status").hasAttribute("open")).toBe(false);
-  history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
-  window.dispatchEvent(new PopStateEvent("popstate"));
+  const shown = text(el, "[data-test=printer-detail-last-print]") ?? "";
+  expect(shown).toBe(formatRecentMinute(lastPrintAt));
+  expect(shown.startsWith(t("time.today_at").split("{time}")[0]!)).toBe(true);
+});
+
+it("shows the Active switch's refusal inside the details window, under the switch", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const api = stubApi({
+    updatePrinter: vi.fn().mockRejectedValueOnce({ code: "connection.failed" }),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
-  expect(disclosure("status").hasAttribute("open")).toBe(true);
-  expect(disclosure("connection").hasAttribute("open")).toBe(false);
-  expect(disclosure("calibration").hasAttribute("open")).toBe(false);
+  toggleSwitch(el, '[name="printer-detail-active"]', false);
+  await vi.waitFor(() => expect(q(el, "[data-test=printer-detail-active-error]")).not.toBeNull());
+  const refusal = q(el, "[data-test=printer-detail-active-error]")!;
+  expect(refusal.closest("[data-test=printer-details-modal]")).not.toBeNull();
+  expect(refusal.closest("[data-test=printer-section-status]")).not.toBeNull();
+  expect(text(el, "p.error")).toBeUndefined();
 });
 
 it("starts calibration from printer details at the paper settings step", async () => {

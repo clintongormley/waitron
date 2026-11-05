@@ -748,7 +748,8 @@ export const en = {
   "printers.last_seen_by": "Last seen by",
   "printers.agent_unknown": "No recent observation",
   "printers.connection": "Connection",
-  "printers.connection_roaming": "Can roam between agents",
+  "printers.connected_through": "Connected through",
+  "printers.details_paper": "Paper and drawer",
   "printers.connection_network": "Any venue agent",
   "printers.connection_direct": "Direct (no agent)",
   "printers.jobs_limit":
@@ -4517,7 +4518,8 @@ export const es: Record<StringKey, string> = {
   "printers.last_seen_by": "Visto por última vez por",
   "printers.agent_unknown": "Sin observaciones recientes",
   "printers.connection": "Conexión",
-  "printers.connection_roaming": "Puede cambiar de agente",
+  "printers.connected_through": "Conectada a través de",
+  "printers.details_paper": "Papel y cajón",
   "printers.connection_network": "Cualquier agente del local",
   "printers.connection_direct": "Directa (sin agente)",
   "printers.jobs_limit":
