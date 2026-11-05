@@ -154,12 +154,12 @@ async function openAgent(api: DashboardApi = stubApi()) {
   return { el, api };
 }
 
-async function openDetail(owner: "name" | "connection", api: DashboardApi = stubApi()) {
+async function openDetail(api: DashboardApi = stubApi()) {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-  await vi.waitFor(() => expect(detailsEditButton(el, "edit", owner)).not.toBeNull());
-  openDetailsEdit(el, owner);
-  await vi.waitFor(() => expect(detailsEditButton(el, "save", owner)).not.toBeNull());
+  await vi.waitFor(() => expect(detailsEditButton(el, "edit")).not.toBeNull());
+  openDetailsEdit(el);
+  await vi.waitFor(() => expect(detailsEditButton(el, "save")).not.toBeNull());
   return { el, api };
 }
 
@@ -240,33 +240,33 @@ describe("the agent editor's Save", () => {
   });
 });
 
-describe("the printer page's name editor Save", () => {
+describe("the details form's Save, for the name", () => {
   it("opens on the printer's name with Save quiet, and a press sends nothing", async () => {
-    const { el, api } = await openDetail("name");
+    const { el, api } = await openDetail();
     expect(q<HTMLElementTagNameMap["wt-input"]>(el, "[name=printer-detail-name]")!.value).toBe(
       "Kitchen",
     );
-    expect(await state(el, detailsEditTest("save", "name"))).toEqual(quiet);
-    await press(el, detailsEditTest("save", "name"));
+    expect(await state(el, detailsEditTest("save"))).toEqual(quiet);
+    await press(el, detailsEditTest("save"));
     await settle();
     expect(api.updatePrinter).not.toHaveBeenCalled();
-    expect(detailsEditButton(el, "save", "name")).not.toBeNull();
+    expect(detailsEditButton(el, "save")).not.toBeNull();
     noComplaint(el);
   });
 
   it("one edit wakes Save, typing the name back quiets it, and an emptied name blocks it", async () => {
-    const { el } = await openDetail("name");
+    const { el } = await openDetail();
     await typeInto(el, "[name=printer-detail-name]", "Kitchen 2");
-    expect(await state(el, detailsEditTest("save", "name"))).toEqual(ready);
+    expect(await state(el, detailsEditTest("save"))).toEqual(ready);
     await typeInto(el, "[name=printer-detail-name]", " Kitchen ");
-    expect(await state(el, detailsEditTest("save", "name"))).toEqual(quiet);
+    expect(await state(el, detailsEditTest("save"))).toEqual(quiet);
     await typeInto(el, "[name=printer-detail-name]", "");
-    expect(await state(el, detailsEditTest("save", "name"))).toEqual(blocked);
+    expect(await state(el, detailsEditTest("save"))).toEqual(blocked);
   });
 
   it("a press that reaches an untouched Save's handler sends nothing", async () => {
-    const { el, api } = await openDetail("name");
-    action(el, detailsEditTest("save", "name")).click();
+    const { el, api } = await openDetail();
+    action(el, detailsEditTest("save")).click();
     await el.updateComplete;
     await settle();
     expect(api.updatePrinter).not.toHaveBeenCalled();
@@ -274,9 +274,9 @@ describe("the printer page's name editor Save", () => {
   });
 
   it("a press after one edit sends it", async () => {
-    const { el, api } = await openDetail("name");
+    const { el, api } = await openDetail();
     await typeInto(el, "[name=printer-detail-name]", "Kitchen 2");
-    await press(el, detailsEditTest("save", "name"));
+    await press(el, detailsEditTest("save"));
     await vi.waitFor(() =>
       expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", { name: "Kitchen 2" }),
     );
@@ -292,33 +292,31 @@ describe("the printer page's name editor Save", () => {
           }),
       ),
     });
-    const { el } = await openDetail("name", api);
+    const { el } = await openDetail(api);
     await typeInto(el, "[name=printer-detail-name]", "Kitchen 2");
-    await press(el, detailsEditTest("save", "name"));
+    await press(el, detailsEditTest("save"));
     await vi.waitFor(() => expect(typeof finish).toBe("function"));
     q(el, "[name=printer-detail-name]")!.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "Kitchen 3" }, bubbles: true }),
     );
     finish();
-    await vi.waitFor(async () =>
-      expect(await state(el, detailsEditTest("save", "name"))).toEqual(ready),
-    );
+    await vi.waitFor(async () => expect(await state(el, detailsEditTest("save"))).toEqual(ready));
     await typeInto(el, "[name=printer-detail-name]", "Kitchen 2");
-    expect(await state(el, detailsEditTest("save", "name"))).toEqual(quiet);
+    expect(await state(el, detailsEditTest("save"))).toEqual(quiet);
   });
 });
 
-describe("the printer page's connection editor Save", () => {
+describe("the details form's Save, for the address", () => {
   it("opens on the printer's address with Save quiet, and a press sends nothing", async () => {
-    const { el, api } = await openDetail("connection");
+    const { el, api } = await openDetail();
     expect(q<HTMLElementTagNameMap["wt-input"]>(el, "[name=printer-detail-host]")!.value).toBe(
       "10.0.0.9",
     );
     expect(q<HTMLElementTagNameMap["wt-input"]>(el, "[name=printer-detail-port]")!.value).toBe(
       "9100",
     );
-    expect(await state(el, detailsEditTest("save", "connection"))).toEqual(quiet);
-    await press(el, detailsEditTest("save", "connection"));
+    expect(await state(el, detailsEditTest("save"))).toEqual(quiet);
+    await press(el, detailsEditTest("save"));
     await settle();
     expect(api.updatePrinter).not.toHaveBeenCalled();
     noComplaint(el);
@@ -331,33 +329,24 @@ describe("the printer page's connection editor Save", () => {
   ])(
     "one edit to %s wakes Save, and putting the stored value back quiets it",
     async (_, selector, edit, revert) => {
-      const { el } = await openDetail("connection");
+      const { el } = await openDetail();
       await typeInto(el, selector, edit);
-      expect(await state(el, detailsEditTest("save", "connection"))).toEqual(ready);
+      expect(await state(el, detailsEditTest("save"))).toEqual(ready);
       await typeInto(el, selector, revert);
-      expect(await state(el, detailsEditTest("save", "connection"))).toEqual(quiet);
+      expect(await state(el, detailsEditTest("save"))).toEqual(quiet);
     },
   );
 
   it("a port its own check refuses keeps Save drawn as a change but unpressable", async () => {
-    const { el } = await openDetail("connection");
+    const { el } = await openDetail();
     await typeInto(el, "[name=printer-detail-port]", "70000");
-    expect(await state(el, detailsEditTest("save", "connection"))).toEqual(blocked);
-  });
-
-  it("a press that reaches an untouched Save's handler sends nothing", async () => {
-    const { el, api } = await openDetail("connection");
-    action(el, detailsEditTest("save", "connection")).click();
-    await el.updateComplete;
-    await settle();
-    expect(api.updatePrinter).not.toHaveBeenCalled();
-    noComplaint(el);
+    expect(await state(el, detailsEditTest("save"))).toEqual(blocked);
   });
 
   it("a press after one edit sends the edit and the field as it was read", async () => {
-    const { el, api } = await openDetail("connection");
+    const { el, api } = await openDetail();
     await typeInto(el, "[name=printer-detail-host]", "10.0.0.10");
-    await press(el, detailsEditTest("save", "connection"));
+    await press(el, detailsEditTest("save"));
     await vi.waitFor(() =>
       expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", {
         host: "10.0.0.10",
@@ -376,19 +365,17 @@ describe("the printer page's connection editor Save", () => {
           }),
       ),
     });
-    const { el } = await openDetail("connection", api);
+    const { el } = await openDetail(api);
     await typeInto(el, "[name=printer-detail-host]", "10.0.0.10");
-    await press(el, detailsEditTest("save", "connection"));
+    await press(el, detailsEditTest("save"));
     await vi.waitFor(() => expect(typeof finish).toBe("function"));
     q(el, "[name=printer-detail-host]")!.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "10.0.0.11" }, bubbles: true }),
     );
     finish();
-    await vi.waitFor(async () =>
-      expect(await state(el, detailsEditTest("save", "connection"))).toEqual(ready),
-    );
+    await vi.waitFor(async () => expect(await state(el, detailsEditTest("save"))).toEqual(ready));
     await typeInto(el, "[name=printer-detail-host]", "10.0.0.10");
-    expect(await state(el, detailsEditTest("save", "connection"))).toEqual(quiet);
+    expect(await state(el, detailsEditTest("save"))).toEqual(quiet);
   });
 });
 
@@ -673,7 +660,7 @@ describe("the calibration wizard's Save, when an add opened it", () => {
     expect(api.deactivatePrinter).not.toHaveBeenCalled();
   });
 
-  it("a printer page's wizard, opened after an added printer's wizard was closed unsaved, opens with Save quiet", async () => {
+  it("a printer's calibration wizard, opened after an added printer's wizard was closed unsaved, opens with Save quiet", async () => {
     const { el, api } = await addFromDiscovery(unregistered);
     const closed = new Promise((resolve) =>
       q(el, "[data-test=edit-printer-modal]")!.addEventListener("wt-close", resolve, {
@@ -917,17 +904,17 @@ describe("under the dashboard's leave coordinator", () => {
   it("the details form opens quiet and wakes on a name or an address edit", async () => {
     history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
     const el = await mountShared();
-    await vi.waitFor(() => expect(detailsEditButton(el, "edit", "name")).not.toBeNull());
-    openDetailsEdit(el, "name");
-    await vi.waitFor(() => expect(detailsEditButton(el, "save", "name")).not.toBeNull());
-    expect(await state(el, detailsEditTest("save", "name"))).toEqual(quiet);
+    await vi.waitFor(() => expect(detailsEditButton(el, "edit")).not.toBeNull());
+    openDetailsEdit(el);
+    await vi.waitFor(() => expect(detailsEditButton(el, "save")).not.toBeNull());
+    expect(await state(el, detailsEditTest("save"))).toEqual(quiet);
     await typeInto(el, "[name=printer-detail-name]", "Kitchen 2");
-    expect(await state(el, detailsEditTest("save", "name"))).toEqual(ready);
+    expect(await state(el, detailsEditTest("save"))).toEqual(ready);
 
     await typeInto(el, "[name=printer-detail-name]", "Kitchen");
-    expect(await state(el, detailsEditTest("save", "connection"))).toEqual(quiet);
+    expect(await state(el, detailsEditTest("save"))).toEqual(quiet);
     await typeInto(el, "[name=printer-detail-port]", "9101");
-    expect(await state(el, detailsEditTest("save", "connection"))).toEqual(ready);
+    expect(await state(el, detailsEditTest("save"))).toEqual(ready);
   });
 
   it("the calibration wizard opens quiet and wakes on a change", async () => {

@@ -602,45 +602,30 @@ export function timesAcrossLines(elements: readonly Node[]): { checked: number; 
   return { checked, broken };
 }
 
-export type DetailsEditPart = "name" | "connection";
 export type DetailsEditAction = "edit" | "save" | "cancel";
 
-function deepFind(root: ParentNode, selector: string): HTMLElement | null {
-  const found = root.querySelector<HTMLElement>(selector);
-  if (found) return found;
-  for (const node of root.querySelectorAll<HTMLElement>("*")) {
-    const nested = node.shadowRoot ? deepFind(node.shadowRoot, selector) : null;
-    if (nested) return nested;
-  }
-  return null;
-}
-
-/** The `data-test` of the printer details form's button. The details hold one form for the name
- * and the address, so `part` only says which field the caller is about to use. */
-export function detailsEditTest(action: DetailsEditAction, part: DetailsEditPart): string {
-  void part;
+export function detailsEditTest(action: DetailsEditAction): string {
   return `${action}-printer-details`;
 }
 
 export function detailsEditButton<T extends HTMLElement = HTMLElement>(
   el: HTMLElement,
   action: DetailsEditAction,
-  part: DetailsEditPart,
 ): T | null {
-  return deepFind(el.shadowRoot!, `[data-test=${detailsEditTest(action, part)}]`) as T | null;
+  return el.shadowRoot!.querySelector<T>(`[data-test=${detailsEditTest(action)}]`);
 }
 
-/** Presses the details' Edit; when the form is already open there is nothing to press. */
-export function openDetailsEdit(el: HTMLElement, part: DetailsEditPart): void {
-  const edit = detailsEditButton(el, "edit", part);
-  if (edit) edit.click();
-  else if (!detailsEditButton(el, "save", part)) throw new Error("No printer details are open.");
+/** Presses the details' Edit, and throws when there is none to press. */
+export function openDetailsEdit(el: HTMLElement): void {
+  const edit = detailsEditButton(el, "edit");
+  if (!edit) throw new Error("The printer details show no Edit to press.");
+  edit.click();
 }
 
-export function saveDetailsEdit(el: HTMLElement, part: DetailsEditPart): void {
-  detailsEditButton(el, "save", part)!.click();
+export function saveDetailsEdit(el: HTMLElement): void {
+  detailsEditButton(el, "save")!.click();
 }
 
-export function cancelDetailsEdit(el: HTMLElement, part: DetailsEditPart): void {
-  detailsEditButton(el, "cancel", part)!.click();
+export function cancelDetailsEdit(el: HTMLElement): void {
+  detailsEditButton(el, "cancel")!.click();
 }

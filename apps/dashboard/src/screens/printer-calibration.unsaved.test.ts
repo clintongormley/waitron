@@ -100,7 +100,6 @@ async function open(screen: PrintersScreen, id: string) {
     q(screen, `[data-test=printer-row-${id}]`)!.click();
   }
   await screen.updateComplete;
-  await screen.updateComplete;
   q(screen, "[data-test=calibrate-printer-details]")!.click();
   await screen.updateComplete;
   await modal(screen)!.updateComplete;

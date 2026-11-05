@@ -610,11 +610,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     );
     await flush(el);
     await openPrinter(el);
-    openDetailsEdit(el, "name");
-    await flush(el);
-    await expectNoA11yViolations(host);
-    await flush(el);
-    openDetailsEdit(el, "connection");
+    openDetailsEdit(el);
     await flush(el);
     await expectNoA11yViolations(host);
   });
@@ -643,9 +639,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       expect(q(el, "[data-test=printer-section-status]")).not.toBeNull();
       expect(q(el, "[data-test=printer-section-connection]")).not.toBeNull();
       expect(q(el, "[data-test=printer-section-calibration]")).not.toBeNull();
-      expect(
-        detailsEditButton(el, "edit", "name")!.getBoundingClientRect().right,
-      ).toBeLessThanOrEqual(
+      expect(detailsEditButton(el, "edit")!.getBoundingClientRect().right).toBeLessThanOrEqual(
         q(el, "[data-test=printer-details-modal]")!
           .shadowRoot!.querySelector("dialog")!
           .getBoundingClientRect().right,
@@ -1204,7 +1198,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it("renders the printer page's name and connection Save, quiet and changed, accessibly", async () => {
+  it("renders the details form's Save, quiet and changed, accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",
       { api: stubApi() },
@@ -1212,15 +1206,9 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     );
     await flush(el);
     await openPrinter(el);
-    openDetailsEdit(el, "name");
+    openDetailsEdit(el);
     await flush(el);
-    openDetailsEdit(el, "connection");
-    await flush(el);
-    expect(saveLook(el, detailsEditTest("save", "name"))).toEqual({
-      variant: "secondary",
-      disabled: true,
-    });
-    expect(saveLook(el, detailsEditTest("save", "connection"))).toEqual({
+    expect(saveLook(el, detailsEditTest("save"))).toEqual({
       variant: "secondary",
       disabled: true,
     });
@@ -1228,11 +1216,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     edit(el, '[name="printer-detail-name"]', "Kitchen 2");
     edit(el, '[name="printer-detail-port"]', "9101");
     await flush(el);
-    expect(saveLook(el, detailsEditTest("save", "name"))).toEqual({
-      variant: "primary",
-      disabled: false,
-    });
-    expect(saveLook(el, detailsEditTest("save", "connection"))).toEqual({
+    expect(saveLook(el, detailsEditTest("save"))).toEqual({
       variant: "primary",
       disabled: false,
     });

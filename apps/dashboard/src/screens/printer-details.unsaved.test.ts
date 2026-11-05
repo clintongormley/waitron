@@ -6,7 +6,12 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { dashboardPath } from "../navigation.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cancelDetailsEdit,
+  cleanupWidgets,
+  mountWidget,
+  saveDetailsEdit,
+} from "../widgets/test-helpers.js";
 import { PrintersScreen } from "./printers-screen.js";
 
 registerIcons(DASHBOARD_ICONS);
@@ -96,9 +101,6 @@ async function open(screen: PrintersScreen) {
 function change(screen: PrintersScreen, name: Field | "port", value: string) {
   field(screen, name).dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
 }
-function press(screen: PrintersScreen, action: "save" | "cancel") {
-  q(screen, `[data-test=${action}-printer-details]`)!.click();
-}
 function unload() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
@@ -127,7 +129,7 @@ for (const owner of ["name", "host"] as const) {
       });
       await open(screen);
       change(screen, owner, owner === "name" ? "Submitted" : "10.0.0.88");
-      press(screen, "save");
+      saveDetailsEdit(screen);
       await expect.poll(() => typeof finish).toBe("function");
       screen.remove();
       const reopened = new PrintersScreen();
@@ -153,11 +155,11 @@ for (const owner of ["name", "host"] as const) {
     expect(unload()).toBe(false);
     change(screen, owner, edited);
     expect(unload()).toBe(true);
-    press(screen, "cancel");
+    cancelDetailsEdit(screen);
     await choose(app, "keep");
     expect(field(screen, owner).value).toBe(edited);
     expect(unload()).toBe(true);
-    press(screen, "cancel");
+    cancelDetailsEdit(screen);
     await choose(app, "discard");
     await expect.poll(() => field(screen, owner)).toBeNull();
     expect(unload()).toBe(false);
@@ -171,7 +173,7 @@ for (const owner of ["name", "host"] as const) {
     expect(unload()).toBe(true);
     change(screen, owner, `  ${saved[owner]}  `);
     expect(unload()).toBe(false);
-    press(screen, "cancel");
+    cancelDetailsEdit(screen);
     await expect.poll(() => field(screen, owner)).toBeNull();
     expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   });
@@ -191,7 +193,7 @@ for (const owner of ["name", "host"] as const) {
     });
     await open(screen);
     change(screen, owner, owner === "name" ? "  New kitchen  " : "10.0.0.88");
-    press(screen, "save");
+    saveDetailsEdit(screen);
     await expect.poll(() => dirtyAtRefresh).toBe(false);
     expect(body).toEqual(
       owner === "name" ? { name: "New kitchen" } : { host: "10.0.0.88", port: 9100 },
@@ -210,7 +212,7 @@ for (const owner of ["name", "host"] as const) {
     const submitted = owner === "name" ? "Submitted" : "10.0.0.88";
     const newer = owner === "name" ? "Newer" : "10.0.0.99";
     change(screen, owner, submitted);
-    press(screen, "save");
+    saveDetailsEdit(screen);
     await expect.poll(() => field(screen, owner).disabled).toBe(true);
     change(screen, owner, newer);
     finish();
@@ -231,14 +233,14 @@ for (const owner of ["name", "host"] as const) {
     await open(screen);
     const newer = owner === "name" ? "Newer" : "10.0.0.99";
     change(screen, owner, owner === "name" ? "Submitted" : "10.0.0.88");
-    press(screen, "save");
+    saveDetailsEdit(screen);
     await expect.poll(() => field(screen, owner).disabled).toBe(true);
     change(screen, owner, newer);
     refuse({ code: "connection.failed" });
     await expect.poll(() => field(screen, owner).disabled).toBe(false);
     expect(field(screen, owner).value).toBe(newer);
     expect(unload()).toBe(true);
-    press(screen, "cancel");
+    cancelDetailsEdit(screen);
     await choose(app, "keep");
   });
 }
@@ -259,7 +261,7 @@ it("a save whose refresh fails keeps both fields' newer input dirty", async () =
   await open(screen);
   change(screen, "name", "Submitted");
   change(screen, "host", "10.0.0.88");
-  press(screen, "save");
+  saveDetailsEdit(screen);
   await expect.poll(() => field(screen, "name").disabled).toBe(true);
   change(screen, "name", "Newer");
   change(screen, "host", "10.0.0.99");
@@ -344,7 +346,7 @@ for (const owner of ["name", "host"] as const) {
     const { screen } = await mount();
     await open(screen);
     const old = field(screen, owner);
-    press(screen, "cancel");
+    cancelDetailsEdit(screen);
     await expect.poll(() => field(screen, owner)).toBeNull();
     await open(screen);
     old.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "stale edit" } }));
@@ -368,7 +370,7 @@ it("a port-only edit protects leaving, treats 09100 as 9100 and sends an explici
   expect(unload()).toBe(false);
   change(screen, "port", "");
   expect(unload()).toBe(true);
-  press(screen, "save");
+  saveDetailsEdit(screen);
   await expect.poll(() => submitted).toEqual({ host: "10.0.0.9", port: null });
   await expect.poll(() => field(screen, "host")).toBeNull();
   expect(unload()).toBe(false);
