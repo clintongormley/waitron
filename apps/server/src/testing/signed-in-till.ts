@@ -3,12 +3,18 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { deviceProfiles, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  deviceProfiles,
+  withTransaction,
+  type Database,
+  type Transaction,
+  venueLocationId,
+} from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { loginWithPin, persons } from "@waitron/identity";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import { planVenue } from "@waitron/provisioning";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import {
   createDepartment,
   departmentReceipts,
@@ -23,7 +29,7 @@ import { DEVICE_COOKIE } from "../device-session.js";
 import { ALL_MODULES } from "../modules.js";
 import { systemClock } from "../till-backend.js";
 import { mountTillApi } from "../till-api.js";
-import type { TradingContext } from "../trading-context.js";
+import type { WithVenueRowId } from "./venue-row-id.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { BASIC_ACTIONS } from "./session-device.js";
@@ -38,7 +44,7 @@ export interface TillSeed {
 }
 
 export interface SignedInTill {
-  cfg: TradingContext;
+  cfg: WithVenueRowId;
   app: Hono;
   cookie: string;
   personId: string;
@@ -55,7 +61,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
   options: {
     taxId: string;
     dayCutover: string;
-    seed: (tx: Transaction, cfg: TradingContext) => Promise<S>;
+    seed: (tx: Transaction, cfg: WithVenueRowId) => Promise<S>;
     simulatorCard?: boolean;
   },
 ): Promise<SignedInTill & S> {
@@ -89,9 +95,10 @@ export async function provisionSignedInTill<S extends TillSeed>(
     ),
     { db, modules: ALL_MODULES },
   );
-  const cfg: TradingContext = {
+  const venueId = await venueLocationId(db);
+  const cfg: WithVenueRowId = {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: venueId,
     locale: SIGNED_IN_TILL_LOCALE,
     invoiceLocales: [SIGNED_IN_TILL_LOCALE],
     tipsEnabled: false,

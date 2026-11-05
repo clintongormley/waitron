@@ -36,7 +36,7 @@ import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/tes
 import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
 import { fiscalAllocations, registroSif } from "@waitron/fiscal-verifactu";
 import type { WaitronModule } from "@waitron/module";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import {
   standbyContract,
   allocatedStandbyModules,
@@ -167,7 +167,6 @@ async function setupVenue(): Promise<{
     { db, modules: ALL_MODULES },
   );
   const designated: AdoptResult = {
-    locationId: venue.locationId,
     nodeId: venue.nodeId,
   };
   await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, designated.nodeId);
@@ -288,7 +287,7 @@ async function post(app: Hono, body: unknown): Promise<Response> {
   const primary = (await db.select().from(nodes))[0]!;
   const fixture = await standbyContract(
     db,
-    { nodeId: nodeId(primary.id), locationId: locationId(primary.locationId) },
+    { nodeId: nodeId(primary.id) },
     request.standbyNodeId,
     [
       { code: "FA", purpose: "standard" },
@@ -770,7 +769,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(byCode.get("RF-P000042")).toBe("rectificative");
     const primary = {
       nodeId: nodeId(designated.nodeId),
-      locationId: locationId(designated.locationId),
     };
     await prepareStandbyDatabase(db, spare.db, primary);
     expect(await takenOverSeries(spare.db, standby.nodeId, fixture, fiscal)).toEqual([
@@ -1476,7 +1474,6 @@ async function allocatedReply(
 ) {
   const primary = {
     nodeId: nodeId(designated.nodeId),
-    locationId: locationId(designated.locationId),
   };
   const fixture = await standbyContract(
     db,

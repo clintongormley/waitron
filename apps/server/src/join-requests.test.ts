@@ -47,7 +47,7 @@ import {
 import { authenticateAgent } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { createStation } from "./kitchen.js";
@@ -1806,51 +1806,5 @@ describe("a request stamped ahead of the clock, as after a backward step", () =>
     );
     await stampAhead(made.joinId, JOIN_TTL_MS - 5_000);
     expect(await readAgentJoinStatus(suite.db, cfg, made.joinId, made.token)).toBe("pending");
-  });
-});
-
-describe("the venue a join stamps", () => {
-  // A1301: deleted with cfg in S18
-  it("stamps the venue on a request, the device and agents it becomes, whatever location the scope names", async () => {
-    const venue = await setupVenue(suite.db);
-    const elsewhere = { ...venue.cfg, locationId: brandLocationId(randomUUID()) };
-    const profileId = await seedProfile("till");
-    const { device, agent, self } = await withTransaction(suite.db, async (tx) => {
-      const device = await createJoinRequest(tx, elsewhere, { kind: "device", label: "Bar till" });
-      const [request] = await tx
-        .select({ locationId: joinRequests.locationId })
-        .from(joinRequests)
-        .where(eq(joinRequests.id, device.joinId));
-      expect(request).toEqual({ locationId: venue.cfg.locationId });
-      // An accept that read the request's location would now fail the device's foreign key.
-      await tx
-        .update(joinRequests)
-        .set({ locationId: brandLocationId(randomUUID()) })
-        .where(eq(joinRequests.id, device.joinId));
-      await acceptDeviceJoinRequest(tx, elsewhere, device.joinId, { label: "Bar 1", profileId });
-      const agent = await createJoinRequest(tx, elsewhere, { kind: "print_agent", label: "pi" });
-      await tx
-        .update(joinRequests)
-        .set({ locationId: brandLocationId(randomUUID()) })
-        .where(eq(joinRequests.id, agent.joinId));
-      await acceptPrintAgentJoinRequest(tx, elsewhere, agent.joinId, {
-        choice: agent.verificationNumber,
-      });
-      const self = await selfEnrolNodeAgent(tx, { nodeId: randomUUID(), name: "box" });
-      return { device, agent, self };
-    });
-    const [deviceRow] = await suite.db
-      .select({ locationId: devices.locationId })
-      .from(devices)
-      .where(eq(devices.id, device.joinId));
-    expect(deviceRow).toEqual({ locationId: venue.cfg.locationId });
-    const agentRows = await suite.db
-      .select({ id: printAgents.id, locationId: printAgents.locationId })
-      .from(printAgents)
-      .orderBy(printAgents.name);
-    expect(agentRows).toEqual([
-      { id: self.agentId, locationId: venue.cfg.locationId },
-      { id: agent.joinId, locationId: venue.cfg.locationId },
-    ]);
   });
 });

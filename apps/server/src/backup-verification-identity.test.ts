@@ -79,7 +79,6 @@ describe("archived operational TOTP derivation", () => {
           },
           source: {
             nodeId: "source",
-            locationId: "venue",
             environment: "preproduction",
             createdAt: new Date().toISOString(),
           },

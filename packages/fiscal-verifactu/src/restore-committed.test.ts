@@ -1,7 +1,7 @@
 import { beforeEach, expect, it } from "vitest";
 import { invoiceSeries, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
@@ -11,7 +11,7 @@ import { fiscalAllocations } from "./schema/allocations.js";
 import { assertFiscalRestoreCommitted } from "./restore-committed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },

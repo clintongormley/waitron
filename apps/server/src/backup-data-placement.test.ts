@@ -17,6 +17,7 @@ import { buildManifest } from "./backup-manifest.js";
 import { validateBackupArtifactFile } from "./backup-verification-archive.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { placeBackupData, placeBackupDatabase } from "./backup-data-placement.js";
+import * as backupConfig from "./backup-config.js";
 
 const modules = ALL_MODULES.filter((m) => ["core", "catalogue"].includes(m.name));
 const options = migrationOptionsFor(orderedMigrationSets(modules), null);
@@ -372,6 +373,42 @@ it("uses captured env precedence to validate backup settings without reaching th
       "WAITRON_BACKUP_RECOVERY_KEY=earlier-valid-archive-key\n",
     );
     await expect(stat(join(f.stateDir, "backup.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  } finally {
+    await validated.discard();
+  }
+});
+it("checks the captured backup settings against the copy's own venue id", async () => {
+  const f = await fixture();
+  const load = vi.spyOn(backupConfig, "loadBackupConfig");
+  await seal(f);
+  const validated = await validateBackupArtifactFile(f);
+  try {
+    await placeBackupData(validated, f);
+    expect(load.mock.calls.map(([, venueId]) => venueId)).toEqual([location]);
+  } finally {
+    await validated.discard();
+  }
+});
+it("refuses a copy holding two venue rows before moving the database", async () => {
+  const f = await fixture();
+  await seal(f);
+  const validated = await validateBackupArtifactFile(f);
+  try {
+    const copy = new DatabaseSync(validated.databasePath);
+    try {
+      copy
+        .prepare(
+          "insert into locations (id, name, operation_description, invoice_locales) values (?, ?, ?, ?)",
+        )
+        .run("10000000-0000-4000-8000-000000000099", "Second venue", "Sale", '["en"]');
+    } finally {
+      copy.close();
+    }
+    await expect(placeBackupData(validated, f)).rejects.toMatchObject({
+      code: "provisioning.second_venue",
+    });
+    expect((await stat(validated.databasePath)).isFile()).toBe(true);
+    await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
   } finally {
     await validated.discard();
   }

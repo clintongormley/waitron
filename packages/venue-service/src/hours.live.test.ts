@@ -17,7 +17,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 import { saveHolidayArea } from "./holidays.js";
 import { QUERY_DEPENDENCIES } from "./dashboard/live-queries.js";
@@ -81,7 +80,7 @@ it("refreshes Calendar and routing from special days, clock and daily station st
       ])
       .returning();
     return {
-      cfg: { locationId: locationId(venueId) },
+      cfg: { locationId: venueId },
       departmentId: department!.id,
       bar: barRow!.id,
       kitchen: kitchenRow!.id,
@@ -167,7 +166,7 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
       city: "Vielha",
     });
     const venueId = await venueLocationId(tx);
-    return { locationId: locationId(venueId) };
+    return { locationId: venueId };
   });
   const calendar = QUERY_DEPENDENCIES["named-days"];
   const holidays = QUERY_DEPENDENCIES.holidays;
@@ -208,7 +207,7 @@ it("daily station status refreshes routing and special days refresh Opening hour
       timeZone: "Europe/Madrid",
     });
     const venueId = await venueLocationId(tx);
-    const cfg = { locationId: locationId(venueId) };
+    const cfg = { locationId: venueId };
     const [bar] = await tx
       .insert(kitchenStations)
       .values([

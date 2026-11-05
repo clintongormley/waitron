@@ -40,7 +40,7 @@ import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
-import { jobOrigin, locationId, nodeId, seriesId } from "@waitron/shared";
+import { jobOrigin, nodeId, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import {
@@ -172,7 +172,6 @@ async function setup(bluetooth = false) {
     {
       db: suite.db,
       cfg: {
-        locationId: locationId(location!.id),
         nodeId: nodeId(node!.id),
         locale: "es-ES",
         invoiceLocales: ["es-ES"],

@@ -38,11 +38,11 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import {
   decimal,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   PORTIONS_AT_ONCE,
   rawCentsToDecimal,
@@ -67,7 +67,8 @@ import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import type { OrderFlow } from "./till-config.js";
-import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import type { ServiceMode } from "@waitron/module";
 import { requestBill } from "./bill-request.js";
 import {
@@ -151,10 +152,10 @@ function nextNif(): string {
   return nifWithControlLetter(70_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -167,7 +168,7 @@ type OfferedProduct = AvailableProduct & { menuItemId: string; zoneId: string };
 
 interface SeededVenue {
   seriesId: ReturnType<typeof brandSeriesId>;
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   cafe: OfferedProduct;
 }
 
@@ -205,7 +206,8 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
+  const venueId = await venueLocationId(suite.db);
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
   const rows = await suite.db
     .select()
     .from(departments)
@@ -429,7 +431,7 @@ async function collectedAtSet(id: string): Promise<boolean> {
 /** The venue's default kitchen station id (`applyVenue` seeds one "Cocina" per location). Every
  *  fixture line here carries no product/category route, so `placeOrder` fires it to this
  *  station. */
-async function defaultStationId(cfg: DeviceRequestConfig): Promise<string> {
+async function defaultStationId(cfg: WithVenueRowId<DeviceRequestConfig>): Promise<string> {
   const rows = suite.db.all<{ id: string }>(sql`
     select id from kitchen_stations where location_id = ${cfg.locationId} and is_default and active
   `);

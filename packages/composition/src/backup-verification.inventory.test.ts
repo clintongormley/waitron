@@ -161,7 +161,6 @@ it.each([
         },
         source: {
           nodeId: "source",
-          locationId: "venue",
           environment: "preproduction",
           createdAt: "2026-10-20T08:00:00.000Z",
         },

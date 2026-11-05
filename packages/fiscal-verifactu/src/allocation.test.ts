@@ -14,9 +14,9 @@ import {
   type Database,
   type Transaction,
   type VenueDatabase,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenants, seedSoldRegistro } from "../test/fixtures.js";
 import * as fiscal from "./index.js";
@@ -39,7 +39,6 @@ import * as activation from "./allocation.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node: ProvisionedNode = {
   nodeId: TENANT_A.nodeId,
-  locationId: locationId(TENANT_A.locationId),
 };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -927,7 +926,7 @@ describe("activation over retained fiscal rows", () => {
       }),
     );
     await seedSoldRegistro(suite.db, {
-      locationId: node.locationId,
+      locationId: await venueLocationId(suite.db),
       nodeId: node.nodeId,
       sifId: old.id,
       nif: candidate.taxpayerNif,
@@ -1185,39 +1184,4 @@ it("refuses replay when the stored node is absent", async () => {
   } finally {
     await suite.db.execute(sql`pragma foreign_keys = on`);
   }
-});
-
-// A1301: deleted with cfg in S18
-it("validates and replays an allocation without location scope", async () => {
-  const unscoped = { ...node, locationId: locationId("f0000000-0000-4000-8000-000000000099") };
-  expect(await validate(allocation, approval, context, unscoped)).toEqual({
-    ok: true,
-    allocation,
-    approval,
-  });
-  const committed = await withTransaction(suite.db, (tx) =>
-    activateAllocation(tx, unscoped, allocation, approval, context),
-  );
-  expect(
-    await withTransaction(suite.db, (tx) =>
-      activateAllocation(tx, unscoped, allocation, approval, {
-        ...context,
-        priorActivation: "committed",
-      }),
-    ),
-  ).toEqual(committed);
-});
-
-// A1301: deleted with cfg in S18
-it("replays a committed allocation without location scope", async () => {
-  const committed = await activate();
-  const unscoped = { ...node, locationId: locationId("f0000000-0000-4000-8000-000000000099") };
-  expect(
-    await withTransaction(suite.db, (tx) =>
-      activateAllocation(tx, unscoped, allocation, approval, {
-        ...context,
-        priorActivation: "committed",
-      }),
-    ),
-  ).toEqual(committed);
 });

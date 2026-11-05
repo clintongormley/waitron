@@ -117,7 +117,7 @@ export function mountDepartmentReceiptSettingsApi(
         const current = await VENUE_SERVICE.readDepartmentReceipt(tx, checked.scope, id);
         const kept =
           receipt.logo !== undefined && receipt.logo === current.logo
-            ? await VENUE_SERVICE.readDepartmentLogoRasters(tx, checked.scope, id)
+            ? await VENUE_SERVICE.readDepartmentLogoRasters(tx, id)
             : null;
         return prepareLogo(tx, receipt.logo, kept);
       });
@@ -143,13 +143,7 @@ export function mountDepartmentReceiptSettingsApi(
           if (current.revision !== prepared?.revision)
             throw new AppError("image.changed", { imageId: current.id });
         }
-        await VENUE_SERVICE.saveDepartmentReceiptSettings(
-          tx,
-          checked.scope,
-          id,
-          checked.input,
-          rasters,
-        );
+        await VENUE_SERVICE.saveDepartmentReceiptSettings(tx, id, checked.input, rasters);
       });
       return c.body(null, 204);
     }),

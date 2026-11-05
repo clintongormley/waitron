@@ -362,7 +362,7 @@ describe("Orders routes", () => {
           db: venue.db,
           backend: venue.backend,
           cfg: { nodeId: venue.cfg.nodeId },
-          tradingContext: { ...venue.cfg, nodeId: ownNode, locationId: ownLocation, practiceMode },
+          tradingContext: { ...venue.cfg, nodeId: ownNode, practiceMode },
           invoiceEmailAvailable: () => Promise.resolve(false),
         },
         () => {},

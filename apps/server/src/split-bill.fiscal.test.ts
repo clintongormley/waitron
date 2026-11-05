@@ -9,6 +9,7 @@ import {
   sales,
   withTransaction,
   workingOrderLines,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -25,15 +26,11 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import {
-  basisPointsToDecimal,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  thousandthsToDecimal,
-} from "@waitron/shared";
+import { basisPointsToDecimal, nodeId as brandNodeId, thousandthsToDecimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import type { TillSaleResult } from "./till-sale.js";
@@ -80,10 +77,10 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -138,7 +135,8 @@ async function setupVenue(): Promise<Seeded> {
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
+  const venueId = await venueLocationId(suite.db);
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
   const seeded = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const comida = await createCategory(tx, { name: "Comida" });

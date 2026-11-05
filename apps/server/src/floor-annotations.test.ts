@@ -7,8 +7,9 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { bookings } from "@waitron/bookings";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
 import { listTablesWithState } from "./working-order.js";
 import { ALL_MODULES, enabledFloorAnnotators } from "./modules.js";
@@ -28,7 +29,7 @@ beforeAll(() => {
 
 const LOCALE = "es-ES";
 
-async function setupVenue(): Promise<TradingContext> {
+async function setupVenue(): Promise<WithVenueRowId> {
   await seedVenue(db, {
     name: "Counter",
     invoiceLocales: [LOCALE],
@@ -39,7 +40,7 @@ async function setupVenue(): Promise<TradingContext> {
   const nodeId = await seedNode(db);
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -54,7 +55,7 @@ function asApp<T>(cfg: TradingContext, fn: (tx: Transaction) => Promise<T>): Pro
   });
 }
 
-async function insertBooking(cfg: TradingContext, tableId: string, time: string): Promise<void> {
+async function insertBooking(cfg: WithVenueRowId, tableId: string, time: string): Promise<void> {
   await asApp(cfg, (tx) =>
     tx.insert(bookings).values({
       locationId: cfg.locationId,

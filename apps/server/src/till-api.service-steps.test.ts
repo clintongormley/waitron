@@ -8,17 +8,17 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashSessionToken, persons, sessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { serviceStepCompletions } from "@waitron/venue-service";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { createZone } from "./testing/service-zone.js";
 import { createTable } from "./testing/live-table.js";
 import { departmentOf, setSteps } from "./testing/service-steps.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-let cfg: TradingContext;
+let cfg: WithVenueRowId;
 let personId: string;
 let token: string;
 let requestCookie: string;
@@ -34,7 +34,7 @@ beforeEach(async () => {
     operationDescription: "Hospitality",
   });
   cfg = {
-    locationId: locationId(await venueLocationId(suite.db)),
+    locationId: await venueLocationId(suite.db),
     nodeId: nodeId(await seedNode(suite.db)),
     locale: "en-GB",
     invoiceLocales: ["en-GB"],

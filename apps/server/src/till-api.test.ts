@@ -72,13 +72,7 @@ import {
   listAvailableProducts,
   removeMember,
 } from "@waitron/catalogue";
-import {
-  AppError,
-  SUPPORTED_LOCALES,
-  decimal,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-} from "@waitron/shared";
+import { AppError, SUPPORTED_LOCALES, decimal, nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { cardReaders, type PaymentProvider } from "@waitron/payments";
 import type { Logger, LogLevel } from "./logger.js";
@@ -94,7 +88,7 @@ import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE, requireSession } from "./till-session.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import "./errors.js";
 
@@ -121,7 +115,7 @@ async function sendRound(
   });
 }
 
-let cfg: TradingContext;
+let cfg: WithVenueRowId;
 let ana: { id: string };
 // The pre-login roster fixtures: `abel` is a second ACTIVE person whose name sorts BEFORE "Ana" but
 // is inserted AFTER it, so `[abel, ana]` proves `listActiveStaff` sorts by name rather than by
@@ -172,7 +166,7 @@ const suite = useVenueDb({
     const venueId = await venueLocationId(db);
     // A default kitchen station so the place route's fire (placeOrder → fireLines) has a fallback.
     const defaultStationId = await seedKitchenStation(db, {
-      locationId: brandLocationId(venueId),
+      locationId: venueId,
     });
     // A node the working-order routes need: `parkOrder`/`payWorkingOrder` write `working_orders.node_id`
     // (its FK `(node_id) → nodes(id)` requires a real row).
@@ -239,7 +233,7 @@ const suite = useVenueDb({
         insert into department_sale_policies (department_id, order_start) values (${department!.id}, 'counter')`);
         await tx.execute(sql`
         insert into zone_sale_policies (zone_id, order_start) values (${zone!.id}, 'counter')`);
-        const venueScope = { locationId: brandLocationId(venueId) };
+        const venueScope = { locationId: venueId };
         await offerMenuThroughZone(tx, venueScope, zone!.id, cat.id, { makeDefault: true });
         const offer = await addProductToMenu(tx, {
           menuId: cat.id,
@@ -293,10 +287,10 @@ function collect(
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-function makeCfg(locationId: string, nodeId: string): TradingContext {
+function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

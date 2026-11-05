@@ -5,7 +5,13 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPayments, locations, withTransaction, workingOrders } from "@waitron/db";
+import {
+  billPayments,
+  locations,
+  withTransaction,
+  workingOrders,
+  venueLocationId,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   assignCatalogueToVenue,
@@ -20,17 +26,14 @@ import { createPrinter } from "@waitron/printing";
 import { departmentReceipts, departments } from "@waitron/venue-service";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { completeBillPayment } from "./bill-payments.js";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { readSettledTicket } from "./testing/whole-payment-fixture.js";
 import "./errors.js";
@@ -59,7 +62,7 @@ let backend: FiscalBackend;
 let clock: TrustedClock;
 
 interface Venue {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   /** OPERATOR's open session on the venue's device, which a bill payment is taken under. */
   operator: { personId: string; sessionId: string };
   offers: ZoneOffers;
@@ -128,10 +131,11 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     ),
     { db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
-    locationId: brandLocationId(provisioned.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

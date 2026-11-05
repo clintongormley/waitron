@@ -55,6 +55,8 @@ import {
   openVenueDatabase,
   withTransaction,
   applicationVersion,
+  nodes,
+  venueLocationId,
   type Database,
   type SingletonRole,
 } from "@waitron/db";
@@ -385,7 +387,7 @@ import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { acceptMembershipDocument } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
 import { runTunnelClient } from "@waitron/tunnel";
-import { readNodeLocation, readFilingModule, type NodeConfig } from "./node-config.js";
+import { readFilingModule } from "./node-config.js";
 import { offeredOperationDescriptionDefault } from "./operation-description-default.js";
 import type { TradingContext } from "./trading-context.js";
 import { readVenueContentLanguageRules, readVenueLocale } from "./venue-locale.js";
@@ -1673,10 +1675,13 @@ async function bootServer(
     );
   }
 
-  const nodeLocationId = await readNodeLocation(db, config.node.nodeId);
-  if (nodeLocationId === null)
+  const [ownNode] = await db
+    .select({ id: nodes.id })
+    .from(nodes)
+    .where(eq(nodes.id, config.node.nodeId));
+  if (ownNode === undefined)
     throw new AppError("server.node_config_invalid", { key: "WAITRON_NODE_ID" });
-  const node: NodeConfig = { ...config.node, locationId: nodeLocationId };
+  const node = config.node;
   assertSingleOperationalVenue(await readOperationalVenueIds(db));
 
   await assertRestoredMembershipReadable(config.stateDir, db);
@@ -2008,6 +2013,8 @@ async function bootServer(
     operationDescriptionDefault,
     practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
   };
+  // Interim: the venue row's id; removed by S18e or S28.
+  const venueId = await venueLocationId(db);
   // The venue's default DISPLAY locale. The override is the RAW `tradingContext.localeOverride`, not the
   // defaulted `tradingContext.locale`, which would mask geography.
   const venueLocale = await readVenueLocale(db, { override: tradingContext.localeOverride });
@@ -2592,7 +2599,7 @@ async function bootServer(
     testClock: seams.testClock,
     db,
     nodeDb: store.node,
-    node: { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId },
+    node: { nodeId: tradingContext.nodeId },
     modules: enabledModules(ALL_MODULES, moduleConfig),
     credentialKeyRing: totpKeyRing,
     stateDir: config.stateDir,
@@ -2613,7 +2620,7 @@ async function bootServer(
       trading: tradingAdmission,
     }),
     liveOperations: createLiveModuleOperation({
-      node: { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId },
+      node: { nodeId: tradingContext.nodeId },
       preparation: nodePreparation,
       requestFromBox: seams.requestFromBox,
     }),
@@ -2728,7 +2735,7 @@ async function bootServer(
         managedByEnvironment: isBackupManagedByEnvironment(),
         env: await loadBoxEnv(base, config.stateDir),
         readSealedWithMeta: () => readArchiveSettingsWithMeta(db, ring),
-        venueId: tradingContext.locationId,
+        venueId,
       }),
     isManagedByEnvironment: isBackupManagedByEnvironment,
     readSingletonRole: () => holders.singletonRole.current,
@@ -3100,7 +3107,7 @@ async function bootServer(
       db,
       nodeDb: store.node,
       node: tradingContext,
-      venueId: tradingContext.locationId,
+      venueId,
       modules: setsToMigrate,
       now,
     },
@@ -3110,7 +3117,7 @@ async function bootServer(
     ? createCloudConnection({
         stateDir: config.stateDir,
         origin: cloudOrigin,
-        localVenueId: tradingContext.locationId,
+        localVenueId: venueId,
         environment: config.environment === "production" ? "production" : "test",
       })
     : undefined;
@@ -3119,7 +3126,7 @@ async function bootServer(
       ? createCloudReplacement({
           stateDir: config.stateDir,
           origin: cloudOrigin,
-          localVenueId: tradingContext.locationId,
+          localVenueId: venueId,
           nodeId: tradingContext.nodeId,
           connection: cloudConnection,
         })
@@ -3174,7 +3181,7 @@ async function bootServer(
       supervisor: backupSupervisor,
       db,
       ring,
-      venueId: tradingContext.locationId,
+      venueId,
       stateDir: config.stateDir,
       readRecoveryKey,
       readBoxEnv: () => loadBoxEnv(base, config.stateDir),
@@ -3194,7 +3201,7 @@ async function bootServer(
       keyRing: totpKeyRing,
       ring,
       node: tradingContext,
-      venueId: tradingContext.locationId,
+      venueId,
       modules: setsToMigrate,
       turns: backupTurns,
       readBoxEnv: () => loadBoxEnv(base, config.stateDir),
@@ -3211,7 +3218,7 @@ async function bootServer(
       db,
       ring,
       stream: streamHost,
-      venueId: tradingContext.locationId,
+      venueId,
       isPrimary: () => holders.singletonRole.current === "primary",
       isManagedByEnvironment: isBackupManagedByEnvironment,
       loadedArchives: () => backupSupervisor.current().destinations,
@@ -3267,7 +3274,7 @@ async function bootServer(
             ? `https://${tunnelConfig.relayHost}:${tunnelConfig.relayPort}/`
             : undefined,
         boxHostname: BOX_HOSTNAME,
-        designated: { ...config.node, locationId: nodeLocationId },
+        designated: config.node,
         accountKey: accountKey.toString("base64"),
         credentialKeyRing: totpKeyRing,
       },

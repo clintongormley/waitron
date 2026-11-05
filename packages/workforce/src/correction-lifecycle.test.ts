@@ -4,7 +4,7 @@ import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db"
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import { seedLocation, seedEmployment } from "../test/fixtures.js";
 import { WorkforceBackend } from "./clocking.js";
 import { readChain } from "./chain.js";
@@ -22,7 +22,7 @@ const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.
 beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
+  nodeId = await seedNode(suite.db, locationId);
   const rows = await suite.db
     .insert(persons)
     .values([

@@ -27,7 +27,7 @@ const suite = useVenueDb({
 const backend = new WorkforceBackend();
 let locationId: string, nodeId: string, personId: string, primary: boolean;
 const now = new Date("2026-01-07T09:00:00Z");
-const deps = () => ({ db: suite.db, locationId, nodeId, now: () => now, isPrimary: () => primary });
+const deps = () => ({ db: suite.db, nodeId, now: () => now, isPrimary: () => primary });
 beforeEach(async () => {
   primary = true;
   await suite.db.execute(sql`drop trigger if exists reject_question`);

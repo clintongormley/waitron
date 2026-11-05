@@ -15,13 +15,12 @@ import {
 } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 const node = {
   nodeId: nodeId("c0000000-0000-4000-8000-000000000002"),
-  locationId: locationId("c0000000-0000-4000-8000-000000000001"),
 };
 const binding = {
   module: "test-regime",

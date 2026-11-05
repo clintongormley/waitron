@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
 import { applyAllocatedTestVenue as applyVenue } from "../test/allocated-venue.js";
@@ -56,12 +57,12 @@ describe("readOperationalVenueIds", () => {
   });
 
   it("reads the provisioned venue's id", async () => {
-    const venue = await applyVenue(planVenue(request(), ALL_MODULES), {
+    await applyVenue(planVenue(request(), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
 
-    expect(await readOperationalVenueIds(suite.db)).toEqual([venue.locationId]);
+    expect(await readOperationalVenueIds(suite.db)).toEqual([await venueLocationId(suite.db)]);
   });
 
   it("reads every venue row, so a second venue is visible to the guard", async () => {

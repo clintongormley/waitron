@@ -33,6 +33,7 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -61,7 +62,6 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { planVenue } from "@waitron/provisioning";
 import {
   decimal,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
@@ -89,6 +89,7 @@ import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import {
   collectOrderOrchestration as collectOrder,
   payWorkingOrder,
@@ -124,7 +125,7 @@ let backend: FiscalBackend;
 let clock: TrustedClock;
 
 interface Venue {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   /** OPERATOR's open session on the venue's device, which a bill payment is taken under. */
   operator: { personId: string; sessionId: string };
   offers: ZoneOffers;
@@ -193,10 +194,11 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     ),
     { db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
-    locationId: brandLocationId(provisioned.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

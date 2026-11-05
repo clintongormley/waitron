@@ -10,7 +10,6 @@ import {
   type Database,
   type NodeDatabase,
   type VenueDatabase,
-  venueLocationId,
 } from "@waitron/db";
 import { NODE_FILE, VENUE_FILE } from "@waitron/store";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -113,7 +112,6 @@ beforeAll(async () => {
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });
-  const venueId = await venueLocationId(aStore.venue);
   const aId = await seedNode(aStore.venue);
   await establishNodeIdentity({ ownerDb: aStore.venue, node: aStore.node, ring: RING_A }, aId);
   await setNodeMode({ venue: aStore.venue, node: aStore.node }, aId, "primary");
@@ -154,7 +152,7 @@ beforeAll(async () => {
           relayUrl: "https://relay.test",
           boxHostname: "waitron.local",
           accountKey: "test-account-key",
-          designated: { nodeId: aId, locationId: venueId },
+          designated: { nodeId: aId },
           standby,
         });
       },

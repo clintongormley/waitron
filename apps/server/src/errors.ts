@@ -136,7 +136,7 @@ declare module "@waitron/shared" {
      */
     "server.node_config_missing": { key: string };
     /**
-     * The node identity is malformed or has no location in the venue database. `key` names the
+     * The node identity is malformed or names no node row in the venue database. `key` names the
      * variable and is the only field; the rejected value is not carried, for the reason
      * `server.node_config_missing` gives.
      */

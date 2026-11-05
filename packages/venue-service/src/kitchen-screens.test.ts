@@ -14,8 +14,7 @@ import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice as seedSharedDevice, seedVenue } from "@waitron/db/testing/seed.js";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
-import type { LocationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import type { DeviceKitchenScreen, ProfileKitchenScreens } from "@waitron/module";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, createServiceZone } from "./operations.js";
@@ -75,14 +74,14 @@ const refused = (field: string, reason: string) => ({
   params: { field, reason },
 });
 
-async function seedLocation(): Promise<LocationId> {
+async function seedLocation(): Promise<string> {
   await seedVenue(db, {
     name: `Venue ${randomUUID()}`,
     invoiceLocales: ["en-GB"],
     operationDescription: "Hospitality",
   });
   const venueId = await venueLocationId(db);
-  return brandLocationId(venueId);
+  return venueId;
 }
 
 async function seedProfile(formFactor: "till" | "phone-portrait" | "kds"): Promise<string> {
@@ -93,7 +92,7 @@ async function seedProfile(formFactor: "till" | "phone-portrait" | "kds"): Promi
   return row!.id;
 }
 
-async function seedStation(locationId: LocationId, name: string) {
+async function seedStation(locationId: string, name: string) {
   const [row] = await db
     .insert(kitchenStations)
     .values({ locationId, name })

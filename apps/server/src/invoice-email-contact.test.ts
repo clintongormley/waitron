@@ -13,7 +13,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import {
   VENUE_SERVICE_MIGRATIONS,
   departments,
@@ -33,7 +32,7 @@ async function fixture(nullHeader = false) {
     operationDescription: "Hospitality",
   });
   const venueId = await venueLocationId(suite.db);
-  const cfg = { locationId: locationId(venueId) };
+  const cfg = { locationId: venueId };
   const nodeId = await seedNode(suite.db);
   const [primary] = await suite.db
     .insert(departments)

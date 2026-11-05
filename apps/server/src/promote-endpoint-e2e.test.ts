@@ -31,7 +31,7 @@ import {
   createProduct,
 } from "@waitron/catalogue";
 import { generateNodeKeyPair, type Endorsement } from "@waitron/membership";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer, type StartedServer } from "./boot.js";
 import { ALL_MODULES } from "./modules.js";
@@ -267,7 +267,7 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
     });
     await assignCatalogueToVenue(tx, cat.id);
     const offers = await offerProducts(tx, {
-      locationId: brandLocationId(MIRROR_LOCATION_ID),
+      locationId: MIRROR_LOCATION_ID,
     });
     return offers.offerFor(water.id);
   });
@@ -524,10 +524,9 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       seed.nodeId,
     );
     const keyFixture = allocationFixture({
-      node: { nodeId: brandNodeId(seed.nodeId), locationId: brandLocationId(MIRROR_LOCATION_ID) },
+      node: { nodeId: brandNodeId(seed.nodeId) },
       primary: {
         nodeId: brandNodeId(MIRROR_ORIGIN_NODE_ID),
-        locationId: brandLocationId(MIRROR_LOCATION_ID),
       },
       taxpayerNif: "90222222F",
       identity: "P000042",

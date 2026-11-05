@@ -171,7 +171,6 @@ async function run(files: Record<string, string> = entries(), missingBefore = fa
         },
         source: {
           nodeId: "node-one",
-          locationId: location,
           environment: "preproduction",
           createdAt: now,
         },

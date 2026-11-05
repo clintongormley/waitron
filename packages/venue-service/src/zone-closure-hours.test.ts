@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -44,7 +44,7 @@ async function venue() {
     timeZone: "Europe/Madrid",
   });
   const venueId = await venueLocationId(db);
-  const cfg = { locationId: brandLocationId(venueId) };
+  const cfg = { locationId: venueId };
   await db
     .insert(kitchenStations)
     .values({ locationId: cfg.locationId, name: "Kitchen", isDefault: true });

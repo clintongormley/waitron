@@ -8,7 +8,6 @@ import {
   type OperationBinding,
   type ModuleOperationInput,
 } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
@@ -21,7 +20,7 @@ import { fiscalReservations } from "./schema/reservations.js";
 import { createHourDormantPreparation, readRetainedHourDormant } from "./hour-dormant-standby.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const primary = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
 const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
 const bases = [
   { code: "FF", purpose: "full" },
@@ -124,15 +123,6 @@ it("reserves dormant configuration before the standby node exists", async () => 
   const reserved = await reserve();
   expect(reserved.state).toMatchObject({ kind: "hour-dormant", binding: reserveBinding, bases });
   expect(history).toEqual([]);
-});
-// A1301: deleted with cfg in S18
-it("reserves and establishes dormant state without reading the supplied location scope", async () => {
-  const reserved = await reserve(
-    { ...primary, locationId: locationId("a0000000-0000-4000-8000-000000000091") },
-    { ...standby, locationId: locationId("a0000000-0000-4000-8000-000000000092") },
-  );
-  await establish(reserved.state);
-  expect(value).toEqual({ version: 1, entries: [], dormant: [reserved.state] });
 });
 it("reads retained dormant state with exactly five keys", () => {
   const state = {

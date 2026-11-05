@@ -15,7 +15,6 @@ import {
 } from "@waitron/db";
 import { applyMigrationSet, useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 import { departments } from "./schema/service.js";
@@ -85,7 +84,7 @@ it("upgrades a populated predecessor with its installed change-feed and append-o
   // Raw SQL: the drizzle schema names columns later migrations add, which this database lacks.
   const dept = { id: newId() };
   suite.db.run(
-    sql`insert into departments (id, location_id, name, trading_name, is_default, created_at) values (${dept.id}, ${locationId(placeId)}, 'Existing department', 'Existing sign', 1, ${nowIso()})`,
+    sql`insert into departments (id, location_id, name, trading_name, is_default, created_at) values (${dept.id}, ${placeId}, 'Existing department', 'Existing sign', 1, ${nowIso()})`,
   );
   const receipt = {
     logo: `${"a".repeat(64)}.png`,

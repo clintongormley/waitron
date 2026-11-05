@@ -21,7 +21,6 @@ import {
 // The fetcher only JSON-round-trips it, so the content is immaterial.
 const SAMPLE_BUNDLE: MirrorBundle = {
   designated: {
-    locationId: "22222222-2222-2222-2222-222222222222",
     nodeId: "44444444-4444-4444-4444-444444444444",
   },
   tenant: { country: "ES", taxId: "B00000000" },

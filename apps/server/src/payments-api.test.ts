@@ -33,12 +33,7 @@ import {
   payments,
   type CardProviderContribution,
 } from "@waitron/payments";
-import {
-  AppError,
-  type DeleteImpact,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-} from "@waitron/shared";
+import { AppError, type DeleteImpact, nodeId as brandNodeId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { DEFAULT_DEVICE_PROFILES } from "@waitron/layouts";
 import { mountPaymentsApi } from "./payments-api.js";
@@ -202,7 +197,6 @@ function saleDeps() {
 function cfgOf(venue: Venue): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

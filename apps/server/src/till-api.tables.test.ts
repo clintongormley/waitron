@@ -19,12 +19,12 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -36,7 +36,7 @@ import { seedSessionDevice, sessionCookieForTest } from "./testing/session-devic
 // The HTTP wiring of the table/tab routes: session guard, isUuid screens and STATUS mapping. The verbs
 // are pinned in `tabs.filing.test.ts`, `move-merge.filing.test.ts` and packages/db's schema suites.
 // The schema is the whole manifest: the tables here span modules that FK into core.
-let cfg: TradingContext;
+let cfg: WithVenueRowId;
 let ana: { id: string };
 /** A supervisor, who holds the refund permission a sent dish's cancel needs. */
 let sara: { id: string };
@@ -69,7 +69,7 @@ const suite = useVenueDb({
       operationDescription: "Retail",
     });
     const locationId = await venueLocationId(db);
-    await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
+    await seedKitchenStation(db, { locationId: locationId });
     // `openTab`/`addTabRound` create a working_orders row whose `node_id` FK requires a real row.
     const nodeId = await seedNode(db);
     const [person] = await db
@@ -130,10 +130,10 @@ function collect(
 }
 
 /** `seriesId` is unused by these routes (no fiscal write on the tab/table path), so it carries a fresh uuid. */
-function makeCfg(locationId: string, nodeId: string): TradingContext {
+function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

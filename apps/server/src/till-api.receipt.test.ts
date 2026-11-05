@@ -24,6 +24,7 @@ import {
   tenantReceipts,
   products,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import {
   assignCatalogueToVenue,
@@ -62,7 +63,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   PORTIONS_AT_ONCE,
   seriesId as brandSeriesId,
@@ -78,6 +78,7 @@ import type { TranslationItemPage } from "@waitron/catalogue/src/content-transla
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { CAPABILITY_FLAGS, emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
@@ -159,10 +160,10 @@ function nextNif(): string {
   return nifWithControlLetter(64_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -175,7 +176,7 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
  *  holds `cash.drawer`; the staff person does not — the pair the gated drawer matrix is written
  *  against. */
 async function setupVenue(): Promise<{
-  cfg: TradingContext;
+  cfg: WithVenueRowId;
   each: AvailableProduct & { menuItemId: string };
   operatorId: string;
   supervisorId: string;
@@ -211,7 +212,8 @@ async function setupVenue(): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = tillConfigFromVenue(venue);
+  const venueId = await venueLocationId(suite.db);
+  const cfg = tillConfigFromVenue(venue, venueId);
   venueReceiptPrinter = null;
   const { each, operatorId, supervisorId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
@@ -302,7 +304,7 @@ let venueReceiptPrinter: string | null = null;
 /** Puts every device of the venue, and each one enrolled after, on `printerId` for receipts and
  *  payment slips; `null` leaves them with no printer. */
 async function configureReceipt(
-  cfg: TradingContext,
+  cfg: WithVenueRowId,
   opts: { mode?: "auto" | "on_request"; printerId?: string | null },
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
@@ -1039,7 +1041,7 @@ describe("an original receipt whose printer was deleted", () => {
 
   async function open(): Promise<{
     app: Hono;
-    cfg: TradingContext;
+    cfg: WithVenueRowId;
     orderId: string;
     cookie: string;
     printerId: string;

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { deviceId as brandDeviceId, nodeId as brandNodeId } from "@waitron/shared";
-import type { DeviceId, LocationId, NodeId } from "@waitron/shared";
+import type { DeviceId, NodeId } from "@waitron/shared";
 import type { Database, Transaction } from "../client.js";
 import { deviceFormFactorEnum, deviceProfiles } from "../schema/device-profiles.js";
 import { devices } from "../schema/devices.js";
@@ -55,7 +55,7 @@ export async function seedVenue(
 }
 
 /** Seeds one node and returns its id: at the venue unless `location` is given. */
-export async function seedNode(db: Database | Transaction, location?: LocationId): Promise<NodeId> {
+export async function seedNode(db: Database | Transaction, location?: string): Promise<NodeId> {
   const [row] = await db
     .insert(nodes)
     .values({ locationId: location ?? (await venueLocationId(db)), name: "Test node" })
@@ -68,7 +68,7 @@ export async function seedNode(db: Database | Transaction, location?: LocationId
  * ({@link fireLines}) resolves. */
 export async function seedKitchenStation(
   db: Database | Transaction,
-  opts: { locationId: LocationId; name?: string; isDefault?: boolean },
+  opts: { locationId: string; name?: string; isDefault?: boolean },
 ): Promise<string> {
   const { locationId, name = "Cocina", isDefault = true } = opts;
   const [row] = await db
@@ -85,7 +85,7 @@ let deviceCounter = 0;
 export async function seedDevice(
   db: Database | Transaction,
   opts: {
-    locationId?: LocationId | string;
+    locationId?: string;
     label?: string;
     formFactor?: Exclude<(typeof deviceFormFactorEnum.enumValues)[number], "kds">;
     capabilities?: string[];

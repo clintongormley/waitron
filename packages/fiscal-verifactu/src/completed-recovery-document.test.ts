@@ -18,7 +18,6 @@ import { seedFixtureSif } from "../test/sif-fixture.js";
 import { registroSif } from "./schema/sif.js";
 import { cadenas } from "./schema/cadenas.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { locationId } from "@waitron/shared";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(
@@ -26,7 +25,7 @@ const suite = useVenueDb({
     null,
   ),
 });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
 const nodeKey = {
   nodeId: node.nodeId,
   name: "2026-10-18 · TEST",
@@ -114,14 +113,6 @@ describe("the pack's server-key page seat", () => {
     );
   }
 
-  // A1301: deleted with cfg in S18
-  it("names the venue without reading the supplied location scope", async () => {
-    const result = await page({
-      target: { ...node, locationId: locationId("a0000000-0000-4000-8000-000000000091") },
-      newKey,
-    });
-    expect(result.keyFile).toEqual({ ...scope, nodeKey });
-  });
   it("refuses a missing venue with venue.not_found", async () => {
     await suite.db.execute(sql`pragma foreign_keys = off`);
     try {

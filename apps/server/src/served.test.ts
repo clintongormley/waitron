@@ -24,6 +24,7 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -33,15 +34,12 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
@@ -114,7 +112,7 @@ const DISHES = {
 type Dish = keyof typeof DISHES;
 
 interface Venue {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   zoneId: string;
   offer(dish: Dish): string;
   /** The Steak's extras list, whose one pick is the sauce. */
@@ -154,10 +152,11 @@ async function setupVenue(): Promise<Venue> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(suite.db);
   const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
-    locationId: brandLocationId(venue.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

@@ -1,4 +1,3 @@
-import { locationId as brandLocationId } from "@waitron/shared";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -21,6 +20,7 @@ import {
   withTransaction,
   workingOrders,
   type Database,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -61,6 +61,7 @@ import { mountPaymentsApi } from "./payments-api.js";
 import { loadTillAppSettings } from "./till-config.js";
 import { loadNodeIdentity } from "./node-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import {
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   printSaleReceipt,
@@ -116,7 +117,7 @@ const MADRID = { postalCode: "28013", city: "Madrid", province: "Madrid" };
 
 interface Venue {
   app: Hono;
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   session: string;
   /** The session plus an enrolled till device, as a sale is sent. */
   till: string;
@@ -158,6 +159,7 @@ async function venueWith(
     ),
     { db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(db);
   // Built the way boot builds it, from the variables the box sets.
   const cfg = await deviceRequestCfg(suite.db, {
     ...loadNodeIdentity({
@@ -168,7 +170,7 @@ async function venueWith(
       WAITRON_NODE_ID: venue.nodeId,
       ...(envLocale === undefined ? {} : { WAITRON_TILL_LOCALE: envLocale }),
     }),
-    locationId: brandLocationId(venue.locationId),
+    locationId: venueId,
     simplifiedInvoiceLimit: null,
   });
   const { menuItemId, staffId, profileId, printerId } = await withTransaction(db, async (tx) => {

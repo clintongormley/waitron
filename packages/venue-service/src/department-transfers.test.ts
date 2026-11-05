@@ -30,7 +30,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
   createDepartment,
@@ -61,7 +60,7 @@ async function venue() {
       });
     }
     const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
-    const cfg = { locationId: locationId(await venueLocationId(tx)) };
+    const cfg = { locationId: await venueLocationId(tx) };
     const a = await createDepartment(tx, { name: `Deli${suffix}`, orderStart: "table" });
     const b = await createDepartment(tx, {
       name: `Restaurant${suffix}`,

@@ -53,7 +53,7 @@ const SUMUP = {
   affiliateKey: "-",
 };
 const BUNDLE: Omit<MirrorBundle, "reservedIdentity"> = {
-  designated: { locationId: "33333333-3333-4333-8333-333333333333", nodeId: PRIMARY_NODE_ID },
+  designated: { nodeId: PRIMARY_NODE_ID },
   tenant: { country: "ES", taxId: "80000001K" },
   primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
   environment: "preproduction",

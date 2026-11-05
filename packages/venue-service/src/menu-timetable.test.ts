@@ -29,7 +29,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { occurrenceKey } from "./floor-layout-due.js";
 import { addDays } from "./hours-rules.js";
 import { CALENDAR_COLOURS } from "./hours-types.js";
@@ -609,7 +608,7 @@ async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } 
     });
   const venueId = await venueLocationId(db);
   const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
-  const locationId: LocationId = brandLocationId(venueId);
+  const locationId: string = venueId;
   const cfg = { locationId };
   await db
     .insert(kitchenStations)

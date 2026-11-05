@@ -16,12 +16,13 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
+import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { OriginConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -34,7 +35,7 @@ import { seedSessionDevice, sessionCookieForTest } from "./testing/session-devic
 // The HTTP surface of the transfer route: the session guard, the malformed-`:id`/`toBillId` screens
 // and the STATUS mapping for the transfer codes. The transfer's write behaviour is pinned in
 // `transfer-lines.test.ts` and `transfer-lines.filing.test.ts`.
-let cfg: OriginConfig;
+let cfg: WithVenueRowId<OriginConfig>;
 let ana: { id: string };
 // One product, offered in a table zone, so a tab can open with a real line to transfer — `openTab`
 // prices it and the `check_locales` trigger demands its `es-ES` description key match the
@@ -90,11 +91,11 @@ function collect(
 }
 
 /** `seriesId` is unused by the transfer route (no fiscal write on the tab path). */
-function makeCfg(locationId: string, nodeId: string): OriginConfig {
+function makeCfg(locationId: string, nodeId: string): WithVenueRowId<OriginConfig> {
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

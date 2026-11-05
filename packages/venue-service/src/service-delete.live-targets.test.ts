@@ -12,7 +12,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import * as service from "./index.js";
 
 import { readDepartmentLogoRasters } from "./department-receipts.js";
@@ -36,7 +35,7 @@ async function fixture() {
       timeZone: "Europe/Madrid",
     });
     const venueId = await venueLocationId(tx);
-    const cfg = { locationId: locationId(venueId), receiptLanguages: ["en-GB"] };
+    const cfg = { locationId: venueId, receiptLanguages: ["en-GB"] };
     const live = await service.createDepartment(tx, { name: "Live" });
     const gone = await service.createDepartment(tx, { name: "Gone" });
     const zone = await service.createServiceZone(tx, {
@@ -53,7 +52,7 @@ async function fixture() {
       menuId: menu!.id,
       staffMenuIds: [],
     });
-    await service.writeDepartmentReceipt(tx, cfg, gone.id, { email: "history@example.com" });
+    await service.writeDepartmentReceipt(tx, gone.id, { email: "history@example.com" });
     await tx.update(departments).set({ active: false }).where(eq(departments.id, gone.id));
     await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, zone.id));
     return {
@@ -172,15 +171,11 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
     "department.not_found",
     (tx, f) => service.readDepartmentReceipt(tx, f.cfg, f.gone),
   ],
-  [
-    "receipt logo read",
-    "department.not_found",
-    (tx, f) => readDepartmentLogoRasters(tx, f.cfg, f.gone),
-  ],
+  ["receipt logo read", "department.not_found", (tx, f) => readDepartmentLogoRasters(tx, f.gone)],
   [
     "receipt write",
     "department.not_found",
-    (tx, f) => service.writeDepartmentReceipt(tx, f.cfg, f.gone, { email: "changed@example.com" }),
+    (tx, f) => service.writeDepartmentReceipt(tx, f.gone, { email: "changed@example.com" }),
   ],
   ["zone context", "service_zone.not_found", (tx, f) => service.resolveZoneContext(tx, f.zone)],
   [
@@ -269,7 +264,7 @@ describe("deleted service targets", () => {
       await service.updateDepartment(tx, f.live, { tradingName: "Edited" });
       await service.configureZone(tx, { zoneId: f.liveZone, departmentId: f.live });
       await service.replaceZoneClosedWeek(tx, f.liveZone, closedWeek, 0, at);
-      await service.writeDepartmentReceipt(tx, f.cfg, f.live, { email: "live@example.com" });
+      await service.writeDepartmentReceipt(tx, f.live, { email: "live@example.com" });
     });
     expect(await run((tx) => service.readDepartmentReceipt(tx, f.cfg, f.live))).toEqual({
       email: "live@example.com",

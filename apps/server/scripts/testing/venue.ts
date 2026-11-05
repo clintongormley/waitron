@@ -8,7 +8,6 @@ export interface TestVenue {
   nodeId: string;
   seriesId: string;
   rectificativeSeriesId: string;
-  locationId: string;
 }
 
 /**
@@ -51,7 +50,6 @@ export async function provisionTestVenue(venueDir: string, taxId: string): Promi
       nodeId: venue.nodeId,
       seriesId: venue.seriesIds[0]!,
       rectificativeSeriesId: venue.seriesIds[2]!,
-      locationId: venue.locationId,
     };
   } finally {
     await store.close();

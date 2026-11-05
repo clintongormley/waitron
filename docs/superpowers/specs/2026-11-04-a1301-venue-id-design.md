@@ -1,6 +1,7 @@
 # A1301 — The venue's id towards the outside world (design)
 
-**Status:** Awaiting the owner's approval; nothing is built from it until then.
+**Status:** Approved by the owner on 2026-11-04. It is built as S18e, which A1308 holds because
+it adds a table.
 
 Written 2026-11-04 by lane B while planning S18, at Waitron main `6d2147332b` and Waitron Cloud
 main `7b8ffec5`. Every `file:line` below was read at those heads; nothing was run. It settles the
@@ -32,6 +33,11 @@ local backup folders, that's for the user to specify the path." So a box that is
 Cloud backs up where its owner says, and nothing derives a folder name from a venue id.
 
 ## What the box sends today
+
+**2026-11-05 (S18f):** `readNodeLocation` and `tradingContext.locationId` are gone. Boot reads
+`venueLocationId(db)` once, and the backup checks take the id from `readCopyNodeAndVenue`
+(`apps/server/src/restore.ts`). The `locationId` brand stays, for the fiscal golden test. The
+table below is as written on 2026-11-04.
 
 The box reads its `locations` row's id once at start (`readNodeLocation`, `apps/server/src/boot.ts:1742`)
 and hands it out as `tradingContext.locationId`. Where it leaves the box:

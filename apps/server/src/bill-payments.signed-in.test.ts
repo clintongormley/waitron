@@ -12,6 +12,7 @@ import {
   printJobs,
   sales,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -28,11 +29,7 @@ import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider
 import { createPrinter } from "@waitron/printing";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import {
   takeBillPayment,
   takeReaderBillPayment,
@@ -46,6 +43,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import "./errors.js";
 
 // Synchronous work runs from case to case; let the venue watchdog tick between them.
@@ -68,7 +66,7 @@ let clock: TrustedClock;
 
 interface Venue {
   seriesId: ReturnType<typeof brandSeriesId>;
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   offers: ZoneOffers;
   cana: string;
 }
@@ -129,10 +127,11 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     ),
     { db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
-    locationId: brandLocationId(provisioned.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

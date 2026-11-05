@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, deviceOrigin } from "@waitron/shared";
-import type { DeviceId, LocationId, NodeId, SaleId, SeriesId } from "@waitron/shared";
+import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
@@ -26,7 +26,7 @@ import { recordVoid } from "./record-void.js";
 import { seedTenant } from "../test/fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
-let locationId: LocationId;
+let locationId: string;
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;

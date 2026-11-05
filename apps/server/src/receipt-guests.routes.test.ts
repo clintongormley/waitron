@@ -1,4 +1,3 @@
-import { locationId as brandLocationId } from "@waitron/shared";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
@@ -19,6 +18,7 @@ import {
   sales,
   withTransaction,
   type Database,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
@@ -42,6 +42,8 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { decimal } from "@waitron/shared";
 import { offerProducts } from "./testing/zone-offers.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./testing/session-device.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
 import { fingerprint, seatTable } from "./parties.js";
 import { payWorkingOrderIntegratedOrchestration } from "./testing/whole-payment-fixture.js";
@@ -76,7 +78,7 @@ interface Venue {
   menuItemId: string;
   db: Database;
   backend: VerifactuBackend;
-  cfg: Awaited<ReturnType<typeof deviceRequestCfg>>;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   staffId: string;
   counterZone: string;
   tablesZone: string;
@@ -119,6 +121,7 @@ async function venue(db: Database): Promise<Venue> {
     ),
     { db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     ...loadNodeIdentity({
       WAITRON_NODE_ID: allocated.nodeId,
@@ -126,7 +129,7 @@ async function venue(db: Database): Promise<Venue> {
     ...loadTillAppSettings({
       WAITRON_NODE_ID: allocated.nodeId,
     }),
-    locationId: brandLocationId(allocated.locationId),
+    locationId: venueId,
     simplifiedInvoiceLimit: null,
   });
   const {

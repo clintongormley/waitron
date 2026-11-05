@@ -13,8 +13,6 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
-import type { LocationId } from "@waitron/shared";
 import { BOOKINGS_FLOOR_ANNOTATIONS } from "./floor.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 import "./errors.js";
@@ -27,7 +25,7 @@ beforeAll(() => {
 });
 
 interface Venue {
-  locationId: LocationId;
+  locationId: string;
 }
 
 async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
@@ -38,7 +36,7 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
     timeZone: opts.timeZone ?? DEFAULT_TIME_ZONE,
   });
   return {
-    locationId: brandLocationId(await venueLocationId(db)),
+    locationId: await venueLocationId(db),
   };
 }
 

@@ -7,7 +7,7 @@ import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
-import { nodeId, locationId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { mountRecoveryPackApi } from "./recovery-pack-api.js";
 
@@ -16,7 +16,6 @@ const suite = useVenueDb({
 });
 const node = {
   nodeId: nodeId("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
-  locationId: locationId("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
 };
 let secret: string;
 let managerToken: string;

@@ -7,7 +7,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -35,7 +34,7 @@ const BOGUS_NODE = "99999999-9999-4999-8999-999999999999";
 
 /** A fresh node under TENANT_A's seeded location. */
 async function seedNodeForA(): Promise<string> {
-  return seedNode(suite.db, brandLocationId(TENANT_A.locationId));
+  return seedNode(suite.db, TENANT_A.locationId);
 }
 
 async function nodeIdNullability(table: string): Promise<{ is_nullable: string }[]> {

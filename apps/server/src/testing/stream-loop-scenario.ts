@@ -24,6 +24,7 @@ import {
   readStandardSeriesId,
   stampDeployment,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import {
   createPaperAllocationPreparation,
@@ -35,7 +36,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { readRecoveryKeyVerifier } from "@waitron/node-db";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { planVenue, quoteIdent } from "@waitron/provisioning";
 import { mintBreakGlassSecret } from "../break-glass.js";
 import {
@@ -313,6 +314,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         ),
         { db: seeding.venue, modules: ALL_MODULES },
       );
+      const venueId = await venueLocationId(seeding.venue);
       nodeSecret = await mintBreakGlassSecret(
         { venue: seeding.venue, node: seeding.node },
         venue.nodeId,
@@ -329,7 +331,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       await withTransaction(seeding.venue, (tx) =>
         putCredential(tx, ring, {
           purpose: "backup.stream",
-          value: streamSettingsPayload({ venueId: venue.locationId, bucket }),
+          value: streamSettingsPayload({ venueId, bucket }),
         }),
       );
       const [row] = await seeding.venue
@@ -339,7 +341,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       a = {
         nodeId: venue.nodeId,
         seriesId: venue.seriesIds[0]!,
-        locationId: venue.locationId,
+        locationId: venueId,
         publicKey: row!.publicKey!,
       };
     } finally {
@@ -466,7 +468,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     const dirsB = await boxDirs(scratch, "box-b");
     const portB = await freePort();
     const recoveryFixture = allocationFixture({
-      node: { nodeId: nodeId(a.nodeId), locationId: locationId(a.locationId) },
+      node: { nodeId: nodeId(a.nodeId) },
       taxpayerNif: "74000001P",
       identity: "P000042",
       recoveryKey: true,

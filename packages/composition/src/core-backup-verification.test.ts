@@ -34,7 +34,6 @@ describe("core backup contribution", () => {
         },
         source: {
           nodeId: "source",
-          locationId: "venue",
           environment: "preproduction",
           createdAt: "2026-10-20T00:00:00.000Z",
         },

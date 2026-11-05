@@ -24,7 +24,7 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
@@ -36,7 +36,7 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { DEVICE_COOKIE } from "./device-session.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import type { PassBoard, PassCard, PassCardItem } from "./pass-card.js";
 import { boardCards, boardItems } from "./testing/pass-board-probe.js";
 import "./errors.js";
@@ -44,7 +44,7 @@ import { seedSessionDevice, sessionCookieForTest } from "./testing/session-devic
 
 // The HTTP shape of the coursing, fire, station-queue and expo routes: the session guard, the id
 // screens and the STATUS mapping. The verbs' logic is pinned in `working-order.test.ts`.
-let cfg: TradingContext;
+let cfg: WithVenueRowId;
 let ana: { id: string };
 let starterCourseId: string;
 let mainCourseId: string;
@@ -74,7 +74,7 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Retail",
     });
-    const locationId = brandLocationId(await venueLocationId(db));
+    const locationId = await venueLocationId(db);
     await seedKitchenStation(db, { locationId });
     const nodeId = await seedNode(db);
     const [person] = await db
@@ -123,10 +123,10 @@ function collect(
 }
 
 /** `seriesId` is unused (no fiscal write on the coursing/fire path), so it carries a fresh uuid. */
-function makeCfg(locationId: string, nodeId: string): TradingContext {
+function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

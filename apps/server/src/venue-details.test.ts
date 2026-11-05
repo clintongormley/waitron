@@ -776,17 +776,13 @@ describe("venue details preserve committed history", () => {
       sql`select code, purpose from invoice_series where retired_at is null`,
     );
     const fixture = allocationFixture({
-      node: { nodeId: venue.cfg.nodeId, locationId: venue.cfg.locationId },
+      node: { nodeId: venue.cfg.nodeId },
       taxpayerNif: taxId,
       identity: "P000042",
       bases,
     });
     await fixture.transaction(suite.db, "restore", (tx, operation) =>
-      ALLOCATED_FISCAL_RESTORE(
-        tx,
-        { nodeId: venue.cfg.nodeId, locationId: venue.cfg.locationId },
-        operation,
-      ),
+      ALLOCATED_FISCAL_RESTORE(tx, { nodeId: venue.cfg.nodeId }, operation),
     );
     expect(suite.db.all(sql`select * from fiscal_allocations`)).toHaveLength(1);
     expect(
@@ -1468,7 +1464,6 @@ describe("workforce facts after venue corrections", () => {
       const event = {
         nodeId: venue.cfg.nodeId,
         personId,
-        locationId: venue.cfg.locationId,
         offsetMinutes: 120,
         origin: jobOrigin("dashboard"),
       };

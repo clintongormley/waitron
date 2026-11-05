@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { venueLocationId, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -21,7 +21,6 @@ import { computeDailyClose } from "@waitron/reporting";
 import {
   compareDecimal,
   decimal,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   jobOrigin,
   MEDIA_FILENAME,
@@ -61,7 +60,6 @@ function tillConfigFor(venue: Venue): OriginConfig {
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
     locale: SEED_INVOICE_LOCALE[LOCALE],
     invoiceLocales: [SEED_INVOICE_LOCALE[LOCALE]],
     tipsEnabled: false,
@@ -234,7 +232,7 @@ describe("demo seed end-to-end", () => {
         .from(zoneServicePolicies)
         .where(
           and(
-            eq(zoneServicePolicies.locationId, venue.locationId),
+            eq(zoneServicePolicies.locationId, await venueLocationId(tx)),
             eq(zoneServicePolicies.isCounterDefault, true),
           ),
         );

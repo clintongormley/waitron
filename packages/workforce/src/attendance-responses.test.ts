@@ -3,7 +3,7 @@ import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db"
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import { seedLocation } from "../test/fixtures.js";
 import { WorkforceBackend } from "./clocking.js";
 import { readChain } from "./chain.js";
@@ -22,7 +22,7 @@ const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.
 beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
+  nodeId = await seedNode(suite.db, locationId);
   const rows = await suite.db
     .insert(persons)
     .values([
@@ -33,14 +33,13 @@ beforeEach(async () => {
   [personId, managerId] = rows.map((r) => r.id) as [string, string];
 });
 async function completedDay() {
-  const input = { nodeId, personId, locationId, offsetMinutes: 0, origin };
+  const input = { nodeId, personId, offsetMinutes: 0, origin };
   await run((tx) => backend.clockIn(tx, { ...input, at: "2026-01-05T09:00:00Z" }));
   await run((tx) => backend.clockOut(tx, { ...input, at: "2026-01-05T17:00:00Z" }));
 }
 const missing = (missingEntryKind: "in" | "out", at: string) => ({
   nodeId,
   personId,
-  locationId,
   missingEntryKind,
   at,
   offsetMinutes: 0,

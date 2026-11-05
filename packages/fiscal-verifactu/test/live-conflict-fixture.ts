@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { invoiceSeries, stampDeployment, withTransaction, type Database } from "@waitron/db";
 import { recordSale } from "@waitron/core";
 import { withOperationAuthority } from "@waitron/module";
-import { locationId, seriesId } from "@waitron/shared";
+import { seriesId } from "@waitron/shared";
 import { seedVenueNodes, TENANT_A } from "./fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "./write-path-fixtures.js";
 import { createHourPreparation } from "../src/hour-preparation.js";
@@ -15,7 +15,6 @@ import { fiscalAllocations } from "../src/schema/allocations.js";
 
 export const liveConflictNode = {
   nodeId: TENANT_A.nodeId,
-  locationId: locationId(TENANT_A.locationId),
 };
 const bases = [
   { code: "A", purpose: "standard" },

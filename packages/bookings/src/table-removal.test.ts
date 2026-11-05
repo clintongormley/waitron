@@ -12,8 +12,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
-import type { LocationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { getBooking } from "./bookings.js";
 import { BOOKINGS_TABLE_REMOVAL } from "./table-removal.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
@@ -27,7 +26,7 @@ beforeAll(() => {
 });
 
 interface Venue {
-  locationId: LocationId;
+  locationId: string;
 }
 
 async function setupVenue(timeZone = "Europe/Madrid"): Promise<Venue> {
@@ -37,7 +36,7 @@ async function setupVenue(timeZone = "Europe/Madrid"): Promise<Venue> {
     operationDescription: "Restaurant service",
     timeZone,
   });
-  return { locationId: brandLocationId(await venueLocationId(db)) };
+  return { locationId: await venueLocationId(db) };
 }
 
 async function makeTable(v: Venue, label: string): Promise<string> {

@@ -21,7 +21,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { cadenas, registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { hashPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { AppError, jobOrigin, nodeId, locationId } from "@waitron/shared";
+import { AppError, jobOrigin, nodeId } from "@waitron/shared";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { stampDeployment } from "@waitron/db";
 import { mintBreakGlassSecret } from "./break-glass.js";
@@ -394,7 +394,7 @@ async function run(
 ): Promise<{ code: number; out: string[] }> {
   const out: string[] = [];
   const allocation = allocationFixture({
-    node: { nodeId: nodeId(ids.node), locationId: locationId(ids.location) },
+    node: { nodeId: nodeId(ids.node) },
     taxpayerNif: "89890001K",
     identity: "P000042",
     recoveryKey: true,

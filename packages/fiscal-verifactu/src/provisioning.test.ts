@@ -10,7 +10,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { isAppError, locationId as brandLocationId } from "@waitron/shared";
+import { isAppError } from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenants } from "../test/fixtures.js";
@@ -28,7 +28,6 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 60_000 });
 let db: Database;
 
 const NODE: ProvisionedNode = {
-  locationId: brandLocationId(TENANT_A.locationId),
   nodeId: TENANT_A.nodeId,
 };
 const NODE_2: ProvisionedNode = { ...NODE, nodeId: TENANT_A.nodeId2 };

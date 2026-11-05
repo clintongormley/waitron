@@ -12,7 +12,7 @@ the shared done-check (the design's grep, `P` and `PATHS`), "Calls into another 
 them), "Cross-location tests are deleted, not rewritten", and "deletes a test case by its title,
 never by its line number". **Design:** [`2026-11-01-a1301-remove-location-design.md`](../specs/2026-11-01-a1301-remove-location-design.md)
 §6, S18's row. **Venue id:** [`2026-11-04-a1301-venue-id-design.md`](../specs/2026-11-04-a1301-venue-id-design.md),
-awaiting the owner's approval.
+approved by the owner on 2026-11-04.
 
 **Plan head:** main `6d2147332b` (2026-11-03). Every `file:line` here was read there. Main moved
 to `6a52e7189c` while this was written; `git diff --stat 6d2147332b 6a52e7189c` lists only
@@ -848,6 +848,9 @@ recorder's `locationId?` (`attendance-capture.ts:19`) go. Nothing reads either o
 
 ## S18e — The venue's Cloud id (Waitron side): waits for the venue-id design's approval
 
+**2026-11-05:** the owner approved the design on 2026-11-04. S18e is now held by A1308, because
+it adds a table.
+
 **Not built before the owner approves [the design](../specs/2026-11-04-a1301-venue-id-design.md).**
 Its tasks are written then, against the head of that day, with the owner's answers to the design's
 seven questions. The outline below follows the design's defaults:
@@ -864,7 +867,8 @@ seven questions. The outline below follows the design's defaults:
 3. Backups in the owner's place:
    - the stream and archive folders become the owner's prefix itself;
    - the pointer's same-writer id;
-   - `loadBackupConfig` loses `venueId`;
+   - `loadBackupConfig` loses `venueId`, and S18f's interim `readCopyNodeAndVenue`
+     (`apps/server/src/restore.ts`) stops reading the copy's venue row;
    - the recovery kit, the archive pack, the restore and rebuild reads, and the backup screen.
 4. Boot stops handing out the location id. Under the default schedule that means
    `tradingContext.locationId`; under the cheaper one, S18f's interim `venueLocationId` reads.
@@ -884,7 +888,7 @@ The Cloud lanes' change lands with it (design, "What Cloud must change").
 - `NodeConfig` and `TradingContext`.
 
 `readNodeLocation` is gone. So are `LocationId` and the `locationId` brand
-(`packages/shared/src/ids.ts:11,52`). Line numbers below are the plan head's. Each task re-reads
+(`packages/shared/src/ids.ts:11,52`); the brand stayed (2026-11-05 note under Task S18f-3). Line numbers below are the plan head's. Each task re-reads
 them first: S18e, if it lands first, moves `boot.ts`.
 
 - **Depends on:** S18a–S18d. Under the default schedule also S18e: until it lands,
@@ -902,6 +906,30 @@ them first: S18e, if it lands first, moves `boot.ts`.
   - `packages/composition/src/composition.test.ts`.
 
 ### Task S18f-1: `ProvisionedNode` and the identity it is built from
+
+**Re-sized 2026-11-05 (lane B), from a dry run at main `48681368d0`.** The owner chose the cheaper
+schedule (2026-11-04 ~06:05), so S18f does not wait for S18e. The run
+`--drop-property ProvisionedNode.locationId --drop-property AdoptResult.locationId
+--drop-property VenueResult.locationId --dry-run` edits 47 files itself and reports 273 reads of
+the dropped property (71 files, nearly all tests) and 150 object literals with no contextual type
+(126 files). The task is built as four, in this order, so that every commit before S18f-1c
+compiles:
+
+- **S18f-1a:** tests and test helpers in `packages/`, `apps/server/scripts/`, and the three
+  largest server suites (`configuration-transfer.test.ts`, `provision.test.ts`,
+  `management-api.test.ts`) stop reading `locationId` off a `ProvisionedNode`, `AdoptResult` or
+  `VenueResult`. Each read becomes an independent read of the same id, normally
+  `await venueLocationId(db)` on the database that venue was set up in. The property still exists,
+  so nothing else changes and every suite passes as before.
+- **S18f-1b:** the same, for the rest of `apps/server`'s tests and helpers.
+- **S18f-1c:** Steps 1–4 below: delete the scope-blind cases, run the codemod, make the production
+  edits and Step 3's backup-verification change. Under the cheaper schedule,
+  `backup-data-placement.ts` and `backup-verification-secrets.ts` hand `loadBackupConfig` the id of
+  the copy's own single `locations` row, read from the copy as `readArtifactNode` does today
+  (`restore.ts`), each with a one-line note that S18e or S28 removes it.
+- **S18f-1d:** the reported literals with no contextual type. Delete the `locationId` key where
+  nothing reads it afterwards (typecheck plus the file's suite decide); keep it where the value is
+  read, for example to fill a `location_id` column.
 
 **To be re-sized before dispatch.** It is the largest task here: production files in five
 packages, the test helpers below, and about 125 test literals. Once S18a–S18d have landed, the
@@ -984,6 +1012,7 @@ Test helpers:
     So the server's test helpers return `TradingContext & { readonly locationId: string }`, under
     one named type in `apps/server/src/testing/`. A one-line comment at the type says: "the venue
     row's id, for filling `location_id` columns until the schema slices".
+    (2026-11-05: the type is `WithVenueRowId`, in `apps/server/src/testing/venue-row-id.ts`.)
   - That type is an **exception** to the parent plan's global constraint "No new `location_id`,
     `locationId`, … fixture". It renames what tests already read, and adds no new use. The PR
     states this. If the owner refuses the exception, the helpers return the id from
@@ -1019,6 +1048,13 @@ Test helpers:
   only as strings, so it compiles unchanged; S28 deletes it.
 - [ ] **Step 4:** `pnpm -r typecheck` (every package, since the brand was everywhere). Run the
   focused suites of the files changed outside tests, the fiscal pair and the code guards. Commit.
+
+**Note, 2026-11-05.** Step 3 was not done: the fiscal pair's
+`packages/fiscal-verifactu/src/write-path.e2e.test.ts` imports the brand (`:32`) and calls it
+(`:555`), and that file is never edited. So `LocationId` and `locationId` stay in
+`packages/shared/src/ids.ts` with a one-line note (owner asked; the default was to keep them).
+Step 2's retype to `string` also covered `apps/server/src/testing/venue-row-id.ts`
+(`WithVenueRowId`).
 
 ### Task S18f-4: The whole-tree done-check, the backlog, the parent plan
 

@@ -2,14 +2,13 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { withTransaction, venueLocationId } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPinThrottle, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
-import { locationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountPaymentsApi } from "./payments-api.js";
 import { systemClock } from "./till-backend.js";
@@ -45,7 +44,6 @@ async function setup(role: "manager" | "staff" = "manager") {
     invoiceLocales: ["en-GB"],
     operationDescription: "Restaurant service",
   });
-  const venueId = await venueLocationId(suite.db);
   const writingNodeId = await seedNode(suite.db);
   const app = new Hono();
   mountPaymentsApi(
@@ -57,7 +55,6 @@ async function setup(role: "manager" | "staff" = "manager") {
       clock: systemClock(),
       cfg: {
         nodeId: writingNodeId,
-        locationId: locationId(venueId),
         locale: "es-ES",
         invoiceLocales: ["es-ES"],
         tipsEnabled: false,

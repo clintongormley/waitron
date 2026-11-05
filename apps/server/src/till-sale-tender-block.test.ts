@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { tenders, withTransaction } from "@waitron/db";
+import { tenders, withTransaction, venueLocationId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   assignCatalogueToVenue,
@@ -24,7 +24,6 @@ import { associatePaymentWithSale, insertCapturedPayment } from "@waitron/paymen
 import type { CardDetails } from "@waitron/payments";
 import {
   decimal,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
@@ -32,7 +31,8 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { readTenderBlock } from "./till-sale.js";
 import { createOpenOrder } from "./working-order.js";
 import { descendingIds } from "./testing/descending-ids.js";
@@ -82,10 +82,10 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -93,7 +93,7 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
   };
 }
 
-let cfg: DeviceRequestConfig;
+let cfg: WithVenueRowId<DeviceRequestConfig>;
 let seriesId: ReturnType<typeof brandSeriesId>;
 let menuItemId: string;
 let zoneId: string;
@@ -143,7 +143,8 @@ beforeAll(async () => {
   );
 
   seriesId = brandSeriesId(venue.seriesIds[0]!);
-  cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
+  const venueId = await venueLocationId(suite.db);
+  cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
   ({ menuItemId, zoneId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: "Bebidas" });

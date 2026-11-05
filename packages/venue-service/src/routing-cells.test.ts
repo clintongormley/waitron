@@ -24,7 +24,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import type { RouteTarget } from "./routing.js";
@@ -51,7 +50,7 @@ async function venue(tx: Transaction, suffix = "") {
     operationDescription: "Hospitality",
   });
   const venueId = await venueLocationId(tx);
-  const cfg = { locationId: locationId(venueId) };
+  const cfg = { locationId: venueId };
   const zones = await tx
     .insert(floorZones)
     .values([

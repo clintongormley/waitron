@@ -23,11 +23,7 @@ import {
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { starterName } from "@waitron/country-packs";
-import {
-  locationId as brandLocationId,
-  type CalendarColour,
-  type LocationId,
-} from "@waitron/shared";
+import { type CalendarColour } from "@waitron/shared";
 import { resolveDepartmentDays } from "./day-resolver.js";
 import { saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -64,10 +60,10 @@ beforeAll(() => {
   db = suite.db;
 });
 
-async function newLocation(name: string): Promise<LocationId> {
+async function newLocation(name: string): Promise<string> {
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
   const venueId = await venueLocationId(db);
-  return brandLocationId(venueId);
+  return venueId;
 }
 
 const shape = (rows: { name: string; startsOn: string }[]) =>
@@ -123,7 +119,7 @@ describe("ensureDefaultSeasons", () => {
     if (tenant) await seedVenue(db, venue);
     else await db.insert(locations).values(venue);
     const venueId = await venueLocationId(db);
-    return brandLocationId(venueId);
+    return venueId;
   };
   const starterSeasons = (language: "es" | "en") =>
     DEFAULT_SEASONS.map(({ name, startsOn, colour }) => ({
@@ -215,7 +211,7 @@ async function autumnVenue() {
     dayCutover: "06:00",
   });
   const venueId = await venueLocationId(db);
-  const cfg: { locationId: LocationId } = { locationId: brandLocationId(venueId) };
+  const cfg: { locationId: string } = { locationId: venueId };
   const [zone] = await db
     .insert(floorZones)
     .values({ locationId: cfg.locationId, name: "Terrace", displayOrder: 0 })

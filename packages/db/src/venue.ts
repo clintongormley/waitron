@@ -119,8 +119,7 @@ export async function readVenueClock(tx: Transaction): Promise<BusinessDayClock>
   return (await readVenueClockAndPlace(tx)).clock;
 }
 
-/** Interim, until the schema stops keying rows by location: the one `locations` row's id, for code
- * that must still fill a `location_id` column. */
+/** Interim, until the schema stops keying rows by location: the one `locations` row's id. */
 export async function venueLocationId(tx: Transaction): Promise<string> {
   return (await venueRow(tx)).id;
 }

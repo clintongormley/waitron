@@ -24,6 +24,7 @@ import {
   workingLinePortions,
   workingOrderLines,
   workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -31,12 +32,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { loginWithPin, persons } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
 import { planVenue } from "@waitron/provisioning";
-import {
-  decimal,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { decimal, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { deploymentEnvironment } from "../config.js";
 import { DEVICE_COOKIE } from "../device-session.js";
 import type { Logger } from "../logger.js";
@@ -57,6 +53,7 @@ import { createTable } from "./live-table.js";
 import { mountTillApi } from "../till-api.js";
 import { systemClock } from "../till-backend.js";
 import type { DeviceRequestConfig } from "../trading-context.js";
+import type { WithVenueRowId } from "./venue-row-id.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";
@@ -280,7 +277,7 @@ export interface AdjustmentVenue {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   /** The display language the till routes are mounted with; the same code as `cfg.locale`. */
   venueLocale: string;
   tables: ZoneOffers;
@@ -351,9 +348,10 @@ export async function provisionAdjustmentVenue(
     ),
     { db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
-    locationId: brandLocationId(provisioned.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

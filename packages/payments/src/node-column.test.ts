@@ -2,7 +2,6 @@ import { CORE_MIGRATIONS, FOREIGN_KEY_VIOLATION, captureError, isRefusal } from 
 import { randomUUID } from "node:crypto";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
@@ -22,7 +21,7 @@ async function seedOrderWithNode(): Promise<{
   node: string;
 }> {
   const seeded = await seedWorkingOrder(suite.db, freshNif());
-  const node = await seedNode(suite.db, brandLocationId(seeded.locationId));
+  const node = await seedNode(suite.db, seeded.locationId);
   return { seeded, node };
 }
 

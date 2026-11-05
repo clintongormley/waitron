@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { WaitronModule } from "@waitron/module";
 import { NODE_MIGRATIONS, readRecoveryKeyName, setRecoveryKeyTx } from "@waitron/node-db";
-import { nodeId, locationId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { createRecoveryPack } from "./recovery-pack.js";
 
@@ -16,7 +16,6 @@ const suite = useVenueDb({
 const handles = () => ({ venue: suite.db, node: suite.node });
 const node = {
   nodeId: nodeId("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
-  locationId: locationId("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
 };
 const now = new Date("2026-10-14T10:00:00.000Z");
 const contribution = {

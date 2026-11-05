@@ -10,6 +10,7 @@ import {
   printerHolders,
   printers,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { createCatalogue } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -31,8 +32,8 @@ import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { createStation } from "./kitchen.js";
 import { deletePrinter } from "./printer-delete.js";
-import type { TradingContext } from "./trading-context.js";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
+import { nodeId as brandNodeId } from "@waitron/shared";
 
 /**
  * The device-profile CRUD routes end to end, over HTTP, with the manager and staff sessions a real
@@ -63,7 +64,7 @@ function uniqueName(base: string): string {
 }
 
 /** The venue the station and watcher list routes are scoped to, as boot threads it. */
-let venueCfg: TradingContext;
+let venueCfg: WithVenueRowId;
 
 /** The provisioned counter's department and zone: a profile that is not a kitchen display must
  * name a department to be saved. */
@@ -100,9 +101,10 @@ async function setupTenant(): Promise<void> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(suite.db);
   venueCfg = {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

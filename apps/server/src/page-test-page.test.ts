@@ -23,12 +23,7 @@ import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { ReceiptQrText, TrustedClock } from "@waitron/fiscal";
-import {
-  jobOrigin,
-  locationId as brandLocation,
-  nodeId as brandNode,
-  seriesId,
-} from "@waitron/shared";
+import { jobOrigin, nodeId as brandNode, seriesId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
@@ -92,7 +87,6 @@ async function venue(opts: { render?: Render } = {}) {
   ).makeBackend({ db: suite.db, clock, environment: "preproduction" });
   const cfg: TradingContext = {
     nodeId: brandNode(nodeId),
-    locationId: brandLocation(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

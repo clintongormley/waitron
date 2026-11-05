@@ -894,7 +894,7 @@ export async function readSettledTicket(
 
   return {
     ...(await readReceiptOrder(tx, workingOrderId)),
-    ...(await readReceiptPresentation(tx, cfg, issued.saleId, issued.locale)),
+    ...(await readReceiptPresentation(tx, issued.saleId, issued.locale)),
     locale: issued.locale,
     namesLocale: issued.invoiceLocales[0]!,
     invoiceNumber: formatInvoiceNumber(issued.code, issued.number),
@@ -1058,7 +1058,7 @@ async function fileImmediateSale(
   // `FiscalRecordRef` is regime-opaque, so the "A/1" is read back from the sale row and its series.
   const ticket: TillSaleResult = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),
-    ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
+    ...(await readReceiptPresentation(tx, saleId, language.locale)),
     ...(await readReceiptOrder(tx, workingOrderId)),
     locale: language.locale,
     namesLocale: language.invoiceLocales[0]!,
@@ -1701,7 +1701,7 @@ async function finalizeCapture(
 
         const ticket: TillSaleResult = {
           ...(await readReceiptIssuer(deps.backend, tx, saleId)),
-          ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
+          ...(await readReceiptPresentation(tx, saleId, language.locale)),
           ...(await readReceiptOrder(tx, req.id)),
           locale: language.locale,
           namesLocale: language.invoiceLocales[0]!,
@@ -1879,7 +1879,7 @@ async function finalizeRecovery(
 
       const ticket: TillSaleResult = {
         ...(await readReceiptIssuer(deps.backend, tx, saleId)),
-        ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
+        ...(await readReceiptPresentation(tx, saleId, language.locale)),
         ...(await readReceiptOrder(tx, req.id)),
         locale: language.locale,
         namesLocale: language.invoiceLocales[0]!,

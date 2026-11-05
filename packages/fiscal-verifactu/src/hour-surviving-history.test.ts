@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm";
 import { deployment, invoiceSeries, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { withHourAdmission } from "./allocation-envelope.js";
@@ -14,7 +13,7 @@ import { fiscalAllocations } from "./schema/allocations.js";
 import { registroSif } from "./schema/sif.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId };
 const binding: OperationBinding = {
   module: "fiscal-verifactu",
   action: "setup",

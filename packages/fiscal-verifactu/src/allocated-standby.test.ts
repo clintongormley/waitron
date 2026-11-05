@@ -8,7 +8,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { deployment, invoiceSeries, nodes, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationInput } from "@waitron/module";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
 import * as fiscal from "./index.js";
@@ -24,8 +24,8 @@ import {
 } from "./paper-evidence.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
-const standby = { nodeId: TENANT_A.nodeId2, locationId: primary.locationId };
+const primary = { nodeId: TENANT_A.nodeId };
+const standby = { nodeId: TENANT_A.nodeId2 };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
@@ -269,12 +269,7 @@ it("refuses an establishment state different from the independently prepared sig
 it("binds reserve to the primary actually read by the host", async () => {
   await expect(
     attempt("reserve", (tx, operation) =>
-      lifecycle().reserve(
-        tx,
-        { ...primary, nodeId: TENANT_B.nodeId, locationId: primary.locationId },
-        standby,
-        operation,
-      ),
+      lifecycle().reserve(tx, { ...primary, nodeId: TENANT_B.nodeId }, standby, operation),
     ),
   ).rejects.toMatchObject(refusal("node_mismatch"));
 });
@@ -607,18 +602,6 @@ it("refuses to reserve for a spare that already has an open series", async () =>
     attempt("reserve", (tx, operation) => lifecycle().reserve(tx, primary, standby, operation)),
   ).rejects.toMatchObject(refusal("standby_already_active"));
   expect(await rows()).toEqual(before);
-});
-
-// A1301: deleted with cfg in S18
-it("reserves a standby allocation without location scope", async () => {
-  const unscoped = { ...standby, locationId: locationId("f0000000-0000-4000-8000-000000000099") };
-  const reserved = await attempt(
-    "reserve",
-    (tx, operation) => lifecycle().reserve(tx, primary, unscoped, operation),
-    () => {},
-    unscoped,
-  );
-  expect(reserved).toEqual({ state: { version: 1, evidence: request().evidence } });
 });
 
 it("reserves before the standby node has been created", async () => {

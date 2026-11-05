@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { vi } from "vitest";
-import { locationId } from "@waitron/shared";
 import {
   invoiceSeries,
   openVenueDatabase,
@@ -90,7 +89,7 @@ export async function stagedHourRestore(
     await seedTenants(db);
     await stampDeployment(db, "preproduction");
     const key = await mintBreakGlassKey({ venue: db, node: nodeDb }, TENANT_A.nodeId);
-    const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+    const node = { nodeId: TENANT_A.nodeId };
     const initial: OperationBinding = {
       module: "fiscal-verifactu",
       action: "setup",

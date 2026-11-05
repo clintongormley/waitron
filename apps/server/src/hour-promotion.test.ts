@@ -20,7 +20,6 @@ import {
   withPreparedModuleOperations,
   type OperationBinding,
 } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
@@ -62,8 +61,8 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
 const spare = useVenueDb({ migrations });
-const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
-const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
+const primary = { nodeId: TENANT_A.nodeId };
+const standby = { nodeId: TENANT_A.nodeId2 };
 const ADMIN = "e1000000-0000-4000-8000-000000000004";
 const PASSWORD = "synthetic-promotion-password";
 const hash = hashPassword(PASSWORD);
@@ -110,7 +109,7 @@ beforeEach(async () => {
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Promotion SL" });
   await suite.db.insert(locations).values({
-    id: primary.locationId,
+    id: TENANT_A.locationId,
     name: "Restaurant",
     invoiceLocales: ["en"],
     operationDescription: "Hospitality",
@@ -119,7 +118,7 @@ beforeEach(async () => {
   await suite.db.insert(nodes).values(
     [primary, standby].map((node) => ({
       id: node.nodeId,
-      locationId: node.locationId,
+      locationId: TENANT_A.locationId,
       name: node === primary ? "Primary" : "Standby",
       filingModule: "verifactu",
       taxModule: "vat",
@@ -1043,7 +1042,7 @@ it.each(["key", "manager"])(
 
 it("establishes the real reserved node and identity while keeping its fiscal state dormant", async () => {
   const identity = generateStandbyIdentity();
-  const target = { ...standby, nodeId: brandNodeId(identity.nodeId) };
+  const target = { nodeId: brandNodeId(identity.nodeId) };
   const held = { ...joinBinding, targetNodeId: target.nodeId };
   const options = {
     stateDir: join(root, "state"),
@@ -1078,14 +1077,14 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Promotion SL" });
   await spare.db.insert(locations).values({
-    id: primary.locationId,
+    id: TENANT_A.locationId,
     name: "Restaurant",
     invoiceLocales: ["en"],
     operationDescription: "Hospitality",
   });
   await spare.db.insert(nodes).values({
     id: primary.nodeId,
-    locationId: primary.locationId,
+    locationId: TENANT_A.locationId,
     name: "Original",
     publicKey: primaryKeys.publicKey,
     filingModule: "verifactu",

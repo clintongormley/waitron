@@ -37,7 +37,6 @@ import { nodeId as brandNodeId } from "@waitron/shared";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
-import { locationId } from "@waitron/shared";
 import { FISCAL_RESTORE, currentSif } from "@waitron/fiscal-verifactu";
 import { AppError, isAppError } from "@waitron/shared";
 import { enabledModules, fiscalSlot } from "@waitron/module";
@@ -906,7 +905,7 @@ describe("restore hooks (identity phase)", () => {
     await stampDeployment(suite.db, "preproduction");
     const secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, T.nodeId);
     const fixture = allocationFixture({
-      node: { nodeId: brandNodeId(T.nodeId), locationId: locationId(T.locationId) },
+      node: { nodeId: brandNodeId(T.nodeId) },
       identity: "P000042",
       softwareId: "WT",
       recoveryKey: true,
@@ -1056,7 +1055,6 @@ describe("restore hooks (identity phase)", () => {
       makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": hook }) }),
     );
     expect(hook).toHaveBeenCalledWith(expect.anything(), {
-      locationId: T.locationId,
       nodeId: T.nodeId,
     });
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV); // the artifact's, restored over the stale one
@@ -1844,11 +1842,9 @@ it("resolves an archive node's own location through the read-only source databas
     });
     await expect(readArtifactNode(copy(T.nodeId))).resolves.toEqual({
       nodeId: T.nodeId,
-      locationId: T.locationId,
     });
     await expect(readArtifactNode(copy(otherNode))).resolves.toEqual({
       nodeId: otherNode,
-      locationId: otherLocation,
     });
     const missing = "c0000000-0000-4000-8000-0000000000ff";
     await expect(readArtifactNode(copy(missing))).rejects.toMatchObject({

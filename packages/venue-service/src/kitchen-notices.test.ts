@@ -23,8 +23,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { AppError, locationId as brandLocationId, thousandthsToDecimal } from "@waitron/shared";
-import type { LocationId } from "@waitron/shared";
+import { AppError, thousandthsToDecimal } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { kitchenNotices } from "./schema/kitchen-notices.js";
 import { workingLineContexts } from "./schema/service.js";
@@ -294,7 +293,7 @@ function cutoverFromNow(minutes: number): string {
   return `${new Date(Date.now() + minutes * 60_000).toISOString().slice(11, 16)}:00`;
 }
 
-async function seedLocation(name: string): Promise<LocationId> {
+async function seedLocation(name: string): Promise<string> {
   await seedVenue(db, {
     name,
     invoiceLocales: ["en"],
@@ -302,10 +301,10 @@ async function seedLocation(name: string): Promise<LocationId> {
     timeZone: "UTC",
   });
   const venueId = await venueLocationId(db);
-  return brandLocationId(venueId);
+  return venueId;
 }
 
-async function seedStation(locationId: LocationId, name: string): Promise<string> {
+async function seedStation(locationId: string, name: string): Promise<string> {
   const [row] = await db
     .insert(kitchenStations)
     .values({ locationId, name })

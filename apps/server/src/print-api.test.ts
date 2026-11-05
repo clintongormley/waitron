@@ -39,11 +39,7 @@ import {
   type BluetoothCommand,
   type NetworkProbe,
 } from "@waitron/print-agent";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  type SupportedLocale,
-} from "@waitron/shared";
+import { nodeId as brandNodeId, type SupportedLocale } from "@waitron/shared";
 import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
 import { printingAlertSource } from "./alert-sources.js";
 import { JOBS_WAITING_MS } from "./print-job-trouble.js";
@@ -112,7 +108,6 @@ async function seedPrintRouteFixture(db: Database) {
   // Knock and accept must share this one cfg: every join-request statement filters by node.
   cfg = {
     nodeId: brandNodeId(randomUUID()),
-    locationId: brandLocationId(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

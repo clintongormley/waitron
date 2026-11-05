@@ -20,7 +20,6 @@ import { randomUUID } from "node:crypto";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { departments } from "./schema/service.js";
 
@@ -462,7 +461,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
       .insert(locations)
       .values({ name: "Venue", invoiceLocales: ["en"], operationDescription: "Hospitality" })
       .returning({ id: locations.id });
-    const locationId = brandLocationId(location!.id);
+    const locationId = location!.id;
     const [zone] = await db
       .insert(floorZones)
       .values({ locationId, name: "Terrace" })
@@ -759,8 +758,8 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const [station, destination] = await db
       .insert(kitchenStations)
       .values([
-        { locationId: brandLocationId(v.locationId), name: "Grill" },
-        { locationId: brandLocationId(v.locationId), name: "Bar" },
+        { locationId: v.locationId, name: "Grill" },
+        { locationId: v.locationId, name: "Bar" },
       ])
       .returning({ id: kitchenStations.id });
     const state = (day: string, sendsTo: string | null) =>
@@ -789,7 +788,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const v = await venue();
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: brandLocationId(v.locationId), name: "Grill" })
+      .values({ locationId: v.locationId, name: "Grill" })
       .returning({ id: kitchenStations.id });
     const cellId = randomUUID();
     await db.execute(sql`insert into routing_cells (id, location_id, zone_id, station_id)
@@ -1255,7 +1254,7 @@ describe("the kitchen screen tables refuse what their rules forbid", () => {
       .returning({ id: kitchenStations.id });
     const [zone] = await db
       .insert(floorZones)
-      .values({ locationId: brandLocationId(venueId), name: "Terrace" })
+      .values({ locationId: venueId, name: "Terrace" })
       .returning({ id: floorZones.id });
     const [profile] = await db
       .insert(deviceProfiles)

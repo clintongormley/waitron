@@ -52,8 +52,7 @@ import type { Database, Transaction } from "@waitron/db";
 import type { ZoneMenu, ZoneMenuState } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
-import type { LocationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 
 import { resolveMakers, setRoutingCell } from "./routing-store.js";
@@ -290,7 +289,7 @@ describe("new department service periods", () => {
 
   it("places the venue's menu in Open on weekdays", async () => {
     const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));
-    const id = brandLocationId(await seedLocation(`New ${randomUUID()}`));
+    const id = await seedLocation(`New ${randomUUID()}`);
     await db.update(locations).set({ catalogueId: menu.id }).where(eq(locations.id, id));
     const department = await scoped((tx) =>
       createDepartment(tx, { name: "Restaurant", orderStart: "counter" }),
@@ -319,7 +318,7 @@ describe("new department service periods", () => {
   /** A location with a menu and a business-day start of `dayCutover` waiting for 2026-11-04. */
   async function waitingLocation(dayCutover: string) {
     const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));
-    const id = brandLocationId(await seedLocation(`Waiting ${randomUUID()}`));
+    const id = await seedLocation(`Waiting ${randomUUID()}`);
     await db.update(locations).set({ catalogueId: menu.id }).where(eq(locations.id, id));
     await db.insert(locationBusinessDaySettings).values({ locationId: id, revision: 1 });
     await db.insert(locationDayCutoverChanges).values({
@@ -329,7 +328,7 @@ describe("new department service periods", () => {
     });
     return id;
   }
-  const terraces = async (id: LocationId) =>
+  const terraces = async (id: string) =>
     (
       await db.execute(
         sql`select name from departments where location_id = ${id} and name = 'Terrace'`,
@@ -402,12 +401,12 @@ async function seedLocation(name: string, withDefault = true): Promise<string> {
   if (withDefault) {
     await db
       .insert(kitchenStations)
-      .values({ locationId: brandLocationId(venueId), name: "Default prep", isDefault: true });
+      .values({ locationId: venueId, name: "Default prep", isDefault: true });
   }
   return venueId;
 }
 
-async function seedZone(locationId: LocationId, name: string): Promise<string> {
+async function seedZone(locationId: string, name: string): Promise<string> {
   const [row] = await db
     .insert(floorZones)
     .values({ locationId, name })
@@ -415,7 +414,7 @@ async function seedZone(locationId: LocationId, name: string): Promise<string> {
   return row!.id;
 }
 
-async function seedStation(locationId: LocationId, name: string, active = true): Promise<string> {
+async function seedStation(locationId: string, name: string, active = true): Promise<string> {
   const [row] = await db
     .insert(kitchenStations)
     .values({ locationId, name, active })
@@ -479,7 +478,7 @@ async function seedUnitTenant(): Promise<{
 
 describe("venue service routing", () => {
   it("reports an inactive default station before missing departments", async () => {
-    const locationId = brandLocationId(await seedLocation("No departments", false));
+    const locationId = await seedLocation("No departments", false);
     await db.insert(kitchenStations).values({
       locationId,
       name: "Default prep",
@@ -497,7 +496,7 @@ describe("venue service routing", () => {
 
   it("counts a menu reaching a product only through nested sections as not empty", async () => {
     await seedUnitTenant();
-    const locationId = brandLocationId(await seedLocation("Venue"));
+    const locationId = await seedLocation("Venue");
     const zone = await seedZone(locationId, "Terrace");
     await scoped(async (tx) => {
       const department = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
@@ -569,7 +568,7 @@ describe("venue service routing", () => {
   it("reports incomplete active zones and cascades department removal", async () => {
     await seedUnitTenant();
     const location = await seedLocation("Venue");
-    const locationId = brandLocationId(location);
+    const locationId = location;
     const zone = await seedZone(locationId, "Terrace");
 
     await scoped(async (tx) => {
@@ -647,7 +646,7 @@ describe("venue service routing", () => {
   it("routes one cocktail to the bar serving its service zone", async () => {
     await seedUnitTenant();
     const location = await seedLocation("Venue");
-    const locationId = brandLocationId(location);
+    const locationId = location;
     const upstairsZone = await seedZone(locationId, "Upstairs");
     const downstairsZone = await seedZone(locationId, "Downstairs");
     const upstairsBar = await seedStation(locationId, "Upstairs bar");
@@ -724,7 +723,7 @@ describe("venue service routing", () => {
   it("inherits service mode, lists zone offers, and freezes the order context", async () => {
     const { kgUnitId } = await seedUnitTenant();
     const location = await seedLocation("Venue");
-    const locationId = brandLocationId(location);
+    const locationId = location;
     const zone = await seedZone(locationId, "Deli counter");
     const nodeId = await seedNode(db);
 
@@ -917,7 +916,7 @@ describe("venue service routing", () => {
   it("records a working line context for a product with no unit (Each)", async () => {
     await seedUnitTenant();
     const location = await seedLocation("Venue");
-    const locationId = brandLocationId(location);
+    const locationId = location;
     const zone = await seedZone(locationId, "Deli counter");
     const nodeId = await seedNode(db);
 
@@ -987,7 +986,7 @@ describe("venue service routing", () => {
   it("refuses missing configuration and supports explicit no-preparation", async () => {
     await seedUnitTenant();
     const location = await seedLocation("Venue");
-    const locationId = brandLocationId(location);
+    const locationId = location;
     const zone = await seedZone(locationId, "Terrace");
 
     await scoped(async (tx) => {
@@ -1053,7 +1052,7 @@ describe("venue service routing", () => {
 async function seedRoutingVenue() {
   await seedUnitTenant();
   const location = await seedLocation("Venue");
-  const locationId = brandLocationId(location);
+  const locationId = location;
   const zone = await seedZone(locationId, "Dining room");
   const otherZone = await seedZone(locationId, "Terrace");
   const cfg = { locationId };
@@ -1075,7 +1074,7 @@ async function seedRoutingVenue() {
 async function insertStation(tx: Transaction, locationId: string, name: string): Promise<string> {
   const [row] = await tx
     .insert(kitchenStations)
-    .values({ locationId: brandLocationId(locationId), name })
+    .values({ locationId: locationId, name })
     .returning({ id: kitchenStations.id });
   return row!.id;
 }
@@ -1475,7 +1474,7 @@ describe("departments", () => {
   });
 
   it("resolves a recorded zone's receipt policy after the zone is deactivated", async () => {
-    const locationId = brandLocationId(await seedLocation("Retained sale policy"));
+    const locationId = await seedLocation("Retained sale policy");
     const zoneId = await seedZone(locationId, "Old counter");
     await scoped(async (tx) => {
       const department = await createDepartment(tx, {
@@ -1497,7 +1496,7 @@ describe("departments", () => {
   });
 
   it("clears one zone override without changing another policy field", async () => {
-    const locationId = brandLocationId(await seedLocation("Cleared sale override"));
+    const locationId = await seedLocation("Cleared sale override");
     const zoneId = await seedZone(locationId, "Terrace");
     const department = await scoped(async (tx) => {
       const row = await createDepartment(tx, {
@@ -1521,7 +1520,7 @@ describe("departments", () => {
   });
 
   it("inherits each sale policy field separately from the department", async () => {
-    const locationId = brandLocationId(await seedLocation("Inherited sale policy"));
+    const locationId = await seedLocation("Inherited sale policy");
     const zoneId = await seedZone(locationId, "Terrace");
     const department = await scoped(async (tx) => {
       const row = await createDepartment(tx, {
@@ -1556,7 +1555,7 @@ describe("departments", () => {
   });
 
   it("gives a newly configured zone blank quick-sale and receipt overrides", async () => {
-    const locationId = brandLocationId(await seedLocation("Zone policy defaults"));
+    const locationId = await seedLocation("Zone policy defaults");
     const zoneId = await seedZone(locationId, "Terrace");
     await scoped(async (tx) => {
       const department = await createDepartment(tx, {
@@ -1661,7 +1660,7 @@ describe("departments", () => {
   });
 
   it("switches off another department and its zones while retaining their tables and service policy", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Two departments")) };
+    const cfg = { locationId: await seedLocation("Two departments") };
     const terrace = await seedZone(cfg.locationId, "Terrace");
     const dining = await seedZone(cfg.locationId, "Dining room");
     const { restaurant, bar, tableId } = await scoped(async (tx) => {
@@ -1726,7 +1725,7 @@ describe("departments", () => {
 /** A venue selling one product from one menu in two zones, each zone under its own department. */
 async function seedSellingVenue() {
   await seedUnitTenant();
-  const locationId = brandLocationId(await seedLocation("Venue"));
+  const locationId = await seedLocation("Venue");
   const cfg = { locationId };
   const diningZone = await seedZone(locationId, "Dining room");
   const barZone = await seedZone(locationId, "Bar");
@@ -2953,7 +2952,7 @@ describe("each served menu's structure and Device Home Page", () => {
 
   it("names the period that ended earlier today on both reads", async () => {
     await seedUnitTenant();
-    const locationId = brandLocationId(await seedLocation("Venue"));
+    const locationId = await seedLocation("Venue");
     const zoneId = await seedZone(locationId, "Dining room");
     const { lunchMenu, dinnerMenu } = await scoped(async (tx) => {
       const restaurant = await createDepartment(tx, {
@@ -3022,7 +3021,7 @@ describe("each served menu's structure and Device Home Page", () => {
 
   it("names no ended period for a menu the running period also offers", async () => {
     await seedUnitTenant();
-    const locationId = brandLocationId(await seedLocation("Venue"));
+    const locationId = await seedLocation("Venue");
     const zoneId = await seedZone(locationId, "Dining room");
     const { lunchMenu, drinksMenu } = await scoped(async (tx) => {
       const restaurant = await createDepartment(tx, {
@@ -3516,7 +3515,7 @@ describe("combined settings operations", () => {
 });
 
 it("keeps a switched-off zone's table rows and today's rows unchanged", async () => {
-  const cfg = { locationId: brandLocationId(await seedLocation("Today reopen")) };
+  const cfg = { locationId: await seedLocation("Today reopen") };
   await scoped(async (tx) => {
     const department = await createDepartment(tx, { name: "Dining" });
     const zone = await createServiceZone(tx, { name: "Dining", departmentId: department.id });

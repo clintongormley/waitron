@@ -17,12 +17,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, posix, sep } from "node:path";
 import { eq } from "drizzle-orm";
-import {
-  AppError,
-  isAppError,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-} from "@waitron/shared";
+import { AppError, isAppError, nodeId as brandNodeId } from "@waitron/shared";
 import {
   insertNodeSeriesTx,
   readLiveSeriesIdTx,
@@ -41,7 +36,13 @@ import {
 } from "@waitron/db";
 import { NODE_MIGRATIONS, readRecoveryKeyName } from "@waitron/node-db";
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
-import { NODE_FILE, openBackupQuery, SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
+import {
+  NODE_FILE,
+  openBackupQuery,
+  SIDE_FILE_SUFFIXES,
+  VENUE_FILE,
+  type BackupQuery,
+} from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import {
   orderedMigrationSets,
@@ -861,7 +862,19 @@ export async function resolveArtifactNode(
   const { node } = readArtifactIdentity(entries);
   const [stored] = await db.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, node.nodeId));
   if (stored === undefined) throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
-  return { ...node, locationId: brandLocationId(await venueLocationId(db)) };
+  // Interim: keeps the `provisioning.second_venue` refusal until S28 drops `locations`.
+  await venueLocationId(db);
+  return node;
+}
+
+async function requireCopyNode(query: BackupQuery, node: ProvisionedNode): Promise<void> {
+  for await (const row of query.rows(
+    "select l.id from nodes n join locations l on l.id = n.location_id where n.id = ?",
+    [node.nodeId],
+  )) {
+    if (typeof row.id === "string") return;
+  }
+  throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
 }
 
 export async function readArtifactNode(
@@ -870,16 +883,27 @@ export async function readArtifactNode(
   const { node } = readArtifactIdentity(copy.secretEntries);
   const opened = await openBackupQuery(copy.databasePath);
   try {
-    for await (const row of opened.query.rows(
-      "select l.id from nodes n join locations l on l.id = n.location_id where n.id = ?",
-      [node.nodeId],
-    )) {
-      if (typeof row.id === "string") return { ...node, locationId: brandLocationId(row.id) };
-    }
-    throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
+    await requireCopyNode(opened.query, node);
+    return node;
   } finally {
     await opened.close();
   }
+}
+
+/** Interim: the venue id is the copy's one venue row, for backup settings; S18e or S28 removes it. */
+export async function readCopyNodeAndVenue(
+  query: BackupQuery,
+  secretEntries: readonly ArchiveEntry[],
+): Promise<{ node: ProvisionedNode; venueId: string }> {
+  const { node } = readArtifactIdentity(secretEntries);
+  await requireCopyNode(query, node);
+  const ids: unknown[] = [];
+  for await (const row of query.rows("select id from locations limit 2")) ids.push(row.id);
+  if (ids.length > 1) throw new AppError("provisioning.second_venue", {});
+  const [venueId] = ids;
+  if (typeof venueId !== "string")
+    throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
+  return { node, venueId };
 }
 
 function wrapHookError(module: string, err: unknown): unknown {

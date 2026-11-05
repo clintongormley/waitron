@@ -15,7 +15,6 @@ import {
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 
 import { computeEntryHash } from "./chain-hash.js";
@@ -55,7 +54,7 @@ describe("populated automatic-author upgrade", () => {
     const personId = await seedPerson(suite.db);
     const managerId = await seedPerson(suite.db, "Manager");
     const locationId = await seedLocation(suite.db);
-    const nodeId = await seedNode(suite.db, brandLocationId(locationId));
+    const nodeId = await seedNode(suite.db, locationId);
     const ids = [newId(), newId(), newId(), newId()];
     let prevEntryHash: string | null = null;
     for (const [index, entryKind] of ["in", "out", "correction", "correction"].entries()) {
@@ -137,7 +136,7 @@ describe("empty automatic-author upgrade", () => {
     await seedTenant(suite.db);
     const personId = await seedPerson(suite.db);
     const locationId = await seedLocation(suite.db);
-    const nodeId = await seedNode(suite.db, brandLocationId(locationId));
+    const nodeId = await seedNode(suite.db, locationId);
     suite.db.execute(sql`
       insert into time_entries (
         id, person_id, node_id, entry_kind, event_at, event_offset_minutes,

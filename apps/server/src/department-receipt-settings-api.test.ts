@@ -30,14 +30,14 @@ import {
   departmentReceipts,
   departmentSalePolicies,
 } from "@waitron/venue-service";
-import { locationId, nodeId, type DepartmentReceiptWrite } from "@waitron/shared";
+import { nodeId, type DepartmentReceiptWrite } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 import { mountDepartmentReceiptSettingsApi } from "./department-receipt-api.js";
 import * as logoModule from "./receipt-logo.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moduleCoreServices } from "./parties.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 
 const suite = useVenueDb({
   migrations: [
@@ -78,8 +78,8 @@ async function fixture(
     province: "Madrid",
   });
   const venueId = await venueLocationId(suite.db);
-  const cfg: TradingContext = {
-    locationId: locationId(venueId),
+  const cfg: WithVenueRowId = {
+    locationId: venueId,
     nodeId: nodeId(randomUUID()),
     locale: "es-ES",
     invoiceLocales: ["gl-ES"],

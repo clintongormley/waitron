@@ -4,7 +4,7 @@ import {
   departmentSalePolicies,
   readPrintedDepartmentReceipt,
 } from "@waitron/venue-service";
-import { locations } from "@waitron/db";
+import { locations, venueLocationId } from "@waitron/db";
 /**
  * The dashboard's sign-in and staff-administration routes end to end — login, logout, the roster
  * and its gate, invitations, password reset, Google linking, degenerate bodies answering 4xx rather
@@ -36,9 +36,9 @@ import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue, savePrivacyContact } from "@waitron/provisioning";
 import { WorkforceBackend } from "@waitron/workforce";
-import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import type { AccountEmailSender } from "./account-email.js";
 import type { exchangeGoogleCode } from "./google-oidc.js";
 import {
@@ -93,7 +93,7 @@ function invitationBody(
   };
 }
 
-let venueCfg: TradingContext | undefined;
+let venueCfg: WithVenueRowId | undefined;
 
 async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
   const venue = await applyVenue(
@@ -126,9 +126,10 @@ async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(suite.db);
   venueCfg = {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -2049,7 +2050,6 @@ describe("Management API — Google sign-in edges, credential checks and staff l
       });
       const event = {
         nodeId: venueCfg!.nodeId,
-        locationId: venueCfg!.locationId,
         personId: staffId,
         offsetMinutes: 120,
         origin: jobOrigin("dashboard"),

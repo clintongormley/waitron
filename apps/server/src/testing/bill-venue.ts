@@ -17,6 +17,7 @@ import {
   tenders,
   withTransaction,
   workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
@@ -32,12 +33,7 @@ import { cardReaderHolders, cardReaders, deviceCardReaders } from "@waitron/paym
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { createPrinter } from "@waitron/printing";
 import { planVenue } from "@waitron/provisioning";
-import {
-  AppError,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { AppError, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { CardProviderPool } from "../card-provider-pool.js";
 import type { DiskFullState } from "../disk-full-state.js";
 import { deploymentEnvironment } from "../config.js";
@@ -46,6 +42,7 @@ import type { Logger } from "../logger.js";
 import { ALL_MODULES, VENUE_SERVICE } from "../modules.js";
 import { createTable } from "./live-table.js";
 import type { DeviceRequestConfig } from "../trading-context.js";
+import type { WithVenueRowId } from "./venue-row-id.js";
 import { mountTillApi } from "../till-api.js";
 import { systemClock } from "../till-backend.js";
 import { SESSION_COOKIE } from "../till-session.js";
@@ -83,7 +80,7 @@ export interface BillVenue {
   backend: FiscalBackend;
   clock: TrustedClock;
   /** The box's configuration, tips off. */
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   card: FakePaymentProvider;
   /** Serves the fake card provider as `fake`. */
   pool: CardProviderPool;
@@ -159,9 +156,10 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     ),
     { db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
-    locationId: brandLocationId(provisioned.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

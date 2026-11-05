@@ -20,6 +20,7 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -28,7 +29,7 @@ import { planVenue } from "@waitron/provisioning";
 import { serviceSteps } from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import type { VenueResult } from "@waitron/provisioning";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { splitBill } from "./bill-action-fixture.js";
 import { takeBillPayment } from "./bill-payment-fixture.js";
 import { deploymentEnvironment } from "../config.js";
@@ -39,6 +40,7 @@ import { memberTables, seatTable, setPartyName } from "../parties.js";
 import { joinTables } from "./table-action-fixture.js";
 import { createTable } from "./live-table.js";
 import type { DeviceRequestConfig } from "../trading-context.js";
+import type { WithVenueRowId } from "./venue-row-id.js";
 import { systemClock } from "../till-backend.js";
 import { payWorkingOrder } from "./whole-payment-fixture.js";
 import { listTablesWithState, parkOrder } from "../working-order.js";
@@ -70,7 +72,7 @@ export interface PartyVenue {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   /** {@link OPERATOR}'s open session on the venue's device, which a bill payment is taken under. */
   operator: { personId: string; sessionId: string };
   /** The "tables" zone. */
@@ -129,9 +131,10 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     ),
     { db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

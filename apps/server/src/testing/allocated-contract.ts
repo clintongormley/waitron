@@ -7,6 +7,7 @@ import {
   nodes,
   readTenant,
   tenants,
+  venueLocationId,
   type Database,
 } from "@waitron/db";
 import { ALLOCATED_FISCAL_STANDBY } from "@waitron/fiscal-verifactu";
@@ -61,7 +62,10 @@ export async function prepareStandbyDatabase(
 ) {
   const tenant = (await source.select().from(tenants))[0]!;
   const location = (
-    await source.select().from(locations).where(eq(locations.id, primary.locationId))
+    await source
+      .select()
+      .from(locations)
+      .where(eq(locations.id, await venueLocationId(source)))
   )[0]!;
   const node = (await source.select().from(nodes).where(eq(nodes.id, primary.nodeId)))[0]!;
   const sif = await source
@@ -92,14 +96,9 @@ export async function takenOverSeries(
   fixture: StandbyContract,
   state: unknown,
 ) {
-  const primary = {
-    nodeId: nodeId(fixture.request("establish").binding.sourceId),
-    locationId: (await db.select().from(locations))[0]!.id as ProvisionedNode["locationId"],
-  };
-  const target = { ...primary, nodeId: nodeId(targetNodeId) };
-  await db
-    .insert(nodes)
-    .values({ id: target.nodeId, locationId: target.locationId, name: "Standby" });
+  const target = { nodeId: nodeId(targetNodeId) };
+  const venueId = (await db.select().from(locations))[0]!.id;
+  await db.insert(nodes).values({ id: target.nodeId, locationId: venueId, name: "Standby" });
   await fixture.transaction(db, "establish", (tx, operation) =>
     ALLOCATED_FISCAL_STANDBY.establish(tx, target, state, operation),
   );

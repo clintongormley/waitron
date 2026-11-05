@@ -250,25 +250,23 @@ export async function verifyCoreBackupData(input: {
   before: BackupQuery;
   after: BackupQuery;
   nodeId: string;
-  locationId: string;
   environment: DeploymentEnvironment;
 }): Promise<boolean> {
   if (!(await compareBackupTables({ ...input, policies: CORE_BACKUP_TABLE_POLICIES })))
     return false;
   for (const query of [input.before, input.after]) {
     const deployment = await first(query, "select environment from deployment where id = 1");
+    // The `nodes.location_id` and `locations` reads go with the A1301 schema slices.
     const node = await first(query, "select location_id from nodes where id = ?", [input.nodeId]);
-    const location = await first(query, "select id from locations where id = ?", [
-      input.locationId,
-    ]);
+    const venues = await first(query, "select count(*) as n from locations");
     const tenant = await first(
       query,
       "select country, tax_id, legal_name from tenants where id = 1",
     );
     if (
       deployment?.environment !== input.environment ||
-      node?.location_id !== input.locationId ||
-      location === undefined ||
+      node === undefined ||
+      Number(venues?.n) !== 1 ||
       tenant === undefined ||
       [tenant.country, tenant.tax_id, tenant.legal_name].some(
         (value) => typeof value !== "string" || value.length === 0,

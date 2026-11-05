@@ -106,7 +106,7 @@ function bundleDeps() {
     relayUrl: "https://relay.test",
     boxHostname: "waitron.local",
     accountKey: "public-test",
-    designated: { nodeId: PRIMARY, locationId: LOCATION },
+    designated: { nodeId: PRIMARY },
     standby: { nodeId: TARGET, publicKey: generateNodeKeyPair().publicKey },
   };
 }
@@ -234,7 +234,7 @@ describe("opaque authenticated standby carriers", () => {
     modules.push(
       regime(async (_tx, primary, standby, operation) => {
         expect(primary.nodeId).toBe(PRIMARY);
-        expect(standby).toEqual({ nodeId: TARGET, locationId: LOCATION });
+        expect(standby).toEqual({ nodeId: TARGET });
         received = operation;
         expect(operation).toBeDefined();
         expect(operation!.input).toBe(input);

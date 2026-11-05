@@ -50,7 +50,6 @@ const ADOPT_BODY = JSON.stringify({
 const PRIMARY_KEYS = generateNodeKeyPair();
 const BUNDLE: MirrorBundle = {
   designated: {
-    locationId: "33333333-3333-4333-8333-333333333333",
     nodeId: PRIMARY_NODE_ID,
   },
   tenant: { country: "ES", taxId: "80000001K" },

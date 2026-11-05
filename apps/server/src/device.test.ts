@@ -9,8 +9,9 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { FormFactor } from "@waitron/layouts";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createStation } from "./kitchen.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { insertDevice, resolveDeviceKitchenScreens } from "./device.js";
@@ -27,7 +28,7 @@ const suite = useVenueDb({
 });
 
 interface SeededVenue {
-  cfg: TradingContext;
+  cfg: WithVenueRowId;
   stationId: string;
 }
 
@@ -42,9 +43,9 @@ async function setupVenue(): Promise<SeededVenue> {
   });
   const locationId = await venueLocationId(admin);
   const nodeId = await seedNode(admin);
-  const cfg: TradingContext = {
+  const cfg: WithVenueRowId = {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { venueLocationId, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -244,15 +244,11 @@ describe("Me API — the identity property: the session's person, never the body
   it("files a swap as the SESSION's person, never the body's — even when the body names someone else", async () => {
     // P is signed in; the body names Q as `requestedByPersonId`. A route that read the body would
     // file as Q, and `requestSwap`'s ownership guard would refuse, since the offered shift is P's.
-    const venue = await setupVenue();
+    await setupVenue();
+    const venueId = await venueLocationId(suite.db);
     const p = await seedPerson("P");
     const q = await seedPerson("Q");
-    const pShift = await seedShift(
-      p,
-      venue.locationId,
-      "2026-05-04T09:00:00Z",
-      "2026-05-04T17:00:00Z",
-    );
+    const pShift = await seedShift(p, venueId, "2026-05-04T09:00:00Z", "2026-05-04T17:00:00Z");
     const app = mountApp();
     const cookieP = await cookieFor(p);
 
@@ -307,16 +303,12 @@ describe("Me API — the identity property: the session's person, never the body
   });
 
   it("whoami and the reads scope to the session's person — P sees only P's shifts, never Q's", async () => {
-    const venue = await setupVenue();
+    await setupVenue();
+    const venueId = await venueLocationId(suite.db);
     const p = await seedPerson("P");
     const q = await seedPerson("Q");
-    const pShift = await seedShift(
-      p,
-      venue.locationId,
-      "2026-06-01T09:00:00Z",
-      "2026-06-01T17:00:00Z",
-    );
-    await seedShift(q, venue.locationId, "2026-06-01T10:00:00Z", "2026-06-01T18:00:00Z");
+    const pShift = await seedShift(p, venueId, "2026-06-01T09:00:00Z", "2026-06-01T17:00:00Z");
+    await seedShift(q, venueId, "2026-06-01T10:00:00Z", "2026-06-01T18:00:00Z");
     const app = mountApp();
     const cookieP = await cookieFor(p);
 

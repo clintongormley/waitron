@@ -16,7 +16,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { type ModuleRouteContext, type LiveModuleOperationBridge } from "@waitron/module";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
-import { locationId, seriesId } from "@waitron/shared";
+import { seriesId } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
 import { FISCAL_ROUTES, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
@@ -45,7 +45,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId };
 const PATH = "https://box.test/api/module-recovery/fiscal-verifactu/conflict";
 const SECRET = "synthetic-current-node-key";
 const verifier = identity.hashSecret(SECRET);

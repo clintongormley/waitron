@@ -54,7 +54,6 @@ const gate = () => {
   return { resolve, promise };
 };
 const day = (date = "2026-01-05") => ({
-  locationId,
   businessDay: date,
   startAt: `${date}T04:00:00.000Z`,
   endAt: `${date.slice(0, 8)}${String(Number(date.slice(8)) + 1).padStart(2, "0")}T04:00:00.000Z`,

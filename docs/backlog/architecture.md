@@ -1041,34 +1041,33 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. The owner answered
   every design question (lane B's A1268 does the working-time hashes; the working-time export names
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
-  slices. Still open: S18, S19 and the schema slices S20–S28; every other slice has landed.
+  slices. Still open: S18e, S19 and the schema slices S20–S28; every other slice has landed.
   `@waitron/db`'s `readVenue`, `readVenueClock`, `readVenueClockAndPlace` and the interim
   `venueLocationId` are on main for the remaining consumer slices (S1, #2379).
   `@waitron/db/testing/seed.js` has `seedVenue` and `seedWorkingOrder`, and
   `scripts/a1301-seed-codemod.mjs` rewrites the common shapes and reports the rest (F1, #2383).
   S18 is planned in six sub-slices
   ([S18 plan](../superpowers/plans/2026-11-04-a1301-s18-contract-cleanup.md)). S18c (#2443),
-  S18a (#2447), S18b (#2450) and S18d (#2451, #2453) have landed. The owner decided on 2026-11-02 what the venue id sent to Cloud and naming the backup
+  S18a (#2447), S18b (#2450), S18d (#2451, #2453) and S18f (#2467) have landed. The owner decided on 2026-11-02 what the venue id sent to Cloud and naming the backup
   folder becomes: Cloud assigns the id, and a box not connected to Cloud backs up where its owner
   says. The owner approved the [venue-id design](../superpowers/specs/2026-11-04-a1301-venue-id-design.md)
-  that writes this up, with its defaults, on 2026-11-04. S18e builds it. S18f does not wait for
+  that writes this up, with its defaults, on 2026-11-04. S18e builds it, and is held by A1308: it
+  adds a table, and no lane starts table work until A760's squash lands. S18f did not wait for
   S18e: the owner chose the plan's cheaper schedule, so the places that need the old id read it
   from one temporary function until S18e replaces it. The schema slices S20–S28 get a plan of their own.
 
   What the landed slices left, by owner:
 
-  - **S18:** the contract's node location ids remain for S18 (S3, #2387). The node's id remains
-    for S18f (S16, #2402). `CatalogueApiDeps.venueCfg` (`apps/server/src/catalogue-api.ts`) is
-    unread, and no slice plans its removal yet (S18b). Functions in `apps/server`'s
-    `order-groups.ts`, `parties.ts`, `till-sale.ts` and `working-order.ts`, and test helpers such
-    as `asApp` and `asTenant`, discard a `cfg` parameter with `void cfg;`. S18b's codemod started
-    only from parameters named `_cfg` or `_locationId`, so it left them. Removing the ones in
-    `till-sale.ts` and `working-order.ts` edits files on the invoice path, which the owner lands
-    (S18b). Four department-receipt scopes are still built by
-    spreading a `cfg` whose type holds `locationId`, which the scope's type no longer declares:
-    `receipt-print.ts` and `receipt-presentation.ts` (their `Pick<TradingContext, "locationId" …>`,
-    which S18f-2 retypes), and `invoice-document.ts` and `department-receipt-api.ts` (a whole
-    `TradingContext`, which stops holding `locationId` in S18f-2) (S18a).
+  - **S18:** S18e, held by A1308 (above). `CatalogueApiDeps.venueCfg`
+    (`apps/server/src/catalogue-api.ts`) is unread, and no slice plans its removal yet (S18b).
+    Functions in `apps/server`'s `order-groups.ts`, `parties.ts`, `till-sale.ts` and
+    `working-order.ts`, and test helpers such as `asApp` and `asTenant`, discard a `cfg` parameter
+    with `void cfg;`. S18b's codemod started only from parameters named `_cfg` or `_locationId`, so
+    it left them. Removing the ones in `till-sale.ts` and `working-order.ts` edits files on the
+    invoice path, which the owner lands (S18b). Two test helpers still hand out a node value
+    holding the venue row's id, because test files read it from there: `hour-recovery-host.ts`'s
+    `node` and `staged-hour-crash.ts`'s (an assertion in
+    `restore-emergency-crash.e2e.test.ts`) (S18f).
   - **The schema slices S20–S28:** the schema changes remain for S20–S28 (S3, #2387). Until the
     schema slices drop `print_jobs.location_id`, `enqueuePrintJob` takes the venue id as an
     optional `venueId`, so a sale, a kitchen send or a payment's slips read it once, and the demo
@@ -1086,7 +1085,17 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
     `station-order-migration.test.ts`): the schema slice that drops `working_orders.location_id`
     changes them (F5, #2403). A bucket restore reads the venue from the downloaded copy before any
     migration runs, so the slice that moves the venue's columns keeps that read working on an older
-    copy (S12; the plan's "Carried to the schema plan").
+    copy (S12; the plan's "Carried to the schema plan"). Server test helpers take the venue row's
+    id through the test type `WithVenueRowId` (`apps/server/src/testing/venue-row-id.ts`), which
+    goes when no `location_id` column is left to fill (S18f). `verifyCoreBackupData`
+    (`packages/db/src/backup-evidence.ts`) still reads `locations` and `nodes.location_id` (S18f).
+    Until `venueLocationId` goes, boot takes the venue row's id for backup settings, recovery
+    packs, the bucket stream and the Cloud connection, and `backup-data-placement.ts` and
+    `backup-verification.ts` read it from a backup copy (`readCopyNodeAndVenue`) for backup
+    settings, which `backup-verification-secrets.ts` is handed; S18e or S28 removes them (S18f).
+    The `locationId` brand stays in
+    `packages/shared/src/ids.ts` for the fiscal pair's `write-path.e2e.test.ts` alone, which is never
+    edited (S18f).
   - **Fixture lines the helpers could not take:** F5 (#2403), F2 (#2410) and F4 (#2412) list the
     lines they left (fixed ids the helpers cannot keep, second-location cases and standby copies)
     with their owning slice in their commit messages and PR bodies; F3 (#2427) lists its lines
@@ -1097,7 +1106,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
     (`certificate-install`, `seed-single-venue`, `void-issue-clock`) are S3's. Left as they were
     by F4: rows written under fixed ids that a backup, archive, `trading.env` or assertion names
     (most `recovery*` and `restore*` suites, `hour-promotion`, `hour-recovery`,
-    `rebuild-first-start`, `node-config.location`, `promote-endpoint-e2e`), devices planted under
+    `rebuild-first-start`, `promote-endpoint-e2e`), devices planted under
     a join request's id, cases needing no taxpayer row (`reset-request`), and second-location
     cases whose code slice deletes them.
     Left as they were by F3: venue and node rows under fixed ids that a boot env, `trading.env`,

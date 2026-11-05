@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
@@ -21,7 +20,7 @@ import { registroSif } from "./schema/sif.js";
 import { runPaperCustodian } from "./paper-custodian.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();

@@ -4,7 +4,7 @@ import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db"
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import { jobOrigin, locationId as brandedLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import { seedLocation, seedEmployment } from "../test/fixtures.js";
 import * as api from "./index.js";
 const suite = useVenueDb({
@@ -24,7 +24,7 @@ let nodeId: string, locationId: string, worker: string, manager: string, other: 
 beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, brandedLocationId(locationId));
+  nodeId = await seedNode(suite.db, locationId);
   const rows = await suite.db
     .insert(persons)
     .values([
@@ -212,7 +212,7 @@ it("serialises simultaneous closes into one closure and one marker", async () =>
 });
 it("closes a period once for the venue", async () => {
   const first = await close();
-  const secondNode = await seedNode(suite.db, brandedLocationId(locationId));
+  const secondNode = await seedNode(suite.db, locationId);
   const again = await close({ nodeId: secondNode });
   expect(again.id).toBe(first.id);
   expect(await api.readPayPeriodClosures(suite.db, { period })).toHaveLength(1);

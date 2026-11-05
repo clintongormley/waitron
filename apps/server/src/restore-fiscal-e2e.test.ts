@@ -35,7 +35,7 @@ import {
 } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu";
@@ -185,7 +185,7 @@ async function restoreDepsFor(
   artifact = artifactPath,
 ): Promise<RestoreDeps> {
   const fixture = allocationFixture({
-    node: { nodeId: nodeId(F.nodeId), locationId: locationId(F.locationId) },
+    node: { nodeId: nodeId(F.nodeId) },
     bases: [
       { code: "FA", purpose: "standard" },
       { code: "FF", purpose: "full" },

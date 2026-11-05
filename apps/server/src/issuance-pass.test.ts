@@ -1,7 +1,7 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, placeOrder } from "./testing/order-writer-fixture.js";
-import { floorTodayTables } from "@waitron/db";
+import { floorTodayTables, venueLocationId } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -34,12 +34,7 @@ import type { PaymentProvider, PaymentResult } from "@waitron/payments";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { SaleLineClassification } from "@waitron/shared";
-import {
-  decimal,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { decimal, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { issuancePass } from "./issuance-pass.js";
 import { ALL_MODULES } from "./modules.js";
@@ -138,10 +133,11 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(suite.db);
   const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
-    locationId: brandLocationId(venue.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

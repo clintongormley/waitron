@@ -201,7 +201,7 @@ async function reserve(standby = generateStandbyIdentity()) {
     relayUrl: "https://relay.test",
     boxHostname: "waitron.local",
     accountKey: "test-account-key",
-    designated: { nodeId: PRIMARY, locationId: LOCATION },
+    designated: { nodeId: PRIMARY },
     credentialKeyRing: TOTP_KEY_RING,
   });
   const response = await app.request("/management-api/mirror-bundle", {

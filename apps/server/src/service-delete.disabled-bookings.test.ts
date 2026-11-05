@@ -5,7 +5,7 @@ import { diningTables, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import {
   createDepartment,
   createServiceZone,
@@ -17,7 +17,7 @@ import {
 import { createTable } from "./testing/live-table.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { moduleCoreServices } from "./parties.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(
@@ -34,8 +34,8 @@ it("deletes through the real core seat when the optional bookings table was neve
     invoiceLocales: ["en-GB"],
     operationDescription: "Hospitality",
   });
-  const cfg: TradingContext = {
-    locationId: locationId(await venueLocationId(suite.db)),
+  const cfg: WithVenueRowId = {
+    locationId: await venueLocationId(suite.db),
     nodeId: nodeId(randomUUID()),
     locale: "en-GB",
     invoiceLocales: ["en-GB"],

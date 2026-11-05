@@ -1,6 +1,6 @@
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { sql } from "drizzle-orm";
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, venueLocationId } from "@waitron/db";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -10,15 +10,11 @@ import {
 import { persons, startManagementSession } from "@waitron/identity";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import {
-  jobOrigin,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { jobOrigin, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "../modules.js";
 import type { OriginConfig } from "../trading-context.js";
+import type { WithVenueRowId } from "./venue-row-id.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 
@@ -30,7 +26,7 @@ const LOCALE = "es-ES";
 export interface Venue {
   seriesId: ReturnType<typeof brandSeriesId>;
   /** Orders a test opens directly come from the dashboard, so no device is seeded for them. */
-  cfg: OriginConfig;
+  cfg: WithVenueRowId<OriginConfig>;
   /** The venue's provisioned default kitchen station — where `placeOrder` fires items, and the
    *  station the KDS device below binds to. */
   defaultStationId: string;
@@ -43,11 +39,11 @@ export interface Venue {
   staffCookie: string;
 }
 
-function tillConfigFromVenue(venue: VenueResult): OriginConfig {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId<OriginConfig> {
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -101,10 +97,11 @@ export async function setupVenue(db: Database): Promise<Venue> {
     { db, modules: ALL_MODULES },
   );
 
-  const cfg = tillConfigFromVenue(venue);
+  const venueId = await venueLocationId(db);
+  const cfg = tillConfigFromVenue(venue, venueId);
 
   const seeded = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: `Delicatessen ${venue.locationId}` });
+    const cat = await createCatalogue(tx, { name: `Delicatessen ${venueId}` });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
     const cafe = await createProduct(tx, {
       catalogueId: cat.id,

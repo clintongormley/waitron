@@ -15,7 +15,6 @@ import {
   type BackupVerificationContext,
 } from "@waitron/module";
 import { openBackupQuery } from "@waitron/store";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { makeAuthority } from "../test/certificate-fixtures.js";
@@ -32,7 +31,7 @@ import { FISCAL_CLASSIFICATION } from "./classification.js";
 import { FISCAL_BACKUP_VERIFICATION } from "./index.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId };
 const time = "2026-10-16T11:00:00.000Z";
 const bases = [
   { code: "A", purpose: "standard" },

@@ -16,6 +16,7 @@ import {
   ticketItems,
   workingOrderLines,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -57,15 +58,11 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -129,7 +126,7 @@ function nextNif(): string {
 
 interface Lunch {
   seriesId: ReturnType<typeof brandSeriesId>;
-  cfg: TradingContext;
+  cfg: WithVenueRowId;
   zoneId: string;
   menuId: string;
   rootId: string;
@@ -185,9 +182,10 @@ async function setupLunch(): Promise<Lunch> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const cfg: TradingContext = {
+  const venueId = await venueLocationId(suite.db);
+  const cfg: WithVenueRowId = {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

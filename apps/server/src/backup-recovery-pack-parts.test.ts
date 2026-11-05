@@ -7,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
 import { PART_WORDS, partFailure } from "@waitron/recovery-pack";
-import { AppError, locationId, type NodeId } from "@waitron/shared";
+import { AppError, type NodeId } from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { ARCHIVE_PURPOSE, writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
@@ -379,7 +379,7 @@ describe("the server key part", () => {
     module: module(...args),
     evidence: {},
   });
-  const node = () => ({ nodeId, locationId: locationId(VENUE) });
+  const node = () => ({ nodeId });
   const server = (
     seat: ServerKeySeat,
     options: { newKey?: typeof newKey; keyInForce?: ServerKeyInput["keyInForce"] } = {},
@@ -651,7 +651,7 @@ describe("the server key's seat", () => {
     const keyed = await inTx((tx) =>
       buildServerKeyPart(tx, context, {
         seat,
-        node: { nodeId, locationId: locationId(VENUE) },
+        node: { nodeId },
         keyInForce: {
           name: "2026-09-02 · OLD",
           holder: { kind: "pack", number: 2, madeOn: "2026-09-02", received: true },

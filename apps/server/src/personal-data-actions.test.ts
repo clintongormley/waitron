@@ -20,7 +20,6 @@ import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/t
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { formatInvoiceNumber } from "@waitron/core";
 import type { PersonalDataPart, PersonalDataSubject } from "@waitron/module";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { ACTIONS_FILES, actionsPersonalData } from "./personal-data-actions.js";
 
 const MARTA = "cccccccc-0000-4000-8000-0000000000a1";
@@ -48,7 +47,7 @@ const suite = useVenueDb({
 
 async function seedPlace(db: Database): Promise<Place> {
   await seedVenue(db, { name: "Actions", invoiceLocales: ["en"], operationDescription: "Meals" });
-  const locationId = brandLocationId(await venueLocationId(db));
+  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const { deviceId } = await seedDevice(db);
   const series: Record<string, string> = {};

@@ -5,7 +5,6 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import { readCalendarDays } from "./hours.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -30,7 +29,7 @@ it.each(["calendar", "special days", "opening hours"] as const)(
           timeZone: "Europe/Madrid",
           dayCutover: "06:00:00",
         });
-        const cfg = { locationId: locationId(await venueLocationId(tx)) };
+        const cfg = { locationId: await venueLocationId(tx) };
         const [special] = await tx
           .insert(specialDays)
           .values({ locationId: cfg.locationId, name: "Annual closure", repeatsYearly: true })

@@ -27,7 +27,6 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { CoreServices, ModuleRouteContext } from "@waitron/module";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -130,7 +129,7 @@ async function casaMarina() {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00:00",
   });
-  const locationId = brandLocationId(await venueLocationId(db));
+  const locationId = await venueLocationId(db);
   const fake = fakeCore(locationId);
   const app = new Hono();
   VENUE_SERVICE_ROUTES.mount(

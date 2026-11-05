@@ -27,7 +27,6 @@ import { createAgent, createClient, type PageJob } from "@waitron/print-agent";
 import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
 import {
   jobOrigin,
-  locationId as brandLocation,
   nodeId as brandNode,
   seriesId as brandSeries,
   workingOrderId as brandWorkingOrder,
@@ -277,7 +276,6 @@ async function venue() {
   ).makeBackend({ db: suite.db, clock, environment: "preproduction" });
   const cfg: TradingContext = {
     nodeId: brandNode(nodeId),
-    locationId: brandLocation(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

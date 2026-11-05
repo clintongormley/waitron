@@ -20,7 +20,7 @@ import { deployment, locations, nodes, tenants, withTransaction } from "@waitron
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets, withOperationAuthority } from "@waitron/module";
-import { locationId, nodeId, seriesId } from "@waitron/shared";
+import { nodeId, seriesId } from "@waitron/shared";
 import { certificate } from "@waitron/server-kit/certificate.js";
 import { activateAllocation } from "@waitron/fiscal-verifactu/src/allocation.js";
 import {
@@ -47,7 +47,7 @@ import type { BackupVerificationDeps } from "../backup-verification.js";
 
 export const verificationNode = {
   nodeId: nodeId("20000000-0000-4000-8000-000000000002"),
-  locationId: locationId("10000000-0000-4000-8000-000000000001"),
+  locationId: "10000000-0000-4000-8000-000000000001",
 };
 export const verificationTime = "2026-10-20T12:00:00.000Z";
 const vault = Buffer.alloc(32, 19).toString("base64");

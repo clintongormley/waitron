@@ -4,7 +4,7 @@ import { CORE_MIGRATIONS } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 import { computeEntryHash, verifyChain, type EntryHashInput } from "./chain-hash.js";
 import { appendToChain, readChain } from "./chain.js";
@@ -76,7 +76,7 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
+  nodeId = await seedNode(suite.db, locationId);
 });
 it("round-trips an automatic end with no human recorder and verifies its hash", async () => {
   const automatic = { ...extension, authorKind: "automatic" as const };
@@ -106,7 +106,6 @@ it("confirmation leaves the last captured out as the current state", async () =>
   const backend = new WorkforceBackend();
   const input = {
     nodeId,
-    locationId,
     personId,
     at: "2026-01-05T09:00:00.000Z",
     offsetMinutes: 0,
@@ -206,7 +205,7 @@ it("refuses a self-approval flag on an ordinary clock entry without changing the
 it.each(["chain", "record"])(
   "retains a stored self-approval flag added to a basic entry in the %s reader",
   async (reader) => {
-    const original = { ...content, personId, recordedByPersonId: personId, nodeId, locationId };
+    const original = { ...content, personId, recordedByPersonId: personId, nodeId };
     await suite.db.insert(timeEntries).values({
       ...original,
       entryKind: "in",

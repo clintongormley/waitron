@@ -28,7 +28,6 @@ import { fixtureSifIdentities } from "@waitron/fiscal-verifactu/test/sif-fixture
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node: ProvisionedNode = {
   nodeId: TENANT_A.nodeId,
-  locationId: TENANT_A.locationId as ProvisionedNode["locationId"],
 };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();

@@ -2,11 +2,12 @@ import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets, type WaitronModule } from "@waitron/module";
 import { resolveBackupKeyInputs } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
+import { openBackupQuery } from "@waitron/store";
 import { loadBackupConfig, loadRecoveryKey } from "./backup-config.js";
 import { OPTIONAL_BACKUP_STATE } from "./backup-optional-state.js";
 import type { Logger } from "./logger.js";
 import {
-  readArtifactNode,
+  readCopyNodeAndVenue,
   restoreDatabase,
   restoreSecrets,
   type ValidatedArtifact,
@@ -55,7 +56,10 @@ export async function placeBackupData(
     if (!allowed.has(entry.name))
       throw new AppError("restore.unexpected_entry", { name: entry.name });
   }
-  const node = await readArtifactNode(validated);
+  const copy = await openBackupQuery(validated.databasePath);
+  const { venueId } = await readCopyNodeAndVenue(copy.query, validated.secretEntries).finally(() =>
+    copy.close(),
+  );
   const read = (name: string) =>
     validated.secretEntries.find((entry) => entry.name === "secrets/" + name)?.bytes;
   const secretsEnv = read("secrets.env");
@@ -67,7 +71,8 @@ export async function placeBackupData(
     backupEnv: read("backup.env") ?? null,
   });
   loadRecoveryKey(env);
-  loadBackupConfig(env, node.locationId);
+  // Interim: the copy's venue row id; removed by S18e or S28.
+  loadBackupConfig(env, venueId);
   await placeBackupDatabase(validated.databasePath, input, validated.nodeDump);
   await restoreSecrets({
     entries: validated.secretEntries.filter((entry) => entry.name !== "secrets/backup.env"),

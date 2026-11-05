@@ -9,7 +9,6 @@ import { deployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type BackupVerificationContext } from "@waitron/module";
 import { openBackupQuery } from "@waitron/store";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, seedSoldRegistro, TENANT_A } from "../test/fixtures.js";
 import { activateAllocation } from "./allocation.js";
@@ -38,7 +37,7 @@ const pinned = vi.hoisted(() => ({
 }));
 vi.mock("./backup-verification-trust.js", () => ({ FISCAL_BACKUP_PUBLIC_TRUST: pinned }));
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "R", purpose: "rectificative" },
@@ -264,7 +263,6 @@ async function verify() {
         },
         source: {
           nodeId: node.nodeId,
-          locationId: node.locationId,
           environment: "preproduction",
           createdAt: time,
         },

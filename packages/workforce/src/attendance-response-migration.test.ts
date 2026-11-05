@@ -6,7 +6,6 @@ import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, newId, runMigrations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { readChain } from "./chain.js";
 import { computeEntryHash, verifyChain } from "./chain-hash.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
@@ -187,7 +186,7 @@ describe("populated A10-3 response-table upgrade", () => {
     await seedTenant(db);
     const subject = await seedPerson(db);
     const place = await seedLocation(db);
-    const node = await seedNode(db, brandLocationId(place));
+    const node = await seedNode(db, place);
     // Raw inserts, not today's writer, which cannot run on this older schema.
     const extension = {
       authorKind: "worker" as const,

@@ -6,7 +6,6 @@ import { vi } from "vitest";
 import { recordSale } from "@waitron/core";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { seriesId as brandSeriesId } from "@waitron/shared";
-import { locationId } from "@waitron/shared";
 import {
   invoiceSeries,
   readStandardSeriesId,
@@ -83,7 +82,7 @@ export async function stagedHourCrash(
     await seedVenueNodes(db);
     await stampDeployment(db, "preproduction");
     const key = await mintBreakGlassKey({ venue: db, node: nodeDb }, TENANT_A.nodeId);
-    const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+    const node = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
     const initial: OperationBinding = {
       module: "fiscal-verifactu",
       action: "setup",

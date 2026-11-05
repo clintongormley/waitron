@@ -11,6 +11,7 @@ import {
   devices,
   withTransaction,
   workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import {
@@ -35,7 +36,6 @@ import { deleteCredential, loadKeyRing, putCredential, type KeyRing } from "@wai
 import {
   AppError,
   decimal,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   workingOrderId as brandWorkingOrderId,
@@ -69,6 +69,7 @@ import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { systemClock } from "./till-backend.js";
 import { createOpenOrder } from "./working-order.js";
 import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
@@ -131,7 +132,7 @@ const stripeSeat: CardProviderContribution = createStripeCardProvider((() => {
 }) as unknown as MakeStripe);
 
 interface Venue {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   /** Two devices at the venue: payments start on `deviceId` unless a case says otherwise. */
   deviceId: string;
   otherDeviceId: string;
@@ -185,10 +186,11 @@ async function setup(
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
+  const venueId = await venueLocationId(suite.db);
   const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
-    locationId: brandLocationId(venue.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -271,8 +273,8 @@ async function setup(
     noopLog,
   );
   const devices = [
-    await seedDevice(suite.db, { locationId: brandLocationId(venue.locationId), label: "Barra 1" }),
-    await seedDevice(suite.db, { locationId: brandLocationId(venue.locationId), label: "Barra 2" }),
+    await seedDevice(suite.db, { locationId: venueId, label: "Barra 1" }),
+    await seedDevice(suite.db, { locationId: venueId, label: "Barra 2" }),
   ];
   return {
     cfg,

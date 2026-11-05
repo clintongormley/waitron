@@ -35,7 +35,7 @@ import {
 } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
-import { deviceOrigin, locationId } from "@waitron/shared";
+import { deviceOrigin } from "@waitron/shared";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
@@ -54,13 +54,14 @@ import {
 import { recoverTenderRefunds, runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import type { RefundAnswer, RefundLookup } from "@waitron/payments";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import type { TenderRefundRequest } from "./tender-refund-types.js";
 
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const AT = "2026-10-16T12:00:00.000Z";
 const PIN = "4567";
 const HASH = hashPin(PIN);
-let cfg: DeviceRequestConfig;
+let cfg: WithVenueRowId<DeviceRequestConfig>;
 let personId: string;
 let managerId: string;
 let sessionId: string;
@@ -78,7 +79,7 @@ beforeEach(async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Meals",
   });
-  const placeId = locationId(await venueLocationId(db));
+  const placeId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const device = await seedDevice(db, {
     capabilities: [

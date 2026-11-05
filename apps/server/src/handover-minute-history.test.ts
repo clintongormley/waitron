@@ -23,7 +23,6 @@ import {
   withPreparedModuleOperations,
   type OperationBinding,
 } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { FISCAL_HOUR_BACKUP_STATE } from "@waitron/fiscal-verifactu";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
@@ -56,8 +55,8 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 }));
 // One venue file holds both nodes: a mirror's venue.db is M1's whole database, so it is the copy.
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
-const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
+const primary = { nodeId: TENANT_A.nodeId };
+const standby = { nodeId: TENANT_A.nodeId2 };
 const ADMIN = "e1000000-0000-4000-8000-000000000004";
 const PASSWORD = "synthetic-handover-password";
 const credentials = { personId: ADMIN, password: PASSWORD };
@@ -156,7 +155,7 @@ beforeEach(async () => {
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Handover SL" });
   await suite.db.insert(locations).values({
-    id: primary.locationId,
+    id: TENANT_A.locationId,
     name: "Restaurant",
     invoiceLocales: ["en"],
     operationDescription: "Hospitality",
@@ -165,7 +164,7 @@ beforeEach(async () => {
   await suite.db.insert(nodes).values(
     [primary, standby].map((node) => ({
       id: node.nodeId,
-      locationId: node.locationId,
+      locationId: TENANT_A.locationId,
       name: node === primary ? "Primary" : "Standby",
       filingModule: "verifactu",
       taxModule: "vat",

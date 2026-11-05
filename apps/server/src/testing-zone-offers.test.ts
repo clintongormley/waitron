@@ -30,11 +30,12 @@ import {
   createProduct,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
+import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import { parkOrder } from "./working-order.js";
 import { createStation } from "./kitchen.js";
 import { createTable } from "./testing/live-table.js";
 import type { OriginConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { routeCategoryTo, routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -47,7 +48,7 @@ const suite = useVenueDb({
 });
 
 interface Venue {
-  cfg: OriginConfig;
+  cfg: WithVenueRowId<OriginConfig>;
   catalogueId: string;
   coffee: string;
   toast: string;
@@ -64,9 +65,9 @@ async function seedVenueWithMenu(db: Database): Promise<Venue> {
     operationDescription: "Retail",
   });
   await seedLegacySellingUnits(db);
-  const locationId = brandLocationId(await venueLocationId(db));
+  const locationId = await venueLocationId(db);
   const kitchen = await seedKitchenStation(db, { locationId });
-  const cfg: OriginConfig = {
+  const cfg: WithVenueRowId<OriginConfig> = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(await seedNode(db)),
     locationId,

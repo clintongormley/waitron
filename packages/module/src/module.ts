@@ -886,7 +886,6 @@ export interface VenueServiceContribution {
   ): Promise<DepartmentReceiptPolicy>;
   saveDepartmentReceiptSettings(
     tx: Transaction,
-    cfg: DepartmentReceiptScope,
     departmentId: string,
     input: DepartmentReceiptWrite,
     rasters?: ReceiptLogoRasters,
@@ -909,12 +908,10 @@ export interface VenueServiceContribution {
   ): Promise<PrintedDepartmentReceipt>;
   readDepartmentLogoRasters(
     tx: Transaction,
-    cfg: DepartmentReceiptScope,
     departmentId: string,
   ): Promise<ReceiptLogoRasters | null>;
   writeDepartmentReceipt(
     tx: Transaction,
-    cfg: DepartmentReceiptScope,
     departmentId: string,
     receipt: DepartmentReceiptConfig,
     rasters?: ReceiptLogoRasters,

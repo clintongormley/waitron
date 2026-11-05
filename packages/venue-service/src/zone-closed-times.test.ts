@@ -12,7 +12,6 @@ import {
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
@@ -44,7 +43,7 @@ async function venue() {
       operationDescription: "Restaurant",
     });
     const venueId = await venueLocationId(db);
-    const cfg = { locationId: locationId(venueId) };
+    const cfg = { locationId: venueId };
     const departmentId = (await createDepartment(db, { name: "Dining", orderStart: "table" })).id;
     const zone = async (name: string, displayOrder: number, active = true) => {
       const [z] = await db

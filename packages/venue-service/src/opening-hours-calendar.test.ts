@@ -22,7 +22,6 @@ import {
 import { eq } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId, type LocationId } from "@waitron/shared";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { CALENDAR_MONTH_PLAN_READS } from "./dashboard/live-queries.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -65,7 +64,7 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
     });
   const venueId = await venueLocationId(suite.db);
   const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
-  const cfg: { locationId: LocationId } = { locationId: locationId(venueId) };
+  const cfg: { locationId: string } = { locationId: venueId };
   return run(async (tx) => {
     const menuId = (await createCatalogue(tx, { name: `Menu ${randomUUID()}` })).id;
     const { document } = await buildMenuDocument(tx, menuId);

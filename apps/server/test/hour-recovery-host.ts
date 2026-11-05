@@ -24,7 +24,7 @@ import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedVenueNodes, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import "@waitron/fiscal-verifactu/src/schema/allocations.js";
-import { locationId, seriesId } from "@waitron/shared";
+import { seriesId } from "@waitron/shared";
 import { mintBreakGlassKey } from "../src/break-glass.js";
 import "../src/recovery-module-operation.js";
 import { validateArtifact } from "../src/restore.js";
@@ -107,7 +107,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
 export const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-export const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+export const node = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
 export const binding: OperationBinding = {
   module: "fiscal-verifactu",
   action: "restore",

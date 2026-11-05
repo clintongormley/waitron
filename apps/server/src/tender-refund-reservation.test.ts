@@ -18,8 +18,9 @@ import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/t
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
-import { deviceOrigin, locationId } from "@waitron/shared";
+import { deviceOrigin } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import type { TenderRefundRequest } from "./tender-refund-types.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
 
@@ -32,7 +33,7 @@ const store = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   resetPerTest: true,
 });
-let cfg: DeviceRequestConfig;
+let cfg: WithVenueRowId<DeviceRequestConfig>;
 let seriesId: string;
 let orderId: string;
 let number: number;
@@ -43,7 +44,7 @@ beforeEach(async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Meals",
   });
-  const placeId = locationId(await venueLocationId(db));
+  const placeId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const { deviceId } = await seedDevice(db);
   const [series] = await db
@@ -687,7 +688,6 @@ describe("cash reservation without the optional payments module", () => {
       invoiceLocales: ["en-GB"],
       operationDescription: "Meals",
     });
-    const cashLocationId = locationId(await venueLocationId(db));
     const cashNodeId = await seedNode(db);
     const { deviceId } = await seedDevice(db);
     const [series] = await db
@@ -720,7 +720,7 @@ describe("cash reservation without the optional payments module", () => {
     const answer = await withTransaction(db, (tx) =>
       reserveTenderRefund(
         tx,
-        { ...cfg, nodeId: cashNodeId, locationId: cashLocationId, origin: deviceOrigin(deviceId) },
+        { ...cfg, nodeId: cashNodeId, origin: deviceOrigin(deviceId) },
         sale!.id,
         request(tender!.id),
         ACTOR,

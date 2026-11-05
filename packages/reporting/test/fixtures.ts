@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import {
   addDecimal,
-  locationId as brandLocationId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
   decimal,
@@ -71,7 +70,7 @@ export async function seedVenueWithSeries(db: Database): Promise<SeededVenue> {
     locationId = location!.id;
   }
   const { deviceId } = await seedDevice(db, { locationId });
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  const nodeId = await seedNode(db, locationId);
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId, code: "A" })
@@ -88,7 +87,7 @@ export async function seedNodeAndSeries(
   venue: { locationId: string },
   seriesCode = "B",
 ): Promise<{ nodeId: NodeId; seriesId: SeriesId }> {
-  const nodeId = await seedNode(db, brandLocationId(venue.locationId));
+  const nodeId = await seedNode(db, venue.locationId);
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId, code: seriesCode })
@@ -98,7 +97,7 @@ export async function seedNodeAndSeries(
 
 /** Another device at `locationId`, for a test that needs money taken on two. */
 export async function seedVenueDevice(db: Database, locationId: string): Promise<DeviceId> {
-  return (await seedDevice(db, { locationId: brandLocationId(locationId) })).deviceId;
+  return (await seedDevice(db, { locationId: locationId })).deviceId;
 }
 
 /**

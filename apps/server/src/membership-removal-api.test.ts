@@ -21,7 +21,6 @@ import {
   type MembershipNode,
 } from "@waitron/membership";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { locationId as brandLocationId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
@@ -275,7 +274,7 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
 
     it("refuses a standby this database holds a node row for as membership.standby_joined (409)", async () => {
       const p = await primary();
-      const joinedId = await seedNode(p.db, brandLocationId(p.locationId));
+      const joinedId = await seedNode(p.db, p.locationId);
       await holdChart(p, [self(p), standby(joinedId)]);
       await expectRefused(p, joinedId, 409, "membership.standby_joined");
     });
@@ -757,7 +756,7 @@ describe("GET /management-api/servers", () => {
   it("lists the held chart with removable set by the same rule the removal applies", async () => {
     const p = await primary();
     const neverJoined = standby();
-    const joinedId = await seedNode(p.db, brandLocationId(p.locationId));
+    const joinedId = await seedNode(p.db, p.locationId);
     const joined = standby(joinedId, "https://joined.deli.test");
     const former: MembershipNode = {
       nodeId: randomUUID(),

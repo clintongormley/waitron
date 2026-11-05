@@ -27,6 +27,7 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { deploymentEnvironment } from "./config.js";
 import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createStation } from "./kitchen.js";
 import { deleteStation } from "./station-delete.js";
 import { parkOrder } from "./working-order.js";
@@ -149,7 +150,7 @@ async function moveItemToStation(itemId: string, stationId: string): Promise<voi
 /** Seed a `cloud_poll` printer for the venue — needs only a poll id, so no print agent has to be
  *  seeded to satisfy the transport CHECK. Through the table definition: `printers.id` comes from a
  *  `$defaultFn` raw SQL never reaches. */
-async function seedPrinter(cfg: TradingContext): Promise<string> {
+async function seedPrinter(cfg: WithVenueRowId): Promise<string> {
   const [row] = await suite.db
     .insert(printers)
     .values({
@@ -186,7 +187,7 @@ async function deviceBindings(deviceId: string): Promise<{
   return row!;
 }
 
-async function seedNamedPrinters(cfg: TradingContext, names: string[]): Promise<string[]> {
+async function seedNamedPrinters(cfg: WithVenueRowId, names: string[]): Promise<string[]> {
   const rows = await suite.db
     .insert(printers)
     .values(
@@ -202,7 +203,7 @@ async function seedNamedPrinters(cfg: TradingContext, names: string[]): Promise<
 }
 
 /** An office (page) printer at the venue's location; its id is never a receipt printer's. */
-async function seedPagePrinter(cfg: TradingContext): Promise<string> {
+async function seedPagePrinter(cfg: WithVenueRowId): Promise<string> {
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({

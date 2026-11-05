@@ -5,7 +5,6 @@ import { deployment, invoiceSeries, withTransaction, type Transaction } from "@w
 import { sql } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationInput } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import * as activation from "./allocation-operation.js";
@@ -26,7 +25,7 @@ import { establishDormantAllocation } from "./standby-allocation.js";
 import { fiscalReservations } from "./schema/reservations.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -707,15 +706,4 @@ it("refuses allocation references when the stored node is absent", async () => {
   await expect(
     readAllocated(bases, { ...node, nodeId: "missing" as typeof node.nodeId }),
   ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "node_mismatch" } });
-});
-
-// A1301: deleted with cfg in S18
-it("reads committed allocation references without location scope", async () => {
-  const committed = await activateForRead();
-  expect(
-    await readAllocated(bases, {
-      ...node,
-      locationId: locationId("f0000000-0000-4000-8000-000000000099"),
-    }),
-  ).toEqual(committed.series);
 });

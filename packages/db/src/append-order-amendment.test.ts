@@ -15,7 +15,7 @@
  */
 import { asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceOrigin, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { deviceOrigin, jobOrigin } from "@waitron/shared";
 import type { Origin } from "@waitron/shared";
 import { appendOrderAmendment, type AppendAmendmentInput } from "./append-order-amendment.js";
 import type { Transaction } from "./client.js";
@@ -68,7 +68,7 @@ describe("order_amendments append helper", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    nodeB = await seedNode(admin, brandLocationId(LOCATION_B));
+    nodeB = await seedNode(admin, LOCATION_B);
   });
 
   /** Seeds one fresh open working order and returns its id. A fresh chain per test so sequence

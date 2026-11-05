@@ -20,7 +20,6 @@ import {
   classifySavedTimeZone,
   businessDayAt,
   cutoverForBusinessDay,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   normaliseUuid,
 } from "@waitron/shared";
@@ -58,7 +57,6 @@ export interface InitialModuleInput {
 }
 
 export interface VenueResult {
-  locationId: string;
   nodeId: string;
   /** The active series ids, in the plan's purpose order. */
   seriesIds: string[];
@@ -373,10 +371,7 @@ export async function applyVenue(
             );
           }
           if (reusingVenue) break;
-          const node = {
-            locationId: brandLocationId(locationId),
-            nodeId: brandNodeId(nodeId),
-          };
+          const node = { nodeId: brandNodeId(nodeId) };
           const input = inputs.get(action.module);
           let report: string;
           if (input === undefined) {
@@ -462,7 +457,7 @@ export async function applyVenue(
       const references = (
         await resolveSeries(
           tx,
-          { locationId: brandLocationId(locationId), nodeId: brandNodeId(nodeId) },
+          { nodeId: brandNodeId(nodeId) },
           seriesBases.map((base) => ({ ...base })),
         )
       ).map((reference) => ({ ...reference }));
@@ -501,7 +496,7 @@ export async function applyVenue(
         ),
       );
     }
-    const result = { locationId, nodeId, seriesIds, seeded };
+    const result = { nodeId, seriesIds, seeded };
     await deps.beforeCommit?.(tx, result);
     for (const [name] of prepared) moduleOperationFor(prepared, name, nodeId, "setup");
     return result;

@@ -20,7 +20,7 @@ import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 import { liveResourceTypes } from "./live-resources.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { TableRemoval } from "@waitron/module";
-import { AppError, locationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { removeLiveTables, tableDeleteRefusals } from "./table-removal.js";
 
@@ -50,7 +50,7 @@ for (const enabled of [true, false]) {
         operationDescription: "test",
       });
       const venueId = await venueLocationId(suite.db);
-      const cfg = { locationId: locationId(venueId) };
+      const cfg = { locationId: venueId };
       const [zone] = await suite.db
         .insert(floorZones)
         .values({ locationId: cfg.locationId, name: "Stream hierarchy" })
@@ -165,7 +165,7 @@ for (const enabled of [true, false]) {
           operationDescription: "test",
         });
         const venueId = await venueLocationId(suite.db);
-        const cfg = { locationId: locationId(venueId) };
+        const cfg = { locationId: venueId };
         const [zone] = await suite.db
           .insert(floorZones)
           .values({ locationId: cfg.locationId, name: "Hierarchy" })

@@ -7,13 +7,12 @@ import {
   tryGetCredential,
   type KeyRing,
 } from "@waitron/credentials";
-import { deployment, invoiceSeries, venueLocationId, withTransaction } from "@waitron/db";
+import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { ALLOCATED_FISCAL_STANDBY, currentSif } from "@waitron/fiscal-verifactu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
-import type { LocationId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { Endorsement } from "@waitron/membership";
 import type { ReservedIdentity } from "./mirror-bundle.js";
 import { ALL_MODULES } from "./modules.js";
@@ -40,7 +39,6 @@ describe("establishReservedStandbyIdentity", () => {
     timeoutMs: 60_000,
   });
 
-  let locationId: LocationId;
   let NIF: string;
 
   // A fresh tenant per test: the idempotency case starts from an unsealed vault, so it cannot share a
@@ -51,7 +49,6 @@ describe("establishReservedStandbyIdentity", () => {
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });
-    locationId = brandLocationId(await venueLocationId(suite.db));
     const t = await suite.db.execute<{ tax_id: string }>(
       sql`select tax_id from tenants where id = 1`,
     );
@@ -95,11 +92,7 @@ describe("establishReservedStandbyIdentity", () => {
     );
     expect(series.rows[0]!.n).toBe(0);
     await fixture.transaction(suite.db, "promote", (tx, operation) =>
-      ALLOCATED_FISCAL_STANDBY.activate!(
-        tx,
-        { nodeId: brandNodeId(standby.nodeId), locationId },
-        operation,
-      ),
+      ALLOCATED_FISCAL_STANDBY.activate!(tx, { nodeId: brandNodeId(standby.nodeId) }, operation),
     );
     const sif = await withTransaction(suite.db, (tx) =>
       currentSif(tx, brandNodeId(standby.nodeId)),
@@ -323,7 +316,6 @@ describe("establishReservedStandbyIdentity", () => {
   async function preparedReservation(standby: StandbyIdentity) {
     const primary = {
       nodeId: await seedNode(suite.db),
-      locationId: brandLocationId(locationId),
     };
     await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
     await withTransaction(suite.db, (tx) =>

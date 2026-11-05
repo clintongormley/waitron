@@ -10,7 +10,6 @@ import "./errors.js"; // side-effect: registers provisioning.invalid_locales on 
 
 /** The node designated by a mirror bundle. */
 export interface AdoptResult {
-  locationId: string;
   nodeId: string;
 }
 

@@ -27,7 +27,7 @@ import {
   prepareStandbyDatabase,
   takenOverSeries,
 } from "./testing/allocated-contract.js";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 
 // A mutable copy, so one case can add a module for its own duration.
 vi.mock("./modules.js", async (importOriginal) => {
@@ -105,7 +105,6 @@ async function setupVenue(): Promise<AdoptResult> {
     { db, modules: ALL_MODULES },
   );
   const designated: AdoptResult = {
-    locationId: venue.locationId,
     nodeId: venue.nodeId,
   };
   await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, designated.nodeId);
@@ -153,7 +152,6 @@ describe("assembleMirrorBundle (primary side)", () => {
     const { bundle } = await allocatedBundle(standby, { designated: stale });
     expect(bundle.designated).not.toHaveProperty("seriesId");
     expect(bundle.designated.nodeId).toBe(designated.nodeId);
-    expect(bundle.designated.locationId).toBe(designated.locationId);
   });
 
   it("assembles a bundle carrying tenant + node identity and the box's connection details", async () => {
@@ -335,7 +333,7 @@ describe("assembleMirrorBundle (primary side)", () => {
 });
 
 function primaryNode() {
-  return { nodeId: nodeId(designated.nodeId), locationId: locationId(designated.locationId) };
+  return { nodeId: nodeId(designated.nodeId) };
 }
 async function allocatedBundle(
   standby: { nodeId: string; publicKey: string },

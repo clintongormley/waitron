@@ -6,7 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deviceProfiles, withTransaction } from "@waitron/db";
+import { deviceProfiles, venueLocationId, withTransaction } from "@waitron/db";
 import { readProfilePrinterLists } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -54,10 +54,9 @@ describe("seedDemoRestaurant", () => {
     "closes only the Terrace from 23:00 to the Restaurant's midnight close, after its sales, with a %s changeover",
     async (cutover) => {
       const venue = await provisionVenue();
+      const venueId = await venueLocationId(suite.db);
       await withTransaction(suite.db, (tx) =>
-        tx.execute(
-          sql`update locations set day_cutover = ${cutover} where id = ${venue.locationId}`,
-        ),
+        tx.execute(sql`update locations set day_cutover = ${cutover} where id = ${venueId}`),
       );
       const readClosures = () =>
         suite.db.execute<{ zone: string; weekday: number; starts_at: string; ends_at: string }>(sql`
@@ -65,7 +64,7 @@ describe("seedDemoRestaurant", () => {
           from zone_day_ranges r join zone_days c on c.id = r.day_id
           join seasons se on se.id = c.season_id and se.starts_on = '12-01'
           join floor_zones z on z.id = c.zone_id
-          where z.location_id = ${venue.locationId}
+          where z.location_id = ${venueId}
           order by z.name, c.weekday`);
       const realSeedSales = salesSeed.seedSales;
       let closuresAfterSales: unknown;
@@ -102,6 +101,7 @@ describe("seedDemoRestaurant", () => {
 
   it("seeds department service periods instead of a second opening-hours grid", async () => {
     const venue = await provisionVenue();
+    const venueId = await venueLocationId(suite.db);
     await seedDemoRestaurant(suite.db, {
       venue,
       locale: LOCALE,
@@ -121,7 +121,7 @@ describe("seedDemoRestaurant", () => {
       join department_days t on t.id = s.day_id
       join seasons se on se.id = t.season_id and se.starts_on = '12-01'
       join departments d on d.id = p.department_id
-      where d.location_id = ${venue.locationId}
+      where d.location_id = ${venueId}
       order by d.name, t.weekday, s.starts_at`);
     expect(rows).toEqual([
       ...[1, 2, 3, 4, 5, 6].map((weekday) => ({
@@ -147,6 +147,7 @@ describe("seedDemoRestaurant", () => {
   it("seeds Christmas Day as a closed special day that repeats every year", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-06T10:00:00Z") });
     const venue = await provisionVenue();
+    const venueId = await venueLocationId(suite.db);
     await seedDemoRestaurant(suite.db, {
       venue,
       locale: LOCALE,
@@ -163,7 +164,7 @@ describe("seedDemoRestaurant", () => {
     }>(sql`
       select s.name, s.repeats_yearly, d.date, d.closed_all_day, d.holiday_name
       from special_days s join special_day_dates d on d.special_day_id = s.id
-      where s.location_id = ${venue.locationId}`);
+      where s.location_id = ${venueId}`);
     expect(rows).toEqual([
       {
         name: "Christmas Day",
@@ -204,6 +205,7 @@ describe("seedDemoRestaurant", () => {
 
   it("connects the demo printer to every device profile and the preparation stations", async () => {
     const venue = await provisionVenue();
+    const venueId = await venueLocationId(suite.db);
     await seedDemoRestaurant(suite.db, {
       venue,
       locale: LOCALE,
@@ -221,7 +223,7 @@ describe("seedDemoRestaurant", () => {
     }>(sql`
       select p.id, p.name, p.transport, p.has_cash_drawer,
         (select cast(count(*) as integer) from station_printers sp where sp.printer_id = p.id) as ticket_stations
-      from printers p where p.location_id = ${venue.locationId}`);
+      from printers p where p.location_id = ${venueId}`);
     expect(printers).toEqual([
       {
         id: expect.any(String),
@@ -282,6 +284,7 @@ describe("seedDemoRestaurant", () => {
 
   it("routes seeded drinks by zone, dishes to Kitchen, and a test-only no-preparation folder without work", async () => {
     const venue = await provisionVenue();
+    const venueId = await venueLocationId(suite.db);
     await seedDemoRestaurant(suite.db, {
       venue,
       locale: LOCALE,
@@ -292,9 +295,9 @@ describe("seedDemoRestaurant", () => {
 
     await withTransaction(suite.db, async (tx) => {
       const { rows: stations } = await tx.execute<{ id: string; name: string }>(sql`
-        select id, name from kitchen_stations where location_id = ${venue.locationId}`);
+        select id, name from kitchen_stations where location_id = ${venueId}`);
       const { rows: zones } = await tx.execute<{ id: string; name: string }>(sql`
-        select id, name from floor_zones where location_id = ${venue.locationId}`);
+        select id, name from floor_zones where location_id = ${venueId}`);
       const { products } = await listAvailableProducts(tx);
       const drink = products.find((product) => product.name === "House Negroni")!;
       const dish = products.find((product) => product.name === "Sirloin")!;
@@ -350,6 +353,7 @@ describe("seedDemoRestaurant", () => {
 
   it("gives each demo station its own colour", async () => {
     const venue = await provisionVenue();
+    const venueId = await venueLocationId(suite.db);
     await seedDemoRestaurant(suite.db, {
       venue,
       locale: LOCALE,
@@ -359,7 +363,7 @@ describe("seedDemoRestaurant", () => {
     });
     const { rows } = await suite.db.execute<{ name: string; colour: string }>(sql`
       select name, colour from kitchen_stations
-      where location_id = ${venue.locationId} order by name`);
+      where location_id = ${venueId} order by name`);
     expect(rows).toEqual([
       { name: "Deli counter", colour: "green" },
       { name: "Downstairs bar", colour: "blue" },
@@ -370,6 +374,7 @@ describe("seedDemoRestaurant", () => {
 
   it("keeps drinks downstairs without station hours or an evening period", async () => {
     const venue = await provisionVenue();
+    const venueId = await venueLocationId(suite.db);
     await seedDemoRestaurant(suite.db, {
       venue,
       locale: LOCALE,
@@ -385,7 +390,7 @@ describe("seedDemoRestaurant", () => {
       expect(retired).toEqual([]);
 
       const { rows: subjects } = await tx.execute<{ id: string; name: string }>(sql`
-        select id, name from departments where location_id = ${venue.locationId} order by name`);
+        select id, name from departments where location_id = ${venueId} order by name`);
       const weeks: Record<string, string[]> = {};
       for (const subject of subjects) {
         const { rows: ranges } = await tx.execute<{
@@ -415,14 +420,14 @@ describe("seedDemoRestaurant", () => {
 
       const { rows: periods } = await tx.execute<{ name: string }>(sql`
         select p.name from menu_periods p join departments d on d.id = p.department_id
-        where d.location_id = ${venue.locationId} order by d.name`);
+        where d.location_id = ${venueId} order by d.name`);
       expect(periods).toEqual([{ name: "Open" }, { name: "Open" }]);
 
       const { rows: zones } = await tx.execute<{ id: string }>(sql`
         select id from floor_zones
-        where location_id = ${venue.locationId} and name = 'Upstairs bar'`);
+        where location_id = ${venueId} and name = 'Upstairs bar'`);
       const { rows: stations } = await tx.execute<{ id: string; name: string }>(sql`
-        select id, name from kitchen_stations where location_id = ${venue.locationId}`);
+        select id, name from kitchen_stations where location_id = ${venueId}`);
       const { products } = await listAvailableProducts(tx);
       const drink = products.find((product) => product.name === "House Negroni")!;
       for (const [instant, stationName] of [
@@ -756,6 +761,7 @@ describe("seedDemoRestaurant", () => {
         postalCode,
         city: province,
       })();
+      const venueId = await venueLocationId(suite.db);
       await seedDemoRestaurant(suite.db, {
         venue,
         locale: "es",
@@ -767,7 +773,7 @@ describe("seedDemoRestaurant", () => {
       const restaurantPeriods = await suite.db.execute<{ count: number }>(sql`
         select count(*) as count from zone_service_policies p
         join menu_periods d on d.department_id = p.department_id
-        where p.location_id = ${venue.locationId} and p.is_counter_default`);
+        where p.location_id = ${venueId} and p.is_counter_default`);
       expect(restaurantPeriods.rows).toEqual([{ count: 1 }]);
 
       const read = await withTransaction(suite.db, async (tx) => {

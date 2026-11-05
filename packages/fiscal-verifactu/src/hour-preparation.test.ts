@@ -7,7 +7,6 @@ import {
   type OperationBinding,
   type ModuleOperationHost,
 } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
@@ -129,7 +128,6 @@ function fixture() {
               tx,
               {
                 nodeId: TENANT_A.nodeId,
-                locationId: locationId(TENANT_A.locationId),
               },
               operation,
             ),
@@ -292,7 +290,6 @@ it("keeps the shared exclusion held through the complete prepared callback", asy
         tx,
         {
           nodeId: TENANT_A.nodeId,
-          locationId: locationId(TENANT_A.locationId),
         },
         retained,
       ),
@@ -324,7 +321,6 @@ it("a different authenticated operator cannot adopt another operator's spent int
             tx,
             {
               nodeId: TENANT_A.nodeId,
-              locationId: locationId(TENANT_A.locationId),
             },
             prepared,
           ),
@@ -551,7 +547,6 @@ it("the hosted adapter keeps the host scope separate from clock metadata", async
           tx,
           {
             nodeId: TENANT_A.nodeId,
-            locationId: locationId(TENANT_A.locationId),
           },
           operation,
         ),

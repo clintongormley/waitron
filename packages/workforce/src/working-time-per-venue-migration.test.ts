@@ -8,7 +8,7 @@ import { CORE_MIGRATIONS, newId, openVenueDatabase, type Database } from "@waitr
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { applyMigrations } from "@waitron/migrations";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 import { appendToChain, readChain } from "./chain.js";
 import { computeEntryHash, verifyChain } from "./chain-hash.js";
@@ -60,7 +60,7 @@ async function seedPlace(db: Database) {
   await seedTenant(db);
   const personId = await seedPerson(db);
   const place = await seedLocation(db);
-  const nodeId = await seedNode(db, brandLocationId(place));
+  const nodeId = await seedNode(db, place);
   return { personId, place, nodeId };
 }
 

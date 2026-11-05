@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { appendToChain, readChain, type ChainKey, type TimeEntryAppend } from "./chain.js";
@@ -31,7 +31,7 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
+  nodeId = await seedNode(suite.db, locationId);
 });
 
 function key(node = nodeId): ChainKey {
@@ -94,7 +94,7 @@ describe("appendToChain under concurrent callers", () => {
   it("never collides between two nodes on the SAME location — independent heads", async () => {
     // Both nodes claim the same sequence_no values at one location; they cannot collide only because
     // `node_id` is in `time_entries_chain_position_uq`.
-    const nodeB = await seedNode(suite.db, brandLocationId(locationId));
+    const nodeB = await seedNode(suite.db, locationId);
     const perNode = WRITERS / 2;
     // Interleaved, so each node produces sequence_no 1..perNode.
     await appendAll((i) => key(i % 2 === 0 ? nodeId : nodeB));

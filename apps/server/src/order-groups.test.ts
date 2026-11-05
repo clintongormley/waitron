@@ -52,8 +52,9 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { createPrinter } from "@waitron/printing";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deviceRequestCfg, seedSessionDevice } from "./testing/session-device.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -145,7 +146,7 @@ const COURSE_OF: Record<Dish, keyof typeof COURSES> = {
 };
 
 interface Venue {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   productId: Record<Dish, string>;
   printerId: string;
   /** The one kitchen station every routed dish goes to. */
@@ -165,16 +166,16 @@ async function setupVenue(): Promise<Venue> {
     operationDescription: "Restaurante",
   });
   const locationId = await venueLocationId(db);
-  const stationId = await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
+  const stationId = await seedKitchenStation(db, { locationId: locationId });
   const nodeId = await seedNode(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies TradingContext);
+  } satisfies WithVenueRowId);
   return inTx(async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Carta" });
     const category = await createCategory(tx, { name: "Platos" });

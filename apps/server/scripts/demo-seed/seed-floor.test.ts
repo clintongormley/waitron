@@ -12,12 +12,11 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { listAvailableProducts } from "@waitron/catalogue";
 import { listSalePolicies, readFloorPlanSets, resolveMakers } from "@waitron/venue-service";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { readLayout } from "../../src/floor-plan.js";
 import { defaultLayout } from "../../src/testing/floor-sets.js";
 import type { Placement } from "../../src/floor-reset-plan.js";
 import { createTable } from "../../src/testing/live-table.js";
-import type { TradingContext } from "../../src/trading-context.js";
+import type { WithVenueRowId } from "../../src/testing/venue-row-id.js";
 import { DEMO_TABLES } from "./testing/data.js";
 import { seedFloor } from "./seed-floor.js";
 import { seedCatalogues } from "./seed-catalogue.js";
@@ -272,7 +271,7 @@ describe("seedFloor", () => {
     const cfg = {
       nodeId: "unused",
       seriesId: "unused",
-      locationId: brandLocationId(locationId),
+      locationId: locationId,
     } as unknown as Parameters<typeof defaultLayout>[1];
 
     const res = await withTransaction(suite.db, async (tx) => {
@@ -442,7 +441,7 @@ describe("seedFloor", () => {
         sql`select zone_id from zone_service_policies
             where location_id = ${locationId} and is_counter_default limit 1`,
       );
-      await createTable(tx, { locationId: brandLocationId(locationId) } as TradingContext, {
+      await createTable(tx, { locationId: locationId } as WithVenueRowId, {
         label: "Stray",
         zoneId: rows[0]!.zone_id,
       });
@@ -464,7 +463,7 @@ describe("seedFloor", () => {
         where location_id = ${locationId} and is_counter_default limit 1`);
       await createTable(
         tx,
-        { locationId: brandLocationId(locationId) } as TradingContext,
+        { locationId: locationId } as WithVenueRowId,
         { label: "Disabled stray", zoneId: rows[0]!.zone_id },
         { today: false },
       );

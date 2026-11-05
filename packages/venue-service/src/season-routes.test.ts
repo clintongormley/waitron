@@ -26,7 +26,6 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -65,7 +64,7 @@ async function routed() {
     dayCutover: "06:00",
   });
   const venueId = await venueLocationId(db);
-  const cfg = { locationId: brandLocationId(venueId) };
+  const cfg = { locationId: venueId };
   const made = await scoped(async (tx) => {
     const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
     const menuId = (await createCatalogue(tx, { name: `Dinner ${randomUUID()}` })).id;

@@ -18,6 +18,7 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -50,7 +51,7 @@ import {
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import {
   MANUAL_PROVIDER,
   SimulatorPaymentProvider,
@@ -73,6 +74,7 @@ import { buildCardProvider } from "./boot.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { OrderFlow } from "./till-config.js";
 import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
@@ -131,10 +133,10 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venue.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -148,7 +150,7 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
  * (1.50 gross, general/21%) and one kg product (24.90 €/kg, reduced/10%).
  */
 async function setupVenue(): Promise<{
-  cfg: TradingContext;
+  cfg: WithVenueRowId;
   catalogueId: string;
   available: (AvailableProduct & { menuItemId: string })[];
   operatorId: string;
@@ -184,7 +186,8 @@ async function setupVenue(): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = tillConfigFromVenue(venue);
+  const venueId = await venueLocationId(suite.db);
+  const cfg = tillConfigFromVenue(venue, venueId);
   const [department] = await suite.db
     .select()
     .from(departments)
@@ -3398,7 +3401,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
 
   async function venueWithTill(orderFlow: OrderFlow = "prepay") {
     const venue = await setupVenue();
-    const cfg: TradingContext = { ...venue.cfg };
+    const cfg: WithVenueRowId = { ...venue.cfg };
     await withTransaction(suite.db, (tx) =>
       offerProducts(tx, cfg, {
         orderStart: "counter",

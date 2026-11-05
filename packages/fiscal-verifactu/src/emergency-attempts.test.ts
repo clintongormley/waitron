@@ -8,7 +8,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationInput } from "@waitron/module";
-import { AppError, locationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
@@ -17,7 +17,7 @@ import { fiscalAllocations } from "./schema/allocations.js";
 import { withEmergencyAttempt } from "./emergency-attempt.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId };
 const binding = {
   module: "fiscal-verifactu",
   action: "restore",

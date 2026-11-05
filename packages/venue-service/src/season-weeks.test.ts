@@ -18,7 +18,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { readOpeningHoursModel, replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -63,7 +62,7 @@ async function venue() {
     timeZone: "Europe/Madrid",
   });
   const venueId = await venueLocationId(db);
-  const cfg: { locationId: LocationId } = { locationId: brandLocationId(venueId) };
+  const cfg: { locationId: string } = { locationId: venueId };
   const [zone] = await db
     .insert(floorZones)
     .values({ locationId: cfg.locationId, name: "Dining room", displayOrder: 0 })

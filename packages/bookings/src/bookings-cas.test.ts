@@ -18,7 +18,6 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { bookings } from "./schema/bookings.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 import { cancelBooking, createBooking } from "./bookings.js";
@@ -29,7 +28,7 @@ const LOCALE = "es-ES";
 
 async function setupVenue(
   db: Database,
-): Promise<{ cfg: { locationId: LocationId }; createdBy: string }> {
+): Promise<{ cfg: { locationId: string }; createdBy: string }> {
   await seedVenue(db, {
     name: "Front counter",
     invoiceLocales: [LOCALE],
@@ -37,14 +36,14 @@ async function setupVenue(
   });
   const locationId = await venueLocationId(db);
   await seedNode(db);
-  return { cfg: { locationId: brandLocationId(locationId) }, createdBy: crypto.randomUUID() };
+  return { cfg: { locationId: locationId }, createdBy: crypto.randomUUID() };
 }
 
 /** An ACTIVE dining table for the venue (createTable's raw equivalent — the verb lives in
  * apps/server, which a module cannot import). */
 async function seedTable(
   db: Database,
-  cfg: { locationId: LocationId },
+  cfg: { locationId: string },
   label: string,
 ): Promise<string> {
   const [zone] = await db

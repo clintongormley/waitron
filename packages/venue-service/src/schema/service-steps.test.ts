@@ -18,7 +18,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "../migrations.js";
 import { departments } from "./service.js";
 import { serviceStepCompletions, serviceSteps } from "./service-steps.js";
@@ -40,7 +39,7 @@ beforeAll(async () => {
     operationDescription: "Hospitality",
   });
   const venueId = await venueLocationId(db);
-  const cfg = { locationId: brandLocationId(venueId) };
+  const cfg = { locationId: venueId };
   const [department] = await db
     .insert(departments)
     .values({ locationId: cfg.locationId, name: "Restaurant", tradingName: "Restaurant" })

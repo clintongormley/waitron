@@ -1,19 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { floorPlanSets, withTransaction } from "@waitron/db";
+import { floorPlanSets, withTransaction, venueLocationId } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { createDepartment, createServiceZone, linkFloorPlanSet } from "@waitron/venue-service";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 
 const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
@@ -28,7 +28,7 @@ const suite = useVenueDb({
 
 const noopLog: Logger = () => {};
 
-async function provisionTenant(): Promise<TradingContext> {
+async function provisionTenant(): Promise<WithVenueRowId> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -73,9 +73,10 @@ async function provisionTenant(): Promise<TradingContext> {
       });
     }
   });
+  const venueId = await venueLocationId(suite.db);
   return {
     nodeId: nodeId(venue.nodeId),
-    locationId: locationId(venue.locationId),
+    locationId: venueId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
@@ -104,7 +105,7 @@ async function setAndZone(): Promise<{ setId: string; zoneId: string }> {
 }
 
 let app: Hono;
-let cfg: TradingContext;
+let cfg: WithVenueRowId;
 let managerCookie: string;
 let staffCookie: string;
 

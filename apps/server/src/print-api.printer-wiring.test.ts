@@ -27,7 +27,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob, MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { mountPrintApi } from "./print-api.js";
 import { acceptPrintAgentJoinRequest } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -103,10 +103,9 @@ beforeAll(async () => {
  * same node. */
 const venueNodeId = brandNodeId(randomUUID());
 
-function cfgOf(tenant: Tenant): TradingContext {
+function cfgOf(): TradingContext {
   return {
     nodeId: venueNodeId,
-    locationId: brandLocationId(tenant.locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
@@ -114,7 +113,7 @@ function cfgOf(tenant: Tenant): TradingContext {
   };
 }
 
-function mountApp(tenant: Tenant, now?: () => Date): Hono {
+function mountApp(now?: () => Date): Hono {
   const app = new Hono();
   const pairingMode = createPairingMode();
   pairingMode.open();
@@ -122,7 +121,7 @@ function mountApp(tenant: Tenant, now?: () => Date): Hono {
     app,
     {
       db: suite.db,
-      cfg: cfgOf(tenant),
+      cfg: cfgOf(),
       pairingMode,
       readMembership: async () => null,
       readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
@@ -155,7 +154,6 @@ async function send(
 async function joinAndAccept(
   app: Hono,
   label: string,
-  tenant: Tenant = tenantA,
 ): Promise<{ agentId: string; token: string }> {
   const knock = await send(app, "POST", "/print-api/agent/join", { body: { name: label } });
   expect(knock.status).toBe(201);
@@ -165,7 +163,7 @@ async function joinAndAccept(
   };
   const joinId = token.slice(0, token.indexOf("."));
   await withTransaction(suite.db, async (tx) => {
-    const result = await acceptPrintAgentJoinRequest(tx, cfgOf(tenant), joinId, {
+    const result = await acceptPrintAgentJoinRequest(tx, cfgOf(), joinId, {
       choice: verificationNumber,
     });
     expect(result.ok).toBe(true);
@@ -235,7 +233,7 @@ async function seedNodeAgent(tenant: Tenant, nodeId: string): Promise<string> {
 
 describe("Print API — the agent lifecycle end to end", () => {
   it("enrol → claim (the status written inside the request) → report done", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const { agentId, token } = await joinAndAccept(app, "Cocina");
     const printerId = await createPrinter(app, agentId, "Cocina real");
     const jobId = await enqueue(printerId, new Uint8Array([0x41, 0x42]));
@@ -264,7 +262,7 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("derived eligibility: a usb job is NOT claimed by a box that cannot see its key", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const mine = await joinAndAccept(app, "Mine");
     const serial = `SN-${randomUUID()}`;
     const usbPrinter = await createUsbPrinter(app, serial, "Other USB");
@@ -283,7 +281,7 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("persists the agent host and edits names", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const { agentId, token } = await joinAndAccept(app, "Name before edit");
     const pulled = await send(app, "POST", "/print-api/agent/jobs", {
       bearer: token,
@@ -304,7 +302,7 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("discovered-printers reads registered keys + agent names", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const { agentId, token } = await joinAndAccept(app, "Inventory");
     const registered = `SN-${randomUUID()}`;
     const unregistered = `SN-${randomUUID()}`;
@@ -341,7 +339,7 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("a REVOKED agent fails the claim instantly (401)", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const { agentId, token } = await joinAndAccept(app, "Revocable");
     await createPrinter(app, agentId, "Revocable printer");
     expect((await send(app, "POST", "/print-api/agent/jobs", { bearer: token })).status).toBe(200);
@@ -356,7 +354,7 @@ describe("Print API — the agent lifecycle end to end", () => {
 
   it("the management routes require printer.manage — 401 unauth, 403 staff, 200 manager (gate proven by deletion)", async () => {
     // A `staff`-role session holds no `printer.manage`.
-    const app = mountApp(tenantA);
+    const app = mountApp();
 
     const unauth = await send(app, "GET", "/management-api/printers");
     expect(unauth.status).toBe(401);
@@ -377,7 +375,7 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("the discovery routes require printer.manage — 401 unauth, 403 staff, 2xx manager (gate proven by deletion)", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const routes = [
       { method: "POST", path: "/management-api/printer-discovery/start" },
       { method: "POST", path: "/management-api/printer-discovery/renew" },
@@ -417,7 +415,7 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("the Bluetooth Pair and Forget routes require printer.manage — 401 unauth, 403 staff, 202 manager", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const { agentId, token } = await joinAndAccept(app, "Bluetooth");
     const address = "0A:1B:2C:3D:4E:5F";
     const pulled = await send(app, "POST", "/print-api/agent/jobs", {
@@ -456,7 +454,7 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("allow-again reactivates a revoked agent (printer.manage)", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const { agentId } = await joinAndAccept(app, "Reactivable");
     const revoke = await send(app, "POST", `/management-api/print-agents/${agentId}/revoke`, {
       cookie: managerCookie,
@@ -472,7 +470,7 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("allow-again on an unknown id is agent.not_found (404)", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const res = await send(app, "POST", `/management-api/print-agents/${randomUUID()}/allow`, {
       cookie: managerCookie,
     });
@@ -483,7 +481,7 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("the agents list carries node provenance", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const someNode = randomUUID();
     const id = await seedNodeAgent(tenantA, someNode);
     const res = await send(app, "GET", "/management-api/print-agents", { cookie: managerCookie });
@@ -495,7 +493,7 @@ describe("Print API — the agent lifecycle end to end", () => {
 
 describe("Station ↔ printer mapping routes (printer.manage)", () => {
   it("attaches, lists both directions, is idempotent, and detaches a pair as a manager", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const agent = await joinAndAccept(app, "Mapping agent");
     const printerId = await createPrinter(app, agent.agentId, "Mapping printer");
     const stationId = await seedStation(tenantA, `Cocina ${randomUUID()}`);
@@ -532,7 +530,7 @@ describe("Station ↔ printer mapping routes (printer.manage)", () => {
   });
 
   it("404s an unknown station/printer and 400s a malformed id (shared.invalid_id)", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const agent = await joinAndAccept(app, "Miss agent");
     const printerId = await createPrinter(app, agent.agentId, "Miss printer");
     const stationId = await seedStation(tenantA, `Barra ${randomUUID()}`);
@@ -566,7 +564,7 @@ describe("Station ↔ printer mapping routes (printer.manage)", () => {
   });
 
   it("require printer.manage — 401 unauth, 403 staff, 204 manager (gate proven by deletion via the shared `gated`)", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const agent = await joinAndAccept(app, "Gate agent");
     const printerId = await createPrinter(app, agent.agentId, "Gate printer");
     const stationId = await seedStation(tenantA, `Plancha ${randomUUID()}`);
@@ -599,7 +597,7 @@ function retainedConfiguration() {
 
 describe("Receipt-printer and drawer config routes (printer.manage)", () => {
   it("has no till list, and no per-till receipt printer or drawer route", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const tillId = randomUUID();
     for (const [method, route, body] of [
       ["GET", "/management-api/tills", undefined],
@@ -612,7 +610,7 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
   });
 
   it("keeps the retired venue receipt-mode route closed for every former value", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const before = retainedConfiguration();
     for (const mode of ["never", "on_request", "auto"] as const) {
       const res = await send(
@@ -627,7 +625,7 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
   });
 
   it("keeps the retired route closed for unknown locations and invalid values", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const unknown = await send(
       app,
       "PATCH",
@@ -646,7 +644,7 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
   });
 
   it("keeps the retired drawer policy route closed without changing configuration or audit", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const before = retainedConfiguration();
     for (const cookie of [undefined, staffCookie, managerCookie]) {
       for (const id of [tenantA.locationId, randomUUID(), "bad-id"]) {
@@ -668,7 +666,7 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
   });
 
   it("GET /management-api/printer-profiles names each profile offering a printer on either list, once, ordered by profile name then printer id", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const agent = await joinAndAccept(app, "Offers agent");
     const counter = await createPrinter(app, agent.agentId, "Counter");
     const portable = await createPrinter(app, agent.agentId, "Portable");
@@ -706,7 +704,7 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
   });
 
   it("GET /management-api/printer-profiles lists a receipt printer on an invoice list, and no row for a page printer there", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const agent = await joinAndAccept(app, "Invoice offers agent");
     const counter = await createPrinter(app, agent.agentId, "Counter");
     const [office] = await suite.db
@@ -744,7 +742,7 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
   });
 
   it("GET /management-api/printer-profiles requires printer.manage — 401 unauth, 403 staff, 200 manager", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const unauth = await send(app, "GET", "/management-api/printer-profiles");
     expect(unauth.status).toBe(401);
     const staff = await send(app, "GET", "/management-api/printer-profiles", {
@@ -759,7 +757,7 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
   });
 
   it("never lets an authenticated manager or staff restore the retired authorization bypass", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const before = retainedConfiguration();
     for (const cookie of [managerCookie, staffCookie, undefined]) {
       const res = await send(
@@ -778,7 +776,7 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
 });
 
 it("delivers enqueue and agent completion events with fresh printer aggregates", async () => {
-  const app = mountApp(tenantA);
+  const app = mountApp();
   const bus = new LiveEvents();
   mountLiveApi(app, { db: suite.db, bus, resourceTypes: ["printers", "print_jobs"] }, noopLog);
   const { agentId, token } = await joinAndAccept(app, "Live agent");
@@ -836,7 +834,7 @@ it("delivers enqueue and agent completion events with fresh printer aggregates",
 
 describe("print job resend", () => {
   it("requires print.resend and copies the original bytes without changing its history", async () => {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const printerId = await createUsbPrinter(app, randomUUID(), "Resend");
     const originalId = await enqueue(printerId, new Uint8Array([0, 255, 27, 64, 29, 86, 0]));
     await suite.db
@@ -901,7 +899,7 @@ describe("print job resend", () => {
 
 describe("station printer selection replacement", () => {
   async function fixture() {
-    const app = mountApp(tenantA);
+    const app = mountApp();
     const agent = await joinAndAccept(app, `Set agent ${randomUUID()}`);
     const old = await createPrinter(app, agent.agentId, `Old ${randomUUID()}`);
     const next = await createPrinter(app, agent.agentId, `Next ${randomUUID()}`);
@@ -1100,7 +1098,7 @@ describe("printer delete routes (printer.manage)", () => {
   }
 
   it("reads the impact, then deletes with the impact recomputed: work queued after the read is ended too", async () => {
-    const app = mountApp(tenantA, () => NOW);
+    const app = mountApp(() => NOW);
     const p = await linkedPrinter(app);
 
     const read = await send(app, "GET", `/management-api/printers/${p.printerId}/delete-impact`, {
@@ -1172,7 +1170,7 @@ describe("printer delete routes (printer.manage)", () => {
   });
 
   it("refuses unauthenticated, staff, malformed and unknown targets without writing", async () => {
-    const app = mountApp(tenantA, () => NOW);
+    const app = mountApp(() => NOW);
     const p = await linkedPrinter(app);
     const before = await printingRows();
 
@@ -1212,7 +1210,7 @@ describe("printer delete routes (printer.manage)", () => {
   });
 
   it("refuses the delete when the manager lost printer.manage after reading the impact", async () => {
-    const app = mountApp(tenantA, () => NOW);
+    const app = mountApp(() => NOW);
     const p = await linkedPrinter(app);
     const { personId, cookie } = await withTransaction(suite.db, async (tx) => {
       const [person] = await tx
@@ -1239,7 +1237,7 @@ describe("printer delete routes (printer.manage)", () => {
   });
 
   it("lets one of two concurrent deletes succeed and answers the other printer.not_found", async () => {
-    const app = mountApp(tenantA, () => NOW);
+    const app = mountApp(() => NOW);
     const p = await linkedPrinter(app);
 
     const responses = await Promise.all(
@@ -1310,7 +1308,7 @@ describe("printer delete routes (printer.manage)", () => {
     }
 
     it("answers each with printer.not_found and writes no row, job or audit", async () => {
-      const app = mountApp(tenantA, () => NOW);
+      const app = mountApp(() => NOW);
       const { p, calls } = await deletedPrinterCalls(app);
       const before = await printingRows();
 
@@ -1330,7 +1328,7 @@ describe("printer delete routes (printer.manage)", () => {
     });
 
     it("still edits, Enables, lists and detaches a switched-off printer that is not deleted", async () => {
-      const app = mountApp(tenantA, () => NOW);
+      const app = mountApp(() => NOW);
       const p = await linkedPrinter(app);
       const printer = `/management-api/printers/${p.printerId}`;
       const off = await send(app, "POST", `${printer}/deactivate`, { cookie: managerCookie });

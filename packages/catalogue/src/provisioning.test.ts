@@ -11,7 +11,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
 import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { CATALOGUE_PROVISIONING, FIRST_MENU_NAME } from "./provisioning.js";
@@ -40,7 +39,7 @@ async function venue(country: string, province: string, receipt: string | string
     invoiceLocales: typeof receipt === "string" ? [receipt] : receipt,
     operationDescription: "Hospitality",
   });
-  const locationId = brandLocationId(await venueLocationId(suite.db));
+  const locationId = await venueLocationId(suite.db);
   const nodeId = await seedNode(suite.db);
   return { locationId, nodeId };
 }

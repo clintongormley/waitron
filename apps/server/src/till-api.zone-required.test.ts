@@ -23,12 +23,13 @@ import {
   setProductVariants,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
+import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { OriginConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -46,7 +47,7 @@ const suite = useVenueDb({
 });
 
 interface Venue {
-  cfg: OriginConfig;
+  cfg: WithVenueRowId<OriginConfig>;
   cookie: string;
   water: string;
   // Its only variant is Inactive, so it sells as itself.
@@ -64,13 +65,13 @@ async function seedVenueWithMenuAndTill(db: Database): Promise<Venue> {
     invoiceLocales: ["es-ES"],
     operationDescription: "Retail",
   });
-  const locationId = brandLocationId(await venueLocationId(db));
+  const locationId = await venueLocationId(db);
   await seedKitchenStation(db, { locationId });
   const [person] = await db
     .insert(persons)
     .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
     .returning({ id: persons.id });
-  const cfg: OriginConfig = {
+  const cfg: WithVenueRowId<OriginConfig> = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(await seedNode(db)),
     locationId,

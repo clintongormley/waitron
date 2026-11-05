@@ -11,7 +11,7 @@ import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/catalogue";
 import { createPrinter } from "@waitron/printing";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
@@ -19,7 +19,7 @@ import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -30,7 +30,7 @@ import { seedSessionDevice, sessionCookieForTest } from "./testing/session-devic
 // that `reprintOrderTickets` re-enqueues through the SAME outbox path the fire uses. The verb's logic
 // is pinned in `kitchen-print.test.ts`.
 const COFFEE = "Cafe con leche";
-let cfg: TradingContext;
+let cfg: WithVenueRowId;
 let ana: { id: string };
 let stationId: string;
 let coffeeOffer: string;
@@ -46,7 +46,7 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });
-    const locationId = brandLocationId(await venueLocationId(db));
+    const locationId = await venueLocationId(db);
     // The default station serves an item no routing cell covers.
     stationId = await seedKitchenStation(db, { locationId });
     const nodeId = await seedNode(db);
@@ -74,10 +74,10 @@ const suite = useVenueDb({
   },
 });
 
-function makeCfg(locationId: string, nodeId: string): TradingContext {
+function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

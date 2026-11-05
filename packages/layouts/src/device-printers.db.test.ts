@@ -14,8 +14,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
-import type { LocationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { selectDevicePrinter, settleProfilePrinterDevices } from "./device-equipment.js";
@@ -45,10 +44,10 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, fn);
 }
 
-async function seedLocation(name: string): Promise<LocationId> {
+async function seedLocation(name: string): Promise<string> {
   await seedVenue(suite.db, { name, invoiceLocales: ["es"], operationDescription: "Hospitality" });
   const venueId = await venueLocationId(suite.db);
-  return brandLocationId(venueId);
+  return venueId;
 }
 
 async function seedPrinter(location: string, name: string): Promise<string> {
@@ -93,7 +92,7 @@ async function setActive(printerId: string, active: boolean): Promise<void> {
 }
 
 describe("a profile's printer lists and each device's current printers", () => {
-  let loc: LocationId;
+  let loc: string;
   let p1: string;
   let p2: string;
   let p3: string;
@@ -573,7 +572,7 @@ describe("a profile's printer lists and each device's current printers", () => {
 });
 
 describe("a deleted printer on a profile's lists", () => {
-  let loc: LocationId;
+  let loc: string;
   let live: string;
   let gone: string;
 
@@ -708,7 +707,7 @@ describe("a deleted printer on a profile's lists", () => {
 });
 
 describe("a profile's invoice printer list", () => {
-  let loc: LocationId;
+  let loc: string;
   let receipt: string;
   let office: string;
 

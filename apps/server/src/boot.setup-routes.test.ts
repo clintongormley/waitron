@@ -16,6 +16,7 @@ import {
   deviceProfiles,
   openVenueDatabase,
   stampDeployment,
+  venueLocationId,
   withTransaction,
   type Database,
   type VenueDatabase,
@@ -47,7 +48,7 @@ import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { encodeRecoveryKit, signPointer } from "@waitron/stream";
 import { loadTillAppSettings } from "./till-config.js";
-import { loadNodeIdentity, readNodeLocation } from "./node-config.js";
+import { loadNodeIdentity } from "./node-config.js";
 import type { TradingContext } from "./trading-context.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -574,9 +575,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       const cfg: TradingContext = {
         ...loadNodeIdentity(trading),
         ...loadTillAppSettings(trading),
-        locationId: (await readNodeLocation(venue.store.venue, loadNodeIdentity(trading).nodeId))!,
         simplifiedInvoiceLimit: null,
       };
+      const venueId = await venueLocationId(venue.store.venue);
       const [profile] = await venue.store.venue
         .select({ id: deviceProfiles.id })
         .from(deviceProfiles)
@@ -591,7 +592,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         .where(eq(persons.role, "admin"));
       const offer = await withTransaction(venue.store.venue, async (tx) => {
         const catalogue = await createCatalogue(tx, {
-          name: `Boot setup routes menu ${cfg.locationId}`,
+          name: `Boot setup routes menu ${venueId}`,
         });
         const drinks = await createCategory(tx, { name: "Bebidas" });
         const water = await createProduct(tx, {
@@ -603,7 +604,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           vatClass: "general",
         });
         await assignCatalogueToVenue(tx, catalogue.id);
-        const offers = await offerProducts(tx, { locationId: cfg.locationId });
+        const offers = await offerProducts(tx, { locationId: venueId });
         return offers.offerFor(water.id);
       });
 
@@ -1385,7 +1386,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     const venue = await freshVenue();
     const bundle = {
       designated: {
-        locationId: "22222222-2222-4222-8222-222222222222",
         nodeId: "44444444-4444-4444-8444-444444444444",
       },
       tenant: { country: "ES", taxId: "80000001K" },

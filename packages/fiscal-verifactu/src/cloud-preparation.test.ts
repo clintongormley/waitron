@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { locationId } from "@waitron/shared";
 import { deployment, invoiceSeries, nodes, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationPreparation } from "@waitron/module";
@@ -18,7 +17,7 @@ import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
@@ -607,15 +606,4 @@ it("refuses reporting when the stored node is absent", async () => {
   } finally {
     await suite.db.execute(sql`pragma foreign_keys = on`);
   }
-});
-
-// A1301: deleted with cfg in S18
-it("reports a committed Cloud allocation without location scope", async () => {
-  await activate();
-  expect(
-    await collectReport(undefined, {
-      ...node,
-      locationId: locationId("f0000000-0000-4000-8000-000000000099"),
-    }),
-  ).toEqual(await collectReport());
 });

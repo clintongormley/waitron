@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { deployment, invoiceSeries, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 
@@ -20,7 +19,7 @@ import {
 } from "./paper-evidence.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const primary = { nodeId: TENANT_A.nodeId };
 const target = { ...primary, nodeId: TENANT_A.nodeId2 };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -347,14 +346,4 @@ describe("persisting a named spare's dormant paper allocation", () => {
     );
     expect(await rows("fiscal_reservations")).toEqual(before);
   });
-});
-
-// A1301: deleted with cfg in S18
-it("establishes a dormant allocation without target location scope", async () => {
-  expect(
-    await establish(undefined, context, {
-      ...target,
-      locationId: locationId("f0000000-0000-4000-8000-000000000099"),
-    }),
-  ).toEqual({ reservationEventId: join.eventId, allocationId: allocation.allocationId });
 });

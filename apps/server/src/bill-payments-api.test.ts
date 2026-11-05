@@ -34,6 +34,7 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -70,7 +71,6 @@ import {
   basisPointsToDecimal,
   centsToDecimal,
   decimal,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   thousandthsToDecimal,
   deviceOrigin,
@@ -86,6 +86,7 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { OriginConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { BASIC_ACTIONS, revokedDeviceSessionCookie } from "./testing/session-device.js";
@@ -133,7 +134,7 @@ const unreadableMailRing = loadKeyRing({
 const SMTP = { url: "smtp://smtp.example.test:2525", from: "Venue <venue@example.test>" };
 
 interface Venue {
-  cfg: OriginConfig;
+  cfg: WithVenueRowId<OriginConfig>;
   offers: ZoneOffers;
   /** Product id by the staff name. */
   productIds: Map<string, string>;
@@ -238,10 +239,11 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     ),
     { db, modules: ALL_MODULES },
   );
-  const cfg: OriginConfig = {
+  const venueId = await venueLocationId(db);
+  const cfg: WithVenueRowId<OriginConfig> = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(provisioned.nodeId),
-    locationId: brandLocationId(provisioned.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

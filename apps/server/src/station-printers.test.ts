@@ -5,13 +5,12 @@ import {
   kitchenStations,
   printers,
   stationPrinters,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { createPrinter, updatePrinter } from "@waitron/printing";
 
 import type { TradingContext } from "./trading-context.js";
@@ -39,11 +38,9 @@ async function setupVenue(): Promise<TradingContext> {
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

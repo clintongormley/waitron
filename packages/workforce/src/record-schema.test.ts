@@ -4,7 +4,6 @@ import { CORE_MIGRATIONS, newId, captureError, engineErrorMessage } from "@waitr
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 
@@ -17,7 +16,7 @@ beforeEach(async () => {
   personId = await seedPerson(suite.db);
   otherPersonId = await seedPerson(suite.db, "Other");
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
+  nodeId = await seedNode(suite.db, locationId);
 });
 interface Shape {
   kind: string;

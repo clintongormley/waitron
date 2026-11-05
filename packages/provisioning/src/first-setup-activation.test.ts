@@ -205,7 +205,6 @@ it("checks every module's real committed receipt before trusting the recovered v
   const state = (await f.runtime.store.read())!;
   f.recover.mockResolvedValue({
     nodeId: state.frozen.nodeId,
-    locationId: "f0d20241-e144-4ea6-bf9b-66976e60e765",
     seriesIds: [],
     seeded: [],
   });

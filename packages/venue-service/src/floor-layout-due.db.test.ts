@@ -12,7 +12,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import type { ZoneFloorLayout } from "@waitron/module";
-import { locationId, type LocationId } from "@waitron/shared";
 import { linkFloorPlanSet } from "./floor-plan-set-store.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
@@ -34,7 +33,7 @@ const at = (time: string, date = FRIDAY) =>
 const key = (departmentId: string, day: string, periodId: string, startsAt: string) =>
   JSON.stringify([departmentId, day, periodId, startsAt]);
 
-async function newZone(tx: Transaction, cfg: { locationId: LocationId }, name: string) {
+async function newZone(tx: Transaction, cfg: { locationId: string }, name: string) {
   const [zone] = await tx
     .insert(floorZones)
     .values({ ...cfg, name })
@@ -44,7 +43,7 @@ async function newZone(tx: Transaction, cfg: { locationId: LocationId }, name: s
 
 async function newSet(
   tx: Transaction,
-  cfg: { locationId: LocationId },
+  cfg: { locationId: string },
   departmentId: string,
   name: string,
 ) {
@@ -66,7 +65,7 @@ async function fixture() {
       dayCutover: "06:00:00",
     });
     const venueId = await venueLocationId(tx);
-    const cfg = { locationId: locationId(venueId) };
+    const cfg = { locationId: venueId };
     const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
     const bar = (await createDepartment(tx, { name: "Bar", orderStart: "table" })).id;
     const dining = await newZone(tx, cfg, "Dining");

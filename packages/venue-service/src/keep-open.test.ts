@@ -13,7 +13,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, listZoneOffers, menuState } from "./operations.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
@@ -46,7 +45,7 @@ async function fixture() {
     }
     const venueId = await venueLocationId(tx);
     const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
-    const cfg = { locationId: locationId(venueId) };
+    const cfg = { locationId: venueId };
     const departmentId = (
       await createDepartment(tx, { name: `Restaurant${suffix}`, orderStart: "table" })
     ).id;

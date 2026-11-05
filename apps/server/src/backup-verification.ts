@@ -39,7 +39,7 @@ import {
 } from "./backup-verification-secrets.js";
 import { buildBackupVerificationTarget } from "./backup-verification-target.js";
 import { errnoOf } from "./errno.js";
-import { readArtifactNode } from "./restore.js";
+import { readCopyNodeAndVenue } from "./restore.js";
 
 export interface BackupVerificationDeps {
   artifactPath: string;
@@ -133,6 +133,7 @@ function classify(error: unknown): Verdict {
         "restore.unsafe_entry_path",
         "restore.unexpected_entry",
         "restore.identity_incomplete",
+        "provisioning.second_venue",
         "shared.invalid_id",
       ].includes(error.code)
     )
@@ -249,7 +250,7 @@ export async function verifyBackupArtifact(
         compatibility,
         compatibility === "invalid" ? "archive_invalid" : "target_incompatible",
       );
-    const node = await readArtifactNode(validated);
+    const { node, venueId } = await readCopyNodeAndVenue(before.query, validated.secretEntries);
     let sealedState: { sealed: Uint8Array; recoveryKey: string } | undefined;
     let hasSealedState = false;
     for await (const row of before.query.rows(
@@ -267,7 +268,7 @@ export async function verifyBackupArtifact(
     }
     const secrets = await verifyBackupStateSecrets(
       validated.secretEntries,
-      node,
+      { ...node, venueId },
       deps.now(),
       sealedState,
     );

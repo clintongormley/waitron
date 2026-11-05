@@ -6560,19 +6560,14 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
 
 - **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
-  2026-11-01, high priority; nothing new is built on locations meanwhile). Still open: S18,
+  2026-11-01, high priority; nothing new is built on locations meanwhile). Still open: S18e,
   S19 and the schema slices S20–S28; every other slice has landed. S18 has a plan
-  ([S18 plan](superpowers/plans/2026-11-04-a1301-s18-contract-cleanup.md)); its S18e waits for the
-  owner to approve the [venue-id design](superpowers/specs/2026-11-04-a1301-venue-id-design.md).
+  ([S18 plan](superpowers/plans/2026-11-04-a1301-s18-contract-cleanup.md)); its S18e builds the
+  approved [venue-id design](superpowers/specs/2026-11-04-a1301-venue-id-design.md) and is held by
+  A1308, since it adds a table.
   [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
   [plan](superpowers/plans/2026-11-01-a1301-remove-location.md).
   [Detail](backlog/architecture.md#a1301-remove-the-location-concept-the-venue-holds-everything-a-location-held)
-
-- **`readDepartmentLogoRasters` and `writeDepartmentReceipt` take a receipt scope they never
-  read** (`packages/venue-service/src/department-receipts.ts`, `_cfg: DepartmentReceiptScope`).
-  Dropping it changes the two module-contract members, `department-receipt-api.ts`'s call,
-  `saveDepartmentReceiptSettings`'s call and their tests' call sites. Not location work (left by
-  A1301 S18a). A1301 S18f-4's `_cfg` done-check prints these two until this entry lands.
 
 - **A1301 S5 left "location" in files other slices own.** Wording to change:
   `apps/server/scripts/demo-seed/seed-catalogue.ts` (S19), and the

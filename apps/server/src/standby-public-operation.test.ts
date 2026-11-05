@@ -190,7 +190,7 @@ async function bundleApp() {
     stateDir: stateDir!,
     relayUrl: "https://relay.test",
     boxHostname: "waitron.local",
-    designated: { nodeId: PRIMARY, locationId: LOCATION },
+    designated: { nodeId: PRIMARY },
     accountKey: "test-account",
     credentialKeyRing: TOTP_KEY_RING,
   });
@@ -414,7 +414,7 @@ it("refuses a promotion runner redirected to another node before collecting evid
         {
           db: suite.db,
           nodeDb: suite.node,
-          node: { nodeId: PRIMARY as never, locationId: LOCATION as never },
+          node: { nodeId: PRIMARY as never },
         },
         async (tx) => {
           await tx

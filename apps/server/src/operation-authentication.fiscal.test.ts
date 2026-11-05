@@ -6,7 +6,6 @@ import { deployment, invoiceSeries, withNodeTransaction, withTransaction } from 
 import { nodeMode, readNodeMode, setNodeModeTx, setSingletonRoleTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, persons } from "@waitron/identity";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 
@@ -30,7 +29,7 @@ const ADMIN = "a0000000-0000-4000-8000-000000000001";
 const OTHER = "a0000000-0000-4000-8000-000000000003";
 const PASSWORD = "correct horse";
 const HASH = hashPassword(PASSWORD);
-const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const primary = { nodeId: TENANT_A.nodeId };
 const target = { ...primary, nodeId: TENANT_A.nodeId2 };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();

@@ -16,6 +16,7 @@ import {
   printers,
   tenants,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import {
   assignCatalogueToVenue,
@@ -45,7 +46,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   jobOrigin,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   workingOrderId as brandWorkingOrderId,
@@ -57,6 +57,7 @@ import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { deletePrinter } from "./printer-delete.js";
 import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createOpenOrder } from "./working-order.js";
 import { decodeTicket, opensDrawer, printedLines } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -111,7 +112,7 @@ interface Venue {
   /** Whether the till's mail transport check answers available; true unless a case says. */
   email: { transport: boolean | Error };
   logged: unknown[][];
-  cfg: TradingContext;
+  cfg: WithVenueRowId;
   scriptCfg: TradingContext & { origin: ReturnType<typeof jobOrigin> };
   app: Hono;
   cookie: string;
@@ -158,9 +159,10 @@ async function venue(): Promise<Venue> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const cfg: TradingContext = {
+  const venueId = await venueLocationId(suite.db);
+  const cfg: WithVenueRowId = {
     nodeId: brandNodeId(result.nodeId),
-    locationId: brandLocationId(result.locationId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

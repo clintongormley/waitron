@@ -31,8 +31,9 @@ import {
   resendPrintJob,
   updatePrinter,
 } from "@waitron/printing";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
-import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
+import { nodeId as brandNodeId } from "@waitron/shared";
+import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { createStation } from "./kitchen.js";
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
@@ -89,7 +90,7 @@ const DISHES = {
 type Dish = keyof typeof DISHES;
 
 interface Venue {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   kitchenStationId: string;
   barStationId: string;
   kitchenPrinterId: string;
@@ -109,18 +110,18 @@ async function setupVenue(): Promise<Venue> {
   });
   const locationId = await venueLocationId(db);
   const kitchenStationId = await seedKitchenStation(db, {
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     name: "Kitchen",
   });
   const nodeId = await seedNode(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies TradingContext);
+  } satisfies WithVenueRowId);
   return inTx(async (tx) => {
     const { id: barStationId } = await createStation(tx, { name: "Bar" });
     const catalogue = await createCatalogue(tx, { name: "Menu" });

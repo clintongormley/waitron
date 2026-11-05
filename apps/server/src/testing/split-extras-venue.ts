@@ -13,8 +13,9 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig, OriginConfig, TradingContext } from "../trading-context.js";
+import type { WithVenueRowId } from "./venue-row-id.js";
 import { deviceRequestCfg } from "./session-device.js";
 import { createStation } from "../kitchen.js";
 import { createPrinter } from "@waitron/printing";
@@ -35,7 +36,7 @@ export function useSplitExtrasDb(database: Database): void {
 }
 
 export interface Venue {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   catalogueId: string;
 }
 
@@ -56,12 +57,12 @@ export async function setupVenue(): Promise<Venue> {
   });
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies TradingContext);
+  } satisfies WithVenueRowId);
   return { cfg, catalogueId };
 }
 
@@ -226,7 +227,7 @@ export type ProductLine = {
  *  product. Call once the suite's products, stations and extras are final. */
 export async function createOfferedOrder(
   tx: Transaction,
-  cfg: OriginConfig,
+  cfg: WithVenueRowId<OriginConfig>,
   id: string,
   lines: ProductLine[],
 ): ReturnType<typeof createOpenOrder> {
@@ -240,7 +241,7 @@ export async function createOfferedOrder(
  *  line, children included, to `fireLines`, so the parent-only filter under test is `fireLines`' own. */
 export async function fireNewOrder(
   tx: Transaction,
-  cfg: OriginConfig,
+  cfg: WithVenueRowId<OriginConfig>,
   lines: ProductLine[],
 ): Promise<string> {
   const id = randomUUID();
@@ -252,7 +253,7 @@ export async function fireNewOrder(
 /** `fireNewOrder` with each line stored once, as a counter order written before portions holds it. */
 export async function fireGroupedOrder(
   tx: Transaction,
-  cfg: OriginConfig,
+  cfg: WithVenueRowId<OriginConfig>,
   lines: ProductLine[],
 ): Promise<string> {
   const id = randomUUID();

@@ -74,7 +74,6 @@ async function run(missingBefore = false, sourceSchema = 1) {
         },
         source: {
           nodeId: "source-node",
-          locationId: "source-location",
           environment: "preproduction",
           createdAt: "2026-10-20T08:00:00.000Z",
         },

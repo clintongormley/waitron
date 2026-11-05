@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, afterEach, vi } from "vitest";
 import { deployment, locations, nodes, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ThrowawayAllocation } from "@waitron/module";
-import { locationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { FISCAL_PROVISIONING } from "./provisioning.js";
 import { createThrowawayAllocation } from "./throwaway-allocation.js";
@@ -20,7 +20,7 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const TAXPAYER = "B12345674";
 const node = {
   nodeId: brandNodeId("c0000000-0000-4000-8000-000000000008"),
-  locationId: locationId("c0000000-0000-4000-8000-000000000002"),
+  locationId: "c0000000-0000-4000-8000-000000000002",
 };
 const bases = [
   { code: "A", purpose: "standard" },

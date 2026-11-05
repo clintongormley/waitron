@@ -269,7 +269,7 @@ it("checks an import's module version before replacing its existing rows", async
 
 it("imports fresh ids and actual bytes without rewriting ordinary text that resembles either", async () => {
   const modules = enabledModules(ALL_MODULES, venueFiscalSelection(ALL_MODULES, "GB-vat").config);
-  const target = await applyVenue(
+  await applyVenue(
     planVenue(
       {
         ...request,
@@ -289,6 +289,7 @@ it("imports fresh ids and actual bytes without rewriting ordinary text that rese
     ),
     { db: suite.db, modules },
   );
+  const venueId = await venueLocationId(suite.db);
   await scratch(async (tx) => {
     await tx.execute(
       sql`create table zz_parents (id text primary key, location_id text references locations(id), name text, bytes blob, enabled integer)`,
@@ -322,7 +323,7 @@ it("imports fresh ids and actual bytes without rewriting ordinary text that rese
     ).rows[0]!;
     expect(parent).toEqual({
       id: expect.any(String),
-      location_id: target.locationId,
+      location_id: venueId,
       name: "old-id",
       bytes: "0001FF",
       storage: "blob",

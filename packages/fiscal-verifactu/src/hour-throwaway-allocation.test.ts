@@ -3,7 +3,6 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ThrowawayAllocation } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { createHourThrowawayAllocation } from "./hour-throwaway-allocation.js";
@@ -23,7 +22,7 @@ vi.mock("node:crypto", async (original) => {
   };
 });
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "a/B_1.2-3", purpose: "standard" },

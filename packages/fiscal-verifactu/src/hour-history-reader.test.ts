@@ -4,7 +4,7 @@ import { deployment, invoiceSeries, withTransaction, readDeploymentEnvironment }
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { recordSale } from "@waitron/core";
-import { locationId, seriesId } from "@waitron/shared";
+import { seriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, seedVenueNodes, TENANT_A } from "../test/fixtures.js";
 import { withHourAdmission } from "./allocation-envelope.js";
@@ -83,10 +83,7 @@ it("enumerates the higher retired other-node hour that current-node readers omit
           withCollectedModuleAllocation(
             operation,
             async (request) => ({ ...request, evidence }),
-            (write) =>
-              withTransaction(suite.db, (tx) =>
-                write(tx, { nodeId, locationId: locationId(TENANT_A.locationId) }),
-              ),
+            (write) => withTransaction(suite.db, (tx) => write(tx, { nodeId })),
           ),
       );
     });
@@ -99,7 +96,7 @@ it("enumerates the higher retired other-node hour that current-node readers omit
     .update(registroSif)
     .set({ revocadoEn: new Date("2026-10-16T12:30:00Z") })
     .where(eq(registroSif.nodeId, TENANT_A.nodeId2));
-  const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+  const node = { nodeId: TENANT_A.nodeId };
   const result = await withTransaction(suite.db, async (tx) => ({
     bases: await liveSeriesBases(tx, node),
     series: await readModuleAllocationSeries(tx, node, bases),
@@ -403,7 +400,6 @@ it("reads the newest fiscal record's time only through the floor reader, never t
             withTransaction(suite.db, (tx) =>
               write(tx, {
                 nodeId: TENANT_A.nodeId,
-                locationId: locationId(TENANT_A.locationId),
               }),
             ),
         ),

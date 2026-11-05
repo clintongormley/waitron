@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
-import { readVenue, venueLocationId, withTransaction, type Database } from "@waitron/db";
+import { readVenue, withTransaction, type Database } from "@waitron/db";
 import { readIssueZone } from "@waitron/fiscal";
 import { enabledModules, type WaitronModule } from "@waitron/module";
-import { AppError, locationId, nodeId } from "@waitron/shared";
+import { AppError, nodeId } from "@waitron/shared";
 import { parseInitialVenueInput, type InitialVenueInput } from "./initial-venue-input.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import type { VenueRequest } from "./venue-plan.js";
@@ -40,7 +40,7 @@ export async function recoverProvisionedVenue(
     const savedVenue = await readVenue(tx);
     if (savedVenue.name !== venue.name || savedVenue.fiscalTerritory !== venue.fiscalTerritory)
       return refuse();
-    const row = { ...found.rows[0]!, locationId: await venueLocationId(tx) };
+    const row = found.rows[0]!;
     await readIssueZone(tx, { nodeId: row.nodeId });
     if (initial !== undefined) {
       if (row.nodeId !== initial.nodeId) return refuse();
@@ -53,11 +53,7 @@ export async function recoverProvisionedVenue(
     const expected: readonly { id?: string; code: string; purpose: string }[] =
       resolver === undefined
         ? bases
-        : await resolver.resolve(
-            tx,
-            { nodeId: nodeId(row.nodeId), locationId: locationId(row.locationId) },
-            bases,
-          );
+        : await resolver.resolve(tx, { nodeId: nodeId(row.nodeId) }, bases);
     const series = await tx.execute<{ id: string; purpose: string; code: string }>(sql`
       select id, purpose, code from invoice_series where node_id = ${row.nodeId}`);
     if (
@@ -77,7 +73,6 @@ export async function recoverProvisionedVenue(
     });
     if (references.some((reference) => reference === undefined)) return refuse();
     return {
-      locationId: row.locationId,
       nodeId: row.nodeId,
       seriesIds: references.map((reference) => reference!.id),
       seeded: [],

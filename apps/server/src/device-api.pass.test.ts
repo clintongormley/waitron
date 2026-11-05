@@ -15,7 +15,6 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { seedNode } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { endSession, loginWithPin, persons } from "@waitron/identity";
@@ -361,7 +360,7 @@ describe("the pass screen's device routes", () => {
         operationDescription: "Restaurant",
       })
       .returning({ id: locations.id });
-    const foreignNode = await seedNode(suite.db, brandLocationId(foreignLocation!.id));
+    const foreignNode = await seedNode(suite.db, foreignLocation!.id);
     const [foreignStation] = await suite.db
       .insert(kitchenStations)
       .values({ locationId: foreignLocation!.id, name: "Other kitchen" })

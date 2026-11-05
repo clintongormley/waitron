@@ -32,13 +32,13 @@ import {
   openVenueDatabase,
   stampDeployment,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { hashSecret, persons } from "@waitron/identity";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
-import { locationId as brandLocationId } from "@waitron/shared";
 import {
   bucketKey,
   createS3ObjectStore,
@@ -332,6 +332,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         ),
         { db: seeding.venue, modules: ALL_MODULES },
       );
+      const venueId = await venueLocationId(seeding.venue);
       await establishNodeIdentity(
         { ownerDb: seeding.venue, node: seeding.node, ring },
         venue.nodeId,
@@ -344,7 +345,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
       await withTransaction(seeding.venue, (tx) =>
         putCredential(tx, ring, {
           purpose: "backup.stream",
-          value: streamSettingsPayload({ venueId: venue.locationId, bucket }),
+          value: streamSettingsPayload({ venueId, bucket }),
         }),
       );
       const [admin] = await seeding.venue
@@ -364,7 +365,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         .set({ tokenHash: hashSecret(DEVICE_TOKEN) })
         .where(eq(devices.id, deviceId));
       const offer = await withTransaction(seeding.venue, async (tx) => {
-        const catalogue = await createCatalogue(tx, { name: `Stream menu ${venue.locationId}` });
+        const catalogue = await createCatalogue(tx, { name: `Stream menu ${venueId}` });
         const drinks = await createCategory(tx, { name: "Bebidas" });
         const water = await createProduct(tx, {
           catalogueId: catalogue.id,
@@ -376,15 +377,15 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         });
         await assignCatalogueToVenue(tx, catalogue.id);
         const offers = await offerProducts(tx, {
-          locationId: brandLocationId(venue.locationId),
+          locationId: venueId,
         });
         return offers.offerFor(water.id);
       });
       box = {
         nodeId: venue.nodeId,
         seriesId: venue.seriesIds[0]!,
-        locationId: venue.locationId,
-        venueId: venue.locationId,
+        locationId: venueId,
+        venueId,
         adminId: admin!.id,
         deviceId,
         offer,

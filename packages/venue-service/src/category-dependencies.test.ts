@@ -21,7 +21,6 @@ import {
 import { randomUUID } from "node:crypto";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { resolveMakers, setRoutingCell } from "./routing-store.js";
 import { routingCells } from "./schema/routing.js";
@@ -36,7 +35,7 @@ async function venue() {
     invoiceLocales: ["en"],
     operationDescription: "Restaurant",
   });
-  return { locationId: (await venueLocationId(suite.db)) as LocationId };
+  return { locationId: (await venueLocationId(suite.db)) as string };
 }
 
 it("deleting a category removes its own and its subtree's category cells and keeps product cells", async () => {

@@ -4,7 +4,7 @@ import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db"
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import { deviceOrigin, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { deviceOrigin, jobOrigin } from "@waitron/shared";
 import { seedLocation, seedEmployment } from "../test/fixtures.js";
 import { WorkforceBackend } from "./clocking.js";
 import * as corrections from "./corrections.js";
@@ -25,7 +25,7 @@ const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.
 beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
+  nodeId = await seedNode(suite.db, locationId);
   const rows = await suite.db
     .insert(persons)
     .values([
@@ -175,8 +175,7 @@ it.each([
   if (shape === "empty") inputs.length = 0;
   if (shape === "three") inputs.push({ ...inputs[1]! });
   if (shape === "reverse") inputs.reverse();
-  if (shape === "different-node")
-    inputs[1]!.nodeId = await seedNode(suite.db, brandLocationId(locationId));
+  if (shape === "different-node") inputs[1]!.nodeId = await seedNode(suite.db, locationId);
   if (shape === "different-actor") {
     await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, personId));
     inputs[1]!.actorPersonId = manager;
@@ -447,7 +446,7 @@ it("records a worker's disagreement on both manager proposals and leaves actual 
 it("answers an earlier node's pair on a new node without changing its chain", async () => {
   const ids = await run((tx) => corrections.requestCorrectionGroup(tx, pair(), "request"));
   const oldChain = await readChain(suite.db, { nodeId });
-  const nextNode = await seedNode(suite.db, brandLocationId(locationId));
+  const nextNode = await seedNode(suite.db, locationId);
   await run((tx) =>
     corrections.decideCorrectionGroup(
       tx,

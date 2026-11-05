@@ -74,7 +74,7 @@ describe("business-day timeline through cold restore and reset", () => {
       );
       const series = await suite.db.select().from(invoiceSeries);
       const fixture = allocationFixture({
-        node: { nodeId: nodeId(venue.cfg.nodeId), locationId: venue.cfg.locationId },
+        node: { nodeId: nodeId(venue.cfg.nodeId) },
         taxpayerNif: (
           await suite.db.execute<{ taxId: string }>(sql`select tax_id as taxId from tenants`)
         ).rows[0]!.taxId,

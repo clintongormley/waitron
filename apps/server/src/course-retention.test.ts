@@ -27,14 +27,14 @@ import {
   updateProduct,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { createTable } from "./testing/live-table.js";
 import { mountTillApi } from "./till-api.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import "./errors.js";
 import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 
@@ -71,10 +71,10 @@ async function setup() {
     operationDescription: "Restaurant",
   });
   const venueId = await venueLocationId(db);
-  const locationId = brandLocationId(venueId);
+  const locationId = venueId;
   const stationId = await seedKitchenStation(db, { locationId });
   const nodeId = await seedNode(db);
-  const cfg: TradingContext = {
+  const cfg: WithVenueRowId = {
     nodeId: brandNodeId(nodeId),
     locationId,
     locale: "es-ES",

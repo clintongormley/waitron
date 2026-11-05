@@ -15,7 +15,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { deviceOrigin, locationId, seriesId } from "@waitron/shared";
+import { deviceOrigin, seriesId } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
 import { fiscalAllocations, registroSif, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
@@ -71,7 +71,7 @@ it.each([
       expect(await store.venue.select().from(devices)).toEqual([]);
       const cfg = {
         nodeId: TENANT_A.nodeId,
-        locationId: locationId(await withTransaction(store.venue, venueLocationId)),
+        locationId: await withTransaction(store.venue, venueLocationId),
         locale: "en",
         invoiceLocales: ["es"],
         tipsEnabled: false,
