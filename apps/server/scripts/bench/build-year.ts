@@ -148,7 +148,7 @@ function readVenue<T>(dir: string, read: (db: DatabaseSync) => T): T {
   }
 }
 
-function copyFolder(from: string, to: string): void {
+export function copyFolder(from: string, to: string): void {
   const args =
     process.platform === "darwin" ? ["-c", "-R", from, to] : ["--reflink=auto", "-R", from, to];
   execFileSync("cp", args);
@@ -211,7 +211,7 @@ function writeVolume(
   });
 }
 
-function gitCommit(): string | null {
+export function gitCommit(): string | null {
   try {
     return execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: dirname(fileURLToPath(import.meta.url)),
