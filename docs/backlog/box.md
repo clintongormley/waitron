@@ -1243,6 +1243,10 @@ NetworkManager.
   the wire, narrowing spec §8's "carries the person and permission" (D7); a join takes WPA2 and
   WPA3 personal networks only, so open, OWE and enterprise networks cannot be joined from Red (D9);
   `tag.write` takes no person actor, narrowing spec §8's "carries the person" (D6).
+- `scripts/box/wifi-boot-copy.test.mjs`'s last case, "the copy's states and failures match what the
+  cases observe", skips itself when any other case in the file is not set to run, so a `.skip` or
+  `.only` left in that file turns it off with no failure. Left open by #2474's review, which
+  suggested failing instead of skipping when `CI` is set.
 
 **Left open by PR 1's review (#2370):**
 
