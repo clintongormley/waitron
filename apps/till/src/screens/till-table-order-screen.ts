@@ -546,7 +546,7 @@ type ActionStep = "closed" | "pick" | "move-dishes" | "split-table" | "split-tab
 
 /** What the foot says when a refusal's own sentence would claim the rows were read again and they
  * were not. */
-const splitRowsUnreadSentence = (): string => t("table.reread_failed");
+const splitRowsUnreadSentence = (): string => t("table.split_updated_elsewhere");
 
 const isAnswer = (read: SplitSources | "failed" | null): read is SplitSources =>
   read !== null && read !== "failed";

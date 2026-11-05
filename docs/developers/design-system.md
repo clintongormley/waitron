@@ -2646,7 +2646,7 @@ form's own checks disable the action; an error that comes back from a request ne
 
 Split a table's panel (A803 4c) departs from these in three ways. `till-table-order-screen.split-table.test.ts`
 pins the first two and `till-app-split-table.test.ts` the third, and that a failed read after a refused
-split leaves Split enabled; `till-app-split-table.snapshot.test.ts` pins that no read holds Split. All read this
+split leaves Split enabled; `till-app-split-table.snapshot.test.ts` and `till-app-split-table.reads.test.ts` pin that no read holds Split. All read this
 panel alone, with stubbed reads, and nothing checks another panel for the same behaviour.
 
 **(a) A first read that fails says so at once.** The panel's rows come from a read, so a failed
@@ -2654,7 +2654,8 @@ first read shows `table.split_read_failed` in `wt-form-actions`'s bottom message
 with Split quiet and disabled and no hint above the missing rows, until a read answers. A later read that fails keeps the last rows,
 says nothing and leaves Split as it was. Once rows are drawn no read holds Split: a press sends the party revision
 the rows' read answered with, and if they are stale the server refuses it and the panel comes back with the sentence
-and reads. A read that sentence waits on counts as failed once it has been out for 25 seconds. Its precedents: the Products browser's Move and Delete
+and reads. A bill ticked before its edit state has arrived does not hold Split either: there is no change since the
+tick to notice, so the press names what it knows and the server judges. A read that sentence waits on counts as failed once it has been out for 25 seconds. Its precedents: the Products browser's Move and Delete
 dialog, whose confirm is quiet after the summary failed; `wt-delete-dialog`, whose Delete is quiet
 while `readError` is set; and the period delete dialog, whose bottom says when its impact read
 failed.
@@ -2671,7 +2672,7 @@ after a refused split fails, no bill shows held and Split stays enabled.
 A refused split comes back with the foot brought into view, the sentence and Split together on
 screen, and a refused take-over's line does the same. If the read after that refusal draws more rows above it, the
 foot follows that one answer, unless the waiter has touched the screen since. After `party.out_of_date`, if the read that
-brings the panel's rows fails, the foot says `table.reread_failed` rather than that the table was
+brings the panel's rows fails or passes that limit, the foot says `table.split_updated_elsewhere` rather than that the table was
 reloaded; once a later read brings the rows, it goes back to the refusal's own sentence.
 
 **(c) A refused take-over has a line of its own** (`data-split-take-over-refusal`), below whatever the foot already says, where the list below says one
@@ -5968,7 +5969,7 @@ anyway), an invalid count, then a stop a read left waiting, then Everything tick
 A whole bill presented or part-paid by a read stays whole and stops nothing, and an unticked bill
 gaining an order gets its row and stops nothing. Behind these the app keeps, for each selected bill,
 the edit state seen when it was ticked (`split-table-observe`) and, at Send, compares the selected
-bills: one missing or moved sends no request and reopens the panel with `table.split_changed`. A
+bills: one moved sends no request and reopens the panel with `table.split_changed`; one with nothing recorded when ticked is left to the server. A
 take-over from the panel and the screen's own stop replace that bill's record, so one change stops one
 press.
 

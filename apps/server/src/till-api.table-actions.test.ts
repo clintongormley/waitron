@@ -1955,6 +1955,66 @@ describe("A803 split: the panel's read", () => {
       expect(onNewParty).toEqual([{ id: pulpoBill }]);
     });
 
+    it("a press that knows no edit state names an untouched bill's: taken on one, and refused on an edited one with the state, which the next press names", async () => {
+      const untouched = await twoBillsOnTwoTables();
+      const blank = (billId: string) => ({
+        billId,
+        editorVersion: 0,
+        draftId: null,
+        draftRevision: null,
+      });
+      const pressNaming = (partyId: string, tableId: string, billId: string, edit: unknown) =>
+        send(venue.app, venue.cookie, "POST", `/api/parties/${partyId}/split-table`, {
+          tableId,
+          selection: { wholeBillIds: [billId], loose: [] },
+          expectedPartyRevision: revisionOf(partyId),
+          expectedEdits: [edit],
+          guestCounts: { staying: null, leaving: null },
+        });
+      const taken = await pressNaming(
+        untouched.ana.partyId,
+        untouched.second,
+        untouched.pulpoBill,
+        blank(untouched.pulpoBill),
+      );
+      expect(taken.status, JSON.stringify(taken.json)).toBe(200);
+
+      const { ana, second, pulpoBill } = await twoBillsOnTwoTables();
+      const [pulpo] = venue.db.all<{ id: string }>(
+        sql`select id from working_order_lines where working_order_id = ${pulpoBill}`,
+      );
+      const recalled = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/parties/${ana.partyId}/lines/${pulpo!.id}/recall`,
+        {
+          submissionId: randomUUID(),
+          expectedPartyRevision: revisionOf(ana.partyId),
+          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, pulpoBill)),
+        },
+      );
+      expect(recalled.status, JSON.stringify(recalled.json)).toBe(200);
+
+      const refused = await pressNaming(ana.partyId, second, pulpoBill, blank(pulpoBill));
+      expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+      expect(refused.json).toMatchObject({
+        code: "draft.out_of_date",
+        params: { billId: pulpoBill },
+      });
+      const { edit } = refused.json.params as { edit: Record<string, unknown> };
+      expect(edit).toMatchObject({ billId: pulpoBill });
+      expect(edit.editorVersion).not.toBe(0);
+
+      const retried = await pressNaming(ana.partyId, second, pulpoBill, {
+        billId: edit.billId,
+        editorVersion: edit.editorVersion,
+        draftId: edit.draftId,
+        draftRevision: edit.draftRevision,
+      });
+      expect(retried.status, JSON.stringify(retried.json)).toBe(200);
+    });
+
     it("an order sent on a bill moves it too, so rows from before are refused whatever edit state the press carries", async () => {
       const { ana, second, pulpoBill } = await twoBillsOnTwoTables();
       const [pulpo] = venue.db.all<{ id: string }>(

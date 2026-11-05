@@ -1,12 +1,36 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
-import type { BillBalance, PartyBill, SplitSources, TabLine } from "./api/client.js";
-import { currentLocale, fill, setLocale, t } from "./i18n/t.js";
+import type { PartyBill, SplitSources, TabLine } from "./api/client.js";
+import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { partyBill } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
-import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
+import {
+  atFloor,
+  balance,
+  billTwoTicked,
+  dish,
+  draftsMoving,
+  expectPressCarriesTheRows,
+  flush,
+  held,
+  listAt,
+  lost,
+  mounted,
+  panelOpen,
+  picker,
+  press,
+  q,
+  refreshDrafts,
+  rowsAt,
+  said,
+  sent,
+  splitButton,
+  takes,
+  tickBox,
+  timedRead,
+  toPanel,
+} from "./till-app-split-table.snapshot.test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
-import type { TillSplitPicker } from "./widgets/split-picker.js";
 import {
   api,
   emit,
@@ -35,194 +59,6 @@ afterEach(async () => {
   setLocale(locale);
   await page.viewport(1280, 768);
 });
-
-async function flush(el: TillApp, rounds = 6): Promise<void> {
-  for (let i = 0; i < rounds; i++) {
-    await vi.advanceTimersByTimeAsync(0);
-    await el.updateComplete;
-  }
-}
-
-function dish(id: string, lineNo: number, name = id): TabLine {
-  return {
-    id,
-    lineNo,
-    stationId: "bar",
-    changesAfterSending: null,
-    movable: true,
-    name,
-    productId: id,
-    parentProductId: null,
-    parentLineNo: null,
-    quantity: "1.000",
-    priceQuantity: "1.000",
-    unitPrecision: 0,
-    unitPriceGross: "10.00",
-    servedAt: null,
-    courseId: null,
-    sentAt: null,
-    firedAt: null,
-    state: null,
-    groupId: null,
-    note: null,
-    listId: null,
-    menuItemId: `offer-${id}`,
-    portion: true,
-  };
-}
-
-function balance(workingOrderId: string, total: string): BillBalance {
-  return {
-    workingOrderId,
-    status: "open",
-    total,
-    received: "0.00",
-    reserved: "0.00",
-    outstanding: total,
-    tips: "0.00",
-    payments: [],
-    paidLines: [],
-  };
-}
-
-const lost = () => new TypeError("Failed to fetch");
-
-const atFloor = (revision: number, over: Parameters<typeof party>[0] = {}) => {
-  const held = party({ tableIds: ["t4", "t5"], billCount: 2, revision, ...over });
-  return [table("t4", "4", held), table("t5", "5", held), table7];
-};
-
-/** One sources answer: Bill 2 at `total`, with the party's revision the server read beside it. */
-const rowsAt = (partyRevision: number, total: string, more: string[] = []): SplitSources => ({
-  partyRevision,
-  bills: [
-    { billId: "wo-4", lines: [dish("soup", 1)], balance: balance("wo-4", "10.00") },
-    { billId: "b2", lines: [dish("steak", 1)], balance: balance("b2", total) },
-    ...more.map((billId) => ({
-      billId,
-      lines: [dish(`dish-${billId}`, 1)],
-      balance: balance(billId, "5.00"),
-    })),
-  ],
-});
-
-const listAt = (total: string, revision: number, more: string[] = []): PartyBill[] => [
-  partyBill("wo-4", 1, "10.00"),
-  partyBill("b2", 2, total, { revision }),
-  ...more.map((billId, index) => partyBill(billId, 3 + index, "5.00")),
-];
-
-/** Calls that wait, in order, until a case answers or fails each of them. */
-function held<T>() {
-  const calls: { answer: (value: T) => void; fail: () => void }[] = [];
-  const read = () =>
-    new Promise<T>((resolve, reject) =>
-      calls.push({ answer: resolve, fail: () => reject(lost()) }),
-    );
-  return { calls, read };
-}
-
-const q = <T extends HTMLElement = HTMLElement>(el: TillApp, selector: string) =>
-  tableOrder(el)!.shadowRoot!.querySelector<T>(selector);
-const picker = (el: TillApp) => q<TillSplitPicker>(el, "till-split-picker");
-const splitButton = (el: TillApp) =>
-  q<HTMLElementTagNameMap["wt-button"]>(el, "[data-split-confirm]");
-const takes = (el: TillApp) => q(el, "[data-split-takes]")?.textContent ?? "";
-const said = (el: TillApp) => q(el, "[data-split-refusal]")?.textContent?.trim() ?? null;
-const panelOpen = (el: TillApp) => q(el, "[data-split-pick]") !== null;
-const sent = (call: number) => api.splitTable!.mock.calls[call]![3];
-const tickBox = (el: TillApp, billId: string) =>
-  picker(el)!.shadowRoot!.querySelector<HTMLInputElement>(`[data-split-tick="${billId}"]`);
-
-async function press(el: TillApp, selector: string): Promise<void> {
-  q(el, selector)!.click();
-  await flush(el);
-}
-
-async function toPanel(el: TillApp): Promise<void> {
-  await press(el, "[data-move-split]");
-  await press(el, '[data-action="split-table"]');
-  await press(el, '[data-target="t5"]');
-}
-
-async function tick(el: TillApp, billId: string): Promise<void> {
-  tickBox(el, billId)!.click();
-  await flush(el);
-}
-
-async function mounted(over: Record<string, unknown>): Promise<TillApp> {
-  server.bills.add("wo-4");
-  server.bills.add("b2");
-  const { el } = await mountApp({
-    getTablesState: vi.fn().mockResolvedValue(atFloor(3)),
-    getPartyBills: vi.fn().mockResolvedValue(listAt("20.00", 0)),
-    getSplitSources: vi.fn().mockResolvedValue(rowsAt(3, "20.00")),
-    splitTable: vi.fn().mockResolvedValue({ partyId: "v-split", billIds: ["b2"] }),
-    ...over,
-  });
-  await flush(el);
-  emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
-  await flush(el);
-  emit(shell(el), "screen-select", { screen: "floor" });
-  await flush(el);
-  emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
-  await flush(el);
-  return el;
-}
-
-async function billTwoTicked(over: Record<string, unknown> = {}): Promise<TillApp> {
-  const el = await mounted(over);
-  await toPanel(el);
-  await tick(el, "b2");
-  expect(takes(el)).toContain("20.00");
-  return el;
-}
-
-async function timedRead(el: TillApp): Promise<void> {
-  await vi.advanceTimersByTimeAsync(15_000);
-  await flush(el);
-}
-
-/** Moves the ticked bill's edit state once `moved.now` is set, so the till's own stop at Send runs on
- * the next press. */
-function draftsMoving() {
-  const moved = { now: false };
-  const listDrafts = vi.fn(async (partyId: string) => {
-    const snapshot = await server.listDrafts(partyId);
-    return moved.now
-      ? {
-          ...snapshot,
-          billEdits: snapshot.billEdits.map((edit) =>
-            edit.billId === "b2" ? { ...edit, editorVersion: 2 } : edit,
-          ),
-        }
-      : snapshot;
-  });
-  return { moved, listDrafts };
-}
-
-async function refreshDrafts(el: TillApp): Promise<void> {
-  window.dispatchEvent(new Event("focus"));
-  await flush(el);
-}
-
-/**
- * The ruling, for a case whose rows say which read they came from by Bill 2's amount: Split can be
- * pressed, and the press carries the revision of the rows on screen.
- */
-async function expectPressCarriesTheRows(
-  el: TillApp,
-  revisionOfAmount: Record<string, number>,
-): Promise<void> {
-  const shown = /€(\d+\.\d\d)/.exec(takes(el))?.[1];
-  expect(shown === undefined ? undefined : Object.keys(revisionOfAmount)).toContain(shown);
-  expect(splitButton(el)!.disabled).toBe(false);
-  const before = api.splitTable!.mock.calls.length;
-  await press(el, "[data-split-confirm]");
-  await flush(el);
-  expect(api.splitTable!.mock.calls.length).toBe(before + 1);
-  expect(sent(before)).toBe(revisionOfAmount[shown!]);
-}
 
 const FIRST_SEED = 1;
 const HISTORIES = 40;
@@ -441,7 +277,8 @@ async function runHistory(
     discardIfAsked(el);
     await flush(el, 3);
   }
-  venue = Object.assign(new Venue(random() < 0.25), { random });
+  // Rising across histories: the till keeps the highest revision it has seen, and no server falls behind it.
+  venue = Object.assign(new Venue(random() < 0.25), { random, revision: venue.revision });
   server.drafts.length = 0;
   api.getTablesState!.mockClear();
   emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
@@ -755,176 +592,6 @@ describe("till-app: Split a table's rows and its revision are one read (D16)", (
     });
   });
 
-  describe("a refusal's own reads have a time limit", () => {
-    // The till's limit on a floor read, `FLOOR_POLL_LIMIT_MS`.
-    const LIMIT = 25_000;
-    const never = () => new Promise(() => {});
-    const noBanner = (el: TillApp) => el.shadowRoot!.querySelector(".error") === null;
-    const refusedWith = (error: unknown) => ({ splitTable: vi.fn().mockRejectedValue(error) });
-
-    /** Pressing Split with these reads stuck: nothing said one moment before `limit`, then the
-     * panel back, with its tick, its sentence, and Split ready. */
-    async function saysOnlyAtTheLimit(el: TillApp, limit: number, sentence: string) {
-      await press(el, "[data-split-confirm]");
-      await vi.advanceTimersByTimeAsync(limit - 1);
-      await flush(el);
-      expect(panelOpen(el), "still closed").toBe(false);
-      expect(noBanner(el)).toBe(true);
-
-      await vi.advanceTimersByTimeAsync(1);
-      await flush(el);
-      expect(panelOpen(el), "back at the limit").toBe(true);
-      expect(said(el)).toBe(sentence);
-      expect(noBanner(el)).toBe(true);
-      expect(tickBox(el, "b2")!.checked).toBe(true);
-      expect(splitButton(el)!.disabled).toBe(false);
-      expect(splitButton(el)!.variant).toBe("primary");
-      expect(api.splitTable).toHaveBeenCalledOnce();
-    }
-
-    /** What a refused party.out_of_date says when its reads fail outright. */
-    async function sentenceOfAFailedRead(fail: () => void): Promise<string> {
-      const el = await billTwoTicked(refusedWith({ code: "party.out_of_date" }));
-      fail();
-      await press(el, "[data-split-confirm]");
-      await flush(el);
-      expect(panelOpen(el)).toBe(true);
-      const words = said(el)!;
-      expect(words).not.toBe("");
-      cleanupWidgets();
-      resetAllergyFixture();
-      return words;
-    }
-
-    it.each([
-      ["floor", "getTablesState"],
-      ["bills", "getPartyBills"],
-      ["lines", "getTabLines"],
-      ["groups", "listGroups"],
-      ["kitchen", "readCurrentOrders"],
-    ] as const)(
-      "party.out_of_date with its %s read never answering says at the limit what a failed read says",
-      async (_read, method) => {
-        const failed = await sentenceOfAFailedRead(() =>
-          api[method]!.mockReset().mockRejectedValue(lost()),
-        );
-        const el = await billTwoTicked(refusedWith({ code: "party.out_of_date" }));
-        api[method]!.mockReset().mockImplementation(never);
-        await saysOnlyAtTheLimit(el, LIMIT, failed);
-      },
-    );
-
-    it("a lost reply with its floor read never answering says table.error at the limit", async () => {
-      const el = await billTwoTicked(refusedWith(lost()));
-      api.getTablesState!.mockReset().mockImplementation(never);
-      await saysOnlyAtTheLimit(el, LIMIT, t("table.error"));
-    });
-
-    it("tab.split_held_line with its rows' read never answering says its own words at the limit, and the old rows stay", async () => {
-      const el = await billTwoTicked(refusedWith({ code: "tab.split_held_line" }));
-      api.getSplitSources!.mockReset().mockImplementation(never);
-      await saysOnlyAtTheLimit(el, LIMIT, t("table.split_held_error"));
-      expect(takes(el)).toContain("20.00");
-      await expectPressCarriesTheRows(el, { "20.00": 3 });
-    });
-
-    it("each read has the limit to itself: a bills read and then a rows read never answering take it twice over", async () => {
-      const el = await billTwoTicked(refusedWith({ code: "tab.not_open", tabId: "b2" }));
-      api.getPartyBills!.mockReset().mockImplementation(never);
-      api.getSplitSources!.mockReset().mockImplementation(never);
-      await saysOnlyAtTheLimit(el, 2 * LIMIT, fill(t("table.split_changed"), { bill: "Bill 2" }));
-    });
-
-    it("draft.out_of_date's drafts read keeps its own limit, a request's, as it takes the signal the read is cut off by", async () => {
-      const el = await billTwoTicked(refusedWith({ code: "draft.out_of_date", billId: "b2" }));
-      api.listDrafts!.mockReset().mockImplementation(
-        (_party: string, options?: { signal?: AbortSignal }) =>
-          new Promise((_resolve, reject) => {
-            options?.signal?.addEventListener("abort", () => reject(lost()));
-          }),
-      );
-      await saysOnlyAtTheLimit(
-        el,
-        TABLE_REQUEST_LIMIT_MS,
-        fill(t("table.split_changed"), { bill: "Bill 2" }),
-      );
-    });
-
-    it("a late floor answer writes nothing: the party stays as it was, no read follows, and a press carries the rows", async () => {
-      const el = await billTwoTicked(refusedWith({ code: "party.out_of_date" }));
-      const floorRead = held<ReturnType<typeof atFloor>>();
-      api.getTablesState!.mockReset().mockImplementation(floorRead.read);
-      await press(el, "[data-split-confirm]");
-      await vi.advanceTimersByTimeAsync(LIMIT);
-      await flush(el);
-      expect(panelOpen(el)).toBe(true);
-      const rowsRead = api.getSplitSources!.mock.calls.length;
-      const bills = tableOrder(el)!.bills;
-
-      floorRead.calls[0]!.answer(atFloor(9));
-      await flush(el);
-
-      expect(tableOrder(el)!.party?.revision).toBe(3);
-      expect(tableOrder(el)!.bills).toBe(bills);
-      expect(api.getSplitSources!.mock.calls.length).toBe(rowsRead);
-      await expectPressCarriesTheRows(el, { "20.00": 3 });
-    });
-
-    it("a late bills answer writes nothing: the list stays as it was, no read follows, and a press carries the rows", async () => {
-      const el = await billTwoTicked(refusedWith({ code: "party.out_of_date" }));
-      const billsRead = held<PartyBill[]>();
-      api.getPartyBills!.mockReset().mockImplementation(billsRead.read);
-      await press(el, "[data-split-confirm]");
-      await vi.advanceTimersByTimeAsync(LIMIT);
-      await flush(el);
-      expect(panelOpen(el)).toBe(true);
-      const rowsRead = api.getSplitSources!.mock.calls.length;
-      const bills = tableOrder(el)!.bills;
-
-      billsRead.calls[0]!.answer(listAt("30.00", 5));
-      await flush(el);
-
-      expect(tableOrder(el)!.bills).toBe(bills);
-      expect(api.getSplitSources!.mock.calls.length).toBe(rowsRead);
-      await expectPressCarriesTheRows(el, { "20.00": 3 });
-    });
-
-    it("a late rows answer writes nothing: the rows on screen stay, and a press carries them", async () => {
-      const el = await billTwoTicked(refusedWith({ code: "tab.split_held_line" }));
-      const rowsRead = held<SplitSources>();
-      api.getSplitSources!.mockReset().mockImplementationOnce(rowsRead.read);
-      api.getSplitSources!.mockResolvedValue(rowsAt(3, "20.00"));
-      await press(el, "[data-split-confirm]");
-      await vi.advanceTimersByTimeAsync(LIMIT);
-      await flush(el);
-      expect(panelOpen(el)).toBe(true);
-
-      rowsRead.calls[0]!.answer(rowsAt(9, "30.00"));
-      await flush(el);
-
-      expect(takes(el)).toContain("20.00");
-      await expectPressCarriesTheRows(el, { "20.00": 3 });
-    });
-
-    it("a read answering inside the limit still brings what it says", async () => {
-      const el = await billTwoTicked(refusedWith({ code: "party.out_of_date" }));
-      const floorRead = held<ReturnType<typeof atFloor>>();
-      api.getTablesState!.mockReset().mockImplementation(floorRead.read);
-      await press(el, "[data-split-confirm]");
-      await vi.advanceTimersByTimeAsync(LIMIT - 1);
-      await flush(el);
-      expect(panelOpen(el)).toBe(false);
-      api.getSplitSources!.mockResolvedValue(rowsAt(9, "20.00"));
-
-      floorRead.calls[0]!.answer(atFloor(9));
-      await flush(el);
-
-      expect(panelOpen(el)).toBe(true);
-      expect(tableOrder(el)!.party?.revision).toBe(9);
-      await expectPressCarriesTheRows(el, { "20.00": 9 });
-    });
-  });
-
   describe("the waiting mark travels in the rows' read", () => {
     const held = {
       id: "g-mains",
@@ -1178,7 +845,7 @@ describe("till-app: Split a table's rows and its revision are one read (D16)", (
         await press(el, "[data-split-confirm]");
         await flush(el);
         expect(panelOpen(el), name).toBe(true);
-        expect(said(el) === t("table.reread_failed"), name).toBe(reaches);
+        expect(said(el) === t("table.split_updated_elsewhere"), name).toBe(reaches);
         cleanupWidgets();
         resetAllergyFixture();
       }

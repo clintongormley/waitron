@@ -2230,7 +2230,7 @@ describe("A803 split: a read and a selected bill", () => {
 
     el.splitRowsUnread = refusal;
     await settled(el);
-    expect(refusalLine(el)!.textContent!.trim()).toBe(t("table.reread_failed"));
+    expect(refusalLine(el)!.textContent!.trim()).toBe(t("table.split_updated_elsewhere"));
 
     el.splitRead = withoutBills("b3");
     await settled(el);

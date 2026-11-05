@@ -512,19 +512,25 @@ export class DraftSync {
   }
 
   /** A read never turns a retained local candidate into saved work. */
-  async load(): Promise<boolean> {
+  async load(limitMs?: number): Promise<boolean> {
     if (this.#commanding || this.#correctingPlaces) return false;
-    return this.#load();
+    return this.#load(limitMs);
   }
 
-  async #load(): Promise<boolean> {
+  async #load(limitMs = this.#options.requestLimitMs): Promise<boolean> {
     const command = this.#commandsStarted;
     const read = ++this.#reads;
     this.#cancelTimer();
-    const limit = limited(this.#options.requestLimitMs, this.#commandAbort?.signal);
+    const limit = limited(limitMs, this.#commandAbort?.signal);
     let answer;
     try {
-      answer = await this.#options.api.listDrafts(this.partyId, { signal: limit.signal });
+      // What a read answers past its limit goes nowhere, whether or not its request stopped.
+      answer = await Promise.race([
+        this.#options.api.listDrafts(this.partyId, { signal: limit.signal }),
+        pause(limit.signal).then(() => {
+          throw new DOMException("A drafts read ended", "AbortError");
+        }),
+      ]);
     } catch {
       return false;
     } finally {
