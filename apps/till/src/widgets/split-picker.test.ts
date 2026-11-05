@@ -1,12 +1,17 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { decimal, formatMoney } from "@waitron/shared";
-import type { BillBalance, PartyBill, TabLine } from "../api/client.js";
+import type { BillBalance, Draft, PartyBill, TabLine } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { paidQuantities } from "../state/bill-payment.js";
 import { tabLinePortionKey } from "../state/portion-groups.js";
 import { pickGroups } from "../state/portion-selection.js";
-import { pickOnBill, type SplitPicks, type SplitSource } from "../state/split-selection.js";
+import {
+  pickOnBill,
+  splitSourcesFrom,
+  type SplitPicks,
+  type SplitSource,
+} from "../state/split-selection.js";
 import { billGross } from "../state/adjust-target.js";
 import type { TillPortionPicker } from "./portion-picker.js";
 import { TillSplitPicker } from "./split-picker.js";
@@ -19,8 +24,8 @@ function line(id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine 
     stationId: "bar",
     changesAfterSending: null,
     movable: true,
-    name: "Caña",
-    productId: "cana",
+    name: "Beer",
+    productId: "beer",
     parentProductId: null,
     parentLineNo: null,
     quantity: "1.000",
@@ -35,7 +40,7 @@ function line(id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine 
     groupId: null,
     note: null,
     listId: null,
-    menuItemId: "offer-cana",
+    menuItemId: "offer-beer",
     portion: true,
     ...over,
   };
@@ -44,11 +49,12 @@ function line(id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine 
 const ham = (id: string, lineNo: number) =>
   line(id, lineNo, { name: "Ham", productId: "ham", menuItemId: "ham", unitPriceGross: "9.00" });
 
-const CANAS = [line("c1", 1), line("c2", 2), line("c3", 3)];
-const DISHES = [...CANAS, ham("h1", 4)];
+const BEERS = [line("c1", 1), line("c2", 2), line("c3", 3)];
+const DISHES = [...BEERS, ham("h1", 4)];
 
 interface SourceOptions {
   received?: string;
+  reserved?: string;
   paid?: string[];
   status?: PartyBill["status"];
   billName?: string;
@@ -56,18 +62,17 @@ interface SourceOptions {
   ownUnsent?: boolean;
 }
 
-function source(
+function balanceOf(
   id: string,
-  number: number,
   lines: readonly TabLine[],
   options: SourceOptions = {},
-): SplitSource {
-  const balance: BillBalance = {
+): BillBalance {
+  return {
     workingOrderId: id,
     status: options.status ?? "open",
     total: billGross(lines),
     received: options.received ?? "0.00",
-    reserved: "0.00",
+    reserved: options.reserved ?? "0.00",
     outstanding: "0.00",
     tips: "0.00",
     payments: [],
@@ -77,8 +82,18 @@ function source(
       paidQuantity: "1.000",
     })),
   };
-  const keyOf = (row: TabLine) =>
-    tabLinePortionKey(row, lines, paidQuantities(balance).get(row.lineNo) ?? null);
+}
+
+const keyFor = (lines: readonly TabLine[], balance: BillBalance) => (row: TabLine) =>
+  tabLinePortionKey(row, lines, paidQuantities(balance).get(row.lineNo) ?? null);
+
+function source(
+  id: string,
+  number: number,
+  lines: readonly TabLine[],
+  options: SourceOptions = {},
+): SplitSource {
+  const balance = balanceOf(id, lines, options);
   return {
     bill: {
       workingOrderId: id,
@@ -95,7 +110,7 @@ function source(
       hasPayments: (options.received ?? "0.00") !== "0.00",
       receiptAvailable: false,
     },
-    groups: pickGroups(lines, keyOf, balance, new Set()),
+    groups: pickGroups(lines, keyFor(lines, balance), balance, new Set()),
     held: options.held ?? null,
     ownUnsent: options.ownUnsent ?? false,
   };
@@ -108,8 +123,8 @@ const looseOf = (id: string, ...picks: string[]): SplitPicks => ({
   picks: new Map([[id, new Set(picks)]]),
 });
 
-const luis = { draftId: "draft-luis", revision: 7, ownerName: "Luis" };
-const nobody = { draftId: "draft-x", revision: 3, ownerName: null };
+const luis = { draftId: "draft-luis", revision: 7, ownerName: "Luis", takenFromYou: false };
+const nobody = { draftId: "draft-x", revision: 3, ownerName: null, takenFromYou: false };
 
 const money = (amount: string) => formatMoney(decimal(amount), currentLocale());
 const nameOf = (dish: TabLine) => dish.name ?? "";
@@ -230,6 +245,46 @@ describe("till-split-picker", () => {
     expect(q(el, '[data-split-bill="b2"] [data-split-paid]')).toBeNull();
   });
 
+  it("money only reserved by a card in progress is not called paid, and still keeps its dishes on the bill", async () => {
+    const { el } = await picker(
+      [source("b1", 1, DISHES, { reserved: "5.00" })],
+      looseOf("b1", "c1", "c2", "c3"),
+    );
+    expect(text(el, '[data-split-bill="b1"] [data-split-paid]')).toBeUndefined();
+    const tick = rowTick(el, "b1", "h1");
+    expect(tick.disabled).toBe(true);
+    const reason = inner(el, "b1")!.shadowRoot!.getElementById(
+      tick.getAttribute("aria-describedby")!,
+    );
+    expect(reason!.textContent).toBe(fill(t("table.move_dishes_floor"), { amount: money("5.00") }));
+  });
+
+  it("a bill with money received and a card in progress says only what was received", async () => {
+    const { el } = await picker([source("b1", 1, DISHES, { received: "3.00", reserved: "5.00" })]);
+    expect(text(el, '[data-split-bill="b1"] [data-split-paid]')).toBe(
+      fill(t("table.split_bill_part_paid"), { amount: money("3.00") }),
+    );
+  });
+
+  it("a presented bill's disabled ticks carry the note's words, whole or not", async () => {
+    const { el } = await picker([source("b1", 1, DISHES, { status: "placed" })]);
+    expect(rowTick(el, "b1", "c1").getAttribute("aria-description")).toBe(
+      t("table.split_presented"),
+    );
+    el.split = wholeOf("b1");
+    await el.updateComplete;
+    await inner(el, "b1")!.updateComplete;
+    expect(rowTick(el, "b1", "c1").disabled).toBe(true);
+    expect(rowTick(el, "b1", "c1").getAttribute("aria-description")).toBe(
+      t("table.split_presented"),
+    );
+  });
+
+  it("a bill that is not presented puts no such words on its ticks", async () => {
+    const { el } = await picker([source("b1", 1, DISHES)]);
+    expect(rowTick(el, "b1", "c1").hasAttribute("aria-description")).toBe(false);
+  });
+
   it("a presented bill has its note, a usable header and greyed rows", async () => {
     const { el, emitted } = await picker([source("b1", 1, DISHES, { status: "placed" })]);
     expect(billText(el, "b1")).toContain(t("table.split_presented"));
@@ -264,7 +319,7 @@ describe("till-split-picker", () => {
     const reason = el.shadowRoot!.getElementById(tick.getAttribute("aria-describedby")!);
     expect(reason!.textContent).toBe(t("table.split_take_over_first"));
     expect(inner(el, "b1")).toBeNull();
-    expect(billText(el, "b1")).not.toContain("Caña");
+    expect(billText(el, "b1")).not.toContain("Beer");
     expect(billText(el, "b1")).not.toContain(t("table.move_dishes_none"));
   });
 
@@ -298,13 +353,52 @@ describe("till-split-picker", () => {
 
   it("an order taken from this person draws the taken-over words, named and unnamed", async () => {
     const { el } = await picker(
-      [source("b1", 1, DISHES, { held: luis }), source("b2", 2, DISHES, { held: nobody })],
+      [
+        source("b1", 1, DISHES, { held: { ...luis, takenFromYou: true } }),
+        source("b2", 2, DISHES, { held: { ...nobody, takenFromYou: true } }),
+      ],
       NOTHING,
-      { takenFromYou: new Set(["b1", "b2"]) },
     );
     expect(billText(el, "b1")).toContain(fill(t("table.draft_taken_by"), { name: "Luis" }));
     expect(billText(el, "b1")).not.toContain(fill(t("table.others_draft"), { name: "Luis" }));
     expect(billText(el, "b2")).toContain(t("table.draft_taken_by_unnamed"));
+  });
+
+  it("the panel's read decides the taken-over words: only a draft taken from this person draws them", async () => {
+    const billIds = ["b1", "b2", "b3"];
+    const held = (billId: string, takenOverFrom: Draft["takenOverFrom"]): Draft => ({
+      id: `draft-${billId}`,
+      partyId: "party",
+      billId,
+      ownerId: "luis",
+      ownerName: "Luis",
+      revision: 2,
+      lines: [],
+      takenOverFrom,
+    });
+    const sources = splitSourcesFrom(
+      {
+        bills: billIds.map((billId) => ({
+          billId,
+          lines: DISHES,
+          balance: balanceOf(billId, DISHES),
+        })),
+      },
+      billIds.map((billId, index) => source(billId, index + 1, DISHES).bill),
+      [
+        held("b1", { personId: "ana", name: "Ana" }),
+        held("b2", { personId: "marta", name: "Marta" }),
+        held("b3", null),
+      ],
+      "ana",
+      new Set(),
+      keyFor,
+    );
+    const { el } = await picker(sources);
+    expect(billText(el, "b1")).toContain("Taken over by Luis");
+    expect(billText(el, "b1")).not.toContain("Luis has an unsent order");
+    expect(billText(el, "b2")).toContain("Luis has an unsent order");
+    expect(billText(el, "b3")).toContain("Luis has an unsent order");
   });
 
   it("Take over emits the bill and the draft as read, once, bubbling and composed", async () => {

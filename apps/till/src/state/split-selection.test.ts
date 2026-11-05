@@ -137,7 +137,7 @@ function source(
   };
 }
 
-const luis = { draftId: "draft-luis", revision: 0, ownerName: "Luis" };
+const luis = { draftId: "draft-luis", revision: 0, ownerName: "Luis", takenFromYou: false };
 
 const NOTHING: SplitPicks = { whole: new Set(), picks: new Map() };
 
@@ -587,7 +587,12 @@ describe("A803 selection:", () => {
         keyFor,
       );
 
-      expect(one!.held).toEqual({ draftId: "draft-luis", revision: 4, ownerName: "Luis" });
+      expect(one!.held).toEqual({
+        draftId: "draft-luis",
+        revision: 4,
+        ownerName: "Luis",
+        takenFromYou: false,
+      });
       expect(one!.ownUnsent).toBe(false);
     });
 
@@ -601,7 +606,30 @@ describe("A803 selection:", () => {
         keyFor,
       );
 
-      expect(one!.held).toEqual({ draftId: "draft-gone", revision: 0, ownerName: null });
+      expect(one!.held).toEqual({
+        draftId: "draft-gone",
+        revision: 0,
+        ownerName: null,
+        takenFromYou: false,
+      });
+    });
+
+    it("a holder who took the draft from this person marks it, and from anyone else does not", () => {
+      const takenFrom = (billId: string, personId: string) => ({
+        ...draft(billId, "luis", "Luis"),
+        takenOverFrom: { personId, name: "" },
+      });
+      const [mine, theirs] = splitSourcesFrom(
+        readOf({ id: "b1", lines: [a] }, { id: "b2", lines: [b] }),
+        [bill("b1", 1), bill("b2", 2)],
+        [takenFrom("b1", "me"), takenFrom("b2", "marta")],
+        "me",
+        new Set(),
+        keyFor,
+      );
+
+      expect(mine!.held!.takenFromYou).toBe(true);
+      expect(theirs!.held!.takenFromYou).toBe(false);
     });
 
     it("this person's draft sets ownUnsent and no held", () => {
@@ -1033,7 +1061,7 @@ describe("A803 selection:", () => {
   describe("heldSelected", () => {
     const heldBy = (id: string, number: number, ownerName: string | null) =>
       source(id, number, [dish(`d${id}`, number, "5.00")], {
-        held: { draftId: `draft-${id}`, revision: 0, ownerName },
+        held: { draftId: `draft-${id}`, revision: 0, ownerName, takenFromYou: false },
       });
 
     it("is in number order and leaves out an unselected held bill", () => {

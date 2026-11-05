@@ -49,8 +49,9 @@ interface PickGroup {
  * one grouping serves every drawing of the rows until what it is grouped from changes. */
 export interface PickGroups {
   readonly groups: readonly PickGroup[];
-  /** The bill's total and what it has received or reserved; null with no balance read. */
-  readonly floor: { total: Decimal; kept: Decimal } | null;
+  /** The bill's total, what it has received, and `kept`: that plus what a card in progress has
+   * reserved, which is the least the bill may hold. Null with no balance read. */
+  readonly floor: { total: Decimal; received: Decimal; kept: Decimal } | null;
 }
 
 /**
@@ -91,6 +92,7 @@ export function pickGroups(
         ? null
         : {
             total: decimal(balance.total),
+            received: decimal(balance.received),
             kept: moneyPlus(balance.received, balance.reserved),
           },
   };

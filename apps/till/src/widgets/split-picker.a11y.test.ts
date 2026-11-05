@@ -18,8 +18,8 @@ function line(id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine 
     stationId: "bar",
     changesAfterSending: null,
     movable: true,
-    name: "Caña",
-    productId: "cana",
+    name: "Beer",
+    productId: "beer",
     parentProductId: null,
     parentLineNo: null,
     quantity: "1.000",
@@ -34,7 +34,7 @@ function line(id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine 
     groupId: null,
     note: null,
     listId: null,
-    menuItemId: "offer-cana",
+    menuItemId: "offer-beer",
     portion: true,
     ...over,
   };
@@ -98,7 +98,7 @@ function source(
 const NOTHING: SplitPicks = { whole: new Set(), picks: new Map() };
 const WHOLE: SplitPicks = { whole: new Set(["b1"]), picks: new Map() };
 const SOME: SplitPicks = { whole: new Set(), picks: new Map([["b1", new Set(["c1", "c2"])]]) };
-const luis = { draftId: "draft-luis", revision: 1, ownerName: "Luis" };
+const luis = { draftId: "draft-luis", revision: 1, ownerName: "Luis", takenFromYou: false };
 const money = (amount: string) => formatMoney(decimal(amount), currentLocale());
 
 const STATES: [string, SplitSource, SplitPicks][] = [

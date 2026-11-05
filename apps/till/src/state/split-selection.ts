@@ -25,8 +25,14 @@ export interface SplitSource {
   bill: PartyBill;
   groups: PickGroups;
   /** Someone else's unsent dishes hold it: no new tick until taken over; an existing tick stays
-   * (D21). `ownerName` is null for a holder the server has no name for. */
-  held: { draftId: string; revision: number; ownerName: string | null } | null;
+   * (D21). `ownerName` is null for a holder the server has no name for. `takenFromYou`: the holder
+   * took the order from this person. */
+  held: {
+    draftId: string;
+    revision: number;
+    ownerName: string | null;
+    takenFromYou: boolean;
+  } | null;
   /** This person's own unsent dishes on it: a saved draft, or dishes recalled on screen. */
   ownUnsent: boolean;
 }
@@ -248,6 +254,7 @@ export function splitSourcesFrom(
                 revision: holder.revision,
                 // The server sends "" for a person it has no name for (`order-drafts.ts`).
                 ownerName: holder.ownerName === "" ? null : holder.ownerName,
+                takenFromYou: holder.takenOverFrom?.personId === personId,
               },
         ownUnsent: withOwnDraft.has(billId) || lines.some((line) => recalled.has(line.id)),
       },

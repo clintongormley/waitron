@@ -105,8 +105,6 @@ export class TillSplitPicker extends LitElement {
   /** The bills to draw, in the order to draw them. */
   @property({ attribute: false }) sources: readonly SplitSource[] = [];
   @property({ attribute: false }) split: SplitPicks = { whole: new Set(), picks: new Map() };
-  /** Bills whose holder took the order from this person, who then reads different words. */
-  @property({ attribute: false }) takenFromYou: ReadonlySet<string> = new Set();
   /** Names a dish or an extra. */
   @property({ attribute: false }) nameOf: (line: TabLine) => string = (line) => line.name ?? "";
   @property({ attribute: false }) money: (amount: string) => string = (amount) => amount;
@@ -133,7 +131,7 @@ export class TillSplitPicker extends LitElement {
 
   #holder(source: SplitSource, held: NonNullable<SplitSource["held"]>): TemplateResult {
     const name = held.ownerName ?? "";
-    const words = this.takenFromYou.has(source.bill.workingOrderId)
+    const words = held.takenFromYou
       ? named(name, t("table.draft_taken_by"), t("table.draft_taken_by_unnamed"))
       : named(name, t("table.others_draft"), t("table.others_draft_unnamed"));
     return html`<div class="held">
@@ -154,7 +152,7 @@ export class TillSplitPicker extends LitElement {
     const tick = billTick(source, this.split);
     const waitsForTakeOver = source.held !== null && tick === "none";
     const reasonId = `split-reason-${id}`;
-    const kept = source.groups.floor?.kept ?? ZERO;
+    const received = source.groups.floor?.received ?? ZERO;
     return html`<section class="bill" data-split-bill=${id}>
       <div class="header" data-split-header>
         <label>
@@ -170,10 +168,10 @@ export class TillSplitPicker extends LitElement {
           <span class="name" data-split-name>${billLabel(source.bill)}</span>
         </label>
         ${
-          compareDecimal(kept, ZERO) > 0
+          compareDecimal(received, ZERO) > 0
             ? html`<span class="paid" data-split-paid
                 >${fill(t("table.split_bill_part_paid"), {
-                  amount: this.money(toScale(kept, MONEY_SCALE)),
+                  amount: this.money(toScale(received, MONEY_SCALE)),
                 })}</span
               >`
             : nothing

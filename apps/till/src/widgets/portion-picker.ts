@@ -204,6 +204,7 @@ export class TillPortionPicker extends LitElement {
           .checked=${live(count > 0)}
           ?disabled=${off}
           aria-describedby=${reason === "" ? nothing : reasonId}
+          aria-description=${row.blocked?.reason === "presented" ? t("table.split_presented") : nothing}
           @change=${() => this.#emit(this.#toggled(row))}
         />
         <span class="name"

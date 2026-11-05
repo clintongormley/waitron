@@ -242,4 +242,19 @@ describe.each(["light", "dark"] as const)("A803 picker a11y (%s theme)", (theme)
     const painted = await paintedIn(host, box.getBoundingClientRect());
     expect(Math.max(...painted.map((pixel) => contrast(pixel, page_)))).toBeGreaterThanOrEqual(3);
   });
+
+  it("a paid row's ticked, disabled box paints a check mark on its fill", async () => {
+    const { el, host } = await mountWidget<TillPortionPicker>(
+      "till-portion-picker",
+      { rows: rowsOf(PAID_LINES, PAID_ROWS, new Set()), whole: true, nameOf, money },
+      theme,
+    );
+    const box = el.shadowRoot!.querySelector<HTMLInputElement>('[data-pick="s1"]')!;
+    const fill = rgb(getComputedStyle(box).backgroundColor);
+    const { left, top, width, height } = box.getBoundingClientRect();
+    // Only the middle: the rounded corners show the page, which would pass with no mark at all.
+    const middle = new DOMRect(left + width / 4, top + height / 4, width / 2, height / 2);
+    const painted = await paintedIn(host, middle);
+    expect(Math.max(...painted.map((pixel) => contrast(pixel, fill)))).toBeGreaterThanOrEqual(3);
+  });
 });
