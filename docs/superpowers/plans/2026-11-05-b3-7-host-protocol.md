@@ -114,7 +114,7 @@ The lane decided D1 and D2 on 2026-11-05, as the watcher asked it to rather than
 - **D3. One pure module, `scripts/box/host-protocol.mjs`.** The parent names `host.mjs` (the service) and `host-protocol.mjs` (the protocol) separately (file map, slice 3). This pull request builds only the protocol, with the dispatcher taking adapters, so `host.mjs` later wires the socket's standard input and output to `handleHostRequest` and the real adapters to it.
 - **D4. The line: `<verb> <JSON object>`, printable ASCII, at most 4096 characters, in one canonical form.** A request line is the verb, one space, and one JSON object holding the request's fields in a fixed order and then `actor`. It is checked in this order, each step's refusal winning over later ones:
   1. not a string, longer than `HOST_LINE_MAX` (4096) characters, or holding any character outside U+0020–U+007E (so no newline, carriage return, tab or raw non-ASCII) → `request_invalid`; the length check comes first, as the shell's does (finding 2);
-  2. no space, or an empty verb → `request_invalid`; a verb not on `HOST_VERBS` (the shell's two included, D5) → `unknown_request`;
+  2. an empty verb → `request_invalid`; a verb not on `HOST_VERBS` (the shell's two included, D5) → `unknown_request`; then a listed verb with no space after it → `request_invalid` (as built: the verb is read before the space is looked for, so a bare unlisted verb answers `unknown_request`);
   3. the rest not JSON, not a plain object, or its own keys not exactly the verb's fields plus `actor` → `request_invalid`;
   4. the actor's form (D6) → `actor_invalid`;
   5. each field's value (D9–D12) → `fields_invalid`;
@@ -147,7 +147,7 @@ The lane decided D1 and D2 on 2026-11-05, as the watcher asked it to rather than
   {"ok":true,"wired":{"connected":true,"address":"192.168.1.10"},"wifi":{"connectedSsidHex":"…","savedSsidHex":"…"},"change":null,"bootCopy":{"state":"current","reason":null,"failure":null}}
   ```
 
-  - `wired.address`: `null`, or a string that `net.isIP` answers 4 or 6 for, of at most 45 characters and holding no `%`, so no interface name rides along (finding 16); `null` whenever `connected` is false.
+  - `wired.address`: `null`, or a string that `net.isIP` answers 4 or 6 for and holding no `%`, so no interface name rides along (finding 16); `null` whenever `connected` is false. As built there is no separate 45-character limit: on Node v26.13.0 `net.isIP` refused every longer form tried (the hand cases, and 200,000 random IPv6 shapes whose longest accepted form was 45 characters), and a 46-character test case fails first if a later Node accepts longer forms.
   - `wifi.connectedSsidHex` and `savedSsidHex`: each `null` or hex (D10); the saved one is the box's normal Wi-Fi, which `network.forget` names.
   - `change`: `null`, or `{kind, ssidHex, state, reason}` for the latest change: `kind` `join` or `forget`; `state` `running`, `applied` or `refused`; `reason` `null` unless `refused`, then for a join `password-rejected`, `network-not-found`, `timed-out` or `failed`, and for a forget `failed`.
   - `bootCopy`: exactly PR 5's `status()` shape (finding 11): `state` on `WIFI_COPY_STATES`, `reason` `null` or on `WIFI_NO_COPY_REASONS`, `failure` on `WIFI_COPY_FAILURES` exactly when `state` is `failed`, else `null`.

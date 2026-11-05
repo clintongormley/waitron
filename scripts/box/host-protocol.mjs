@@ -417,6 +417,7 @@ const ADAPTER_NAMES = [...Object.values(VERB_ADAPTER), "log"];
 const HOST_FAILED_LINE = '{"ok":false,"reason":"host_failed"}\n';
 
 /**
+ * Each adapter is called as a plain function, never with `this`.
  * @typedef {Record<string, (...args: any[]) => unknown>} HostAdapters  exactly networkRead,
  *   networkScan, networkJoin, networkForget, screenRead, screenSet, tagWrite and log
  */
