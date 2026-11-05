@@ -173,6 +173,8 @@ obtain an owner decision before changing that behavior.
 
 **Interfaces:** `HostRequest` discriminated union in `host-protocol.mjs`: `network.read`, `network.scan`, `network.join`, `network.forget`, `screen.read`, `screen.set`, `tag.write`, `first-start.status`; disk-document and cutover operations added only in slice 8. `NetworkSnapshot={wired:{connected:boolean,address:string|null},wifi:{connectedSsid:string|null,networks:readonly {ssid:string,signal:number}[]}}`. `handleHostRequest(request:unknown, actor:VerifiedHostActor):Promise<HostReply>` validates fixed fields and actor/permission at each action. `boxHostCall<T>(request:HostRequest):Promise<T>` in new server client wraps the private socket with bounded request/response sizes/timeouts; no arbitrary path or command execution.
 
+> 2026-11-05: [PR 7's plan](2026-11-05-b3-7-host-protocol.md) builds seven of these requests (`first-start.status` is left to slice 1's recipe), as `handleHostRequest(line, adapters)` answering one reply line; `network.read` answers no network list, which `network.scan` answers instead, and SSIDs travel as hex; the host checks the actor's form, not a permission (its D3, D6, D7, D10, D13, D15).
+
 **The clock requests slice 9b shipped** (A798-B slice 9b, #2331, added 2026-11-01): a contract
 between the server and the host that B3 keeps or migrates. `waitron.sh install` installs a socket
 unit, `deploy/box/waitron-box.socket`, listening on `/run/waitron-box/box.sock` (`Accept=yes`,

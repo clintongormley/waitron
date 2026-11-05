@@ -1,4 +1,4 @@
-> 2026-11-05: PR 7's plan (the box host protocol: B3's requests, their actor and replies): [2026-11-05-b3-7-host-protocol.md](../plans/2026-11-05-b3-7-host-protocol.md); the clock requests stay on slice 9b's wire and shell handler (its D1), and the host knows its caller by the socket alone (its D2).
+> 2026-11-05: PR 7's plan (the box host protocol: B3's requests, their actor and replies): [2026-11-05-b3-7-host-protocol.md](../plans/2026-11-05-b3-7-host-protocol.md); the clock requests stay on slice 9b's wire and shell handler (its D1), and the host knows its caller by the socket alone (its D2); a change carries the person but not the permission, which the host names from the verb (its D7), and `tag.write` carries no person (its D6).
 
 > 2026-11-03: PR 6's plan (the disk recovery key as systemd's letters, and reading a typed key back): [2026-11-03-b3-6-disk-key-letters.md](../plans/2026-11-03-b3-6-disk-key-letters.md); the passphrase is the formatted text itself, as `systemd-cryptenroll` enrols it, so the box re-forms a typed key before `cryptsetup` sees it (its D2).
 
