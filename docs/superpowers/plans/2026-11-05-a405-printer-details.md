@@ -625,6 +625,24 @@ PR 1:
     working after a refusal that names no field", and "starts the inline printer name form again
     when it is reopened" (its "no refusal" check now reads an empty bottom message; the old
     selector could no longer match anything).
+- Task 4c, as built:
+  - `printers-screen.test.ts` "updates a printer and its recent jobs after a data event while
+    preserving an inline name draft" and "keeps printer status live without replacing an inline
+    name draft": the spec's Edit form hides facts while editing; same two checks, read after Cancel.
+    While the form is open the data event leaves the name draft and Save's state as they were; the
+    Status facts are read after Cancel (and Discard, where the case has a leave prompt) and show the
+    event's values.
+  - `printer-details.unsaved.test.ts` (renamed from `printer-inline.unsaved.test.ts`): each case
+    runs against the one form, by field (`name`, `host`) instead of by editor; closing the window
+    while editing is Escape (the form shows no Close); a third leaving route, the dashboard's own
+    navigation, joins close and Back. "saving a printer name leaves the independently edited
+    connection protected" is deleted and replaced by "a save whose refresh fails keeps both fields'
+    newer input dirty". New: "a Save whose draft a live change has made equal to the printer sends
+    nothing and shows the details".
+  - `dashboard-app.test.ts` "printer breadcrumb during a pending save" → "printer details window
+    during a pending save": one Edit and Save instead of two editors, the window is closed by
+    Escape, and the refusal is read from the form's one bottom message instead of
+    `printer-name-refusal` or the connection section's alert; same text, same checks.
 
 PR 2:
 - `apps/server/src/print-api.printer-wiring.test.ts` "GET /management-api/printer-profiles lists a

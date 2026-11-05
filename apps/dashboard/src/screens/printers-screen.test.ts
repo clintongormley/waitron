@@ -1476,6 +1476,9 @@ describe("printers-screen", () => {
     openDetailsEdit(el, "name");
     await flush(el);
     typeField(el, '[name="printer-detail-name"]', "Unsaved name");
+    await flush(el);
+    const saveBefore = detailsEditButton<import("@waitron/ui").WtButton>(el, "save", "name")!;
+    const saveDisabledBefore = saveBefore.disabled;
     vi.mocked(api.listPrinters).mockResolvedValue(
       printers.map((printer) =>
         printer.id === "p1"
@@ -1491,11 +1494,11 @@ describe("printers-screen", () => {
     ]);
     await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
     await flush(el);
-    const status = q(el, "[data-test=printer-section-status]")!;
-    expect(status.textContent).toContain("7");
-    expect(status.textContent).toContain(formatRecentMinute("2026-09-11T12:34:00.000Z"));
     expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).value).toBe(
       "Unsaved name",
+    );
+    expect(detailsEditButton<import("@waitron/ui").WtButton>(el, "save", "name")!.disabled).toBe(
+      saveDisabledBefore,
     );
     expect(api.listRecentJobs).toHaveBeenCalledTimes(2);
     expect(api.listPrinterProfiles).toHaveBeenCalledTimes(1);
@@ -1503,6 +1506,9 @@ describe("printers-screen", () => {
     await flush(el);
     await choosePrinter(el, "discard");
     await flush(el);
+    const status = q(el, "[data-test=printer-section-status]")!;
+    expect(status.textContent).toContain("7");
+    expect(status.textContent).toContain(formatRecentMinute("2026-09-11T12:34:00.000Z"));
     pressCloseDetails(el);
     await flush(el);
     const row = q(el, "[data-test=printer-row-p1]")!.closest("tr")!;
@@ -4954,6 +4960,12 @@ it("keeps printer status live without replacing an inline name draft", async () 
   openDetailsEdit(el, "name");
   await flush(el);
   typeField(el, '[name="printer-detail-name"]', "Unsaved name");
+  await flush(el);
+  const saveDisabledBefore = detailsEditButton<import("@waitron/ui").WtButton>(
+    el,
+    "save",
+    "name",
+  )!.disabled;
   vi.mocked(api.listPrinters).mockResolvedValue([
     {
       ...printers[0]!,
@@ -4965,12 +4977,17 @@ it("keeps printer status live without replacing an inline name draft", async () 
   liveData.invalidate([{ type: "print_jobs", id: "j1" }]);
   await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
   await flush(el);
+  expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).value).toBe(
+    "Unsaved name",
+  );
+  expect(detailsEditButton<import("@waitron/ui").WtButton>(el, "save", "name")!.disabled).toBe(
+    saveDisabledBefore,
+  );
+  cancelDetailsEdit(el, "name");
+  await flush(el);
   expect(text(el, "[data-test=printer-status]")).toContain("Cocina agent");
   expect(text(el, "[data-test=printer-status]")).toContain(
     formatRecentMinute("2026-09-26T16:00:00.000Z"),
-  );
-  expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).value).toBe(
-    "Unsaved name",
   );
 });
 
