@@ -212,6 +212,7 @@ import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { compareFinalCopy } from "./handover-compare.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
 import { mountHandoverActivationApi } from "./handover-activation.js";
+import { readTakenOverFrom } from "./handover-collection.js";
 import { mountHandoverPreparationApi } from "./handover-preparation.js";
 import { startHandoverDestinationDuty } from "./handover-destination-duty.js";
 import {
@@ -550,12 +551,16 @@ export async function buildCardProvider(
   return undefined;
 }
 
-/** The payments this box's card sweep may resolve: its own, and the rows naming no box only while
- * it is the venue's singleton primary. Taking over from another box is not built yet.
+/** The payments this box's card sweep may resolve: its own, those of the boxes it took over from
+ * (`readTakenOverFrom`), and the rows naming no box only while it is the venue's singleton primary.
  *
  * Exported for a direct test (`boot-pending-sweep.test.ts`). */
-export function sweepOwners(nodeId: NodeId, role: SingletonRole): CollectionOwners {
-  return { nodeId, takenOverFrom: [], unowned: role === "primary" };
+export function sweepOwners(
+  nodeId: NodeId,
+  role: SingletonRole,
+  takenOverFrom: readonly NodeId[] = [],
+): CollectionOwners {
+  return { nodeId, takenOverFrom, unowned: role === "primary" };
 }
 
 /** Run each card provider's `resolvePending` sweep on every tick, around (not instead of) the
@@ -3657,6 +3662,8 @@ async function bootServer(
     await loop;
   });
 
+  // Read once: rows naming this box as destination appear only in a promotion, which restarts it.
+  const takenOverFrom = await readTakenOverFrom(db, tradingContext.nodeId);
   const pendingCardController = new AbortController();
   const pendingCardLoop = runPendingCardLoop({
     admission: tradingAdmission,
@@ -3668,7 +3675,8 @@ async function bootServer(
           contributions: CARD_PROVIDERS,
           simulator: cardProvider,
         }),
-        owners: () => sweepOwners(tradingContext.nodeId, holders.singletonRole.current),
+        owners: () =>
+          sweepOwners(tradingContext.nodeId, holders.singletonRole.current, takenOverFrom),
         recover: () =>
           recoverAutomaticCardPayments({
             db,

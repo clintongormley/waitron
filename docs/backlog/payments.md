@@ -524,10 +524,10 @@ the same column.
   a bank decline keeps its existing retry key. Automatic resolution has no person in its audit row.
   Each payment records the box that started it in `payments.node_id`: every payment insert takes a
   required node id (`packages/payments/src/store.ts:45`). Each box's card sweep resolves only the
-  in-flight payments it owns: its own, those of boxes it has taken over from (none until the A1018
-  build plan's Task 5.9 supplies them), and payments naming no box only while it is the venue's
-  singleton primary (`listAttempting`, `packages/payments/src/store.ts:510`; `sweepOwners`,
-  `apps/server/src/boot.ts:511`). The sweep runs in every node role; only sale recovery and bill
+  in-flight payments it owns: its own, those of boxes it has taken over from, followed back through
+  each of those boxes' own sources (`readTakenOverFrom`, `apps/server/src/handover-collection.ts`,
+  read once at start), and payments naming no box only while it is the venue's singleton primary
+  (`listAttempting`, `packages/payments/src/store.ts:510`; `sweepOwners`, `apps/server/src/boot.ts`). The sweep runs in every node role; only sale recovery and bill
   completion check for primary. Coordination between two boxes collecting at the same time is not
   built. A manager's stuck-payment resolution still acts on every box's payments, through both
   dashboard lists (`apps/server/src/payments-api.ts:1032` for whole orders, `:1184` for held bill
