@@ -806,7 +806,8 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 - **A974. Finish the remaining English names in general code.** Remaining names include till boot and
   counter-payment fixtures; shared-fixture consumers in the server split-bill and move-bill suites,
   party seating, bill-editing, moved-dish, waiting-course and other order fixtures, shared helper
-  consumers and file names. Receipt-print retains `nifCounter`, `nextNif` and `registroCount`.
+  consumers and file names. Receipt-print retains the private `registro` binding and comparison key
+  in `filedFacts`.
   Keep accented search fixtures unchanged. The receipt-print and working-order suites retain their
   display samples under A976.
   Other fixture text stays with A976, including catalogue
