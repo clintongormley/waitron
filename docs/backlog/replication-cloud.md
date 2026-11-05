@@ -752,17 +752,23 @@ and cloud operations. See [documentation ownership](../cloud-ownership.md).
 
 ## A951. The box's lasting tunnel and public-certificate client
 
-The complete [appliance successor](../superpowers/specs/2026-11-05-a951-appliance-v1-successor.md)
-is proposed for D582 cross-review. The owner chose server-trusted current local
-permission for v1, with application DB access/sign-in/TLS unchanged; the rejected
-protected store-owner/ingress is not a dependency. A compromised server can forge
-the local approval half for the exact provisioned binding; independent original
-current Cloud-owner checks and fixed helper/safety/custody restrictions remain.
-D must disposition the final server-publication L boundary versus later supervisor
-opening/ack, exact private grammar, provisioning authentication and adapter/signer
-semantics, then produce the complete shared signed corpus. Full appliance
-acceptance and affected integration remain gated; the successor supplies no runtime
-proof. The latest plan/intake amendment records exact full-file digest and scope.
+D582 accepts the complete [appliance successor](../superpowers/specs/2026-11-05-a951-appliance-v1-successor.md)
+requirements solely for isolated codec/shared signed-corpus work, the policy/proof
+and initially unmounted path shapes, and L as the final local publication boundary.
+Cloud consume C is independent; no continuous Cloud permission through L is
+required. Both owning current-permission checks and the independent later safety
+fences still need implementation proof. The dated plan/intake amendment records
+the exact final-disposition receipt and scope; full connected acceptance stays open.
+
+E proposes the [native private protocol](../superpowers/specs/2026-11-05-a951-native-publication-protocol.md)
+for D's exact-byte review before native integration. Native caller/signer custody,
+publication/ack/status consumers, cross-store durability, replay/crash/expiry and
+peak-budget evidence remain open. D owns receiver/provisioning authentication,
+Cloud one-use ledger and the shared signed corpus. The owner-selected server-trust
+exception stands: a compromised server may forge local approval for its exact
+provisioned binding; it gains no independent Cloud approval or general helper
+operation. No protected database owner, relocated sign-in/TLS authority or new
+owner-held secret is a dependency. Preserve historical artifacts unchanged.
 
 All five [plan](../superpowers/plans/2026-10-22-a951-connection.md) cuts have owner
 build approval. D560's exact G1 mapping acceptance remains isolated planning only;

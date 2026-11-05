@@ -360,6 +360,34 @@ abort signal so deliberate shutdown does not record a service outage.
 
 ## A951 build intake
 
+### Native publication protocol proposal and D582 disposition: 5 November 2026
+
+E proposes the [private native protocol](../superpowers/specs/2026-11-05-a951-native-publication-protocol.md),
+`waitron-a951-native-publication-v1` / `proposal-2026-11-05.1`, complete-file
+SHA-256 `db920d5bd340d29c9cdaaf85dd42a0021ce1f401f8ff54740c6c9102a82f5018`, including final LF. It defines the E-owned
+publication/acknowledgement/status return for D cross-review before native
+integration. The [dated plan amendment](../superpowers/plans/2026-10-22-a951-connection.md#native-publication-protocol-proposal-5-november-2026)
+records the exact scope and remaining checks.
+
+D582's final disposition, relayed at about 18:55 on 5 November, accepts the
+complete appliance successor's requirements only for isolated codec/shared
+signed-corpus work, its provisioning policy/proof/path shapes as engineering
+contract shapes, and local publication L. Cloud's consume C and local L are
+independent winning points. The exact retained review has SHA-256
+`c76c7cc464760f2dd511b6c26e18a9486f97b1cd533c97f4ca5544f87685c8db`.
+This supersedes older requests to disposition L or maintain Cloud permission
+through L; it supplies no connected or runtime acceptance. Both current-permission
+transactions and all independent later safety fences still require proof.
+
+D retains receiver/provisioning authentication, Cloud one-use ledger and the
+signed corpus. Native private grammar agreement, constrained signer/caller
+realization, cross-store durability, crash/replay/peak-budget and exact Debian
+qualification remain open. The owner-selected server trust exception stands;
+H/A/channel/PP bytes and all historical documents remain unchanged. No required
+table is released from A1308. Full connected acceptance, accepted executable
+consumers and runtime pair NONE; admission CLOSED, manifests empty and `.local`
+independent. No partial foundation publication follows this documentation change.
+
 ### Complete appliance successor proposal: 5 November 2026
 
 E publishes the [complete appliance successor](../superpowers/specs/2026-11-05-a951-appliance-v1-successor.md),

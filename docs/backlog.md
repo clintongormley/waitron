@@ -6168,15 +6168,16 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   integration (2026-09-24; #638, #808).
 
 - **A951. The box's lasting tunnel and public-certificate client.** Build approved;
-  E's complete [appliance successor](superpowers/specs/2026-11-05-a951-appliance-v1-successor.md)
-  needs D cross-review: server-trusted local approval for v1, exact channel and
-  provisioning, final publication/ack race and signed corpus. Full appliance,
-  consumer and runtime acceptance remain open. Debian target agreement is
-  planning-only; native qualification/sleep evidence and remaining path gates
-  stay open. D560 mapping and D136 routing acceptances retain their isolated
-  scopes. Runtime pair NONE; admission CLOSED; use the shared helper one lane
-  at a time, preserve owner Waitron/partitions and obtain separate approval for
-  host configuration changes. [Host evidence](operations/a951-host-evidence.md).
+  D accepts the complete appliance successor's requirements for isolated codec
+  and shared-corpus work, including independent local L and Cloud C permission
+  boundaries. E's [private native protocol](superpowers/specs/2026-11-05-a951-native-publication-protocol.md)
+  needs exact D agreement before native integration. Receiver/provisioning,
+  one-use ledgers, signed corpus, native custody/durability/race/budget evidence
+  and full connected acceptance remain open. Debian agreement is planning-only;
+  qualify exact consumers and all remaining path/privacy/host gates. Runtime pair
+  NONE; admission CLOSED. Use the shared helper one lane at a time, preserve owner
+  Waitron/partitions and obtain separate approval for host configuration changes.
+  [Host evidence](operations/a951-host-evidence.md).
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
 - **Waitron retains:** box-side networking and `@waitron/tunnel`'s retirement; first-contact trust
