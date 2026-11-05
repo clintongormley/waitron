@@ -106,8 +106,9 @@ vi.mock("@waitron/identity/src/verify-password.js", async (importOriginal) => {
 
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
-const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
-const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
+const venueId = locationId(TENANT_A.locationId);
+const primary = { nodeId: TENANT_A.nodeId };
+const standby = { nodeId: TENANT_A.nodeId2 };
 const OPERATION = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ADMIN = "e1000000-0000-4000-8000-000000000004";
 const ADMIN_EMAIL = "admin@venue.test";
@@ -160,7 +161,7 @@ beforeEach(async () => {
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Handover SL" });
   await suite.db.insert(locations).values({
-    id: primary.locationId,
+    id: venueId,
     name: "Restaurant",
     invoiceLocales: ["en"],
     operationDescription: "Hospitality",
@@ -169,7 +170,7 @@ beforeEach(async () => {
   await suite.db.insert(nodes).values(
     [primary, standby].map((node) => ({
       id: node.nodeId,
-      locationId: node.locationId,
+      locationId: venueId,
       name: node === primary ? "Primary" : "Standby",
       filingModule: "verifactu",
       taxModule: "vat",

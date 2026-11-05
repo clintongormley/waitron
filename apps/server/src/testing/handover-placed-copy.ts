@@ -44,8 +44,9 @@ import { establishNodeIdentity, readNodeIdentityKey } from "../node-identity.js"
 import { mintSelfSignedServerCert } from "../self-signed-cert.js";
 import { pinMainBoxKey } from "./pinned-main-box.js";
 
-export const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
-export const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
+const venueId = locationId(TENANT_A.locationId);
+export const primary = { nodeId: TENANT_A.nodeId };
+export const standby = { nodeId: TENANT_A.nodeId2 };
 export const OPERATION = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 export const ADMIN = "e1000000-0000-4000-8000-000000000004";
 export const ADMIN_EMAIL = "admin@venue.test";
@@ -155,7 +156,7 @@ export function placedSpareFixture(boxes: {
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Handover SL" });
     await mainBox.db.insert(locations).values({
-      id: primary.locationId,
+      id: venueId,
       name: "Restaurant",
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
@@ -163,7 +164,7 @@ export function placedSpareFixture(boxes: {
     });
     await mainBox.db.insert(nodes).values({
       id: primary.nodeId,
-      locationId: primary.locationId,
+      locationId: venueId,
       name: "Primary",
       filingModule: "verifactu",
       taxModule: "vat",
@@ -184,7 +185,7 @@ export function placedSpareFixture(boxes: {
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Handover SL" });
     await spareBefore.db.insert(locations).values({
-      id: standby.locationId,
+      id: venueId,
       name: "Restaurant",
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
@@ -192,7 +193,7 @@ export function placedSpareFixture(boxes: {
     });
     await spareBefore.db.insert(nodes).values({
       id: standby.nodeId,
-      locationId: standby.locationId,
+      locationId: venueId,
       name: "Standby",
       filingModule: "verifactu",
       taxModule: "vat",
@@ -214,7 +215,7 @@ export function placedSpareFixture(boxes: {
     await withTransaction(mainBox.db, (tx) =>
       insertReservedNodeTx(tx, {
         id: standby.nodeId,
-        locationId: primary.locationId,
+        locationId: venueId,
         name: "Primary (standby)",
         filingModule: "verifactu",
         taxModule: "vat",
