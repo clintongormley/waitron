@@ -694,9 +694,9 @@ still takes the body's whole width.
 A screen that styles its own native control reads the same variable on the element wrapping it.
 A screen whose own layout
 makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
-beside it: the Printers screen's `.field-row` does, for the calibration wizard's two answers, and
-the wizard's "Print width test" row and results row read it too, so the button ends where the answers
-end; the zone editor's `.form` reads it too, so Save ends where its fields
+beside it: the Printers screen's `.field-row` does, for the known-address row's address, port and
+Connect. The calibration wizard's answers row, "Print width test" row and results row read it too,
+so the button ends where the answers end; the zone editor's `.form` reads it too, so Save ends where its fields
 end. The station editor (`station-editor.ts`) applies it to its minutes row, its notes and its
 printers read-out, so they end where its fields end. Guards: the form-width
 cases in `packages/ui/src/components/wt-modal.test.ts` (`wt-input`, `wt-textarea`, `wt-combobox`,
