@@ -2011,3 +2011,473 @@ describe("A803 split: Everything ticked", () => {
     );
   });
 });
+
+describe("A803 split: a read and a selected bill", () => {
+  const lines = (billId: string) =>
+    board08.splitRead.bills.find((bill) => bill.billId === billId)!.lines;
+  const billRow = (el: TillTableOrderScreen, billId: string) =>
+    splitPicker(el)!.shadowRoot!.querySelector(`[data-split-bill="${billId}"]`);
+  const tick = (el: TillTableOrderScreen, billId: string) =>
+    splitPicker(el)!.shadowRoot!.querySelector<HTMLInputElement>(`[data-split-tick="${billId}"]`);
+  const takeOverRow = (el: TillTableOrderScreen, billId: string) =>
+    splitPicker(el)!.shadowRoot!.querySelector(`[data-split-take-over="${billId}"]`);
+  const dishRows = (el: TillTableOrderScreen, billId: string) =>
+    billRow(el, billId)!.querySelector("till-portion-picker");
+  const sentence = (el: TillTableOrderScreen) => textOf(el, "[data-split-refusal]");
+  const taken = (who: string) => fill(t("table.split_taken"), { who });
+  const gone = (bill: string) => fill(t("table.split_bill_gone"), { bill });
+  const changed = (bill: string) => fill(t("table.split_changed"), { bill });
+  const enter = (el: TillTableOrderScreen, side: Side) =>
+    nativeInput(el, side).dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+    );
+
+  async function press(el: TillTableOrderScreen): Promise<void> {
+    split(el).click();
+    await settled(el);
+  }
+
+  function withoutBills(...ids: string[]): SplitSources {
+    return { bills: board08.splitRead.bills.filter((bill) => !ids.includes(bill.billId)) };
+  }
+
+  /** A whole bill and a bill with picks, ready for a read to reach them. */
+  async function selected(over: Partial<TillTableOrderScreen> = {}) {
+    const el = await mountScreen(over);
+    const sent = heard<SplitTableDetail>(el, "split-table");
+    await toPanel(el);
+    await tickBill(el, "b3");
+    await pickDish(el, "b1", "salad");
+    return { el, sent };
+  }
+
+  async function bothHeld() {
+    const opened = await selected();
+    opened.el.partyDrafts = [draft("b1", "ana", "Ana"), draft("b3", "luis", "Luis")];
+    await settled(opened.el);
+    return opened;
+  }
+
+  const paidSalad = () =>
+    read(
+      { b1: lines("b1"), b2: lines("b2"), b3: lines("b3") },
+      { b1: "97.00", b2: "40.00", b3: "39.00" },
+      {
+        b1: {
+          received: "10.00",
+          paidLines: [{ lineId: "salad", lineNo: 2, paidQuantity: "1.000" }],
+        },
+      },
+    );
+
+  it("a read and a selected bill: a whole bill and a bill with picks stay ticked when each gains someone else's draft", async () => {
+    const { el, sent } = await bothHeld();
+
+    expect(tick(el, "b3")!.checked).toBe(true);
+    expect(tick(el, "b1")!.indeterminate).toBe(true);
+    expect(dishRows(el, "b3")).toBeNull();
+    expect(dishRows(el, "b1")).toBeNull();
+    expect(takeOverRow(el, "b3")).not.toBeNull();
+    expect(takeOverRow(el, "b1")).not.toBeNull();
+
+    el.partyDrafts = [];
+    await settled(el);
+    await press(el);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!).toMatchObject({
+      selection: {
+        wholeBillIds: ["b3"],
+        loose: [{ billId: "b1", lineIds: ["salad"] }],
+      },
+    });
+  });
+
+  it("a read and a selected bill: says at once, unpressed, who holds both bills, and holds Split", async () => {
+    const { el } = await bothHeld();
+
+    const line = refusalLine(el)!;
+    expect(line.getAttribute("role")).toBe("alert");
+    expect(sentence(el)).toBe("Take over unsent items from Ana and Luis before splitting.");
+    expect(split(el).variant).toBe("secondary");
+    expect(split(el).disabled).toBe(true);
+  });
+
+  it("a read and a selected bill: the holders' sentence in the owner's Spanish words", async () => {
+    const { el } = await bothHeld();
+    setLocale("es-ES");
+    el.requestUpdate();
+    await settled(el);
+    expect(sentence(el)).toBe("Toma los platos sin enviar de Ana y Luis antes de separar.");
+  });
+
+  it("a read and a selected bill: one holder of two bills is named once", async () => {
+    const { el } = await selected();
+    el.partyDrafts = [draft("b1", "ana", "Ana"), draft("b3", "ana", "Ana")];
+    await settled(el);
+    expect(sentence(el)).toBe(taken("Ana"));
+  });
+
+  it("a read and a selected bill: a holder with no name uses the unnamed words, whoever else holds", async () => {
+    const { el } = await selected();
+    el.partyDrafts = [draft("b1", "ana", "Ana"), draft("b3", "x", "")];
+    await settled(el);
+    expect(sentence(el)).toBe("Take over the unsent items before splitting.");
+    setLocale("es-ES");
+    el.requestUpdate();
+    await settled(el);
+    expect(sentence(el)).toBe("Toma los platos sin enviar antes de separar.");
+  });
+
+  it("a read and a selected bill: nothing sends while held, by a real click, a click on the host or Enter", async () => {
+    const { el, sent } = await bothHeld();
+
+    await userEvent.click(split(el), { force: true });
+    await settled(el);
+    expect(sent).toEqual([]);
+
+    split(el).click();
+    await settled(el);
+    expect(sent).toEqual([]);
+
+    enter(el, "staying");
+    await settled(el);
+    enter(el, "leaving");
+    await settled(el);
+    expect(sent).toEqual([]);
+    expect(q(el, "[data-split-pick]")).not.toBeNull();
+  });
+
+  it("a read and a selected bill: the everything-ticked question goes back to the action row when a bill becomes held", async () => {
+    const el = await mountScreen();
+    const sent = heard<SplitTableDetail>(el, "split-table");
+    await toPanel(el);
+    for (const id of ["b1", "b2", "b3"]) await tickBill(el, id);
+    await press(el);
+    expect(q(el, "[data-split-question]")).not.toBeNull();
+
+    el.partyDrafts = [draft("b2", "ana", "Ana")];
+    await settled(el);
+
+    expect(q(el, "[data-split-question]")).toBeNull();
+    expect(q(el, "[data-split-anyway]")).toBeNull();
+    expect(split(el).disabled).toBe(true);
+    expect(sent).toEqual([]);
+  });
+
+  it("a read and a selected bill: unticking one held bill names the other, and unticking the last gives Split back", async () => {
+    const { el, sent } = await bothHeld();
+
+    await tickBill(el, "b1");
+    expect(sentence(el)).toBe(taken("Luis"));
+    expect(split(el).disabled).toBe(true);
+
+    await tickBill(el, "b3");
+    expect(refusalLine(el)).toBeNull();
+    expect(split(el).variant).toBe("primary");
+    expect(split(el).disabled).toBe(false);
+    expect(tick(el, "b1")!.disabled).toBe(true);
+    expect(tick(el, "b3")!.disabled).toBe(true);
+    expect(billRow(el, "b1")!.textContent).toContain(t("table.split_take_over_first"));
+
+    await press(el);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!).toMatchObject({ selection: { wholeBillIds: [], loose: [] } });
+  });
+
+  it("a read and a selected bill: the draft going brings rows, ticks and picks back, and Split", async () => {
+    const { el, sent } = await bothHeld();
+
+    el.partyDrafts = [];
+    await settled(el);
+
+    expect(rowIds(el, "b1")).toContain("salad");
+    expect(rowIds(el, "b3")).toContain("fish");
+    expect(tick(el, "b3")!.checked).toBe(true);
+    expect([...ticked(el).picks.get("b1")!]).toEqual(["salad"]);
+    expect(refusalLine(el)).toBeNull();
+    expect(split(el).variant).toBe("primary");
+    expect(split(el).disabled).toBe(false);
+    expect(sent).toEqual([]);
+  });
+
+  it("a read and a selected bill: a marked count beside a held bill shows both messages", async () => {
+    const { el } = await selected();
+    await typeCount(el, "leaving", "0");
+    await press(el);
+    expect(bottom(el).error).toBe(t("form.fix_fields"));
+
+    el.partyDrafts = [draft("b3", "luis", "Luis")];
+    await settled(el);
+
+    expect(bottom(el).error).toBe(t("form.fix_fields"));
+    expect(sentence(el)).toBe(taken("Luis"));
+  });
+
+  it("a read and a selected bill: a no-field refusal is replaced by the held sentence and does not come back", async () => {
+    const { el } = await selected();
+    await press(el);
+    await refuse(el, reopenedAt());
+    expect(sentence(el)).toBe("Refused");
+
+    el.partyDrafts = [draft("b3", "luis", "Luis")];
+    await settled(el);
+    expect(sentence(el)).toBe(taken("Luis"));
+
+    el.partyDrafts = [];
+    await settled(el);
+    expect(refusalLine(el)).toBeNull();
+  });
+
+  it("a read and a selected bill: a whole bill the read no longer lists takes one press to say so", async () => {
+    const named = {
+      bills: [board08.bills[0]!, board08.bills[1]!, { ...board08.bills[2]!, billName: "Clint" }],
+    };
+    const { el, sent } = await selected(named);
+
+    el.bills = board08.bills.filter((bill) => bill.workingOrderId !== "b3");
+    el.splitRead = withoutBills("b3");
+    await settled(el);
+
+    expect(billRow(el, "b3")).toBeNull();
+    expect([...ticked(el).whole]).toEqual([]);
+    expect(refusalLine(el)).toBeNull();
+
+    await press(el);
+    expect(sent).toEqual([]);
+    expect(sentence(el)).toBe(gone("Bill 3 · Clint"));
+    expect(split(el).disabled).toBe(false);
+
+    await press(el);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!).toMatchObject({
+      selection: { wholeBillIds: [], loose: [{ billId: "b1", lineIds: ["salad"] }] },
+    });
+  });
+
+  it("a read and a selected bill: the gone sentence's Spanish words", async () => {
+    setLocale("es-ES");
+    const { el } = await selected();
+    el.splitRead = withoutBills("b3");
+    await settled(el);
+    await press(el);
+    expect(sentence(el)).toBe(
+      "Cuenta 3 ya no está en esta mesa o ya se ha pagado. Revisa lo marcado y elige Separar de nuevo.",
+    );
+  });
+
+  it("a read and a selected bill: two gone bills take two sentences and two presses, then the send", async () => {
+    const el = await mountScreen();
+    const sent = heard<SplitTableDetail>(el, "split-table");
+    await toPanel(el);
+    await tickBill(el, "b2");
+    await tickBill(el, "b3");
+
+    el.splitRead = withoutBills("b2", "b3");
+    await settled(el);
+
+    await press(el);
+    expect(sentence(el)).toBe(gone("Bill 2"));
+    await press(el);
+    expect(sentence(el)).toBe(gone("Bill 3"));
+    expect(sent).toEqual([]);
+
+    await press(el);
+    expect(sent).toHaveLength(1);
+  });
+
+  it("a read and a selected bill: a source whose bill left stops one press too", async () => {
+    const { el, sent } = await selected();
+
+    el.splitRead = withoutBills("b1");
+    await settled(el);
+
+    expect(billRow(el, "b1")).toBeNull();
+    await press(el);
+    expect(sent).toEqual([]);
+    expect(sentence(el)).toBe(gone("Bill 1"));
+
+    await press(el);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!).toMatchObject({ selection: { wholeBillIds: ["b3"], loose: [] } });
+  });
+
+  it("a read and a selected bill: a bill gone from a refused selection stops one press, by the name it last drew", async () => {
+    const { el, sent } = await selected();
+    await press(el);
+    expect(sent).toHaveLength(1);
+
+    el.bills = board08.bills.filter((bill) => bill.workingOrderId !== "b3");
+    el.splitRead = withoutBills("b3");
+    await settled(el);
+    await refuse(el, reopenedAt());
+
+    expect([...ticked(el).whole]).toEqual([]);
+    await press(el);
+    expect(sent).toHaveLength(1);
+    expect(sentence(el)).toBe(gone("Bill 3"));
+  });
+
+  it("a read and a selected bill: a bill that changed and then went takes one press, as gone", async () => {
+    const { el, sent } = await selected();
+    await pickDish(el, "b1", "soup");
+    el.splitRead = paidSalad();
+    await settled(el);
+    el.splitRead = withoutBills("b1");
+    await settled(el);
+
+    await press(el);
+    expect(sentence(el)).toBe(gone("Bill 1"));
+    expect(sent).toEqual([]);
+    await press(el);
+    expect(sent).toHaveLength(1);
+  });
+
+  it("a read and a selected bill: a picked dish paid stops one press, and the next sends", async () => {
+    const { el, sent } = await selected();
+    await pickDish(el, "b1", "soup");
+
+    el.splitRead = paidSalad();
+    await settled(el);
+
+    await press(el);
+    expect(sent).toEqual([]);
+    expect(sentence(el)).toBe(changed("Bill 1"));
+    expect(split(el).disabled).toBe(false);
+
+    await press(el);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!).toMatchObject({
+      selection: { wholeBillIds: ["b3"], loose: [{ billId: "b1", lineIds: ["soup"] }] },
+    });
+  });
+
+  it("a read and a selected bill: the changed sentence's Spanish words", async () => {
+    setLocale("es-ES");
+    const { el } = await selected();
+    el.splitRead = paidSalad();
+    await settled(el);
+    await press(el);
+    expect(sentence(el)).toBe(
+      "Cuenta 1 ha cambiado mientras elegías. Revisa su fila y elige Separar de nuevo.",
+    );
+  });
+
+  it("a read and a selected bill: a bill's last pick paid, leaving nothing ticked, still says so before an empty send", async () => {
+    const el = await mountScreen();
+    const sent = heard<SplitTableDetail>(el, "split-table");
+    await toPanel(el);
+    await pickDish(el, "b1", "salad");
+
+    el.splitRead = paidSalad();
+    await settled(el);
+    expect(ticked(el).picks.size).toBe(0);
+
+    await press(el);
+    expect(sent).toEqual([]);
+    expect(sentence(el)).toBe(changed("Bill 1"));
+
+    await press(el);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!).toMatchObject({ selection: { wholeBillIds: [], loose: [] } });
+  });
+
+  describe("picks that become the whole bill", () => {
+    const withoutSteak = () =>
+      read(
+        {
+          b1: lines("b1").filter((line) => line.id !== "steak"),
+          b2: lines("b2"),
+          b3: lines("b3"),
+        },
+        { b1: "30.00", b2: "40.00", b3: "39.00" },
+      );
+
+    async function threePicked() {
+      const el = await mountScreen();
+      const sent = heard<SplitTableDetail>(el, "split-table");
+      await toPanel(el);
+      for (const row of ["soup", "salad", "bread"]) await pickDish(el, "b1", row);
+      el.splitRead = withoutSteak();
+      await settled(el);
+      return { el, sent };
+    }
+
+    it("a read and a selected bill: the bill's only unpicked dish removed makes it whole, told once", async () => {
+      const { el, sent } = await threePicked();
+
+      expect(tick(el, "b1")!.checked).toBe(true);
+      expect(textOf(el, "[data-split-takes]")).toContain("Bill 1");
+      expect(q(el, "[data-split-new-bill-note]")).toBeNull();
+
+      await press(el);
+      expect(sent).toEqual([]);
+      expect(sentence(el)).toBe(changed("Bill 1"));
+
+      await press(el);
+      expect(sent).toHaveLength(1);
+      expect(sent[0]!).toMatchObject({ selection: { wholeBillIds: ["b1"], loose: [] } });
+    });
+
+    it("a read and a selected bill: a second read naming nothing leaves that stop waiting", async () => {
+      const { el, sent } = await threePicked();
+
+      el.splitRead = withoutSteak();
+      await settled(el);
+
+      await press(el);
+      expect(sent).toEqual([]);
+      expect(sentence(el)).toBe(changed("Bill 1"));
+    });
+  });
+
+  it("a read and a selected bill: closing the panel forgets what was waiting", async () => {
+    const el = await mountScreen();
+    const sent = heard<SplitTableDetail>(el, "split-table");
+    await toPanel(el);
+    await tickBill(el, "b3");
+    el.splitRead = withoutBills("b3");
+    await settled(el);
+
+    await click(el, "[data-action-back]");
+    await click(el, '[data-target="t8"]');
+    await settled(el);
+
+    await press(el);
+    expect(sent).toHaveLength(1);
+    expect(refusalLine(el)).toBeNull();
+  });
+
+  it("a read and a selected bill: a read changing nothing stops nothing", async () => {
+    const { el, sent } = await selected();
+    el.splitRead = read(
+      { b1: lines("b1"), b2: lines("b2"), b3: lines("b3") },
+      { b1: "97.00", b2: "40.00", b3: "39.00" },
+    );
+    await settled(el);
+    await press(el);
+    expect(sent).toHaveLength(1);
+  });
+
+  it("a read and a selected bill: a whole bill presented by a read stops nothing", async () => {
+    const { el, sent } = await selected();
+    el.bills = [board08.bills[0]!, board08.bills[1]!, { ...board08.bills[2]!, status: "placed" }];
+    await settled(el);
+    await press(el);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!).toMatchObject({ selection: { wholeBillIds: ["b3"] } });
+  });
+
+  it("a read and a selected bill: an unselected bill gaining a draft stops nothing, and its tick waits", async () => {
+    const { el, sent } = await selected();
+    el.partyDrafts = [draft("b2", "ana", "Ana")];
+    await settled(el);
+
+    expect(tick(el, "b2")!.disabled).toBe(true);
+    expect(refusalLine(el)).toBeNull();
+    expect(split(el).variant).toBe("primary");
+
+    await press(el);
+    expect(sent).toHaveLength(1);
+  });
+});

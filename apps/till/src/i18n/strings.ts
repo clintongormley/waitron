@@ -1298,6 +1298,12 @@ export const en = {
   "table.split_read_failed": "This table's bills could not be read. Choose Back and try again.",
   "table.split_bill_part_paid": "{amount} paid",
   "table.split_take_over_first": "Take over the draft to tick this bill.",
+  "table.split_taken": "Take over unsent items from {who} before splitting.",
+  "table.split_taken_unnamed": "Take over the unsent items before splitting.",
+  "table.split_bill_gone":
+    "{bill} has left this table or been paid. Check what is ticked, then choose Split again.",
+  "table.split_changed":
+    "{bill} changed while you were choosing. Check its row, then choose Split again.",
   "table.split_presented": "Presented: this bill goes whole or stays.",
   "table.split_own_unsent": "Your unsent dishes go only with the whole bill.",
   "table.name_title": "Name the party at {tables}",
@@ -3179,6 +3185,12 @@ export const es: Record<StringKey, string> = {
     "No se pudieron leer las cuentas de esta mesa. Elige Atrás e inténtalo de nuevo.",
   "table.split_bill_part_paid": "{amount} pagados",
   "table.split_take_over_first": "Toma el pedido para marcar esta cuenta.",
+  "table.split_taken": "Toma los platos sin enviar de {who} antes de separar.",
+  "table.split_taken_unnamed": "Toma los platos sin enviar antes de separar.",
+  "table.split_bill_gone":
+    "{bill} ya no está en esta mesa o ya se ha pagado. Revisa lo marcado y elige Separar de nuevo.",
+  "table.split_changed":
+    "{bill} ha cambiado mientras elegías. Revisa su fila y elige Separar de nuevo.",
   "table.split_presented": "Presentada: esta cuenta se va entera o se queda.",
   "table.split_own_unsent": "Tus platos sin enviar solo se van con la cuenta entera.",
   "table.name_title": "Poner nombre a los clientes de {tables}",
