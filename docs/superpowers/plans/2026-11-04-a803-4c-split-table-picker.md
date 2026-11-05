@@ -37,8 +37,8 @@ that a lane adds no other "owner lands it" gate. 4c changes no fiscal function; 
 `issueIfFullyPaid` on a new path, as slice 4a's Move dishes route does (#2372, which the lane landed).
 The PR body tells the owner in plain words that one split can issue more than one invoice in one
 transaction when loose picks finish several part-paid bills, and names the new test cases that pin it
-(Task 5's cases 6 and 7; Task 18). An unanswered Question 1 or 2 holds landing until it is answered; the
-lane then lands it.
+(Task 5's cases 6 and 7; Task 18). The owner confirmed on 2026-11-05 that the
+lane lands it once the review wave and CI pass.
 
 **Execution.** Subagent-driven: each task goes to one `implementer` (medium effort), then a
 high-effort reviewer. Each task is sized well under 100 tool calls (estimate in its heading). An
@@ -174,26 +174,23 @@ and below is already changed. "Ran" means this revision ran it, with the receipt
 | I1 of that fix's review (`~/waitron-campaign-c/a803-4c-reviews/task-4-fix.md`): a dish of a party combined into another could go untold, because every table on its list still at the table counted as on its ticket | **Applied**, on the driver's ruling: for a combined party's dish, prefer an occasional extra slip to a missed one, since a missed slip can send a plate to the wrong guests and an extra costs a line of paper. It then answered only the earliest table on its list still at the table, which the next row replaces | D6, Task 17b, Task 18 | **Ran (R15):** the cases went red with no notice and no slip before the change |
 | I1 of the second fix's review (`~/waitron-campaign-c/a803-4c-reviews/task-4-fix-2.md`): five ordinary histories still printed nothing for a dish whose paper's every name had gone, among them a plain Move guests followed by a join | **Applied**, on the driver's ruling (the review's option 1): a dish whose paper belongs to a party since combined away is told the first time any table on that party's `table_names` list leaves, because what that paper printed cannot be read back. A split of a table not on the list tells it nothing. An open party's dish goes as before | D6, Task 17b, Task 18, R15 | **Ran (R15):** the review's five histories are named cases, red with no notice and no slip before the change; each control is under Task 17b; 3,000 random histories printed 1 missed slip, and that one is not a combined party's paper (R15) |
 
-## Owner answers so far (2026-11-04, questions.md ~22:13 and ~22:15)
+## Owner answers (questions.md, 2026-11-04 ~22:13 and ~22:15, 2026-11-05 ~04:03 to 04:24)
 
-- **Question 1:** `table.split_taken` is replaced by the owner's shorter line, below. The other words are still open.
+- **Question 1:** answered. The words and the guide text under Question 1 below are the final words.
 - **Question 2:** approved ("Q2 ok"): the two checks may go, and the ten cases move to the panel.
-- **Question 3:** keep it as built for now; the watcher is confirming which option the owner meant.
-- **Who lands it:** still open with the watcher. Do not land until it is answered, whatever this plan's header says.
+- **Question 3:** the owner chose (B), as built: a staying dish is told only when no name its paper printed is still one of its places. Both rulings stand.
+- **Who lands it:** the lane, once the review wave and CI pass.
 
 ## Owner questions
 
-Building goes ahead on each default. Questions 1 and 2 hold landing until they are answered, and the lane
-lands it after that. Question 3 does not hold landing: the build carries the default and the PR says so.
-All go to
-`~/waitron-campaign-c/questions.md` at Task 0, one at a time.
+All three are answered, above. These are the questions as asked, in
+`~/waitron-campaign-c/questions.md`, with Question 1 updated to the words in force.
 
 A fourth question, whether a bill someone else is editing may leave whole without a take-over, is
 answered already: D4 cites the decisions.
 
-**Question 1 of 3 (new words; blocks landing). Rule: new Spanish needs your approval (master plan).
-Recommended: the wordings below.** Every new text a person reads, with a recommended
-wording. Worked example, from board 08: García is at T7 + T8 with Bills 1, 2 and 3. The waiter chooses
+**Question 1 of 3 (new words): answered.** Every new text a person reads, in the words the owner
+approved (2026-11-05 ~04:03 and 04:24). Worked example, from board 08: García is at T7 + T8 with Bills 1, 2 and 3. The waiter chooses
 Split a table → T8, ticks Bills 2 and 3 and three dishes of Bill 1.
 
 | Key (proposed) | English | Spanish | Where and what it is built from |
@@ -205,9 +202,9 @@ Split a table → T8, ticks Bills 2 and 3 and three dishes of Bill 1.
 | `table.split_dishes_from` | `{count} dishes from {bill}` | `{count} platos de {bill}` | A part of `{what}`; «platos» as in `table.action_move_dishes` «Mover platos…» |
 | `table.split_dish_from` | `1 dish from {bill}` | `1 plato de {bill}` | The same, for one |
 | `table.split_rest_of` | `the rest of {bill}` | `el resto de {bill}` | A part of `{what}` |
-| `table.split_empty_bill` | `an empty bill` | `una cuenta vacía` | `{what}` when one side has nothing, except the next row |
-| `table.split_nothing_to_pay` | `nothing to pay` | `nada que pagar` | `{what}` for the staying side when the only bills staying are paid (`anywayNote` answers `"paid"`): the server adds no empty bill then (D12). Same words as `table.split_anyway_note_paid` |
-| `table.split_new_bill_note` | `Single dishes go on a new bill at {table}. Merge it later if wanted.` | `Los platos sueltos van en una cuenta nueva en {table}. Se puede juntar después.` | Under the summary, only while a loose dish is ticked; board 08. «juntar» as in `table.action_merge_bills` «Juntar cuentas» |
+| `table.split_empty_bill` | `an empty bill` | `una cuenta vacía` | `{what}` when one side has nothing, except where the next row's line takes the staying side's place |
+| `table.split_nothing_to_pay` | `{table} is left with nothing to pay` | `{table} se queda sin nada que pagar` | The whole staying summary line, with no amount, in place of `table.split_keeps`, when the only bills staying are paid (`anywayNote` answers `"paid"`) and no pick is left on a bill paid since: the server adds no empty bill then (D12) |
+| `table.split_new_bill_note` | `Single dishes go on a new bill at {table}.` | `Los platos sueltos van en una cuenta nueva en {table}.` | Under the summary, only while a loose dish is ticked; board 08 |
 | `table.split_guests_at` | `Guests at {table}` | `Comensales en {table}` | Each stepper's label; `seat.guest_count` «Comensales» |
 | `table.split_nothing_stays` | `Nothing would stay at {kept}. Move the guests to {table} instead?` | `No quedaría nada en {kept}. ¿Mover los clientes a {table}?` | Everything ticked; board 10. «Mover clientes» as in `table.action_move_guests` |
 | `table.split_anyway` | `Split anyway` | `Separar igualmente` | Everything ticked; `table.split_guests_confirm` «Separar» |
@@ -215,37 +212,30 @@ Split a table → T8, ticks Bills 2 and 3 and three dishes of Bill 1.
 | `table.split_anyway_note_paid` | `Split anyway leaves {kept} with nothing to pay.` | `Separar igualmente deja {kept} sin nada que pagar.` | Everything ticked, when the only bills staying are paid: the server adds no empty bill then (D12) |
 | `table.split_changed` | `{bill} changed while you were choosing. Check its row, then choose Split again.` | `{bill} ha cambiado mientras elegías. Revisa su fila y elige Separar de nuevo.` | Bottom of the panel, when a ticked bill changed, a read took a pick off it, or a read turned its picks into the whole bill (D16, D20, D21). Replaces `draft.out_of_date`'s "Reload it" there |
 | `table.split_taken` | `Take over unsent items from {who} before splitting.` | `Toma los platos sin enviar de {who} antes de separar.` | Owner's words, 2026-11-04 ~22:13 (questions.md); replaces the longer line. Bottom of the panel, as soon as a read shows it, while Split is held (D21). Replaces `draft.taken_over`'s "Reload the table" there. `{who}` is every holder's `editorName` from the read that marks the bill held, de-duplicated, in bill-number order, through `conjunctionList(names, currentLocale())` from `@waitron/shared` ("Ana and Luis") |
-| `table.split_taken_unnamed` | `Take over the unsent items before splitting.` | `Toma los platos sin enviar antes de separar.` | Same place, when any holder's `editorName` is null, which `BillEditState` allows (`bill-editing.ts:309`). Sibling of `table.take_over_title_unnamed`; offered to the owner with the answer on `{who}` |
-| `table.split_bill_gone` | `{bill} has left this table or been paid, so it is not in this split. Check what is ticked, then choose Split again.` | `{bill} ya no está en esta mesa o ya se ha pagado, así que no entra en esta separación. Revisa lo marcado y elige Separar de nuevo.` | Bottom of the panel, on the first press after a read took a ticked bill away (D21). One bill per press |
+| `table.split_taken_unnamed` | `Take over the unsent items before splitting.` | `Toma los platos sin enviar antes de separar.` | Same place, when any holder's `editorName` is null, which `BillEditState` allows (`bill-editing.ts:309`). Sibling of `table.take_over_title_unnamed` |
+| `table.split_bill_gone` | `{bill} has left this table or been paid. Check what is ticked, then choose Split again.` | `{bill} ya no está en esta mesa o ya se ha pagado. Revisa lo marcado y elige Separar de nuevo.` | Bottom of the panel, on the first press after a read took a ticked bill away (D21). One bill per press |
 | `table.split_read_failed` | `This table's bills could not be read. Choose Back and try again.` | `No se pudieron leer las cuentas de esta mesa. Elige Atrás e inténtalo de nuevo.` | Bottom of the panel when its first read fails; Split stays quiet. A later read that fails says nothing (D14). `action.back` «Atrás» |
 | `table.split_bill_part_paid` | `{amount} paid` | `{amount} pagados` | Bill header beside the label, board 10; `bill_pay.paid_part` «pagados». Money received only: money a card in progress has reserved is not paid, so a bill holding only that draws no paid words in its header. Its rows still can: a row the floor stops reads `table.move_dishes_floor`'s "{amount} is already paid on this bill", and a row a pending item payment covers reads `bill_pay.paid`, because `paidLines` includes pending item payments (`paidQuantitiesOf`, `apps/server/src/bill-payments.ts`). Both are in Task 18's backlog entry. The picker's floor still counts it |
-| `table.split_take_over_first` | `You can tick this bill once you take the order over.` | `Podrás marcar esta cuenta cuando tomes el pedido.` | Under a take-over row while the bill is not ticked; board 10 |
+| `table.split_take_over_first` | `Take over the draft to tick this bill.` | `Toma el pedido para marcar esta cuenta.` | Under a take-over row while the bill is not ticked; board 10 |
 | `table.split_presented` | `Presented: this bill goes whole or stays.` | `Presentada: esta cuenta se va entera o se queda.` | Under a presented bill's header; `presented_pay.balance` «Cuenta presentada» |
 | `table.split_own_unsent` | `Your unsent dishes go only with the whole bill.` | `Tus platos sin enviar solo se van con la cuenta entera.` | Under a bill holding this person's unsent dishes; `bill_pay.unsent` «platos sin enviar» |
 
-Plus the guide section (Task 15), English and Spanish, also shown to the owner:
+Plus the guide section (Task 15), English and Spanish, as the owner cut it down:
 
 - Heading: `Split a table` `{#split-table}` / `Separar una mesa` `{#split-table}`
   («Separar una mesa», `guide/es/table-service.md:267`).
 - EN: "When some of a party move to a table of their own, open the **⋮** menu, choose **Split a
   table** and tap the table that leaves. Tick what goes with it: whole bills, or single dishes from
-  any bill. Single dishes go together on a new bill at that table. Set each table's guests, then
-  choose **Split**. With nothing ticked, the table leaves with an empty bill.
-
-  If someone else has an unsent order on a bill, choose **Take over draft** on its row before you tick
-  it."
+  any bill. Set each table's guests, then choose **Split**."
 - ES: «Cuando parte de un grupo pasa a una mesa propia, abre el menú **⋮**, elige **Separar una
   mesa** y toca la mesa que se separa. Marca lo que se lleva: cuentas enteras o platos sueltos de
-  cualquier cuenta. Los platos sueltos van juntos en una cuenta nueva en esa mesa. Indica los
-  comensales de cada mesa y elige **Separar**. Si no marcas nada, la mesa se va con una cuenta vacía.
+  cualquier cuenta. Indica los comensales de cada mesa y elige **Separar**.»
 
-  Si otra persona tiene un pedido sin enviar en una cuenta, elige **Tomar el pedido** en su fila antes
-  de marcarla.»
+Task 15 writes exactly this text. The owner's reason for the cut: "We should tell the user what to do,
+not too into details of what happens in each case." If the code built makes a sentence untrue, ask the
+owner rather than changing it.
 
-Task 15 writes these from the code built; where that code makes a proposal untrue, Task 15 changes it
-and updates the posted question, so the owner approves the text that ships.
-
-**Question 2 of 3 (deleted test checks; blocks landing). Rule: a check of the old guests window goes
+**Question 2 of 3 (deleted test checks): approved. Rule: a check of the old guests window goes
 only where the panel cannot do what it checked; every other check moves to the panel at least as
 strictly. Recommended: yes.** The window `widgets/split-guests-dialog.ts` goes, with its three test
 files: spec §3.7 puts guest counts "in the same window", so a second window is exactly what the spec
@@ -1333,7 +1323,7 @@ The old `split-table-bill` step stays what a waiter sees: **a new step `split-ta
 
 `SplitTableDetail` is a union until Task 14a, so types pass at this commit: `{ tableId, guestCounts, prompt? }` with either `billId` (the old step, `:5056-5061`, whose `satisfies` is unchanged) or `selection` (the new step). In `till-app.ts`, `#onSplitTableOpen` returns early on the new shape until Task 12a, and `#onSplitTable` until Task 12b. `split-table-open`'s `billId` becomes optional for the same reason.
 
-- [ ] **Failing tests**, `.split-table.test.ts` (S in "Deleted checks", opening cases): tapping a table opens the pick step and dispatches `split-table-open` with a `prompt`; heading `{table} leaves {party}` in EN and ES, focused; a renamed table by its name; hint names the staying tables; rows from `splitRead`; steppers named `stayingGuests`, `leavingGuests`, labelled, prefilled, staying from the party's count; Split primary at once once the read has answered; the summary lines for board 08; with only paid bills staying, the staying line says `table.split_nothing_to_pay`, not `table.split_empty_bill`; the new-bill note only with a loose pick; Back returns to the tables, Escape too; Split dispatches `split-table` with `{ tableId, selection, guestCounts, prompt }` once and closes; nothing ticked sends an empty selection; with no read answered Split is quiet and disabled; a first read that failed puts `table.split_read_failed` at the bottom at once, with nothing pressed, and Split stays quiet; a read failing after one has answered keeps the last rows, says nothing, and leaves Split enabled; invalid counts per the Deleted-checks rows; a dish recalled on a bill not on screen is in no row; two portions of one dish with different allergy marks draw as two rows; without `splitPanelLive` the old step draws.
+- [ ] **Failing tests**, `.split-table.test.ts` (S in "Deleted checks", opening cases): tapping a table opens the pick step and dispatches `split-table-open` with a `prompt`; heading `{table} leaves {party}` in EN and ES, focused; a renamed table by its name; hint names the staying tables; rows from `splitRead`; steppers named `stayingGuests`, `leavingGuests`, labelled, prefilled, staying from the party's count; Split primary at once once the read has answered; the summary lines for board 08; with only paid bills staying, the staying line is `table.split_nothing_to_pay` with no amount, not `table.split_keeps` with `table.split_empty_bill`; the new-bill note only with a loose pick; Back returns to the tables, Escape too; Split dispatches `split-table` with `{ tableId, selection, guestCounts, prompt }` once and closes; nothing ticked sends an empty selection; with no read answered Split is quiet and disabled; a first read that failed puts `table.split_read_failed` at the bottom at once, with nothing pressed, and Split stays quiet; a read failing after one has answered keeps the last rows, says nothing, and leaves Split enabled; invalid counts per the Deleted-checks rows; a dish recalled on a bill not on screen is in no row; two portions of one dish with different allergy marks draw as two rows; without `splitPanelLive` the old step draws.
 - [ ] **RED.** `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.split-table.test.ts`.
 - [ ] **Implement.** Move the panel's body into `#splitPickStep`, in as few new lines as the screen allows. `guestsStepper` gains optional `name` and `label`, its comment moved to the callers it still describes. Rows 19, 20 (the a11y scan needs a part-paid bill, a held bill and a whole bill in its fixture, with `splitPanelLive` set). A help bubble is not added.
 - [ ] **GREEN.** `.split-table.test.ts`, `.table-menu.test.ts`, `.a11y.test.ts`, `src/screens/till-table-order-screen.test.ts` (the old step unedited); till types; `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/help-tooltip-mode.test.ts`.
@@ -1518,7 +1508,7 @@ This is D21 on the screen. The app's half, through a real read, is Task 12f.
 
 ## Task 14a: the old window and steps go (about 65 calls)
 
-Waits for Question 2. Built on its default; the PR cannot land until it is answered.
+Question 2 is approved: this goes ahead.
 
 - [ ] Consumer trace, run first and listed in the ledger:
   `rg -n 'split-guests|SplitGuests|split-table-bill|splitPanelLive|split_table_bill_heading|split_no_bill|split_guests_title' apps docs/developers docs/operations scripts`. `split-table-open` and `#splitTablePrompts` stay (D20), so they are not in it. Also `rg -n 'data-target="none"' apps/till/src`, which must end empty.
@@ -1540,7 +1530,7 @@ Waits for Question 2. Built on its default; the PR cannot land until it is answe
 
 ## Task 15: guides and the design contract (about 35 calls)
 
-- [ ] EN and ES: the section of Question 1 in `guide/{en,es}/table-service.md`, before `{#held-dishes-move}`, one heading `{#split-table}` in both. Write each sentence from the code built and keep it only if it changes what staff do (root `CLAUDE.md` §3, A803 4b's Build record). Question 1's text has already lost the sentences on a part-paid bill and on everything ticked, which the screen itself says; do not put them back. Check the ES names against the till's strings by `rg`, not memory: **Tomar el pedido**, **Mover clientes**, **Separar**, **Separar igualmente**.
+- [ ] EN and ES: exactly the owner's text under Question 1, in `guide/{en,es}/table-service.md`, before `{#held-dishes-move}`, one heading `{#split-table}` in both. Add no sentence: the owner cut it down to what the waiter does. Check the ES names against the till's strings by `rg`, not memory: **Separar una mesa**, **Separar**.
 - [ ] Remove nothing else, and leave `#held-dishes-move` as the owner cut it. `table-service.md:345-346`'s "A table split off with a bill starts again at Bill 1" stays true and gets "with bills". If a sentence there is now untrue, fix it in both languages.
 - [ ] `design-system.md` "The dish picker" (`:5795`): the whole-bill header, `whole` rows, the summary and notes, take-over rows, presented and everything-ticked, in the section's present-tense form, each guard named with what it does not see. The action panel entry (`:1090`) gains that this panel's refusals sit at its foot, per Forms, and the till's banner only when no panel can reopen. "The dish picker" also gains D21's four cases and that a selected bill someone else's order reaches stays ticked.
 - [ ] Forms, after the exceptions at `design-system.md:2631-2635` (A396, A752), in present tense, naming A803 4c: **(a)** a panel whose rows come from a read says so at once when its first read fails, with its action quiet and disabled; a later read that fails keeps the last rows and leaves the action as it was. Precedents to name: the Products Move and Delete dialog ("or after the summary failed", `:2898-2900`), `wt-delete-dialog`'s `readError` (`:5458-5463`), the period delete dialog (`:6402`). **(b)** A selection someone else's change now rules out says so at once, naming each choice, and holds the action quiet and disabled until the person chooses or the change goes: A427's rule for a button its row's own state rules out (`:2909-2912`), and `wt-delete-dialog`, which lists what refuses a delete as it opens (`:5455-5458`). Each stays a statement of what this panel does, with `till-table-order-screen.split-table.test.ts` named as what pins it.
@@ -1604,7 +1594,7 @@ Waits for Question 2. Built on its default; the PR cannot land until it is answe
 - [ ] A650's decision in `docs/backlog/till.md:2023-2034` is kept and gains one dated sentence: "2026-11-04, A803 4c: Split a table no longer tells bills that stay, by spec §3.7, except where a name on their paper has gone", worded to Question 3's answer. Moves to `## Decisions and deliberate limits` if not already there; never deleted.
 - [ ] Dated one-line pointers, never rewrites: spec §3.7 "Bill numbers"; `2026-11-01-a803-4-portion-picker.md` Cut 4c: "built from `2026-11-04-a803-4c-split-table-picker.md`, whose findings correct this outline"; `2026-10-14-a650-moved-slips-design.md` §0 ruling 1 and its rows 8, 9 and 18: the same sentence as above.
 - [ ] **Record pass.** Append "## Build record (4c)" to this plan: what was built versus planned, departures with reasons, line numbers that moved, the control table.
-- [ ] PR body in plain English: what the waiter and the kitchen see; no venue reset, no schema change; "Changed test checks" (every row), "Moved till-app cases" and "Deleted checks"; "For the owner": Questions 1 and 2 hold landing until answered, and the lane lands it after that; Question 3's default, naming the two rulings; and, in plain words, that the route now issues an invoice for a bill it leaves fully paid, by the function Move dishes calls, no fiscal function changed, and that **one split can issue more than one invoice in one transaction when loose picks finish several part-paid bills**, naming the two cases that pin it in `split-table.fiscal.test.ts`: "two loose sources left paid make two invoices, in bill-number order, the second chained on the first" and "a refusal at the second invoice leaves no sale and no record, and takes no number". Say also that the bill the old `billId` request names now gets a zone check too, where before only the party did. Say also that a bill someone else's order reaches stays ticked and holds Split (D21), naming Task 12f's title. Then `/finish-branch` with this plan named.
+- [ ] PR body in plain English: what the waiter and the kitchen see; no venue reset, no schema change; "Changed test checks" (every row), "Moved till-app cases" and "Deleted checks"; "For the owner": Questions 1 and 2 are answered and the lane lands it; Question 3's answer, naming the two rulings; and, in plain words, that the route now issues an invoice for a bill it leaves fully paid, by the function Move dishes calls, no fiscal function changed, and that **one split can issue more than one invoice in one transaction when loose picks finish several part-paid bills**, naming the two cases that pin it in `split-table.fiscal.test.ts`: "two loose sources left paid make two invoices, in bill-number order, the second chained on the first" and "a refusal at the second invoice leaves no sale and no record, and takes no number". Say also that the bill the old `billId` request names now gets a zone check too, where before only the party did. Say also that a bill someone else's order reaches stays ticked and holds Split (D21), naming Task 12f's title. Then `/finish-branch` with this plan named.
   - "For the owner" also says: a dish of a combined party is told the first time any of that party's tables leaves, so a cook can get a slip for a dish whose table did not change, as the price of no missed slip for a combined party's paper in 3,000 random histories built to combine often, none of them with named groups, today's merges or held dishes.
   - "For the owner" also says: an open party's dish whose ticket named one table is not told when that table leaves a group whose name stays, because the read goes by the shown name; D6 already states it.
 - [ ] Ledger `Status: in progress` until landed.
