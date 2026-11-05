@@ -407,7 +407,7 @@ until A977).
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Other private naming sites remain in the till's boot and counter-payment suites and
-  other server till-API, fiscal-sale and order fixtures. These include accented move-line bindings
+  other server till-API (split-bill, groups and move-bill), fiscal-sale and order fixtures. These include accented move-line bindings
   and shared helper consumers such as `made-here.test.ts`.
   Fixture strings remain separate from this naming work. The counter, filing and adjustment
   order-portion suites retain Spanish dish samples under A976; counter and adjustment test
@@ -424,8 +424,8 @@ until A977).
   choices carrying such a code before changing it. Its reachability through an installed pack
   has not been established. `git blame` attributes the selection expression to `082553a65`.
 - **A976 — remaining test-venue defaults.** Menu-period rule samples use English names.
-  The counter, filing and adjustment order-portion suites still have Spanish dish samples; the counter
-  and adjustment suites have Spanish dish words in test descriptions.
+  The transfer, portion-sale projection and counter, filing and adjustment order-portion suites
+  still have Spanish dish samples; the counter and adjustment suites have Spanish dish words in test descriptions.
   The kitchen-note upgrade fixture uses an English operation description.
   Native allergy, kitchen-note and bill-identity suites use English sample location names.
   The bill, party, boot, stream and clock fixtures
@@ -801,7 +801,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 ## A974. Finish the remaining English names in general code.
 
 - **A974. Finish the remaining English names in general code.** Remaining names include till boot and
-  counter-payment fixtures; server till-API, fiscal-sale and other order fixtures;
+  counter-payment fixtures; server till-API (split-bill, groups and move-bill), fiscal-sale and other order fixtures;
   shared helper consumers and file names.
   Keep accented search fixtures unchanged. Other fixture text stays with A976, including catalogue
   display names, recipe ingredient names and seasonal venue and zone names, printer-screen display
@@ -814,8 +814,9 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
 - **A976. Finish the server's English test-venue defaults.** Spanish display samples remain in
   `party-bill-actions.test.ts`, `party-move-bill.test.ts`, `till-api.reprint.test.ts`,
-  `order-portions.counter.test.ts`, `order-portions.filing.test.ts` and
-  `order-portions.adjustments.test.ts`; these belong to A976 rather than the private-name work
+  `order-portions.counter.test.ts`, `order-portions.filing.test.ts`,
+  `order-portions.adjustments.test.ts`, `till-api.transfer.test.ts` and
+  `portion-sale-projection.test.ts`; these belong to A976 rather than the private-name work
   in A974. The counter and adjustment order-portion suites also have Spanish dish words
   in their test descriptions. Bookings’ native suites use English
   sample location, operation, contact and note text. Native provisioning and floor-plan-set route

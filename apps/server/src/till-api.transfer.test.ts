@@ -40,8 +40,8 @@ let ana: { id: string };
 // One product, offered in a table zone, so a tab can open with a real line to transfer — `openTab`
 // prices it and the `check_locales` trigger demands its `es-ES` description key match the
 // venue's `es-ES` locale. Both tabs' tables sit in that zone, so a transfer joins like modes.
-let cafeId: string;
-let cafeOffer: string;
+let coffeeId: string;
+let coffeeOffer: string;
 let tablesZoneId: string;
 
 const suite = useVenueDb({
@@ -76,10 +76,10 @@ const suite = useVenueDb({
       });
       await assignCatalogueToVenue(tx, cat.id);
       const zoneOffers = await offerProducts(tx, cfg, { zone: "tables" });
-      return { zoneId: zoneOffers.zoneId, cafeId: p.id, cafe: zoneOffers.offerFor(p.id) };
+      return { zoneId: zoneOffers.zoneId, coffeeId: p.id, coffee: zoneOffers.offerFor(p.id) };
     });
-    cafeId = offers.cafeId;
-    cafeOffer = offers.cafe;
+    coffeeId = offers.coffeeId;
+    coffeeOffer = offers.coffee;
     tablesZoneId = offers.zoneId;
   },
 });
@@ -161,7 +161,9 @@ async function setupTabsApp(
     const a = await createTable(tx, cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
     // Its line is stored grouped, as a line written before portions: the route moves part of it.
     const tabAResult = await openPartyTab(tx, cfg, { tableId: a.id });
-    await writeGroupedLines(tx, cfg, tabAResult.tabId, [{ menuItemId: cafeOffer, quantity: aQty }]);
+    await writeGroupedLines(tx, cfg, tabAResult.tabId, [
+      { menuItemId: coffeeOffer, quantity: aQty },
+    ]);
     const tabB = randomUUID();
     await createOpenOrder(tx, cfg, tabB, [], null, {
       partyId: tabAResult.partyId,
@@ -257,7 +259,7 @@ describe("POST /api/bills/:id/transfer", () => {
       sql`select line_no, product_id, cast(quantity as text) as quantity, cast(unit_price_gross as int) as unit_price_gross from working_order_lines where working_order_id = ${tabB}`,
     );
     expect(b.rows).toEqual([
-      { line_no: 1, product_id: cafeId, quantity: "2000", unit_price_gross: 150 },
+      { line_no: 1, product_id: coffeeId, quantity: "2000", unit_price_gross: 150 },
     ]);
   });
 
