@@ -459,7 +459,15 @@ const NO_BAR_TABLES: readonly BarTable[] = Object.freeze([]);
 const NO_PARTY_DRAFTS: readonly PartyDraft[] = Object.freeze([]);
 
 const billsSeen = (bills: readonly PartyBill[]): string =>
-  JSON.stringify(bills.map((bill) => [bill.workingOrderId, bill.revision]));
+  JSON.stringify(
+    bills.map((bill) => [
+      bill.workingOrderId,
+      bill.revision,
+      bill.status,
+      bill.outstanding,
+      bill.hasPayments,
+    ]),
+  );
 
 interface ReleasedBill {
   personId: string;
@@ -4221,6 +4229,8 @@ export class TillApp extends LitElement {
   }
 
   override updated(changed: PropertyValues): void {
+    // A screen out of the page cannot say it left the panel: its event no longer reaches this app.
+    if (this.#splitPanel?.screen.isConnected === false) this.#leaveSplitRead();
     if (this.#moveAllergyOpening && !this.#moveAllergyCurrent()) this.#closeMoveAllergy();
     this.#syncTableAllergy();
     if (this.allergyDialog !== null && !this.allergyDialog.current()) this.#closeAllergyDialog();
@@ -11989,7 +11999,7 @@ export class TillApp extends LitElement {
       if (read === this.#partyBillsRead) {
         const before = this.partyBills;
         this.partyBills = bills;
-        this.#followSplitBills(party.id, bills);
+        this.#followSplitBills(bills);
         this.#syncDraftBillStatus();
         void this.#loadBillBalance(balance);
         if (follow) await this.#followBillsRead(answer, before);
@@ -15616,7 +15626,7 @@ export class TillApp extends LitElement {
     this.#splitTablePrompts.set(prompt, this.#billComposition(billId === null ? [] : [billId]));
   }
 
-  #splitPanel?: { partyId: string; billsSeen: string };
+  #splitPanel?: { partyId: string; billsSeen: string; screen: TillTableOrderScreen };
   #splitReadGeneration = 0;
   #splitReadAbort?: AbortController;
 
@@ -15624,11 +15634,12 @@ export class TillApp extends LitElement {
     const party = this.orderParty;
     this.#leaveSplitRead();
     this.splitRead = null;
+    const screen = event.composedPath()[0] as TillTableOrderScreen;
     // The screen draws its new step before this app's next update reaches it, and what it draws
     // from an earlier answer would stay on the panel.
-    (event.composedPath()[0] as TillTableOrderScreen).splitRead = null;
+    screen.splitRead = null;
     if (party === null) return;
-    this.#splitPanel = { partyId: party.id, billsSeen: billsSeen(this.partyBills) };
+    this.#splitPanel = { partyId: party.id, billsSeen: billsSeen(this.partyBills), screen };
     void this.#readSplitSources(party.id);
   }
 
@@ -15652,13 +15663,13 @@ export class TillApp extends LitElement {
     this.#splitReadAbort = undefined;
   }
 
-  #followSplitBills(partyId: string, bills: readonly PartyBill[]): void {
+  #followSplitBills(bills: readonly PartyBill[]): void {
     const panel = this.#splitPanel;
-    if (panel?.partyId !== partyId) return;
+    if (panel === undefined) return;
     const seen = billsSeen(bills);
     if (seen === panel.billsSeen) return;
     panel.billsSeen = seen;
-    void this.#readSplitSources(partyId);
+    void this.#readSplitSources(panel.partyId);
   }
 
   async #onSplitTable(event: Event): Promise<void> {
@@ -19210,7 +19221,7 @@ export class TillApp extends LitElement {
       .splitRefusal=${this.splitRefusal}
       .splitRead=${this.splitRead}
       .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
-      .personId=${this.#draftSync?.personId ?? ""}
+      .personId=${this.#draftSync?.personId ?? this.#sessionPersonId}
       .busy=${this.submitting || this.invoiceRecipientReading}
       .groupCommandBusy=${this.groupCommandBusy}
       .handheld=${this.handheldMode}
@@ -19356,7 +19367,7 @@ export class TillApp extends LitElement {
           .splitRefusal=${this.splitRefusal}
           .splitRead=${this.splitRead}
           .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
-          .personId=${this.#draftSync?.personId ?? ""}
+          .personId=${this.#draftSync?.personId ?? this.#sessionPersonId}
           .busy=${this.submitting || this.invoiceRecipientReading}
           .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheldMode}

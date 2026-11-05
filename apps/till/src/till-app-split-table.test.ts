@@ -291,6 +291,45 @@ describe("till-app: the read behind Split a table's panel", () => {
     expect(tableOrder(el)!.splitRead).toBe(later);
   });
 
+  it.each<[string, Partial<PartyBill>]>([
+    ["money received", { outstanding: "5.00", hasPayments: true }],
+    ["only a changed outstanding", { outstanding: "5.00" }],
+    ["only hasPayments changed", { hasPayments: true }],
+    ["a changed status", { status: "settled" }],
+  ])(
+    "reads again when a bills read with the same revisions shows %s, and not on one more like it",
+    async (_change, over) => {
+      fakeTimers();
+      const el = await mounted("desktop");
+      emit(tableOrder(el)!, "split-table-open", { tableId: "t5", prompt: {} });
+      await flush(el);
+
+      const later = answered();
+      api.getSplitSources!.mockResolvedValue(later);
+      const changed = [partyBill("wo-4", 1, "10.00"), partyBill("b2", 2, "20.00", over)];
+      await rereadBills(el, changed);
+      expect(api.getSplitSources).toHaveBeenCalledTimes(2);
+      expect(tableOrder(el)!.splitRead).toBe(later);
+
+      await rereadBills(el, changed);
+      expect(api.getSplitSources).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("does not read again after a changed revision until the bills change once more", async () => {
+    fakeTimers();
+    const el = await mounted("desktop");
+    emit(tableOrder(el)!, "split-table-open", { tableId: "t5", prompt: {} });
+    await flush(el);
+
+    await rereadBills(el, bills(1));
+    expect(api.getSplitSources).toHaveBeenCalledTimes(2);
+    await rereadBills(el, bills(1));
+    expect(api.getSplitSources).toHaveBeenCalledTimes(2);
+    await rereadBills(el, bills(2));
+    expect(api.getSplitSources).toHaveBeenCalledTimes(3);
+  });
+
   it("does not read on a changed revision once the panel is left", async () => {
     fakeTimers();
     const el = await mounted("desktop");
@@ -348,6 +387,18 @@ describe("till-app: the read behind Split a table's panel", () => {
     expect(tableOrder(el)!.splitRead).toBeNull();
   });
 
+  it("forgets the panel's answer when the app moves to another party", async () => {
+    const el = await mounted("desktop");
+    emit(tableOrder(el)!, "split-table-open", { tableId: "t5", prompt: {} });
+    await flush(el);
+    expect(tableOrder(el)!.splitRead).not.toBeNull();
+
+    emit(shell(el), "open-table", { tableId: "t7", seated: true });
+    await flush(el, 6);
+    expect(tableOrder(el)!.party?.id).toBe("v7");
+    expect(tableOrder(el)!.splitRead).toBeNull();
+  });
+
   it("aborts the read when the waiter leaves the step, and drops its answer", async () => {
     const { calls, read } = heldReads();
     const el = await mounted("desktop", { getSplitSources: read });
@@ -360,6 +411,49 @@ describe("till-app: the read behind Split a table's panel", () => {
     calls[0]!.answer(answered());
     await flush(el);
     expect(tableOrder(el)!.splitRead).toBeNull();
+  });
+
+  it("aborts the read when sign-out takes the screen away, and the next session gets no answer from it", async () => {
+    const { calls, read } = heldReads();
+    const el = await mounted("desktop", { getSplitSources: read });
+    await toPanel(el);
+    expect(calls[0]!.signal!.aborted).toBe(false);
+
+    emit(shell(el), "logout");
+    await flush(el);
+    expect(tableOrder(el)).toBeNull();
+    expect(calls[0]!.signal!.aborted).toBe(true);
+
+    calls[0]!.answer(answered());
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(tableOrder(el)!.splitRead).toBeNull();
+  });
+
+  it("stops reading when another tab takes the screen away, also once back on the same table", async () => {
+    fakeTimers();
+    const { calls, read } = heldReads();
+    const el = await mounted("desktop", { getSplitSources: read });
+    await toPanel(el);
+    const opened = tableOrder(el)!;
+
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    expect(opened.isConnected).toBe(false);
+    expect(calls[0]!.signal!.aborted).toBe(true);
+
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(tableOrder(el)).not.toBe(opened);
+    expect(q(el, "[data-split-pick]")).toBeNull();
+
+    for (const revision of [1, 2, 3]) await rereadBills(el, bills(revision));
+    expect(calls).toHaveLength(1);
   });
 
   it("tells the screen a first read failed, and the words are on the panel", async () => {
@@ -386,6 +480,19 @@ describe("till-app: the read behind Split a table's panel", () => {
     expect(tableOrder(el)!.splitRead).toBe(read);
     expect(picker(el)).not.toBeNull();
     expect(bottom(el).error).toBe("");
+  });
+
+  it("says a new opening's read failed even after an earlier opening had an answer", async () => {
+    const el = await mounted("desktop");
+    await toPanel(el);
+    expect(picker(el)).not.toBeNull();
+
+    api.getSplitSources!.mockRejectedValue(new Error("read failed"));
+    await backAndAgain(el);
+    expect(api.getSplitSources).toHaveBeenCalledTimes(2);
+    expect(tableOrder(el)!.splitRead).toBe("failed");
+    expect(picker(el)).toBeNull();
+    expect(bottom(el).error).toBe(t("table.split_read_failed"));
   });
 
   it("reads again on Back and the same table, and that answer replaces the failure", async () => {
@@ -433,4 +540,65 @@ describe("till-app: the read behind Split a table's panel", () => {
       expect(splitButton(el).disabled).toBe(false);
     },
   );
+
+  describe("a party with no bill", () => {
+    const noBill = party({ tableIds: ["t4", "t5"], billCount: 0, openingBillId: null });
+    const noBillRead = {
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([table("t4", "4", noBill), table("t5", "5", noBill), table7]),
+      getPartyBills: vi.fn().mockResolvedValue([]),
+      getSplitSources: vi.fn().mockResolvedValue({ bills: [] }),
+    };
+    const text = (el: TillApp, selector: string) =>
+      q(el, selector)!.textContent!.replace(/\s+/g, " ").trim();
+
+    function expectEmptyPanel(el: TillApp): void {
+      expect(picker(el)).not.toBeNull();
+      expect(picker(el)!.sources).toEqual([]);
+      expect(splitButton(el).variant).toBe("primary");
+      expect(splitButton(el).disabled).toBe(false);
+      expect(bottom(el).error).toBe("");
+      expect(text(el, "[data-split-takes]")).toBe("5 takes an empty bill · €0.00");
+      expect(text(el, "[data-split-keeps]")).toBe("4 keeps an empty bill · €0.00");
+    }
+
+    it.each<Binding>(["desktop", "handheld"])(
+      "on the %s screen draws the panel with no bills, Split primary, for the signed-in person",
+      async (binding) => {
+        const el = await mounted(binding, noBillRead);
+        expect(tableOrder(el)!.orderId).toBeUndefined();
+        await toPanel(el);
+
+        expect(tableOrder(el)!.personId).toBe("p1");
+        expectEmptyPanel(el);
+      },
+    );
+
+    it("draws the same panel when the bills read turns empty while its table is on screen", async () => {
+      fakeTimers();
+      const el = await mounted("desktop", { getSplitSources: noBillRead.getSplitSources });
+      await rereadBills(el, []);
+      expect(tableOrder(el)!.orderId).toBeUndefined();
+      await toPanel(el);
+
+      expect(tableOrder(el)!.personId).toBe("p1");
+      expectEmptyPanel(el);
+    });
+
+    it("is the next person's once someone else has signed out and they have signed in", async () => {
+      const el = await mounted("desktop", noBillRead);
+      emit(shell(el), "logout");
+      await flush(el);
+      expect(tableOrder(el)).toBeNull();
+
+      emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
+      await flush(el);
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+      await flush(el);
+      expect(tableOrder(el)!.personId).toBe("p2");
+    });
+  });
 });
