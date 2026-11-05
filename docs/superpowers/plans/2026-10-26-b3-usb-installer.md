@@ -1,3 +1,5 @@
+> 2026-11-05: PR 7's plan (the box host protocol: B3's requests, their actor and replies, as a pure module) (#2474): [2026-11-05-b3-7-host-protocol.md](2026-11-05-b3-7-host-protocol.md); the clock requests stay on slice 9b's wire and shell handler (its D1), and the host knows its caller by the socket alone, the actor being ids the server reports (its D2).
+
 > 2026-11-03: PR 6's plan (the disk recovery key as systemd's letters, and reading a typed key back): [2026-11-03-b3-6-disk-key-letters.md](2026-11-03-b3-6-disk-key-letters.md); the passphrase is the formatted text itself, as `systemd-cryptenroll` enrols it, so the box re-forms a typed key before `cryptsetup` sees it (its D2).
 
 > 2026-11-03: PR 5's plan (publishing and removing the Wi-Fi boot copy, and its state) and its re-map against main: [2026-11-03-b3-5-wifi-publication.md](2026-11-03-b3-5-wifi-publication.md); a "no copy" answer of any reason, not only cable-only, removes `wifi.json` unless its checks refuse (its D7, D4).
@@ -89,6 +91,8 @@ stay with their owning task.
 | `ReleaseInputs`, `ReleaseAssets`, `ReleaseManifest` / 2.1/5.1          | Inputs are A940 identity plus exact candidate image/installer/package/source/notice/declaration files and digests. Assets are manifest bytes, detached signatures and file inventory. Manifest fields are pinned in 2.1; SHA is full source SHA, not mutable branch name.                                                                                                                                                                     |
 | `QualificationRecord`, `LicenseInventory`, `SourceInventory` / 6.1/5.1 | Qualification record fields are enumerated in 6.1, required cases include a–i at their assigned VM/hardware sites plus install/mode/cutover/document/UI/network cases. License rows map each shipped package/version/file to copyright and offer; source rows map the same package/version to retained source bytes/digest. Missing row or `not-run` blocks publication.                                                                      |
 
+> 2026-11-05: `VerifiedHostActor` and `HostReply` now mean what [PR 7's plan](2026-11-05-b3-7-host-protocol.md) D2, D6 and D16 say: ids only, minted by the server from a session it authorised, checked by the host for form and logged; the replay boundary is access to the socket.
+
 New server refusals must use registered domain codes, with assertions on the code, never only
 `Error`: absent/unauthorised admin uses existing session/`authorization.not_permitted` handling;
 stale/wrong setup identity retains `setup.owner_required`; phase/state refusal retains
@@ -169,6 +173,8 @@ obtain an owner decision before changing that behavior.
 
 **Interfaces:** `HostRequest` discriminated union in `host-protocol.mjs`: `network.read`, `network.scan`, `network.join`, `network.forget`, `screen.read`, `screen.set`, `tag.write`, `first-start.status`; disk-document and cutover operations added only in slice 8. `NetworkSnapshot={wired:{connected:boolean,address:string|null},wifi:{connectedSsid:string|null,networks:readonly {ssid:string,signal:number}[]}}`. `handleHostRequest(request:unknown, actor:VerifiedHostActor):Promise<HostReply>` validates fixed fields and actor/permission at each action. `boxHostCall<T>(request:HostRequest):Promise<T>` in new server client wraps the private socket with bounded request/response sizes/timeouts; no arbitrary path or command execution.
 
+> 2026-11-05: [PR 7's plan](2026-11-05-b3-7-host-protocol.md) builds seven of these requests (`first-start.status` is left to slice 1's recipe), as `handleHostRequest(line, adapters)` answering one reply line; `network.read` answers no network list, which `network.scan` answers instead, and SSIDs travel as hex; the host checks the actor's form, not a permission (its D3, D6, D7, D10, D13, D15).
+
 **The clock requests slice 9b shipped** (A798-B slice 9b, #2331, added 2026-11-01): a contract
 between the server and the host that B3 keeps or migrates. `waitron.sh install` installs a socket
 unit, `deploy/box/waitron-box.socket`, listening on `/run/waitron-box/box.sock` (`Accept=yes`,
@@ -191,6 +197,8 @@ server reports about itself, which the host checks only for form and then logs: 
 plan's `VerifiedHostActor`, which "caller JSON … cannot mint", since the server alone authorizes a
 set. B3 either keeps the two requests on this wire or moves them under its own protocol and actor,
 in the same change that moves the server's client.
+
+> 2026-11-05: settled by [PR 7's plan](2026-11-05-b3-7-host-protocol.md), D1: B3 keeps the two clock requests on this wire and shell handler.
 
 **Proposed boot-copy contract:** `network.mjs` owns a bounded versioned join record at fixed
 `/boot/waitron-recovery/wifi.json`: SSID, password and only adapter-required validated security/join

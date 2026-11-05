@@ -993,6 +993,50 @@ between the 32 bytes the box keeps and the 64 letters a person reads and types, 
 - Both byte inputs take exactly 32 bytes in a genuine `Uint8Array` (a `Buffer` is accepted),
   checked as the unlock gate checks them, and anything else throws `disk_recovery_key.invalid`.
 
+**Built so far (2026-11-05), PR 7.** [PR 7](../superpowers/plans/2026-11-05-b3-7-host-protocol.md)
+(#2474) adds `scripts/box/host-protocol.mjs`, called by nothing yet: what the server may ask B3's
+host service and what the host may answer, as a pure module with no socket, root or
+NetworkManager.
+
+- Seven requests from Task 3.1's list (`HOST_VERBS`; `first-start.status` is left to slice 1's
+  recipe); `clock.status` and `clock.set` stay slice 9b's shell handler's (`SHELL_VERBS`), and this
+  module answers them `unknown_request`.
+- A request is one line: the verb, one space and one JSON object of the request's fields and then
+  `actor`, printable ASCII only, at most 4096 characters, and accepted only in the exact form
+  `formatHostRequest` writes, so a duplicate key, another key order, extra spaces or an upper-case
+  escape is refused. Refusals: `request_invalid`, `unknown_request`, `actor_invalid`,
+  `fields_invalid`. The verb is read before the space is looked for: an empty verb is
+  `request_invalid`, a verb not on `HOST_VERBS` is `unknown_request`, and only then is a listed
+  verb with nothing after it `request_invalid`.
+- The actor is ids only: `{"source":"person","person":<id>}` (1–64 of `A–Z a–z 0–9 -`) or
+  `{"source":"server"}`, each request accepting only its listed sources. The host checks the form
+  and never a permission; the log entry names the verb's permission (`system.manage`) from the
+  module's own table for a person, and `null` for the server.
+- Fields: a join takes exactly what the boot-copy writer accepts (`formatWifiRecord`: WPA2 or WPA3
+  personal), with the SSID as hex (`isSsidHex`, now exported by `wifi-record.mjs`); a forget names
+  one SSID as hex, and whether it is the saved one is the adapter's (`not_saved`); the start screen
+  is `dashboard` or `till`; the name tag is `null` or a name `usableVenueName` leaves unchanged,
+  with `live` true or false.
+- The join check zeroes the byte array `formatWifiRecord` returns, and nothing else. The copy
+  `parseWifiRecord` builds to compare against, the WPA3 password's size check and the record built
+  for a refused password are left for the garbage collector unzeroed, and the password arrives and
+  leaves as a JavaScript string, which cannot be zeroed at all. So the module makes no claim that a
+  password is wiped from memory.
+- Replies: each request's reply is checked when written and when read back (`formatHostReply`,
+  `parseHostReply`), so the server's client can check what it receives by the same rules. A join
+  or forget answers only `{"ok":true}` or a refusal, and `network.read` reports the latest change
+  and the boot copy's state (PR 5's, its lists now exported by `wifi-boot-copy.mjs`) side by side.
+  A scan lists at most 32 networks: 32 of the longest kind make a reply of 3641 bytes with its
+  newline, under the client's 4096.
+- A wired address is one Node's `net.isIP` accepts, with no `%`; the code has no length limit of
+  its own. On Node v26.13.0 `net.isIP` accepted no form longer than 45 characters among those
+  tried (the hand cases, and 200,000 random IPv6 shapes).
+- `handleHostRequest(line, adapters)` checks that `adapters` holds exactly the eight functions,
+  reading each once, then logs the verb and actor, calls the one adapter as a plain function (no
+  `this`) with only the checked fields, copies and checks its answer, and answers the fixed
+  `host_failed` for any adapter failure or wrong answer, with no adapter error text in it. A canary
+  sweep finds the Wi-Fi password only in the join adapter's argument.
+
 **A box that already holds Waitron, with its TPM or Secure Boot switched off:** the owner decided on 2026-11-03; see [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 **For later slices, from PR 1's re-map against main:**
@@ -1161,6 +1205,45 @@ between the 32 bytes the box keeps and the 64 letters a person reads and types, 
   first unreadable character wins over a wrong count, and text over 4096 code units is refused
   unread (D4).
 
+**For later slices, from PR 7's [re-map against main](../superpowers/plans/2026-11-05-b3-7-host-protocol.md#re-map-against-main-on-2026-11-05):**
+
+- The shell handler forwards a line whose verb is on `HOST_VERBS` to the Node host and keeps
+  answering both clock verbs itself; a B3 line can be up to 4096 characters, so it must be read
+  past the clock's 700-character limit without changing a clock answer. A box with the shell alone
+  answers `unknown_request` to a B3 line of at most 700 characters, and `request_invalid` to a
+  longer one, before it reads the verb (`deploy/box/waitron-box.sh:161-165`; a join line reaches
+  1003 characters, a `tag.write` line 3142). So the server's client must not read
+  `request_invalid` from a shell-only box as a fault in its own line; the forwarding pull request,
+  which lets a B3 line past the shell's 700-character read, removes the case. The client reads
+  `unknown_request` as "this host does not know this request", for that request only (D16), since
+  a host built before a later request was added answers it to that request alone.
+- Every connection's instance stops at `RuntimeMaxSec=15`. A join and a forget are meant to answer
+  once the change has started (D8), so each exchange stays short; how long a scan takes on the
+  box's radio, and a join with its address, are rig measurements.
+- The Linux adapters are called as plain functions, never with `this` (the dispatcher reads each
+  once and calls what it checked), so none may rely on `this`: an adapter that needs state takes
+  it through a closure or a bound function.
+- The server's client sends the exact line `formatHostRequest` writes and checks each reply with
+  `parseHostReply`. Nothing in `apps/` imports `scripts/box/` today, so the client pull request
+  chooses between importing the module, moving it into a package, or a TypeScript twin held to it
+  by a shared test.
+- The server's routes check `system.manage` for every person request; `tag.write` runs as the
+  server's own duty at handoff and after a rename or a move to Live commits, sending `null` for a
+  name the tag cannot hold.
+- The host service holds the latest change, serialises changes (one at a time, `busy` otherwise)
+  and publishes the boot copy after each, keeping the two outcomes separate in `network.read`.
+- Nothing zeroes the Wi-Fi password end to end (PR 7's note above), so the host service and its
+  adapters make no claim that it is wiped from memory unless a later pull request builds and tests
+  that.
+- `first-start.status`, in Task 3.1's list, is left to slice 1's recipe pull request: nothing
+  defines its answer or reads it, because the host itself serves first start's failure page while
+  Waitron is not yet running (spec §7.3 item 3). That pull request decides whether the request
+  exists, and if it does, its answer and who reads it.
+- Decisions recorded for review: the permission is named by the verb on the host, not carried on
+  the wire, narrowing spec §8's "carries the person and permission" (D7); a join takes WPA2 and
+  WPA3 personal networks only, so open, OWE and enterprise networks cannot be joined from Red (D9);
+  `tag.write` takes no person actor, narrowing spec §8's "carries the person" (D6).
+
 **Left open by PR 1's review (#2370):**
 
 - Another process running as the same user can create a recorded file or pid file path before the
@@ -1268,6 +1351,7 @@ The owner's four answers: no reserved
 **Full-disk write stop (owner, 2026-10-21, A798-B slice 3, #1950):** refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21.
 
 - **A box that already holds Waitron but has its TPM or Secure Boot switched off still starts (owner, 2026-11-03).** The stick starts the installed Waitron after 15 seconds so the venue keeps selling; the installer's message and the status page carry the setting that is off; slice 3's host service raises the alert; a reinstall on that box stays refused. Built as the installer's decision D2 in B3 PR 3 (`scripts/box/installer-policy.mjs`, #2426) and kept as built. The 15 seconds, two minutes, 60 seconds and one minute stay the spec's proposals; the owner was not asked about them. ([B3 PR 4's plan](../superpowers/plans/2026-11-03-b3-4-name-tag-wifi-copy.md), D13.)
+- **B3 keeps slice 9b's clock requests on their wire and shell handler (B3 PR 7's D1; the lane's decision of 2026-11-05, open to the owner).** They have landed, the clock-behind stop and the clock confirmation use them, and a box installed by `waitron.sh` has no Node on its host. B3's requests will share the socket, the one-line framing and `apps/server/src/box-host-client.ts`; the shell handler is to forward them to the Node host in slice 3's Linux pull request. The host knows its caller by the socket alone (D2): only root and the app's group can connect, one request per connection, so there is no token to replay; the server is to mint an ids-only actor from a session it authorised, and the host checks its form and logs it, and a compromised server can send any actor, as with slice 9b's requester. ([PR 7's plan](../superpowers/plans/2026-11-05-b3-7-host-protocol.md), D1, D2.)
 - **Cloud verification keeps worker threads denied (owner, 2026-10-22, A1004).** Only the fresh
   disposable venue copy omits its watchdog; it still takes the venue lock. Ordinary server and
   restore opens retain monitoring. Cloud must pin the implementing release and requalify its
@@ -1857,16 +1941,6 @@ session reads as written (negative or missing) and every other correction for th
 refused `correction.invalid` `unmatched_out` until a manager retimes the clock-in. Read, not run,
 except the retime. Left open by A798-B slice 9b, Task 15a. Design:
 [A1268 design §4](../superpowers/specs/2026-11-01-a1268-clock-ins-per-venue-design.md#4-part-2--readings-that-order-entries-by-time-after-a-backward-clock-step).
-
-## B3 keeps or replaces the clock requests slice 9b shipped.
-
-Slice 9b ships the host side as a shell handler behind `waitron-box.socket`, with one text line in
-and one JSON line out, and a requester the server reports about itself that the host only logs. B3's
-plan meant to create the host service and `apps/server/src/box-host-client.ts` itself, under its
-own protocol and an actor the caller cannot mint. B3 either keeps the two clock requests on this
-wire or moves them under its own protocol, in the same change that moves the server's client; the
-contract is written into B3's plan, Task 3.1, "The clock requests slice 9b shipped". Left open by
-A798-B slice 9b (the lead's ruling (a)).
 
 ## The bucket stream prunes nothing, and says nothing, while it cannot read its marker.
 

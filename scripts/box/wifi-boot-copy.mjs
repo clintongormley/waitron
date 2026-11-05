@@ -9,6 +9,18 @@ import {
   parseWifiRecord,
 } from "./wifi-record.mjs";
 
+/** Every state status() answers. Frozen. */
+export const WIFI_COPY_STATES = Object.freeze(["pending", "current", "absent", "failed"]);
+/** Every failure a publication can end with. Frozen. */
+export const WIFI_COPY_FAILURES = Object.freeze([
+  "mount-unverified",
+  "root-changed",
+  "path-unsafe",
+  "permissions-unsafe",
+  "io-failed",
+  "publication-unverified",
+]);
+
 /**
  * @typedef {'pending'|'current'|'absent'|'failed'} WifiCopyState
  * @typedef {'mount-unverified'|'root-changed'|'path-unsafe'|'permissions-unsafe'|'io-failed'

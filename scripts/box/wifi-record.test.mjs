@@ -14,6 +14,7 @@ import {
   createWifiRecordReader,
   decideWifiBootCopy,
   formatWifiRecord,
+  isSsidHex,
   parseWifiRecord,
   readActiveWifiRecord,
 } from "./wifi-record.mjs";
@@ -1611,5 +1612,27 @@ describe("WIFI_NO_COPY_REASONS", () => {
     const caseReasons = new Set(removeCases.map(([, reason]) => reason));
     for (const reason of caseReasons) expect(WIFI_NO_COPY_REASONS).toContain(reason);
     for (const reason of WIFI_NO_COPY_REASONS) expect(caseReasons.has(reason)).toBe(true);
+  });
+});
+
+describe("isSsidHex", () => {
+  it.each([
+    ["one zero byte", "00"],
+    ["one ff byte", "ff"],
+    ["32 bytes", "0123456789abcdef".repeat(4)],
+  ])("accepts %s", (_name, value) => {
+    expect(isSsidHex(value)).toBe(true);
+  });
+
+  it.each([
+    ["an empty string", ""],
+    ["half a byte", "f"],
+    ["upper case", "FF"],
+    ["33 bytes", "ab".repeat(33)],
+    ["not hex", "zz"],
+    ["null", null],
+    ["a number", 42],
+  ])("refuses %s", (_name, value) => {
+    expect(isSsidHex(value)).toBe(false);
   });
 });

@@ -8,6 +8,8 @@ import { clearTimeout, setTimeout } from "node:timers";
 import { TextEncoder, inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  WIFI_COPY_FAILURES,
+  WIFI_COPY_STATES,
   createWifiBootCopyPublisher,
   publishWifiBootCopy,
   wifiBootCopyStatus,
@@ -308,8 +310,12 @@ const lstatThrowingAt = (path, value) => async (target, options) => {
 
 const ioError = (code) => Object.assign(new Error(`${code}: ${PASSWORD_A}`), { code });
 
+/** Every status a case passed to expectStatus, as the publisher answered it. */
+const observedStatuses = [];
+
 /** @param {unknown} status @param {unknown} expected */
 function expectStatus(status, expected) {
+  observedStatuses.push(status);
   expect(status).toEqual(expected);
   expect(Object.isFrozen(status)).toBe(true);
   expect(Object.keys(/** @type {object} */ (status)).sort()).toEqual([
@@ -376,6 +382,22 @@ describe("createWifiBootCopyPublisher refuses deps that are not exactly right", 
     expect(() =>
       createWifiBootCopyPublisher({ bootRoot: "/boot", ownerUid: 0, inspectBootMount: vi.fn() }),
     ).not.toThrow();
+  });
+});
+
+describe("the copy's states and failures", () => {
+  it("lists the four states and the six failures, frozen", () => {
+    expect(WIFI_COPY_STATES).toEqual(["pending", "current", "absent", "failed"]);
+    expect(WIFI_COPY_FAILURES).toEqual([
+      "mount-unverified",
+      "root-changed",
+      "path-unsafe",
+      "permissions-unsafe",
+      "io-failed",
+      "publication-unverified",
+    ]);
+    expect(Object.isFrozen(WIFI_COPY_STATES)).toBe(true);
+    expect(Object.isFrozen(WIFI_COPY_FAILURES)).toBe(true);
   });
 });
 
@@ -1886,5 +1908,27 @@ describe("a publication stopped after any step, and the next start", () => {
     await expectMissing(outside);
     await expectBytes(f.recordPath, writeA.bytes);
     expectStatus(status, IO_FAILED_WRITE);
+  });
+});
+
+/** @param {import("vitest").RunnerTestSuite | import("vitest").RunnerTestFile} suite */
+const testsIn = (suite) =>
+  suite.tasks.flatMap((task) => (task.type === "suite" ? testsIn(task) : [task]));
+
+// Last in the file, as it reads the statuses every case above observed.
+describe("the copy's states and failures match what the cases observe", () => {
+  it("in both directions", (context) => {
+    const others = testsIn(context.task.file).filter((test) => test !== context.task);
+    context.skip(
+      others.some((test) => test.mode !== "run"),
+      "needs every other case in the file to have run",
+    );
+    const states = new Set(observedStatuses.map(({ state }) => state));
+    const failures = new Set(observedStatuses.map(({ failure }) => failure));
+    failures.delete(null);
+    for (const state of states) expect(WIFI_COPY_STATES).toContain(state);
+    for (const failure of failures) expect(WIFI_COPY_FAILURES).toContain(failure);
+    for (const state of WIFI_COPY_STATES) expect(states.has(state)).toBe(true);
+    for (const failure of WIFI_COPY_FAILURES) expect(failures.has(failure)).toBe(true);
   });
 });
