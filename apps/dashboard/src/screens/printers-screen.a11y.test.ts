@@ -20,7 +20,7 @@ import type {
 const agents: PrintAgentRow[] = [
   {
     id: "a1",
-    name: "Cocina agent",
+    name: "Kitchen agent",
     active: true,
     host: null,
     nodeId: null,
@@ -30,7 +30,7 @@ const agents: PrintAgentRow[] = [
   },
   {
     id: "a2",
-    name: "Barra agent",
+    name: "Bar agent",
     active: false,
     host: null,
     nodeId: "n1", // self-enrolled + revoked: axe scans the provenance marker and the allow-again control
@@ -43,7 +43,7 @@ const agents: PrintAgentRow[] = [
 const printers: Printer[] = [
   {
     id: "p1",
-    name: "Cocina",
+    name: "Kitchen",
     transport: "network_tcp",
     host: "10.0.0.9",
     port: 9100,
@@ -81,7 +81,7 @@ const printers: Printer[] = [
   },
   {
     id: "p3",
-    name: "Barra USB",
+    name: "Bar USB",
     transport: "usb",
     host: null,
     port: null,
@@ -104,7 +104,7 @@ const jobs: PrintJobRow[] = [
   {
     id: "j1",
     printerId: "p1",
-    printerName: "Cocina",
+    printerName: "Kitchen",
     status: "failed",
     canResend: true,
     attempts: 2,
@@ -115,16 +115,16 @@ const jobs: PrintJobRow[] = [
 ];
 
 const printerProfiles: PrinterProfileOffer[] = [
-  { printerId: "p1", profileId: "dp1", profileName: "Camareros" },
-  { printerId: "p2", profileId: "dp1", profileName: "Camareros" },
-  { printerId: "p1", profileId: "dp2", profileName: "Mostrador" },
+  { printerId: "p1", profileId: "dp1", profileName: "Waiters" },
+  { printerId: "p2", profileId: "dp1", profileName: "Waiters" },
+  { printerId: "p1", profileId: "dp2", profileName: "Counter" },
 ];
 
 // An unregistered USB device, a disabled registration offered for adding again, and an office printer.
 const discovered = [
   {
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "usb",
     localKey: "SN-1",
     make: "Epson",
@@ -136,7 +136,7 @@ const discovered = [
   },
   {
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "usb",
     localKey: "SN-2",
     make: "Star",
@@ -149,7 +149,7 @@ const discovered = [
   {
     // An office printer: its muted row and explanation replace the Add action, so axe checks their contrast.
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "network_tcp",
     host: "10.0.0.56",
     port: 9100,
@@ -254,7 +254,7 @@ afterEach(() => sessionStorage.removeItem("waitron.printers.table"));
 const bluetooth: DiscoveredPrinter[] = [
   {
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "bluetooth",
     localKey: "00:11:22:33:44:55",
     name: "Bar printer",
@@ -265,7 +265,7 @@ const bluetooth: DiscoveredPrinter[] = [
   },
   {
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "bluetooth",
     localKey: "66:77:88:99:AA:BB",
     name: "Headphones",
@@ -275,7 +275,7 @@ const bluetooth: DiscoveredPrinter[] = [
   },
   {
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "bluetooth",
     localKey: "22:22:22:22:22:22",
     name: "Old bar printer",
@@ -509,7 +509,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     const office = (host: string, overrides: Partial<DiscoveredPrinter> = {}) =>
       ({
         agentId: "a1",
-        agentName: "Cocina agent",
+        agentName: "Kitchen agent",
         transport: "network_tcp",
         host,
         port: 9100,
@@ -532,7 +532,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       resolutionDpi: 600,
       active: true,
       agentId: "a1",
-      agentName: "Cocina agent",
+      agentName: "Kitchen agent",
       ...overrides,
     });
     const { el, host } = await mountWidget<PrintersScreen>(
@@ -542,7 +542,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
           listDiscoveredPrinters: vi.fn().mockResolvedValue([
             office("10.0.0.61"),
             office("10.0.0.62"),
-            office("10.0.0.63", { agentId: "a2", agentName: "Barra agent" }),
+            office("10.0.0.63", { agentId: "a2", agentName: "Bar agent" }),
             office("10.0.0.64"),
             office("10.0.0.65", {
               office: {
@@ -1092,7 +1092,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       try {
         let answer!: (value: unknown) => void;
         const impact = {
-          target: { id: "p1", name: "Cocina" },
+          target: { id: "p1", name: "Kitchen" },
           refusals: [],
           ends: [
             { key: "print_jobs", count: 2, targets: [] },
@@ -1210,7 +1210,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       disabled: true,
     });
     await expectNoA11yViolations(host);
-    edit(el, '[name="printer-detail-name"]', "Cocina 2");
+    edit(el, '[name="printer-detail-name"]', "Kitchen 2");
     edit(el, '[name="printer-detail-port"]', "9101");
     await flush(el);
     expect(saveLook(el, "save-printer-name")).toEqual({ variant: "primary", disabled: false });
