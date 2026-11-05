@@ -130,6 +130,18 @@ vi.mock("node:fs", async (importOriginal) => {
   return { ...real, createReadStream };
 });
 
+const chartReads = vi.hoisted(() => ({ count: 0 }));
+vi.mock("@waitron/db", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@waitron/db")>();
+  return {
+    ...real,
+    readNodeMembership: (...args: Parameters<typeof real.readNodeMembership>) => {
+      chartReads.count += 1;
+      return real.readNodeMembership(...args);
+    },
+  };
+});
+
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x7).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -1666,6 +1678,20 @@ describe("the spare's duty runs the real comparison", () => {
       } finally {
         process.umask(mask);
       }
+    });
+
+    it("reads the chart once before each post the old box refuses", async () => {
+      const r = await dutyRig();
+      const atEachPost: number[] = [];
+      r.seam.answer = () => {
+        atEachPost.push(chartReads.count);
+        return r.refusal("handover.not_stepped_down");
+      };
+      await r.startAccepting();
+      await vi.waitFor(() => expect(atEachPost.length).toBeGreaterThan(3), { timeout: 15_000 });
+      const betweenPosts = atEachPost.slice(1, 4).map((reads, index) => reads - atEachPost[index]!);
+      // Failing case, the address and the check each reading it: 2 between each post.
+      expect(betweenPosts).toEqual([1, 1, 1]);
     });
 
     it("control: an unaltered copy is kept as accepted, recorded, posted, and filing is assumed", async () => {

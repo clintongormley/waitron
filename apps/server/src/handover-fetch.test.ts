@@ -63,6 +63,17 @@ import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { boxDownload } from "./mirror-bundle-fetch.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
+const chartReads = vi.hoisted(() => ({ count: 0 }));
+vi.mock("@waitron/db", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@waitron/db")>();
+  return {
+    ...real,
+    readNodeMembership: (...args: Parameters<typeof real.readNodeMembership>) => {
+      chartReads.count += 1;
+      return real.readNodeMembership(...args);
+    },
+  };
+});
 vi.mock("./handover-store.js", { spy: true });
 vi.mock("node:fs/promises", { spy: true });
 
@@ -1252,6 +1263,22 @@ describe("the folder of an operation that closed", () => {
     expect(existsSync(folder)).toBe(true);
     duty.wake();
     await vi.waitFor(() => expect(existsSync(folder)).toBe(false));
+  });
+});
+
+describe("the chart", () => {
+  it("is read once a pass while the old box is asked for its status", async () => {
+    const r = await rig();
+    const atEachAsk: number[] = [];
+    await r.listen(new Hono(), (url, real) => {
+      if (url === "/api/node/peer-status") atEachAsk.push(chartReads.count);
+      return real;
+    });
+    await r.start();
+    await vi.waitFor(() => expect(atEachAsk.length).toBeGreaterThan(3), { timeout: 10_000 });
+    const betweenAsks = atEachAsk.slice(1, 4).map((reads, index) => reads - atEachAsk[index]!);
+    // Failing case, the address and the key each reading it: 2 between each ask.
+    expect(betweenAsks).toEqual([1, 1, 1]);
   });
 });
 

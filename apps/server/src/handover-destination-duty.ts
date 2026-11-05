@@ -318,6 +318,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     await advanceHandover(deps, operation.operationId, "abandoned", {
       reportedBy: operation.sourceNodeId,
     } as CanonicalValue);
+    held = undefined;
     deps.log("info", "handover-destination.abandoned", { operationId: operation.operationId });
   }
 
@@ -408,6 +409,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     if (outcome !== undefined && accept !== null) {
       if (current === null) return;
       await accept(deps, current, copy.indicator, copy.path);
+      held = undefined;
       return;
     }
     copy.compared = true;
@@ -416,15 +418,15 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     }
   }
 
-  /** Where the old box is and the certificate to trust it by, or `undefined` while it cannot be asked. */
+  /** The chart read, where it puts the old box and the certificate to trust it by, or `undefined` while it cannot be asked. */
   async function sourceAddress(operation: HandoverOperation) {
     const link = await readMirrorLink(deps.node, deps.nodeId);
     const chart = await readNodeMembership(deps.db);
     const source = chart?.body.nodes.find((n) => n.nodeId === operation.sourceNodeId);
     const base = usableBase(source?.contactUrl);
-    return link === null || source === undefined || base === undefined
+    return link === null || chart === null || source === undefined || base === undefined
       ? undefined
-      : { source, base, ca: link.boxCaPem };
+      : { chart, source, base, ca: link.boxCaPem };
   }
 
   async function postAcceptance(operation: HandoverOperation): Promise<void> {
@@ -447,7 +449,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       return waitOn(operation, "handover.source_unreachable");
     }
     // Before the post, or the old box gives up filing to a box that will not take it.
-    if (!oldBoxStillMain(await readNodeMembership(deps.db), operation.sourceNodeId)) {
+    if (!oldBoxStillMain(address.chart, operation.sourceNodeId)) {
       return waitOn(operation, "handover.source_no_longer_main");
     }
     const acceptance = await readStoredAcceptance(deps, operationId);
@@ -493,11 +495,11 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       await waitOn(operation, "handover.source_unreachable");
       return true;
     }
-    const { source, base, ca } = address;
+    const { chart, source, base, ca } = address;
     let silentBecause: string | undefined;
     const status = await askPeerStatus({
       sign: (body) => signAsThisBox(deps, "query", body),
-      publicKeyOf: await peerKeyOf(deps),
+      publicKeyOf: await peerKeyOf(deps, chart),
       authorityOf: () => ca,
       query: { operationId: operation.operationId, purpose: "status" },
       onSilent: (_nodeId, reason) => {
