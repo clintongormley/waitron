@@ -366,8 +366,10 @@ Docker is available. The dated 2 November entries below preserve the former
 3 November wait; they no longer describe execution availability. Read the
 [current host evidence](../operations/a951-host-evidence.md) for the Mac fixture
 probes and read-only test-box inventory. Neither is native A951 qualification.
-The proposed host profile needs an explicit successor for the existing test box's
-Ubuntu 26.04. G1 executable consumers, G2 and the other affected gates remain open;
+B3's approved shipped image is Debian 13. The owner chose Debian 13 on the
+reinstalled test box. Hold native runs until it returns; write the Debian-profile
+successor and advance E's independent D136 intake. Write no Ubuntu successor.
+G1 executable consumers, G2 and the other affected gates remain open;
 D560's exact documentation acceptance and the immutable artifacts are unchanged.
 
 ### G1 mapping acceptance: 2 November 2026 (D560)

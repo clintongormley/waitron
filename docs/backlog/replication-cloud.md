@@ -623,8 +623,10 @@ exact D560 G1 mapping accepted for isolated planning only.
 Full appliance/host acceptance, approval/provisioning/PP consumers, signed corpus
 and E's matching D136 routing record remain open. Docker is available. The
 [5 November host evidence](../operations/a951-host-evidence.md) records preliminary
-socket/confinement probes and the actual test-box profile. Reconcile the proposed
-Ubuntu 24.04 target with that box's Ubuntu 26.04 before native host qualification.
+socket/confinement probes and the actual test-box profile. B3's approved shipped
+image is Debian 13; the owner chose that system on the reinstalled test box.
+Hold native runs until it returns; write a Debian-profile successor and continue
+E's independent D136 intake.
 Admission CLOSED; other scoped gates remain.
 
 All five cuts of the [plan](../superpowers/plans/2026-10-22-a951-connection.md)
@@ -649,8 +651,9 @@ Keep the remaining work separate:
 - **G7 real host, E:** the Docker availability wait has ended. Mac Docker Desktop
   is an isolated fixture, outside the proposed native host profile. The existing
   x86_64/systemd/AppArmor test box runs Ubuntu 26.04, whereas the immutable proposal
-  names 24.04; return an explicit engineering successor rather than silently
-  accepting it or reinstalling the box. Obtain populated exact
+  names 24.04 and B3 ships Debian 13. The owner chose Debian 13 on the reinstalled
+  test box; hold native runs until it returns and write the Debian-profile successor.
+  Change no box configuration. Reconcile the contract and obtain populated exact
   host/build/image/profile/unit/mount pins, GUARD16's complete bounded inventory,
   protected-store/participant evidence and network/listener-custody measurements.
   Qualify full-budget closure, crash/stop races and suspension separately.

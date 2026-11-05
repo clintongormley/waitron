@@ -6024,9 +6024,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **A951. The box's lasting tunnel and public-certificate client.** Build approved;
   exact D560 G1 mapping accepted for isolated planning only. Docker is available;
-  preliminary socket/confinement probes ran on 5 November. Reconcile the proposed
-  Ubuntu 24.04 host profile with the existing Ubuntu 26.04 test box, then complete
-  native custody, G1 consumers and the remaining qualification gates.
+  preliminary socket/confinement probes ran on 5 November. B3 ships Debian 13;
+  the owner chose Debian 13 on the reinstalled test box. Hold native runs until
+  it returns; write the Debian host successor and advance E's independent D136 intake.
+  G1 consumers and the remaining runtime gates stay open.
   [Host evidence and next steps](operations/a951-host-evidence.md).
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 

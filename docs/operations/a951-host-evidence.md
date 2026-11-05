@@ -4,6 +4,18 @@ You can resume isolated A951 work: Docker is available. The former “Docker wit
 the owner on 3 November” wait no longer applies. These measurements begin G7's
 host evidence; they do not qualify a tunnel, public certificate or native service.
 
+## Host direction updated after these measurements
+
+The owner chose Debian 13 on the test box, which is being reinstalled. Hold native
+runs until the watcher confirms it is back; the shared helper returns 75 while it
+is unavailable. Write a Debian-profile successor, not an Ubuntu successor.
+B3's approved design chooses a Debian 13 shipped disk in
+[section 3](../superpowers/specs/2026-10-21-b3-usb-installer-design.md#3-the-shape-a-small-stick-that-fetches-a-ready-made-box)
+and [section 8](../superpowers/specs/2026-10-21-b3-usb-installer-design.md#8-the-boxs-operating-system).
+Keep the Ubuntu measurements below as fixture evidence and change no box
+configuration. E's D136 intake and Debian-profile writing can proceed independently
+of the reinstall and Cloud D582's implementation.
+
 ## What ran
 
 The source context was Waitron `924f09bcf506088c2d42915acff5ff00ed09d319`, with the
@@ -52,19 +64,20 @@ Moving an endpoint and admitting customer products remain separate work.
 | G4   | E and Cloud G/D88                                    | Agree independent public-upstream issuer, trust, mutual TLS and exchange/revocation. This gates customer upstream traffic, not the first isolated staff-certificate fixture.                                                                                                                                                                                    |
 | G5   | E, Cloud G/D88 and A947's owner                      | Agree movement/replacement phases, retirement and recovery. Keep these disabled for the first fixed-box proof.                                                                                                                                                                                                                                                  |
 | G6   | E, Cloud G/D136 and Cloud D/D101 with E/A980         | Record E's matching routing revision-2 intake; agree diagnostic/export bounds and flow-specific metadata processing/access/retention before affected traffic. An empty customer manifest does not accept staff metadata processing.                                                                                                                             |
-| G7   | E, Cloud G and the host qualification reviewer       | Reconcile Ubuntu 26.04 through a versioned engineering successor; build native entries/profiles/units, map the complete guard inventory within the existing cap and qualify exact loaded bytes, custody, failure and sleep behavior. Then qualify the applicable DNS/issuer/device/origin path.                                                                 |
+| G7   | E, Cloud G and the host qualification reviewer       | Write the Debian 13 host successor, wait for the test box's return, then build native entries/profiles/units, map the complete guard inventory within the existing cap and qualify exact loaded bytes, custody, failure and sleep behavior. Then qualify the applicable DNS/issuer/device/origin path.                                                          |
 
 Cloud G/D582 is queued to return concrete dependency ownership after D581.
-Start with the host-profile successor and those G1 implementation assignments,
-then finish the isolated corpus/foundation, G2 mapping and E's routing intake.
+Start with E's independent D136 intake and those G1 implementation assignments.
+Write the Debian 13 host successor while the test box is reinstalled; continue the
+isolated corpus/foundation and G2 mapping where their own gates permit.
 Qualify native custody and guards on the agreed host before the test staff
 exchange and fixed-box tunnel proof. Resolve G6 processing and applicable
 DNS/issuer/device/runtime acceptance before real traffic. G4 and G5 keep their
 own affected paths closed.
 
 You do not need to reinstall the test box or perform a manual step for the
-preliminary work recorded here. Engineering acceptance of a host-profile successor
-is still required; this report changes no accepted target. Later real-device tests
+preliminary work recorded here. The owner selected Debian 13; engineering
+acceptance and qualification of its successor remain open. Later real-device tests
 and provider/DNS activation need their separately authorized operational work.
 The A1308 table hold remains in force. Local fixture evidence creates no table,
 new writer, fiscal permission or customer product.
