@@ -55,15 +55,10 @@ import {
 } from "@waitron/node-db";
 import type { StartedServer } from "./boot.js";
 import { acceptFinalCopy, acceptedCopyPath } from "./handover-acceptance.js";
-import {
-  FINAL_STATE_EVENT,
-  captureFinalCopy,
-  finalCopyPath,
-  type CaptureDeps,
-} from "./handover-capture.js";
+import { captureFinalCopy, finalCopyPath, type CaptureDeps } from "./handover-capture.js";
 import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
-import { advanceHandover, beginHandoverFromOffer } from "./handover-store.js";
+import { advanceHandover, beginHandoverFromOffer, HANDOVER_EVENT } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -81,6 +76,7 @@ const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x8).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
+const FINAL_STATE_EVENT = HANDOVER_EVENT.finalState;
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const OTHER_OP = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const AUTHORISER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";

@@ -35,15 +35,15 @@ import {
 import {
   CAPTURE_REFUSAL_STATUS,
   captureFinalCopy,
-  FINAL_STATE_EVENT,
   journalDigest,
   type CaptureDeps,
 } from "./handover-capture.js";
 import { buildNodeLocalManifest } from "./handover-manifest.js";
-import { advanceHandover, beginHandover } from "./handover-store.js";
+import { advanceHandover, beginHandover, HANDOVER_EVENT } from "./handover-store.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity } from "./node-identity.js";
 
+const FINAL_STATE_EVENT = HANDOVER_EVENT.finalState;
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x4).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",

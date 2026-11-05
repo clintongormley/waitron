@@ -49,9 +49,7 @@ import { appendHandoverEventTx, setNodeMode, writeMirrorLink } from "@waitron/no
 import type { StartedServer } from "../boot.js";
 import { loadBoxEnv } from "../box-env.js";
 import { acceptedCopyPath } from "../handover-acceptance.js";
-import { FINAL_STATE_EVENT } from "../handover-capture.js";
-import { COPY_PLACED_EVENT } from "../handover-place-copy.js";
-import { advanceHandover, beginHandover } from "../handover-store.js";
+import { advanceHandover, beginHandover, HANDOVER_EVENT } from "../handover-store.js";
 import { type assertNotAhead, runEntry } from "../node-entry.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "../node-identity.js";
 import { readRecoveryState, writeRecoveryState } from "../recovery-state.js";
@@ -127,7 +125,7 @@ export function copyPlacedEvents(b: Box): number {
     return (
       raw
         .prepare("select count(*) as n from node_handover_events where kind = ?")
-        .get(COPY_PLACED_EVENT) as { n: number }
+        .get(HANDOVER_EVENT.copyPlaced) as { n: number }
     ).n;
   } finally {
     raw.close();
@@ -353,7 +351,7 @@ export function placeCopyBoxes(deps: {
       await appendHandoverEventTx(tx, {
         nodeId,
         operationId: OP,
-        kind: FINAL_STATE_EVENT,
+        kind: HANDOVER_EVENT.finalState,
         detail: {},
         envelope: JSON.stringify(envelope),
       });

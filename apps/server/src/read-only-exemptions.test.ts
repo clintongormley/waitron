@@ -23,7 +23,6 @@ import {
   setSingletonRole,
   writeMirrorLink,
 } from "@waitron/node-db";
-import { COPY_PLACED_EVENT } from "./handover-place-copy.js";
 import { sha256Hex, signEnvelope } from "@waitron/handover";
 import {
   canonicalize,
@@ -41,7 +40,7 @@ import { freePort } from "./testing/free-ports.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
-import { advanceHandover, beginHandover } from "./handover-store.js";
+import { advanceHandover, beginHandover, HANDOVER_EVENT } from "./handover-store.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { READ_ONLY_EXEMPTIONS, isReadOnlyExempt, pathMatches } from "./read-only-exemptions.js";
 
@@ -280,7 +279,7 @@ beforeAll(async () => {
     appendHandoverEventTx(tx, {
       nodeId: hId,
       operationId: MIRROR_OPERATION_ID,
-      kind: COPY_PLACED_EVENT,
+      kind: HANDOVER_EVENT.copyPlaced,
       detail: {},
       envelope: null,
     }),

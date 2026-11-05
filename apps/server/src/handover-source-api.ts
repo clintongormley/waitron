@@ -11,7 +11,7 @@ import {
   type HandoverBinding,
 } from "@waitron/handover";
 import type { CanonicalValue } from "@waitron/membership";
-import { readHandoverEvent, readHandoverOperation, type HandoverOperation } from "@waitron/node-db";
+import { readHandoverOperation, type HandoverOperation } from "@waitron/node-db";
 import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import {
@@ -21,7 +21,6 @@ import {
 } from "./handover-acceptance.js";
 import {
   CAPTURE_REFUSAL_STATUS,
-  FINAL_STATE_EVENT,
   captureFinalCopy,
   digestBytes,
   finalCopyPath,
@@ -30,7 +29,7 @@ import {
   type CaptureDeps,
 } from "./handover-capture.js";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
-import { advanceHandoverTx } from "./handover-store.js";
+import { advanceHandoverTx, findHandoverEnvelope, HANDOVER_EVENT } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { verifiedPeerQuery, type PeerQueryPurpose } from "./peer-status-api.js";
 import "./errors.js";
@@ -211,7 +210,7 @@ async function relinquishFiling(
   const { operation, binding, indicatorDigest } = await acceptanceOf(deps, operationId, raw);
   const indicator = await readFinalState(deps.node, deps.nodeId, operationId);
   if (indicator === null) {
-    throw new AppError("handover.indicator_mismatch", { field: FINAL_STATE_EVENT });
+    throw new AppError("handover.indicator_mismatch", { field: HANDOVER_EVENT.finalState });
   }
   const held = envelopeDigest(indicator);
   if (indicatorDigest !== held) {
@@ -247,15 +246,11 @@ async function relinquishFiling(
   });
 }
 
-async function readRelinquishment(
+function readRelinquishment(
   deps: { node: NodeDatabase | NodeTransaction; nodeId: string },
   operationId: string,
 ): Promise<string | null> {
-  const row = await readHandoverEvent(deps.node, deps.nodeId, operationId, "filing_relinquished");
-  if (row === null) return null;
-  // A fault in Waitron: this file's writer always stores the envelope with the event.
-  if (row.envelope === null) throw new Error(`the relinquishment of ${operationId} is empty`);
-  return row.envelope;
+  return findHandoverEnvelope(deps, operationId, HANDOVER_EVENT.filingRelinquished);
 }
 
 /**

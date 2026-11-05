@@ -43,6 +43,8 @@ import { handoverPageAt, handoverPageOf } from "./handover-status-api.js";
 import {
   abandonHandover,
   beginHandoverFromOffer,
+  HANDOVER_EVENT,
+  readHandoverEnvelope,
   storedRefusal,
   type HandoverRefusal,
 } from "./handover-store.js";
@@ -328,7 +330,12 @@ export function mountHandoverSourceStartApi(
       throw new AppError("handover.operation_conflict", { operationId });
     }
     if (stored.state === "abandoned") {
-      const event = await readHandoverEvent(deps.node, deps.nodeId, operationId, "abandoned");
+      const event = await readHandoverEvent(
+        deps.node,
+        deps.nodeId,
+        operationId,
+        HANDOVER_EVENT.abandoned,
+      );
       // A fault in Waitron: moving to `abandoned` records this event in the same transaction.
       if (event === null) throw new Error(`no abandoned event for handover ${operationId}`);
       const { code, params } = storedRefusal(event.detail);
@@ -382,9 +389,7 @@ export function mountHandoverSourceStartApi(
         params: { destinationNodeId },
       });
     }
-    const offer = await readHandoverEvent(deps.node, deps.nodeId, operationId, "offer");
-    // A fault in Waitron: this route records the offer in the transaction that begins the operation.
-    if (offer?.envelope == null) throw new Error(`no offer event for handover ${operationId}`);
+    const offer = await readHandoverEnvelope(deps, operationId, HANDOVER_EVENT.offer);
     // A spare that recorded this offer answers from its store, comparing nothing, so a file that
     // went bad or changed since is found only here.
     let settings: OfferSettings;
@@ -393,11 +398,11 @@ export function mountHandoverSourceStartApi(
     } catch (error) {
       return abandon(operationId, refusalOf(error));
     }
-    const offered = (JSON.parse(offer.envelope) as { body: { settings: unknown } }).body.settings;
+    const offered = (JSON.parse(offer) as { body: { settings: unknown } }).body.settings;
     if (!isDeepStrictEqual(offered, settings)) {
       return abandon(operationId, { code: "handover.settings_changed", params: {} });
     }
-    return offerThenStepDown(c, binding, destination.contactUrl, offer.envelope);
+    return offerThenStepDown(c, binding, destination.contactUrl, offer);
   };
 
   const startNew = async (

@@ -15,11 +15,24 @@ import {
   advanceHandoverOperationTx,
   appendHandoverEventTx,
   beginHandoverOperationTx,
+  readHandoverEvent,
   readHandoverOperation,
   type HandoverOperation,
 } from "@waitron/node-db";
 import { AppError, type ErrorCode } from "@waitron/shared";
+import type { RestrictedStepKind } from "./i18n/restricted-page.js";
 import "./errors.js";
+
+/** The `node_handover_events.kind` of each event read or written by name. */
+export const HANDOVER_EVENT = {
+  offer: "offer",
+  finalState: "final_state" satisfies RestrictedStepKind,
+  copyAccepted: "copy_accepted",
+  /** That the accepted copy is the live database. */
+  copyPlaced: "copy_placed",
+  filingRelinquished: "filing_relinquished",
+  abandoned: "abandoned",
+} as const;
 
 export interface HandoverStoreDeps {
   readonly node: NodeDatabase;
@@ -73,7 +86,7 @@ export function beginHandoverFromOffer(
       await appendHandoverEventTx(tx, {
         nodeId: deps.nodeId,
         operationId: binding.operationId,
-        kind: "offer",
+        kind: HANDOVER_EVENT.offer,
         detail: {},
         envelope: canonicalize(offer as unknown as CanonicalValue),
       });
@@ -131,6 +144,32 @@ export async function* destinationOperationFolders(
     const row = await readHandoverOperation(deps.node, deps.nodeId, name);
     if (row?.role === "destination") yield row;
   }
+}
+
+/**
+ * The envelope of `kind`'s first event, or `null` with no such event. Asked only of an event whose
+ * writer always stores one, so an event holding none is a fault in Waitron.
+ */
+export async function findHandoverEnvelope(
+  deps: { readonly node: NodeDatabase | NodeTransaction; readonly nodeId: string },
+  operationId: string,
+  kind: string,
+): Promise<string | null> {
+  const row = await readHandoverEvent(deps.node, deps.nodeId, operationId, kind);
+  if (row === null) return null;
+  if (row.envelope === null) throw new Error(`the ${kind} event of ${operationId} is empty`);
+  return row.envelope;
+}
+
+/** `findHandoverEnvelope` for an event the operation's state says was recorded: none is a fault too. */
+export async function readHandoverEnvelope(
+  deps: { readonly node: NodeDatabase | NodeTransaction; readonly nodeId: string },
+  operationId: string,
+  kind: string,
+): Promise<string> {
+  const envelope = await findHandoverEnvelope(deps, operationId, kind);
+  if (envelope === null) throw new Error(`the ${kind} event of ${operationId} is not stored`);
+  return envelope;
 }
 
 /** Closes a source operation that never stepped down, storing the refusal a repeat answers. */

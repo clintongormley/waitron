@@ -79,9 +79,13 @@ import {
   type HandoverDestinationDuty,
   type DestinationDutyDeps,
 } from "./handover-destination-duty.js";
-import { COPY_PLACED_EVENT } from "./handover-place-copy.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
-import { advanceHandover, beginHandover, beginHandoverFromOffer } from "./handover-store.js";
+import {
+  advanceHandover,
+  beginHandover,
+  beginHandoverFromOffer,
+  HANDOVER_EVENT,
+} from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { boxDownload } from "./mirror-bundle-fetch.js";
 import { ALL_MODULES } from "./modules.js";
@@ -175,6 +179,7 @@ const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x7).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
+const COPY_PLACED_EVENT = HANDOVER_EVENT.copyPlaced;
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const OTHER_OP = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const FISCAL = "fiscal-verifactu";

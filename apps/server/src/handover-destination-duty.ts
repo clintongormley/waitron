@@ -28,9 +28,13 @@ import {
 import type { CompareOptions, CompareOutcome, CopyFileChecks } from "./handover-compare.js";
 import type { Statfs } from "./free-bytes.js";
 import { movedOnFromSource, oldBoxStillMain } from "./handover-chart.js";
-import { COPY_PLACED_EVENT } from "./handover-place-copy.js";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
-import { advanceHandover, destinationOperationFolders, waitHandover } from "./handover-store.js";
+import {
+  advanceHandover,
+  destinationOperationFolders,
+  HANDOVER_EVENT,
+  waitHandover,
+} from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { boxDownload, boxExchange } from "./mirror-bundle-fetch.js";
 import type { PeerQueryPurpose, PeerStatusBody } from "./peer-status-api.js";
@@ -269,7 +273,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       deps.node,
       deps.nodeId,
       operation.operationId,
-      COPY_PLACED_EVENT,
+      HANDOVER_EVENT.copyPlaced,
     );
     return placed === null ? { kind: "place", operation } : null;
   }

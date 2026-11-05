@@ -22,7 +22,6 @@ import { canonicalize, type CanonicalValue } from "@waitron/membership";
 import { collectHandoverSummaries, type WaitronModule } from "@waitron/module";
 import {
   appendHandoverEventTx,
-  readHandoverEvent,
   readHandoverOperation,
   readHandoverRestriction,
 } from "@waitron/node-db";
@@ -30,12 +29,9 @@ import { AppError } from "@waitron/shared";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { errnoOf } from "./errno.js";
 import { buildNodeLocalManifest } from "./handover-manifest.js";
-import type { RestrictedStepKind } from "./i18n/restricted-page.js";
+import { findHandoverEnvelope, HANDOVER_EVENT } from "./handover-store.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import "./errors.js";
-
-/** The `node_handover_events.kind` of the one event holding a box's signed final-state indicator. */
-export const FINAL_STATE_EVENT = "final_state" satisfies RestrictedStepKind;
 
 export const CAPTURE_REFUSAL_STATUS = { "handover.not_stepped_down": 409 } as const;
 
@@ -124,7 +120,7 @@ async function captureOnce(deps: CaptureDeps, operationId: string): Promise<Fina
     await appendHandoverEventTx(tx, {
       nodeId: deps.nodeId,
       operationId,
-      kind: FINAL_STATE_EVENT,
+      kind: HANDOVER_EVENT.finalState,
       detail: {},
       envelope: text,
     });
@@ -166,11 +162,12 @@ export async function readFinalState(
   nodeId: string,
   operationId: string,
 ): Promise<FinalStateEnvelope | null> {
-  const row = await readHandoverEvent(node, nodeId, operationId, FINAL_STATE_EVENT);
-  if (row === null) return null;
-  // A fault in Waitron: this file's writer always stores the envelope with the event.
-  if (row.envelope === null) throw new Error(`the final-state event of ${operationId} is empty`);
-  return JSON.parse(row.envelope) as FinalStateEnvelope;
+  const envelope = await findHandoverEnvelope(
+    { node, nodeId },
+    operationId,
+    HANDOVER_EVENT.finalState,
+  );
+  return envelope === null ? null : (JSON.parse(envelope) as FinalStateEnvelope);
 }
 
 async function isDirectory(path: string): Promise<boolean> {

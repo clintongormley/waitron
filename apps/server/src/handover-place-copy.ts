@@ -13,17 +13,14 @@ import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
 import { errnoOf } from "./errno.js";
 import { acceptedCopyPath } from "./handover-acceptance.js";
-import { digestFileIfPresent, FINAL_STATE_EVENT } from "./handover-capture.js";
+import { digestFileIfPresent } from "./handover-capture.js";
 import { oldBoxStillMain } from "./handover-chart.js";
-import { destinationOperationFolders, waitHandoverTx } from "./handover-store.js";
+import { destinationOperationFolders, HANDOVER_EVENT, waitHandoverTx } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { isReadableChart } from "./membership-trust.js";
 import { INCOMING_SUFFIX, VENUE_FILE_MODE } from "./restore.js";
 import { reachDisk } from "./sync-path.js";
 import "./errors.js";
-
-/** The `node_handover_events.kind` recording that the accepted copy is the live database. */
-export const COPY_PLACED_EVENT = "copy_placed";
 
 export type PlacementAtStart =
   | { readonly kind: "nothing" }
@@ -76,8 +73,8 @@ function readAwaitingPlacement(nodePath: string, nodeId: string): AwaitingPlacem
     const event = node.prepare(
       "select envelope from node_handover_events where node_id = ? and operation_id = ? and kind = ? order by rowid limit 1",
     );
-    if (event.get(nodeId, operationId, COPY_PLACED_EVENT) !== undefined) return null;
-    const indicator = event.get(nodeId, operationId, FINAL_STATE_EVENT) as
+    if (event.get(nodeId, operationId, HANDOVER_EVENT.copyPlaced) !== undefined) return null;
+    const indicator = event.get(nodeId, operationId, HANDOVER_EVENT.finalState) as
       { envelope: string | null } | undefined;
     // A fault in Waitron: `acceptFinalCopy` stores the indicator in the transaction that accepts.
     if (indicator?.envelope == null) {
@@ -358,7 +355,7 @@ export async function removePlacedCopies(args: {
   const { node, nodeId, stateDir, log } = args;
   try {
     for await (const { operationId } of destinationOperationFolders({ node, nodeId }, stateDir)) {
-      const placed = await readHandoverEvent(node, nodeId, operationId, COPY_PLACED_EVENT);
+      const placed = await readHandoverEvent(node, nodeId, operationId, HANDOVER_EVENT.copyPlaced);
       if (placed !== null) await removeAcceptedCopy(stateDir, operationId, log);
     }
   } catch (error) {
@@ -382,7 +379,7 @@ export async function recordCopyPlaced(args: {
     await appendHandoverEventTx(tx, {
       nodeId,
       operationId,
-      kind: COPY_PLACED_EVENT,
+      kind: HANDOVER_EVENT.copyPlaced,
       detail: {},
       envelope: null,
     });

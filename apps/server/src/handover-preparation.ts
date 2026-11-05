@@ -8,7 +8,7 @@ import type { OperationBinding } from "@waitron/module";
 import { readHandoverEvent, readHandoverOperation, type HandoverOperation } from "@waitron/node-db";
 import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
-import { COPY_PLACED_EVENT } from "./handover-place-copy.js";
+import { HANDOVER_EVENT } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import type { createNodeOperationPreparation } from "./node-operation-preparation.js";
@@ -68,7 +68,8 @@ export async function readOperationReadyToPromote(
   const ready =
     READY_TO_PROMOTE.has(operation.state) &&
     (operation.state !== "filing_assumed" ||
-      (await readHandoverEvent(deps.node, deps.nodeId, operationId, COPY_PLACED_EVENT)) !== null);
+      (await readHandoverEvent(deps.node, deps.nodeId, operationId, HANDOVER_EVENT.copyPlaced)) !==
+        null);
   if (!ready)
     throw new AppError("handover.step_out_of_order", { from: operation.state, to: "activated" });
   return operation;

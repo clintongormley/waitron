@@ -10,10 +10,9 @@ import {
   type SignedHandoverEnvelope,
 } from "@waitron/handover";
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
-import { appendHandoverEventTx, readHandoverEvent, type HandoverOperation } from "@waitron/node-db";
-import { FINAL_STATE_EVENT } from "./handover-capture.js";
+import { appendHandoverEventTx, type HandoverOperation } from "@waitron/node-db";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
-import { advanceHandoverTx } from "./handover-store.js";
+import { advanceHandoverTx, HANDOVER_EVENT, readHandoverEnvelope } from "./handover-store.js";
 import { reachDisk } from "./sync-path.js";
 
 export interface AcceptanceBody {
@@ -68,7 +67,7 @@ export async function acceptFinalCopy(
     await appendHandoverEventTx(tx, {
       nodeId: deps.nodeId,
       operationId,
-      kind: FINAL_STATE_EVENT,
+      kind: HANDOVER_EVENT.finalState,
       detail: {},
       envelope: canonicalize(envelope as unknown as CanonicalValue),
     });
@@ -77,14 +76,11 @@ export async function acceptFinalCopy(
 }
 
 /** The acceptance as recorded, so every post of it carries the same bytes. */
-export async function readStoredAcceptance(
+export function readStoredAcceptance(
   deps: { node: NodeDatabase; nodeId: string },
   operationId: string,
 ): Promise<string> {
-  const row = await readHandoverEvent(deps.node, deps.nodeId, operationId, "copy_accepted");
-  // A fault in Waitron: `acceptFinalCopy` records the state and its acceptance together.
-  if (row?.envelope == null) throw new Error(`the acceptance of ${operationId} is not stored`);
-  return row.envelope;
+  return readHandoverEnvelope(deps, operationId, HANDOVER_EVENT.copyAccepted);
 }
 
 /** The person the old box's offer names as having started the handover. */
@@ -92,10 +88,8 @@ export async function offeredAuthoriser(
   deps: { node: NodeDatabase; nodeId: string },
   operationId: string,
 ): Promise<string> {
-  const offer = await readHandoverEvent(deps.node, deps.nodeId, operationId, "offer");
-  // A fault in Waitron: the offer route stores the offer in the transaction that begins the row.
-  if (offer?.envelope == null) throw new Error(`the offer of ${operationId} is not stored`);
-  return (JSON.parse(offer.envelope) as { body: { authorisedBy: string } }).body.authorisedBy;
+  const offer = await readHandoverEnvelope(deps, operationId, HANDOVER_EVENT.offer);
+  return (JSON.parse(offer) as { body: { authorisedBy: string } }).body.authorisedBy;
 }
 
 export function isOperationsBinding(raw: unknown, operation: HandoverOperation): boolean {

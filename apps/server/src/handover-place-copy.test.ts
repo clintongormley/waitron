@@ -38,17 +38,15 @@ import {
   setNodeModeTx,
 } from "@waitron/node-db";
 import { acceptedCopyPath } from "./handover-acceptance.js";
-import { FINAL_STATE_EVENT } from "./handover-capture.js";
 import { classifyStartFailure } from "./boot-failure.js";
 import {
-  COPY_PLACED_EVENT,
   placeAcceptedCopyAtStart,
   placeAcceptedCopyForStart,
   recordCopyPlaced,
   removePlacedCopies,
   type PlacementSteps,
 } from "./handover-place-copy.js";
-import { advanceHandover, beginHandover, waitHandover } from "./handover-store.js";
+import { advanceHandover, beginHandover, HANDOVER_EVENT, waitHandover } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 
 const fileReads = vi.hoisted(() => ({ paths: [] as string[] }));
@@ -61,6 +59,8 @@ vi.mock("node:fs", async (importOriginal) => {
   return { ...real, createReadStream };
 });
 
+const FINAL_STATE_EVENT = HANDOVER_EVENT.finalState;
+const COPY_PLACED_EVENT = HANDOVER_EVENT.copyPlaced;
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const SOURCE = "11111111-1111-4111-8111-111111111111";
 const OTHER_NODE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";

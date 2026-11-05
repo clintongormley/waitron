@@ -51,14 +51,13 @@ import { startServer, type StartedServer } from "./boot.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
-import { COPY_PLACED_EVENT } from "./handover-place-copy.js";
 import {
   assertBindingNamesOperation,
   handoverPromotionContext,
   mountHandoverPreparationApi,
 } from "./handover-preparation.js";
 import { keysInTurn } from "./attempt-turns.js";
-import { advanceHandover, beginHandover } from "./handover-store.js";
+import { advanceHandover, beginHandover, HANDOVER_EVENT } from "./handover-store.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { promoteMirrorToPrimary } from "./promote.js";
@@ -305,7 +304,7 @@ async function recordPlaced(): Promise<void> {
     appendHandoverEventTx(tx, {
       nodeId: standby.nodeId,
       operationId: OPERATION,
-      kind: COPY_PLACED_EVENT,
+      kind: HANDOVER_EVENT.copyPlaced,
       detail: {},
       envelope: null,
     }),

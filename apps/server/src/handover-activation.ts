@@ -10,7 +10,6 @@ import {
   type SignedHandoverEnvelope,
 } from "@waitron/handover";
 import {
-  readHandoverEvent,
   readHandoverOperation,
   readMirrorLink,
   readNodeMode,
@@ -28,7 +27,7 @@ import {
   readOperationReadyToPromote,
   signInCredentials,
 } from "./handover-preparation.js";
-import { advanceHandover } from "./handover-store.js";
+import { advanceHandover, readHandoverEnvelope } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import { assertHeldDocumentReadable, HELD_DOCUMENT_REFUSALS } from "./membership-trust.js";
@@ -84,17 +83,8 @@ async function storedEvidence(
   deps: HandoverActivationDeps,
   operation: HandoverOperation,
 ): Promise<SignedHandoverEnvelope<unknown>> {
-  const event = await readHandoverEvent(
-    deps.node,
-    deps.nodeId,
-    operation.operationId,
-    operation.state,
-  );
-  if (event?.envelope == null) {
-    // A fault in Waitron: `advanceHandover` stores the envelope with the step this box checked.
-    throw new Error(`the operation ${operation.operationId} has no stored ${operation.state}`);
-  }
-  return JSON.parse(event.envelope) as SignedHandoverEnvelope<unknown>;
+  const envelope = await readHandoverEnvelope(deps, operation.operationId, operation.state);
+  return JSON.parse(envelope) as SignedHandoverEnvelope<unknown>;
 }
 
 async function activate(

@@ -87,7 +87,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { StartServerSeams, StartedServer } from "./boot.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { acceptedCopyPath } from "./handover-acceptance.js";
-import { COPY_PLACED_EVENT } from "./handover-place-copy.js";
+import { HANDOVER_EVENT } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { provisionBillVenue, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { freePorts } from "./testing/free-ports.js";
@@ -264,6 +264,7 @@ const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 };
+const COPY_PLACED_EVENT = HANDOVER_EVENT.copyPlaced;
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const PASSWORD = "dashPass123";
 const SIGN_IN = { email: "owner@example.test", password: PASSWORD };
