@@ -33,6 +33,18 @@ late answers and corrections that move a session across period boundaries.
 Optimise the remaining period paths with their cross-window
 and frozen-history assertions intact; do not replace them with a bare event-time filter.
 
+## Attendance discovery invalidation
+
+The A1308 write-path marking audit in `tables-people.md` §8 remains open. A direct-insert probe
+scanned a draft/group event before its party had a working order, then added the order. The old
+event became readable for its original day, but an ordinary restart did not dirty that day.
+No real route reproduced this sequence. Trace admitted writers and test any reachable transition
+before changing invalidation; preserve the original event time and every legal-record assertion.
+
+When changing an existing discovery rule without a migration, explicitly invalidate the retained
+scan marker if already-scanned rows need the new rule. The marker currently binds the physical
+file, schema counter and applied migration versions, not the discovery code version.
+
 ## A708. Special-day staffing on a date with its own changeover
 
 The special-day staffing painter draws every date's column, and the blocks in it, on the read's one

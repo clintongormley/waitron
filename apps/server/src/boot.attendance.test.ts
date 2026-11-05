@@ -27,6 +27,7 @@ import {
   timeEntries,
 } from "@waitron/workforce";
 import { ALL_MODULES } from "./modules.js";
+import { schemaVersionsByModule } from "./backup-manifest.js";
 import type { StartedServer } from "./boot.js";
 import { createClockVenue } from "./testing/clock-venue.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -105,7 +106,7 @@ for (const enabled of [true, false]) {
     }
     it(
       enabled
-        ? "starts both real duties, catches up, captures a real login and reopens with a new discovery generation"
+        ? "starts both real duties, catches up, captures a real login and reopens with retained discovery progress"
         : "starts neither duty and makes no workforce SQL query on a real login",
       async () => {
         const f = await prepared();
@@ -224,13 +225,25 @@ for (const enabled of [true, false]) {
             const generation = (await suite.db.select().from(attendanceSourceState)).find(
               (s) => s.recordKind === "scan",
             )!.generation;
+            const rotaScan = (await suite.db.select().from(attendanceSourceState)).find(
+              (row) => row.recordKind === "scan" && row.source === "rota" && row.key === "shifts",
+            )!;
+            const storedVersions = (
+              JSON.parse(JSON.parse(rotaScan.fingerprint!).store) as unknown[]
+            )[3];
+            expect(storedVersions).toEqual(
+              Object.entries(
+                await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES),
+              ).sort(([a], [b]) => a.localeCompare(b)),
+            );
+
             server = await startServer(f.env);
             await awaitListening(httpPort());
             expect(discoverSpy).toHaveBeenCalledTimes(2);
             const reopened = (await suite.db.select().from(attendanceSourceState)).find(
               (s) => s.recordKind === "scan",
             )!.generation;
-            expect(reopened).not.toBe(generation);
+            expect(reopened).toBe(generation);
             await server.close();
             server = undefined;
             beforeServerStarts();

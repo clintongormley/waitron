@@ -3,6 +3,8 @@ import { StatementSync } from "node:sqlite";
 import { asc, eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
+  installChangeFeed,
+  removeChangeFeed,
   appendOrderAmendment,
   locations,
   locationDayCutoverChanges,
@@ -200,6 +202,224 @@ describe("durable attendance discovery", () => {
       scans.every((s) => s.generation === "open-two" && s.completed && s.cursor === s.endpoint),
     ).toBe(true);
   });
+  it("keeps completed discovery across an ordinary restart and reads only new source rows", async () => {
+    await signIn("2026-01-05T12:00:00Z");
+    await begin();
+    await drain();
+    const scans = await suite.db.select().from(attendanceSourceState);
+    await signIn("2026-01-06T17:00:00Z");
+    const original = StatementSync.prototype.all;
+    const returned: string[] = [];
+    const spy = vi.spyOn(StatementSync.prototype, "all").mockImplementation(function (
+      this: StatementSync,
+      ...args
+    ) {
+      const result = Reflect.apply(original, this, args) as ReturnType<typeof original>;
+      if (/from sessions e /i.test(this.sourceSQL))
+        returned.push(...(result as { at: string }[]).map((row) => row.at));
+      return result;
+    });
+    try {
+      await begin("ordinary-restart");
+      expect(await suite.db.select().from(attendanceSourceState)).toEqual(scans);
+      await drain();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(returned).toEqual(["2026-01-06T17:00:00Z"]);
+    expect((await rows()).map((row) => row.businessDay)).toEqual(["2026-01-05", "2026-01-06"]);
+  });
+
+  it("resumes a partially committed bootstrap on restart and still waits for its last page", async () => {
+    await signIn("2026-01-05T08:00:00Z");
+    await signIn("2026-01-05T12:00:00Z");
+    await signIn("2026-01-05T17:00:00Z");
+    await begin();
+    await pass(1);
+    const scans = await suite.db.select().from(attendanceSourceState);
+    await begin("interrupted-restart");
+    expect(await suite.db.select().from(attendanceSourceState)).toEqual(scans);
+    expect(await next()).toBeNull();
+    await drain(1);
+    expect((await next())?.businessDay).toBe("2026-01-05");
+    const sessionScan = (await suite.db.select().from(attendanceSourceState)).find(
+      (row) => row.recordKind === "scan" && row.source === "session",
+    );
+    expect(sessionScan).toMatchObject({
+      generation: "open-one",
+      cursor: 3,
+      endpoint: 3,
+      completed: true,
+    });
+  });
+
+  it("rescans a changed layout after VACUUM before reading inserts below the old cursor", async () => {
+    await signIn("2026-01-05T12:00:00Z");
+    await suite.db.execute(sql`update sessions set rowid = 100`);
+    await begin();
+    await drain();
+    await evaluate();
+    const before = await rows();
+    await suite.db.execute(sql`vacuum`);
+    await suite.db.execute(sql`update sessions set rowid = 1`);
+    await signIn("2026-01-06T17:00:00Z");
+    await begin("after-vacuum");
+    expect(await next()).toBeNull();
+    await drain();
+    expect((await rows())[0]).toEqual(before[0]);
+    expect((await rows()).map((row) => row.businessDay)).toEqual(["2026-01-05", "2026-01-06"]);
+    const scan = (await suite.db.select().from(attendanceSourceState)).find(
+      (row) => row.recordKind === "scan" && row.source === "session",
+    );
+    expect(scan).toMatchObject({
+      generation: "after-vacuum",
+      cursor: 2,
+      endpoint: 2,
+      completed: true,
+    });
+  });
+
+  it("rescans when the saved physical identity is missing and then retains the completed scan", async () => {
+    await signIn("2026-01-05T12:00:00Z");
+    await begin();
+    await drain();
+    const saved = (await suite.db.select().from(attendanceSourceState)).find(
+      (row) => row.recordKind === "scan" && row.source === "rota" && row.key === "shifts",
+    )!;
+    const { clock } = JSON.parse(saved.fingerprint!) as { clock: unknown };
+    await suite.db
+      .update(attendanceSourceState)
+      .set({ fingerprint: JSON.stringify({ clock }) })
+      .where(eq(attendanceSourceState.id, saved.id));
+    await begin("without-identity");
+    expect(await next()).toBeNull();
+    await drain();
+    const scans = await suite.db.select().from(attendanceSourceState);
+    expect(
+      scans
+        .filter((row) => row.recordKind === "scan")
+        .every((row) => row.generation === "without-identity"),
+    ).toBe(true);
+    await begin("ordinary-restart");
+    expect(await suite.db.select().from(attendanceSourceState)).toEqual(scans);
+    expect((await next())?.businessDay).toBe("2026-01-05");
+  });
+
+  it("retains the database identity while a changed business-day clock rescans future shifts", async () => {
+    const version = newId();
+    await suite.db.insert(rosterVersions).values({
+      id: version,
+      locationId,
+      periodStart: "2026-01-05",
+      periodEnd: "2026-01-11",
+      status: "published",
+      publishedAt: "2026-01-04T12:00:00Z",
+    });
+    for (const day of ["10", "11", "12"])
+      await suite.db.insert(shifts).values({
+        personId,
+        locationId,
+        rosterVersionId: version,
+        startsAt: `2026-01-${day}T08:00:00.000Z`,
+        endsAt: `2026-01-${day}T17:00:00.000Z`,
+        startsOffsetMinutes: 60,
+        endsOffsetMinutes: 60,
+      });
+    await begin();
+    await drain();
+    await suite.db.insert(locationDayCutoverChanges).values({
+      locationId,
+      effectiveBusinessDay: "2026-01-11",
+      dayCutover: "06:00:00",
+    });
+    await pass(1);
+    const partial = await suite.db.select().from(attendanceSourceState);
+    expect(partial.find((row) => row.source === "rota" && row.key === "shifts")).toMatchObject({
+      cursor: 1,
+      completed: false,
+    });
+    await begin("during-clock-rescan");
+    expect(await suite.db.select().from(attendanceSourceState)).toEqual(partial);
+    await drain();
+    const completed = await suite.db.select().from(attendanceSourceState);
+    await begin("after-clock-rescan");
+    expect(await suite.db.select().from(attendanceSourceState)).toEqual(completed);
+    expect((await rows()).map((row) => row.businessDay)).toEqual([
+      "2026-01-10",
+      "2026-01-11",
+      "2026-01-12",
+    ]);
+  });
+
+  it.each(["db", "workforce"])(
+    "rescans after the %s migration version changes during boot",
+    async (changed) => {
+      const { beginAttendanceDiscovery } = await import("./attendance-discovery.js");
+      await signIn("2026-01-05T12:00:00Z");
+      const migrationVersions = { db: 1, workforce: 1 };
+      await run((tx) =>
+        beginAttendanceDiscovery(tx, { generation: "before-migration", migrationVersions }),
+      );
+      await drain();
+      await run((tx) =>
+        beginAttendanceDiscovery(tx, {
+          generation: "unchanged-versions",
+          migrationVersions: { workforce: 1, db: 1 },
+        }),
+      );
+      expect((await next())?.businessDay).toBe("2026-01-05");
+      const schemaVersionBeforeMigrations = suite.db.execute<{ schema_version: number }>(
+        sql`pragma schema_version`,
+      ).rows[0]!.schema_version;
+      await run((tx) =>
+        beginAttendanceDiscovery(tx, {
+          generation: "after-migration",
+          schemaVersionBeforeMigrations,
+          migrationVersions: { ...migrationVersions, [changed]: 2 },
+        }),
+      );
+      expect(await next()).toBeNull();
+      await drain();
+      expect(
+        (await suite.db.select().from(attendanceSourceState))
+          .filter((row) => row.recordKind === "scan")
+          .every((row) => row.generation === "after-migration" && row.completed),
+      ).toBe(true);
+      expect((await next())?.businessDay).toBe("2026-01-05");
+    },
+  );
+
+  it("records boot's rebuilt trigger cookie for the following restart", async () => {
+    const { beginAttendanceDiscovery } = await import("./attendance-discovery.js");
+    const sources = [{ table: "sessions", type: "session" }];
+    await installChangeFeed(suite.db, sources);
+    await signIn("2026-01-05T12:00:00Z");
+    await begin();
+    await drain();
+    const before = await suite.db.select().from(attendanceSourceState);
+    const schemaVersionBeforeMigrations = suite.db.execute<{ schema_version: number }>(
+      sql`pragma schema_version`,
+    ).rows[0]!.schema_version;
+    removeChangeFeed(suite.db);
+    await installChangeFeed(suite.db, sources);
+    const current = suite.db.execute<{ schema_version: number }>(sql`pragma schema_version`)
+      .rows[0]!.schema_version;
+    expect(current).toBeGreaterThan(schemaVersionBeforeMigrations);
+    await run((tx) =>
+      beginAttendanceDiscovery(tx, {
+        generation: "after-trigger-rebuild",
+        schemaVersionBeforeMigrations,
+      }),
+    );
+    const updated = await suite.db.select().from(attendanceSourceState);
+    expect(updated.map((row) => [row.id, row.generation, row.cursor, row.completed])).toEqual(
+      before.map((row) => [row.id, row.generation, row.cursor, row.completed]),
+    );
+    await begin("following-restart");
+    expect(await suite.db.select().from(attendanceSourceState)).toEqual(updated);
+    expect((await next())?.businessDay).toBe("2026-01-05");
+  });
+
   it("rolls back a source page and its cursor together before resuming the same generation", async () => {
     await signIn("2026-01-05T12:00:00Z");
     await begin();

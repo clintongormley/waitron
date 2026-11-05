@@ -2,6 +2,8 @@
 
 # People, sign-in, working time and rota — proposed tables
 
+> **2026-11-05, A1343:** The every-start history rescan described in §§1 and 8 is superseded by restart reuse tied to the database file, the pre-migration schema version and applied migration versions. An interrupted startup can still cause a conservative rescan. The day-evidence read and write-path marking audit below remain open.
+
 Area: identity (who can sign in and how), roles, workforce (the legal working-time record, the
 attendance checker, rotas, absences, swaps), workforce-es (Spanish collective-agreement rules) and
 staffing (painted staffing needs). First read on `main` at `64eeabb036`; brought into line with the
