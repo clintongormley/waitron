@@ -175,7 +175,7 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies TradingContext);
+  } satisfies WithVenueRowId);
   return inTx(async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Carta" });
     const category = await createCategory(tx, { name: "Platos" });

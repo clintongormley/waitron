@@ -31,7 +31,7 @@ import {
   nodeId as brandNodeId,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import type { DeviceRequestConfig, OriginConfig, TradingContext } from "./trading-context.js";
+import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { createTable } from "./testing/live-table.js";
@@ -93,7 +93,7 @@ async function setupVenue(): Promise<Seeded> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies TradingContext);
+  } satisfies WithVenueRowId);
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
     const drinks = await createCategory(tx, { name: "Bebidas" });

@@ -52,7 +52,7 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
-import type { DeviceRequestConfig, OriginConfig, TradingContext } from "./trading-context.js";
+import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
@@ -126,7 +126,7 @@ async function setupVenue(): Promise<Seeded> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies TradingContext);
+  } satisfies WithVenueRowId);
   const {
     coffeeId,
     waterId,

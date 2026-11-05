@@ -32,7 +32,7 @@ import {
   updatePrinter,
 } from "@waitron/printing";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
-import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { createStation } from "./kitchen.js";
@@ -121,7 +121,7 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies TradingContext);
+  } satisfies WithVenueRowId);
   return inTx(async (tx) => {
     const { id: barStationId } = await createStation(tx, { name: "Bar" });
     const catalogue = await createCatalogue(tx, { name: "Menu" });

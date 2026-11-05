@@ -62,7 +62,7 @@ export async function setupVenue(): Promise<Venue> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies TradingContext);
+  } satisfies WithVenueRowId);
   return { cfg, catalogueId };
 }
 
