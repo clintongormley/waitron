@@ -677,7 +677,6 @@
   "src/moved-slips.test.ts": 8,
   "src/name-constraints.test.ts": 1.1,
   "src/node-api.test.ts": 0.3,
-  "src/node-config.location.test.ts": 2.5,
   "src/node-config.test.ts": 1,
   "src/node-db-copy.test.ts": 8.6,
   "src/node-enrol-api.test.ts": 6.8,

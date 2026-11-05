@@ -4339,7 +4339,7 @@ brackets.
 | `fiscal-fixtures.ts` | F5a | `:111-118` venue, device, node → helpers; `:52,76-78` (S27) |
 | `floor-sets.ts`, `floor-today-venue.ts`, `kitchen-allergy-fixture.ts`, `live-table.ts`, `service-steps.ts`, `service-zone.ts` | — | module rows and `cfg` (S7, S24, S18) |
 | `full-invoice-fixture.ts` | — | `:69` text "Current mutable location address" (S19) |
-| `session-device.ts` | F5b | `:28-35` stops passing `locationId` to `seedDevice` (F1's helper fills it); `:81-89` `dashboardOrderAt(locationId)` is order values for tests' own inserts (category 2/5, S27); signature kept |
+| `session-device.ts` | F5b | `:28-35` stops passing `locationId` to `seedDevice` (F1's helper fills it); `:81-89` `dashboardOrderAt(locationId)` is order values for tests' own inserts (category 2/5, S27); signature kept (2026-11-05: deleted in S18f-4; no caller since #2427) |
 | `split-extras-venue.ts` | F5b | `:49-57` venue and node → helpers |
 | `stream-pause-scenario.ts` | F5b | `:360` `insert(devices)` → `seedDevice`; its request literal is S16's and its catalogue lines S5's |
 | `theme-logo.ts`, `zone-offers.ts`, `zone-process-child.ts` | — | module rows, a second location (`theme-logo.ts:70-131`, category 1), a settings read/write (S1) |
@@ -4468,7 +4468,7 @@ landed.
 | `deploy/test-cloud/test-fixtures/integration-recovery-authority.mjs:18`; `integration-authorised-recovery.test.ts:118,121`; `integration-continuous-recovery.test.ts:126,129` | read `saved.WAITRON_TILL_LOCATION_ID` / `trading.WAITRON_TILL_LOCATION_ID` from the venue's `trading.env` (and `WAITRON_TILL_NODE_ID`) | **Not A1301: #2198** removed both settings. The restored `trading.env` now holds only `WAITRON_NODE_ID` | Take `localVenueId` from `ready.json` or Cloud's status, and the node from `WAITRON_NODE_ID` | Any move of the pin past `b1b0f10952`, now, ahead of A1301 |
 
 **Added 2026-11-05 (A1301 S18f-4), from Cloud-repo paths lane J reported; not checked here.**
-- The `initial.location` that `waitron-adapter.mjs` reads (row above) comes from
+- The `initial.location` that `waitron-adapter.mjs` reads (the `waitron-adapter.mjs:56-67,103-110` row) comes from
   `scripts/cloud-cost/fixtures/stack-conformance.test.mjs:26` (lane J, D391). It runs at the
   pinned historical release, so it is not urgent.
 - `scripts/cloud-cost/isolated-replay.mjs:92,110,175` validates and forwards `locationId`, and

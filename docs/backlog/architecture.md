@@ -1089,10 +1089,11 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
     id through the test type `WithVenueRowId` (`apps/server/src/testing/venue-row-id.ts`), which
     goes when no `location_id` column is left to fill (S18f). `verifyCoreBackupData`
     (`packages/db/src/backup-evidence.ts`) still reads `locations` and `nodes.location_id` (S18f).
-    Until `venueLocationId` goes, boot takes the venue row's id for backup settings and the Cloud
-    connection, and `backup-data-placement.ts` and `backup-verification.ts` read it from a backup
-    copy (`readCopyNodeAndVenue`) for backup settings, which `backup-verification-secrets.ts` is
-    handed; S18e or S28 removes them (S18f). The `locationId` brand stays in
+    Until `venueLocationId` goes, boot takes the venue row's id for backup settings, recovery
+    packs, the bucket stream and the Cloud connection, and `backup-data-placement.ts` and
+    `backup-verification.ts` read it from a backup copy (`readCopyNodeAndVenue`) for backup
+    settings, which `backup-verification-secrets.ts` is handed; S18e or S28 removes them (S18f).
+    The `locationId` brand stays in
     `packages/shared/src/ids.ts` for the fiscal pair's `write-path.e2e.test.ts` alone, which is never
     edited (S18f).
   - **Fixture lines the helpers could not take:** F5 (#2403), F2 (#2410) and F4 (#2412) list the
