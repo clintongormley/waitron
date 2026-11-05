@@ -1,4 +1,3 @@
-import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import type { Database, NodeDatabase } from "@waitron/db";
@@ -18,7 +17,8 @@ import { modulePreparationMergeFits, quoteIdent, unknownHashes } from "@waitron/
 import { isAppError, type ErrorCode } from "@waitron/shared";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { offeredAuthoriser } from "./handover-acceptance.js";
-import { digestBytes } from "./handover-capture.js";
+import { errnoOf } from "./errno.js";
+import { digestFileIfPresent } from "./handover-capture.js";
 import { isCopyIntact } from "./handover-integrity.js";
 import {
   offerSettingsDifference,
@@ -170,13 +170,8 @@ async function compareFile(
 }
 
 async function holdsDescribedBytes(path: string, body: FinalStateIndicator): Promise<boolean> {
-  try {
-    const { sha256, bytes } = await digestBytes(createReadStream(path));
-    return sha256 === body.snapshot.sha256 && bytes === body.snapshot.bytes;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
-    throw error;
-  }
+  const held = await digestFileIfPresent(path);
+  return held?.sha256 === body.snapshot.sha256 && held.bytes === body.snapshot.bytes;
 }
 
 /** What a kept file's checks cannot see of a file gone or cut short, without reading it again. */
@@ -184,7 +179,7 @@ async function stillSameSize(path: string, body: FinalStateIndicator): Promise<b
   try {
     return (await stat(path)).size === body.snapshot.bytes;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    if (errnoOf(error) === "ENOENT") return false;
     throw error;
   }
 }

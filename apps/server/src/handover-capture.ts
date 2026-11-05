@@ -28,6 +28,7 @@ import {
 } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
+import { errnoOf } from "./errno.js";
 import { buildNodeLocalManifest } from "./handover-manifest.js";
 import type { RestrictedStepKind } from "./i18n/restricted-page.js";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -212,6 +213,18 @@ async function describeCopy(
 
 async function digestFile(path: string): Promise<{ sha256: string; bytes: number }> {
   return digestBytes(createReadStream(path));
+}
+
+/** `digestFile`, where a file that is not there is an answer: `null`. */
+export async function digestFileIfPresent(
+  path: string,
+): Promise<{ sha256: string; bytes: number } | null> {
+  try {
+    return await digestFile(path);
+  } catch (error) {
+    if (errnoOf(error) === "ENOENT") return null;
+    throw error;
+  }
 }
 
 /** The SHA-256, as lowercase hex, and the length of the bytes a stream yields. */
