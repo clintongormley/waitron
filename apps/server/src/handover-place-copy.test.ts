@@ -434,8 +434,22 @@ describe("placeAcceptedCopyAtStart", () => {
       expect(b.logged).toContainEqual({
         level: "error",
         message: "handover.place_copy.failed",
-        detail: { errno: "EIO" },
+        detail: { errno: "EIO", reason: "refused" },
       });
+      expect(existsSync(b.accepted)).toBe(true);
+    });
+
+    it("a folder at the incoming name reports the copy's own failure, not the failed tidy-up", async () => {
+      const b = await box();
+      mkdirSync(b.incoming);
+
+      const error = await placeAcceptedCopyForStart(b.args).catch((thrown: unknown) => thrown);
+
+      expect(error).toMatchObject({
+        code: "handover.placement_failed",
+        params: { errno: "EISDIR" },
+      });
+      expect((error as { reason?: string }).reason).toContain("copyfile");
       expect(existsSync(b.accepted)).toBe(true);
     });
 

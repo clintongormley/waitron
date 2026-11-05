@@ -3,8 +3,9 @@ import type { CanonicalValue } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
 import { sha256Hex } from "./envelope.js";
 import "./errors.js";
+import type { handoverScenario } from "./schema/activations.js";
 
-export type HandoverScenario = "controlled" | "emergency";
+export type HandoverScenario = (typeof handoverScenario.enumValues)[number];
 
 /** What one operation is about, fixed when it starts. */
 export interface HandoverBinding {

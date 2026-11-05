@@ -211,8 +211,10 @@ async function swapIn(steps: PlacementSteps, accepted: string, venueDir: string)
     }
     await steps.reachDisk(venueDir);
     await steps.rename(incoming, live);
-  } finally {
-    await rm(incoming, { force: true });
+  } catch (error) {
+    // The step's own failure is the one to report, not a failed tidy-up after it.
+    await rm(incoming, { force: true }).catch(() => {});
+    throw error;
   }
 }
 
@@ -316,8 +318,9 @@ export async function placeAcceptedCopyForStart(
       throw new AppError("handover.placement_no_room", { neededBytes });
     }
     if (errno === undefined || errno === "ENOSPC" || sqliteFailureOf(error) !== null) throw error;
-    args.log("error", "handover.place_copy.failed", { errno });
-    throw new AppError("handover.placement_failed", { errno });
+    const reason = (error as Error).message;
+    args.log("error", "handover.place_copy.failed", { errno, reason });
+    throw new AppError("handover.placement_failed", { errno }, { reason });
   }
 }
 

@@ -135,9 +135,11 @@ function largestRevisionBytes(revisions: readonly Revision[]): number {
   );
 }
 /**
- * Whether this box's file could take `incoming` and still take the dormant setup, the wait and the
- * selection the box writes after the old box has given up filing: a file over its limit makes every
- * later module operation refuse `setup.attempt_invalid`.
+ * Whether this box's file could take `incoming` and keep room, estimated from the file itself, for
+ * three more writes: the dormant setup, the wait and the selection. It catches the likely shapes and
+ * promises nothing: any further write can still fill the file (the backlog's entry on this file's
+ * growth), and a file over its limit makes every later module operation refuse
+ * `setup.attempt_invalid`.
  */
 export async function modulePreparationMergeFits(
   options: { stateDir: string },

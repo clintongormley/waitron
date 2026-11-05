@@ -9,7 +9,10 @@ export async function insertHandoverActivationTx(
   tx: Transaction,
   row: HandoverActivationRow,
 ): Promise<void> {
-  await tx.insert(handoverActivations).values(row);
+  // `activated_at` is compared as text, so every row stores one spelling of a time.
+  await tx
+    .insert(handoverActivations)
+    .values({ ...row, activatedAt: new Date(row.activatedAt).toISOString() });
 }
 
 export async function readHandoverActivation(

@@ -14,7 +14,7 @@ export const handoverActivations = table(
     sourceNodeId: id("source_node_id").notNull(),
     /** A declared reference to `nodes`, and never exported: `configurationTransfer` is `none`. */
     destinationNodeId: id("destination_node_id").notNull(),
-    /** The signed relinquishment, or the signed declaration, exactly as received. */
+    /** The signed relinquishment, or the signed declaration. */
     evidence: json<SignedHandoverEnvelope<unknown>>("evidence").notNull(),
     /** A plain id with no foreign key: `persons` is in `@waitron/identity`'s set, which is optional. */
     personId: id("person_id").notNull(),

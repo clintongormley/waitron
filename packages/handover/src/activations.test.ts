@@ -108,6 +108,19 @@ describe("the record of activations", () => {
     expect(await readActivationRows(suite.db, c)).toEqual([]);
   });
 
+  it("sorts by the instant, whatever spelling of a time the caller gave", async () => {
+    const { a, b, c } = await nodes();
+    await insert(
+      activation(a, b, { operationId: OP_X, activatedAt: "2026-11-04T12:00:00.000+02:00" }),
+    );
+    await insert(activation(c, b, { operationId: OP_Y, activatedAt: "2026-11-04T11:00:00.000Z" }));
+    const rows = await readActivationRows(suite.db, b);
+    expect(rows.map((row) => [row.operationId, row.activatedAt])).toEqual([
+      [OP_X, "2026-11-04T10:00:00.000Z"],
+      [OP_Y, "2026-11-04T11:00:00.000Z"],
+    ]);
+  });
+
   it("reads inside a transaction", async () => {
     const { a, b } = await nodes();
     const seen = await withTransaction(suite.db, async (tx) => {

@@ -1450,8 +1450,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Los registros de la copia que ha recibido el equipo de reserva no superan su propia comprobación, así que no la ha aceptado. El equipo antiguo sigue detenido.",
   },
   "handover.preparation_state_too_large": {
-    en: "The two boxes' saved preparations would leave their file too full for the spare to take over, so the spare did not accept this handover. The old box stays stopped.",
-    es: "Los preparativos guardados de los dos equipos dejarían su archivo demasiado lleno para que el equipo de reserva tome el relevo, así que no ha aceptado este traspaso. El equipo antiguo sigue detenido.",
+    en: "The two boxes' saved preparations would leave their file with too little room to be sure the spare can take over, so the spare did not accept this handover. The old box stays stopped.",
+    es: "Los preparativos guardados de los dos equipos dejarían su archivo con muy poco espacio para asegurar que el equipo de reserva pueda tomar el relevo, así que no ha aceptado este traspaso. El equipo antiguo sigue detenido.",
   },
   "handover.summary_mismatch": {
     en: "The copy the spare received does not hold what the old box said it holds, so the spare did not accept it. The old box stays stopped.",
@@ -1482,8 +1482,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El disco de este equipo no tiene sitio para la copia del local que aceptó: necesita sitio para otra copia entera. La copia se conserva, y Reintentar lo vuelve a intentar.",
   },
   "handover.no_room_to_place": {
-    en: "This box's disk has no room to put the accepted copy of the venue in place, so it has not asked the old box to give up filing. It asks once there is room. The old box stays stopped.",
-    es: "El disco de este equipo no tiene sitio para poner en su sitio la copia aceptada del local, así que no ha pedido al equipo antiguo que ceda el envío de registros. Lo pedirá cuando haya sitio. El equipo antiguo sigue detenido.",
+    en: "This box's disk has no room to put the accepted copy of the venue in place. It asks the old box to give up filing once there is room. The old box stays stopped.",
+    es: "El disco de este equipo no tiene sitio para poner en su sitio la copia aceptada del local. Pedirá al equipo antiguo que ceda el envío de registros cuando haya sitio. El equipo antiguo sigue detenido.",
   },
   "handover.accepted_copy_missing": {
     en: "The copy of the venue this box accepted is no longer on its disk, so this box cannot take over the venue.",

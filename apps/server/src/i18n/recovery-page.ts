@@ -289,12 +289,12 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": {
       title: "The copy of the venue this box accepted is no longer on its disk.",
       action:
-        "This is a fault in Waitron or this box's disk. This box cannot take over without that copy, and its own database is unchanged. The old box has given up filing and stays stopped. Press “Retry a normal boot” if the file has been put back.",
+        "This is a fault in Waitron or this box's disk. This box cannot take over without that copy. The old box has given up filing and stays stopped. Press “Retry a normal boot” if the file has been put back.",
     },
     "es-ES": {
       title: "La copia del local que este equipo aceptó ya no está en su disco.",
       action:
-        "Es un fallo de Waitron o del disco de este equipo. Este equipo no puede hacerse cargo sin esa copia, y su propia base de datos no ha cambiado. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» si el archivo ha vuelto a su sitio.",
+        "Es un fallo de Waitron o del disco de este equipo. Este equipo no puede hacerse cargo sin esa copia. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» si el archivo ha vuelto a su sitio.",
     },
   },
   "handover.copy_mismatch": {

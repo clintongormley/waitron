@@ -257,7 +257,7 @@ declare module "@waitron/shared" {
     "handover.copy_damaged": Record<string, never>;
     /** `module`'s records in the copy a spare received fail that module's own check. */
     "handover.chain_broken": { module: string };
-    /** The old box's retained selections and the spare's own would leave their file too full. */
+    /** The old box's retained selections and the spare's own would leave their file too little room. */
     "handover.preparation_state_too_large": Record<string, never>;
     /**
      * At the start that places the accepted copy, this box's own preparation file could not be read
@@ -275,8 +275,8 @@ declare module "@waitron/shared" {
      */
     "handover.placement_no_room": { neededBytes: number };
     /**
-     * The spare has too little room to place the copy it accepted, so it has not asked the old box to
-     * give up filing. It asks once there is room.
+     * The spare has too little room to place the copy it accepted. It asks the old box to give up
+     * filing once there is room.
      */
     "handover.no_room_to_place": Record<string, never>;
     /** `module`'s summary, worked out from the received copy, is not the one the old box signed. */
