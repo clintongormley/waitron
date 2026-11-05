@@ -1214,7 +1214,7 @@ NetworkManager.
   longer one, before it reads the verb (`deploy/box/waitron-box.sh:161-165`; a join line reaches
   1003 characters, a `tag.write` line 3142). So the server's client must not read
   `request_invalid` from a shell-only box as a fault in its own line; the forwarding pull request,
-  which raises the shell's limit for B3 lines, removes the case. The client reads
+  which lets a B3 line past the shell's 700-character read, removes the case. The client reads
   `unknown_request` as "this host does not know this request", for that request only (D16), since
   a host built before a later request was added answers it to that request alone.
 - Every connection's instance stops at `RuntimeMaxSec=15`. A join and a forget are meant to answer
