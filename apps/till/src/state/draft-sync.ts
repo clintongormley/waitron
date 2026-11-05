@@ -285,6 +285,8 @@ export class DraftSync {
   readonly personId: string;
   /** Other people's open drafts on this bill, as last read. */
   others: Draft[] = [];
+  /** Every bill's open drafts in the party, as last read. */
+  partyDrafts: Draft[] = [];
   readonly #options: DraftSyncOptions;
   readonly #candidates: Map<string, RetainedDraftCandidate>;
   #edit: BillEditState | null = null;
@@ -543,6 +545,7 @@ export class DraftSync {
       const known = previous.get(edit.billId);
       return known !== undefined && this.#olderEdit(edit, known) ? known : { ...edit };
     });
+    this.partyDrafts = answer.drafts;
     this.applyBillSnapshot({ draft, edit }, read);
     this.#recoveryRequired = false;
     this.#unlockRecovery?.();
@@ -640,6 +643,33 @@ export class DraftSync {
     this.#unsaved = false;
     this.applyBillSnapshot(taken, read);
     return "taken";
+  }
+
+  /** Takes over a draft on a bill not on screen, so nothing here locks or replaces that screen's
+   * lines. The read goes through `load`, because a read inside a command would end its recovery. */
+  async takeOverOn(billId: string, draftId: string, revision: number): Promise<TakeOverOutcome> {
+    if (this.#ended || this.#correctingPlaces || this.#recoveryRequired || this.store.sending)
+      return "failed";
+    const expectedEdit = this.expectedEditFor(billId);
+    if (expectedEdit === null) return "failed";
+    const limit = limited(this.#options.requestLimitMs);
+    try {
+      await this.#options.api.takeOverDraft(
+        this.partyId,
+        draftId,
+        { revision, expectedEdit, submissionId: crypto.randomUUID() },
+        { signal: limit.signal },
+      );
+    } catch (error) {
+      if (this.#ended) return "failed";
+      await this.load();
+      return asRefusal(error) ?? "failed";
+    } finally {
+      limit.done();
+    }
+    if (this.#ended) return "failed";
+    await this.load();
+    return this.#ended ? "failed" : "taken";
   }
 
   /** Source commands change stored bill rows and their draft together. No edit or save may use

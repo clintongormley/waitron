@@ -1384,6 +1384,322 @@ describe("DraftSync: taking over another person's draft", () => {
   });
 });
 
+describe("A803 split: taking over the unsent dishes of a bill not on screen", () => {
+  /** Someone else's draft on the bill that is not on screen. */
+  const seedOther = (ownerId: string, ...products: TillProduct[]): Draft => {
+    const theirs = seed(ownerId, ...products);
+    theirs.billId = "wo-check";
+    return theirs;
+  };
+
+  it("A803 split: partyDrafts holds the last read's drafts of every bill and each read replaces it", async () => {
+    const onScreen = seed("p1", beer);
+    const elsewhere = seedOther("p2", steak);
+    const draft = sync();
+    expect(draft.partyDrafts).toEqual([]);
+
+    await draft.load();
+    expect(draft.partyDrafts.map(({ id, billId }) => [id, billId])).toEqual([
+      [onScreen.id, "wo-4"],
+      [elsewhere.id, "wo-check"],
+    ]);
+
+    server.drafts.splice(server.drafts.indexOf(elsewhere), 1);
+    await draft.load();
+    expect(draft.partyDrafts.map(({ id }) => id)).toEqual([onScreen.id]);
+  });
+
+  it("A803 split: a read that fails keeps the last read's drafts", async () => {
+    const elsewhere = seedOther("p2", steak);
+    const draft = sync();
+    await draft.load();
+
+    server.listDrafts.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await draft.load();
+
+    expect(draft.partyDrafts.map(({ id }) => id)).toEqual([elsewhere.id]);
+  });
+
+  it("A803 split: sends that bill's own edit and reads, leaving the bill on screen as it was", async () => {
+    const elsewhere = seedOther("p3", steak);
+    const revision = elsewhere.revision;
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    const onScreen = seed("p2", steak, beer);
+    await draft.load();
+    const candidate = structuredClone(draft.candidate);
+    const others = structuredClone(draft.others);
+    const lines = rows(draft);
+    const edit = draft.edit;
+    expect(candidate?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    expect(others.map((other) => other.id)).toEqual([onScreen.id]);
+    const reads = server.listDrafts.mock.calls.length;
+
+    expect(await draft.takeOverOn("wo-check", elsewhere.id, revision)).toBe("taken");
+
+    expect(server.takeOverDraft).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      elsewhere.id,
+      {
+        revision,
+        expectedEdit: {
+          billId: "wo-check",
+          editorVersion: 1,
+          draftId: elsewhere.id,
+          draftRevision: revision,
+        },
+        submissionId: expect.any(String),
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(server.listDrafts).toHaveBeenCalledTimes(reads + 1);
+    expect(draft.partyDrafts.find((row) => row.id === elsewhere.id)?.ownerId).toBe("p1");
+    expect(draft.expectedEditFor("wo-check")?.draftRevision).toBe(revision + 1);
+    expect(rows(draft)).toEqual(lines);
+    expect(draft.candidate).toEqual(candidate);
+    expect(draft.others).toEqual(others);
+    expect(draft.edit).toEqual(edit);
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    expect(refused).toEqual([]);
+  });
+
+  it("A803 split: each take-over carries a submission id of its own", async () => {
+    const elsewhere = seedOther("p2", steak);
+    const draft = sync();
+    await draft.load();
+
+    await draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision - 1);
+    await draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision);
+
+    const [first, second] = server.takeOverDraft.mock.calls.map((call) => call[2].submissionId);
+    expect(first).toEqual(expect.any(String));
+    expect(second).toEqual(expect.any(String));
+    expect(first).not.toBe(second);
+  });
+
+  it("A803 split: an edit waiting on the bill on screen stays, stays editable, and is still saved", async () => {
+    const elsewhere = seedOther("p2", steak);
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    let answer!: (value: BillDraftSnapshot) => void;
+    server.takeOverDraft.mockImplementationOnce(
+      () => new Promise<BillDraftSnapshot>((resolve) => (answer = resolve)),
+    );
+
+    const outcome = draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(draft.store.sending).toBe(false);
+    expect(draft.store.editsLocked).toBe(false);
+    answer(server.snapshot(server.takeOver("v1", elsewhere.id, elsewhere.revision)));
+
+    expect(await outcome).toBe("taken");
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+    await settle();
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+    expect(server.saveDraft.mock.calls[0]![1]).toMatchObject({ billId: "wo-4" });
+  });
+
+  it("A803 split: a refusal answers its code, reads again and locks nothing on the bill on screen", async () => {
+    const elsewhere = seedOther("p2", steak);
+    const draft = sync();
+    await draft.load();
+    const reads = server.listDrafts.mock.calls.length;
+    // The read fails too, so a lock taken for the refusal would be left standing.
+    server.listDrafts.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    expect(await draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision - 1)).toEqual({
+      refused: "draft.out_of_date",
+    });
+
+    expect(server.listDrafts).toHaveBeenCalledTimes(reads + 1);
+    expect(draft.store.editsLocked).toBe(false);
+    draft.store.addProduct(beer, "1");
+    expect(await draft.flush()).toBe("saved");
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+  });
+
+  it("A803 split: a refused take-over shows the read it took afterwards", async () => {
+    const elsewhere = seedOther("p2", steak);
+    const draft = sync();
+    await draft.load();
+    const stale = elsewhere.revision - 1;
+    server.personId = "p3";
+    server.takeOver("v1", elsewhere.id, elsewhere.revision);
+    server.personId = "p1";
+
+    expect(await draft.takeOverOn("wo-check", elsewhere.id, stale)).toEqual({
+      refused: "draft.out_of_date",
+    });
+
+    expect(draft.partyDrafts.find((row) => row.id === elsewhere.id)?.ownerId).toBe("p3");
+  });
+
+  it("A803 split: no answer by its limit answers failed, reads again and locks nothing", async () => {
+    const elsewhere = seedOther("p2", steak);
+    const draft = sync();
+    await draft.load();
+    server.takeOverDraft.mockImplementationOnce(noAnswer);
+    const reads = server.listDrafts.mock.calls.length;
+
+    const outcome = draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision);
+    await vi.advanceTimersByTimeAsync(LIMIT);
+
+    expect(await outcome).toBe("failed");
+    expect(server.listDrafts).toHaveBeenCalledTimes(reads + 1);
+    expect(draft.store.editsLocked).toBe(false);
+  });
+
+  it("A803 split: a bill on screen that is paid does not stop a take-over on another bill", async () => {
+    const elsewhere = seedOther("p2", steak);
+    const draft = sync();
+    await draft.load();
+    draft.billStatus = "settled";
+
+    expect(await draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision)).toBe("taken");
+  });
+
+  describe("A803 split: sends nothing and answers failed", () => {
+    let elsewhere: Draft;
+    let draft: DraftSync;
+
+    beforeEach(async () => {
+      elsewhere = seedOther("p2", steak);
+      draft = sync();
+      await draft.load();
+    });
+
+    const refusedOutright = async () => {
+      expect(await draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision)).toBe("failed");
+      expect(server.takeOverDraft).not.toHaveBeenCalled();
+    };
+
+    it("while a send is out", async () => {
+      draft.store.sending = true;
+      await refusedOutright();
+    });
+
+    it("while a command is out", async () => {
+      const command = draft.runCommand(noAnswer);
+      await vi.advanceTimersByTimeAsync(0);
+      await refusedOutright();
+      draft.drop();
+      await command;
+    });
+
+    it("while the places are being corrected", async () => {
+      server.listDrafts.mockImplementationOnce(() => new Promise<never>(() => {}));
+      void draft.correctPlaces(new Map(), new AbortController().signal, () => true);
+      await vi.advanceTimersByTimeAsync(0);
+      await refusedOutright();
+    });
+
+    it("while the bill on screen waits for a read to recover", async () => {
+      server.takeOverDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
+      server.listDrafts.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+      await draft.takeOver(elsewhere.id, elsewhere.revision);
+      server.takeOverDraft.mockClear();
+      await refusedOutright();
+    });
+
+    it("once closed", async () => {
+      await draft.close();
+      await refusedOutright();
+    });
+
+    it("once dropped", async () => {
+      draft.drop();
+      await refusedOutright();
+    });
+
+    it("for a bill the last read did not name", async () => {
+      expect(await draft.takeOverOn("wo-unknown", elsewhere.id, elsewhere.revision)).toBe("failed");
+      expect(server.takeOverDraft).not.toHaveBeenCalled();
+    });
+  });
+
+  it("A803 split: a read answering after the sync was dropped changes nothing", async () => {
+    const elsewhere = seedOther("p2", steak);
+    const draft = sync();
+    await draft.load();
+    const before = structuredClone(draft.partyDrafts);
+    const edit = draft.expectedEditFor("wo-check");
+    let answer!: (value: { drafts: Draft[]; billEdits: BillDraftSnapshot["edit"][] }) => void;
+    server.listDrafts.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+
+    const outcome = draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision);
+    await vi.advanceTimersByTimeAsync(0);
+    draft.drop();
+    answer({
+      drafts: structuredClone(server.drafts),
+      billEdits: ["wo-4", "wo-check"].map((id) => server.edit(id)),
+    });
+
+    expect(await outcome).toBe("failed");
+    expect(draft.partyDrafts).toEqual(before);
+    expect(draft.expectedEditFor("wo-check")).toEqual(edit);
+  });
+
+  it("A803 split: reads nothing once dropped while the take-over was out, answered or refused", async () => {
+    const elsewhere = seedOther("p2", steak);
+    const draft = sync();
+    await draft.load();
+    let answer!: (value: BillDraftSnapshot) => void;
+    server.takeOverDraft.mockImplementationOnce(
+      () => new Promise<BillDraftSnapshot>((resolve) => (answer = resolve)),
+    );
+    const reads = server.listDrafts.mock.calls.length;
+    const taken = draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision);
+    await vi.advanceTimersByTimeAsync(0);
+    draft.drop();
+    answer(server.snapshot(server.takeOver("v1", elsewhere.id, elsewhere.revision)));
+    expect(await taken).toBe("failed");
+    expect(server.listDrafts).toHaveBeenCalledTimes(reads);
+
+    const second = sync();
+    await second.load();
+    let refuse!: (error: unknown) => void;
+    server.takeOverDraft.mockImplementationOnce(
+      () => new Promise<BillDraftSnapshot>((_resolve, reject) => (refuse = reject)),
+    );
+    const secondReads = server.listDrafts.mock.calls.length;
+    const refusedTake = second.takeOverOn("wo-check", elsewhere.id, elsewhere.revision);
+    await vi.advanceTimersByTimeAsync(0);
+    second.drop();
+    refuse({ code: "draft.out_of_date", status: 409 });
+    expect(await refusedTake).toBe("failed");
+    expect(server.listDrafts).toHaveBeenCalledTimes(secondReads);
+  });
+
+  it("A803 split: leaves the read to a command that started while the take-over was out", async () => {
+    const elsewhere = seedOther("p2", steak);
+    const draft = sync();
+    await draft.load();
+    let answer!: (value: BillDraftSnapshot) => void;
+    server.takeOverDraft.mockImplementationOnce(
+      () => new Promise<BillDraftSnapshot>((resolve) => (answer = resolve)),
+    );
+    const outcome = draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision);
+    await vi.advanceTimersByTimeAsync(0);
+    let finishCommand!: (value: string) => void;
+    const command = draft.runCommand(
+      () => new Promise<string>((resolve) => (finishCommand = resolve)),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    const reads = server.listDrafts.mock.calls.length;
+
+    answer(server.snapshot(server.takeOver("v1", elsewhere.id, elsewhere.revision)));
+
+    expect(await outcome).toBe("taken");
+    expect(server.listDrafts).toHaveBeenCalledTimes(reads);
+    finishCommand("done");
+    expect(await command).toEqual({ applied: "done", reloaded: true });
+    expect(draft.partyDrafts.find((row) => row.id === elsewhere.id)?.ownerId).toBe("p1");
+  });
+});
+
 describe("DraftSync: what the server says about each line", () => {
   const flags = (draft: DraftSync) => draft.store.lines.map((line) => line.unavailableOnServer);
 
