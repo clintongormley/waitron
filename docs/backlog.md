@@ -114,8 +114,7 @@ come after the list above:
 
 - **Finish table service and paying a bill in parts** (_The till, devices and table service_).
   What Task 16 (counter handover, #981) and Task 17 (#991) left open is in their entries under that
-  area. **Send the asesor's [shortened list](compliance/asesor-questions.md#the-shortened-list-2026-10-09)
-  (S3, S6, S10 cover Q27–Q29).**
+  area. **Follow up the already-sent shortened list (S3, S6, S10 cover Q27–Q29); the owner has a [new batch](compliance/2026-11-05-consultas-para-asesores.md) to review and send.**
 - **Design the fixed screens for each kind of device** (A182 part 1, under _The till, devices and
   table service_). The Counter cleanup is built; A738 custom items and A739 paying remain.
   The handheld, kitchen screen and pass are **A797**: the owner answered Q42 on 2026-10-18 and
@@ -419,9 +418,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **Loose ends left by C126 (cancelling an order whose invoice was issued credits it, #1030).**
   [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
 
-- **Asesor questions to send:** Q27 (money before the invoice, then a split; printing the invoice first), Q28 (unpaid departure; built on the owner's
-  decision, asked to confirm), Q29 (how a discount or comp appears on the invoice) and Q32 (a cancelled, already-issued ticket: credit or annul; built on
-  the owner's decision). Q19 stays open.
+- **The next adviser batch awaits the owner sending it.** The [Spanish questions by recipient](compliance/2026-11-05-consultas-para-asesores.md) cover the additions after the shortened list and the labour questions. Adviser answers, including Q19, remain open. The owner records the earlier shortened list as sent around 15 October; do not send its questions again as a new batch.
   [Detail](backlog/fiscal.md#asesor-questions-to-send)
 
 - **Task 6 (#818) and C50 (#847): the ticket of a bill collected after a correction still shows the original invoice total.** **PARKED (owner,
@@ -7150,9 +7147,7 @@ diagnostics (Slice 1, #192).
 each of the 106 bullets in the 6 October list. The same day every bullet was researched against
 primary sources and the list was cut to seventeen questions, S1–S17 (S17, on selling by weight,
 is legal metrology rather than tax), and a review list, R1–R6:
-[the shortened list](compliance/asesor-questions.md#the-shortened-list-2026-10-09). Send that, asking
-for a fixed price. Before paying for answers, re-read the list against the current Waitron
-architecture.
+[the shortened list](compliance/asesor-questions.md#the-shortened-list-2026-10-09). The owner records that list as sent around 15 October. The [next batch](compliance/2026-11-05-consultas-para-asesores.md) is prepared for the owner to review and send, with separate fiscal, labour, privacy and consumer-law parts. Answers remain open. Before paying for answers, agree the scope and price.
 Cloud archive and hosting questions, including the historical cloud-storage document's §8a,
 are now tracked in the [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md).
 Keep core fiscal questions here and coordinate shared assumptions with that review.
@@ -7177,9 +7172,7 @@ Spain-hosting assumption; wider country policy belongs to Cloud.
 [asesor-laboral-questions.md](compliance/asesor-laboral-questions.md). Nothing there blocks the build;
 two items want confirming before go-live (the digital-registro RD's status; the provincial convenio
 and figures), plus whether the venue's exported working-time record may show per-node chains. The
-gestoría's payroll import layout is the one build dependency (it fixes the D3 export format). A tip
-collected through the card terminal is business income — an accounting/payroll matter, not the
-factura.
+gestoría's payroll import layout is the one build dependency (it fixes the D3 export format). How card tips are booked remains Q49; the employer-paid tip payroll questions remain L6. Both are included in the next batch.
 
 **Data protection (RGPD) is a third track, never scoped end-to-end.** Scope it before engaging a
 DPO: a data map (what personal data, where, how long); the controller-versus-processor split and

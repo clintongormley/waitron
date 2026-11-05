@@ -1292,15 +1292,9 @@ conflict and behind a cancellation of a refused invoice were dropped on 2026-10-
 
 ## Asesor questions to send
 
-[Q27](../compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26)
-(money before the invoice, then a split; printing the invoice first),
-[Q28](../compliance/asesor-questions.md#q28-a-table-leaves-without-paying--is-the-invoice-still-owed-added-2026-09-26)
-(unpaid departure; built on the owner's decision, asked to confirm) and
-[Q29](../compliance/asesor-questions.md#q29-how-a-discount-or-comp-appears-on-a-simplified-invoice-added-2026-09-26)
-(how a discount or comp appears on the invoice), and
-[Q32](../compliance/asesor-questions.md#q32-cancelling-an-order-whose-ticket-was-already-issued--a-corrective-invoice-or-an-annulment-added-2026-10-02)
-(a cancelled, already-issued ticket: credit or annul; built on the owner's decision). Q19 stays
-open.
+The [Spanish next batch](../compliance/2026-11-05-consultas-para-asesores.md) is prepared for the owner to review and send. It separates fiscal/accounting, labour, privacy and consumer-law questions, retaining their stable references. It has not been sent by this campaign; adviser answers remain open.
+
+The owner records the earlier shortened list as sent around 15 October in [the question register](../compliance/asesor-questions.md). Q27–Q29 and Q32 belong to that earlier batch; follow up their answers rather than duplicating the enquiry. The new batch covers Q13(d), Q48–Q61 and the labour list, excluding points already answered by primary sources. Q19 also remains open in the earlier question register.
 
 ## A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1 landed 2026-10-23 (#2000).
 

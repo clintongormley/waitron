@@ -1,5 +1,7 @@
 # Questions for the asesor
 
+**2026-11-05:** The [next adviser batch](2026-11-05-consultas-para-asesores.md) is prepared in Spanish, grouped by recipient, for the owner to review and send. This preparation sends nothing.
+
 > **2026-11-04 (A1009):** The five standalone demo scripts and commands are retired.
 > Their checks now live in `catalogue-allergen-workflow.test.ts` and `reporting-write-workflows.test.ts`
 > in the server. See the [worked Spain VAT return](../../packages/reporting/examples/modelo-303.md).
