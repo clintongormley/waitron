@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { FileHandle } from "node:fs/promises";
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
@@ -506,6 +506,22 @@ describe("the final copy and its indicator, served to the selected box only", ()
       indicator.body.snapshot.sha256,
     );
     expect(await readdir(join(stateDir, "handover", OP))).toEqual(["venue.db"]);
+  });
+
+  it("a copy taken again is readable by its owner alone, under a permissive mask", async () => {
+    const { app, deps, destination } = await boxes();
+    await captureFinalCopy(deps, OP);
+    await rm(copyPath());
+    // Under this mask a file created with no stated mode comes out 644.
+    const mask = process.umask(0o022);
+    try {
+      const response = await ask(app, "final-copy", destination);
+      expect(response.status).toBe(200);
+      await response.arrayBuffer();
+    } finally {
+      process.umask(mask);
+    }
+    expect((await stat(copyPath())).mode & 0o777).toBe(0o600);
   });
 
   it("a copy folder that went missing after venue.db changed is refused, not served", async () => {

@@ -65,9 +65,13 @@ const refuse = (reason: ErrorCode, detail: CanonicalValue = {}): Refusal => ({
   detail,
 });
 
-function fileDiffers(found: CopyFileChecks): Refusal {
+function forget(found: CopyFileChecks): void {
   delete found.bytesAndIntegrity;
   delete found.moduleChecks;
+}
+
+function fileDiffers(found: CopyFileChecks): Refusal {
+  forget(found);
   return refuse("handover.copy_mismatch");
 }
 
@@ -106,6 +110,23 @@ export async function compareFinalCopy(
     return refuse("handover.indicator_mismatch", { field: "binding" });
   }
   const remembered = found.bytesAndIntegrity === true;
+  try {
+    return await compareFile(deps, operation, body, copyPath, { found, signal }, remembered);
+  } catch (error) {
+    // The file may be what failed, and only reading it from nothing would say so.
+    if (remembered) forget(found);
+    throw error;
+  }
+}
+
+async function compareFile(
+  deps: CompareDeps,
+  operation: HandoverOperation,
+  body: FinalStateIndicator,
+  copyPath: string,
+  { found, signal }: CompareOptions,
+  remembered: boolean,
+): Promise<CompareOutcome> {
   if (remembered) {
     if (!(await stillSameSize(copyPath, body))) return fileDiffers(found);
   } else {
@@ -241,10 +262,11 @@ async function rememberedModuleChecks(
   modules: readonly WaitronModule[],
   query: BackupQuery,
 ): Promise<Refusal | null> {
-  if (found.moduleChecks === undefined) {
-    found.moduleChecks = await moduleCheckRefused(modules, query);
-  }
-  return found.moduleChecks;
+  if (found.moduleChecks !== undefined) return found.moduleChecks;
+  const answer = await moduleCheckRefused(modules, query);
+  // A check that threw says nothing about the file, so the next try asks it again.
+  if (answer?.reason !== "handover.copy_check_failed") found.moduleChecks = answer;
+  return answer;
 }
 
 function rowOf(body: FinalStateIndicator, item: string) {

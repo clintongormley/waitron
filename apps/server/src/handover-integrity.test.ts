@@ -62,6 +62,44 @@ describe("isCopyIntact", () => {
     expect(await isCopyIntact(path)).toBe(false);
   });
 
+  it("a row naming a parent that is not there does not, though the integrity check passes", async () => {
+    const path = join(scratch, "copy.db");
+    const db = new DatabaseSync(path);
+    db.exec(`pragma foreign_keys = off;
+      create table parent(id text primary key);
+      create table child(parent_id text references parent(id));
+      insert into child values ('gone')`);
+    expect(db.prepare("pragma integrity_check").all()).toEqual([{ integrity_check: "ok" }]);
+    expect(db.prepare("pragma foreign_key_check").all()).toHaveLength(1);
+    db.close();
+    expect(await isCopyIntact(path)).toBe(false);
+  });
+
+  it("a key whose parent has no unique index does not: the check that throws is not a pass", async () => {
+    const path = join(scratch, "copy.db");
+    const db = new DatabaseSync(path);
+    db.exec(`pragma foreign_keys = off;
+      create table parent(id text);
+      create table child(parent_id text references parent(id));
+      insert into parent values ('here');
+      insert into child values ('here')`);
+    expect(db.prepare("pragma integrity_check").all()).toEqual([{ integrity_check: "ok" }]);
+    expect(() => db.prepare("pragma foreign_key_check").all()).toThrow("foreign key mismatch");
+    db.close();
+    expect(await isCopyIntact(path)).toBe(false);
+  });
+
+  it("control: a row whose parent is there, and a row naming none, do", async () => {
+    const path = join(scratch, "copy.db");
+    const db = new DatabaseSync(path);
+    db.exec(`create table parent(id text primary key);
+      create table child(parent_id text references parent(id));
+      insert into parent values ('here');
+      insert into child values ('here'), (null)`);
+    db.close();
+    expect(await isCopyIntact(path)).toBe(true);
+  });
+
   it("a path where no file is does not, and leaves no file behind", async () => {
     const path = join(scratch, "absent.db");
     expect(await isCopyIntact(path)).toBe(false);

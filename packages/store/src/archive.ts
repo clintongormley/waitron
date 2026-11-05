@@ -1,3 +1,4 @@
+import { closeSync, openSync } from "node:fs";
 import { rename, rm } from "node:fs/promises";
 import { sql } from "drizzle-orm";
 import type { StatementTarget } from "./append-only.js";
@@ -25,6 +26,9 @@ export async function archiveTo(target: StatementTarget, path: string): Promise<
   const working = workingName(path);
   await rm(working, { force: true });
   try {
+    // A copy holds the whole database. The engine creates a missing target 644 under a mask of 022;
+    // an empty file it finds, it fills and leaves at the mode it has.
+    closeSync(openSync(working, "a", 0o600));
     target.run(sql`vacuum into ${working}`);
     await rename(working, path);
   } catch (error) {

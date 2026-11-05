@@ -15,7 +15,10 @@ try {
   try {
     db.exec("pragma query_only=on");
     const checks = db.prepare("pragma integrity_check").all();
-    intact = checks.length === 1 && checks[0].integrity_check === "ok";
+    intact =
+      checks.length === 1 &&
+      checks[0].integrity_check === "ok" &&
+      db.prepare("pragma foreign_key_check").get() === undefined;
   } finally {
     db.close();
   }
@@ -28,9 +31,10 @@ parentPort.postMessage({ intact });
 type WorkerStarter = (source: string, options: WorkerOptions) => Worker;
 
 /**
- * Whether `pragma integrity_check` passes on `path`, on a thread of its own: on a venue-sized file
- * it takes long enough that the box would answer nothing meanwhile. A thread that fails or ends
- * without answering rejects, because that says nothing about the file.
+ * Whether `pragma integrity_check` and `pragma foreign_key_check` both pass on `path`, on a thread
+ * of its own: on a venue-sized file they take long enough that the box would answer nothing
+ * meanwhile. A thread that fails or ends without answering rejects, because that says nothing about
+ * the file.
  */
 export function isCopyIntact(
   path: string,

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import {
   copyFile,
   mkdir,
@@ -508,6 +509,19 @@ describe("compareFinalCopy", () => {
       );
     });
 
+    it("a row naming a parent that is not there is refused the same way", async () => {
+      const r = await rig();
+      alter(r.path, `update sales set device_id = 'gone' where node_id = '${r.m1.nodeId}'`);
+      const altered = new DatabaseSync(r.path, { readOnly: true });
+      expect(altered.prepare("pragma integrity_check").all()).toEqual([{ integrity_check: "ok" }]);
+      expect(altered.prepare("pragma foreign_key_check").all().length).toBeGreaterThan(0);
+      altered.close();
+      // Failing case: the integrity check alone passes this, and a later step answers instead.
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("handover.copy_damaged"),
+      );
+    });
+
     it("a file that is not a database, under the indicator as signed, is refused for its bytes", async () => {
       const r = await rig();
       await writeFile(r.path, "x".repeat(8192));
@@ -781,6 +795,66 @@ describe("compareFinalCopy", () => {
       expect(checkCopy).toHaveBeenCalledTimes(2);
     });
 
+    it("a module's check that threw is not kept: the throw says nothing about the file", async () => {
+      const r = await rig();
+      const checkCopy = vi.fn(async (): Promise<"ok" | "broken"> => "ok");
+      checkCopy.mockRejectedValueOnce(new Error("a passing fault"));
+      const flaky: WaitronModule = {
+        ...ALL_MODULES[0]!,
+        name: "flaky",
+        handover: { summarise: async () => ({}), checkCopy },
+      };
+      const modules = [...ALL_MODULES, flaky];
+      const envelope = r.resigned((body) => {
+        body.snapshot.modules.push({ name: "flaky", version: flaky.version });
+        body.modulesSummary.flaky = {};
+      });
+      const found: CopyFileChecks = {};
+      expect(await r.compareRow(envelope, { modules }, found)).toEqual(
+        refused("handover.copy_check_failed", { module: "flaky" }),
+      );
+      expect(found).toEqual({ bytesAndIntegrity: true });
+      // Failing case: `copy_check_failed` again, with the old box stopped until a restart.
+      expect(await r.compareRow(envelope, { modules }, found)).toEqual({ ok: true });
+      expect(checkCopy).toHaveBeenCalledTimes(2);
+    });
+
+    it("a kept file turned to noise throws once, then is refused so it is fetched again", async () => {
+      const r = await rig();
+      const found: CopyFileChecks = {};
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual({ ok: true });
+      await writeFile(r.path, randomBytes((await stat(r.path)).size));
+      await expect(r.compareRow(r.indicator, {}, found)).rejects.toThrow();
+      expect(found).toEqual({});
+      // Failing case: the same throw on every try, and the file never fetched again.
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual(refused("handover.copy_mismatch"));
+    });
+
+    it("a throw on a kept sound file costs one more read and one more thread, then it passes", async () => {
+      const r = await rig();
+      const found: CopyFileChecks = {};
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual({ ok: true });
+      fileReads.paths.length = 0;
+      integrityThreads.paths.length = 0;
+      // Where this image's migrations should be: a fault on this box, nothing about the file.
+      const migrationsRoot = join(r.m2State, "absent");
+      await expect(r.compareRow(r.indicator, { migrationsRoot }, found)).rejects.toThrow();
+      expect(found).toEqual({});
+      expect(fileReads.paths).toEqual([]);
+      expect(await r.compareRow(r.indicator, {}, found)).toEqual({ ok: true });
+      expect(fileReads.paths).toEqual([r.path]);
+      expect(integrityThreads.paths).toEqual([r.path]);
+      expect(found).toEqual({ bytesAndIntegrity: true, moduleChecks: null });
+    });
+
+    it("a throw on a first try keeps what that try read: nothing was remembered before it", async () => {
+      const r = await rig();
+      const migrationsRoot = join(r.m2State, "absent");
+      const found: CopyFileChecks = {};
+      await expect(r.compareRow(r.indicator, { migrationsRoot }, found)).rejects.toThrow();
+      expect(found).toEqual({ bytesAndIntegrity: true });
+    });
+
     it("what only the spare's own files say is read every time", async () => {
       const r = await rig();
       const found: CopyFileChecks = {};
@@ -1013,6 +1087,7 @@ describe("compareFinalCopy", () => {
         r.path,
         `delete from cadenas where node_id = '${r.m2.nodeId}';
          delete from registro_sif where node_id = '${r.m2.nodeId}';
+         delete from invoice_series where node_id = '${r.m2.nodeId}';
          delete from nodes where id = '${r.m2.nodeId}'`,
       );
       expect(await r.compareRow(await r.resignedForFile())).toEqual(
@@ -1404,9 +1479,48 @@ describe("the spare's duty runs the real comparison", () => {
     expect(seen[0]).toEqual({});
   }, 60_000);
 
+  it("a kept file turned to noise while the spare waits on a setting is fetched again", async () => {
+    const r = await dutyRig();
+    await writeFile(join(r.m2State, "backup.env"), SETTINGS);
+    await r.start({ compareRetryMs: 30 });
+    await vi.waitFor(
+      async () => expect((await r.row()).waitingReason).toBe("handover.backup_settings_differ"),
+      { timeout: 15_000 },
+    );
+    expect(r.copyReads()).toBe(1);
+    await writeFile(r.path, randomBytes((await stat(r.path)).size));
+    // Failing case: the count stays at 1, each try throwing, until the box restarts.
+    await vi.waitFor(() => expect(r.copyReads()).toBeGreaterThan(1), { timeout: 15_000 });
+  });
+
   describe("accepting the copy and asking the old box to give up filing", () => {
     const acceptedEvent = (r: { m2: SeededNode }) =>
       readHandoverEvent(suite.node, r.m2.nodeId, OP, "copy_accepted");
+
+    it("a real download stays readable by its owner alone through acceptance, under a permissive mask", async () => {
+      // Under this mask a file created with no stated mode comes out 644. It holds over M1's
+      // capture too, which the rig takes.
+      const mask = process.umask(0o022);
+      try {
+        const r = await dutyRig();
+        const received: number[] = [];
+        const download = vi.fn(async (...args: Parameters<typeof boxDownload>) => {
+          const answer = await boxDownload(...args);
+          received.push(statSync(args[2]).mode & 0o777);
+          return answer;
+        });
+        r.seam.answer = () => r.refusal("handover.not_stepped_down");
+        await r.startAccepting({ download });
+        await vi.waitFor(async () => expect((await r.row()).state).toBe("copy_accepted"), {
+          timeout: 15_000,
+        });
+        expect(statSync(finalCopyPath(r.m1State, OP)).mode & 0o777).toBe(0o600);
+        expect(received).toEqual([0o600]);
+        expect(statSync(acceptedCopyPath(r.m2State, OP)).mode & 0o777).toBe(0o600);
+      } finally {
+        process.umask(mask);
+      }
+    });
 
     it("control: an unaltered copy is kept as accepted, recorded, posted, and filing is assumed", async () => {
       const r = await dutyRig();

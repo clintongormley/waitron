@@ -251,6 +251,18 @@ describe("capturing a stepped-down box's final copy", () => {
     expect(envelope.body.snapshot.bytes).toBeGreaterThan(0);
   });
 
+  it("the copy is readable by its owner alone, under a permissive mask", async () => {
+    const self = await steppedDown();
+    // Under this mask a file created with no stated mode comes out 644.
+    const mask = process.umask(0o022);
+    try {
+      await captureFinalCopy(deps(self), OP);
+    } finally {
+      process.umask(mask);
+    }
+    expect((await stat(copyPath())).mode & 0o777).toBe(0o600);
+  });
+
   it("the summaries are read from the captured file", async () => {
     const self = await steppedDown();
     suite.db.run(sql`insert into handover_probe (n) values (1), (2)`);
