@@ -15621,20 +15621,48 @@ export class TillApp extends LitElement {
     await this.#followActionBills(result.billIds, sent);
   }
 
-  // Refreshing the view cannot replace the bill observation a guests dialog opened with.
-  readonly #splitTablePrompts = new WeakMap<object, BillComposition | null>();
+  // A plain refresh keeps what a prompt opened with: only #reloadSplitParty and a refusal replace it.
+  readonly #splitTablePrompts = new WeakMap<object, PartyComposition | null>();
+  /** Each selected bill's edit state when it joined the selection, or null if it had none then: a
+   * later read does not turn that into permission. */
+  readonly #splitObservations = new WeakMap<object, Map<string, BillEditExpected | null>>();
 
   #onSplitTableOpen(event: Event): void {
     const { billId, prompt } = (event as CustomEvent<{ billId?: string | null; prompt: object }>)
       .detail;
     if (billId === undefined) {
-      this.#openSplitRead(event);
+      this.#splitTablePrompts.set(prompt, this.#partyComposition([]));
+      this.#openSplitRead(event, prompt);
       return;
     }
     this.#splitTablePrompts.set(prompt, this.#billComposition(billId === null ? [] : [billId]));
   }
 
+  #onSplitTableObserve(event: Event): void {
+    const { prompt, billIds } = (event as CustomEvent<{ prompt: object; billIds: string[] }>)
+      .detail;
+    const kept = this.#splitObservations.get(prompt);
+    this.#splitObservations.set(
+      prompt,
+      new Map(
+        billIds.map((id) => [
+          id,
+          kept?.has(id) === true ? kept.get(id)! : this.#billEditIfReady(id),
+        ]),
+      ),
+    );
+  }
+
+  /** The first selected bill whose edit state is not what it was when the waiter ticked it. */
+  #splitBillChanged(observed: Map<string, BillEditExpected | null>, ids: string[]) {
+    return ids.find((id) => {
+      const seen = observed.get(id);
+      return seen == null || !this.#billChoiceMatches(seen);
+    });
+  }
+
   #splitPanel?: {
+    prompt: object;
     partyId: string;
     billsSeen: string;
     screen: TillTableOrderScreen;
@@ -15645,7 +15673,7 @@ export class TillApp extends LitElement {
   #splitReadGeneration = 0;
   #splitReadAbort?: AbortController;
 
-  #openSplitRead(event: Event): void {
+  #openSplitRead(event: Event, prompt: object): void {
     const party = this.orderParty;
     this.#leaveSplitRead();
     this.splitRead = null;
@@ -15654,7 +15682,7 @@ export class TillApp extends LitElement {
     // from an earlier answer would stay on the panel.
     screen.splitRead = null;
     if (party === null) return;
-    this.#splitPanel = { partyId: party.id, billsSeen: billsSeen(this.partyBills), screen };
+    this.#splitPanel = { prompt, partyId: party.id, billsSeen: billsSeen(this.partyBills), screen };
     this.#splitReadParty = party.id;
     if (this.#draftSync === undefined) this.#scheduleBillDraftRefresh();
     void this.#readSplitSources(party.id);
@@ -15718,7 +15746,11 @@ export class TillApp extends LitElement {
       this.#rememberOrderParty();
       const before = this.partyBills;
       const answer = await this.#loadPartyBills(undefined, false, true);
-      if (panel === this.#splitPanel) await this.#followBillsRead(answer, before, true);
+      if (panel !== this.#splitPanel) return;
+      await this.#followBillsRead(answer, before, true);
+      // The panel now draws what this read found, so Split acts on it, not on what it opened with.
+      if (panel === this.#splitPanel && answer.bills !== null)
+        this.#splitTablePrompts.set(panel.prompt, this.#partyComposition([]));
     } finally {
       panel.reloading = false;
     }
@@ -15734,6 +15766,11 @@ export class TillApp extends LitElement {
     const party = this.orderParty;
     if (party === null) return;
     const looseIds = selection.loose.map((source) => source.billId);
+    const selected = [...new Set([...selection.wholeBillIds, ...looseIds])].sort();
+    const observed =
+      prompt === undefined || !("selection" in detail)
+        ? undefined
+        : (this.#splitObservations.get(prompt) ?? new Map<string, BillEditExpected | null>());
     const asked =
       confirmed ??
       (prompt === undefined
@@ -15744,6 +15781,18 @@ export class TillApp extends LitElement {
       return;
     }
     if (!this.#billCompositionUnchanged(asked)) return;
+    const stopIfChanged = async (): Promise<boolean> => {
+      const changed =
+        observed === undefined ? undefined : this.#splitBillChanged(observed, selected);
+      if (changed === undefined) return false;
+      await this.#onSplitBillChanged(
+        { tableId, guestCounts, prompt, selection },
+        party.id,
+        changed,
+      );
+      return true;
+    };
+    if (await stopIfChanged()) return;
     if (
       confirmed === undefined &&
       looseIds.length > 0 &&
@@ -15753,7 +15802,7 @@ export class TillApp extends LitElement {
       ))
     )
       return;
-    if (!this.#billCompositionUnchanged(asked)) return;
+    if (!this.#billCompositionUnchanged(asked) || (await stopIfChanged())) return;
     const live = () => this.#billCompositionCurrent(asked);
     const sent = asked.sent;
     const visit = this.#orderVisit;
@@ -15765,24 +15814,33 @@ export class TillApp extends LitElement {
         tableId,
         selection,
         asked.revisions.expectedPartyRevision!,
-        asked.expectedEdits,
+        observed === undefined ? asked.expectedEdits : selected.map((id) => observed.get(id)!),
         guestCounts,
       );
     } catch (error) {
       if (!live()) return;
       const refused = error as { code?: string; field?: string } | undefined;
       const side = refusedSplitSide(refused);
-      if (side !== undefined && "billId" in detail) {
+      if (side !== undefined) {
         if (visit === this.#orderVisit && this.orderParty?.id === party.id)
           this.splitRefusal = {
             tableId,
-            billId: detail.billId,
+            ...("billId" in detail ? { billId: detail.billId } : { selection }),
             staying: guestField(guestCounts.staying),
             leaving: guestField(guestCounts.leaving),
             field: side,
             message: t("seat.guest_count_invalid"),
             ...(prompt === undefined ? {} : { prompt }),
           };
+        return;
+      }
+      if (refused?.code === "draft.out_of_date" && "selection" in detail) {
+        const billId = (error as { billId?: unknown }).billId;
+        await this.#onSplitBillChanged(
+          { tableId, guestCounts, prompt, selection },
+          party.id,
+          billId,
+        );
         return;
       }
       if (refused?.code === "draft.out_of_date" || refused?.code === "draft.taken_over")
@@ -15836,6 +15894,44 @@ export class TillApp extends LitElement {
       !this.#hasLeftParty(party.id, sent)
     )
       await this.#refreshBillDraft();
+  }
+
+  /** D16: nothing was sent or the server refused, so the drafts are read again and the panel reopens
+   * with its ticks. The waiter is now looking at the new state, so a retry compares against that. */
+  async #onSplitBillChanged(
+    sent: {
+      tableId: string;
+      guestCounts: SplitTableDetail["guestCounts"];
+      prompt: object | undefined;
+      selection: SplitSelection;
+    },
+    partyId: string,
+    billId: unknown,
+  ): Promise<void> {
+    const { tableId, guestCounts, prompt, selection } = sent;
+    const visit = this.#orderVisit;
+    const bill = this.partyBills.find((each) => each.workingOrderId === billId);
+    this.errorKey = undefined;
+    this.splitRefusal = null;
+    await this.#refreshBillDraft();
+    const party = this.orderParty;
+    if (visit !== this.#orderVisit || party?.id !== partyId) return;
+    if (prompt !== undefined) {
+      this.#splitTablePrompts.set(prompt, this.#partyComposition([]));
+      this.#splitObservations.delete(prompt);
+    }
+    if (bill === undefined || party.tableIds.length < 2 || !party.tableIds.includes(tableId)) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return;
+    }
+    this.splitRefusal = {
+      tableId,
+      selection,
+      staying: guestField(guestCounts.staying),
+      leaving: guestField(guestCounts.leaving),
+      message: fill(t("table.split_changed"), { bill: billLabel(bill) }),
+      ...(prompt === undefined ? {} : { prompt }),
+    };
   }
 
   /** A refusal of the name itself goes back to the screen's field, unless the waiter has left the
@@ -17427,12 +17523,16 @@ export class TillApp extends LitElement {
     );
   }
 
-  #billChoiceMatches(expected: BillEditExpected): boolean {
+  /** {@link #billChoiceEdit} without the banner. */
+  #billEditIfReady(billId: string): BillEditExpected | null {
     const sync = this.#draftSync;
-    const current =
-      this.#draftReady && sync?.partyId === this.orderParty?.id
-        ? sync?.expectedEditFor(expected.billId)
-        : undefined;
+    return this.#draftReady && sync?.partyId === this.orderParty?.id
+      ? (sync?.expectedEditFor(billId) ?? null)
+      : null;
+  }
+
+  #billChoiceMatches(expected: BillEditExpected): boolean {
+    const current = this.#billEditIfReady(expected.billId);
     return (
       current != null &&
       current.editorVersion === expected.editorVersion &&
@@ -19320,6 +19420,7 @@ export class TillApp extends LitElement {
       .revealOtherDrafts=${this.revealOtherDrafts}
       .guestsRefusal=${this.guestsRefusal}
       .splitRefusal=${this.splitRefusal}
+      .splitPanelLive=${true}
       .splitRead=${this.splitRead}
       .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
       .personId=${this.#draftSync?.personId ?? this.#sessionPersonId}
@@ -19466,6 +19567,7 @@ export class TillApp extends LitElement {
           .revealOtherDrafts=${this.revealOtherDrafts}
           .guestsRefusal=${this.guestsRefusal}
           .splitRefusal=${this.splitRefusal}
+          .splitPanelLive=${true}
           .splitRead=${this.splitRead}
           .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
           .personId=${this.#draftSync?.personId ?? this.#sessionPersonId}
@@ -19813,6 +19915,7 @@ export class TillApp extends LitElement {
         }}
         @join-tables=${(event: Event) => void this.#ownBillsChange(() => this.#onJoinTables(event))}
         @split-table-open=${(event: Event) => this.#onSplitTableOpen(event)}
+        @split-table-observe=${(event: Event) => this.#onSplitTableObserve(event)}
         @split-table-leave=${() => this.#leaveSplitRead()}
         @split-table=${(event: Event) => void this.#ownBillsChange(() => this.#onSplitTable(event))}
         @name-party=${(event: Event) => void this.#onNameParty(event)}
