@@ -495,7 +495,8 @@ function no longer reads the scope. It fails before the change. It is marked
   its owner says, and no folder name is derived from a venue id. The decision is written up in
   [`2026-11-04-a1301-venue-id-design.md`](../specs/2026-11-04-a1301-venue-id-design.md), which
   awaits the owner's approval; it is built as S18e and followed by S18f in
-  [the S18 plan](2026-11-04-a1301-s18-contract-cleanup.md).
+  [the S18 plan](2026-11-04-a1301-s18-contract-cleanup.md). (2026-11-05: the owner approved it on
+  2026-11-04 and chose the schedule where S18f lands first; A1308 holds S18e.)
 - **S17's interim import rule** (a column whose foreign key points at `locations` is set to
   `venueLocationId(tx)`) goes when the columns go; S28's `venueLocationId` grep finds it.
 - **S22** re-keys `attendance_source_state`'s and `attendance_operation_facts`' indexes without

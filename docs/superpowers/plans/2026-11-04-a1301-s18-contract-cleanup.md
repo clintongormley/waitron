@@ -12,7 +12,7 @@ the shared done-check (the design's grep, `P` and `PATHS`), "Calls into another 
 them), "Cross-location tests are deleted, not rewritten", and "deletes a test case by its title,
 never by its line number". **Design:** [`2026-11-01-a1301-remove-location-design.md`](../specs/2026-11-01-a1301-remove-location-design.md)
 §6, S18's row. **Venue id:** [`2026-11-04-a1301-venue-id-design.md`](../specs/2026-11-04-a1301-venue-id-design.md),
-awaiting the owner's approval.
+approved by the owner on 2026-11-04.
 
 **Plan head:** main `6d2147332b` (2026-11-03). Every `file:line` here was read there. Main moved
 to `6a52e7189c` while this was written; `git diff --stat 6d2147332b 6a52e7189c` lists only
