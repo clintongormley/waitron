@@ -1509,7 +1509,7 @@ describe("the spare's duty runs the real comparison", () => {
       closers.push(() => duty?.stop() ?? Promise.resolve());
       return duty;
     };
-    /** As boot starts it, past accepting. The plain `start` stops short, for the checks before it. */
+    /** As boot starts it, past accepting. The rig's `start` is `stopped`, which stops short. */
     const startAccepting = start;
     const m1Row = async () => (await readHandoverOperation(suite.node, r.m1.nodeId, OP))!;
     const copyReads = () => requests.filter((line) => line.endsWith("/final-copy")).length;

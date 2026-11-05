@@ -3261,7 +3261,7 @@ lock, not that every writer of the file takes it.
 
 | Caller | Runs | Decision |
 | --- | --- | --- |
-| `apps/server/src/boot.ts` | the server | locks five times in turn: placing a handover's accepted copy (`placeAcceptedCopyForStart`, `apps/server/src/handover-place-copy.ts`), the stamp probe, the pre-migration trigger read (`missingBeforeMigration`, `apps/server/src/append-only-watch.ts`), the migrate, and the long-lived store, which holds it until the server closes or its start fails. Between them the folder is briefly free, unless the container entry (`node-entry.ts`) started the server: its hold covers those gaps |
+| `apps/server/src/boot.ts` | the server | locks up to five times in turn: placing a handover's accepted copy (`placeAcceptedCopyForStart`, `apps/server/src/handover-place-copy.ts`, with a node identity and an existing `node.db`), the stamp probe, the pre-migration trigger read (`missingBeforeMigration`, `apps/server/src/append-only-watch.ts`), the migrate, and the long-lived store, which holds it until the server closes or its start fails. Between them the folder is briefly free, unless the container entry (`node-entry.ts`) started the server: its hold covers those gaps |
 | `apps/server/src/backup-supervisor.ts` (`reload`) | inside the server | shares the server's hold |
 | `apps/server/src/node-entry.ts` (`clearReplacedDatabases`, `assertNotAhead`) and the staged restore and staged reset it runs | the container entrypoint, the same process as the server | the staged restore, then the staged reset, each locks on its own and releases before `runEntry` takes `lockVenueDatabase` and holds it from clearing set-aside folders (`clearReplacedDatabases`) through the ahead check until `startServer` settles or an earlier step throws (on a box that waits for its peers, `startServer` returns as soon as the waiting start is listening, before the wait ends; see the backlog's _The waiting start's loose ends_). The ahead check's opens and the server's opens during its start share that hold |
 | `apps/server/src/restore.ts` (`writeValidated`) | `waitron-restore` (server stopped) and the staged restore | takes the lock before its first change and holds it to the end; its migrate and hook open share it. Refused while another process holds the folder |
@@ -4609,16 +4609,18 @@ this error. `waitron.sh`'s advice on that failure depends on the box: on one tha
 production, it names `waitron.sh --reset install [ref]`, which wipes the database as
 `waitron.sh reset` does and installs again in one run, the clean way back to a working box; on a
 production box the script refuses to suggest that (a reset there would destroy the fiscal chain) and
-says to install a newer ref instead (#314). It has two callers (`grep -rn assertNotAhead` before
-believing otherwise): boot, in `apps/server/src/node-entry.ts`, and the bucket rebuild's
+says to install a newer ref instead (#314). It has three callers (`grep -rn assertNotAhead` before
+believing otherwise): boot, in `apps/server/src/node-entry.ts`, a resumed restore, in
+`apps/server/src/restore.ts`, and the bucket rebuild's
 preparation, `prepareStreamRestore` in `apps/server/src/restore-stream.ts`, which checks the
 downloaded copy before anything is placed (2026-09-25, slice 2 Task 9b). Boot's call runs after
 `runStagedRestore` — the restore that replaces the venue files — and `runStagedReset`, which removes
 them, and BEFORE `startServer`, so it reads a database nothing has migrated yet, because boot owns
 the migration now (`apps/server/src/boot.ts`). The ordering, and the one-direction comparison that
 lets a virgin venue directory pass it, are stated at `runEntry` in `apps/server/src/node-entry.ts`.
-Placing a handover's accepted copy replaces `venue.db` later, in `bootServer`, so `assertNotAhead`
-never reads that file; the handover's compare refuses a copy ahead of this image with the same code
+Placing a handover's accepted copy replaces `venue.db` later, in `bootServer`, so on that start
+`assertNotAhead` has already run on the old file; the handover's compare refuses a copy ahead of this
+image with the same code
 (`aheadOfThisImage`, `apps/server/src/handover-compare.ts`).
 
 The GAP, stated so nobody assumes coverage: BOOT and the bucket rebuild are the only migrating paths

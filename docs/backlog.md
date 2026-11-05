@@ -6003,8 +6003,8 @@ Not in any track until the standalone primary is done.
 
 - **A hung integrity check on a copy has no time limit.** Only an answer, an exit or a stop ends the
   wait, so the duty would wait with no reason recorded, and the frozen-process watchdog does not see
-  it (read, not run). A stop ends the wait, not the thread: on a 1.14 GiB copy a stop at 2 s rejected
-  at 2,001 ms and the thread lived until 11,425 ms, when `integrity_check` returned. Left open by
+  it (read, not run). A stop asks the thread to end and answers when it has, or after `STOP_WAIT_MS` with the file
+  possibly still open: a running `integrity_check` does not stop for it. Left open by
   A1018 Slice 5 (Ruling R53).
 
 - **A throw while checking a copy leaves no reason a person can read.** It reaches only the log, with
@@ -6012,8 +6012,8 @@ Not in any track until the standalone primary is done.
   R53).
 
 - **The spare's folder clean-up reads any `readdir` failure as an empty folder.** A refusal to read
-  ends the sweep with no log line and leaves a closed operation's venue copy
-  (`apps/server/src/handover-destination-duty.ts`, read, not run). Left open by A1018 Slice 5 (Ruling
+  ends either sweep with no log line and leaves a closed operation's venue copy
+  (`destinationOperationFolders`, `apps/server/src/handover-store.ts`, read, not run). Left open by A1018 Slice 5 (Ruling
   R53).
 
 - **A box can refuse its start while its `venue.db` already holds the accepted copy.** Killed just

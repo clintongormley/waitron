@@ -79,7 +79,7 @@ async function openIfMatching(
   try {
     handle = await open(path, "r");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if (errnoOf(error) === "ENOENT") return null;
     throw error;
   }
   try {

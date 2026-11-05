@@ -261,7 +261,7 @@ the owner.
 3. **A stepdown stops outside-facing background work at once, not at the restart.** The drain is
    started by the singleton role, not the admission (`singletonPass`, `boot.ts:3205-3206`); the
    clock watch asks AEAT whenever `filesRecords()` is true (`apps/server/src/clock-watch.ts:281`);
-   the card sweep runs in every role (`boot.ts:505-512`). Design §2 step 1 says no new filing or
+   the card sweep runs in every role (`boot.ts:505-512`; until Slice 5's R47, 2026-11-05). Design §2 step 1 says no new filing or
    payment work starts once the restriction is on disk, and counts "background jobs … and module
    writers" in that. So the stepdown signals, inside the request and right after closing the gate,
    the duties **named** in Task 2.4 — each one that files, moves money, sends to an outside service
@@ -1107,7 +1107,7 @@ chart's `term` — a till needs the term to hand over a newer chart, Task 3.6), 
   equal; control: a normal start changes it within the same time, through the sealed-state refresh
   `boot.ts:2532`); "asks AEAT's host for no clock reading" (the clock watch's `readAuthorityTime`
   stand-in is never called; `apps/server/src/clock-watch.ts:281-284`); "runs no card-provider
-  sweep" (the sweep stand-in is never called; today it runs in every role, `boot.ts:505-512`);
+  sweep" (the sweep stand-in is never called; today it runs in every role, `boot.ts:505-512`; until Slice 5's R47, 2026-11-05);
   "starts no Litestream child" (the stream seam's `spawn` is never called).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/boot.restricted-quiet.test.ts` — FAIL only if Task 2.1 left a worker running; if it PASSES at once, delete the early return locally and confirm each case fails for the reason named, then restore it.
 - [ ] **Step 3: Implement** whatever the failing case names.
@@ -2713,7 +2713,7 @@ Slice 4 probe (2026-11-03): placing the file as module-evidence does not reach p
 **Files:** Create `apps/server/src/handover-place-copy.ts`; modify `boot.ts` (at the top of `bootServer`, before the
 store opens, `placeAcceptedCopyForStart` places `accepted.db` as `venue.db` when the operation is
 at `filing_assumed` and not yet placed; `node.db` is never touched. `runStagedRestore`, at
-`apps/server/src/restore-request.ts:344`, is called from `node-entry.ts:626`, not `boot.ts`, and
+`apps/server/src/restore-request.ts:344`, is called from `runEntry` in `node-entry.ts`, not `boot.ts`, and
 entry's ahead check runs after it and before `startServer`, so placing runs later than a staged
 restore and after that check, Ruling P19); add the file to `REPLACES` in `scripts/backup-room-note.test.ts`. Test
 `apps/server/src/handover-place-copy.test.ts`.

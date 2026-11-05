@@ -610,8 +610,8 @@ wrong, and none is reachable on a real box before A947 3b.
 - `handover-destination.post_failed` warns on every tick, about 17,000 lines a day with the old box
   off, for as long as the wait lasts.
 - A closed operation's folder that could not be removed is tried again only when the duty starts and
-  on a pass that finds no work, so it stays, with a whole venue's copy in it, for as long as another
-  operation is open.
+  on a pass that finds no work, so it stays, with a whole venue's copy in it, while the duty has
+  another operation to work on, and after the duty closes one itself until the next wake or start.
 - With nothing free on the disk, every tick logs `handover-destination.waiting` and `pass_failed`
   `storage.disk_full`, and the named reason is not stored (a real 0-byte filesystem).
 

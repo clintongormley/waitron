@@ -358,7 +358,7 @@ export function placeCopyBoxes(deps: {
       await appendHandoverEventTx(tx, {
         nodeId,
         operationId: OP,
-        kind: "offer",
+        kind: HANDOVER_EVENT.offer,
         detail: {},
         envelope: canonicalize({ body: { authorisedBy: AUTHORISER } }),
       });

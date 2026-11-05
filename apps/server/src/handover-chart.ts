@@ -14,9 +14,9 @@ export function oldBoxStillMain(
 }
 
 /**
- * Whether a stored document says the venue has moved on from this source, for the step that places
- * the accepted copy. No chart, or one too broken to read, says nothing, so placing goes on: the old
- * box has already given up filing.
+ * Whether a stored document says the venue has moved on from this source, for the duty deciding
+ * whether placing the accepted copy would stop. No chart, or one too broken to read, says nothing:
+ * the old box has already given up filing.
  */
 export function movedOnFromSource(document: unknown, sourceNodeId: string): boolean {
   return (

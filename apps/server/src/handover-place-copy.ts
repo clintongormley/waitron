@@ -131,6 +131,7 @@ function holdsMovedOnChart(
     if (text === null) return false;
     const document: unknown = JSON.parse(text);
     if (document === null) return false;
+    // Spelled out rather than `movedOnFromSource`: an unreadable chart here must reach the log below.
     if (!isReadableChart(document)) throw new Error("not a readable chart");
     if (oldBoxStillMain(document as SignedMembershipDocument, sourceNodeId)) return false;
     return !acceptedCopyHolds(acceptedPath, text);
@@ -152,7 +153,7 @@ function acceptedCopyHolds(acceptedPath: string, chartText: string): boolean {
   }
 }
 
-/** Opened and read, not only looked up: what cannot be read stops the start, as a digest would. */
+/** Opened and its first byte read, not only looked up: a file that fails either stops the start. */
 async function sizeIfPresent(path: string): Promise<number | null> {
   let handle: FileHandle;
   try {
