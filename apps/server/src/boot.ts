@@ -211,6 +211,7 @@ import { mountPeerStatusApi } from "./peer-status-api.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { compareFinalCopy } from "./handover-compare.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
+import { mountHandoverActivationApi } from "./handover-activation.js";
 import { mountHandoverPreparationApi } from "./handover-preparation.js";
 import { startHandoverDestinationDuty } from "./handover-destination-duty.js";
 import {
@@ -435,6 +436,8 @@ export interface StartedServer {
   promoteMirrorToPrimary?: (
     attestation: FenceAttestation,
     withModuleOperations?: PromotionOperationRunner,
+    /** Awaited after the promotion and before the restart is scheduled; a failure still restarts. */
+    beforeRestart?: () => Promise<void>,
   ) => Promise<MirrorPromotionResult>;
   /**
    * Resolves once background work has stopped, the listeners are closed, every password reset the
@@ -3396,6 +3399,7 @@ async function bootServer(
   const promoteMirrorRun = async (
     attestation: FenceAttestation,
     withModuleOperations?: PromotionOperationRunner,
+    beforeRestart?: () => Promise<void>,
   ): Promise<MirrorPromotionResult> => {
     await deleteNoteForPromotion();
     const result = await promoteMirrorToPrimary(
@@ -3424,9 +3428,10 @@ async function bootServer(
         await deleteBackupRoomNote(config.stateDir).catch((error: unknown) =>
           log("error", "backup.room_note_delete_failed", { errno: errnoOf(error) ?? null }),
         );
+        await beforeRestart?.();
       } finally {
         // On the NEXT tick, so the in-process caller's result is returned first.
-        setTimeout(restartProcess, 0);
+        setTimeout(seams.stepdown?.restart ?? restartProcess, 0);
       }
     }
     return result;
@@ -3437,9 +3442,10 @@ async function bootServer(
   const promoteRun = async (
     attestation: FenceAttestation,
     withModuleOperations?: PromotionOperationRunner,
+    beforeRestart?: () => Promise<void>,
   ): Promise<PromoteRunResult> => {
     if (isMirror) {
-      const result = await promoteMirrorRun(attestation, withModuleOperations);
+      const result = await promoteMirrorRun(attestation, withModuleOperations, beforeRestart);
       return { alreadyPrimary: result.alreadyPrimary, restarting: !result.alreadyPrimary };
     }
     const held = await readNodeMembership(db);
@@ -3469,6 +3475,17 @@ async function bootServer(
       appDb: db,
       nodePreparation,
       requestFromBox: seams.requestFromBox,
+    },
+    log,
+  );
+  mountHandoverActivationApi(
+    app,
+    {
+      node: store.node,
+      nodeId: tradingContext.nodeId,
+      appDb: db,
+      nodePreparation,
+      run: promoteRun,
     },
     log,
   );

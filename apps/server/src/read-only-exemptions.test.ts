@@ -73,6 +73,7 @@ describe("the read-only exemption list", () => {
       ["POST", "/api/node/membership", ["mirror", "fenced"]],
       ["POST", "/api/node/handover/offer", ["mirror"]],
       ["POST", "/api/node/handover/:operationId/preparation", ["mirror"]],
+      ["POST", "/api/node/handover/:operationId/activate", ["mirror"]],
     ]);
     for (const row of READ_ONLY_EXEMPTIONS) expect(row.authenticates.trim()).not.toBe("");
   });
@@ -423,6 +424,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
           base,
           `/api/node/handover/${MIRROR_OPERATION_ID}/preparation`,
         ),
+        handoverActivate: await post(base, `/api/node/handover/${MIRROR_OPERATION_ID}/activate`),
         peerStatus: await post(base, "/api/node/peer-status"),
         membership: await handEmptyChart(base),
         offer: await post(base, "/api/node/handover/offer"),
@@ -436,6 +438,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         promote: { status: 401, code: "password.invalid" },
         preparation: PREPARATION_REFUSAL,
         handoverPreparation: PREPARATION_REFUSAL,
+        handoverActivate: PREPARATION_REFUSAL,
         peerStatus: { status: 400, code: "handover.request_invalid" },
         membership: { status: 200, body: { accepted: false } },
         offer: { status: 400, code: "handover.request_invalid" },
@@ -469,6 +472,13 @@ describe("each listed route is reached on a real read-only start, and nothing el
         [`/api/node/handover/${id}/preparation`, "DELETE"],
         ["/api/node/handover/a%2Fb/preparation", "POST"],
         ["/api/node/handover/..%2F..%2Fmembership/preparation", "POST"],
+        [`/api/node/handover/${id}/extra/activate`, "POST"],
+        [`/api/node/handover/${id}/activate/extra`, "POST"],
+        [`/api/node/handover/${id}/activated`, "POST"],
+        [`/api/node/handover/${id}/activate`, "PUT"],
+        [`/api/node/handover/${id}/activate`, "DELETE"],
+        ["/api/node/handover/a%2Fb/activate", "POST"],
+        ["/api/node/handover/..%2F..%2Fmembership/activate", "POST"],
       ] as const) {
         expect([path, method, await post(base, path, method)]).toEqual([path, method, GATED]);
       }
@@ -587,6 +597,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
           base,
           `/api/node/handover/${MIRROR_OPERATION_ID}/preparation`,
         ),
+        handoverActivate: await post(base, `/api/node/handover/${MIRROR_OPERATION_ID}/activate`),
         unlisted: await post(base, "/management-api/catalogues"),
         startHandover: await post(base, "/management-api/handover"),
       }).toEqual({
@@ -597,6 +608,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         membership: { status: 200, body: { accepted: false } },
         offer: GATED,
         handoverPreparation: GATED,
+        handoverActivate: GATED,
         unlisted: GATED,
         startHandover: GATED,
       });

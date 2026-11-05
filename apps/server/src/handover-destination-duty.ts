@@ -23,6 +23,7 @@ import {
 } from "./handover-acceptance.js";
 import type { CompareOptions, CompareOutcome, CopyFileChecks } from "./handover-compare.js";
 import type { Statfs } from "./free-bytes.js";
+import { oldBoxStillMain } from "./handover-chart.js";
 import { COPY_PLACED_EVENT } from "./handover-place-copy.js";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { advanceHandover, waitHandover } from "./handover-store.js";
@@ -436,6 +437,11 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     if (address === undefined) {
       return waitOn(operation, "handover.source_unreachable");
     }
+    // Before the post, or the old box gives up filing to a box that will not take it. Placing the
+    // copy replaces the chart this reads, so nothing later can see what this box holds now.
+    if (!oldBoxStillMain(await readNodeMembership(deps.db), operation.sourceNodeId)) {
+      return waitOn(operation, "handover.source_no_longer_main");
+    }
     const acceptance = await readStoredAcceptance(deps, operationId);
     let answer: { status: number; text: string };
     try {
@@ -463,6 +469,9 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     const relinquishment = await verifiedRelinquishment(deps, operation, acceptance, answer.text);
     if (relinquishment === null) {
       return waitOn(operation, "handover.relinquishment_invalid");
+    }
+    if (!oldBoxStillMain(await readNodeMembership(deps.db), operation.sourceNodeId)) {
+      return waitOn(operation, "handover.source_no_longer_main");
     }
     await advanceHandover(deps, operationId, "filing_assumed", {}, relinquishment);
     deps.log("info", "handover-destination.filing_assumed", { operationId });

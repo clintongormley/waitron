@@ -1489,6 +1489,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The copy of the venue this box accepted is no longer on its disk, so this box cannot take over the venue.",
     es: "La copia del local que este equipo aceptó ya no está en su disco, así que este equipo no puede pasar a llevar el local.",
   },
+  "handover.source_no_longer_main": {
+    en: "This box's chart no longer has the old box as the main box, so this box has not taken over from it, and it asks the old box for nothing more. It carries on by itself if a newer chart names the old box again.",
+    es: "El esquema de este equipo ya no tiene al equipo antiguo como equipo principal, así que este equipo no ha asumido sus funciones y no le pide nada más. Sigue por sí solo si un esquema más reciente vuelve a nombrar al equipo antiguo.",
+  },
   "handover.relinquishment_invalid": {
     en: "The old box's answer did not hand filing to this box for the copy it accepted, so this box has not taken over. It keeps asking the old box.",
     es: "La respuesta del equipo antiguo no le cede a este equipo el envío de registros de la copia que aceptó, así que este equipo no ha asumido el envío. Sigue preguntando al equipo antiguo.",

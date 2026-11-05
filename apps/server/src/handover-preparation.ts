@@ -34,7 +34,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 // A refusal's params are logged, and this route takes any caller's text.
-const OPERATION_ID_MAX_LENGTH = 64;
+export const OPERATION_ID_MAX_LENGTH = 64;
 
 const BEFORE_ACTIVATION: ReadonlySet<HandoverState> = new Set<HandoverState>([
   "filing_assumed",
@@ -90,7 +90,7 @@ export function assertBindingNamesOperation(
 }
 
 /** Only these three fields reach the sign-in, so no break-glass secret or person id can. */
-async function signInCredentials(
+export async function signInCredentials(
   db: Database,
   signIn: unknown,
 ): Promise<{ personId: string; password: unknown; totp: unknown }> {

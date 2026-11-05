@@ -1,4 +1,4 @@
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
@@ -37,6 +37,7 @@ import {
   signDocumentBody,
   type CanonicalValue,
   type MembershipDocumentBody,
+  type MembershipNode,
 } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
@@ -52,7 +53,13 @@ import {
   writeMirrorLink,
 } from "@waitron/node-db";
 import type { StartedServer } from "./boot.js";
-import { FINAL_STATE_EVENT, captureFinalCopy, type CaptureDeps } from "./handover-capture.js";
+import { acceptFinalCopy, acceptedCopyPath } from "./handover-acceptance.js";
+import {
+  FINAL_STATE_EVENT,
+  captureFinalCopy,
+  finalCopyPath,
+  type CaptureDeps,
+} from "./handover-capture.js";
 import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { advanceHandover, beginHandoverFromOffer } from "./handover-store.js";
@@ -642,10 +649,15 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
     };
   }
 
-  const chart = (mainId: string, mainUrl: string, spareId: string): MembershipDocumentBody => ({
-    term: 3,
+  const chart = (
+    mainId: string,
+    mainUrl: string,
+    spareId: string,
+    { term = 3, standing = "serving-primary" as MembershipNode["standing"] } = {},
+  ): MembershipDocumentBody => ({
+    term,
     nodes: [
-      { nodeId: mainId, contactUrl: mainUrl, standing: "serving-primary" },
+      { nodeId: mainId, contactUrl: mainUrl, standing },
       { nodeId: spareId, contactUrl: "https://spare.example", standing: "serving-secondary" },
     ],
   });
@@ -745,9 +757,18 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
       }).caCertPem,
       originNodeId: mainId,
     });
-    const writeSpareChart = (mainUrl: string) =>
-      writeNodeMembership(spareBox.db, signedChart(chart(mainId, mainUrl, spareId)));
-    return { mainId, spareId, mainEnv, spareEnv, mainPublic, writeSpareChart };
+    const writeSpareChart = (mainUrl: string, change: Parameters<typeof chart>[3] = {}) =>
+      writeNodeMembership(spareBox.db, signedChart(chart(mainId, mainUrl, spareId, change)));
+    const chartSignedBySpare = (mainUrl: string, term: number) => {
+      const body = chart(mainId, mainUrl, spareId, { term });
+      return {
+        body,
+        signerNodeId: spareId,
+        signature: signDocumentBody(body, spareKey),
+        endorsements: [endorseKey(mainId, mainPublic, spareId, spareKey)],
+      };
+    };
+    return { mainId, spareId, mainEnv, spareEnv, mainPublic, writeSpareChart, chartSignedBySpare };
   }
 
   const refusesSales = async (port: number): Promise<void> => {
@@ -759,6 +780,81 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
 
   const event = (node: NodeDatabase, nodeId: string, kind: string) =>
     readHandoverEvent(node, nodeId, OP, kind);
+
+  it("a chart evicting the old box at copy_accepted: the real old box gives up nothing, and a chart naming it again carries on", async () => {
+    const ring = loadKeyRing(KEY_ENV);
+    const boxes = await prepared();
+    const mainState = boxes.mainEnv.WAITRON_STATE_DIR!;
+    const spareState = boxes.spareEnv.WAITRON_STATE_DIR!;
+    const indicator = await captureFinalCopy(
+      {
+        venue: mainBox.db,
+        node: mainBox.node,
+        stateDir: mainState,
+        ring,
+        nodeId: boxes.mainId,
+        modules: [],
+      },
+      OP,
+    );
+    const received = join(spareState, "received.db");
+    await copyFile(finalCopyPath(mainState, OP), received);
+    await mkdir(dirname(acceptedCopyPath(spareState, OP)), { recursive: true });
+    await acceptFinalCopy(
+      { node: spareBox.node, ring, nodeId: boxes.spareId, stateDir: spareState },
+      (await readHandoverOperation(spareBox.node, boxes.spareId, OP))!,
+      indicator,
+      received,
+    );
+    beforeServerStarts();
+    const restrictionBefore = await readHandoverRestriction(mainBox.node, boxes.mainId);
+
+    main = await startServer(boxes.mainEnv, boxes.mainEnv);
+    const mainPort = httpPort();
+    await boxes.writeSpareChart(`http://127.0.0.1:${mainPort}`, { term: 4, standing: "evicted" });
+    const restart = vi.fn();
+    spare = await startServer(boxes.spareEnv, boxes.spareEnv, {
+      peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
+      stepdown: { mount: () => {}, restart },
+    });
+    const sparePort = httpPort();
+
+    await vi.waitFor(
+      async () =>
+        expect(await readHandoverOperation(spareBox.node, boxes.spareId, OP)).toMatchObject({
+          state: "copy_accepted",
+          waitingReason: "handover.source_no_longer_main",
+        }),
+      { timeout: 60_000, interval: 200 },
+    );
+    expect((await readHandoverOperation(mainBox.node, boxes.mainId, OP))?.state).toBe(
+      "source_stepped_down",
+    );
+    expect(await event(mainBox.node, boxes.mainId, "filing_relinquished")).toBeNull();
+    await refusesSales(mainPort);
+    expect(await readHandoverRestriction(mainBox.node, boxes.mainId)).toEqual(restrictionBefore);
+    expect(restart).not.toHaveBeenCalled();
+
+    const naming = await fetch(`http://127.0.0.1:${sparePort}/api/node/membership`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        document: boxes.chartSignedBySpare(`http://127.0.0.1:${mainPort}`, 5),
+      }),
+    });
+    expect(await naming.json()).toMatchObject({ accepted: true });
+    await vi.waitFor(
+      async () =>
+        expect(await readHandoverOperation(spareBox.node, boxes.spareId, OP)).toMatchObject({
+          state: "filing_assumed",
+          waitingReason: null,
+        }),
+      { timeout: 60_000, interval: 200 },
+    );
+    expect((await readHandoverOperation(mainBox.node, boxes.mainId, OP))?.state).toBe(
+      "filing_relinquished",
+    );
+  }, 180_000);
 
   it("from fetch to acceptance on the real routes, the same bytes through a restart, restricted throughout", async () => {
     const boxes = await prepared();

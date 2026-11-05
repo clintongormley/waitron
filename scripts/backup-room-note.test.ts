@@ -54,6 +54,7 @@ const CO_NAMERS: Readonly<Record<string, string>> = {
   "apps/server/src/restore-stream.ts": "restores into a scratch folder it removes",
   "apps/server/src/start-backup-room-record.ts":
     "names venue.db in prose; unlinks only the start's deletion record",
+  "apps/server/src/testing/handover-placed-copy.ts": "test harness: a spare's own stopped files",
   "apps/server/src/testing/staged-hour-crash.ts": "test harness: a scratch box it removes",
   "apps/server/src/testing/staged-hour-restore.ts": "test harness: a scratch box it removes",
   "apps/server/src/testing/stream-loop-scenario.ts": "test harness: scratch folders it removes",

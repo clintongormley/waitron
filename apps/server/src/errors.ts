@@ -293,6 +293,12 @@ declare module "@waitron/shared" {
      */
     "handover.relinquishment_invalid": Record<string, never>;
     /**
+     * This box's held chart no longer has the operation's source as the main box, so this box asks
+     * the old box for nothing more and does not take over from it. A chart naming the old box again
+     * clears it.
+     */
+    "handover.source_no_longer_main": { operationId: string };
+    /**
      * The file this box accepted is missing, so it does not ask the old box to give up filing: that
      * would leave neither box able to go forward.
      */

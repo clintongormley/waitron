@@ -171,6 +171,8 @@ type Envelope = SignedHandoverEnvelope<FinalStateIndicator>;
  * A real three-record chain and a real capture by M1, its file already at M2's received path. Both
  * boxes share one database, as `handover-fetch.test.ts`'s do: every row is keyed by its box.
  */
+const THIRD_BOX = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
 async function rig() {
   const db = suite.db;
   const m1 = await seedNode(db, "First");
@@ -1842,6 +1844,98 @@ describe("the spare's duty runs the real comparison", () => {
       );
       expect(r.posted.length).toBe(posts);
     }, 60_000);
+
+    describe("a chart that no longer has the old box as the main box", () => {
+      const chartWith = async (
+        r: Awaited<ReturnType<typeof dutyRig>>,
+        term: number,
+        standing: "serving-primary" | "sell-only" | "evicted",
+      ) => {
+        const held = await readNodeMembership(r.db);
+        const body: MembershipDocumentBody = {
+          term,
+          nodes: [
+            ...held!.body.nodes.filter((n) => n.nodeId !== THIRD_BOX),
+            ...(standing === "serving-primary"
+              ? []
+              : [
+                  {
+                    nodeId: THIRD_BOX,
+                    contactUrl: "https://third.example",
+                    standing: "serving-primary" as const,
+                  },
+                ]),
+          ].map((n) => (n.nodeId === r.m1.nodeId ? { ...n, standing } : n)),
+        };
+        await writeNodeMembership(r.db, {
+          ...held!,
+          body,
+          signature: signDocumentBody(body, r.m1Key),
+        });
+      };
+
+      it.each(["sell-only", "evicted"] as const)(
+        "the old box %s before the post: it is never asked to give up filing, and a chart naming it again carries on",
+        async (standing) => {
+          const r = await dutyRig();
+          const restart = vi.fn();
+          r.seam.answer = (text) => r.answerWith(r.relinquishment(text));
+          await r.startAccepting({
+            restart,
+            // After the comparison, which reads the old box's signed answers against this chart.
+            compare: async (operation, indicator, path, options) => {
+              const outcome = await compareFinalCopy(r.deps, operation, indicator, path, options);
+              await chartWith(r, 4, standing);
+              return outcome;
+            },
+          });
+          await vi.waitFor(
+            async () =>
+              expect(await r.row()).toMatchObject({
+                state: "copy_accepted",
+                waitingReason: "handover.source_no_longer_main",
+              }),
+            { timeout: 15_000 },
+          );
+          expect(r.posted).toEqual([]);
+          expect(await readHandoverEvent(suite.node, r.m2.nodeId, OP, "filing_assumed")).toBeNull();
+          expect(restart).not.toHaveBeenCalled();
+
+          await chartWith(r, 5, "serving-primary");
+          await vi.waitFor(async () => expect((await r.row()).state).toBe("filing_assumed"), {
+            timeout: 15_000,
+          });
+          expect((await r.row()).waitingReason).toBeNull();
+          expect(restart).toHaveBeenCalled();
+        },
+        60_000,
+      );
+
+      it("a chart taken while the old box answers: not filing_assumed, and the same answer once it clears", async () => {
+        const r = await dutyRig();
+        let moved = false;
+        r.seam.answer = async (text) => {
+          if (!moved) {
+            moved = true;
+            await chartWith(r, 4, "sell-only");
+          }
+          return r.answerWith(r.relinquishment(text));
+        };
+        await r.startAccepting();
+        await vi.waitFor(
+          async () => expect((await r.row()).waitingReason).toBe("handover.source_no_longer_main"),
+          { timeout: 15_000 },
+        );
+        expect((await r.row()).state).toBe("copy_accepted");
+        expect(r.posted).toHaveLength(1);
+        expect(await readHandoverEvent(suite.node, r.m2.nodeId, OP, "filing_assumed")).toBeNull();
+
+        await chartWith(r, 5, "serving-primary");
+        await vi.waitFor(async () => expect((await r.row()).state).toBe("filing_assumed"), {
+          timeout: 15_000,
+        });
+      }, 60_000);
+    });
 
     it("every failed check of the answer waits at copy_accepted and keeps posting, and the true one is taken", async () => {
       const r = await dutyRig();

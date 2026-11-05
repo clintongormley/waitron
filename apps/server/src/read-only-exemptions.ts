@@ -67,6 +67,13 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     authenticates:
       "HTTPS, a stored operation ready to promote, a promote module operation naming that operation, its source and this box, and the sign-in of a person holding `node.promote`, by email (`handover-preparation.ts`)",
   },
+  {
+    method: "POST",
+    path: "/api/node/handover/:operationId/activate",
+    boxes: ["mirror"],
+    authenticates:
+      "HTTPS, a stored operation ready to promote, a promote module operation naming that operation, its source and this box, and the sign-in of a person holding `node.promote`, by email (`handover-activation.ts`); an operation already activated answers only that",
+  },
 ];
 
 export function pathMatches(rowPath: string, requestPath: string): boolean {

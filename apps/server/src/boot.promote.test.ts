@@ -740,6 +740,129 @@ describe("a mirror's promote and the backup room note", () => {
     }
   }, 60_000);
 
+  it("what a caller must record before the restart runs after the backup note's last deletion, and the restart comes through the seam", async () => {
+    const [venueDir, db, node] = await migratedVenue();
+    const seed = await seedMirrorIdentity(db, node);
+    const secret = await mintBreakGlassSecret({ venue: db, node }, seed.nodeId);
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-before-restart-state-"));
+    const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
+    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
+    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
+    const steps: string[] = [];
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        ...TICK_ENV,
+        WAITRON_NODE_ID: seed.nodeId,
+        WAITRON_VENUE_DIR: venueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_STATE_DIR: stateDir,
+      },
+      undefined,
+      { stepdown: { mount: () => {}, restart: () => steps.push("restart") } },
+    );
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+    try {
+      const request = seed.fixture.request("promote");
+      const promote = (beforeRestart: () => Promise<void>) =>
+        server.promoteMirrorToPrimary!(
+          { oldNodeNeutralised: true },
+          (context, consume) => {
+            // Written after the promotion's first deletion, so only the last one can remove it.
+            writeFileSync(note, "{}");
+            return withPromotionModuleOperation(
+              {
+                db: context.db,
+                node: context.nodeDb,
+                nodeId: seed.nodeId,
+                credentialKeyRing: TOTP_KEY_RING,
+                modules: ALL_MODULES,
+              },
+              { binding: request.binding, input: request.input },
+              { breakGlass: secret },
+              (runner) => runner(context, consume),
+            );
+          },
+          beforeRestart,
+        );
+      await promote(async () => {
+        steps.push(`before restart, note ${existsSync(note) ? "there" : "gone"}`);
+        await delay(20);
+        steps.push("recorded");
+      });
+      await delay(50);
+      expect(steps).toEqual(["before restart, note gone", "recorded", "restart"]);
+      expect(killSpy).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+      await delay(50);
+      killSpy.mockRestore();
+      vi.unstubAllEnvs();
+      await rm(stateDir, { recursive: true, force: true });
+      await rm(venueDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("a failed record still restarts, so the start that follows can finish it", async () => {
+    const [venueDir, db, node] = await migratedVenue();
+    const seed = await seedMirrorIdentity(db, node);
+    const secret = await mintBreakGlassSecret({ venue: db, node }, seed.nodeId);
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-before-restart-state-"));
+    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
+    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
+    const restart = vi.fn();
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        ...TICK_ENV,
+        WAITRON_NODE_ID: seed.nodeId,
+        WAITRON_VENUE_DIR: venueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_STATE_DIR: stateDir,
+      },
+      undefined,
+      { stepdown: { mount: () => {}, restart } },
+    );
+    try {
+      const request = seed.fixture.request("promote");
+      await expect(
+        server.promoteMirrorToPrimary!(
+          { oldNodeNeutralised: true },
+          (context, consume) =>
+            withPromotionModuleOperation(
+              {
+                db: context.db,
+                node: context.nodeDb,
+                nodeId: seed.nodeId,
+                credentialKeyRing: TOTP_KEY_RING,
+                modules: ALL_MODULES,
+              },
+              { binding: request.binding, input: request.input },
+              { breakGlass: secret },
+              (runner) => runner(context, consume),
+            ),
+          async () => {
+            throw new Error("record lost");
+          },
+        ),
+      ).rejects.toThrow("record lost");
+      await delay(50);
+      expect(restart).toHaveBeenCalledTimes(1);
+    } finally {
+      await server.close();
+      await delay(50);
+      vi.unstubAllEnvs();
+      await rm(stateDir, { recursive: true, force: true });
+      await rm(venueDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("restarts once and logs the failure when the note cannot be deleted after promoting", async () => {
     const [venueDir, db, node] = await migratedVenue();
     const seed = await seedMirrorIdentity(db, node);
