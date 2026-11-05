@@ -164,15 +164,18 @@ Line numbers below were measured on `c3a4f8a56a`.
   Comparing with the original printer's current settings would be wrong after a recalibration (A404's
   calibration changes both). Receipts, kitchen tickets and refund receipts all begin with `ESC @`
   then the print area: `init()` pushes `1B 40` (`escpos.ts:63-67`) and `printArea(w)` pushes
-  `1D 4C 00 00` then `1D 57`, `w & 0xff`, `w >> 8` (`escpos.ts:139-143`), called first by
-  `formatReceipt` (`receipt-ticket.ts:81-83`), `formatKitchenTicket` (`kitchen-ticket.ts:388-390`)
+  `1D 4C 00 00` then `1D 57`, `w & 0xff`, `w >> 8` (`escpos.ts:140-143`), called first by
+  `formatReceipt` (`receipt-ticket.ts:55-57`, drawing in `drawReceipt` at `:81-83`), `formatKitchenTicket` (`kitchen-ticket.ts:388-390`)
   and the refund receipt (`tender-refund-receipt.ts:86-88`); `esc()`'s constructor pushes nothing
   (`escpos.ts:53-56`). So bytes 0–9 are `1B 40 1D 4C 00 00 1D 57 nL nH` and the width is
   `nL + 256 × nH`. The four settings' widths, 360, 384, 512 and 576, are all different
   (`layout.ts:34-39`), so a width names exactly one (paper width, resolution) pair, resolution
   included. A job whose first ten bytes do not have that shape, or whose width is not one of the
-  four, reprints only on its own printer. Whether every builder of a `sale_id` job starts this way
-  was **not checked** beyond `formatReceipt`; one that does not falls back to its own printer.
+  four, reprints only on its own printer. Every `sale_id` job is queued at `receipt-print.ts:338`, `:364` or `:533`, all through
+  `buildReceiptBytes` → `formatReceipt`; real payloads for receipts (with logo and duplicate flag),
+  roll invoices, kitchen tickets (single and joined) and refund receipts at all four settings were
+  built by the plan's narrow check and every one began with this header. A job that does not still
+  falls back to its own printer.
 - Paper width and resolution are stored only for receipt printers (`printers.paper_width`,
   `printers.resolution`, `packages/db/src/schema/printers.ts:55-56`). **A4 printers have no print
   jobs today:** `print_jobs.printer_id` references `printers` alone
@@ -274,7 +277,7 @@ Said plainly here, in the backlog (Task 20) and in each PR description.
 - **Not built, by design:** switching a disabled A4 printer back on and changing its address from
   its details. Enabling is refused on purpose: "Enabling needs current capabilities and a current
   agent, which only a fresh discovery entry gives: it goes through the POST"
-  (`page-printers-api.ts:164-165`, `page_printer.rediscover` at `:178`). The address is part of the
+  (`page-printers-api.ts:166-167`, `page_printer.rediscover` at `:178`). The address is part of the
   queue's identity (the unique endpoint index, `page-printers.ts:29`) and its format and media come
   from what that queue answered at discovery, so a new address also goes through Add a printer
   (this reading of the address case is mine; the comment names enabling only).
@@ -904,7 +907,7 @@ and list each in the commit.
   on the contribution object (beside `readProfileServiceScopes`, `:228`)
 - Test: `packages/venue-service/src/profile-access.test.ts` (beside the `readProfileServiceScopes`
   cases, `:508`); and `packages/venue-service/src/service.test.ts`'s list of the contribution's
-  method names (`:89`) gains `"readDepartmentNames"`
+  method names (`:89`, compared exactly and sorted) gains `"readDepartmentNames"` at its sorted position
 
 - [ ] **Step 1: Write the failing test.** `it("reads the names of the departments asked for, switched off ones included, and nothing for an unknown id")`
   — `useVenueDb`; seed two departments, switch one off; ask for both plus a random UUID: two rows,
