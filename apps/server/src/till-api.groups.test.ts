@@ -1311,17 +1311,20 @@ describe("POST /api/parties/:id/served, /unserved and /groups/:gid/served", () =
 describe("POST /api/parties/:id/served refusals that need their own setup", () => {
   it("refuses 409 group.line_held for a held line outside any group that needs no kitchen", async () => {
     const party = await seated();
-    const [pulpo] = await inTx(venue, (tx) =>
+    const [octopusProduct] = await inTx(venue, (tx) =>
       tx.select({ id: products.id }).from(products).where(eq(products.name, "Pulpo")),
     );
-    const pulpoCell = { row: { kind: "product" as const, productId: pulpo!.id }, zoneId: null };
-    await inTx(venue, (tx) => setRoutingCell(tx, pulpoCell, { kind: "no_preparation" }));
+    const octopusRoutingCell = {
+      row: { kind: "product" as const, productId: octopusProduct!.id },
+      zoneId: null,
+    };
+    await inTx(venue, (tx) => setRoutingCell(tx, octopusRoutingCell, { kind: "no_preparation" }));
     try {
       await inTx(venue, (tx) =>
         addTabRound(tx, venue.cfg, party.tabId, [{ ...dish("Pulpo"), hold: true }]),
       );
     } finally {
-      await inTx(venue, (tx) => clearRoutingCell(tx, pulpoCell));
+      await inTx(venue, (tx) => clearRoutingCell(tx, octopusRoutingCell));
     }
     const [line] = await inTx(venue, (tx) =>
       tx

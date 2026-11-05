@@ -407,8 +407,8 @@ until A977).
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Other private naming sites remain in the till's boot and counter-payment suites and
-  other server till-API (groups plus shared-fixture consumers in split-bill and move-bill), fiscal-sale and order fixtures. These include accented move-line bindings
-  and shared helper consumers such as `made-here.test.ts`.
+  shared-fixture consumers in the server split-bill and move-bill suites, other order fixtures,
+  and shared helper consumers such as `made-here.test.ts`. Accented move-line bindings also remain.
   Fixture strings remain separate from this naming work. The counter, filing and adjustment
   order-portion suites retain Spanish dish samples under A976; counter and adjustment test
   descriptions also stay with A976.
@@ -801,8 +801,8 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 ## A974. Finish the remaining English names in general code.
 
 - **A974. Finish the remaining English names in general code.** Remaining names include till boot and
-  counter-payment fixtures; server till-API (groups plus shared-fixture consumers in split-bill and move-bill), fiscal-sale and other order fixtures;
-  shared helper consumers and file names.
+  counter-payment fixtures; shared-fixture consumers in the server split-bill and move-bill suites,
+  other order fixtures, shared helper consumers and file names.
   Keep accented search fixtures unchanged. Other fixture text stays with A976, including catalogue
   display names, recipe ingredient names and seasonal venue and zone names, printer-screen display
   labels, counter-screen display text and station-screen display names, plus kitchen-ticket grouping,
@@ -810,16 +810,33 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   variant media fixtures and device/printer deletion fixture text.
   [Detail](architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
+### A974 review assertion gaps
+
+Strengthen the no-kitchen served-refusal setup in `till-api.groups.test.ts` and the extras/replay
+checks in `till-api.fiscal-sale-paths.test.ts`. In the naming review’s installed disposable checkout,
+these simultaneous substitutions left the seven selected cases passing: omit the no-preparation
+routing write; rename the parent product instead of the cheese extra; supply the extras-list id
+instead of the cheese product id in the refused frozen input; read the settled working-order
+count instead of the fiscal-record count. These observations identify gaps in those checks,
+not demonstrated product failures. Retain every existing refusal, frozen-name and count assertion;
+add observations that distinguish the intended setup and each relevant result.
+
+Repeat the controlled substitutions with the two complete suites, or first select
+`-t 'needs no kitchen|files an extras pick|a sale cannot hand over|park & retrieve'`.
+The private-name AST replay and types caught reference mistakes that the current value-only
+checks did not.
+
 ## A976. Finish the server's English test-venue defaults.
 
 - **A976. Finish the server's English test-venue defaults.** Spanish display samples remain in
   `party-bill-actions.test.ts`, `party-move-bill.test.ts`, `till-api.reprint.test.ts`,
   `order-portions.counter.test.ts`, `order-portions.filing.test.ts`,
   `order-portions.adjustments.test.ts`, `till-api.transfer.test.ts`,
-  `till-api.move-bill.test.ts`, `till-api.split-bill.test.ts` and
-  `portion-sale-projection.test.ts`; these belong to A976 rather than the private-name work
-  in A974. The counter and adjustment order-portion suites also have Spanish dish words
-  in their test descriptions. Bookings’ native suites use English
+  `till-api.move-bill.test.ts`, `till-api.split-bill.test.ts`, `till-api.groups.test.ts`,
+  `till-api.fiscal-sale-paths.test.ts` and `portion-sale-projection.test.ts`; these belong to
+  A976 rather than the private-name work in A974. Fiscal-sale descriptions and the counter
+  and adjustment order-portion descriptions also retain Spanish words. The fiscal-sale
+  suite’s string-selected SQL count alias stays with its fixture text. Bookings’ native suites use English
   sample location, operation, contact and note text. Native provisioning and floor-plan-set route
   suites use English venue, operation and menu samples; their Spanish locale and starter-content
   checks remain. UI switch behavior and accessibility suites
