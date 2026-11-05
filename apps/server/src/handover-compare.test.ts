@@ -579,13 +579,18 @@ describe("compareFinalCopy", () => {
       );
     });
 
-    it("a set with no journal in the copy is not ahead", async () => {
+    it("a toggleable set this box switches off may have no journal: neither ahead nor behind", async () => {
       const r = await rig();
-      const set = manifestSets()
+      const off = manifestSets()
         .filter((one) => one.database !== "node")
         .at(-1)!;
-      alter(r.path, `drop table ${set.table}`);
-      expect(await r.compareRow(await r.resignedForFile())).toEqual({ ok: true });
+      expect(ALL_MODULES.find((module) => module.name === off.name)?.tier).toBe("toggleable");
+      alter(r.path, `drop table ${off.table}`);
+      const envelope = await r.resignedForFile((body) => {
+        body.snapshot.modules = body.snapshot.modules.filter((one) => one.name !== off.name);
+      });
+      const modules = ALL_MODULES.filter((module) => module.name !== off.name);
+      expect(await r.compareRow(envelope, { modules })).toEqual({ ok: true });
     });
 
     it("a node.db set is not looked for in the copy, even with a table of its name", async () => {
@@ -679,6 +684,26 @@ describe("compareFinalCopy", () => {
       });
       const modules = ALL_MODULES.filter((module) => module.name !== off);
       expect(await r.compareRow(envelope, { modules })).toEqual({ ok: true });
+    });
+
+    it("no journal for a set this box switches on is refused: that copy could not migrate", async () => {
+      const r = await rig();
+      alter(r.path, `drop table ${setNamed("core").table}`);
+      // Failing case: `{ ok: true }`, and `applyMigrations` on the copy then fails
+      // `migrations.apply_failed` after the old box was told it can relinquish.
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("handover.modules_differ", { set: "core" }),
+      );
+    });
+
+    it("a toggleable set this box switches on is held to its journal too", async () => {
+      const r = await rig();
+      const on = "staffing";
+      expect(ALL_MODULES.find((module) => module.name === on)?.tier).toBe("toggleable");
+      alter(r.path, `drop table ${setNamed(on).table}`);
+      expect(await r.compareRow(await r.resignedForFile())).toEqual(
+        refused("handover.modules_differ", { set: on }),
+      );
     });
 
     it("a node.db set is not looked for in the copy", async () => {
@@ -1458,6 +1483,31 @@ describe("the spare's duty runs the real comparison", () => {
     expect(r.copyReads()).toBeGreaterThan(1);
     expect(existsSync(r.path)).toBe(true);
     expect((await r.row()).state).toBe("prepared");
+  }, 60_000);
+
+  it("a copy with no journal for an enabled set waits refused, with M1 stopped and no acceptance sent", async () => {
+    const r = await dutyRig();
+    const coreJournal = manifestSets().find((set) => set.name === "core")!.table;
+    const download = vi.fn(async (...args: Parameters<typeof boxDownload>) => {
+      const answer = await boxDownload(...args);
+      alter(args[2], `drop table ${coreJournal}`);
+      return answer;
+    });
+    await r.startAccepting({
+      download,
+      compare: async (operation, _indicator, path, options) =>
+        compareFinalCopy(r.deps, operation, await r.resignedForFile(), path, options),
+    });
+    await vi.waitFor(
+      async () => expect((await r.row()).waitingReason).toBe("handover.modules_differ"),
+      { timeout: 15_000 },
+    );
+    expect((await r.row()).state).toBe("prepared");
+    expect(r.posted).toEqual([]);
+    expect((await r.m1Row()).state).toBe("source_stepped_down");
+    expect(await readHandoverRestriction(suite.node, r.m1.nodeId)).toMatchObject({
+      kind: "handed-over",
+    });
   }, 60_000);
 
   it("a setting that differs keeps the file, and a person's fix lets a later compare accept it", async () => {

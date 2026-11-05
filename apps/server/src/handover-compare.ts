@@ -236,8 +236,8 @@ async function behindThisImage(
   root: string | null,
 ): Promise<Refusal | null> {
   for (const { migrations: set } of modules) {
-    if (set.database === "node" || !(await hasTable(query, set.table))) continue;
-    const held = await journalOf(query, set.table);
+    if (set.database === "node") continue;
+    const held = (await hasTable(query, set.table)) ? await journalOf(query, set.table) : [];
     if (unknownHashes(imageMigrationHashes(set, root), held).length > 0) {
       return refuse("handover.modules_differ", { set: set.name });
     }
