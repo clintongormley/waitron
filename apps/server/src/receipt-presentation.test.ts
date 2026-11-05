@@ -83,7 +83,7 @@ async function fixture(header: "department" | "null" | "absent" = "department") 
       .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
   };
   const read = (language = "es-ES") =>
-    withTransaction(suite.db, (tx) => readReceiptPresentation(tx, cfg, sale!.id, language));
+    withTransaction(suite.db, (tx) => readReceiptPresentation(tx, sale!.id, language));
   return { cfg, departmentId: department!.id, read, authored };
 }
 

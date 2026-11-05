@@ -2,14 +2,12 @@ import type { Transaction } from "@waitron/db";
 import { readReceiptLanguage } from "@waitron/catalogue";
 import { resolveReceiptTrim, type ReceiptPresentation } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
-import type { TradingContext } from "./trading-context.js";
 import { readVenueAddress } from "./venue-address.js";
 import { readPresentations } from "@waitron/media";
 import { readVenueLogoName } from "./receipt-venue-logo.js";
 
 export async function readReceiptPresentation(
   tx: Transaction,
-  cfg: Pick<TradingContext, never>,
   saleId: string,
   printedLanguage: string,
 ): Promise<
@@ -27,7 +25,6 @@ export async function readReceiptPresentation(
       : await VENUE_SERVICE.readPrintedDepartmentReceipt(
           tx,
           {
-            ...cfg,
             receiptLanguages: [...new Set([printedLanguage, current.locale])],
             receiptDiagnostic: diagnostic,
           },

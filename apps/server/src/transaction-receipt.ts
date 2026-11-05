@@ -136,7 +136,7 @@ export async function readTransactionReceipt(
     ...(groupId === undefined
       ? { orderLabel: null, orderNumber: 0 }
       : await readReceiptOrder(tx, groupId)),
-    ...(await readReceiptPresentation(tx, cfg, saleId, sale.locale)),
+    ...(await readReceiptPresentation(tx, saleId, sale.locale)),
     ...issuer,
     ...(issuer.issuer === undefined && taxpayer !== null
       ? {

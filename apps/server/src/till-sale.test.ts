@@ -3021,7 +3021,7 @@ describe("receipt presentation sources", () => {
       .values({ id: 1, receipt: global })
       .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt: global } });
     const absent = await withTransaction(suite.db, (tx) =>
-      readReceiptPresentation(tx, cfg, randomUUID(), "en-GB"),
+      readReceiptPresentation(tx, randomUUID(), "en-GB"),
     );
     expect(absent).toEqual({
       receiptHeader: undefined,
@@ -3061,14 +3061,12 @@ describe("receipt presentation sources", () => {
       printTradingName: true,
     });
     const noDepartment = await withTransaction(suite.db, (tx) =>
-      readReceiptPresentation(tx, cfg, sale.saleId, "es-ES"),
+      readReceiptPresentation(tx, sale.saleId, "es-ES"),
     );
     expect(noDepartment).toEqual(absent);
     await suite.db.update(tenantReceipts).set({ receipt: {} });
     expect(
-      await withTransaction(suite.db, (tx) =>
-        readReceiptPresentation(tx, cfg, randomUUID(), "en-GB"),
-      ),
+      await withTransaction(suite.db, (tx) => readReceiptPresentation(tx, randomUUID(), "en-GB")),
     ).toEqual({
       receiptHeader: undefined,
       receiptTrim: {},
@@ -3125,7 +3123,7 @@ describe("receipt presentation sources", () => {
             sql`alter table department_receipts rename to test_hidden_department_receipts`,
           );
         const presentation = await withTransaction(suite.db, (tx) =>
-          readReceiptPresentation(tx, cfg, saved!.saleId, "es-ES"),
+          readReceiptPresentation(tx, saved!.saleId, "es-ES"),
         );
         expect(presentation.receiptTrim).toEqual(
           source === "venue" ? { footerMessage: "Own footer", email: "own@example.test" } : {},
