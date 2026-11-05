@@ -39,6 +39,7 @@ import type { TillUnpaidDepartureDialog } from "./widgets/unpaid-departure-dialo
 import type { TillCancelCreditDialog } from "./widgets/cancel-credit-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
+import { billLabel } from "./state/bill-state.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import { DRAFT_SAVE_DELAY_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import type {
@@ -321,7 +322,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     sendLines: vi.fn().mockResolvedValue(undefined),
     moveGuests: vi.fn().mockResolvedValue({ partyId: "v1", billIds: ["wo-4"] }),
     joinTables: vi.fn().mockResolvedValue({ partyId: "v1", billIds: ["wo-4"] }),
-    splitTable: vi.fn().mockResolvedValue({ partyId: "v-split", billId: "wo-check" }),
+    splitTable: vi.fn().mockResolvedValue({ partyId: "v-split", billIds: ["wo-check"] }),
     setPartyName: vi.fn().mockResolvedValue({ revision: 4, name: "Ana" }),
     setPartyGuests: vi.fn().mockResolvedValue({ revision: 4, guestCount: 4 }),
     setBillName: vi.fn().mockResolvedValue({ revision: 4, billNumber: 1, billName: "Clint" }),
@@ -1853,13 +1854,17 @@ describe("till-app: the party on a handheld", () => {
         }),
         splitTable: vi.fn(async () => {
           split = true;
-          return { partyId: "v-split", billId: "wo-check" };
+          return { partyId: "v-split", billIds: ["wo-check"] };
         }),
       });
       emit(await openOnPhone(el), "move-dishes", { lineIds: ["line-1"], toBillId: null });
       await flush(el);
       expect(orderCard(el)!.orderId).toBe("wo-check");
-      emit(orderCard(el)!, "split-table", { tableId: "t5", billId: "wo-check" });
+      emit(orderCard(el)!, "split-table", {
+        tableId: "t5",
+        selection: oneBill("wo-check"),
+        guestCounts: { staying: null, leaving: null },
+      });
       await flush(el);
       expect(heldRead).toBe(true);
       await selectTab(el, "floor");
@@ -1900,15 +1905,6 @@ describe("till-app: the party on a handheld", () => {
       detail: { billId: "wo-4", name: "Ana" },
       dialog: "till-bill-name-dialog",
       cancel: "bill-name-cancel",
-    },
-    {
-      window: "Split a table",
-      method: "splitTable",
-      field: "guestCounts.leaving",
-      event: "split-table",
-      detail: { tableId: "t5", billId: null, guestCounts: { staying: 3, leaving: 1000 } },
-      dialog: "till-split-guests-dialog",
-      cancel: "split-guests-cancel",
     },
   ])(
     "does not reopen the $window window a refusal opened when a handheld comes back to its order card",
@@ -2294,13 +2290,17 @@ describe("till-app: table actions on the party", () => {
       getTablesState: reads.getTablesState,
       splitTable: vi.fn(async () => {
         reads.other.acted = true;
-        return { partyId: "v-split", billId: "wo-check" };
+        return { partyId: "v-split", billIds: ["wo-check"] };
       }),
     });
     const order = await openMesa(el, "t5");
 
     const guests = { staying: null, leaving: null };
-    emit(order, "split-table", { tableId: "t5", billId: "wo-check", guestCounts: guests });
+    emit(order, "split-table", {
+      tableId: "t5",
+      selection: oneBill("wo-check"),
+      guestCounts: guests,
+    });
     await flush(el);
 
     expect(api.splitTable).toHaveBeenCalledWith(
@@ -2313,7 +2313,11 @@ describe("till-app: table actions on the party", () => {
     );
     expect(tableOrder(el)!.party).toEqual(afterSplit[0]!.party);
 
-    emit(tableOrder(el)!, "split-table", { tableId: "t4", billId: null, guestCounts: guests });
+    emit(tableOrder(el)!, "split-table", {
+      tableId: "t4",
+      selection: NO_BILLS,
+      guestCounts: guests,
+    });
     await flush(el);
     expect(api.splitTable).toHaveBeenLastCalledWith("v1", "t4", NO_BILLS, 4, [], guests);
   });
@@ -2335,14 +2339,14 @@ describe("till-app: table actions on the party", () => {
       getTablesState: reads.getTablesState,
       splitTable: vi.fn(async () => {
         reads.other.acted = true;
-        return { partyId: "v-split", billId: "wo-new" };
+        return { partyId: "v-split", billIds: ["wo-new"] };
       }),
     });
     const order = await openMesa(el, "t4");
 
     emit(order, "split-table", {
       tableId: "t5",
-      billId: null,
+      selection: NO_BILLS,
       guestCounts: { staying: 3, leaving: 2 },
     });
     await flush(el);
@@ -2352,158 +2356,6 @@ describe("till-app: table actions on the party", () => {
       leaving: 2,
     });
     expect(tableOrder(el)!.party?.guestCount).toBe(3);
-  });
-
-  describe("a refusal of one side's count of a split", () => {
-    const atTwo = seated({}, { tableIds: ["t4", "t5"] });
-    const table5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
-    const floorOfTwo = () => vi.fn().mockResolvedValue([atTwo, table5, table7, table9]);
-
-    it.each([
-      ["guestCounts.staying", "staying", { staying: 1000, leaving: 2 }, "1000", "2"],
-      ["guestCounts.leaving", "leaving", { staying: 3, leaving: null }, "3", ""],
-    ] as const)(
-      "hands %s back to Split a table's guests window, beside the field, without a banner",
-      async (field, side, guests, staying, leaving) => {
-        const { el } = await mountApp({
-          getTablesState: floorOfTwo(),
-          splitTable: vi.fn().mockRejectedValue({ code: "management.request_invalid", field }),
-        });
-        const order = await openMesa(el, "t4");
-
-        emit(order, "split-table", { tableId: "t5", billId: "wo-check", guestCounts: guests });
-        await flush(el);
-
-        expect(api.splitTable).toHaveBeenCalledWith(
-          "v1",
-          "t5",
-          oneBill("wo-check"),
-          3,
-          [{ billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null }],
-          guests,
-        );
-        expect(tableOrder(el)!.splitRefusal).toEqual({
-          tableId: "t5",
-          billId: "wo-check",
-          staying,
-          leaving,
-          field: side,
-          message: t("seat.guest_count_invalid"),
-        });
-        const dialog = tableOrder(el)!.shadowRoot!.querySelector("till-split-guests-dialog")!;
-        expect(dialog.staying).toBe(staying);
-        expect(dialog.leaving).toBe(leaving);
-        expect(banner(el)).toBeNull();
-      },
-    );
-
-    it("hands the refusal to the order card on a handheld", async () => {
-      const { el } = await mountApp({
-        getTablesState: floorOfTwo(),
-        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phone }),
-        getDeviceIdentity: vi
-          .fn()
-          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
-        splitTable: vi
-          .fn()
-          .mockRejectedValue({ code: "management.request_invalid", field: "guestCounts.leaving" }),
-      });
-      await flush(el);
-      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
-      await flush(el);
-      await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
-      emit(shell(el), "open-table", { tableId: "t4", seated: true });
-      await flush(el);
-      const card = () =>
-        tabGrid(el)!.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
-
-      emit(card(), "split-table", {
-        tableId: "t5",
-        billId: null,
-        guestCounts: { staying: 3, leaving: 1000 },
-      });
-      await flush(el);
-
-      expect(card().splitRefusal).toMatchObject({ field: "leaving", leaving: "1000" });
-      const dialog = card().shadowRoot!.querySelector("till-split-guests-dialog")!;
-      expect(dialog.leavingRefusal).toBe(t("seat.guest_count_invalid"));
-    });
-
-    it("says a refusal naming no field of the window on the banner", async () => {
-      const { el } = await mountApp({
-        getTablesState: floorOfTwo(),
-        splitTable: vi
-          .fn()
-          .mockRejectedValue({ code: "management.request_invalid", field: "guestCounts" }),
-      });
-      const order = await openMesa(el, "t4");
-
-      emit(order, "split-table", {
-        tableId: "t5",
-        billId: null,
-        guestCounts: { staying: 3, leaving: 2 },
-      });
-      await flush(el);
-
-      expect(tableOrder(el)!.splitRefusal).toBeNull();
-      expect(tableOrder(el)!.shadowRoot!.querySelector("till-split-guests-dialog")).toBeNull();
-      expect(banner(el)).not.toBeNull();
-    });
-
-    it("drops a refusal that arrives after the waiter has opened another party's table", async () => {
-      let refuse!: (reason: unknown) => void;
-      const { el } = await mountApp({
-        getTablesState: floorOfTwo(),
-        splitTable: vi.fn(
-          () =>
-            new Promise<never>((_resolve, reject) => {
-              refuse = reject;
-            }),
-        ),
-      });
-      const order = await openMesa(el, "t4");
-      emit(order, "split-table", {
-        tableId: "t5",
-        billId: null,
-        guestCounts: { staying: 3, leaving: 1000 },
-      });
-      await flush(el);
-      emit(tableOrder(el)!, "back-to-floor");
-      await flush(el);
-      emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
-      await flush(el);
-
-      refuse({ code: "management.request_invalid", field: "guestCounts.leaving" });
-      await flush(el);
-
-      expect(tableOrder(el)!.party?.id).toBe("v7");
-      expect(tableOrder(el)!.splitRefusal).toBeNull();
-      expect(tableOrder(el)!.shadowRoot!.querySelector("till-split-guests-dialog")).toBeNull();
-      expect(banner(el)).toBeNull();
-    });
-
-    it("does not hand a refused split to the next table opened", async () => {
-      const { el } = await mountApp({
-        getTablesState: floorOfTwo(),
-        splitTable: vi
-          .fn()
-          .mockRejectedValue({ code: "management.request_invalid", field: "guestCounts.leaving" }),
-      });
-      const order = await openMesa(el, "t4");
-      emit(order, "split-table", {
-        tableId: "t5",
-        billId: null,
-        guestCounts: { staying: 3, leaving: 1000 },
-      });
-      await flush(el);
-
-      emit(tableOrder(el)!, "back-to-floor");
-      await flush(el);
-      emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
-      await flush(el);
-
-      expect(tableOrder(el)!.splitRefusal).toBeNull();
-    });
   });
 
   it("shows the staying party's remaining bill once the bill on screen has gone with the table split off", async () => {
@@ -2518,7 +2370,7 @@ describe("till-app: table actions on the party", () => {
       getPartyBills: vi.fn(async () => (reads.other.acted ? [tabBill] : [tabBill, checkBill])),
       splitTable: vi.fn(async () => {
         reads.other.acted = true;
-        return { partyId: "v-split", billId: "wo-check" };
+        return { partyId: "v-split", billIds: ["wo-check"] };
       }),
     });
     const order = await openMesa(el);
@@ -2526,7 +2378,11 @@ describe("till-app: table actions on the party", () => {
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-check");
 
-    emit(tableOrder(el)!, "split-table", { tableId: "t5", billId: "wo-check" });
+    emit(tableOrder(el)!, "split-table", {
+      tableId: "t5",
+      selection: oneBill("wo-check"),
+      guestCounts: { staying: null, leaving: null },
+    });
     await flush(el);
 
     expect(tableOrder(el)!.orderId).toBe("wo-4");
@@ -2540,9 +2396,28 @@ describe("till-app: table actions on the party", () => {
     ["service_zone.mode_incompatible", "move-guests", { toTableId: "t9" }, "moveGuests"],
     ["service_zone.join_mismatch", "join-tables", { tableId: "t9" }, "joinTables"],
     ["party.not_open", "join-tables", { tableId: "t9" }, "joinTables"],
-    ["table.not_shared", "split-table", { tableId: "t4", billId: null }, "splitTable"],
-    ["table.not_joined", "split-table", { tableId: "t9", billId: null }, "splitTable"],
-    ["group.held_leaves_party", "split-table", { tableId: "t4", billId: "wo-check" }, "splitTable"],
+    [
+      "table.not_shared",
+      "split-table",
+      { tableId: "t4", selection: NO_BILLS, guestCounts: { staying: null, leaving: null } },
+      "splitTable",
+    ],
+    [
+      "table.not_joined",
+      "split-table",
+      { tableId: "t9", selection: NO_BILLS, guestCounts: { staying: null, leaving: null } },
+      "splitTable",
+    ],
+    [
+      "group.held_leaves_party",
+      "split-table",
+      {
+        tableId: "t4",
+        selection: oneBill("wo-check"),
+        guestCounts: { staying: null, leaving: null },
+      },
+      "splitTable",
+    ],
     ["party.not_open", "name-party", { name: "Ana" }, "setPartyName"],
     ["party.not_open", "guests-party", { guestCount: 4 }, "setPartyGuests"],
   ] as const)("shows %s in its own words after %s", async (code, type, detail, method) => {
@@ -3755,14 +3630,18 @@ describe("till-app: a table action's answer once the waiter has opened another p
       }),
       splitTable: vi.fn(async () => {
         split = true;
-        return { partyId: "v-split", billId: "wo-check" };
+        return { partyId: "v-split", billIds: ["wo-check"] };
       }),
     });
     const order = await openMesa(el);
     emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-check");
-    emit(tableOrder(el)!, "split-table", { tableId: "t5", billId: "wo-check" });
+    emit(tableOrder(el)!, "split-table", {
+      tableId: "t5",
+      selection: oneBill("wo-check"),
+      guestCounts: { staying: null, leaving: null },
+    });
     await flush(el);
     expect(heldRead).toBe(true);
     emit(tableOrder(el)!, "back-to-floor");
@@ -4798,7 +4677,7 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
           const splitTable = vi.fn(async () => {
             split = true;
             holdFloor = true;
-            return { partyId: "v-split", billId: "wo-check" };
+            return { partyId: "v-split", billIds: ["wo-check"] };
           });
           const read = heldBills(() => (split ? [tabBill] : [tabBill, checkBill]));
           const { el } = await mountApp({ getPartyBills: read.bills, getTablesState, splitTable });
@@ -4813,7 +4692,7 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
           expect(read.held()).toBe(true);
           emit(tableOrder(el)!, "split-table", {
             tableId: "t5",
-            billId: "wo-check",
+            selection: oneBill("wo-check"),
             guestCounts: { staying: null, leaving: null },
           });
           await flush(el, 6);
@@ -11806,7 +11685,11 @@ describe("till-app: split-table editing observations", () => {
       getTablesState: vi.fn().mockResolvedValue([atTwo, table5, table7]),
       listDrafts: observations(),
     });
-    emit(await openMesa(el), "split-table", { tableId: "t5", billId, guestCounts: guests });
+    emit(await openMesa(el), "split-table", {
+      tableId: "t5",
+      selection: billId === null ? NO_BILLS : oneBill(billId),
+      guestCounts: guests,
+    });
     await flush(el);
     expect(api.splitTable).toHaveBeenCalledExactlyOnceWith(
       "v1",
@@ -11827,7 +11710,7 @@ describe("till-app: split-table editing observations", () => {
     });
     emit(await openMesa(el), "split-table", {
       tableId: "t5",
-      billId: "wo-check",
+      selection: oneBill("wo-check"),
       guestCounts: guests,
     });
     await flush(el);
@@ -11838,8 +11721,8 @@ describe("till-app: split-table editing observations", () => {
   it.each(["success", "refusal"])("refreshes bill editing metadata after %s", async (outcome) => {
     const listDrafts = observations();
     const splitTable = vi.fn(async () => {
-      if (outcome === "refusal") throw { code: "draft.out_of_date" };
-      return { partyId: "v-split", billId: "wo-check" };
+      if (outcome === "refusal") throw { code: "draft.out_of_date", billId: "wo-check" };
+      return { partyId: "v-split", billIds: ["wo-check"] };
     });
     const { el } = await mountApp({
       getTablesState: vi.fn().mockResolvedValue([atTwo, table5, table7]),
@@ -11848,12 +11731,20 @@ describe("till-app: split-table editing observations", () => {
     });
     const order = await openMesa(el);
     const reads = listDrafts.mock.calls.length;
-    emit(order, "split-table", { tableId: "t5", billId: "wo-check", guestCounts: guests });
+    emit(order, "split-table", {
+      tableId: "t5",
+      selection: oneBill("wo-check"),
+      guestCounts: guests,
+    });
     await flush(el, 5);
     expect(splitTable).toHaveBeenCalledOnce();
     expect(listDrafts.mock.calls.length).toBeGreaterThan(reads);
-    if (outcome === "refusal")
-      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+    if (outcome === "refusal") {
+      expect(banner(el)).toBeNull();
+      expect(
+        tableOrder(el)!.shadowRoot!.querySelector("[data-split-refusal]")!.textContent,
+      ).toContain(t("table.split_changed").replace("{bill}", billLabel(checkBill)));
+    }
   });
 
   for (const change of ["API", "bill", "party"] as const) {
@@ -11868,7 +11759,7 @@ describe("till-app: split-table editing observations", () => {
         });
         emit(await openMesa(el), "split-table", {
           tableId: "t5",
-          billId: "wo-check",
+          selection: oneBill("wo-check"),
           guestCounts: guests,
         });
         await expect.poll(() => pending.call.mock.calls.length).toBe(1);
@@ -11893,7 +11784,7 @@ describe("till-app: split-table editing observations", () => {
           bills: vi.mocked(current.getPartyBills).mock.calls.length,
         };
         if (outcome === "success")
-          pending.answer.settle({ partyId: "v-split", billId: "wo-check" });
+          pending.answer.settle({ partyId: "v-split", billIds: ["wo-check"] });
         else
           pending.answer.refuse(
             outcome === "guest refusal"

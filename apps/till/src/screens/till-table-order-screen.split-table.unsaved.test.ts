@@ -99,7 +99,6 @@ class SplitTableLeaveApp extends LitElement {
         .bills=${bills}
         .lines=${[]}
         .tables=${tables}
-        .splitPanelLive=${true}
         .splitRead=${splitRead}
         .personId=${"me"}
         @split-table=${this.accept}

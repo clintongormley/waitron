@@ -223,26 +223,6 @@ describe("till-app: the read behind Split a table's panel", () => {
     expect(tableOrder(el)!.splitRead).toBe(read);
   });
 
-  it("still does what it did for the old event, which names a bill: no read, and its prompt sends", async () => {
-    server.bills.add("b2");
-    const el = await mounted("desktop", {
-      splitTable: vi.fn().mockResolvedValue({ partyId: "v2", billId: "b2" }),
-    });
-    const prompt = {};
-    emit(tableOrder(el)!, "split-table-open", { tableId: "t5", billId: "b2", prompt });
-    await flush(el);
-    expect(api.getSplitSources).not.toHaveBeenCalled();
-
-    emit(tableOrder(el)!, "split-table", {
-      tableId: "t5",
-      billId: "b2",
-      guestCounts: { staying: null, leaving: null },
-      prompt,
-    });
-    await flush(el);
-    expect(api.splitTable).toHaveBeenCalledTimes(1);
-  });
-
   it.each<Binding>(["desktop", "handheld"])(
     "hands the party's drafts to the %s screen, and a drafts read replaces them",
     async (binding) => {
@@ -1079,22 +1059,6 @@ describe("till-app: Split a table sends the selection and follows it", () => {
         selection,
         3,
         [noEdit("b2"), noEdit("wo-4")],
-        guests,
-      );
-    });
-
-    it("sends the old event's bill as a selection of that bill", async () => {
-      const el = await sending(after(...threeBills()));
-
-      emit(tableOrder(el)!, "split-table", { tableId: "t5", billId: "b2", guestCounts: guests });
-      await flush(el, 6);
-
-      expect(api.splitTable).toHaveBeenCalledWith(
-        "v1",
-        "t5",
-        { wholeBillIds: ["b2"], loose: [] },
-        3,
-        [noEdit("b2")],
         guests,
       );
     });

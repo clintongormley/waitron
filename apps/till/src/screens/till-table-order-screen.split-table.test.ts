@@ -148,7 +148,6 @@ async function mountScreen(over: Partial<TillTableOrderScreen> = {}) {
     orderId: "b1",
     party: garcia,
     tables,
-    splitPanelLive: true,
     personId: "me",
     ...board08,
     ...over,
@@ -266,7 +265,7 @@ describe("Split a table's panel at phone width", () => {
     const takes = q(el, "[data-split-takes]")!;
     const keeps = q(el, "[data-split-keeps]")!;
     const note = q(el, "[data-split-new-bill-note]")!;
-    const guests = q(el, ".split-guests")!;
+    const guests = q(el, ".split-counts")!;
     const row = bottom(el);
     const stepButton = (step: string) =>
       stepper(el, "leaving").shadowRoot!.querySelector(`[data-step="${step}"]`)!;
@@ -301,18 +300,6 @@ describe("Split a table's panel", () => {
 
     expect(q(el, "[data-split-pick]")).not.toBeNull();
     expect(opened).toEqual([{ tableId: "t8", prompt: expect.any(Object) }]);
-    expect(q(el, "till-split-guests-dialog")).toBeNull();
-  });
-
-  it("without splitPanelLive the old step draws", async () => {
-    const el = await mountScreen({ splitPanelLive: false });
-    const opened = heard(el, "split-table-open");
-
-    await toPanel(el);
-
-    expect(q(el, "[data-split-pick]")).toBeNull();
-    expect(q(el, '[data-target="none"]')).not.toBeNull();
-    expect(opened).toEqual([]);
   });
 
   it.each([
@@ -1301,33 +1288,27 @@ describe("A803 split: the steps before the panel follow the party", () => {
     return { el, opened };
   }
 
-  it.each([[true], [false]])(
-    "a party left on one table closes the list, focus on the \u22ee (panel live: %s)",
-    async (splitPanelLive) => {
-      const { el, opened } = await toList({ splitPanelLive });
-      q(el, '[data-target="t8"]')!.focus();
+  it("a party left on one table closes the list, focus on the \u22ee", async () => {
+    const { el, opened } = await toList({});
+    q(el, '[data-target="t8"]')!.focus();
 
-      el.party = onTables("t7");
-      await settled(el);
+    el.party = onTables("t7");
+    await settled(el);
 
-      expect(listOpen(el)).toBe(false);
-      expect(opened).toEqual([]);
-      expect(focused(el)?.matches("[data-table-menu]")).toBe(true);
-    },
-  );
+    expect(listOpen(el)).toBe(false);
+    expect(opened).toEqual([]);
+    expect(focused(el)?.matches("[data-table-menu]")).toBe(true);
+  });
 
-  it.each([[true], [false]])(
-    "another party taking over this bill closes the list (panel live: %s)",
-    async (splitPanelLive) => {
-      const { el, opened } = await toList({ splitPanelLive });
+  it("another party taking over this bill closes the list", async () => {
+    const { el, opened } = await toList({});
 
-      el.party = { ...onTables("t7", "t8", "t9"), id: "another", name: "Bob" };
-      await settled(el);
+    el.party = { ...onTables("t7", "t8", "t9"), id: "another", name: "Bob" };
+    await settled(el);
 
-      expect(listOpen(el)).toBe(false);
-      expect(opened).toEqual([]);
-    },
-  );
+    expect(listOpen(el)).toBe(false);
+    expect(opened).toEqual([]);
+  });
 
   it("the same party losing one of three tables keeps the list, without that table", async () => {
     const { el } = await toList({ party: onTables("t7", "t8", "t9") });
@@ -1338,34 +1319,6 @@ describe("A803 split: the steps before the panel follow the party", () => {
     expect(listOpen(el)).toBe(true);
     expect(q(el, '[data-target="t8"]')).toBeNull();
     expect(q(el, '[data-target="t9"]')).not.toBeNull();
-  });
-
-  describe("the bills of the step Task 14a removes", () => {
-    async function toBills() {
-      const opened = await toList({ splitPanelLive: false, party: onTables("t7", "t8", "t9") });
-      await click(opened.el, '[data-target="t8"]');
-      expect(q(opened.el, '[data-target="none"]')).not.toBeNull();
-      return opened;
-    }
-
-    it("the table leaving the party closes them, with nothing opened", async () => {
-      const { el, opened } = await toBills();
-
-      el.party = onTables("t7", "t9");
-      await settled(el);
-
-      expect(q(el, "[data-split-table]")).toBeNull();
-      expect(opened).toEqual([]);
-    });
-
-    it("the party losing another table keeps them", async () => {
-      const { el } = await toBills();
-
-      el.party = onTables("t7", "t8");
-      await settled(el);
-
-      expect(q(el, '[data-target="none"]')).not.toBeNull();
-    });
   });
 });
 
@@ -1460,25 +1413,18 @@ describe("A803 split: a re-read", () => {
     expect([...ticked(el).whole]).toEqual(["b2"]);
   });
 
-  it.each([
-    ["the list of tables", true, '[data-action="split-table"]'],
-    ["the old step's choice of bill", false, '[data-target="t8"]'],
-  ] as const)(
-    "a re-read: the party going closes %s, which names the party",
-    async (_name, live, last) => {
-      const el = await mountScreen({ splitPanelLive: live });
-      await click(el, "[data-move-split]");
-      await click(el, '[data-action="split-table"]');
-      if (last !== '[data-action="split-table"]') await click(el, last);
-      expect(q(el, "[data-split-table]")).not.toBeNull();
+  it("a re-read: the party going closes the list of tables, which names the party", async () => {
+    const el = await mountScreen();
+    await click(el, "[data-move-split]");
+    await click(el, '[data-action="split-table"]');
+    expect(q(el, "[data-split-table]")).not.toBeNull();
 
-      el.party = null;
-      await el.updateComplete;
+    el.party = null;
+    await el.updateComplete;
 
-      expect(q(el, "[data-split-table]")).toBeNull();
-      expect(q(el, "[data-action-panel]")).toBeNull();
-    },
-  );
+    expect(q(el, "[data-split-table]")).toBeNull();
+    expect(q(el, "[data-action-panel]")).toBeNull();
+  });
 
   it("a re-read: a party with a new count keeps the list of tables", async () => {
     const el = await mountScreen();

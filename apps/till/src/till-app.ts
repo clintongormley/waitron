@@ -15740,14 +15740,9 @@ export class TillApp extends LitElement {
   #splitRefusalReading = false;
 
   #onSplitTableOpen(event: Event): void {
-    const { billId, prompt } = (event as CustomEvent<{ billId?: string | null; prompt: object }>)
-      .detail;
-    if (billId === undefined) {
-      this.#splitTablePrompts.set(prompt, this.#partyComposition([]));
-      this.#openSplitRead(event, prompt);
-      return;
-    }
-    this.#splitTablePrompts.set(prompt, this.#billComposition(billId === null ? [] : [billId]));
+    const { prompt } = (event as CustomEvent<{ prompt: object }>).detail;
+    this.#splitTablePrompts.set(prompt, this.#partyComposition([]));
+    this.#openSplitRead(event, prompt);
   }
 
   #onSplitTableObserve(event: Event): void {
@@ -15819,7 +15814,7 @@ export class TillApp extends LitElement {
   async #watchReopenedSplit(refusal: SplitRefusal): Promise<void> {
     const prompt = refusal.prompt;
     const screen = prompt === undefined ? undefined : this.#splitScreens.get(prompt);
-    if (prompt === undefined || screen === undefined || !("selection" in refusal)) return;
+    if (prompt === undefined || screen === undefined) return;
     await screen.updateComplete;
     const partyId = this.orderParty?.id;
     if (refusal !== this.splitRefusal || partyId === undefined) return;
@@ -15933,18 +15928,14 @@ export class TillApp extends LitElement {
   }
 
   async #onSplitTable(event: Event, confirmed?: PartyComposition): Promise<void> {
-    const detail = (event as CustomEvent<SplitTableDetail>).detail;
-    const { tableId, guestCounts, prompt } = detail;
-    const selection: SplitSelection =
-      "selection" in detail
-        ? detail.selection
-        : { wholeBillIds: detail.billId === null ? [] : [detail.billId], loose: [] };
+    const { tableId, selection, guestCounts, prompt } = (event as CustomEvent<SplitTableDetail>)
+      .detail;
     const party = this.orderParty;
     if (party === null) return;
     const looseIds = selection.loose.map((source) => source.billId);
     const selected = [...new Set([...selection.wholeBillIds, ...looseIds])].sort();
     const observed =
-      prompt === undefined || !("selection" in detail)
+      prompt === undefined
         ? undefined
         : (this.#splitObservations.get(prompt) ?? new Map<string, BillEditExpected | null>());
     const asked =
@@ -15975,15 +15966,11 @@ export class TillApp extends LitElement {
       (await this.#askDifferentPeople(
         () => this.#ownBillsChange(() => this.#onSplitTable(event, asked)),
         looseIds,
-        () => {
-          if ("selection" in detail)
-            this.#saySplitRefused({ tableId, guestCounts, prompt, selection });
-        },
+        () => this.#saySplitRefused({ tableId, guestCounts, prompt, selection }),
       ))
     )
       return;
     if (!this.#billCompositionUnchanged(asked) || (await stopIfChanged())) return;
-    const live = () => this.#billCompositionCurrent(asked);
     const sent = asked.sent;
     const visit = this.#orderVisit;
     this.errorKey = undefined;
@@ -15999,48 +15986,21 @@ export class TillApp extends LitElement {
       );
       this.floorCarried = carryRevisions(this.floorCarried, answer.zoneRevisions);
     } catch (error) {
-      if ("selection" in detail) {
-        const here = () =>
-          this.api === asked.api &&
-          visit === this.#orderVisit &&
-          !this.#hasLeftParty(party.id, sent);
-        if (!here()) return;
-        this.#splitRefusalReading = true;
-        try {
-          const went = await this.#onSplitRefused(
-            error,
-            { tableId, guestCounts, prompt, selection },
-            party.id,
-            here,
-          );
-          if (!went) return;
-        } finally {
-          this.#splitRefusalReading = false;
-        }
-        await this.#followSplit(asked, party, tableId, selection);
-        return;
+      const here = () =>
+        this.api === asked.api && visit === this.#orderVisit && !this.#hasLeftParty(party.id, sent);
+      if (!here()) return;
+      this.#splitRefusalReading = true;
+      try {
+        const went = await this.#onSplitRefused(
+          error,
+          { tableId, guestCounts, prompt, selection },
+          party.id,
+          here,
+        );
+        if (!went) return;
+      } finally {
+        this.#splitRefusalReading = false;
       }
-      if (!live()) return;
-      const refused = error as { code?: string; field?: string } | undefined;
-      const side = refusedSplitSide(refused);
-      if (side !== undefined) {
-        if (visit === this.#orderVisit && this.orderParty?.id === party.id)
-          this.splitRefusal = {
-            tableId,
-            billId: detail.billId,
-            staying: guestField(guestCounts.staying),
-            leaving: guestField(guestCounts.leaving),
-            field: side,
-            message: t("seat.guest_count_invalid"),
-            ...(prompt === undefined ? {} : { prompt }),
-          };
-        return;
-      }
-      if (refused?.code === "draft.out_of_date" || refused?.code === "draft.taken_over")
-        this.errorKey = { code: refused.code };
-      else await this.#onTableRefusal(error, live);
-      if (live()) await this.#refreshBillDraft();
-      return;
     }
     await this.#followSplit(asked, party, tableId, selection);
   }
@@ -19579,7 +19539,7 @@ export class TillApp extends LitElement {
    * by, so the banner keeps it. */
   #dropSplitRefusalForLanguage(asked: SplitRefusal | null): void {
     const refusal = this.splitRefusal;
-    if (refusal === null || !("selection" in refusal)) return;
+    if (refusal === null) return;
     if (refusal !== asked) this.errorKey = this.#splitRefusalSaid;
     this.splitRefusal = null;
   }
@@ -19787,7 +19747,6 @@ export class TillApp extends LitElement {
       .revealOtherDrafts=${this.revealOtherDrafts}
       .guestsRefusal=${this.guestsRefusal}
       .splitRefusal=${this.splitRefusal}
-      .splitPanelLive=${true}
       .splitRead=${this.splitRead}
       .splitReloading=${this.splitReloading}
       .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
@@ -19936,7 +19895,6 @@ export class TillApp extends LitElement {
           .revealOtherDrafts=${this.revealOtherDrafts}
           .guestsRefusal=${this.guestsRefusal}
           .splitRefusal=${this.splitRefusal}
-          .splitPanelLive=${true}
           .splitRead=${this.splitRead}
           .splitReloading=${this.splitReloading}
           .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}

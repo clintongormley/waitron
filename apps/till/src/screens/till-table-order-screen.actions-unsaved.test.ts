@@ -214,7 +214,6 @@ it("picks are unordered and Move sends whole lines directly", async () => {
 });
 it("Split a table's panel protects its ticks and counts, and Split submits with no question", async () => {
   const { app, screen } = await mount("split-table");
-  screen.splitPanelLive = true;
   screen.personId = "me";
   screen.splitRead = {
     bills: bills.map(({ workingOrderId }) => ({

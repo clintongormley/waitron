@@ -1092,8 +1092,8 @@ Tab button and no side drawer.
 - **The action panel.** A ⋮ item that needs a choice draws its step in `aside.action-panel`
   (`data-action-panel`) beside the order while it is open. Its heading takes focus and the panel is
   scrolled into view; Back and Escape close it (Escape closes an open list first) and return focus
-  to the ⋮'s trigger, and focus returns there too when a naming, guests or split-guests window
-  opened from the ⋮ closes.
+  to the ⋮'s trigger, and focus returns there too when a naming or guests window opened from the ⋮
+  closes, and when Split closes Split a table's panel.
 - **The foot**, in order: the Finish table refusal, only after Finish table was refused
   (`role="alert"`, with Take payment and Record unpaid departure, brought into view at
   1024×768 and at 390×844); this bill's total; "Still to pay at this table" with the party's
@@ -2873,8 +2873,8 @@ and the staffing grid's block editor in the A761 entry):
   window do this; with the check deleted, a reconnect case in the `*.unsaved.test.ts` that
   covers it fails (the unit form's is in `catalogue-forms.unsaved.test.ts`);
 - an edit made BEFORE the form is taken out still counts once it is put back: keep the value the
-  scope last committed — the opened value, then each saved value and, in the till's party name, bill name, Guests and Split a table
-  windows, each value stored on another till while they are open — in a field the disconnect does
+  scope last committed — the opened value, then each saved value and, in the till's party name, bill name and Guests
+  windows and the guest counts of Split a table's panel, each value stored on another till while they are open — in a field the disconnect does
   not clear, commit it into the new scope, and clear it wherever the form really reopens, or a
   reopened form starts changed. A form that follows a stored value also notes a change to it that
   arrives while the form is out, because the update that sees it runs while the form is detached,
@@ -2885,8 +2885,8 @@ and the staffing grid's block editor in the A761 entry):
   editor, the unit, ingredient, extras list, option list and option label forms, the menus screen's section and menu details form, an include's Edit
   dialog, the Add to menus and Add products pickers, the Home page tab's shortcut picker and the department dialogs, Settings and zone settings do this, each with an edit-first reconnect case; so does the Patch
   live menu window, whose committed value is always no changes. A menu's Schedule and Change time window does too, though it takes its scope at opening and again as it is put back rather than in `willUpdate`, so it is not in the list above: put back onto the same menu it keeps its edit, onto a different one it closes unchanged, and taken out during its write it closes as it is put back and reads the list again rather than keep its edit, so it leaves nothing to send a second time; a write that fails after that, while the panel still shows that menu, shows on the panel, outside the window, as one sentence saying it may not have gone through, and the panel reads the list again; the sentence stays until Schedule or Change time is opened again or the panel follows a different menu (`menu-publications.unsaved.test.ts`). The recipe editor
-  clears its choice on removal by design (batch 2a). The till's party name, bill name, Guests, Split a table, invoice recipient,
-  extras picker and station dialogs and the floor's Rename window keep it and count it, each with a reconnect case in its
+  clears its choice on removal by design (batch 2a). The till's party name, bill name, Guests, invoice recipient,
+  extras picker and station dialogs, Split a table's panel and the floor's Rename window keep it and count it, each with a reconnect case in its
   `*.unsaved.test.ts`. That accounts for every form in the list above;
 - bind the action through `saveActionState(scope)`: `variant=${s.variant}` and
   `?disabled=${s.unchanged || <the form's own conditions>}`;

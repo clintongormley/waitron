@@ -960,7 +960,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         },
       });
       el.personId = "me";
-      el.splitPanelLive = true;
       el.bills = ["wo-1", "wo-2", "wo-3"].map((workingOrderId, index) => ({
         ...partyBills[0]!,
         workingOrderId,

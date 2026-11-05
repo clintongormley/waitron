@@ -1278,8 +1278,6 @@ export const en = {
   "table.bills_served_differently":
     "These bills are served in different ways, so items cannot move between them",
   "table.split_table_heading": "Split a table off {party}:",
-  "table.split_table_bill_heading": "{table} leaves {party}. Which bill goes with it?",
-  "table.split_no_bill": "No bill, start an empty one",
   "table.split_pick_heading": "{table} leaves {party}",
   "table.split_pick_hint": "Tick what goes with {table}. Everything else stays at {kept}.",
   "table.split_takes": "{table} takes {what} · {amount}",
@@ -1318,7 +1316,6 @@ export const en = {
   "table.name_save": "Save",
   "table.guests_title": "Guests at {tables}",
   "table.guests_save": "Save",
-  "table.split_guests_title": "Guests after the split",
   "table.split_guests_confirm": "Split",
   "table.no_other_bills": "No other bill of this party to choose",
   "table.confirm_different_people_title": "Separate bills for different people?",
@@ -3164,8 +3161,6 @@ export const es: Record<StringKey, string> = {
   "table.bills_served_differently":
     "Estas cuentas se sirven de forma distinta, así que los artículos no pueden pasar de una a otra",
   "table.split_table_heading": "Separar una mesa de {party}:",
-  "table.split_table_bill_heading": "{table} se separa de {party}. ¿Qué cuenta se lleva?",
-  "table.split_no_bill": "Sin cuenta, empezar una vacía",
   "table.split_pick_heading": "{table} se separa de {party}",
   "table.split_pick_hint": "Marca lo que se lleva {table}. Lo demás se queda en {kept}.",
   "table.split_takes": "{table} se lleva {what} · {amount}",
@@ -3205,7 +3200,6 @@ export const es: Record<StringKey, string> = {
   "table.name_save": "Guardar",
   "table.guests_title": "Comensales en {tables}",
   "table.guests_save": "Guardar",
-  "table.split_guests_title": "Comensales tras separar",
   "table.split_guests_confirm": "Separar",
   "table.no_other_bills": "No hay otra cuenta de estos clientes para elegir",
   "table.confirm_different_people_title": "¿Cuentas separadas para distintas personas?",

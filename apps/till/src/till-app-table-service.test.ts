@@ -290,7 +290,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     updateOrderLine: vi.fn().mockResolvedValue({ revision: 1, party: null }),
     moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
     joinTables: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
-    splitTable: vi.fn().mockResolvedValue({ partyId: "v-new", billId: "wo-new" }),
+    splitTable: vi.fn().mockResolvedValue({ partyId: "v-new", billIds: ["wo-new"] }),
     setPartyName: vi.fn().mockResolvedValue({ revision: 4, name: "Ana" }),
     setPartyGuests: vi.fn().mockResolvedValue({ revision: 4, guestCount: 4 }),
     mergeBills: vi.fn().mockResolvedValue(undefined),
@@ -1144,7 +1144,15 @@ describe("till-app table ordering: a handheld's order screen with no table opene
     ],
     ["move-guests", { toTableId: "t9" }, "moveGuests"],
     ["join-tables", { tableId: "t9" }, "joinTables"],
-    ["split-table", { tableId: "t9", billId: null }, "splitTable"],
+    [
+      "split-table",
+      {
+        tableId: "t9",
+        selection: { wholeBillIds: [], loose: [] },
+        guestCounts: { staying: null, leaving: null },
+      },
+      "splitTable",
+    ],
     ["name-party", { name: "Ana" }, "setPartyName"],
     ["guests-party", { guestCount: 4 }, "setPartyGuests"],
     ["merge-bills", { fromBillId: "wo-9" }, "mergeBills"],
@@ -3355,7 +3363,11 @@ describe("A803 action results: the bill on screen after a table action", () => {
     const screen = await toTableOrder(el);
     expect(screen.orderId).toBe("wo-8");
 
-    emit(screen, "split-table", { tableId: "t3", billId: "wo-8" });
+    emit(screen, "split-table", {
+      tableId: "t3",
+      selection: { wholeBillIds: ["wo-8"], loose: [] },
+      guestCounts: { staying: null, leaving: null },
+    });
     await flush(el);
     await flush(el);
 
@@ -3404,7 +3416,11 @@ describe("A803 action results: the bill on screen after a table action", () => {
     const screen = await toTableOrder(el);
     expect(screen.orderId).toBe("wo-8");
 
-    emit(screen, "split-table", { tableId: "t3", billId: "wo-8" });
+    emit(screen, "split-table", {
+      tableId: "t3",
+      selection: { wholeBillIds: ["wo-8"], loose: [] },
+      guestCounts: { staying: null, leaving: null },
+    });
     await flush(el);
     await flush(el);
 
@@ -3446,7 +3462,11 @@ describe("A803 action results: the bill on screen after a table action", () => {
       }),
     });
     const screen = await toTableOrder(mounted.el);
-    emit(screen, "split-table", { tableId: "t3", billId: "wo-8" });
+    emit(screen, "split-table", {
+      tableId: "t3",
+      selection: { wholeBillIds: ["wo-8"], loose: [] },
+      guestCounts: { staying: null, leaving: null },
+    });
     await flush(mounted.el);
     await flush(mounted.el);
     return mounted;

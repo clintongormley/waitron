@@ -4,6 +4,12 @@ import { isValidGuestCount, MAX_GUEST_COUNT } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import { t } from "../i18n/t.js";
 
+/** null records no count for that side. */
+export interface SplitGuestsDetail {
+  staying: number | null;
+  leaving: number | null;
+}
+
 /** A blank field records no count; anything else must be a whole number from 1. */
 export function parseGuestCount(value: string): { guestCount: number | null } | undefined {
   const trimmed = value.trim();

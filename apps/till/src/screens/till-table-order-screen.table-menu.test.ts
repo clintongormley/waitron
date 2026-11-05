@@ -583,7 +583,6 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
 
     it("a second step replacing the first takes focus too, and Back from it returns to the first", async () => {
       const el = await mountScreen({ bills: three });
-      el.splitPanelLive = true;
       el.personId = "me";
       el.splitRead = { bills: [] };
       await userEvent.click(menu(el));
@@ -684,23 +683,6 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       counting.shadowRoot!.querySelector<HTMLElement>("[data-guests-cancel]")!.click();
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("till-party-guests-dialog")).toBeNull();
-      expect(focusOnMenu(el)).toBe(true);
-    });
-
-    it("Split a table's guests window", async () => {
-      const el = await mountScreen();
-
-      item(el, '[data-action="split-table"]')!.click();
-      await el.updateComplete;
-      el.shadowRoot!.querySelector<HTMLElement>('[data-target="t5"]')!.click();
-      await el.updateComplete;
-      el.shadowRoot!.querySelector<HTMLElement>('[data-target="none"]')!.click();
-      await el.updateComplete;
-      const splitting = el.shadowRoot!.querySelector("till-split-guests-dialog")!;
-      await splitting.updateComplete;
-      splitting.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-cancel]")!.click();
-      await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("till-split-guests-dialog")).toBeNull();
       expect(focusOnMenu(el)).toBe(true);
     });
   });
