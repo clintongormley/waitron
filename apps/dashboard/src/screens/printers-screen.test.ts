@@ -5993,6 +5993,31 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     expect(q(el, "[data-test=printer-details-modal] [data-test=printer-refresh-error]")).toBeNull();
   });
 
+  it("shows a failed list load once, in Add printer, when browser navigation opens a printer's details beneath it", async () => {
+    history.replaceState(null, "", "/manage/printers/view/printers");
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=open-add-printer]")!.click();
+    await flush(el);
+    history.pushState(null, "", "/manage/printers/view/printers/printer/p1");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+    expect(detailsHeading(el)).toContain("Cocina");
+    expect(q(el, "[data-test=new-printer-modal]")).not.toBeNull();
+
+    vi.mocked(api.listPrinters).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(
+        q(el, "[data-test=new-printer-modal] [data-test=printer-refresh-error]"),
+      ).not.toBeNull(),
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelectorAll("[data-test=printer-refresh-error]")).toHaveLength(1);
+    expect(q(el, "[data-test=printer-details-modal] [data-test=printer-refresh-error]")).toBeNull();
+  });
+
   it("clears a failed refresh's message once the server answers again", async () => {
     const api = Object.assign(stubApi(), { liveData: new LiveData() });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });

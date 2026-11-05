@@ -2767,7 +2767,7 @@ export class PrintersScreen extends LitElement {
           : nothing
       }
       <div data-test="printer-details-body">
-        ${this.selectedPrinterId === null || this.editingPrinter ? nothing : this.#renderRefreshError()}
+        ${this.selectedPrinterId === null || this.#dialogShowsRefreshError ? nothing : this.#renderRefreshError()}
         ${
           this.selectedPrinterId === null
             ? nothing
@@ -4404,15 +4404,20 @@ export class PrintersScreen extends LitElement {
     ></dashboard-equipment-label>`;
   }
 
-  override render(): TemplateResult {
-    // Each of these dialogs shows the failed read itself, and every action inside them shows its
-    // own refusal.
-    const dialogOpen =
+  /** Each of these dialogs shows the failed read itself, so nothing beneath it repeats it. */
+  get #dialogShowsRefreshError(): boolean {
+    return (
       this.addingAgent ||
       this.addingPrinter ||
-      this.editingAgent ||
-      this.editingPrinter ||
-      this.selectedPrinterId !== null;
+      this.editingAgent !== null ||
+      this.editingPrinter !== null ||
+      this.namingPrinter !== null
+    );
+  }
+
+  override render(): TemplateResult {
+    // Every action inside an open dialog shows its own refusal.
+    const dialogOpen = this.#dialogShowsRefreshError || this.selectedPrinterId !== null;
     return html`<h1 class="title">${t("printers.title")}</h1>
       <wt-tabs
         label=${t("printers.title")}
