@@ -289,8 +289,9 @@ It needs the fixed image on the box first: run
 `docker compose exec print-agent bluetoothctl --timeout 6 scan on`, then
 `docker compose exec print-agent bluetoothctl devices`, and record how many devices are listed
 and where the printer falls among them; then unpair the printer with Waitron's Unpair, which also
-switches it off, since Add a printer lists a paired Bluetooth device, and a switched-on printer's
-device, whether or not a scan marked it (A404); open Add a printer repeatedly, record on which scan
+switches it off, since Add a printer lists a paired Bluetooth device unless its agent's `info`
+reading says it is not a printer, and a switched-on printer's device, whether or not a scan marked
+it (A404); open Add a printer repeatedly, record on which scan
 it is first listed without Show all devices, and look for `bluetooth info failed` lines in
 `docker compose logs print-agent`.
 
@@ -711,10 +712,16 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 
 ## Decisions and deliberate limits
 
-- **Add a printer lists every Bluetooth device its agent reports paired that is not already a
-  switched-on printer (A404, 2026-11-05).** The owner asked that a paired printer stay listed. The
-  paired report is everything `bluetoothctl devices Paired` prints on the agent's machine, so a
-  paired keyboard or headphones on an agent's own computer shows too, with Add.
+- **Add a printer lists a Bluetooth device its agent reports paired unless the agent says it is
+  not a printer; one whose kind it cannot tell is listed (A404, 2026-11-05).** The owner asked that
+  a paired printer stay listed and that a paired non-printer, such as headphones on another
+  computer's agent, not be. The paired listing (`bluetoothctl devices Paired`) carries only an
+  address and a name, so the agent asks `bluetoothctl info` of each paired device it has not asked
+  before and reads it as a scan does (`parseBluetoothctlInfo` in `apps/print-agent/src/bluetooth.ts`:
+  printer icon, imaging class with the printer bit, or the Serial Port profile). A device whose
+  `info` has not answered, or whose agent is older than this change, is listed: a hidden paired
+  printer is the fault the owner reported, while a listed non-printer only adds a row. Show all
+  devices still lists every device.
 
 - **The guest count is `guestCount` (A988, 2026-10-27).** A party's or a receipt's number of
   guests is `guestCount` in every till request and in the `sale_receipt_guests` drizzle

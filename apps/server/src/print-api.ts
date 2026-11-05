@@ -267,6 +267,7 @@ interface IppQueue {
 interface PairedBluetoothWire {
   localKey: string;
   name?: string;
+  printerLike?: boolean;
 }
 
 /** A malformed wire field is dropped, not refused, so a bad report cannot poison the in-memory store. */
@@ -405,7 +406,11 @@ function screenPairedBluetooth(raw: unknown): PairedBluetoothWire[] {
     if (typeof entry !== "object" || entry === null) continue;
     const d = entry as Record<string, unknown>;
     if (typeof d.localKey !== "string" || !isBluetoothAddress(d.localKey)) continue;
-    out.push({ localKey: d.localKey.toUpperCase(), name: wireString(d.name) });
+    out.push({
+      localKey: d.localKey.toUpperCase(),
+      name: wireString(d.name),
+      printerLike: typeof d.printerLike === "boolean" ? d.printerLike : undefined,
+    });
   }
   return out;
 }
@@ -462,6 +467,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     ippOnly?: true;
     office?: OfficePrinterReport;
     printerLike?: true;
+    /** The latest paired report's answer; absent when the agent could not tell. */
+    pairedPrinterLike?: boolean;
     /** The latest report of any kind; the entry is listed while it is fresh. */
     lastSeenAt: number;
     /** Only a scan sets this, and only it authorizes Pair. */
@@ -623,6 +630,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           lastSeenAt: now,
           scannedAt: prior?.scannedAt,
           pairedAt: prior?.pairedAt,
+          pairedPrinterLike: prior?.pairedPrinterLike,
           visibleAt: prior?.visibleAt,
           [stamp]: now,
         });
@@ -630,14 +638,15 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       };
       for (const v of visible) remember(v, "visibleAt");
       for (const s of scanned) remember(s, "scannedAt");
-      for (const p of pairedBluetooth) {
+      for (const { printerLike: pairedPrinterLike, ...p } of pairedBluetooth) {
         const key = keyOf(agentId, "bluetooth", p.localKey);
         const prior = discovered.get(key);
+        const stamps = { lastSeenAt: now, pairedAt: now, pairedPrinterLike };
         discovered.set(
           key,
           prior === undefined
-            ? { agentId, transport: "bluetooth", ...p, lastSeenAt: now, pairedAt: now }
-            : { ...prior, name: prior.name ?? p.name, lastSeenAt: now, pairedAt: now },
+            ? { agentId, transport: "bluetooth", ...p, ...stamps }
+            : { ...prior, name: prior.name ?? p.name, ...stamps },
         );
       }
 
@@ -1005,7 +1014,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             office,
             // The page-printer POST reads only the named agent's own report (findPagePrinterDiscovery).
             officeLent: office !== e.office ? (true as const) : undefined,
-            printerLike: address === undefined ? undefined : e.printerLike,
+            printerLike: address === undefined ? undefined : (e.printerLike ?? e.pairedPrinterLike),
             paired:
               address !== undefined && isListed(e.pairedAt, now) ? (true as const) : undefined,
             bluetoothCommand:

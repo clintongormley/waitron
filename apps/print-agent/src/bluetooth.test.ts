@@ -549,6 +549,88 @@ describe("createBluetoothctlHost — scan() marks printer-like devices", () => {
   });
 });
 
+describe("createBluetoothctlHost — printerKinds() tells paired printers from other paired devices", () => {
+  const OWNER = "5A:4A:45:D4:FB:BB";
+  const HEADSET = "AA:BB:CC:DD:EE:01";
+  // Synthesised in bluetoothctl's `info` shape: a headset's class (major Audio/Video, minor
+  // Wearable Headset), its icon and its Audio Sink profile. No headset was recorded on a real box.
+  const HEADSET_INFO = info(
+    "Class: 0x00240404 (2360324)",
+    "Icon: audio-headset",
+    "Paired: yes",
+    "UUID: Audio Sink                (0000110b-0000-1000-8000-00805f9b34fb)",
+  );
+  const infoCalls = (run: ReturnType<typeof vi.fn<Run>>) =>
+    run.mock.calls.filter(([args]) => args[0] === "info");
+
+  it("asks `info` once for each paired device, under the listing's deadline, and remembers the answer", async () => {
+    const run = vi.fn<Run>(async (args) => (args[1] === OWNER ? OWNER_PRINTER_INFO : HEADSET_INFO));
+    const host = createBluetoothctlHost({ run, listTimeoutMs: 3_000 });
+    const expected = new Map([
+      [OWNER, true],
+      [HEADSET, false],
+    ]);
+    expect(await host.printerKinds([OWNER, HEADSET])).toStrictEqual(expected);
+    expect(await host.printerKinds([OWNER, HEADSET])).toStrictEqual(expected);
+    expect(infoCalls(run)).toStrictEqual([
+      [["info", OWNER], { timeoutMs: 3_000 }],
+      [["info", HEADSET], { timeoutMs: 3_000 }],
+    ]);
+  });
+
+  it("uses a scan's answer without asking again", async () => {
+    const run = vi.fn<Run>(async (args) => {
+      if (args.includes("scan")) return "";
+      if (args[0] === "devices")
+        return `Device ${OWNER} BlueTooth Printer\nDevice ${HEADSET} Buds\n`;
+      return args[1] === OWNER ? OWNER_PRINTER_INFO : HEADSET_INFO;
+    });
+    const host = createBluetoothctlHost({ run });
+    await host.scan();
+    run.mockClear();
+    expect(await host.printerKinds([OWNER, HEADSET])).toStrictEqual(
+      new Map([
+        [OWNER, true],
+        [HEADSET, false],
+      ]),
+    );
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("leaves out a device whose `info` failed, logs it, and leaves asking again to the next scan", async () => {
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    let fail = true;
+    const run = vi.fn<Run>(async (args) => {
+      if (args.includes("scan")) return "";
+      if (args[0] === "devices") return `Device ${OWNER} BlueTooth Printer\n`;
+      if (fail) throw new Error("killed");
+      return OWNER_PRINTER_INFO;
+    });
+    const host = createBluetoothctlHost({ run, log });
+    expect(await host.printerKinds([OWNER])).toStrictEqual(new Map());
+    expect(await host.printerKinds([OWNER])).toStrictEqual(new Map());
+    expect(infoCalls(run)).toHaveLength(1);
+    expect(log.warn).toHaveBeenCalledExactlyOnceWith("bluetooth info failed", {
+      address: OWNER,
+      error: "killed",
+    });
+    fail = false;
+    await host.scan();
+    expect(await host.printerKinds([OWNER])).toStrictEqual(new Map([[OWNER, true]]));
+  });
+
+  it("asks about at most as many devices at once as a scan does", async () => {
+    const many = Array.from(
+      { length: 10 },
+      (_, i) => `AA:BB:CC:DD:EF:${String(i).padStart(2, "0")}`,
+    );
+    const run = vi.fn<Run>(async () => HEADSET_INFO);
+    const host = createBluetoothctlHost({ run });
+    expect((await host.printerKinds(many)).size).toBe(MAX_BLUETOOTH_INFO_DEVICES);
+    expect((await host.printerKinds(many)).size).toBe(10);
+  });
+});
+
 describe("createBluetoothctlHost — forget()", () => {
   const MAC = "5A:4A:45:D4:FB:BB";
 

@@ -29,6 +29,9 @@ export interface BluetoothHost {
   pair(mac: string, pin?: string): Promise<PairResult>;
   paired(): Promise<BluetoothDevice[]>;
   forget(mac: string): Promise<BluetoothCommandResult>;
+  /** Whether each address is a printer, by the same `info` reading a scan takes; an address whose
+   * `info` has not answered is left out. */
+  printerKinds(macs: string[]): Promise<Map<string, boolean>>;
 }
 
 /** `info` is asked of at most this many listed devices per scan, all at once, so the command's own
@@ -159,6 +162,31 @@ export function createBluetoothctlHost(opts: {
   let scans = 0;
   const pair = opts.pair ?? pairWithBluetoothctl;
   const listOpts = opts.listTimeoutMs === undefined ? undefined : { timeoutMs: opts.listTimeoutMs };
+  const askInfo = async (
+    macs: string[],
+    askedAt: number,
+    runOpts?: BluetoothctlRunOptions,
+  ): Promise<void> => {
+    const answers = await Promise.allSettled(
+      macs.map((mac) =>
+        runOpts === undefined ? opts.run(["info", mac]) : opts.run(["info", mac], runOpts),
+      ),
+    );
+    macs.forEach((mac, i) => {
+      const answer = answers[i]!;
+      if (answer.status === "fulfilled") {
+        const printerLike = parseBluetoothctlInfo(answer.value).printerLike === true;
+        readings.set(mac, { printerLike, askedAt });
+        return;
+      }
+      const failure = infoFailure(answer.reason);
+      const lastFailure = JSON.stringify(failure);
+      if (lastFailure !== readings.get(mac)?.lastFailure) {
+        opts.log?.warn("bluetooth info failed", { address: mac, ...failure });
+      }
+      readings.set(mac, { printerLike: false, askedAt, lastFailure });
+    });
+  };
   return {
     async scan(): Promise<DiscoveredDevice[]> {
       const output = await opts.run(["--timeout", String(scanSeconds), "scan", "on"]);
@@ -180,21 +208,7 @@ export function createBluetoothctlHost(opts: {
         )
         .slice(0, MAX_BLUETOOTH_INFO_DEVICES)
         .map(({ d }) => d.mac);
-      const answers = await Promise.allSettled(toAsk.map((mac) => opts.run(["info", mac])));
-      toAsk.forEach((mac, i) => {
-        const answer = answers[i]!;
-        if (answer.status === "fulfilled") {
-          const printerLike = parseBluetoothctlInfo(answer.value).printerLike === true;
-          readings.set(mac, { printerLike, askedAt: scan });
-          return;
-        }
-        const failure = infoFailure(answer.reason);
-        const lastFailure = JSON.stringify(failure);
-        if (lastFailure !== readings.get(mac)?.lastFailure) {
-          opts.log?.warn("bluetooth info failed", { address: mac, ...failure });
-        }
-        readings.set(mac, { printerLike: false, askedAt: scan, lastFailure });
-      });
+      await askInfo(toAsk, scan);
       return listed.map((d) => {
         const printerLike = readings.get(d.mac)?.printerLike === true;
         return {
@@ -228,6 +242,20 @@ export function createBluetoothctlHost(opts: {
         if (result.ok || result.error !== REMOVAL_INCOMPLETE) return result;
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
       }
+    },
+    // Runs on every job pull, so it asks only addresses never asked, under the listing's deadline;
+    // a failed one is asked again by a scan.
+    async printerKinds(macs: string[]): Promise<Map<string, boolean>> {
+      const toAsk = macs.filter((mac) => !readings.has(mac)).slice(0, MAX_BLUETOOTH_INFO_DEVICES);
+      await askInfo(toAsk, scans, listOpts);
+      const kinds = new Map<string, boolean>();
+      for (const mac of macs) {
+        const reading = readings.get(mac);
+        if (reading !== undefined && reading.lastFailure === undefined) {
+          kinds.set(mac, reading.printerLike);
+        }
+      }
+      return kinds;
     },
     async paired(): Promise<BluetoothDevice[]> {
       const args = ["devices", "Paired"];

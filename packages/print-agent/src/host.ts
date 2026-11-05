@@ -113,6 +113,8 @@ export interface PairResult {
 export interface PairedBluetoothDevice {
   localKey: string;
   name?: string;
+  /** Absent when the agent could not tell. */
+  printerLike?: boolean;
 }
 
 export interface BluetoothCommandResult {

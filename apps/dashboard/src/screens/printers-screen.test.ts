@@ -7520,6 +7520,28 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(text(el, sel(`register-${OTHER}`))).toBe(t("action.add"));
   });
 
+  it("lists a paired device its agent says is a printer, with no scan's mark", async () => {
+    const device: DiscoveredPrinter = {
+      ...headphones,
+      name: "BlueTooth Printer",
+      paired: true,
+      printerLike: true,
+    };
+    const { el } = await mountPairing([device]);
+    await openDiscovery(el);
+    expect(text(el, sel(`register-${OTHER}`))).toBe(t("action.add"));
+  });
+
+  it("hides a paired device its agent says is not a printer until Show all devices", async () => {
+    const device: DiscoveredPrinter = { ...headphones, paired: true, printerLike: false };
+    const { el } = await mountPairing([device]);
+    await openDiscovery(el);
+    expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
+    q(el, sel("show-all-bluetooth"))!.click();
+    await flush(el);
+    expect(text(el, sel(`register-${OTHER}`))).toBe(t("action.add"));
+  });
+
   it("hides the same Bluetooth device, not paired, until Show all devices", async () => {
     const device: DiscoveredPrinter = { ...headphones, name: "BlueTooth Printer" };
     const { el } = await mountPairing([device]);

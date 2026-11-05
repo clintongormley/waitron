@@ -118,16 +118,35 @@ The dashboard keeps reading the list after its scan ends, through its live subsc
    unmarked until the agent's first scan pass answers.
 
 **What `paired` means, and what part 2 lets through.** `paired` is `isListed(e.pairedAt, now)`
-(`print-api.ts:487`, `:1008`): a device stays paired for the discovered list's freshness window
+(`print-api.ts`): a device stays paired for the discovered list's freshness window
 (15 seconds, or 45 while a discovery window is open: `discovery-listing.ts`) after the last paired
-listing that named it. That listing is everything
-`bluetoothctl devices Paired` prints on the agent's machine, unfiltered
-(`apps/print-agent/src/bluetooth.ts:232-233`, `linux-devices.ts:209-215`). So a paired device that
-is not a printer would show too. On the box that is a device someone paired through Waitron's own
-Pair — the box's operator has no terminal, and Waitron's dialog offers Pair on a device it does not
-mark as a printer only under Show all devices (`printers-screen.ts:3929-3936`). A print agent on
-another computer reports whatever that computer has paired (a keyboard, headphones), and those would
-now show with Add. This is stated in PR 1's description as a consequence of the owner's rule.
+listing that named it. That listing is everything `bluetoothctl devices Paired` prints on the
+agent's machine, and it carries only an address and a name (`parseBluetoothctlDevices`,
+`apps/print-agent/src/bluetooth.ts`). As first built, part 2 therefore listed any paired device,
+including headphones paired on another computer that runs a print agent.
+
+**Owner's decision (2026-11-05), as built:** a paired device that is not a printer is not in the
+normal list; a paired printer stays listed; Show all devices still shows everything. The kind comes
+from the same `bluetoothctl info` reading a scan already takes of every listed device, paired ones
+included (`parseBluetoothctlInfo`: `Icon: printer`, an imaging class with the printer bit, or the
+Serial Port profile; the owner's printer's recorded `info` carries all three, `bluetooth.test.ts`).
+The agent's paired report now asks `info` once of each paired address it has never asked
+(`printerKinds`, as many at a time as a scan asks, under the paired listing's deadline; a failure
+is retried by the next scan) and sends `printerLike: true | false` beside the address, absent when
+it could not tell. The server keeps that answer per device (`pairedPrinterLike`) and the discovered
+list reports `printerLike: false` only for it. The dialog hides a paired device only when
+`printerLike` is `false`.
+
+**A paired device whose kind cannot be told is listed.** That happens when its `info` failed or
+has not answered yet, or the agent predates this change. Hiding it would bring back the fault the
+owner reported (a paired printer missing from the list), and the person could not add it without
+knowing to press Show all devices; listing a non-printer only adds a row they can ignore.
+
+**Not checked on a real box:** no `info` of a paired headset was recorded; the headset shape in
+the tests (class `0x240404`, `Icon: audio-headset`, Audio Sink) is synthesised from the Bluetooth
+assigned numbers. That `info` of a paired printer still carries its icon and class rests on the
+owner's account that a scan listed the paired printer as a printer (above), since a scan reads the
+same `info`.
 
 ## Points held, and one left to the owner
 
@@ -153,7 +172,7 @@ Said plainly here and in each PR description:
   "ready to overwrite");
 - `product-list.ts:747`, which reaches into an inner input to select it, uses the new
   `WtInput.select()` instead;
-- a paired Bluetooth device that is not a printer is listed (above);
+- the print agent's paired report says whether each paired device is a printer (above);
 - calibration step 3's drawer test button moves up beside the drawer switch.
 
 ## PR split and review weight

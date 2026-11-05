@@ -47,6 +47,7 @@ function fakeBluetooth(over: Partial<BluetoothHost> = {}): BluetoothHost {
     pair: async () => ({ ok: false, error: "no fake" }),
     paired: async () => [],
     forget: async () => ({ ok: false, error: "no fake" }),
+    printerKinds: async () => new Map(),
     ...over,
   };
 }
@@ -311,6 +312,50 @@ describe("createLinuxDevices — pairedBluetooth()", () => {
     expect(await devices.pairedBluetooth()).toStrictEqual([
       { localKey: "5A:4A:45:D4:FB:BB", name: "BlueTooth Printer" },
       { localKey: "11:22:33:44:55:66" },
+    ]);
+  });
+
+  it("says which paired devices are printers and which are not, and nothing of one it could not tell", async () => {
+    const asked: string[][] = [];
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      bluetooth: fakeBluetooth({
+        paired: async () => [
+          { mac: "5A:4A:45:D4:FB:BB", name: "BlueTooth Printer" },
+          { mac: "11:22:33:44:55:66", name: "Buds" },
+          { mac: "22:33:44:55:66:77" },
+          { mac: "not-an-address" },
+        ],
+        printerKinds: async (macs) => {
+          asked.push(macs);
+          return new Map([
+            ["5A:4A:45:D4:FB:BB", true],
+            ["11:22:33:44:55:66", false],
+          ]);
+        },
+      }),
+    });
+    expect(await devices.pairedBluetooth()).toStrictEqual([
+      { localKey: "5A:4A:45:D4:FB:BB", name: "BlueTooth Printer", printerLike: true },
+      { localKey: "11:22:33:44:55:66", name: "Buds", printerLike: false },
+      { localKey: "22:33:44:55:66:77" },
+      { localKey: "not-an-address" },
+    ]);
+    expect(asked).toStrictEqual([["5A:4A:45:D4:FB:BB", "11:22:33:44:55:66", "22:33:44:55:66:77"]]);
+  });
+
+  it("still lists the paired devices when telling their kind fails", async () => {
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      bluetooth: fakeBluetooth({
+        paired: async () => [{ mac: "5A:4A:45:D4:FB:BB", name: "BlueTooth Printer" }],
+        printerKinds: async () => {
+          throw new Error("no answer");
+        },
+      }),
+    });
+    expect(await devices.pairedBluetooth()).toStrictEqual([
+      { localKey: "5A:4A:45:D4:FB:BB", name: "BlueTooth Printer" },
     ]);
   });
 

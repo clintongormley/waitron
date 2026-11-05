@@ -4297,6 +4297,51 @@ describe("Bluetooth Pair and Forget commands", () => {
     expect(row).not.toHaveProperty("printerLike");
   });
 
+  it("carries the agent's answer on whether a paired device is a printer, before any scan", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const printer = randomMac();
+    const headset = randomMac();
+    const untold = randomMac();
+    const visible = [printer, headset, untold].map((mac) => ({
+      transport: "bluetooth",
+      localKey: mac,
+    }));
+    const pairedBluetooth = [
+      { localKey: printer, name: "BlueTooth Printer", printerLike: true },
+      { localKey: headset, name: "Buds", printerLike: false },
+      { localKey: untold, name: "Thing" },
+    ];
+    for (let i = 0; i < 2; i++) await pull(app, token, { visible, pairedBluetooth });
+    const rows = await discoveredRows(app);
+    expect(rows.find((r) => r.localKey === printer)).toMatchObject({
+      paired: true,
+      printerLike: true,
+    });
+    expect(rows.find((r) => r.localKey === headset)).toMatchObject({
+      paired: true,
+      printerLike: false,
+    });
+    const row = rows.find((r) => r.localKey === untold);
+    expect(row).toMatchObject({ paired: true });
+    expect(row).not.toHaveProperty("printerLike");
+  });
+
+  it("keeps a scan's printer mark over a paired report that cannot tell", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const mac = randomMac();
+    await pull(app, token, {
+      scanned: [scannedMac(mac, { printerLike: true })],
+      pairedBluetooth: [{ localKey: mac }],
+    });
+    await pull(app, token, { pairedBluetooth: [{ localKey: mac, printerLike: "yes" }] });
+    expect((await discoveredRows(app)).find((r) => r.localKey === mac)).toMatchObject({
+      paired: true,
+      printerLike: true,
+    });
+  });
+
   it("marks paired only while the pairing report is fresh", async () => {
     const app = mountApp();
     const { token } = await joinAndAccept(app);

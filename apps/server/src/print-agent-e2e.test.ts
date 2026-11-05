@@ -436,6 +436,7 @@ describe("print-agent end to end", () => {
           pair: async () => ({ ok: false, error: "no fake" }),
           paired: async () => [{ mac: MAC, name: "BlueTooth Printer" }],
           forget: async () => ({ ok: false, error: "no fake" }),
+          printerKinds: async () => new Map(),
         },
       });
       const radio = new FakeSink();
@@ -535,6 +536,7 @@ describe("print-agent end to end", () => {
           pair: async () => ({ ok: false, error: "no fake" }),
           paired: async () => [{ mac: MAC, name: "BlueTooth Printer" }],
           forget: async () => ({ ok: false, error: "no fake" }),
+          printerKinds: async () => new Map(),
         },
       });
       const radio = {
@@ -677,6 +679,7 @@ describe("a printer deleted while its agent is sending", () => {
             pair: async () => ({ ok: false, error: "no fake" }),
             paired: async () => [{ mac, name: "Bluetooth receipt" }],
             forget: async () => ({ ok: false, error: "no fake" }),
+            printerKinds: async () => new Map(),
           },
         });
 

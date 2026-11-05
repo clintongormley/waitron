@@ -209,10 +209,18 @@ export function createLinuxDevices(
     async pairedBluetooth(): Promise<PairedBluetoothDevice[]> {
       const known = availability;
       if (known?.available === false && !recheckDue()) throw new Error(known.detail);
-      return (await sharedListing()).map((d) => ({
-        localKey: d.mac,
-        ...(d.name !== undefined ? { name: d.name } : {}),
-      }));
+      const listed = await sharedListing();
+      const kinds = await bluetooth
+        .printerKinds(listed.map((d) => d.mac).filter(isBluetoothAddress))
+        .catch(() => new Map<string, boolean>());
+      return listed.map((d) => {
+        const printerLike = kinds.get(d.mac);
+        return {
+          localKey: d.mac,
+          ...(d.name !== undefined ? { name: d.name } : {}),
+          ...(printerLike !== undefined ? { printerLike } : {}),
+        };
+      });
     },
 
     async forgetBluetooth(mac): Promise<BluetoothCommandResult> {
