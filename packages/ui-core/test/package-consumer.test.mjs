@@ -6,6 +6,7 @@ import { mkdtemp, mkdir, cp, readFile, writeFile, rm, realpath } from "node:fs/p
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import process from "node:process";
+import { URL, fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { test } from "node:test";
 import { build } from "esbuild";
@@ -29,6 +30,16 @@ async function verifyPackage(variant) {
   let server;
   try {
     const source = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+    const checkout = join(root, "../..");
+    const gitEnv = Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+    );
+    const { stdout: currentCommit } = await run("git", ["rev-parse", "HEAD"], {
+      cwd: checkout,
+      env: gitEnv,
+      timeout: 10000,
+    });
+    const expectedCommit = process.env.UI_PACKAGE_SOURCE_COMMIT || currentCommit.trim();
     const packageName = variant === "registry" ? "@waitron-io/ui-core" : source.name;
     const tarball =
       variant === "registry"
@@ -52,7 +63,7 @@ async function verifyPackage(variant) {
       await run(
         process.execPath,
         [
-          join(checkout, "scripts/release/prepare-ui.mjs"),
+          fileURLToPath(new URL("../../../scripts/release/prepare-ui.mjs", import.meta.url)),
           checkout,
           stage,
           "--release-version",
@@ -70,7 +81,22 @@ async function verifyPackage(variant) {
     const packed = JSON.parse(stdout);
     assert.equal(packed.name, packageName);
     if (variant === "registry") {
-      assert.equal(packed.version, "0.2.0");
+      assert.match(packed.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+      if (process.env.UI_PACKAGE_RELEASE_VERSION)
+        assert.equal(packed.version, process.env.UI_PACKAGE_RELEASE_VERSION);
+      assert.equal(packed.waitronSource.commit, expectedCommit);
+      assert.deepEqual(packed.repository, {
+        type: "git",
+        url: "https://github.com/waitron-io/waitron-cloud.git",
+      });
+      assert.equal(
+        packed.homepage,
+        `https://github.com/clintongormley/waitron/tree/${expectedCommit}/packages/ui-core`,
+      );
+      assert.deepEqual(packed.publishConfig, {
+        registry: "https://npm.pkg.github.com",
+        access: "restricted",
+      });
       assert.equal(packed.waitronSource.version, source.version);
       assert.equal(packed.waitronSource.repository, "clintongormley/waitron");
       assert.match(packed.waitronSource.commit, /^[a-f0-9]{40}$/);

@@ -12,8 +12,9 @@ Waitron's `@waitron/ui` keeps its existing root and deep component imports as re
 Venue controls and brand asset delivery stay in `packages/ui`.
 
 Develop against workspace source; use the built tarball for another repository.
-`pnpm --filter @waitron/ui-core test:package` installs that tarball outside the workspace
-and checks its declarations and real Chromium rendering. See
+`pnpm --filter @waitron/ui-core test:package` checks both the workspace tarball and the
+separately staged registry artifact outside the workspace, including declarations and real
+Chromium rendering. Run it from a committed, clean checkout; the staged variant checks source identity. See
 [the package guide](../../packages/ui-core/README.md). Private registry publication
 and Cloud screens remain separate release work.
 

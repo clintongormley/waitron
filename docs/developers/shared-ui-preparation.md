@@ -16,18 +16,20 @@ node scripts/release/prepare-ui.mjs /path/to/clean/waitron /tmp/waitron-ui-0.2.0
 
 Take the release version from Cloud's durable reservation. The extra
 `--source-commit` argument binds preparation to the caller's selected full SHA;
-preparation refuses a different checkout, tracked or untracked source changes,
-and nonempty output. The build runs the package's existing `prepack` script.
+preparation refuses a different checkout, tracked or untracked source changes, hidden index flags, a nested source copy,
+and nonempty output. The utility runs the package's build explicitly, then packs with lifecycle hooks disabled, so an inherited `ignore-scripts` setting cannot skip compilation.
 Changes to tracked source or its commit during that build are refused too.
 Ignored files and installed dependencies are outside that cleanliness check, so
-use Cloud's isolated frozen-lockfile source job for release preparation.
+use Cloud's isolated frozen-lockfile source job for release preparation. Give concurrent preparations separate source checkouts: each build writes `dist`.
 
 The output contains `waitron-io-ui-core-0.2.0.tgz` and `preparation.json`.
 The staged manifest records the original repository, commit and source version
 in `waitronSource`. It retains built JavaScript, declarations, export paths,
 CSS and the Lit peer, removes development and lifecycle metadata, and points at
-Cloud's existing restricted GitHub Packages association. Both delivered notices
+Cloud's existing restricted GitHub Packages association. Staged file modes are normalised so the file-creation mask does not change package bytes. Both delivered notices
 must equal the selected source's `LICENSE` and `LICENSE-GRANTS.md` byte for byte.
+
+The build child receives only an explicit set of path, home, locale, temporary-directory and CI/display environment variables. This does not isolate the home directory or filesystem; Cloud must provide the credential-free build job and isolated configuration required by its plan.
 
 The receipt records the tarball hash and npm integrity value, manifest and notice
 hashes, preparation-script hash, tool versions and hashes of tracked UI-package,
@@ -37,7 +39,7 @@ trusted main runs at that exact SHA, validate its complete build-input inventory
 reserve the version, review these bytes and perform its upload/readback checks.
 This utility neither selects green source nor publishes a package.
 
-Exercise both workspace and staged identities with the same independent
+Commit your changes first: the staged variant requires a clean checkout. Exercise both workspace and staged identities with the same independent
 TypeScript, bundle, browser and accessibility checks:
 
 ```sh
@@ -51,8 +53,5 @@ UI_PACKAGE_TARBALL=/tmp/waitron-ui-0.2.0/waitron-io-ui-core-0.2.0.tgz \
   pnpm --filter @waitron/ui-core test:package
 ```
 
-That option tests only the supplied registry artifact. It checks its source
-version against this checkout and the SHA's spelling; compare the full
-`waitronSource.commit` and tarball integrity with the selected release record
-before accepting it. Cloud's portal, image and authenticated registry-install
+That option tests only the supplied registry artifact. Its source commit must match this checkout by default. To verify an artifact built from another checkout, supply `UI_PACKAGE_SOURCE_COMMIT` with the selected full SHA. Pass `UI_PACKAGE_RELEASE_VERSION` to bind its version to Cloud's reservation. The proof checks the source version, repository association, homepage and private registry settings; compare tarball integrity with the selected release record too. Cloud's portal, image and authenticated registry-install
 qualification still belong to Cloud's release process.

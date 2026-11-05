@@ -1,22 +1,47 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, writeFile, mkdir, rm, readdir, realpath, stat } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  writeFile,
+  mkdir,
+  rm,
+  readdir,
+  realpath,
+  stat,
+  chmod,
+  link,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, relative, isAbsolute } from "node:path";
 import { pathToFileURL, URL } from "node:url";
 
 const hash = (bytes) => createHash("sha512").update(bytes).digest("hex");
+const BUILD_ENV = new Set([
+  "PATH",
+  "HOME",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TZ",
+  "CI",
+  "NO_COLOR",
+  "FORCE_COLOR",
+  "SystemRoot",
+  "SYSTEMROOT",
+  "COMSPEC",
+  "PATHEXT",
+]);
 const env = () =>
-  Object.fromEntries(
-    Object.entries(process.env).filter(
-      ([key]) => !key.startsWith("GIT_") && !/TOKEN|PASSWORD|SECRET|CREDENTIAL/i.test(key),
-    ),
-  );
-const run = (file, args, cwd) =>
+  Object.fromEntries(Object.entries(process.env).filter(([key]) => BUILD_ENV.has(key)));
+const run = (file, args, cwd, overrides = {}) =>
   execFileSync(file, args, {
     cwd,
-    env: env(),
+    env: { ...env(), ...overrides },
     encoding: "utf8",
     timeout: 120000,
     maxBuffer: 8 * 1024 * 1024,
@@ -89,6 +114,17 @@ export async function prepareUi({ checkout, output, releaseVersion, sourceCommit
   );
   checkout = await realpath(checkout);
   output = await realpath(output);
+  assert.equal(
+    await realpath(run("git", ["rev-parse", "--show-toplevel"], checkout).trim()),
+    checkout,
+    "checkout must be the repository top level",
+  );
+  assert(
+    !run("git", ["ls-files", "-v"], checkout)
+      .split("\n")
+      .some((line) => /^[a-zS] /.test(line)),
+    "source index flags may hide changes",
+  );
   assert(outside(checkout, output), "output must be outside the source checkout");
   assert.equal((await readdir(output)).length, 0, "output must be empty");
   assert.equal(
@@ -119,9 +155,13 @@ export async function prepareUi({ checkout, output, releaseVersion, sourceCommit
   );
   const lock = join(output, ".preparing");
   await mkdir(lock);
-  const temp = await realpath(await mkdtemp(join(tmpdir(), "waitron-ui-stage-")));
+  let temp;
   try {
-    run("pnpm", ["pack", "--pack-destination", temp], join(checkout, "packages/ui-core"));
+    temp = await realpath(await mkdtemp(join(tmpdir(), "waitron-ui-stage-")));
+    run("pnpm", ["run", "build"], join(checkout, "packages/ui-core"));
+    run("pnpm", ["pack", "--pack-destination", temp], join(checkout, "packages/ui-core"), {
+      npm_config_ignore_scripts: "true",
+    });
     clean();
     assert.equal(
       run("git", ["rev-parse", "HEAD"], checkout).trim(),
@@ -163,6 +203,36 @@ export async function prepareUi({ checkout, output, releaseVersion, sourceCommit
       notices[notice] = hash(bytes);
     }
     await writeFile(join(staged, "package.json"), JSON.stringify(manifest, null, 2) + "\n");
+    await writeFile(
+      join(staged, "README.md"),
+      `# @waitron-io/ui-core
+
+Use these shared account controls in a registry consumer. Release ${releaseVersion} comes from @waitron/ui-core@${source.version} at ${source.commit}. Waitron itself keeps its workspace imports.
+
+\`\`\`ts
+import "@waitron-io/ui-core/components/wt-input";
+import { applyTokens } from "@waitron-io/ui-core/tokens";
+
+applyTokens(document.querySelector<HTMLElement>("#app")!);
+\`\`\`
+
+Install Lit 3 as a peer dependency. The package includes JavaScript, declarations and theme CSS.
+
+Read the [source guide](https://github.com/clintongormley/waitron/blob/${source.commit}/packages/ui-core/README.md) for the controls and workspace development.
+
+The package carries Elastic License 2.0 in dist/LICENSE and its grants in dist/LICENSE-GRANTS.md.
+`,
+    );
+    const normalize = async (directory) => {
+      await chmod(directory, 0o755);
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        assert(entry.isFile() || entry.isDirectory(), "staged contents must be regular files");
+        if (entry.isDirectory()) await normalize(path);
+        else await chmod(path, 0o644);
+      }
+    };
+    await normalize(staged);
     run("npm", ["pack", "--ignore-scripts", "--pack-destination", temp], staged);
     const filename = `waitron-io-ui-core-${releaseVersion}.tgz`;
     const bytes = await readFile(join(temp, filename));
@@ -188,6 +258,10 @@ export async function prepareUi({ checkout, output, releaseVersion, sourceCommit
       .filter(Boolean)) {
       inputs[path] = hash(await readFile(join(checkout, path)));
     }
+    assert(
+      inputs["packages/ui-core/package.json"] && inputs.LICENSE && inputs["LICENSE-GRANTS.md"],
+      "required source inputs missing",
+    );
     const recipeSha512 = hash(await readFile(new URL(import.meta.url)));
     const toolchain = {
       node: process.version,
@@ -208,13 +282,19 @@ export async function prepareUi({ checkout, output, releaseVersion, sourceCommit
       manifestSha512: hash(await readFile(join(staged, "package.json"))),
       notices,
     };
-    await writeFile(join(output, filename), bytes, { flag: "wx" });
-    await writeFile(join(output, "preparation.json"), JSON.stringify(receipt, null, 2) + "\n", {
-      flag: "wx",
-    });
+    await writeFile(join(lock, filename), bytes);
+    await writeFile(join(lock, "preparation.json"), JSON.stringify(receipt, null, 2) + "\n");
+    const receiptPath = join(output, "preparation.json");
+    await link(join(lock, "preparation.json"), receiptPath);
+    try {
+      await link(join(lock, filename), join(output, filename));
+    } catch (error) {
+      await rm(receiptPath);
+      throw error;
+    }
     return receipt;
   } finally {
-    await rm(temp, { recursive: true, force: true });
+    if (temp) await rm(temp, { recursive: true, force: true });
     await rm(lock, { recursive: true, force: true });
   }
 }

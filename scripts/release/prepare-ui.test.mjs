@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, writeFile, rm, readdir } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm, readdir, cp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 
@@ -26,7 +26,7 @@ async function fixture(fn) {
     type: "module",
     license: "SEE LICENSE IN dist/LICENSE",
     files: ["dist"],
-    scripts: { prepack: 'node -e ""' },
+    scripts: { build: 'node -e ""', prepack: 'node -e ""' },
     devDependencies: { unused: "1.0.0" },
     peerDependencies: { lit: "^3.2.0" },
     sideEffects: true,
@@ -147,7 +147,7 @@ describe("UI release preparation", () => {
       /empty/,
     ],
     [
-      "changed notices",
+      "a changed source commit",
       async ({ checkout }) => {
         await writeFile(join(checkout, "packages/ui-core/dist/LICENSE"), "wrong");
         run("git", ["add", "."], checkout);
@@ -347,5 +347,353 @@ it("records input and recipe hashes for the separately selected source", async (
     );
     expect(receipt.toolchain.node).toBe(process.version);
     expect(receipt.toolchain.pnpm).toMatch(/^9\./);
+  });
+});
+
+it("refuses a stale nested copy inheriting its parent's Git identity", async () => {
+  await fixture(async ({ checkout, output, commit }) => {
+    const copy = join(checkout, "copy");
+    await cp(join(checkout, "packages"), join(copy, "packages"), { recursive: true });
+    for (const notice of ["LICENSE", "LICENSE-GRANTS.md"])
+      await cp(join(checkout, notice), join(copy, notice));
+    await writeFile(join(checkout, ".git/info/exclude"), "copy/\n");
+    await expect(
+      prepareUi({ checkout: copy, output, sourceCommit: commit, releaseVersion: "0.2.0" }),
+    ).rejects.toThrow(/top.level/);
+    expect(await readdir(output)).toEqual([]);
+  });
+});
+
+it.each(["npm_config_ignore_scripts", "NPM_CONFIG_IGNORE_SCRIPTS"])(
+  "rebuilds stale ignored output despite %s",
+  async (key) => {
+    await fixture(async ({ checkout, output, manifest, invoke }) => {
+      await writeFile(join(checkout, ".gitignore"), "packages/ui-core/dist/\n");
+      run("git", ["rm", "-r", "--cached", "packages/ui-core/dist"], checkout);
+      const build =
+        'node -e \'require("node:fs").writeFileSync("dist/index.js", "export const value = 43;\\n")\'';
+      await writeFile(
+        join(checkout, "packages/ui-core/package.json"),
+        JSON.stringify({ ...manifest, scripts: { build, prepack: "pnpm run build" } }),
+      );
+      run("git", ["add", "."], checkout);
+      run(
+        "git",
+        [
+          "-c",
+          "user.name=Fixture",
+          "-c",
+          "user.email=fixture@example.test",
+          "commit",
+          "-qm",
+          "new build",
+          "--no-gpg-sign",
+        ],
+        checkout,
+      );
+      const commit = run("git", ["rev-parse", "HEAD"], checkout).trim();
+      const result = invoke(["--source-commit", commit], { env: { ...gitEnv, [key]: "true" } });
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      expect(
+        run(
+          "tar",
+          ["-xOf", join(output, "waitron-io-ui-core-0.2.0.tgz"), "package/dist/index.js"],
+          output,
+        ),
+      ).toBe("export const value = 43;\n");
+    });
+  },
+);
+
+it("refuses a source edit hidden from git status", async () => {
+  await fixture(async ({ checkout, output, commit }) => {
+    run("git", ["update-index", "--assume-unchanged", "packages/ui-core/package.json"], checkout);
+    await writeFile(join(checkout, "packages/ui-core/package.json"), "{}");
+    expect(run("git", ["status", "--porcelain"], checkout)).toBe("");
+    await expect(
+      prepareUi({ checkout, output, sourceCommit: commit, releaseVersion: "0.2.0" }),
+    ).rejects.toThrow(/index flags/);
+  });
+});
+
+it("releases its output lock if creating scratch space fails", async () => {
+  await fixture(async ({ root, output, invoke }) => {
+    const file = join(root, "not-a-directory");
+    await writeFile(file, "retain");
+    const result = invoke([], { env: { ...gitEnv, TMPDIR: file } });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/ENOTDIR/);
+    expect(await readdir(output)).toEqual([]);
+  });
+});
+
+it("prepares identical bytes under a restrictive file creation mask", async () => {
+  await fixture(async ({ root, checkout, output, commit }) => {
+    const first = await prepareUi({
+      checkout,
+      output,
+      sourceCommit: commit,
+      releaseVersion: "0.2.0",
+    });
+    const secondOutput = join(root, "restrictive");
+    await mkdir(secondOutput);
+    const previous = process.umask(0o077);
+    try {
+      const second = await prepareUi({
+        checkout,
+        output: secondOutput,
+        sourceCommit: commit,
+        releaseVersion: "0.2.0",
+      });
+      expect(await readFile(join(secondOutput, second.tarball.filename))).toEqual(
+        await readFile(join(output, first.tarball.filename)),
+      );
+    } finally {
+      process.umask(previous);
+    }
+  });
+});
+
+it("selects the real UI consumer when only the preparation script changes", async () => {
+  const { scopeForPaths } = await import("../changed-packages.mjs");
+  const scope = scopeForPaths(["scripts/release/prepare-ui.mjs"], () => [
+    { name: "@waitron/ui-core", dir: "packages/ui-core" },
+  ]);
+  expect(scope.kind).toBe("packages");
+  expect(scope.packages).toEqual(["@waitron/ui-core"]);
+});
+
+it.each([[{ ".": { import: "./dist/index.js" } }, /built exports/]])(
+  "requires declaration export targets %#",
+  (exports, error) => {
+    expect(() => releaseManifest({ ...packed, exports }, source, "0.2.0")).toThrow(error);
+  },
+);
+it("refuses the alternative bundled-dependency spelling", () => {
+  expect(() =>
+    releaseManifest({ ...packed, bundleDependencies: ["lit"] }, source, "0.2.0"),
+  ).toThrow(/runtime dependencies/);
+});
+
+it("preserves repository and homepage provenance", () => {
+  const result = releaseManifest(packed, source, "0.2.1");
+  expect(result.repository).toEqual({
+    type: "git",
+    url: "https://github.com/waitron-io/waitron-cloud.git",
+  });
+  expect(result.homepage).toBe(
+    `https://github.com/clintongormley/waitron/tree/${"b".repeat(40)}/packages/ui-core`,
+  );
+});
+
+it("records independently checked manifest and notice hashes", async () => {
+  const { createHash } = await import("node:crypto");
+  await fixture(async ({ checkout, output, commit }) => {
+    const receipt = await prepareUi({
+      checkout,
+      output,
+      sourceCommit: commit,
+      releaseVersion: "0.2.0",
+    });
+    const tarball = join(output, receipt.tarball.filename);
+    const hashText = (text) => createHash("sha512").update(text).digest("hex");
+    expect(receipt.manifestSha512).toBe(
+      hashText(run("tar", ["-xOf", tarball, "package/package.json"], output)),
+    );
+    expect(receipt.notices).toEqual({
+      LICENSE: hashText("fixture LICENSE\n"),
+      "LICENSE-GRANTS.md": hashText("fixture LICENSE-GRANTS.md\n"),
+    });
+  });
+});
+
+it("delivers registry imports and an absolute source-guide link in the README", async () => {
+  await fixture(async ({ checkout, output, commit }) => {
+    const receipt = await prepareUi({
+      checkout,
+      output,
+      sourceCommit: commit,
+      releaseVersion: "0.2.1",
+    });
+    const readme = run(
+      "tar",
+      ["-xOf", join(output, receipt.tarball.filename), "package/README.md"],
+      output,
+    );
+    expect(readme).toContain('import "@waitron-io/ui-core/components/wt-input"');
+    expect(readme).toContain(
+      `https://github.com/clintongormley/waitron/blob/${commit}/packages/ui-core/README.md`,
+    );
+    expect(readme).toContain("dist/LICENSE-GRANTS.md");
+  });
+});
+
+async function buildFixture(context, code) {
+  await writeFile(join(context.checkout, "packages/ui-core/build.mjs"), code);
+  await writeFile(
+    join(context.checkout, "packages/ui-core/package.json"),
+    JSON.stringify({ ...context.manifest, scripts: { build: "node build.mjs" } }),
+  );
+  run("git", ["add", "."], context.checkout);
+  run(
+    "git",
+    [
+      "-c",
+      "user.name=Fixture",
+      "-c",
+      "user.email=fixture@example.test",
+      "commit",
+      "-qm",
+      "build fixture",
+      "--no-gpg-sign",
+    ],
+    context.checkout,
+  );
+  return run("git", ["rev-parse", "HEAD"], context.checkout).trim();
+}
+
+it("keeps credentials and Git overrides out of the real build child", async () => {
+  await fixture(async (context) => {
+    await writeFile(
+      join(context.checkout, ".git/info/exclude"),
+      "packages/ui-core/dist/env.json\n",
+    );
+    const keys = [
+      "NPM_CONFIG__AUTH",
+      "NPM_CONFIG_USERCONFIG",
+      "AWS_ACCESS_KEY_ID",
+      "GH_PAT",
+      "API_KEY",
+      "SSH_AUTH_SOCK",
+      "NODE_AUTH_TOKEN",
+      "GIT_DIR",
+    ];
+    const commit = await buildFixture(
+      context,
+      `import { writeFileSync } from "node:fs"; writeFileSync("dist/env.json", JSON.stringify(Object.fromEntries(${JSON.stringify(keys)}.map(key => [key, process.env[key] ?? null]))));`,
+    );
+    const result = context.invoke(["--source-commit", commit], {
+      env: { ...gitEnv, ...Object.fromEntries(keys.map((key) => [key, "FAKE_SENTINEL"])) },
+    });
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    const value = JSON.parse(
+      run(
+        "tar",
+        ["-xOf", join(context.output, "waitron-io-ui-core-0.2.0.tgz"), "package/dist/env.json"],
+        context.output,
+      ),
+    );
+    expect(value).toEqual(Object.fromEntries(keys.map((key) => [key, null])));
+  });
+});
+
+it("refuses changes to tracked files made during the build", async () => {
+  await fixture(async (context) => {
+    const commit = await buildFixture(
+      context,
+      'import { appendFileSync } from "node:fs"; appendFileSync("package.json", " ");',
+    );
+    await expect(
+      prepareUi({ ...context, sourceCommit: commit, releaseVersion: "0.2.0" }),
+    ).rejects.toThrow(/must be clean/);
+    expect(await readdir(context.output)).toEqual([]);
+  });
+});
+
+it("refuses a clean but different commit created during the build", async () => {
+  await fixture(async (context) => {
+    const commit = await buildFixture(
+      context,
+      `import { writeFileSync } from "node:fs"; import { execFileSync } from "node:child_process"; writeFileSync("marker", "changed"); execFileSync("git", ["add", "."]); execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "changed", "--no-gpg-sign"]);`,
+    );
+    await expect(
+      prepareUi({ ...context, sourceCommit: commit, releaseVersion: "0.2.0" }),
+    ).rejects.toThrow(/build changed source commit/);
+    expect(await readdir(context.output)).toEqual([]);
+  });
+});
+
+it("allows only one build for simultaneous preparations into one output", async () => {
+  await fixture(async (context) => {
+    const marker = join(context.root, "builds");
+    const commit = await buildFixture(
+      context,
+      `import { appendFileSync } from "node:fs"; appendFileSync(${JSON.stringify(marker)}, "built\\n");`,
+    );
+    const options = { ...context, sourceCommit: commit, releaseVersion: "0.2.0" };
+    const results = await Promise.allSettled([prepareUi(options), prepareUi(options)]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(await readFile(marker, "utf8")).toBe("built\n");
+    expect((await readdir(context.output)).sort()).toEqual([
+      "preparation.json",
+      "waitron-io-ui-core-0.2.0.tgz",
+    ]);
+  });
+});
+
+it.each(["preparation.json", "waitron-io-ui-core-0.2.0.tgz"])(
+  "preserves a foreign %s created during the build",
+  async (filename) => {
+    await fixture(async (context) => {
+      const target = join(context.output, filename);
+      const commit = await buildFixture(
+        context,
+        `import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(target)}, "foreign");`,
+      );
+      await expect(
+        prepareUi({ ...context, sourceCommit: commit, releaseVersion: "0.2.0" }),
+      ).rejects.toThrow(/EEXIST/);
+      expect(await readFile(target, "utf8")).toBe("foreign");
+      expect(await readdir(context.output)).toEqual([filename]);
+    });
+  },
+);
+
+it("records the selected lockfile and CI workflow contents", async () => {
+  const { createHash } = await import("node:crypto");
+  await fixture(async (context) => {
+    await mkdir(join(context.checkout, ".github/workflows"), { recursive: true });
+    const lockfile = "lockfileVersion: '9.0'\n";
+    const workflow = "name: fixture\n";
+    await writeFile(join(context.checkout, "pnpm-lock.yaml"), lockfile);
+    await writeFile(join(context.checkout, ".github/workflows/ci.yml"), workflow);
+    const commit = await buildFixture(context, "");
+    const receipt = await prepareUi({ ...context, sourceCommit: commit, releaseVersion: "0.2.0" });
+    expect(receipt.inputs["pnpm-lock.yaml"]).toBe(
+      createHash("sha512").update(lockfile).digest("hex"),
+    );
+    expect(receipt.inputs[".github/workflows/ci.yml"]).toBe(
+      createHash("sha512").update(workflow).digest("hex"),
+    );
+  });
+});
+
+it("collects temporary build files after a successful preparation", async () => {
+  await fixture(async (context) => {
+    const scratch = join(context.root, "scratch");
+    await mkdir(scratch);
+    const result = context.invoke([], { env: { ...gitEnv, TMPDIR: scratch } });
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect((await readdir(scratch)).filter((name) => name.startsWith("waitron-ui-stage-"))).toEqual(
+      [],
+    );
+  });
+});
+
+it("refuses an export that resolves to a directory", async () => {
+  await fixture(async (context) => {
+    const path = join(context.checkout, "packages/ui-core/dist/index.js");
+    await rm(path);
+    await mkdir(path);
+    await writeFile(join(path, "child.js"), "export {};\n");
+    const commit = await buildFixture(context, "");
+    await expect(
+      prepareUi({ ...context, sourceCommit: commit, releaseVersion: "0.2.0" }),
+    ).rejects.toThrow(/must be a staged file/);
+    expect(await readdir(context.output)).toEqual([]);
   });
 });
