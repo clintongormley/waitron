@@ -9,6 +9,7 @@ import {
   type NodeDatabase,
   type NodeTransaction,
 } from "@waitron/db";
+import { ACTIVATED_OR_LATER } from "@waitron/handover";
 import { servingPrimaryNodeId, type SignedMembershipDocument } from "@waitron/membership";
 import {
   nodeHandoverOperations,
@@ -34,14 +35,6 @@ import type { Logger } from "./logger.js";
 import { saveVerifiedMembership } from "./node-membership-api.js";
 
 const START_CHECK_TIMEOUT_MS = 5000;
-
-/** A destination that reached `activated`: this state or one only reachable after it. */
-const ACTIVATED_OR_LATER = [
-  "activated",
-  "return_pending",
-  "return_complete",
-  "return_abandoned",
-] as const;
 
 interface NodeDeps {
   node: NodeDatabase;

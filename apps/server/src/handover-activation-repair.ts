@@ -1,5 +1,5 @@
 import type { Database, NodeDatabase } from "@waitron/db";
-import { readHandoverActivation } from "@waitron/handover";
+import { READY_TO_PROMOTE, readHandoverActivation } from "@waitron/handover";
 import { readNodeMode, readOpenHandoverOperation } from "@waitron/node-db";
 import { advanceHandover } from "./handover-store.js";
 
@@ -15,7 +15,7 @@ export async function finishInterruptedActivation(deps: {
 }): Promise<void> {
   const open = await readOpenHandoverOperation(deps.node, deps.nodeId);
   if (open === null || open.role !== "destination") return;
-  if (open.state !== "filing_assumed" && open.state !== "emergency_declared") return;
+  if (!READY_TO_PROMOTE.includes(open.state)) return;
   if ((await readNodeMode(deps.node, deps.nodeId)).mode === "mirror") return;
   const row = await readHandoverActivation(deps.db, open.operationId);
   if (

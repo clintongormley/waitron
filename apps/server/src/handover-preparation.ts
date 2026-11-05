@@ -2,7 +2,7 @@ import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { Database, NodeDatabase } from "@waitron/db";
-import type { HandoverState } from "@waitron/handover";
+import { READY_TO_PROMOTE } from "@waitron/handover";
 import { personIdForLoginEmail } from "@waitron/identity";
 import type { OperationBinding } from "@waitron/module";
 import { readHandoverEvent, readHandoverOperation, type HandoverOperation } from "@waitron/node-db";
@@ -36,11 +36,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 // A refusal's params are logged, and this route takes any caller's text.
 export const OPERATION_ID_MAX_LENGTH = 64;
 
-const READY_TO_PROMOTE: ReadonlySet<HandoverState> = new Set<HandoverState>([
-  "filing_assumed",
-  "emergency_declared",
-]);
-
 /** Every step of one operation takes this from here: `contextKey` does not cover the last field. */
 export function handoverPromotionContext(operation: Pick<HandoverOperation, "scenario">): {
   oldNodeNeutralised: true;
@@ -66,7 +61,7 @@ export async function readOperationReadyToPromote(
   const operation = await readHandoverOperation(deps.node, deps.nodeId, operationId);
   if (operation === null) throw new AppError("handover.operation_unknown", { operationId });
   const ready =
-    READY_TO_PROMOTE.has(operation.state) &&
+    READY_TO_PROMOTE.includes(operation.state) &&
     (operation.state !== "filing_assumed" ||
       (await readHandoverEvent(deps.node, deps.nodeId, operationId, HANDOVER_EVENT.copyPlaced)) !==
         null);

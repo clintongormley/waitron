@@ -27,7 +27,15 @@ export { NODE_LOCAL_MANIFEST } from "./manifest.js";
 export { HANDOVER_MIGRATIONS } from "./migrations.js";
 export { handoverActivations, handoverScenario } from "./schema/index.js";
 export type { NodeLocalItem, NodeLocalManifestRow, RetainedRevision } from "./manifest.js";
-export { HANDOVER_STATES, initialState, isOpen, nextState } from "./states.js";
+export {
+  ACTIVATED_OR_LATER,
+  BEFORE_ACTIVATION,
+  HANDOVER_STATES,
+  READY_TO_PROMOTE,
+  initialState,
+  isOpen,
+  nextState,
+} from "./states.js";
 export type { HandoverRole, HandoverState } from "./states.js";
 export type {
   HandoverKind,

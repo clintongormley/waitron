@@ -9,6 +9,7 @@ import {
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
+import { ACTIVATED_OR_LATER } from "@waitron/handover";
 import type { CanonicalValue, RoutableServer } from "@waitron/membership";
 import {
   readHandoverEvent,
@@ -215,11 +216,7 @@ export async function startHandoverDestinationDuty(
 
 async function noteOperationOffMirror(deps: DestinationDutyDeps): Promise<void> {
   const open = await readOpenHandoverOperation(deps.node, deps.nodeId);
-  if (
-    open?.role === "destination" &&
-    open.state !== "activated" &&
-    open.state !== "return_pending"
-  ) {
+  if (open?.role === "destination" && !ACTIVATED_OR_LATER.includes(open.state)) {
     deps.log("warn", "handover-destination.not_a_mirror", { operationId: open.operationId });
   }
 }

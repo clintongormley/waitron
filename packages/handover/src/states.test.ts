@@ -1,6 +1,14 @@
 import { AppError } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
-import { HANDOVER_STATES, initialState, isOpen, nextState } from "./states.js";
+import {
+  ACTIVATED_OR_LATER,
+  BEFORE_ACTIVATION,
+  HANDOVER_STATES,
+  READY_TO_PROMOTE,
+  initialState,
+  isOpen,
+  nextState,
+} from "./states.js";
 import type { HandoverRole, HandoverState } from "./states.js";
 import type { HandoverScenario } from "./binding.js";
 
@@ -194,6 +202,47 @@ describe("nextState", () => {
         }
       }
     }
+  });
+});
+
+describe("the named groups of a destination's states", () => {
+  const SCENARIOS: readonly HandoverScenario[] = ["controlled", "emergency"];
+  const stepsFrom = (scenario: HandoverScenario, from: HandoverState) =>
+    HANDOVER_STATES.filter((to) => {
+      try {
+        nextState("destination", scenario, from, to);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  const reaches = (
+    scenario: HandoverScenario,
+    from: HandoverState,
+    target: HandoverState,
+  ): boolean =>
+    stepsFrom(scenario, from).some((to) => to === target || reaches(scenario, to, target));
+  const inAnyScenario = (holds: (scenario: HandoverScenario, state: HandoverState) => boolean) =>
+    HANDOVER_STATES.filter((state) => SCENARIOS.some((scenario) => holds(scenario, state))).sort();
+
+  it("`ACTIVATED_OR_LATER` is `activated` and everything a destination can reach from it", () => {
+    expect([...ACTIVATED_OR_LATER].sort()).toEqual(
+      inAnyScenario(
+        (scenario, state) => state === "activated" || reaches(scenario, "activated", state),
+      ),
+    );
+  });
+
+  it("`BEFORE_ACTIVATION` is every state a destination can still reach `activated` from", () => {
+    expect([...BEFORE_ACTIVATION].sort()).toEqual(
+      inAnyScenario((scenario, state) => reaches(scenario, state, "activated")),
+    );
+  });
+
+  it("`READY_TO_PROMOTE` is every state whose next step can be `activated`", () => {
+    expect([...READY_TO_PROMOTE].sort()).toEqual(
+      inAnyScenario((scenario, state) => stepsFrom(scenario, state).includes("activated")),
+    );
   });
 });
 

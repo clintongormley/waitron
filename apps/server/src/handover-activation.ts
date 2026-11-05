@@ -4,9 +4,9 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { inTurn } from "@waitron/provisioning";
 import { readNodeMembership, nowIso, type Database, type NodeDatabase } from "@waitron/db";
 import {
+  ACTIVATED_OR_LATER,
   insertHandoverActivationTx,
   readHandoverActivation,
-  type HandoverState,
   type SignedHandoverEnvelope,
 } from "@waitron/handover";
 import {
@@ -64,18 +64,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   ...HELD_DOCUMENT_REFUSALS,
 };
 
-const ALREADY_ACTIVATED: ReadonlySet<HandoverState> = new Set<HandoverState>([
-  "activated",
-  "return_pending",
-  "return_complete",
-  "return_abandoned",
-]);
-
 const ALREADY_ANSWER = { activated: true, restarting: false } as const;
 
 async function alreadyActivated(deps: HandoverActivationDeps, operationId: string) {
   const stored = await readHandoverOperation(deps.node, deps.nodeId, operationId);
-  return stored?.role === "destination" && ALREADY_ACTIVATED.has(stored.state);
+  return stored?.role === "destination" && ACTIVATED_OR_LATER.includes(stored.state);
 }
 
 /** The signed step that let this box go ahead: a stored event's envelope, read here, never sent. */
@@ -201,7 +194,7 @@ async function sendChartToSource(deps: ChartPostDeps, stopping: AbortSignal): Pr
   const { mode } = await readNodeMode(deps.node, deps.nodeId);
   if (mode === "mirror") return;
   const operation = await readOpenHandoverOperation(deps.node, deps.nodeId);
-  if (operation?.role !== "destination" || !ALREADY_ACTIVATED.has(operation.state)) return;
+  if (operation?.role !== "destination" || !ACTIVATED_OR_LATER.includes(operation.state)) return;
   const { operationId, sourceNodeId } = operation;
   const chart = await readNodeMembership(deps.db);
   const source = chart?.body.nodes.find((n) => n.nodeId === sourceNodeId);

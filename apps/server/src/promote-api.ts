@@ -10,7 +10,7 @@ import {
   loginManagerById,
   type TotpKeyRing,
 } from "@waitron/identity";
-import type { HandoverState } from "@waitron/handover";
+import { BEFORE_ACTIVATION } from "@waitron/handover";
 import type { WaitronModule } from "@waitron/module";
 import { readOpenHandoverOperation } from "@waitron/node-db";
 import { parseStandbyOperationInput } from "./recovery-module-operation.js";
@@ -75,20 +75,13 @@ const preparationContext = (body: {
   noParallelRecovery: body.noParallelRecovery,
 });
 
-// From `activated` on this box is already the main box, where a promote only reports status.
-const BEFORE_ACTIVATION: ReadonlySet<HandoverState> = new Set<HandoverState>([
-  "prepared",
-  "copy_accepted",
-  "filing_assumed",
-  "emergency_declared",
-]);
-
 export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = () => {}): void {
   const run = createErrorBoundary(STATUS, "promotion.failed");
 
   const refuseWhileTakingOver = async (): Promise<void> => {
     const open = await readOpenHandoverOperation(deps.nodeDb, deps.nodeId);
-    if (open?.role === "destination" && BEFORE_ACTIVATION.has(open.state))
+    // From `activated` on this box is already the main box, where a promote only reports status.
+    if (open?.role === "destination" && BEFORE_ACTIVATION.includes(open.state))
       throw new AppError("handover.operation_in_progress", { operationId: open.operationId });
   };
 
