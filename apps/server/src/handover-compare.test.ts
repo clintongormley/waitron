@@ -861,7 +861,10 @@ describe("compareFinalCopy", () => {
       const found: CopyFileChecks = {};
       expect(await r.compareRow(r.indicator, {}, found)).toEqual({ ok: true });
       await writeFile(r.path, randomBytes((await stat(r.path)).size));
-      await expect(r.compareRow(r.indicator, {}, found)).rejects.toThrow();
+      await expect(r.compareRow(r.indicator, {}, found)).rejects.toMatchObject({
+        code: "ERR_SQLITE_ERROR",
+        errcode: 26,
+      });
       expect(found).toEqual({});
       // Failing case: the same throw on every try, and the file never fetched again.
       expect(await r.compareRow(r.indicator, {}, found)).toEqual(refused("handover.copy_mismatch"));
@@ -875,7 +878,9 @@ describe("compareFinalCopy", () => {
       integrityThreads.paths.length = 0;
       // Where this image's migrations should be: a fault on this box, nothing about the file.
       const migrationsRoot = join(r.m2State, "absent");
-      await expect(r.compareRow(r.indicator, { migrationsRoot }, found)).rejects.toThrow();
+      await expect(r.compareRow(r.indicator, { migrationsRoot }, found)).rejects.toMatchObject({
+        code: "migrations.set_missing",
+      });
       expect(found).toEqual({});
       expect(fileReads.paths).toEqual([]);
       expect(await r.compareRow(r.indicator, {}, found)).toEqual({ ok: true });
@@ -888,7 +893,9 @@ describe("compareFinalCopy", () => {
       const r = await rig();
       const migrationsRoot = join(r.m2State, "absent");
       const found: CopyFileChecks = {};
-      await expect(r.compareRow(r.indicator, { migrationsRoot }, found)).rejects.toThrow();
+      await expect(r.compareRow(r.indicator, { migrationsRoot }, found)).rejects.toMatchObject({
+        code: "migrations.set_missing",
+      });
       expect(found).toEqual({ bytesAndIntegrity: true });
     });
 
@@ -1758,7 +1765,9 @@ describe("the spare's duty runs the real comparison", () => {
       // A folder holding a file refuses the move onto it.
       await mkdir(join(acceptedCopyPath(r.m2State, OP), "in-the-way"), { recursive: true });
       const deps = { node: suite.node, ring: RING, nodeId: r.m2.nodeId, stateDir: r.m2State };
-      await expect(acceptFinalCopy(deps, await r.row(), r.indicator, r.path)).rejects.toThrow();
+      await expect(acceptFinalCopy(deps, await r.row(), r.indicator, r.path)).rejects.toMatchObject(
+        { code: "EISDIR", syscall: "rename" },
+      );
       // Failing case, recording before the move: `copy_accepted` with no accepted file.
       expect((await r.row()).state).toBe("prepared");
       expect(await acceptedEvent(r)).toBeNull();
