@@ -27,7 +27,7 @@ export interface SplitSource {
   /** Someone else's unsent dishes hold it: no new tick until taken over; an existing tick stays
    * (D21). `ownerName` is null for a holder the server has no name for. */
   held: { draftId: string; revision: number; ownerName: string | null } | null;
-  /** This person's own unsent dishes on it, saved or still only on screen. */
+  /** This person's own unsent dishes on it: a saved draft, or dishes recalled on screen. */
   ownUnsent: boolean;
 }
 
@@ -257,7 +257,8 @@ export function splitSourcesFrom(
 }
 
 /** After a read (D21). `gone`: selected bills the read no longer lists. `changed`: bills still listed
- * that lost a pick. A held bill is in neither: it stays selected. Both in the order of `before`. */
+ * that lost a pick or whose picks became the whole bill. A held bill is in neither: it stays selected.
+ * Both in the order of `before`. */
 export function tidySplit(
   before: ReadonlyMap<string, readonly PickRow[]>,
   sources: readonly SplitSource[],
@@ -279,8 +280,8 @@ export function tidySplit(
       const next = presented(source)
         ? NO_PICKS
         : tidyPicks(before.get(id) ?? [], source.groups, old);
-      if ([...old].some((pick) => !next.has(pick))) changed.push(id);
       place(out, source, next);
+      if (out.whole.has(id) || [...old].some((pick) => !next.has(pick))) changed.push(id);
     }
   }
   return { split: out, gone, changed };

@@ -913,14 +913,97 @@ describe("A803 selection:", () => {
       expect(after.changed).toEqual(["b1"]);
     });
 
-    it("a read that leaves every dish picked makes the bill whole and names nothing", () => {
-      const one = source("b1", 1, [a, b]);
-      const split = looseOf({ b1: ["a"] });
+    it("a read that removes a bill's only unpicked dish makes it whole, names it, and names it once", () => {
+      const split = looseOf({ b1: ["a", "b"] });
+      const after = [source("b1", 1, [a, b])];
 
-      const out = tidySplit(drawn([one], split), [source("b1", 1, [a])], split);
+      const out = tidySplit(drawn([source("b1", 1, [a, b, c])], split), after, split);
 
       expect([...out.split.whole]).toEqual(["b1"]);
       expect(out.split.picks.has("b1")).toBe(false);
+      expect(out.changed).toEqual(["b1"]);
+      expect(toSelection(after, out.split)).toEqual({ wholeBillIds: ["b1"], loose: [] });
+
+      expect(tidySplit(drawn(after, out.split), after, out.split).changed).toEqual([]);
+    });
+
+    it("a read that takes a pick as well as the only unpicked dish names the bill once", () => {
+      const split = looseOf({ b1: ["a", "b"] });
+
+      const out = tidySplit(
+        drawn([source("b1", 1, [a, b, c])], split),
+        [source("b1", 1, [a])],
+        split,
+      );
+
+      expect([...out.split.whole]).toEqual(["b1"]);
+      expect(out.changed).toEqual(["b1"]);
+    });
+
+    it("this person's unsent dishes going, with every sent dish picked, makes the bill whole and names it", () => {
+      const split = looseOf({ b1: ["a"] });
+
+      const out = tidySplit(
+        drawn([source("b1", 1, [a], { ownUnsent: true })], split),
+        [source("b1", 1, [a])],
+        split,
+      );
+
+      expect([...out.split.whole]).toEqual(["b1"]);
+      expect(out.changed).toEqual(["b1"]);
+    });
+
+    it("the only unpicked dish leaving under someone else's order names the bill when the order goes", () => {
+      const split = looseOf({ b1: ["a", "b"] });
+      const held = [source("b1", 1, [a, b], { held: luis })];
+
+      const during = tidySplit(drawn([source("b1", 1, [a, b, c])], split), held, split);
+      expect(sorted(during.split.picks.get("b1"))).toEqual(["a", "b"]);
+      expect(during.changed).toEqual([]);
+
+      const after = tidySplit(drawn(held, during.split), [source("b1", 1, [a, b])], during.split);
+      expect([...after.split.whole]).toEqual(["b1"]);
+      expect(after.changed).toEqual(["b1"]);
+    });
+
+    it("a read showing this person's own draft on a whole bill leaves it whole and names nothing", () => {
+      const split = wholeOf("b1");
+
+      const out = tidySplit(
+        drawn([source("b1", 1, [a])], split),
+        [source("b1", 1, [a], { ownUnsent: true })],
+        split,
+      );
+
+      expect([...out.split.whole]).toEqual(["b1"]);
+      expect(out.changed).toEqual([]);
+    });
+
+    it("a read that leaves another dish unpicked keeps the picks and names nothing", () => {
+      const split = looseOf({ b1: ["a"] });
+
+      const out = tidySplit(
+        drawn([source("b1", 1, [a, b, c])], split),
+        [source("b1", 1, [a, b])],
+        split,
+      );
+
+      expect(out.split.whole.size).toBe(0);
+      expect(sorted(out.split.picks.get("b1"))).toEqual(["a"]);
+      expect(out.changed).toEqual([]);
+    });
+
+    it("a read that leaves only a paid dish unpicked keeps the picks and names nothing", () => {
+      const split = looseOf({ b1: ["a"] });
+
+      const out = tidySplit(
+        drawn([source("b1", 1, [a, b, c], { paid: ["c"] })], split),
+        [source("b1", 1, [a, c], { paid: ["c"] })],
+        split,
+      );
+
+      expect(out.split.whole.size).toBe(0);
+      expect(sorted(out.split.picks.get("b1"))).toEqual(["a"]);
       expect(out.changed).toEqual([]);
     });
 
