@@ -1,13 +1,5 @@
 import { existsSync } from "node:fs";
-import {
-  chmod,
-  copyFile,
-  open,
-  rename,
-  rm,
-  rmdir,
-  type FileHandle,
-} from "node:fs/promises";
+import { chmod, copyFile, open, rename, rm, rmdir, type FileHandle } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { lockVenueDatabase, withNodeTransaction, type NodeDatabase } from "@waitron/db";
@@ -163,7 +155,7 @@ function acceptedCopyHolds(acceptedPath: string, chartText: string): boolean {
   }
 }
 
-/** Opened and read, not only looked up: what cannot be read stops the start, as a digest of it would. */
+/** Opened and read, not only looked up: what cannot be read stops the start, as a digest would. */
 async function sizeIfPresent(path: string): Promise<number | null> {
   let handle: FileHandle;
   try {

@@ -415,7 +415,10 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     }
   }
 
-  /** The chart read, where it puts the old box and the certificate to trust it by, or `undefined` while it cannot be asked. */
+  /**
+   * The chart read, where it puts the old box and the certificate to trust it by, or `undefined`
+   * while it cannot be asked.
+   */
   async function sourceAddress(operation: HandoverOperation) {
     const link = await readMirrorLink(deps.node, deps.nodeId);
     const chart = await readNodeMembership(deps.db);

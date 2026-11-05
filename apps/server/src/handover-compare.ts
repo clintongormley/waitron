@@ -10,11 +10,7 @@ import {
 } from "@waitron/handover";
 import { personRole, roleHasPermission, type PersonRoleValue } from "@waitron/identity";
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
-import {
-  imageMigrationHashes,
-  manifestSets,
-  type MigrationSetSource,
-} from "@waitron/migrations";
+import { imageMigrationHashes, manifestSets, type MigrationSetSource } from "@waitron/migrations";
 import { checkHandoverCopy, collectHandoverSummaries, type WaitronModule } from "@waitron/module";
 import type { HandoverOperation } from "@waitron/node-db";
 import { modulePreparationMergeFits, quoteIdent, unknownHashes } from "@waitron/provisioning";
@@ -201,7 +197,7 @@ async function hasTable(query: BackupQuery, name: string): Promise<boolean> {
 
 const imageHashes = new Map<string, readonly string[]>();
 
-/** The files in an image cannot change while it runs, and a box waiting on a setting asks every minute. */
+/** An image's files cannot change while it runs, and a box waiting on a setting asks every minute. */
 function imageHashesOf(set: MigrationSetSource, root: string | null): readonly string[] {
   const key = JSON.stringify([root, set.name, set.from]);
   let hashes = imageHashes.get(key);

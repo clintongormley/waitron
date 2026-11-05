@@ -120,7 +120,7 @@ export async function advanceHandoverTx(
 
 /**
  * The operations this box took the destination role in that have a folder under `stateDir`. A
- * source's folder is its capture and a folder no row names is nothing of ours, so neither is yielded.
+ * source's folder is its capture and a folder no row names is unknown here: neither is yielded.
  */
 export async function* destinationOperationFolders(
   deps: HandoverStoreDeps,

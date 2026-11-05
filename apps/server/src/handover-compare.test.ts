@@ -716,7 +716,7 @@ describe("compareFinalCopy", () => {
       imageReads.folders.length = 0;
       journalReads.statements.length = 0;
       expect(await r.compareRow(r.indicator, { migrationsRoot }, found)).toEqual({ ok: true });
-      // Failing case, nothing remembered: every set's folder again, twice over for the enabled ones.
+      // Failing case, nothing remembered: every set's folder again, twice for the enabled ones.
       expect(imageReads.folders.filter((path) => path.startsWith(migrationsRoot))).toEqual([]);
       expect(journalReads.statements).toEqual(firstJournals);
     });
