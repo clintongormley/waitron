@@ -944,8 +944,8 @@ Each extra stays separate. The retired Allergens screen has no destination or pr
 ### Regional practice names
 
 A demo set up in Catalonia or the Balearic Islands uses the pack's
-`casa-delgado-ca` data and Can Delgado as the default venue name. The stored tenant country
-and venue's province select the data. Catalan staff and kitchen names are a
+`casa-delgado-ca` data and Can Delgado as the default venue name. The tenant's stored country
+and the venue's province select the data. Catalan staff and kitchen names are a
 demo-only override; customer content remains Catalan, Spanish and English.
 The Valencian Community selects `casa-delgado-valencia`, with Casa Delgado de l'Horta
 as its default venue name. Its plain names use `ca-ES-valencia`; content starts in
