@@ -10,7 +10,11 @@ import {
 } from "@waitron/handover";
 import { personRole, roleHasPermission, type PersonRoleValue } from "@waitron/identity";
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
-import { imageMigrationHashes, manifestSets } from "@waitron/migrations";
+import {
+  imageMigrationHashes,
+  manifestSets,
+  type MigrationSetSource,
+} from "@waitron/migrations";
 import { checkHandoverCopy, collectHandoverSummaries, type WaitronModule } from "@waitron/module";
 import type { HandoverOperation } from "@waitron/node-db";
 import { modulePreparationMergeFits, quoteIdent, unknownHashes } from "@waitron/provisioning";
@@ -150,9 +154,10 @@ async function compareFile(
   const copy = await openBackupQuery(copyPath);
   let answer: CompareOutcome;
   try {
-    answer = (await aheadOfThisImage(copy.query, deps.migrationsRoot)) ??
+    const journals = journalsIn(copy.query);
+    answer = (await aheadOfThisImage(journals, deps.migrationsRoot)) ??
       modulesDiffer(body, deps.modules) ??
-      (await behindThisImage(copy.query, deps.modules, deps.migrationsRoot)) ??
+      (await behindThisImage(journals, deps.modules, deps.migrationsRoot)) ??
       (await rememberedModuleChecks(found, deps.modules, copy.query)) ??
       (await settingsRefused(deps, body)) ??
       (await summaryRefused(deps.modules, copy.query, body)) ??
@@ -194,16 +199,46 @@ async function hasTable(query: BackupQuery, name: string): Promise<boolean> {
   return false;
 }
 
+const imageHashes = new Map<string, readonly string[]>();
+
+/** The files in an image cannot change while it runs, and a box waiting on a setting asks every minute. */
+function imageHashesOf(set: MigrationSetSource, root: string | null): readonly string[] {
+  const key = JSON.stringify([root, set.name, set.from]);
+  let hashes = imageHashes.get(key);
+  if (hashes === undefined) {
+    hashes = imageMigrationHashes(set, root);
+    imageHashes.set(key, hashes);
+  }
+  return hashes;
+}
+
+/** A journal's hashes in the copy, `null` with no such table. */
+type JournalOf = (table: string) => Promise<readonly string[] | null>;
+
+/** Each journal read once, however many checks of this one attempt ask for it. */
+function journalsIn(query: BackupQuery): JournalOf {
+  const read = new Map<string, readonly string[] | null>();
+  return async (table) => {
+    let journal = read.get(table);
+    if (journal === undefined) {
+      journal = (await hasTable(query, table)) ? await journalOf(query, table) : null;
+      read.set(table, journal);
+    }
+    return journal;
+  };
+}
+
 /**
  * Every set this image ships, not only the enabled ones: the start that would open this copy reads
  * them all (`node-entry.ts`'s `assertNotAhead`). Runs before any module's code, which must not read
  * a schema this image does not know.
  */
-async function aheadOfThisImage(query: BackupQuery, root: string | null): Promise<Refusal | null> {
+async function aheadOfThisImage(journals: JournalOf, root: string | null): Promise<Refusal | null> {
   for (const set of manifestSets()) {
-    if (set.database === "node" || !(await hasTable(query, set.table))) continue;
-    const hashes = await journalOf(query, set.table);
-    const unknownMigrations = unknownHashes(hashes, imageMigrationHashes(set, root));
+    if (set.database === "node") continue;
+    const hashes = await journals(set.table);
+    if (hashes === null) continue;
+    const unknownMigrations = unknownHashes(hashes, imageHashesOf(set, root));
     if (unknownMigrations.length > 0) {
       return refuse("provisioning.database_ahead", { set: set.name, unknownMigrations });
     }
@@ -226,14 +261,14 @@ async function journalOf(query: BackupQuery, table: string): Promise<string[]> {
  * than its code.
  */
 async function behindThisImage(
-  query: BackupQuery,
+  journals: JournalOf,
   modules: readonly WaitronModule[],
   root: string | null,
 ): Promise<Refusal | null> {
   for (const { migrations: set } of modules) {
     if (set.database === "node") continue;
-    const held = (await hasTable(query, set.table)) ? await journalOf(query, set.table) : [];
-    if (unknownHashes(imageMigrationHashes(set, root), held).length > 0) {
+    const held = (await journals(set.table)) ?? [];
+    if (unknownHashes(imageHashesOf(set, root), held).length > 0) {
       return refuse("handover.modules_differ", { set: set.name });
     }
   }

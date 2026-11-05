@@ -11,7 +11,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { existsSync, statSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type RequestListener, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -128,6 +128,34 @@ vi.mock("node:fs", async (importOriginal) => {
     return real.createReadStream(...args);
   };
   return { ...real, createReadStream };
+});
+
+const imageReads = vi.hoisted(() => ({ folders: [] as string[] }));
+vi.mock("drizzle-orm/migrator", async (importOriginal) => {
+  const real = await importOriginal<typeof import("drizzle-orm/migrator")>();
+  return {
+    ...real,
+    readMigrationFiles: (...args: Parameters<typeof real.readMigrationFiles>) => {
+      imageReads.folders.push(args[0].migrationsFolder);
+      return real.readMigrationFiles(...args);
+    },
+  };
+});
+
+const journalReads = vi.hoisted(() => ({ statements: [] as string[] }));
+vi.mock("@waitron/store", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@waitron/store")>();
+  return {
+    ...real,
+    openBackupQuery: async (...args: Parameters<typeof real.openBackupQuery>) => {
+      const opened = await real.openBackupQuery(...args);
+      const rows: typeof opened.query.rows = (statement, values) => {
+        if (statement.startsWith("select hash from")) journalReads.statements.push(statement);
+        return opened.query.rows(statement, values);
+      };
+      return { ...opened, query: { ...opened.query, rows } };
+    },
+  };
 });
 
 const chartReads = vi.hoisted(() => ({ count: 0 }));
@@ -656,6 +684,61 @@ describe("compareFinalCopy", () => {
       const r = await rig();
       const result = await r.compareRow(r.indicator, { modules: [...ALL_MODULES].reverse() });
       expect(result).toEqual({ ok: true });
+    });
+  });
+
+  describe("what each try reads of this image's migrations and the copy's journals", () => {
+    /** A root of this image's migrations that no earlier case has asked about. */
+    function imageRoot(r: { m2State: string }, name: string): string {
+      const root = join(r.m2State, name);
+      for (const set of manifestSets()) {
+        const { migrationsFolder } = migrationOptionsFor([set], null)[0]!;
+        cpSync(migrationsFolder, join(root, set.name), { recursive: true });
+      }
+      return root;
+    }
+
+    it("reads the image's files once across two tries, and each journal once a try", async () => {
+      const r = await rig();
+      const migrationsRoot = imageRoot(r, "image");
+      const found: CopyFileChecks = {};
+      imageReads.folders.length = 0;
+      journalReads.statements.length = 0;
+
+      expect(await r.compareRow(r.indicator, { migrationsRoot }, found)).toEqual({ ok: true });
+      const firstFolders = imageReads.folders.filter((path) => path.startsWith(migrationsRoot));
+      const firstJournals = [...journalReads.statements];
+      expect(firstFolders.length).toBeGreaterThan(0);
+      expect(new Set(firstFolders).size).toBe(firstFolders.length);
+      expect(firstJournals.length).toBeGreaterThan(0);
+      expect(new Set(firstJournals).size).toBe(firstJournals.length);
+
+      imageReads.folders.length = 0;
+      journalReads.statements.length = 0;
+      expect(await r.compareRow(r.indicator, { migrationsRoot }, found)).toEqual({ ok: true });
+      // Failing case, nothing remembered: every set's folder again, twice over for the enabled ones.
+      expect(imageReads.folders.filter((path) => path.startsWith(migrationsRoot))).toEqual([]);
+      expect(journalReads.statements).toEqual(firstJournals);
+    });
+
+    it("a root holding other migrations answers by its own files, not another root's", async () => {
+      const r = await rig();
+      const whole = imageRoot(r, "whole");
+      const short = imageRoot(r, "short");
+      const journalPath = join(short, FISCAL, "meta", "_journal.json");
+      const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: unknown[] };
+      journal.entries.pop();
+      writeFileSync(journalPath, JSON.stringify(journal));
+
+      expect(await r.compareRow(r.indicator, { migrationsRoot: whole })).toEqual({ ok: true });
+      // Failing case, remembered by the set alone: the whole root's answer again.
+      expect(await r.compareRow(r.indicator, { migrationsRoot: short })).toEqual(
+        expect.objectContaining({
+          ok: false,
+          reason: "provisioning.database_ahead",
+          detail: expect.objectContaining({ set: FISCAL }),
+        }),
+      );
     });
   });
 
