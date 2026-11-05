@@ -2,7 +2,9 @@ import type { Context, Hono } from "hono";
 import { readNodeMembership } from "@waitron/db";
 import {
   bindingFingerprint,
+  isSha256Hex,
   parseBinding,
+  refuseRequest,
   verifyEnvelope,
   type HandoverBinding,
   type SignedHandoverEnvelope,
@@ -13,7 +15,6 @@ import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { AppError, isUuid } from "@waitron/shared";
 import {
   imageMigrationsDigest,
-  isDigest,
   offerSettingsDifference,
   parseOfferSettings,
   readOfferSettings,
@@ -56,20 +57,16 @@ interface VerifiedOffer extends OfferBody {
   envelope: SignedHandoverEnvelope<unknown>;
 }
 
-function invalid(field: string): never {
-  throw new AppError("handover.request_invalid", { field });
-}
-
 function offerBodyOf(body: unknown): OfferBody {
-  if (body === null || typeof body !== "object" || Array.isArray(body)) invalid("body");
+  if (body === null || typeof body !== "object" || Array.isArray(body)) refuseRequest("body");
   const fields = body as Record<string, unknown>;
   if (Object.keys(fields).sort().join() !== "authorisedBy,binding,imageMigrations,settings") {
-    invalid("body");
+    refuseRequest("body");
   }
   if (typeof fields.authorisedBy !== "string" || !isUuid(fields.authorisedBy)) {
-    invalid("authorisedBy");
+    refuseRequest("authorisedBy");
   }
-  if (!isDigest(fields.imageMigrations)) invalid("imageMigrations");
+  if (!isSha256Hex(fields.imageMigrations)) refuseRequest("imageMigrations");
   return {
     binding: parseBinding(fields.binding),
     settings: parseOfferSettings(fields.settings),
@@ -81,13 +78,14 @@ async function verifiedOffer(c: Context, deps: PeerStatusApiDeps): Promise<Verif
   const raw = await readRawJsonBody<unknown>(c);
   const verdict = verifyEnvelope<unknown>(raw, "stepdown", await peerKeyOf(deps));
   if (!verdict.valid) {
-    if (verdict.reason === "malformed" || verdict.reason === "wrong_purpose") invalid("envelope");
+    if (verdict.reason === "malformed" || verdict.reason === "wrong_purpose")
+      refuseRequest("envelope");
     throw new AppError("handover.peer_unknown", {});
   }
   const { binding, settings, imageMigrations } = offerBodyOf(verdict.body);
-  if (verdict.signerNodeId !== binding.sourceNodeId) invalid("sourceNodeId");
-  if (binding.destinationNodeId !== deps.nodeId) invalid("destinationNodeId");
-  if (binding.scenario !== "controlled") invalid("scenario");
+  if (verdict.signerNodeId !== binding.sourceNodeId) refuseRequest("sourceNodeId");
+  if (binding.destinationNodeId !== deps.nodeId) refuseRequest("destinationNodeId");
+  if (binding.scenario !== "controlled") refuseRequest("scenario");
   return { envelope: raw as SignedHandoverEnvelope<unknown>, binding, settings, imageMigrations };
 }
 

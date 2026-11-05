@@ -9,11 +9,12 @@ export { HANDOVER_CLASSIFICATION } from "./classification.js";
 export {
   HANDOVER_KINDS,
   envelopeDigest,
+  isSha256Hex,
   sha256Hex,
   signEnvelope,
   verifyEnvelope,
 } from "./envelope.js";
-export { bindingFingerprint, isOperationId, parseBinding } from "./binding.js";
+export { bindingFingerprint, isOperationId, parseBinding, refuseRequest } from "./binding.js";
 export type { HandoverBinding, HandoverScenario } from "./binding.js";
 export { assembleIndicator, signIndicator } from "./indicator.js";
 export { parseIndicator } from "./indicator-parse.js";

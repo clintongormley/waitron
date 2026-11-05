@@ -5,10 +5,10 @@ import {
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { parseBinding } from "./binding.js";
+import { isSha256Hex } from "./envelope.js";
 import "./errors.js";
 import type { FinalStateIndicator } from "./indicator.js";
 
-const SHA256_HEX = /^[0-9a-f]{64}$/;
 const WHERE = ["node.db", "venue.db", "state", "venue-folder"];
 const CLASS = ["transferred", "source-only", "destination-owned", "rebuildable"];
 
@@ -45,7 +45,7 @@ function text(raw: unknown, field: string): void {
 }
 
 function digest(raw: unknown, field: string): void {
-  if (typeof raw !== "string" || !SHA256_HEX.test(raw)) refuse(field);
+  if (!isSha256Hex(raw)) refuse(field);
 }
 
 function atLeast(raw: unknown, floor: number, field: string): void {

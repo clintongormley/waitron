@@ -2,7 +2,9 @@ import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { KeyRing } from "@waitron/credentials";
 import {
+  isSha256Hex,
   NODE_LOCAL_MANIFEST,
+  refuseRequest,
   sha256Hex,
   type NodeLocalItem,
   type NodeLocalManifestRow,
@@ -113,8 +115,6 @@ export function isManifestStateFile(file: unknown): boolean {
   return NODE_LOCAL_MANIFEST.some((row) => row.where === "state" && row.item === file);
 }
 
-const SHA256_HEX = /^[0-9a-f]{64}$/;
-
 /**
  * The migrations this image ships, every set whether switched on or not, for two boxes to find they
  * run different releases. Module versions cannot say so: every module's is `0.0.0`.
@@ -126,26 +126,18 @@ export function imageMigrationsDigest(root: string | null): string {
   return sha256Hex(canonicalize(hashes));
 }
 
-export function isDigest(value: unknown): value is string {
-  return typeof value === "string" && SHA256_HEX.test(value);
-}
-
-function refuse(field: string): never {
-  throw new AppError("handover.request_invalid", { field });
-}
-
 function digestAt(value: unknown, field: string): string | null {
   if (value === null) return null;
-  if (!isDigest(value)) refuse(field);
+  if (!isSha256Hex(value)) refuseRequest(field);
   return value;
 }
 
 /** A received offer's settings; a wrong shape refuses `handover.request_invalid`. */
 export function parseOfferSettings(raw: unknown): OfferSettings {
-  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) refuse("settings");
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) refuseRequest("settings");
   const fields = raw as Record<string, unknown>;
   if (Object.keys(fields).sort().join() !== "backupSettings,moduleSettings,ringVersions") {
-    refuse("settings");
+    refuseRequest("settings");
   }
   const { ringVersions: versions } = fields;
   if (
@@ -153,7 +145,7 @@ export function parseOfferSettings(raw: unknown): OfferSettings {
     versions.length === 0 ||
     !versions.every((version) => Number.isSafeInteger(version) && (version as number) >= 1)
   ) {
-    refuse("settings.ringVersions");
+    refuseRequest("settings.ringVersions");
   }
   return {
     backupSettings: digestAt(fields.backupSettings, "settings.backupSettings"),

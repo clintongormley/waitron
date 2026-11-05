@@ -1,7 +1,7 @@
 import { canonicalize } from "@waitron/membership";
 import type { CanonicalValue } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
-import { sha256Hex } from "./envelope.js";
+import { isSha256Hex, sha256Hex } from "./envelope.js";
 import "./errors.js";
 import type { handoverScenario } from "./schema/activations.js";
 
@@ -23,33 +23,32 @@ export interface HandoverBinding {
 
 // Lower-case only: the operation id is inside the fingerprint, so one id has one spelling.
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 /** Whether `value` is an operation id `parseBinding` accepts. */
 export function isOperationId(value: unknown): value is string {
   return typeof value === "string" && UUID_V4.test(value);
 }
 
-function refuse(field: string): never {
+export function refuseRequest(field: string): never {
   throw new AppError("handover.request_invalid", { field });
 }
 
 function objectWith(raw: unknown, field: string, keys: readonly string[]): Record<string, unknown> {
-  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) refuse(field);
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) refuseRequest(field);
   const record = raw as Record<string, unknown>;
   const prefix = field === "binding" ? "" : `${field}.`;
-  for (const key of keys) if (!(key in record)) refuse(`${prefix}${key}`);
-  for (const key of Object.keys(record)) if (!keys.includes(key)) refuse(`${prefix}${key}`);
+  for (const key of keys) if (!(key in record)) refuseRequest(`${prefix}${key}`);
+  for (const key of Object.keys(record)) if (!keys.includes(key)) refuseRequest(`${prefix}${key}`);
   return record;
 }
 
 function nonEmptyString(value: unknown, field: string): string {
-  if (typeof value !== "string" || value === "") refuse(field);
+  if (typeof value !== "string" || value === "") refuseRequest(field);
   return value;
 }
 
 function matching(value: unknown, pattern: RegExp, field: string): string {
-  if (typeof value !== "string" || !pattern.test(value)) refuse(field);
+  if (typeof value !== "string" || !pattern.test(value)) refuseRequest(field);
   return value;
 }
 
@@ -64,22 +63,24 @@ export function parseBinding(raw: unknown): HandoverBinding {
   ]);
   const operationId = matching(top.operationId, UUID_V4, "operationId");
   const scenario = top.scenario;
-  if (scenario !== "controlled" && scenario !== "emergency") refuse("scenario");
+  if (scenario !== "controlled" && scenario !== "emergency") refuseRequest("scenario");
 
   const venue = objectWith(top.venue, "venue", ["country", "taxId", "environment"]);
   const country = nonEmptyString(venue.country, "venue.country");
   const taxId = nonEmptyString(venue.taxId, "venue.taxId");
   const environment = venue.environment;
-  if (environment !== "production" && environment !== "preproduction") refuse("venue.environment");
+  if (environment !== "production" && environment !== "preproduction")
+    refuseRequest("venue.environment");
 
   const sourceNodeId = nonEmptyString(top.sourceNodeId, "sourceNodeId");
   const destinationNodeId = nonEmptyString(top.destinationNodeId, "destinationNodeId");
-  if (destinationNodeId === sourceNodeId) refuse("destinationNodeId");
+  if (destinationNodeId === sourceNodeId) refuseRequest("destinationNodeId");
 
   const membership = objectWith(top.membership, "membership", ["term", "digest"]);
   const term = membership.term;
-  if (!Number.isSafeInteger(term) || (term as number) < 1) refuse("membership.term");
-  const digest = matching(membership.digest, SHA256_HEX, "membership.digest");
+  if (!Number.isSafeInteger(term) || (term as number) < 1) refuseRequest("membership.term");
+  const digest = membership.digest;
+  if (!isSha256Hex(digest)) refuseRequest("membership.digest");
 
   return {
     operationId,

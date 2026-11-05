@@ -273,7 +273,7 @@ export interface AskPeerStatusDeps {
 // A status holds at most one chart and two operations; anything far larger is not one.
 const MAX_STATUS_BYTES = 1024 * 1024;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -321,6 +321,19 @@ function partsReadable(status: PeerStatusBody): boolean {
     isOperationStatus(status.requestedOperation) &&
     isRestriction(status.restriction)
   );
+}
+
+/** The code and params of a refusal another box answered, or `null` when `text` is not one. */
+export function boxRefusal(text: string): { code: string; params: unknown } | null {
+  let answer: unknown;
+  try {
+    answer = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const error = isRecord(answer) ? answer.error : undefined;
+  if (!isRecord(error) || typeof error.code !== "string") return null;
+  return { code: error.code, params: error.params };
 }
 
 /** One signed exchange with another box, stopped at `timeoutMs`; a failure is thrown. */

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   HANDOVER_KINDS,
   envelopeDigest,
+  isSha256Hex,
   sha256Hex,
   signEnvelope,
   verifyEnvelope,
@@ -253,6 +254,26 @@ describe("envelopeDigest", () => {
     expect(envelopeDigest(signEnvelope("stepdown", { a: 1 }, m1))).not.toBe(
       envelopeDigest(signEnvelope("stepdown", { a: 2 }, m1)),
     );
+  });
+});
+
+describe("isSha256Hex", () => {
+  it("takes what `sha256Hex` answers", () => {
+    expect(isSha256Hex(sha256Hex("abc"))).toBe(true);
+  });
+
+  it.each([
+    ["one character short", "a".repeat(63)],
+    ["one character long", "a".repeat(65)],
+    ["upper case", "A".repeat(64)],
+    ["not hex", "g".repeat(64)],
+    ["a leading character", `x${"a".repeat(64)}`],
+    ["a trailing line", `${"a".repeat(64)}\n`],
+    ["no characters", ""],
+    ["not text", 1],
+    ["nothing", undefined],
+  ])("refuses %s", (_name, value) => {
+    expect(isSha256Hex(value)).toBe(false);
   });
 });
 

@@ -19,7 +19,7 @@ import {
   type HandoverOperation,
 } from "@waitron/node-db";
 import type { ErrorCode } from "@waitron/shared";
-import { askPeerStatus, isOperationStatus } from "./boot-peer-check.js";
+import { askPeerStatus, boxRefusal, isOperationStatus } from "./boot-peer-check.js";
 import {
   acceptedCopyPath,
   acceptFinalCopy,
@@ -185,13 +185,10 @@ function refusalReason(
   text: string,
   waitedOn: ReadonlySet<string> = REFUSALS_WAITED_ON,
 ): ErrorCode {
-  try {
-    const code = (JSON.parse(text) as { error?: { code?: unknown } }).error?.code;
-    if (typeof code === "string" && waitedOn.has(code)) return code as ErrorCode;
-  } catch {
-    // Not a box's refusal, so it falls through to the same answer as any other.
-  }
-  return "handover.source_unreachable";
+  const code = boxRefusal(text)?.code;
+  return code !== undefined && waitedOn.has(code)
+    ? (code as ErrorCode)
+    : "handover.source_unreachable";
 }
 
 /**

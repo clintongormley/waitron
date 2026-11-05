@@ -1289,6 +1289,7 @@ async function bootServer(
   let stepDownHere: (request: StepDownRequest) => Promise<StepDownResult> = () =>
     Promise.reject(new Error("stepdown called on a start that has not provided one"));
   seams.stepdown?.mount(app, (request) => stepDownHere(request));
+  const restart = seams.stepdown?.restart ?? restartProcess;
   // Registered before every surface below, so each wraps all of them; `/health`, registered above, is
   // deliberately left out of the request log and names no build.
   app.use("*", requestIdMiddleware(log, now));
@@ -1886,7 +1887,7 @@ async function bootServer(
           };
         },
         closeStore: () => store.close(),
-        restart: seams.stepdown?.restart ?? restartProcess,
+        restart,
         log,
       });
       announceWaiting(waitingStart.server);
@@ -2332,25 +2333,20 @@ async function bootServer(
     },
     log,
   );
-  mountPeerStatusApi(app, { db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
-  mountHandoverStatusApi(app, { db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
+  const peerDeps = { db, node: store.node, ring, nodeId: tradingContext.nodeId };
+  mountPeerStatusApi(app, peerDeps, log);
+  mountHandoverStatusApi(app, peerDeps, log);
   const handoverDestinationDuty = await startHandoverDestinationDuty({
-    db,
-    node: store.node,
-    ring,
-    nodeId: tradingContext.nodeId,
+    ...peerDeps,
     stateDir: config.stateDir,
     venueDir: config.venueDir,
     log,
-    restart: seams.stepdown?.restart ?? restartProcess,
+    restart,
     statfs: seams.freeSpaceWatch?.statfs,
     compare: (operation, indicator, copyPath, options) =>
       compareFinalCopy(
         {
-          db,
-          node: store.node,
-          ring,
-          nodeId: tradingContext.nodeId,
+          ...peerDeps,
           stateDir: config.stateDir,
           modules: setsToMigrate,
           migrationsRoot: config.migrationsRoot,
@@ -2369,10 +2365,7 @@ async function bootServer(
   mountHandoverDestinationApi(
     app,
     {
-      db,
-      node: store.node,
-      ring,
-      nodeId: tradingContext.nodeId,
+      ...peerDeps,
       stateDir: config.stateDir,
       migrationsRoot: config.migrationsRoot,
     },
@@ -3438,7 +3431,7 @@ async function bootServer(
         await beforeRestart?.();
       } finally {
         // On the NEXT tick, so the in-process caller's result is returned first.
-        setTimeout(seams.stepdown?.restart ?? restartProcess, 0);
+        setTimeout(restart, 0);
       }
     }
     return result;
@@ -3499,10 +3492,7 @@ async function bootServer(
   mountHandoverSourceStartApi(
     app,
     {
-      db,
-      node: store.node,
-      ring,
-      nodeId: tradingContext.nodeId,
+      ...peerDeps,
       stateDir: config.stateDir,
       migrationsRoot: config.migrationsRoot,
       advertisedOrigin: config.advertisedOrigin,
@@ -3876,7 +3866,7 @@ async function bootServer(
     gate: handoverGate,
     duties,
     close: () => started.close(),
-    restart: seams.stepdown?.restart ?? restartProcess,
+    restart,
     log,
   };
   stepDownHere = (request) => stepDown(stepDownDeps, request);

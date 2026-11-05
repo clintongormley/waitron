@@ -112,6 +112,11 @@ export function sha256Hex(data: string | Uint8Array): string {
   return createHash("sha256").update(data).digest("hex");
 }
 
+/** Whether `value` is what `sha256Hex` answers. */
+export function isSha256Hex(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+}
+
 export function envelopeDigest(envelope: SignedHandoverEnvelope<unknown>): string {
   return sha256Hex(canonicalize(envelope as unknown as CanonicalValue));
 }

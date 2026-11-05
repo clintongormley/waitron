@@ -5,6 +5,7 @@ import { nodes, readNodeMembership } from "@waitron/db";
 import {
   bindingFingerprint,
   isOperationId,
+  refuseRequest,
   verifyEnvelope,
   type HandoverBinding,
   type SignedHandoverEnvelope,
@@ -29,7 +30,7 @@ import {
   requireManagementSession,
 } from "@waitron/server-kit";
 import { AppError, isAppError, isUuid } from "@waitron/shared";
-import { askPeerStatus, originOf, postToBox } from "./boot-peer-check.js";
+import { askPeerStatus, boxRefusal, isRecord, originOf, postToBox } from "./boot-peer-check.js";
 import { confirmFreshSignIn } from "./fresh-sign-in.js";
 import {
   imageMigrationsDigest,
@@ -144,22 +145,14 @@ interface StartRequest {
   signIn: unknown;
 }
 
-function invalid(field: string): never {
-  throw new AppError("handover.request_invalid", { field });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function parseRequest(raw: unknown): StartRequest {
-  if (!isRecord(raw)) invalid("body");
+  if (!isRecord(raw)) refuseRequest("body");
   const known = ["operationId", "destinationNodeId", "signIn"];
-  if (Object.keys(raw).some((key) => !known.includes(key))) invalid("body");
+  if (Object.keys(raw).some((key) => !known.includes(key))) refuseRequest("body");
   const { operationId, destinationNodeId, signIn } = raw;
-  if (!isOperationId(operationId)) invalid("operationId");
+  if (!isOperationId(operationId)) refuseRequest("operationId");
   if (typeof destinationNodeId !== "string" || !isUuid(destinationNodeId)) {
-    invalid("destinationNodeId");
+    refuseRequest("destinationNodeId");
   }
   return { operationId, destinationNodeId, signIn };
 }
@@ -173,14 +166,12 @@ function parseJson(text: string): unknown {
 }
 
 function refusalIn(text: string): HandoverRefusal | null {
-  const answer = parseJson(text);
-  const error = isRecord(answer) ? answer.error : undefined;
-  if (!isRecord(error) || typeof error.code !== "string") return null;
-  if (!Object.hasOwn(OFFER_REFUSALS, error.code)) return null;
-  const param = OFFER_REFUSALS[error.code]!;
-  const code = error.code as HandoverRefusal["code"];
+  const refusal = boxRefusal(text);
+  if (refusal === null || !Object.hasOwn(OFFER_REFUSALS, refusal.code)) return null;
+  const param = OFFER_REFUSALS[refusal.code]!;
+  const code = refusal.code as HandoverRefusal["code"];
   if (param === null) return { code, params: {} };
-  const value = isRecord(error.params) ? error.params[param.name] : undefined;
+  const value = isRecord(refusal.params) ? refusal.params[param.name] : undefined;
   if (!param.isValid(value)) return null;
   return { code, params: { [param.name]: value as string } };
 }
