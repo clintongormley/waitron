@@ -112,7 +112,8 @@ The dashboard keeps reading the list after its scan ends, through its live subsc
 
 **The fix has two parts (Task 1), and touches no table — the list is held in memory.**
 1. A plain report keeps the mark an earlier scan set.
-2. The dialog lists any Bluetooth device its agent reports paired, without Show all devices. Part 1
+2. The dialog lists any Bluetooth device its agent reports paired, without Show all devices —
+   narrowed by the owner's decision below: not when the agent says it is not a printer. Part 1
    alone is not enough for the owner's words ("A printer that is already paired stays listed while
    the dialog is open"): the list starts empty when the server restarts, and a paired printer is
    unmarked until the agent's first scan pass answers.
@@ -127,20 +128,25 @@ including headphones paired on another computer that runs a print agent.
 
 **Owner's decision (2026-11-05), as built:** a paired device that is not a printer is not in the
 normal list; a paired printer stays listed; Show all devices still shows everything. The kind comes
-from the same `bluetoothctl info` reading a scan already takes of every listed device, paired ones
+from the same `bluetoothctl info` reading a scan already takes of listed devices, paired ones
 included (`parseBluetoothctlInfo`: `Icon: printer`, an imaging class with the printer bit, or the
 Serial Port profile; the owner's printer's recorded `info` carries all three, `bluetooth.test.ts`).
-The agent's paired report now asks `info` once of each paired address it has never asked
-(`printerKinds`, as many at a time as a scan asks, under the paired listing's deadline; a failure
-is retried by the next scan) and sends `printerLike: true | false` beside the address, absent when
-it could not tell. The server keeps that answer per device (`pairedPrinterLike`) and the discovered
-list reports `printerLike: false` only for it. The dialog hides a paired device only when
-`printerLike` is `false`.
+The agent's paired report now asks `info` of each paired address it holds no answer for
+(`printerKinds`) and sends `printerLike: true | false` beside the address, absent when it could not
+tell. An address has one `info` running at a time, which a scan and a paired report share, and at
+most eight run at once between them. The listing and the wait for `info` answers share the
+listing's one deadline (3 seconds); an address not answered by then is reported unknown, and its
+`info` keeps running under its own kill deadline so the answer serves the next report. An answer
+with no icon, class or profile to judge by is also unknown; it and a failed `info` are asked again
+by a later scan. The server keeps that answer per device (`pairedPrinterLike`), uses it only while
+the paired report is fresh, and the discovered list reports `printerLike: false` only for it. The
+dialog hides a paired device only when `printerLike` is `false`.
 
-**A paired device whose kind cannot be told is listed.** That happens when its `info` failed or
-has not answered yet, or the agent predates this change. Hiding it would bring back the fault the
-owner reported (a paired printer missing from the list), and the person could not add it without
-knowing to press Show all devices; listing a non-printer only adds a row they can ignore.
+**A paired device whose kind cannot be told is listed.** That happens when its `info` failed, has
+not answered within the report's deadline, or answered with nothing to judge by, or the agent
+predates this change. Hiding it would bring back the fault the owner reported (a paired printer
+missing from the list), and the person could not add it without knowing to press Show all devices;
+listing a non-printer only adds a row they can ignore.
 
 **Not checked on a real box:** no `info` of a paired headset was recorded; the headset shape in
 the tests (class `0x240404`, `Icon: audio-headset`, Audio Sink) is synthesised from the Bluetooth

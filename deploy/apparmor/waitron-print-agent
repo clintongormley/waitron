@@ -32,10 +32,10 @@
 # 36617716323, with them, refused none of them. On both, the agent's own scan
 # (`bluetoothctl --timeout 6 scan on`, three times) sent no `StopDiscovery`: nothing reached the stand-in and nothing was
 # refused, where an interactive `scan off` on the same runs was refused (36617097865) or reached it
-# (36617716323). `info`, which the agent's scan asks of a listed device, worked under these rules:
-# probe run 36629179144 asked it of the stand-in's four printers at once and each exited 0 printing
-# its class and icon; that run stopped before its refusal check, so whether `info` drew any refusal
-# was not read.
+# (36617716323). `info`, which the agent asks of a listed device during a scan and of a paired
+# device it holds no answer for, worked under these rules: probe run 36629179144 asked it of the
+# stand-in's four printers at once and each exited 0 printing its class and icon; that run stopped
+# before its refusal check, so whether `info` drew any refusal was not read.
 #
 # Refused on 36585218089 and 36586467212: `trust` (a `Properties.Set`) and `Device1.Disconnect`.
 # Also refused: the `InterfacesAdded` and `InterfacesRemoved` signals interactive bluetoothctl

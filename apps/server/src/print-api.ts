@@ -614,7 +614,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
 
       const now = Date.now();
       // A visible or scanned report replaces the description, never another kind of report's stamp;
-      // only a scan classifies a device, so a visible report keeps the printer mark.
+      // a visible report carries no printer mark, so it keeps the one already held.
       const describedThisPull = new Set<string>();
       const remember = (d: DiscoveredDeviceWire, stamp: "scannedAt" | "visibleAt"): void => {
         const locator = d.ippOnly ? queueKeyOf(d) : undefined;
