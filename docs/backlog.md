@@ -4946,6 +4946,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   selected person while a proposal is open leaves both Hours suites green. Add a controlled
   summary-removal case that checks the retained subject and blocked draft.
 
+- **Audit attendance discovery invalidation for late attribution and rule changes.** A direct-insert
+  experiment finds activity that becomes attributable after its initial scan without dirtying its day;
+  route reachability is unverified. [Detail](backlog/workforce.md#attendance-discovery-invalidation).
+
 - **Read attendance facts by the requested day.** Narrow the source queries in
   `apps/server/src/attendance-facts.ts` while preserving late corrections, original request times
   and pending payment outcomes.
