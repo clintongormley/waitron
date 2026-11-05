@@ -1309,6 +1309,9 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) splitPanelLive = false;
   /** The party's bills for the panel: null until the read answers, "failed" when it could not. */
   @property({ attribute: false }) splitRead: SplitSources | "failed" | null = null;
+  /** The app is bringing a party's first bill in behind the panel, so what Split would act on is
+   * still moving: it waits, as for a load. */
+  @property({ type: Boolean }) splitReloading = false;
   /** The last drafts read's drafts, of every bill of the party. */
   @property({ attribute: false }) partyDrafts: readonly PartyDraft[] = [];
   /** Who is signed in, which tells their own drafts from someone else's. */
@@ -5468,6 +5471,8 @@ export class TillTableOrderScreen extends LitElement {
       bill === undefined ? said.name : billLabel(bill),
       bill !== undefined,
     );
+    // It says now what that stop would say, so no later press says it again.
+    if (bill === undefined) this.#splitGone.delete(said.billId);
   }
 
   /** Dispatched only in the page, so a change made while taken out is told once it is put back. */
@@ -5645,7 +5650,7 @@ export class TillTableOrderScreen extends LitElement {
     const held = this.#splitHeld(sources);
     const message = held.length > 0 ? this.#splitTakenSentence(held) : this.splitMessage;
     // A take-over's answer reaches the drafts before its record is replaced; Split waits for both.
-    const holding = held.length > 0 || this.takeOverSent !== null;
+    const holding = held.length > 0 || this.takeOverSent !== null || this.splitReloading;
     const countsBad =
       parseGuestCount(this.splitStaying) === undefined ||
       parseGuestCount(this.splitLeaving) === undefined;
@@ -5676,7 +5681,7 @@ export class TillTableOrderScreen extends LitElement {
                 }}
                 @split-take-over=${(event: CustomEvent<SplitTakeOverDetail>) => {
                   event.stopPropagation();
-                  if (!this.#actionControlCurrent(event) || this.takeOverSent !== null) return;
+                  if (!this.#actionControlCurrent(event)) return;
                   const { billId, draftId, revision, ownerName } = event.detail;
                   this.splitTakeOverMessage = null;
                   this.takeOverPending = { id: draftId, revision, ownerName, billId };
@@ -5710,7 +5715,7 @@ export class TillTableOrderScreen extends LitElement {
               class="form-message"
               role="alert"
               data-split-refusal
-              @refund-excess=${(event: CustomEvent<{ billId?: string }>) =>
+              @refund-excess=${(event: CustomEvent<{ billId?: string; bill?: string }>) =>
                 this.#refundFromSplit(event)}
             >
               ${message}
@@ -5739,7 +5744,7 @@ export class TillTableOrderScreen extends LitElement {
                   data-split-anyway
                   slot="secondary"
                   variant="secondary"
-                  ?disabled=${countsBad}
+                  ?disabled=${countsBad || this.splitReloading}
                   @click=${(event: Event) => void this.#confirmSplitPick(event, true)}
                 >
                   ${t("table.split_anyway")}
@@ -5778,11 +5783,17 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** Refund for another bill leaves the panel, so it asks first, as any bill switch does. */
-  #refundFromSplit(event: CustomEvent<{ billId?: string }>): void {
-    const { billId } = event.detail;
+  #refundFromSplit(event: CustomEvent<{ billId?: string; bill?: string }>): void {
+    const { billId, bill } = event.detail;
     if (billId === undefined || billId === this.orderId) return;
     event.stopPropagation();
     if (!this.#actionControlCurrent(event)) return;
+    const sources = this.#splitSources();
+    if (sources?.some((source) => source.bill.workingOrderId === billId) === false) {
+      const name = bill ?? billNumberLabel({ billNumber: null });
+      this.splitMessage = this.#saySplitStop(billId, name, false);
+      return;
+    }
     this.#leavingActions(() => this.#dispatch("refund-excess", event.detail));
   }
 
@@ -5802,13 +5813,7 @@ export class TillTableOrderScreen extends LitElement {
     if (!this.#actionControlCurrent(event)) return;
     const sources = this.#splitSources();
     const tableId = this.splitTableId;
-    if (
-      sources === undefined ||
-      tableId === null ||
-      this.takeOverSent !== null ||
-      this.#splitHeld(sources).length > 0
-    )
-      return;
+    if (sources === undefined || tableId === null || this.#splitHeld(sources).length > 0) return;
     this.splitAttempted = true;
     this.splitCountRefusal = null;
     this.splitMessage = null;

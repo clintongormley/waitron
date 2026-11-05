@@ -2816,6 +2816,26 @@ describe("A803 split: a read and a selected bill", () => {
       expect(sent).toEqual([]);
     });
 
+    it("a sentence that followed a bill away leaves no stop saying it again, so the next press sends", async () => {
+      const { el, sent } = await selected();
+      el.splitRead = withoutBills("b3");
+      await settled(el);
+      el.splitRead = allBills();
+      await settled(el);
+      await press(el);
+      expect(sentence(el)).toBe(changed("Bill 3"));
+      tick(el, "b3")!.click();
+      await settled(el);
+      expect(sentence(el)).toBe(changed("Bill 3"));
+
+      el.splitRead = withoutBills("b3");
+      await settled(el);
+      expect(sentence(el)).toBe(gone("Bill 3"));
+
+      await press(el);
+      expect(sent).toHaveLength(1);
+    });
+
     it("a sentence a later press cleared does not come back with a read", async () => {
       const { el, sent } = await selected();
       el.splitRead = withoutBills("b3");

@@ -650,10 +650,12 @@ export class DraftSync {
     } finally {
       limit.done();
     }
-    if (this.#ended || read !== this.#reads) return "failed";
+    if (this.#ended) return "failed";
     this.#unsaved = false;
     this.#recordTakeOver(taken, draftId);
-    this.applyBillSnapshot(taken, read);
+    // Against the latest read, not the one this began under: whichever read overlapped it, the
+    // older-edit check keeps the newer of the two, and the server has already said yes.
+    this.applyBillSnapshot(taken, this.#reads);
     return "taken";
   }
 

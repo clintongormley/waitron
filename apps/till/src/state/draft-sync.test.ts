@@ -1418,6 +1418,48 @@ describe("A803 split: taking over the unsent dishes of a bill not on screen", ()
     expect(draft.partyDrafts.map(({ id }) => id)).toEqual([onScreen.id]);
   });
 
+  it("A803 split: takeOver writes partyDrafts, so the panel's row goes on its answer", async () => {
+    const onScreen = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+    expect(draft.partyDrafts.find(({ id }) => id === onScreen.id)?.ownerId).toBe("p2");
+
+    expect(await draft.takeOver(onScreen.id, onScreen.revision)).toBe("taken");
+
+    expect(draft.partyDrafts.find(({ billId }) => billId === "wo-4")?.ownerId).toBe("p1");
+  });
+
+  it("A803 split: a take-over answered while a read overlapped it answers taken and shows the taken order", async () => {
+    const onScreen = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+    const answer = holdTakeOver();
+
+    const outcome = draft.takeOver(onScreen.id, onScreen.revision);
+    await vi.advanceTimersByTimeAsync(0);
+    await draft.load();
+    answer(server.snapshot(server.takeOver("v1", onScreen.id, onScreen.revision)));
+
+    expect(await outcome).toBe("taken");
+    expect(draft.edit?.editorId).toBe("p1");
+    expect(draft.others).toEqual([]);
+  });
+
+  it("A803 split: a take-over refused after it was dropped still answers failed, overlap or not", async () => {
+    const onScreen = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+    const answer = holdTakeOver();
+
+    const outcome = draft.takeOver(onScreen.id, onScreen.revision);
+    await vi.advanceTimersByTimeAsync(0);
+    await draft.load();
+    draft.drop();
+    answer(server.snapshot(server.takeOver("v1", onScreen.id, onScreen.revision)));
+
+    expect(await outcome).toBe("failed");
+  });
+
   it("A803 split: a read that fails keeps the last read's drafts", async () => {
     const elsewhere = seedOther("p2", steak);
     const draft = sync();
