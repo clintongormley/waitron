@@ -3027,7 +3027,7 @@ and nothing guards it across screens:
 - A231q: the mail server settings form (`apps/dashboard/src/widgets/email-settings-form.ts`); the
   order detail's invoice email form (`apps/dashboard/src/widgets/invoice-email-dialog.ts`); an office
   printer's Add (`apps/dashboard/src/widgets/page-printer-add.ts`), which opens already savable when
-discovery found a name; the office printers panel's
+  discovery found a name or address; the office printers panel's
   Rename (`apps/dashboard/src/widgets/page-printers-panel.ts`); and the
   till's invoice email form (`apps/till/src/widgets/invoice-email-dialog.ts`). Each has a sibling
   `*.unsaved.test.ts`;
@@ -3281,9 +3281,9 @@ render must not replace it while you are answering the question. Route Cancel, c
 an existing backdrop action through `requestClose(reason)`. Native Escape uses the same gate,
 including after a focused control was disabled (a field disabled while its save is sent) and
 Chromium dropped focus to the page body: the most recently opened dialog still open is asked when it
-has a `beforeClose`, unless the page already handled the key or something Escape reaches first is
-open above it — a popover that is not manual, such as a row menu, or a modal `<dialog>` that is not
-a wt-dialog's (`packages/ui/src/components/wt-dialog.test.ts`, "still asks its guard on Escape once
+has a `beforeClose`, unless the page already handled the key, the key ends a text composition, or one
+of these is open and does not hold the dialog: a popover that is not manual, such as a row menu, or
+a modal `<dialog>` that is not a wt-dialog's, counted as above it whenever it opened (`packages/ui/src/components/wt-dialog.test.ts`, "still asks its guard on Escape once
 its focused field is disabled" and the "page-body Escape" cases). The
 dialog stays open while asking, and a later answer cannot close a different opening. `closeAfter("saved")` and
 `closeAfter("security")` bypass a pending question for a successful write or forced teardown.
