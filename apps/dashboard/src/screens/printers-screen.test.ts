@@ -548,7 +548,7 @@ describe("guided printer calibration", () => {
     expect(api.updatePrinter).not.toHaveBeenCalled();
   });
 
-  it("asks the width step's three questions in labelled dropdowns showing the printer's saved settings", async () => {
+  it("asks the width step's questions and shows its two results", async () => {
     const api = stubApi({
       listPrinters: vi
         .fn()
@@ -580,19 +580,33 @@ describe("guided printer calibration", () => {
       { value: "58mm", label: t("printers.paper_width_58") },
     ]);
     expect(paper.value).toBe("58mm");
-    expect(resolution.label).toBe(t("printers.resolution"));
+    expect(resolution.label).toBe(t("printers.qr_square"));
     expect(resolution.options).toEqual([
       { value: "180dpi", label: t("printers.test_qr_45") },
       { value: "203dpi", label: t("printers.test_qr_40") },
     ]);
     expect(resolution.value).toBe("203dpi");
-    expect(text(el, "[data-test=calibration-qr-question]")).toBe(t("printers.test_qr_help"));
+    expect(text(el, "[data-test=print-ruler-p1]")).toBe(t("printers.ruler_print"));
+    expect(q(el, "[data-test=calibration-qr-question]")).toBeNull();
+    const results = q(el, "[data-test=calibration-results]")!;
+    expect(results.tagName).toBe("DL");
+    expect(results.checkVisibility()).toBe(true);
+    expect(text(el, "[data-test=calibration-result-paper]")).toBe(t("printers.paper_width_58"));
+    expect(text(el, "[data-test=calibration-result-resolution]")).toBe(
+      t("printers.resolution_203"),
+    );
+    expect(text(el, "[data-test=calibration-results]")).toContain(t("printers.paper_width"));
+    expect(text(el, "[data-test=calibration-results]")).toContain(t("printers.resolution"));
 
     await chooseOption(el, "printer-ruler-number", "512");
     expect(paper.value).toBe("80mm");
     expect(ruler.value).toBe("512");
     await chooseOption(el, "printer-resolution", "180dpi");
     expect(resolution.value).toBe("180dpi");
+    expect(text(el, "[data-test=calibration-result-paper]")).toBe(t("printers.paper_width_80"));
+    expect(text(el, "[data-test=calibration-result-resolution]")).toBe(
+      t("printers.resolution_180"),
+    );
   });
 
   it.each([
@@ -677,7 +691,7 @@ describe("guided printer calibration", () => {
     expect(q(el, "[data-test=print-character-tables-p1]")).toBeNull();
   });
 
-  it("keeps the width step's rows, and the button beside the ruler's answer, within the form width on a wide window", async () => {
+  it("keeps the width step's button on its own row above the answers, and the results below them, within the form width", async () => {
     const width = window.innerWidth,
       height = window.innerHeight;
     await page.viewport(1280, 800);
@@ -687,17 +701,61 @@ describe("guided printer calibration", () => {
       probe.style.width = "var(--wt-form-max-width)";
       el.shadowRoot!.appendChild(probe);
       const form = probe.getBoundingClientRect().width;
-      const button = q(el, "[data-test=print-ruler-p1]")!.getBoundingClientRect();
+      const buttonEl = q(el, "[data-test=print-ruler-p1]")!;
+      const button = buttonEl.getBoundingClientRect();
       const answer = q(el, 'wt-combobox[name="printer-ruler-number"]')!.getBoundingClientRect();
-      const paper = q(el, 'wt-combobox[name="printer-paper-width"]')!.getBoundingClientRect();
       const resolution = q(el, 'wt-combobox[name="printer-resolution"]')!.getBoundingClientRect();
+      const results = q(el, "[data-test=calibration-results]")!.getBoundingClientRect();
       const wide = q(el, '[data-test="calibration-step-1"]')!.getBoundingClientRect();
       expect(wide.width).toBeGreaterThan(form);
       expect(answer.width).toBeLessThan(form);
-      expect(Math.abs(answer.bottom - button.bottom)).toBeLessThan(2);
-      expect(answer.right - button.left).toBeLessThanOrEqual(form);
-      expect(resolution.right - paper.left).toBeLessThanOrEqual(form);
+      expect(button.bottom).toBeLessThan(Math.min(answer.top, resolution.top));
+      expect(Math.abs(button.right - resolution.right)).toBeLessThanOrEqual(2);
+      expect(results.top).toBeGreaterThan(Math.max(answer.bottom, resolution.bottom));
+      const rows = [
+        buttonEl.parentElement!,
+        q(el, 'wt-combobox[name="printer-ruler-number"]')!.parentElement!,
+        q(el, 'wt-combobox[name="printer-paper-width"]')!.parentElement!,
+        q(el, "[data-test=calibration-results]")!,
+      ];
+      for (const row of rows) {
+        const box = row.getBoundingClientRect();
+        expect(box.width).toBeGreaterThan(0);
+        expect(box.right - wide.left).toBeLessThanOrEqual(form + 1);
+      }
     } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  it("keeps the width step's rows inside the dialog body on a Spanish phone screen", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    const before = currentLocale();
+    setLocale("es-ES");
+    await page.viewport(390, 844);
+    try {
+      const el = await openCalibration(stubApi());
+      const body = q(el, "[data-test=edit-printer-modal]")!
+        .shadowRoot!.querySelector(".body")!
+        .getBoundingClientRect();
+      const rows = [
+        q(el, "[data-test=print-ruler-p1]")!.parentElement!,
+        q(el, 'wt-combobox[name="printer-ruler-number"]')!.parentElement!,
+        q(el, 'wt-combobox[name="printer-paper-width"]')!.parentElement!,
+        q(el, "[data-test=calibration-results]")!,
+      ];
+      for (const row of rows) {
+        const box = row.getBoundingClientRect();
+        expect(box.width).toBeGreaterThan(0);
+        expect(box.right).toBeLessThanOrEqual(body.right);
+        expect(box.left).toBeGreaterThanOrEqual(body.left);
+        for (const child of row.children) {
+          expect(child.getBoundingClientRect().right).toBeLessThanOrEqual(body.right);
+        }
+      }
+    } finally {
+      setLocale(before);
       await page.viewport(width, height);
     }
   });

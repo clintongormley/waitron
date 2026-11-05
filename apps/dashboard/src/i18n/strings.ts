@@ -1682,8 +1682,8 @@ export const en = {
   "printers.calibration_receipt": "Test the receipt",
   "printers.calibration_drawer": "Does this printer have a cash drawer?",
   "printers.resolution_hint":
-    "Print the width ruler, then choose the last number you can see in full and measure the QR code’s black square, excluding the white border.",
-  "printers.ruler_print": "Print width ruler",
+    "Print the width test. Choose the last number you can see in full on the ruler, and measure the QR code’s black square without its white border. You do not need to scan it.",
+  "printers.ruler_print": "Print width test",
   "printers.print_test_page": "Print test page",
   "printers.test_page_sent": "Test page sent to {name}",
   "printers.ruler_last_number": "Last number fully visible on the ruler",
@@ -1702,8 +1702,7 @@ export const en = {
   "printers.added": "Added {name}.",
   "printers.refresh_failed": "Could not refresh the printer information.",
   "printers.refresh_lists": "Refresh lists",
-  "printers.test_qr_help":
-    "Measure the QR code’s black square with a ruler, excluding the white border. Which size is it closer to? You do not need to scan it.",
+  "printers.qr_square": "QR code’s black square",
   "printers.test_qr_40": "Closer to 40 mm",
   "printers.test_qr_45": "Closer to 45 mm",
   "printers.agent_step_open":
@@ -5462,8 +5461,8 @@ export const es: Record<StringKey, string> = {
   "printers.calibration_receipt": "Prueba el recibo",
   "printers.calibration_drawer": "¿Esta impresora tiene un cajón?",
   "printers.resolution_hint":
-    "Imprime la regla de ancho, elige el último número que se ve entero y mide el cuadrado negro del código QR, sin el borde blanco.",
-  "printers.ruler_print": "Imprimir regla de ancho",
+    "Imprime la prueba de ancho. Elige el último número de la regla que se ve entero y mide el cuadrado negro del código QR sin su borde blanco. No hace falta escanearlo.",
+  "printers.ruler_print": "Imprimir prueba de ancho",
   "printers.print_test_page": "Imprimir página de prueba",
   "printers.test_page_sent": "Página de prueba enviada a {name}",
   "printers.ruler_last_number": "Último número de la regla que se ve entero",
@@ -5482,8 +5481,7 @@ export const es: Record<StringKey, string> = {
   "printers.added": "Se ha añadido {name}.",
   "printers.refresh_failed": "No se pudo actualizar la información de las impresoras.",
   "printers.refresh_lists": "Actualizar listas",
-  "printers.test_qr_help":
-    "Mide con una regla el cuadrado negro del código QR, sin incluir el borde blanco. ¿A qué medida se acerca más? No necesitas escanearlo.",
+  "printers.qr_square": "Cuadrado negro del código QR",
   "printers.test_qr_40": "Más cerca de 40 mm",
   "printers.test_qr_45": "Más cerca de 45 mm",
   "printers.agent_step_open":

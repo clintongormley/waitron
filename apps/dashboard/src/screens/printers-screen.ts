@@ -377,8 +377,20 @@ export class PrintersScreen extends LitElement {
       .field-row > wt-button {
         flex: 0 1 calc(var(--wt-space-6) * 4);
       }
-      .ruler-row > wt-button {
-        flex: none;
+      .print-row {
+        display: flex;
+        justify-content: flex-end;
+        max-width: var(--wt-field-max-width);
+      }
+      .calibration-results {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-3);
+        max-width: var(--wt-field-max-width);
+      }
+      .calibration-results > div {
+        flex: 1 1 calc(var(--wt-space-6) * 6);
+        min-width: 0;
       }
       .field-row > wt-form-actions {
         flex: 0 1 auto;
@@ -3473,7 +3485,7 @@ export class PrintersScreen extends LitElement {
         >
           <h2 class="title">${t("printers.calibration_layout")}</h2>
           <p class="hint">${t("printers.resolution_hint")}</p>
-          <div class="field-row ruler-row">
+          <div class="print-row">
             <wt-button
               variant="primary"
               data-test=${`print-ruler-${p.id}`}
@@ -3481,6 +3493,8 @@ export class PrintersScreen extends LitElement {
               @click=${() => void this.#testPrint(p.id)}
               >${t("printers.ruler_print")}</wt-button
             >
+          </div>
+          <div class="field-row">
             <wt-combobox
               name="printer-ruler-number"
               label=${t("printers.ruler_last_number")}
@@ -3502,8 +3516,19 @@ export class PrintersScreen extends LitElement {
                 if (setting) this.#editPrinter(p.id, { paperWidth: setting.paperWidth });
               }}
             ></wt-combobox>
+            <wt-combobox
+              name="printer-resolution"
+              label=${t("printers.qr_square")}
+              search="auto"
+              .options=${[
+                { value: "180dpi", label: t("printers.test_qr_45") },
+                { value: "203dpi", label: t("printers.test_qr_40") },
+              ]}
+              .value=${p.resolution}
+              @wt-change=${(e: CustomEvent<{ value: string }>) =>
+                this.#editPrinter(p.id, { resolution: e.detail.value as PrintResolution })}
+            ></wt-combobox>
           </div>
-          <p class="hint" data-test="calibration-qr-question">${t("printers.test_qr_help")}</p>
           <div class="field-row">
             <wt-combobox
               name="printer-paper-width"
@@ -3519,19 +3544,21 @@ export class PrintersScreen extends LitElement {
                 this.#editPrinter(p.id, { paperWidth: e.detail.value as PrintPaperWidth });
               }}
             ></wt-combobox>
-            <wt-combobox
-              name="printer-resolution"
-              label=${t("printers.resolution")}
-              search="auto"
-              .options=${[
-                { value: "180dpi", label: t("printers.test_qr_45") },
-                { value: "203dpi", label: t("printers.test_qr_40") },
-              ]}
-              .value=${p.resolution}
-              @wt-change=${(e: CustomEvent<{ value: string }>) =>
-                this.#editPrinter(p.id, { resolution: e.detail.value as PrintResolution })}
-            ></wt-combobox>
           </div>
+          <dl class="status-fields calibration-results" data-test="calibration-results">
+            <div>
+              <dt>${t("printers.paper_width")}</dt>
+              <dd data-test="calibration-result-paper">
+                ${t(p.paperWidth === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80")}
+              </dd>
+            </div>
+            <div>
+              <dt>${t("printers.resolution")}</dt>
+              <dd data-test="calibration-result-resolution">
+                ${t(p.resolution === "180dpi" ? "printers.resolution_180" : "printers.resolution_203")}
+              </dd>
+            </div>
+          </dl>
           ${
             this.rulerNumber !== "" && Number(this.rulerNumber) !== settingDots
               ? html`<p role="status" data-test="ruler-disagrees">
