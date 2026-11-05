@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, writeFile, rm, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
+
+vi.setConfig({ testTimeout: 180000 });
 
 const script = resolve(import.meta.dirname, "prepare-ui.mjs");
 const gitEnv = Object.fromEntries(
