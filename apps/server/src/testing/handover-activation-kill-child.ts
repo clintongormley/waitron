@@ -1,6 +1,6 @@
 // The real preparation and activation routes and the real promotion in their own process, killed
-// with SIGKILL at one point, so no `finally` runs: what is on the disk afterwards is what a power
-// cut leaves. Date and elapsed time are frozen together, or the hour clock refuses a slow run.
+// with SIGKILL at one point, so no `finally` runs. Date and elapsed time are frozen together, or the
+// hour clock refuses a slow run.
 import { registerHooks } from "node:module";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";

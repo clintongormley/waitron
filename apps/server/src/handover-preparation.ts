@@ -36,7 +36,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 // A refusal's params are logged, and this route takes any caller's text.
 export const OPERATION_ID_MAX_LENGTH = 64;
 
-const BEFORE_ACTIVATION: ReadonlySet<HandoverState> = new Set<HandoverState>([
+const READY_TO_PROMOTE: ReadonlySet<HandoverState> = new Set<HandoverState>([
   "filing_assumed",
   "emergency_declared",
 ]);
@@ -66,7 +66,7 @@ export async function readOperationReadyToPromote(
   const operation = await readHandoverOperation(deps.node, deps.nodeId, operationId);
   if (operation === null) throw new AppError("handover.operation_unknown", { operationId });
   const ready =
-    BEFORE_ACTIVATION.has(operation.state) &&
+    READY_TO_PROMOTE.has(operation.state) &&
     (operation.state !== "filing_assumed" ||
       (await readHandoverEvent(deps.node, deps.nodeId, operationId, COPY_PLACED_EVENT)) !== null);
   if (!ready)

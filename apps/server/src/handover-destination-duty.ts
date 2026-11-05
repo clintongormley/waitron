@@ -210,7 +210,11 @@ export async function startHandoverDestinationDuty(
 
 async function noteOperationOffMirror(deps: DestinationDutyDeps): Promise<void> {
   const open = await readOpenHandoverOperation(deps.node, deps.nodeId);
-  if (open?.role === "destination") {
+  if (
+    open?.role === "destination" &&
+    open.state !== "activated" &&
+    open.state !== "return_pending"
+  ) {
     deps.log("warn", "handover-destination.not_a_mirror", { operationId: open.operationId });
   }
 }
@@ -340,8 +344,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     try {
       await mkdir(dirname(path), { recursive: true, mode: 0o700 });
       await discard();
-      // Before the record nothing is promised, so this is only what a crash after the move left, and
-      // beside it a second whole copy might not fit.
+      // Before the record nothing is promised, and beside a leftover a second whole copy might not fit.
       await rm(acceptedCopyPath(deps.stateDir, operationId), { force: true });
       const answer = await boxExchange(
         new URL(`${routes}/indicator`),
@@ -432,8 +435,8 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       () => null,
     );
     if (copyBytes === null) return waitOn(operation, "handover.accepted_copy_missing");
-    // Placing keeps the old database and the accepted copy while it writes a third file. A disk that
-    // cannot say how much it has free is not taken as having room: this is the step with no way back.
+    // Placing keeps the old database and the accepted copy while it writes a third file. No disk able
+    // to say how much it has free is not taken as room: this is the step with no way back.
     const neededBytes = copyBytes + START_FREE_SPACE_FLOOR;
     const availableBytes = await lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs);
     if (availableBytes === null || availableBytes < neededBytes) {

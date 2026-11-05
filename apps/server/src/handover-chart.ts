@@ -18,8 +18,7 @@ export function oldBoxStillMain(
 /**
  * Whether a stored document says the venue has moved on from this source, for the step that places
  * the accepted copy. No chart, or one too broken to read, says nothing, so placing goes on: the old
- * box has already given up filing. Placing and the duty's asking for its restart both judge by this,
- * as a difference between them restarts the box for ever or leaves it on its old file for good.
+ * box has already given up filing.
  */
 export function movedOnFromSource(document: unknown, sourceNodeId: string): boolean {
   return (

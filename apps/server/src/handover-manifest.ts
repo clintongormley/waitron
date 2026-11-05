@@ -185,8 +185,9 @@ function ringVersions(ring: KeyRing): number[] {
 }
 
 /**
- * Only the settings holding a value: the backup settings read an empty value as unset, the same as
- * no line (`isUnset`), so a file with no values left is the same as no file.
+ * Only the settings holding a value, so a file with no values left, or a dangling link, is the same
+ * as no file. An empty value is unset (`isUnset`), the same as no line unless it hides that name in
+ * `trading.env` or `secrets.env`, which this digest does not read.
  */
 async function backupSettingsDigest(stateDir: string): Promise<string | null> {
   let text: string;

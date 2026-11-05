@@ -192,9 +192,9 @@ async function refusalText(res: IncomingMessage): Promise<string> {
 
 /**
  * One POST to a box whose 200 answer is a file: written to `<destinationPath>.partial` as it
- * arrives, and moved to `destinationPath` only once all of it came. Any other status comes back
- * with its text and touches no file. The destination's folder must exist. A connection that carries
- * no byte for `silenceLimitMs` is a failure.
+ * arrives, and moved to `destinationPath` only once all of it came. Any other status touches no
+ * file and comes back with its text; a text over 64 KiB or cut short throws. The destination's folder
+ * must exist. A connection that carries no byte for `silenceLimitMs` is a failure.
  *
  * The file is flushed to disk before the move and the folder after it. A failed folder flush is
  * thrown with the file already at its final name.
@@ -254,9 +254,10 @@ export async function boxDownload(
     }
     await rename(partialPath, destinationPath);
   } catch (error) {
-    // Nothing else closes an answer whose file could not be started; the sender would hold it open.
+    // Until the signal fires, nothing else closes an answer whose file could not be started.
     res.destroy();
-    await rm(partialPath, { force: true });
+    // The write's own failure is the one to report, not a failed tidy-up after it.
+    await rm(partialPath, { force: true }).catch(() => {});
     throw error;
   }
   const folder = await open(dirname(destinationPath), "r");

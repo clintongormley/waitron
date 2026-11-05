@@ -941,6 +941,15 @@ describe("what the duty works on", () => {
     expect(JSON.stringify(logLines)).toContain("handover-destination.not_a_mirror");
   });
 
+  it("logs nothing on a box already activated: that is where a destination's operation stays", async () => {
+    const r = await rig({ mode: "primary" });
+    for (const state of ["copy_accepted", "filing_assumed", "activated"] as const) {
+      await advanceHandover(r.m2Store, OP, state, {});
+    }
+    expect(await r.start()).toBeUndefined();
+    expect(JSON.stringify(logLines)).not.toContain("handover-destination.not_a_mirror");
+  });
+
   it("starts no duty and logs nothing on another box with no destination operation", async () => {
     const r = await rig({ mode: "primary" });
     await advanceHandover(r.m2Store, OP, "abandoned", {});

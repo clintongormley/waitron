@@ -187,7 +187,6 @@ export function mountHandoverActivationApi(
   );
 }
 
-// The old box saves one chart and answers.
 const CHART_POST_LIMIT_MS = 30_000;
 
 // The route answers `{ accepted }` or one short error.
@@ -238,7 +237,7 @@ async function sendChartToSource(deps: ChartPostDeps, stopping: AbortSignal): Pr
     return;
   }
   // The route gives the same answer to a chart it refused and to one it already holds, which is what
-  // every start after the first finds.
+  // a start after one that landed finds.
   deps.log("warn", "handover-activation.chart_not_accepted", {
     operationId,
     sourceNodeId,

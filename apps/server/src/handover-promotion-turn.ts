@@ -7,7 +7,7 @@ interface Turn {
   offersBeingRecorded: string[];
 }
 
-// By handle, so every route of one running box shares a turn and no route can be wired without it.
+// By handle, so every route of one running box shares a turn.
 const turns = new WeakMap<NodeDatabase, Turn>();
 
 function turnOf(node: NodeDatabase): Turn {

@@ -337,7 +337,7 @@ describe("the final copy and its indicator, served to the selected box only", ()
       });
     });
 
-    it(`a purpose no route has is refused when the query is read, before anything else about it, for the ${route}`, async () => {
+    it(`a purpose no route has is refused when the query is read, for the ${route}`, async () => {
       const { app, bystander } = await boxes();
       const response = await ask(app, route, bystander, OP, {
         nonce: NONCE,

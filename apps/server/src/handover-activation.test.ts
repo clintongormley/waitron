@@ -931,7 +931,7 @@ describe("a lost reply, then a retry or a reboot", () => {
     expect(await everything(store)).toEqual(before);
   }, 60_000);
 
-  it("power lost right after the venue save: the retry finishes the role and activated, with no second name", async () => {
+  it("a throw right after the venue save: the retry finishes the role and activated, with no second name", async () => {
     const first = await placedSpare();
     const crashing = spareOn(first);
     const { input } = await selectName(crashing.app);
@@ -940,7 +940,7 @@ describe("a lost reply, then a retry or a reboot", () => {
         attestation,
         async (context, consume) => {
           await runner(context, consume);
-          throw new Error("power lost");
+          throw new Error("stopped here");
         },
         beforeRestart,
       ),
@@ -965,13 +965,13 @@ describe("a lost reply, then a retry or a reboot", () => {
     expect((await readNodeMode(store.node, standby.nodeId)).mode).toBe("primary");
   }, 60_000);
 
-  it("power lost after the role and before activated: a wrong password records nothing, and retries at once record it once", async () => {
+  it("a throw after the role and before activated: a wrong password records nothing, and retries at once record it once", async () => {
     const first = await placedSpare();
     const crashing = spareOn(first);
     const { input } = await selectName(crashing.app);
     const crashApp = appRunning(first, crashing.service, (attestation, runner) =>
       crashing.run(attestation, runner, async () => {
-        throw new Error("power lost");
+        throw new Error("stopped here");
       }),
     );
     expect((await activate(crashApp, input)).status).toBe(500);
@@ -1074,7 +1074,7 @@ describe("a lost reply, then a retry or a reboot", () => {
     );
   }, 60_000);
 
-  it("power lost after the venue save: a fresh name asked for before the retry is not a second name", async () => {
+  it("a throw after the venue save: a fresh name asked for before the retry is not a second name", async () => {
     const first = await placedSpare();
     const crashing = spareOn(first);
     const { input } = await selectName(crashing.app);
@@ -1083,7 +1083,7 @@ describe("a lost reply, then a retry or a reboot", () => {
         attestation,
         async (context, consume) => {
           await runner(context, consume);
-          throw new Error("power lost");
+          throw new Error("stopped here");
         },
         beforeRestart,
       ),

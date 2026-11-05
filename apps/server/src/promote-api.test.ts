@@ -327,7 +327,6 @@ describe("an ordinary promotion while a handover is open on this box", () => {
 
   const run = vi.fn(async () => ({ alreadyPrimary: false, restarting: true }));
   type AfterSignIn = (() => Promise<void>) | undefined;
-  // Doubles that sign in and then ask, as `invoke` in node-operation-preparation.ts does.
   const prepare = vi.fn(async (...args: unknown[]) => {
     await (args[5] as AfterSignIn)?.();
     return { prepared: true };

@@ -1207,7 +1207,9 @@ describe("boxDownload streams one answer to a file", () => {
   it("a partial path that cannot be cleared is a failure, and the connection closes", async () => {
     await mkdir(join(partial, "in-the-way"), { recursive: true });
     const box = await boxHoldingItsAnswer();
-    await expect(boxDownload(box.url, options(), destination)).rejects.toThrow();
+    await expect(boxDownload(box.url, options(), destination)).rejects.toMatchObject({
+      code: "ERR_FS_EISDIR",
+    });
     await vi.waitFor(() => expect(box.closed()).toBe(true));
   });
 });
