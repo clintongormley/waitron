@@ -13,7 +13,7 @@ import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 
 const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
@@ -28,7 +28,7 @@ const suite = useVenueDb({
 
 const noopLog: Logger = () => {};
 
-async function provisionTenant(): Promise<TradingContext> {
+async function provisionTenant(): Promise<WithVenueRowId> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -105,7 +105,7 @@ async function setAndZone(): Promise<{ setId: string; zoneId: string }> {
 }
 
 let app: Hono;
-let cfg: TradingContext;
+let cfg: WithVenueRowId;
 let managerCookie: string;
 let staffCookie: string;
 

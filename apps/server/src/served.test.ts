@@ -43,6 +43,7 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
@@ -115,7 +116,7 @@ const DISHES = {
 type Dish = keyof typeof DISHES;
 
 interface Venue {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   zoneId: string;
   offer(dish: Dish): string;
   /** The Steak's extras list, whose one pick is the sauce. */

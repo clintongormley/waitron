@@ -34,7 +34,7 @@ import { createTable } from "./testing/live-table.js";
 import { mountTillApi } from "./till-api.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import "./errors.js";
 import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 
@@ -74,7 +74,7 @@ async function setup() {
   const locationId = brandLocationId(venueId);
   const stationId = await seedKitchenStation(db, { locationId });
   const nodeId = await seedNode(db);
-  const cfg: TradingContext = {
+  const cfg: WithVenueRowId = {
     nodeId: brandNodeId(nodeId),
     locationId,
     locale: "es-ES",

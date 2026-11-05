@@ -22,7 +22,7 @@ import type { Logger } from "./logger.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -55,7 +55,7 @@ const UNANSWERED = {
 /** Text the printer announced; none of it may reach a response or a stored name. */
 const ANNOUNCED = { make: "HP", model: "LaserJet Pro M404dn", name: "HP LaserJet secret-floor-3" };
 
-let cfg: TradingContext;
+let cfg: WithVenueRowId;
 let managerCookie: string;
 let staffCookie: string;
 

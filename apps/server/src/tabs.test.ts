@@ -53,6 +53,7 @@ import {
 } from "@waitron/catalogue";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig, OriginConfig, TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -94,7 +95,7 @@ beforeAll(() => {
 });
 
 interface Seeded {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   coffeeId: string;
   waterId: string;
   coffeeMenuItemId: string;
@@ -204,7 +205,7 @@ function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T> | T): P
 /** `minPicks: 0` leaves the list optional, so the dish still orders on its own. */
 async function attachExtras(
   tx: Transaction,
-  cfg: OriginConfig,
+  cfg: WithVenueRowId<OriginConfig>,
   dishId: string,
   extraProductId: string,
 ): Promise<string> {

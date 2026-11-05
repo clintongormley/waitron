@@ -32,7 +32,7 @@ import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { createStation } from "./kitchen.js";
 import { deletePrinter } from "./printer-delete.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 
 /**
@@ -64,7 +64,7 @@ function uniqueName(base: string): string {
 }
 
 /** The venue the station and watcher list routes are scoped to, as boot threads it. */
-let venueCfg: TradingContext;
+let venueCfg: WithVenueRowId;
 
 /** The provisioned counter's department and zone: a profile that is not a kitchen display must
  * name a department to be saved. */

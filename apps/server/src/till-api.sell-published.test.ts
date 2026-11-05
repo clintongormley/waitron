@@ -66,7 +66,7 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -130,7 +130,7 @@ function nextNif(): string {
 
 interface Lunch {
   seriesId: ReturnType<typeof brandSeriesId>;
-  cfg: TradingContext;
+  cfg: WithVenueRowId;
   zoneId: string;
   menuId: string;
   rootId: string;
@@ -187,7 +187,7 @@ async function setupLunch(): Promise<Lunch> {
     { db: suite.db, modules: ALL_MODULES },
   );
   const venueId = await venueLocationId(suite.db);
-  const cfg: TradingContext = {
+  const cfg: WithVenueRowId = {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venueId),
     locale: LOCALE,

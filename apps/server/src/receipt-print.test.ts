@@ -91,7 +91,8 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { OrderFlow } from "./till-config.js";
-import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import {
   collectOrderOrchestration as collectOrder,
   printSaleReceipt,
@@ -199,7 +200,7 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venueId),
@@ -215,7 +216,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContex
  * the counter zone under `orderFlow`.
  */
 async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   each: AvailableProduct & { menuItemId: string };
   zoneId: string;
 }> {
@@ -324,7 +325,7 @@ async function makePrinter({
 }
 
 async function configureReceipt(
-  cfg: DeviceRequestConfig,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
   opts: { mode?: "auto" | "on_request"; printerId?: string | null },
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
@@ -361,9 +362,9 @@ const NO_DRAWER_CAPABILITY = CAPABILITY_FLAGS.filter((flag) => flag !== "open-ca
 
 /** `cfg` as a request from a new device at its location whose profile lacks `capability`. */
 async function deviceWithout(
-  cfg: DeviceRequestConfig,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
   capability: string,
-): Promise<DeviceRequestConfig> {
+): Promise<WithVenueRowId<DeviceRequestConfig>> {
   const { deviceId } = await seedDevice(suite.db, {
     capabilities: CAPABILITY_FLAGS.filter((flag) => flag !== capability),
   });
@@ -1529,10 +1530,10 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 describe("every device whose profile allows the drawer opens its chosen drawer", () => {
   /** Another till device at the venue's location, and the config a sale there runs under. */
   async function addNode(
-    cfg: DeviceRequestConfig,
+    cfg: WithVenueRowId<DeviceRequestConfig>,
     name: string,
     capabilities: string[] = [...CAPABILITY_FLAGS],
-  ): Promise<DeviceRequestConfig> {
+  ): Promise<WithVenueRowId<DeviceRequestConfig>> {
     const { deviceId } = await seedDevice(suite.db, {
       label: name,
       capabilities,
@@ -2092,7 +2093,10 @@ describe("a record with no device prints nothing", () => {
 });
 
 describe("the device's invoice printer", () => {
-  async function officePrinter(cfg: DeviceRequestConfig, active = true): Promise<string> {
+  async function officePrinter(
+    cfg: WithVenueRowId<DeviceRequestConfig>,
+    active = true,
+  ): Promise<string> {
     const [row] = await suite.db
       .insert(pagePrinters)
       .values({

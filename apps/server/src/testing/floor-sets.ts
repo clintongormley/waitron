@@ -2,12 +2,12 @@ import { eq } from "drizzle-orm";
 import { floorPlanSets, type Transaction } from "@waitron/db";
 import { linkFloorPlanSet, readFloorPlanSets, zoneServicePolicies } from "@waitron/venue-service";
 import type { LayoutRef } from "../floor-plan.js";
-import type { TradingContext } from "../trading-context.js";
+import type { WithVenueRowId } from "./venue-row-id.js";
 
 /** The default set of the zone's department, made under `name` when the department has none. */
 export async function defaultLayout(
   tx: Transaction,
-  cfg: TradingContext,
+  cfg: WithVenueRowId,
   zoneId: string,
   name = "Standard",
 ): Promise<LayoutRef> {

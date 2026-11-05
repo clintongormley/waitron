@@ -58,6 +58,7 @@ import { createTable } from "./live-table.js";
 import { mountTillApi } from "../till-api.js";
 import { systemClock } from "../till-backend.js";
 import type { DeviceRequestConfig } from "../trading-context.js";
+import type { WithVenueRowId } from "./venue-row-id.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";
@@ -281,7 +282,7 @@ export interface AdjustmentVenue {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   /** The display language the till routes are mounted with; the same code as `cfg.locale`. */
   venueLocale: string;
   tables: ZoneOffers;

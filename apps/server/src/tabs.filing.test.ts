@@ -27,7 +27,8 @@ import type { Database } from "@waitron/db";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
 import { listStationQueue } from "./working-order.js";
 import { createCourse } from "./kitchen.js";
@@ -68,7 +69,7 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venueId),
@@ -80,7 +81,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContex
 }
 
 interface SeededVenue {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   /** 1.50 gross. */
   cafe: AvailableProduct;
   /** 2.00 gross, at café's VAT rate, so a two-line basket has one VAT group. */
@@ -155,7 +156,7 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
 }
 
 async function seedTable(
-  cfg: DeviceRequestConfig,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
   label: string,
   db: Database = suite.db,
   zoneId?: string,

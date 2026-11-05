@@ -19,6 +19,7 @@ import { createProduct } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, updatePrinter } from "@waitron/printing";
 import type { OriginConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createStation, updateStation } from "./kitchen.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import { setStationPrinting } from "./testing/station-printing.js";
@@ -132,7 +133,7 @@ async function sentJobs(tx: Transaction) {
  */
 async function seatAndSubmit(
   tx: Transaction,
-  cfg: OriginConfig,
+  cfg: WithVenueRowId<OriginConfig>,
   groups: { release: "fire" | "hold"; productIds: string[] }[],
 ): Promise<string> {
   await setStationPrinting(tx, { printHeldWork: true });

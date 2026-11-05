@@ -45,6 +45,7 @@ import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { OriginConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 
@@ -63,7 +64,7 @@ import {
 // tickets stay on the check. One case finds a split-off check in Held orders and pays it through the
 // sale route. The split and un-join verbs themselves are tested in
 // `split-bill.test.ts` and `split-bill.fiscal.test.ts`.
-let cfg: OriginConfig;
+let cfg: WithVenueRowId<OriginConfig>;
 let ana: { id: string };
 // One product so a tab can open with a real line to split/carry across an un-join — `openTab` prices it
 // and the `check_locales` trigger demands its `es-ES` description key match the venue's `es-ES` locale.
@@ -118,7 +119,7 @@ function collect(
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-function makeCfg(locationId: string, nodeId: string): OriginConfig {
+function makeCfg(locationId: string, nodeId: string): WithVenueRowId<OriginConfig> {
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
@@ -205,7 +206,7 @@ async function setupTabApp(
 }
 
 /** The suite shares one database, and an earlier case may already have seeded the default station. */
-async function kitchenStation(config: OriginConfig): Promise<string> {
+async function kitchenStation(config: WithVenueRowId<OriginConfig>): Promise<string> {
   const [existing] = await suite.db
     .select({ id: kitchenStations.id })
     .from(kitchenStations)

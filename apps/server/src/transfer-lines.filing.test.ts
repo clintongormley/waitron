@@ -26,7 +26,8 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -79,7 +80,7 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venueId),
@@ -91,7 +92,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContex
 }
 
 interface SeededVenue {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   available: AvailableProduct[];
   /** "Café" — each, 1.50 gross, general(21%). */
   cafe: AvailableProduct;

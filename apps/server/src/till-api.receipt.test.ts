@@ -79,6 +79,7 @@ import type { TranslationItemPage } from "@waitron/catalogue/src/content-transla
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { CAPABILITY_FLAGS, emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
@@ -160,7 +161,7 @@ function nextNif(): string {
   return nifWithControlLetter(64_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venueId),
@@ -176,7 +177,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContex
  *  holds `cash.drawer`; the staff person does not — the pair the gated drawer matrix is written
  *  against. */
 async function setupVenue(): Promise<{
-  cfg: TradingContext;
+  cfg: WithVenueRowId;
   each: AvailableProduct & { menuItemId: string };
   operatorId: string;
   supervisorId: string;
@@ -304,7 +305,7 @@ let venueReceiptPrinter: string | null = null;
 /** Puts every device of the venue, and each one enrolled after, on `printerId` for receipts and
  *  payment slips; `null` leaves them with no printer. */
 async function configureReceipt(
-  cfg: TradingContext,
+  cfg: WithVenueRowId,
   opts: { mode?: "auto" | "on_request"; printerId?: string | null },
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
@@ -1041,7 +1042,7 @@ describe("an original receipt whose printer was deleted", () => {
 
   async function open(): Promise<{
     app: Hono;
-    cfg: TradingContext;
+    cfg: WithVenueRowId;
     orderId: string;
     cookie: string;
     printerId: string;

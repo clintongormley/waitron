@@ -35,6 +35,7 @@ import {
   jobOrigin,
 } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
 import { listStationQueues, moveOrderLines } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
@@ -100,7 +101,7 @@ beforeAll(() => {
 });
 
 interface Seeded {
-  cfg: OriginConfig;
+  cfg: WithVenueRowId<OriginConfig>;
   coffeeId: string;
   waterId: string;
   /** "Bacon" — sold only as another dish's extra here, so a child line's product id can never be
@@ -138,7 +139,7 @@ async function setupVenue(): Promise<Seeded> {
   });
   const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
-  const cfg: OriginConfig = {
+  const cfg: WithVenueRowId<OriginConfig> = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),
@@ -198,7 +199,7 @@ function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T>): Promi
 }
 
 /** Create one active dining table in the venue's tables zone; returns its id. */
-async function seedTable(cfg: OriginConfig, label: string): Promise<string> {
+async function seedTable(cfg: WithVenueRowId<OriginConfig>, label: string): Promise<string> {
   const zoneId = offersOf(cfg).zoneId;
   return asApp(cfg, (tx) => createTable(tx, cfg, { label, zoneId }).then((r) => r.id));
 }

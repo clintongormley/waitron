@@ -70,6 +70,7 @@ import {
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { finishTable, seatTable } from "./testing/party-close-fixture.js";
@@ -138,7 +139,7 @@ const DISHES = {
 type Dish = keyof typeof DISHES;
 
 interface Venue {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   zoneId: string;
   offer(dish: Dish): string;
   extrasListId: string;

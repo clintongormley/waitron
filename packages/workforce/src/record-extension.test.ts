@@ -205,7 +205,7 @@ it("refuses a self-approval flag on an ordinary clock entry without changing the
 it.each(["chain", "record"])(
   "retains a stored self-approval flag added to a basic entry in the %s reader",
   async (reader) => {
-    const original = { ...content, personId, recordedByPersonId: personId, nodeId, locationId };
+    const original = { ...content, personId, recordedByPersonId: personId, nodeId };
     await suite.db.insert(timeEntries).values({
       ...original,
       entryKind: "in",

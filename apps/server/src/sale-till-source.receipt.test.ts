@@ -32,6 +32,7 @@ import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
@@ -83,7 +84,7 @@ function nextNif(): string {
   return nifWithControlLetter(61_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venueId),

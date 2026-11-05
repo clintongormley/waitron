@@ -62,6 +62,7 @@ import { mountPaymentsApi } from "./payments-api.js";
 import { loadTillAppSettings } from "./till-config.js";
 import { loadNodeIdentity } from "./node-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import {
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   printSaleReceipt,
@@ -117,7 +118,7 @@ const MADRID = { postalCode: "28013", city: "Madrid", province: "Madrid" };
 
 interface Venue {
   app: Hono;
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   session: string;
   /** The session plus an enrolled till device, as a sale is sent. */
   till: string;

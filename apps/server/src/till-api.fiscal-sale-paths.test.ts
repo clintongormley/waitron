@@ -74,6 +74,7 @@ import { buildCardProvider } from "./boot.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { OrderFlow } from "./till-config.js";
 import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
@@ -132,7 +133,7 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venueId),
@@ -149,7 +150,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContex
  * (1.50 gross, general/21%) and one kg product (24.90 €/kg, reduced/10%).
  */
 async function setupVenue(): Promise<{
-  cfg: TradingContext;
+  cfg: WithVenueRowId;
   catalogueId: string;
   available: (AvailableProduct & { menuItemId: string })[];
   operatorId: string;
@@ -3400,7 +3401,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
 
   async function venueWithTill(orderFlow: OrderFlow = "prepay") {
     const venue = await setupVenue();
-    const cfg: TradingContext = { ...venue.cfg };
+    const cfg: WithVenueRowId = { ...venue.cfg };
     await withTransaction(suite.db, (tx) =>
       offerProducts(tx, cfg, {
         orderStart: "counter",

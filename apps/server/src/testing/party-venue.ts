@@ -40,6 +40,7 @@ import { memberTables, seatTable, setPartyName } from "../parties.js";
 import { joinTables } from "./table-action-fixture.js";
 import { createTable } from "./live-table.js";
 import type { DeviceRequestConfig } from "../trading-context.js";
+import type { WithVenueRowId } from "./venue-row-id.js";
 import { systemClock } from "../till-backend.js";
 import { payWorkingOrder } from "./whole-payment-fixture.js";
 import { listTablesWithState, parkOrder } from "../working-order.js";
@@ -71,7 +72,7 @@ export interface PartyVenue {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   /** {@link OPERATOR}'s open session on the venue's device, which a bill payment is taken under. */
   operator: { personId: string; sessionId: string };
   /** The "tables" zone. */

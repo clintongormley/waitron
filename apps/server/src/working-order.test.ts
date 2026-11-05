@@ -62,6 +62,7 @@ import {
 } from "@waitron/shared";
 import type { OrderFlow } from "./till-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import {
   advanceTicket,
   advanceTicketItem,
@@ -141,7 +142,7 @@ beforeAll(() => {
 });
 
 interface SeededVenue {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   /** The catalogue assigned to this venue's location — where the KDS routing tests add more products. */
   catalogueId: string;
   /** The `each`-priced "Café" product (VAT general/21%, category "ES drinks"). */
@@ -315,13 +316,13 @@ interface ProductLine {
  * Every product the venue's catalogue holds now, offered in its counter zone (`setupVenue`'s) from
  * the test helper's own menu at the product's own price. Call it after the catalogue is final.
  */
-function counterOffers(cfg: DeviceRequestConfig): Promise<ZoneOffers> {
+function counterOffers(cfg: WithVenueRowId<DeviceRequestConfig>): Promise<ZoneOffers> {
   return withTransaction(db, (tx) => offerProducts(tx, cfg));
 }
 
 /** `parkOrder` for a basket named by product, sold through each product's counter-zone offer. */
 async function parkProducts(
-  cfg: DeviceRequestConfig,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
   req: { id: string; label?: string; lines: ProductLine[] },
 ): Promise<{ id: string; orderNumber: number }> {
   const offers = await counterOffers(cfg);
@@ -334,7 +335,7 @@ async function parkProducts(
 
 /** `updateHeldOrder` for a basket named by product, each line naming its counter-zone offer. */
 async function updateProducts(
-  cfg: DeviceRequestConfig,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
   id: string,
   req: {
     label?: string;
@@ -1353,7 +1354,7 @@ async function setStatus(id: string, status: "settled" | "abandoned"): Promise<v
  * venue-wide (#259): a promoted node inherits the venue's open tabs even though they are
  * tagged with the dead node's id (swap spec §4.3). `node_id` is the foreign node's on purpose.
  */
-async function seedForeignNodeOrder(cfg: DeviceRequestConfig): Promise<string> {
+async function seedForeignNodeOrder(cfg: WithVenueRowId<DeviceRequestConfig>): Promise<string> {
   const id = randomUUID();
   const otherNode = await seedNode(db);
   await db.execute(sql`
@@ -3081,13 +3082,19 @@ async function attachedPrinter(
 }
 
 /** The helper's table-service zone, every current product offered in it. */
-function tableOffers(tx: Transaction, cfg: DeviceRequestConfig): Promise<ZoneOffers> {
+function tableOffers(
+  tx: Transaction,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
+): Promise<ZoneOffers> {
   return offerProducts(tx, cfg, { zone: "tables" });
 }
 
 /** Insert an active dining table in the table-service zone and return its id (for the openTab →
  *  addRound path). */
-async function makeTable(tx: Transaction, cfg: DeviceRequestConfig): Promise<string> {
+async function makeTable(
+  tx: Transaction,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
+): Promise<string> {
   const { zoneId } = await tableOffers(tx, cfg);
   const { rows } = await tx.execute<{ id: string }>(sql`
     insert into dining_tables (id, location_id, label, zone_id, created_at)
@@ -3101,7 +3108,7 @@ async function makeTable(tx: Transaction, cfg: DeviceRequestConfig): Promise<str
 /** `addTabRound` for a round named by product, each line sold through its table-zone offer. */
 async function addRound(
   tx: Transaction,
-  cfg: DeviceRequestConfig,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
   tabId: string,
   lines: (ProductLine & { courseId?: string | null; hold?: boolean })[],
 ): Promise<void> {
@@ -3112,7 +3119,7 @@ async function addRound(
 /** `createOpenOrder` for a basket named by product, sold through each product's counter-zone offer. */
 async function createOfferedOrder(
   tx: Transaction,
-  cfg: DeviceRequestConfig,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
   id: string,
   lines: ProductLine[],
   shape: "portions" | "grouped" = "portions",
@@ -3133,7 +3140,7 @@ async function createOfferedOrder(
  *  without the fiscal machinery. Returns the order's id. */
 async function placeOrderWith(
   tx: Transaction,
-  cfg: DeviceRequestConfig,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
   // `note` is the per-line KDS customisation (spec §2/§3, NON-FISCAL) — `createOpenOrder` validates
   // and persists it on the parent dish line, and `fireLines` snapshots it onto the ticket.
   lines: ProductLine[],
@@ -6427,7 +6434,7 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
  *  shape `bumpCourseReady` must sweep in one UPDATE (`listStationQueue` would need two reads to see both). */
 async function firedCourseAcrossTwoStations(
   tx: Transaction,
-  cfg: DeviceRequestConfig,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
   catalogueId: string,
 ): Promise<{ orderId: string; courseId: string }> {
   await createStation(tx, { name: "Cocina", isDefault: true });
@@ -6894,7 +6901,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
    *  is required. */
   async function openExtrasTab(
     tx: Transaction,
-    cfg: DeviceRequestConfig,
+    cfg: WithVenueRowId<DeviceRequestConfig>,
     tableId: string,
     lines: ProductLine[],
   ): Promise<string> {
@@ -7369,7 +7376,10 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
 // Exercised through `addTabRound`; the order paths run the same `priceOrderLines` code.
 describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   /** Open a fresh empty tab in the venue and return its id — the addTabRound host these cases fire on. */
-  async function openEmptyTab(tx: Transaction, cfg: DeviceRequestConfig): Promise<string> {
+  async function openEmptyTab(
+    tx: Transaction,
+    cfg: WithVenueRowId<DeviceRequestConfig>,
+  ): Promise<string> {
     const tableId = await makeTable(tx, cfg);
     const { tabId } = await openPartyTab(tx, cfg, { tableId });
     return tabId;
@@ -7765,7 +7775,7 @@ it("does not let an omitted payload waive a required extras list it cannot satis
  */
 describe("order path — extras and options", () => {
   interface Seeded {
-    cfg: DeviceRequestConfig;
+    cfg: WithVenueRowId<DeviceRequestConfig>;
     dishId: string;
     wineId: string;
     extraListId: string;

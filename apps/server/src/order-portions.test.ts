@@ -32,6 +32,7 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { setupVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import {
   insertTabRound,
   priceOrderLines,
@@ -298,7 +299,7 @@ describe("A803 portions: recording portions", () => {
     timeoutMs: 60_000,
   });
   let db: Database;
-  let cfg: DeviceRequestConfig;
+  let cfg: WithVenueRowId<DeviceRequestConfig>;
   let offers: ZoneOffers;
   let ids: { burger: string; cheese: string; toppings: string; wine: string };
   let catalogueId: string;

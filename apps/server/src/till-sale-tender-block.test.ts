@@ -32,7 +32,8 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { readTenderBlock } from "./till-sale.js";
 import { createOpenOrder } from "./working-order.js";
 import { descendingIds } from "./testing/descending-ids.js";
@@ -82,7 +83,7 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venueId),
@@ -93,7 +94,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContex
   };
 }
 
-let cfg: DeviceRequestConfig;
+let cfg: WithVenueRowId<DeviceRequestConfig>;
 let seriesId: ReturnType<typeof brandSeriesId>;
 let menuItemId: string;
 let zoneId: string;

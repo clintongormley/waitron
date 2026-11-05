@@ -32,6 +32,7 @@ import {
   thousandthsToDecimal,
 } from "@waitron/shared";
 import type { DeviceRequestConfig, OriginConfig, TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { createTable } from "./testing/live-table.js";
 import {
@@ -69,7 +70,7 @@ beforeAll(() => {
 });
 
 interface Seeded {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   waterId: string;
   hamId: string;
   tableId: string;
@@ -393,7 +394,7 @@ it("retains the frozen options answers and the frozen names when a dish quantity
 });
 
 /** A default kitchen station, with each product's route re-pointed at it, so a round fires there. */
-async function withKitchen(cfg: OriginConfig): Promise<string> {
+async function withKitchen(cfg: WithVenueRowId<OriginConfig>): Promise<string> {
   const stationId = await seedKitchenStation(db, { locationId: cfg.locationId });
   const offers = await asApp(cfg, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
   offersByCfg.set(cfg, offers);

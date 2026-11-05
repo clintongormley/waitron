@@ -55,7 +55,8 @@ import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import type { OrderFlow } from "./till-config.js";
-import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import {
   advanceTicket,
   advanceTicketItem,
@@ -160,7 +161,7 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venueId),
@@ -175,7 +176,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContex
 type OfferedProduct = AvailableProduct & { menuItemId: string };
 
 interface SeededVenue {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   available: AvailableProduct[];
   /** The venue's counter-default zone. */
   zoneId: string;
@@ -258,7 +259,7 @@ async function setupVenue(): Promise<SeededVenue> {
 }
 
 async function offerAtCounter(
-  cfg: DeviceRequestConfig,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
   available: AvailableProduct[],
   mode: OrderFlow = "prepay",
 ): Promise<SeededVenue> {
@@ -483,7 +484,7 @@ async function ticketStateOf(id: string): Promise<string | null> {
  *  venue-apply.ts). No fixture product names a station, itself or through its category, so the
  *  routes `offerProducts` writes send every line here; it is the id the whole-ticket bump and the
  *  per-station queue address. */
-async function defaultStationId(cfg: DeviceRequestConfig): Promise<string> {
+async function defaultStationId(cfg: WithVenueRowId<DeviceRequestConfig>): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     select id from kitchen_stations
     where location_id = ${cfg.locationId} and is_default and active
@@ -2642,14 +2643,17 @@ describe("the pass board — venue-wide", () => {
   });
 });
 
-async function setDefaultStationActive(cfg: DeviceRequestConfig, active: boolean): Promise<void> {
+async function setDefaultStationActive(
+  cfg: WithVenueRowId<DeviceRequestConfig>,
+  active: boolean,
+): Promise<void> {
   await suite.db.execute(sql`
     update kitchen_stations set active = ${active ? 1 : 0}
     where location_id = ${cfg.locationId} and is_default`);
 }
 
 /** A printer on the venue's default station, so a fire there enqueues a kitchen ticket. */
-async function kitchenPrinter(cfg: DeviceRequestConfig): Promise<string> {
+async function kitchenPrinter(cfg: WithVenueRowId<DeviceRequestConfig>): Promise<string> {
   const station = await defaultStationId(cfg);
   return withTransaction(suite.db, async (tx) => {
     const { id } = await createPrinter(tx, {
@@ -2976,7 +2980,7 @@ describe("markCollected (the counter handover)", () => {
  *  → `addTabRound` entry point. */
 async function addTable(
   tx: Transaction,
-  cfg: DeviceRequestConfig,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
   zoneId: string,
 ): Promise<string> {
   // Through the table, not a raw `insert`: BOTH `dining_tables.id` and

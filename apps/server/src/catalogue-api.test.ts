@@ -39,7 +39,7 @@ import {
   configureZone,
 } from "@waitron/venue-service";
 import { floorZones, kitchenStations } from "@waitron/db";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
@@ -616,7 +616,7 @@ beforeEach(async () => {
  * The venue's location id, for the kitchen stations and zones these cases insert and look up
  * directly; the other fields only fill the type.
  */
-function venueCfg(): TradingContext {
+function venueCfg(): WithVenueRowId {
   return {
     nodeId: brandNodeId("11111111-1111-4111-8111-111111111111"),
     locationId: brandLocationId(locationId),

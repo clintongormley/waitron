@@ -17,7 +17,7 @@ import { readLayout } from "../../src/floor-plan.js";
 import { defaultLayout } from "../../src/testing/floor-sets.js";
 import type { Placement } from "../../src/floor-reset-plan.js";
 import { createTable } from "../../src/testing/live-table.js";
-import type { TradingContext } from "../../src/trading-context.js";
+import type { WithVenueRowId } from "../../src/testing/venue-row-id.js";
 import { DEMO_TABLES } from "./testing/data.js";
 import { seedFloor } from "./seed-floor.js";
 import { seedCatalogues } from "./seed-catalogue.js";
@@ -442,7 +442,7 @@ describe("seedFloor", () => {
         sql`select zone_id from zone_service_policies
             where location_id = ${locationId} and is_counter_default limit 1`,
       );
-      await createTable(tx, { locationId: brandLocationId(locationId) } as TradingContext, {
+      await createTable(tx, { locationId: brandLocationId(locationId) } as WithVenueRowId, {
         label: "Stray",
         zoneId: rows[0]!.zone_id,
       });
@@ -464,7 +464,7 @@ describe("seedFloor", () => {
         where location_id = ${locationId} and is_counter_default limit 1`);
       await createTable(
         tx,
-        { locationId: brandLocationId(locationId) } as TradingContext,
+        { locationId: brandLocationId(locationId) } as WithVenueRowId,
         { label: "Disabled stray", zoneId: rows[0]!.zone_id },
         { today: false },
       );

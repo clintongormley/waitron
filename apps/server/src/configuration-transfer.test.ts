@@ -167,7 +167,7 @@ import {
 import { seedSessionDevice } from "./testing/session-device.js";
 import { setDefaultStation } from "./kitchen.js";
 import { selfEnrolNodeAgent } from "./join-requests.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deletePrinter } from "./printer-delete.js";
 import { stageConfigurationImport } from "./configuration-import.js";
 
@@ -3813,7 +3813,7 @@ async function shortNamedBundle(taxId: string) {
     modules: ALL_MODULES,
   });
   const venueId = await venueLocationId(suite.db);
-  const cfg: TradingContext = {
+  const cfg: WithVenueRowId = {
     locationId: locationId(venueId),
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
@@ -7296,7 +7296,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     modules: ALL_MODULES,
   });
   const sourceVenueId = await venueLocationId(suite.db);
-  const cfg: TradingContext = {
+  const cfg: WithVenueRowId = {
     locationId: locationId(sourceVenueId),
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
@@ -7431,7 +7431,7 @@ it("carries Long table's parts, naming the imported tables", async () => {
     modules: ALL_MODULES,
   });
   const venueId = await venueLocationId(suite.db);
-  const cfg: TradingContext = {
+  const cfg: WithVenueRowId = {
     locationId: locationId(venueId),
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
@@ -7516,7 +7516,7 @@ it("carries a kept size, naming the imported table", async () => {
     modules: ALL_MODULES,
   });
   const venueId = await venueLocationId(suite.db);
-  const cfg: TradingContext = {
+  const cfg: WithVenueRowId = {
     locationId: locationId(venueId),
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",

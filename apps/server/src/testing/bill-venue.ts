@@ -47,6 +47,7 @@ import type { Logger } from "../logger.js";
 import { ALL_MODULES, VENUE_SERVICE } from "../modules.js";
 import { createTable } from "./live-table.js";
 import type { DeviceRequestConfig } from "../trading-context.js";
+import type { WithVenueRowId } from "./venue-row-id.js";
 import { mountTillApi } from "../till-api.js";
 import { systemClock } from "../till-backend.js";
 import { SESSION_COOKIE } from "../till-session.js";
@@ -84,7 +85,7 @@ export interface BillVenue {
   backend: FiscalBackend;
   clock: TrustedClock;
   /** The box's configuration, tips off. */
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   card: FakePaymentProvider;
   /** Serves the fake card provider as `fake`. */
   pool: CardProviderPool;

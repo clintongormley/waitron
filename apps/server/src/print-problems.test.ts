@@ -33,6 +33,7 @@ import {
 } from "@waitron/printing";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { createStation } from "./kitchen.js";
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
@@ -89,7 +90,7 @@ const DISHES = {
 type Dish = keyof typeof DISHES;
 
 interface Venue {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   kitchenStationId: string;
   barStationId: string;
   kitchenPrinterId: string;

@@ -19,6 +19,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "../modules.js";
 import type { OriginConfig } from "../trading-context.js";
+import type { WithVenueRowId } from "./venue-row-id.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 
@@ -30,7 +31,7 @@ const LOCALE = "es-ES";
 export interface Venue {
   seriesId: ReturnType<typeof brandSeriesId>;
   /** Orders a test opens directly come from the dashboard, so no device is seeded for them. */
-  cfg: OriginConfig;
+  cfg: WithVenueRowId<OriginConfig>;
   /** The venue's provisioned default kitchen station — where `placeOrder` fires items, and the
    *  station the KDS device below binds to. */
   defaultStationId: string;
@@ -43,7 +44,7 @@ export interface Venue {
   staffCookie: string;
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): OriginConfig {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId<OriginConfig> {
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(venue.nodeId),

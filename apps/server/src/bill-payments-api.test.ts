@@ -87,6 +87,7 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { OriginConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { BASIC_ACTIONS, revokedDeviceSessionCookie } from "./testing/session-device.js";
@@ -134,7 +135,7 @@ const unreadableMailRing = loadKeyRing({
 const SMTP = { url: "smtp://smtp.example.test:2525", from: "Venue <venue@example.test>" };
 
 interface Venue {
-  cfg: OriginConfig;
+  cfg: WithVenueRowId<OriginConfig>;
   offers: ZoneOffers;
   /** Product id by the staff name. */
   productIds: Map<string, string>;
@@ -240,7 +241,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     { db, modules: ALL_MODULES },
   );
   const venueId = await venueLocationId(db);
-  const cfg: OriginConfig = {
+  const cfg: WithVenueRowId<OriginConfig> = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(provisioned.nodeId),
     locationId: brandLocationId(venueId),

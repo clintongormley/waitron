@@ -21,12 +21,13 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { deviceOrigin, jobOrigin, locationId } from "@waitron/shared";
 import { enqueueTenderRefundDrawer } from "./receipt-print.js";
 import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 
 const store = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
 const AUTH = { authorizedBy: "cccccccc-0000-4000-8000-000000000002", viaOverride: true };
 const AT = "2026-10-16T09:00:00.000Z";
-let cfg: DeviceRequestConfig;
+let cfg: WithVenueRowId<DeviceRequestConfig>;
 let profileId: string;
 let saleId: string;
 let tenderId: string;

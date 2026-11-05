@@ -16,13 +16,13 @@ import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import "./errors.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 
 // Venue-made table statuses are retired: the till API serves neither the status list nor the
 // set-status route, and the floor read carries no manual status.
-let cfg: TradingContext;
+let cfg: WithVenueRowId;
 let ana: { id: string };
 let TABLE_ID: string;
 
@@ -62,7 +62,7 @@ function collect(
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-function makeCfg(locationId: string, nodeId: string): TradingContext {
+function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),

@@ -19,7 +19,7 @@ import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from 
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import type { ModuleRouteContext } from "@waitron/module";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
 import {
   finishTable,
@@ -54,7 +54,7 @@ const LOCALE = "es-ES";
 const noopLog: Logger = () => {};
 
 interface Venue {
-  tillCfg: TradingContext;
+  tillCfg: WithVenueRowId;
   ctx: ModuleRouteContext;
   managerId: string;
   managerCookie: string;
@@ -68,7 +68,7 @@ async function setupVenue(): Promise<Venue> {
   });
   const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
-  const tillCfg: TradingContext = {
+  const tillCfg: WithVenueRowId = {
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),
     locale: LOCALE,

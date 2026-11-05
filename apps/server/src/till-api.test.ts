@@ -94,7 +94,7 @@ import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE, requireSession } from "./till-session.js";
-import type { TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import "./errors.js";
 
@@ -121,7 +121,7 @@ async function sendRound(
   });
 }
 
-let cfg: TradingContext;
+let cfg: WithVenueRowId;
 let ana: { id: string };
 // The pre-login roster fixtures: `abel` is a second ACTIVE person whose name sorts BEFORE "Ana" but
 // is inserted AFTER it, so `[abel, ana]` proves `listActiveStaff` sorts by name rather than by
@@ -293,7 +293,7 @@ function collect(
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-function makeCfg(locationId: string, nodeId: string): TradingContext {
+function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),

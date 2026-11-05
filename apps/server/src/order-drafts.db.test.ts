@@ -55,6 +55,7 @@ import { persons } from "@waitron/identity";
 import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OptionSelection } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createCourse } from "./kitchen.js";
 import { createTable } from "./testing/live-table.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -99,7 +100,7 @@ const DISHES = {
 type Dish = keyof typeof DISHES;
 
 interface Venue {
-  cfg: OriginConfig;
+  cfg: WithVenueRowId<OriginConfig>;
   productId: Record<Dish, string>;
   courseId: string;
   sauceListId: string;
@@ -127,7 +128,7 @@ async function setupVenue(): Promise<Venue> {
   const locationId = await venueLocationId(db);
   await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
   const nodeId = await seedNode(db);
-  const cfg: OriginConfig = {
+  const cfg: WithVenueRowId<OriginConfig> = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),

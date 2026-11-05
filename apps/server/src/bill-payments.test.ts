@@ -90,6 +90,7 @@ import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import {
   collectOrderOrchestration as collectOrder,
   payWorkingOrder,
@@ -125,7 +126,7 @@ let backend: FiscalBackend;
 let clock: TrustedClock;
 
 interface Venue {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   /** OPERATOR's open session on the venue's device, which a bill payment is taken under. */
   operator: { personId: string; sessionId: string };
   offers: ZoneOffers;

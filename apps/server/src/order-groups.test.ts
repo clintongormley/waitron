@@ -54,6 +54,7 @@ import {
 import { createPrinter } from "@waitron/printing";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deviceRequestCfg, seedSessionDevice } from "./testing/session-device.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -145,7 +146,7 @@ const COURSE_OF: Record<Dish, keyof typeof COURSES> = {
 };
 
 interface Venue {
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   productId: Record<Dish, string>;
   printerId: string;
   /** The one kitchen station every routed dish goes to. */

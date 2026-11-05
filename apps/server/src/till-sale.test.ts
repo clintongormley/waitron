@@ -71,7 +71,8 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import {
   payWorkingOrder,
   receiptQr,
@@ -153,7 +154,7 @@ async function readyDepartment(venueId: string): Promise<void> {
   });
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venueId),
@@ -169,7 +170,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContex
  * `weight` product (24.90 €/kg, reduced/10%).
  */
 async function setupVenue(options: { variants?: boolean } = {}): Promise<{
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   seriesId: ReturnType<typeof brandSeriesId>;
   available: AvailableProduct[];
   zoneId: string;
@@ -1008,7 +1009,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
  */
 describe("ordering extras and options — parent + child lines", () => {
   interface ModifierVenue {
-    cfg: DeviceRequestConfig;
+    cfg: WithVenueRowId<DeviceRequestConfig>;
     /** The counter-default zone, which offers every product at its own price. */
     zoneId: string;
     /** A second zone, `table_tab`, offering the same menu, for the tabs' dining tables. */

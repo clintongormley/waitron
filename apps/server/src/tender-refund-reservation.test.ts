@@ -20,6 +20,7 @@ import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { deviceOrigin, locationId } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import type { TenderRefundRequest } from "./tender-refund-types.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
 
@@ -32,7 +33,7 @@ const store = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   resetPerTest: true,
 });
-let cfg: DeviceRequestConfig;
+let cfg: WithVenueRowId<DeviceRequestConfig>;
 let seriesId: string;
 let orderId: string;
 let number: number;
