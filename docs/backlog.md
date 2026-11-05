@@ -6571,6 +6571,13 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `recovery_packs`; 111 environment variables become 51, or 55 until A951 lands.
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
 
+- **A1336: qualify the first prepared shared UI release with Cloud.**
+  Waitron's staging utility and independent consumer proof prepare
+  `@waitron-io/ui-core@0.2.0` without changing workspace imports. Return the exact
+  current green main SHA, staged bytes, notice inventory and consumer evidence to
+  Cloud's D579; Cloud still owns reservation, reviewed publication, registry
+  readback and portal/image qualification. [Preparation guide](developers/shared-ui-preparation.md).
+
 - **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
   2026-11-01, high priority; nothing new is built on locations meanwhile). Still open: S18e
   and the schema slices S20–S28; every other slice has landed. S18 has a plan

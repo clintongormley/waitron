@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtemp, cp, readFile, writeFile, rm, realpath } from "node:fs/promises";
+import { mkdtemp, mkdir, cp, readFile, writeFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import process from "node:process";
@@ -17,18 +17,65 @@ const root = dirname(import.meta.dirname);
 const command = (args, cwd = root) =>
   run("pnpm", args, { cwd, timeout: 90000, maxBuffer: 4 * 1024 * 1024 });
 
-test("a packed release works in an independent browser consumer", { timeout: 170000 }, async () => {
+const variants = process.env.UI_PACKAGE_TARBALL ? ["registry"] : ["workspace", "registry"];
+for (const variant of variants)
+  test(`a ${variant} release works in an independent browser consumer`, { timeout: 170000 }, () =>
+    verifyPackage(variant),
+  );
+
+async function verifyPackage(variant) {
   const dir = await mkdtemp(join(tmpdir(), "waitron-ui-consumer-"));
   let browser;
   let server;
   try {
     const source = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
-    await command(["pack", "--pack-destination", dir]);
-    const tarball = `waitron-ui-core-${source.version}.tgz`;
+    const packageName = variant === "registry" ? "@waitron-io/ui-core" : source.name;
+    const tarball =
+      variant === "registry"
+        ? "waitron-io-ui-core-0.2.0.tgz"
+        : `waitron-ui-core-${source.version}.tgz`;
+    if (variant === "workspace") await command(["pack", "--pack-destination", dir]);
+    else if (process.env.UI_PACKAGE_TARBALL)
+      await cp(process.env.UI_PACKAGE_TARBALL, join(dir, tarball));
+    else {
+      const checkout = join(root, "../..");
+      const env = Object.fromEntries(
+        Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+      );
+      const { stdout: commit } = await run("git", ["rev-parse", "HEAD"], {
+        cwd: checkout,
+        env,
+        timeout: 10000,
+      });
+      const stage = join(dir, "stage");
+      await mkdir(stage);
+      await run(
+        process.execPath,
+        [
+          join(checkout, "scripts/release/prepare-ui.mjs"),
+          checkout,
+          stage,
+          "--release-version",
+          "0.2.0",
+          "--source-commit",
+          commit.trim(),
+        ],
+        { env, timeout: 120000, maxBuffer: 4 * 1024 * 1024 },
+      );
+      await cp(join(stage, tarball), join(dir, tarball));
+    }
     const { stdout } = await run("tar", ["-xOf", join(dir, tarball), "package/package.json"], {
       timeout: 10000,
     });
     const packed = JSON.parse(stdout);
+    assert.equal(packed.name, packageName);
+    if (variant === "registry") {
+      assert.equal(packed.version, "0.2.0");
+      assert.equal(packed.waitronSource.version, source.version);
+      assert.equal(packed.waitronSource.repository, "clintongormley/waitron");
+      assert.match(packed.waitronSource.commit, /^[a-f0-9]{40}$/);
+      for (const key of ["private", "scripts", "devDependencies"]) assert(!(key in packed));
+    }
     assert.equal(
       packed.exports["."].import,
       "./dist/index.js",
@@ -61,20 +108,29 @@ test("a packed release works in an independent browser consumer", { timeout: 170
       }
     }
     await cp(join(root, "test/consumer"), dir, { recursive: true });
+    if (variant === "registry") {
+      for (const file of ["main.ts", "input-only.ts"]) {
+        const path = join(dir, file);
+        await writeFile(
+          path,
+          (await readFile(path, "utf8")).replaceAll("@waitron/ui-core", packageName),
+        );
+      }
+    }
     const lit = JSON.parse(await readFile(join(root, "node_modules/lit/package.json"), "utf8"));
     await writeFile(
       join(dir, "package.json"),
       JSON.stringify({
         private: true,
         type: "module",
-        dependencies: { "@waitron/ui-core": `file:./${tarball}`, lit: lit.version },
+        dependencies: { [packageName]: `file:./${tarball}`, lit: lit.version },
       }),
     );
     await command(
       ["install", "--ignore-workspace", "--no-frozen-lockfile", "--ignore-scripts"],
       dir,
     );
-    const installed = join(dir, "node_modules/@waitron/ui-core");
+    const installed = join(dir, "node_modules", packageName);
     assert(
       (await realpath(installed)).startsWith(await realpath(dir)),
       "package must not link back to the workspace",
@@ -200,7 +256,7 @@ test("a packed release works in an independent browser consumer", { timeout: 170
       assert.deepEqual(violations, []);
       if (process.env.UI_PACKAGE_SCREENSHOTS)
         await page.screenshot({
-          path: join(process.env.UI_PACKAGE_SCREENSHOTS, `${theme}.png`),
+          path: join(process.env.UI_PACKAGE_SCREENSHOTS, `${variant}-${theme}.png`),
           fullPage: true,
         });
     }
@@ -229,4 +285,4 @@ test("a packed release works in an independent browser consumer", { timeout: 170
       await rm(dir, { recursive: true, force: true });
     }
   }
-});
+}
