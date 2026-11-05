@@ -433,7 +433,7 @@ describe("placeAcceptedCopyAtStart", () => {
 
       expect(b.logged).toContainEqual({
         level: "error",
-        message: "handover.place_copy.failed",
+        message: "handover-place-copy.failed",
         detail: { errno: "EIO", reason: "refused" },
       });
       expect(existsSync(b.accepted)).toBe(true);
@@ -474,7 +474,7 @@ describe("placeAcceptedCopyAtStart", () => {
         expect(classifyStartFailure(error, 20 * 1024 * 1024)).toBe("handover.placement_no_room");
         expect(b.logged).toContainEqual({
           level: "error",
-          message: "handover.place_copy.no_room",
+          message: "handover-place-copy.no_room",
           detail: { neededBytes: statSync(b.accepted).size },
         });
         expect(existsSync(b.accepted)).toBe(true);
@@ -581,7 +581,7 @@ describe("placeAcceptedCopyAtStart", () => {
         log: b.args.log,
       });
 
-      expect(b.logged.map((line) => line.message)).toEqual(["handover.place_copy.remove_failed"]);
+      expect(b.logged.map((line) => line.message)).toEqual(["handover-place-copy.remove_failed"]);
       expect(await readHandoverEvent(suite.node, NODE, OP, COPY_PLACED_EVENT)).not.toBeNull();
     });
   });
@@ -702,7 +702,7 @@ describe("placeAcceptedCopyAtStart", () => {
       expect(b.logged).toEqual([
         expect.objectContaining({
           level: "error",
-          message: "handover.place_copy.remove_failed",
+          message: "handover-place-copy.remove_failed",
           detail: expect.objectContaining({ operationId: OP }) as unknown,
         }),
       ]);
@@ -715,7 +715,7 @@ describe("placeAcceptedCopyAtStart", () => {
 
       await sweep(b, closed.node);
 
-      expect(b.logged.map((line) => line.message)).toEqual(["handover.place_copy.sweep_failed"]);
+      expect(b.logged.map((line) => line.message)).toEqual(["handover-place-copy.sweep_failed"]);
       expect(existsSync(b.accepted)).toBe(true);
     });
   });
@@ -1255,7 +1255,7 @@ describe("placeAcceptedCopyAtStart", () => {
       expect(b.logged).toEqual([
         {
           level: "warn",
-          message: "handover.place_copy.left_alone",
+          message: "handover-place-copy.left_alone",
           detail: { operationId: OP, mode },
         },
       ]);
@@ -1263,7 +1263,7 @@ describe("placeAcceptedCopyAtStart", () => {
   });
 
   describe("a chart the old file holds", () => {
-    const UNREADABLE = "handover.place_copy.old_chart_unreadable";
+    const UNREADABLE = "handover-place-copy.old_chart_unreadable";
     const SWAPPED = { kind: "copy_placed_owed", operationId: OP, swapped: true };
     const REFUSED = { kind: "source_no_longer_main", operationId: OP };
 
@@ -1299,7 +1299,7 @@ describe("placeAcceptedCopyAtStart", () => {
       expect(b.logged).toEqual([
         {
           level: "warn",
-          message: "handover.place_copy.source_no_longer_main",
+          message: "handover-place-copy.source_no_longer_main",
           detail: { operationId: OP },
         },
       ]);

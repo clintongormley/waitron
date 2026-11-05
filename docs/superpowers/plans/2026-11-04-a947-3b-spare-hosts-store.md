@@ -399,7 +399,7 @@ the A1018 plan, not run.
 | A1285, the staged reset and `secrets.env` | **partly** | Task 3.2: on a box that joined, the staged reset now removes `secrets.env` (fact 19). The entry's other cases are untouched |
 | A1295, the venue authority pair in backups | **yes, by removal** | Task 3.1: a joined spare's authority becomes its `tls/ca.crt` and `tls/ca.key`, which backup verification already checks as a pair; `venue-ca.*` go |
 | A spare's backup settings (the owner's answer of 2026-11-04, A1018 Slice 5's Ruling O3): joining gives `backup.env`, later changes follow, and a spare that was off catches up | **not yet planned here** | No task carries it yet. It is still to be written, docs-only, before 3b-1 starts, saying how it relates to A1273's key ring (Decision D7). Until it lands, the offer refuses `handover.backup_settings_differ` on a venue with a recovery key, the main box still selling |
-| A1296, code-quality follow-ups from 3a | no | none is on 3b's path except the hand-written HTTPS client; 3b extends that one client (`boxExchange`) rather than adding a second |
+| A1296, code-quality follow-ups from 3a | no | none is on 3b's path except the hand-written HTTPS client; 3b extends `boxExchange`; `boxDownload` is D4's one exception |
 
 ---
 

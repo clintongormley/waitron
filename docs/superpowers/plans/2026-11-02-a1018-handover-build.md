@@ -318,7 +318,7 @@ the owner.
    reuse a name in the copy (case 1); that a spare without M1's file reuses a selected but never
    activated name when its clock reads that name's minute (case 2); that placing M1's history as `module-evidence/` the restore way does
    not stop the reuse (case 2c); and that M1's revisions merged into the spare's own preparation
-   file do (case 2b). Task 5.7 is to make that merge. For the emergency, see Q2.
+   file do (case 2b). Task 5.7 makes that merge. For the emergency, see Q2.
 8. **The returned records reach M2 as a full-state batch for every chain M1 holds**: every
    filing-state row and every AEAT answer M1 holds (A947 §7.1's rule, "not only the rows the
    receiver lacks"), M1's `envio_flujo` row (the AEAT wait time and the technical-incident token,
@@ -646,8 +646,7 @@ Task 5.10's simulation runs it against a stand-in AEAT, and Slice 5 changes no d
   Development and demo boxes are reset (`wa-wt reset demo <name>`); a PR whose migration a box
   cannot take says so in its first line.
 - **Nothing per location** (owner, 2026-11-01): no `location_id` column, no `locationId`
-  parameter. Where existing code still reads `nodes.location_id` (`apps/server/src/promote.ts:250-255`),
-  new code does not add a reader; A1301's slices remove it.
+  parameter. New code does not add a reader of `nodes.location_id`; A1301's slices remove it.
 - **`node.db` rules** (CLAUDE.md §3): every new `node.db` table is `local`, keyed by `node_id`
   that every read and write names; no foreign key into or out of `node.db`; take `node.db`'s write
   lock outside `venue.db`'s; where one change spans both files, save `venue.db` first and `node.db`
@@ -737,7 +736,7 @@ Task 5.10's simulation runs it against a stand-in AEAT, and Slice 5 changes no d
 | Boot peer check | `apps/server/src/boot.ts:1600-1622`, `membership-reconcile.ts:28-53` | runs only on a non-mirror with a `node_mirror_link` row; an unreachable peer means "proceed" (`:33-34`); the fetch sends no credential (`:60-63`), so `GET /management-api/membership` answers `password.invalid` (`management-api.ts:1044-1083`) — inferred, not run |
 | Read-only gate | `apps/server/src/read-only-gate.ts:28-39`, mounted at `boot.ts:1699-1718` | on a mirror or fenced box, refuses every write verb `node.read_only` (403) except `POST /api/box/retire` (fenced only), `/management-api/promote` and `/management-api/promote/preparation`; each exempt route authenticates itself |
 | Fence at boot | `boot.ts:1627-1637` | a held chart that fences this box demotes its singleton role and mounts the read-only gate |
-| Duties by role | `boot.ts:1690-1691` (`filesRecords`), `:3200-3210` (drain via `singletonPass`), `:505-512` (card sweep, **every role**), `:3304-3306` (tender refunds, non-fenced primary), `:2541-2556` (stream), `:2481` (backups), `:2651` (clock watch) | see Task 2.4's list |
+| Duties by role | `boot.ts:1690-1691` (`filesRecords`), `:3200-3210` (drain via `singletonPass`), `:505-512` (card sweep, **every role**; since Slice 5's R47, 2026-11-05, not on a fenced box or a mirror), `:3304-3306` (tender refunds, non-fenced primary), `:2541-2556` (stream), `:2481` (backups), `:2651` (clock watch) | see Task 2.4's list |
 | Shutdown | `boot.ts:3400-3437` (`stopWork`), `:828-843` (order: `stopWork`, listener close, `settleRequests`, store close) | aborts every loop's controller, then awaits each |
 | Consistent copy | `packages/store/src/archive.ts:24-34` | `VACUUM INTO` a `.partial` file, then rename |
 | Restore placement | `apps/server/src/restore.ts:579-703` | moves the old files aside, puts `node.db` before `venue.db`; `skipSecrets` keeps the box's own identity and `node.db` (`:403-404,417-419`) |
@@ -2714,7 +2713,7 @@ Slice 4 probe (2026-11-03): placing the file as module-evidence does not reach p
 **Files:** Create `apps/server/src/handover-place-copy.ts`; modify `boot.ts` (at the top of `bootServer`, before the
 store opens, `placeAcceptedCopyForStart` places `accepted.db` as `venue.db` when the operation is
 at `filing_assumed` and not yet placed; `node.db` is never touched. `runStagedRestore`, at
-`apps/server/src/restore-request.ts:344`, is called from `node-entry.ts:680`, not `boot.ts`, and
+`apps/server/src/restore-request.ts:344`, is called from `node-entry.ts:626`, not `boot.ts`, and
 entry's ahead check runs after it and before `startServer`, so placing runs later than a staged
 restore and after that check, Ruling P19); add the file to `REPLACES` in `scripts/backup-room-note.test.ts`. Test
 `apps/server/src/handover-place-copy.test.ts`.
@@ -3019,7 +3018,9 @@ name. The receipts are in the slice's ledger and review files, and the PR.
 - R14, `boxDownload` flushes and creates its file owner-only: one extra sync per download.
 - R15, the download's limit is silence, not total time: a stalled download waits for one limit.
 - R16, "fetch never restarts" means within one process run: one extra download after a restart.
-- R17, R36, R44, minors folded into fix rounds: none beyond a commit.
+- R17, R36, minors folded into fix rounds: none beyond a commit.
+- R44, Task 5.10 covers no third box, and other minors folded into a fix round: a third box's wait is
+  left to the backlog.
 - R18, the `modules.json` digest covers only the modules set to false: one filter to remove.
 - R19, M1 builds its own manifest before the offer: a venue whose file is damaged between offer and
   stepdown waits until a person looks.
@@ -3028,7 +3029,7 @@ name. The receipts are in the slice's ledger and review files, and the PR.
 - R21, the digest stays on `backup.env` alone: two boxes with hand-edited backup settings pass and
   differ in a retention count or a hidden recovery key.
 - R22, the copy must hold this box's `nodes` row and key; nothing reads `location_id`: a row whose
-  location is gone passes this check.
+  `location_id` names a removed row passes this check.
 - R23, M1 refuses before anything stops when its own file lacks the destination's row: handovers
   refused until 3b, unreachable on real boxes before then anyway.
 - R24, R26, integrity runs on a thread; a kept file skips repeated file checks in one process run
@@ -3042,7 +3043,7 @@ name. The receipts are in the slice's ledger and review files, and the PR.
   given up filing, with no exit but the file's owner clearing it.
 - R31, placement as Task 5.7 now says: a box with a first-setup record whose old file holds its
   rows only in the `-wal` reaches the repair page in a narrow window (backlog).
-- R32, the 128 MiB start refusal went to the owner as A1334: a false alarm, one look.
+- R32, the 128 MiB start refusal went to the owner as A1334; main has since fixed it (#2463).
 - R33, the duty asks for the restart again every pass: repeated SIGTERMs during a slow shutdown.
 - R34, no room while placing has `handover.placement_no_room`: on a truly full disk the handover's
   words show rather than the disk-full page.
@@ -3082,6 +3083,8 @@ name. The receipts are in the slice's ledger and review files, and the PR.
 - R54, one fixture line in `handover-compare.test.ts`: none beyond that line.
 - R55, `summary_unreadable` on a remembered file is treated like a throw: one more whole-file digest
   and integrity thread per retry.
+- R56, corrects R52's cost line, as R52 now states: nothing on this branch gets the old box out of a
+  refused copy.
 
 **For later slices:** Slice 6's words are listed in the backlog. "M1 is restricted before, during and
 after" has a test at some states only; it must cover the rest before Slices 10 and 13 add code that

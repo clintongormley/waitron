@@ -5940,7 +5940,7 @@ Not in any track until the standalone primary is done.
   [Detail](backlog/replication-cloud.md#the-module-preparation-file-grows-with-every-write-and-a-handover-cannot-promise-room-in-it)
 
 - **A kill while placing a copy can reach the repair page in one narrow order.** It takes a box with
-  a first-setup record, tenant and location rows only in the old `-wal`, a kill from the side-file
+  a first-setup record, tenant and venue rows only in the old `-wal`, a kill from the side-file
   step on, and placing before the ahead check. Production's order drains the `-wal` first
   (`apps/server/src/boot.place-copy.test.ts` pins it). Left open by A1018 Slice 5 (Ruling R31).
 

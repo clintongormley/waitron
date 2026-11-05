@@ -28,7 +28,7 @@ vi.mock("@hono/node-server", async () => {
 });
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
-const PLACED_LINE = "handover.place_copy.placed";
+const PLACED_LINE = "handover-place-copy.placed";
 const SEEN_AFTER_PLACING = "written_after_placing";
 
 const suite = useVenueDb({ migrations: PLACE_COPY_MIGRATIONS });
@@ -241,7 +241,7 @@ describe("a spare's real start at filing_assumed", () => {
     expect(second.started).toBeDefined();
     await second.started!.close();
 
-    expect(loggedLines("handover.place_copy.remove_failed")).toBe(1);
+    expect(loggedLines("handover-place-copy.remove_failed")).toBe(1);
   }, 120_000);
 
   it("the ahead check runs on the old file, and its close drains the old -wal, before placing", async () => {
@@ -282,7 +282,7 @@ describe("a spare's real start at filing_assumed", () => {
     expect(userVersion(b.live)).toBe(OLD_VERSION);
     expect(existsSync(b.accepted)).toBe(true);
     expect(copyPlacedEvents(b)).toBe(0);
-    expect(loggedLines("handover.place_copy.left_alone")).toBe(1);
+    expect(loggedLines("handover-place-copy.left_alone")).toBe(1);
     // The duty did not start: this is the one line a box off mirror logs instead.
     expect(loggedLines("handover-destination.not_a_mirror")).toBe(1);
     expect(loggedLines("handover-destination.")).toBe(1);
@@ -369,7 +369,7 @@ describe("a chart the old file holds that no longer names the old box the main b
 
     // Failing case, the duty asking at every pass as before: 3, a box restarting for ever.
     expect(asked).toBe(0);
-    expect(loggedLines("handover.place_copy.source_no_longer_main")).toBe(1);
+    expect(loggedLines("handover-place-copy.source_no_longer_main")).toBe(1);
     expect(loggedLines(PLACED_LINE)).toBe(0);
     expect(copyPlacedEvents(b)).toBe(0);
     expect(userVersion(b.live)).toBe(OLD_VERSION);
@@ -446,7 +446,7 @@ describe("a chart the old file holds that no longer names the old box the main b
     // Failing case, judging the placed file's own chart: 0, and the box waits on a file it placed.
     expect(copyPlacedEvents(b)).toBe(1);
     expect(loggedLines(PLACED_LINE)).toBe(1);
-    expect(loggedLines("handover.place_copy.source_no_longer_main")).toBe(0);
+    expect(loggedLines("handover-place-copy.source_no_longer_main")).toBe(0);
     expect(existsSync(b.accepted)).toBe(false);
     expect(handoverRow(b)).toEqual({ state: "filing_assumed", waitingReason: null });
   }, 180_000);
@@ -479,7 +479,7 @@ describe("a chart the old file holds that no longer names the old box the main b
     await start.started!.close();
 
     expect(asked).toBe(0);
-    expect(loggedLines("handover.place_copy.old_chart_unreadable")).toBe(1);
+    expect(loggedLines("handover-place-copy.old_chart_unreadable")).toBe(1);
     expect(userVersion(b.live)).toBe(ACCEPTED_VERSION);
     expect(copyPlacedEvents(b)).toBe(1);
   }, 120_000);
@@ -517,7 +517,7 @@ describe("a chart the old file holds that no longer names the old box the main b
     expect(start.thrown).toBeUndefined();
     await start.started!.close();
 
-    expect(loggedLines("handover.place_copy.old_chart_unreadable")).toBe(1);
+    expect(loggedLines("handover-place-copy.old_chart_unreadable")).toBe(1);
     expect(userVersion(b.live)).toBe(ACCEPTED_VERSION);
     expect(copyPlacedEvents(b)).toBe(1);
   }, 120_000);

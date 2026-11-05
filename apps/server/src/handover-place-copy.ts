@@ -136,7 +136,7 @@ function holdsMovedOnChart(
     if (!movedOnFromSource(document, sourceNodeId)) return false;
     return !acceptedCopyHolds(acceptedPath, text);
   } catch (error) {
-    log("warn", "handover.place_copy.old_chart_unreadable", {
+    log("warn", "handover-place-copy.old_chart_unreadable", {
       operationId,
       error: String(error),
     });
@@ -247,7 +247,7 @@ export async function placeAcceptedCopyAtStart(args: {
     if (awaiting === null) return NOTHING;
     const { operationId } = awaiting;
     if (awaiting.mode !== "mirror") {
-      log("warn", "handover.place_copy.left_alone", { operationId, mode: awaiting.mode });
+      log("warn", "handover-place-copy.left_alone", { operationId, mode: awaiting.mode });
       return { kind: "left_alone", operationId };
     }
     const indicator = parseIndicator(
@@ -265,7 +265,7 @@ export async function placeAcceptedCopyAtStart(args: {
     const accepted = acceptedCopyPath(stateDir, operationId);
     // No server runs while this holds the lock, so no chart can arrive between this read and the swap.
     if (liveDigest !== null && holdsMovedOnChart(live, accepted, awaiting, log)) {
-      log("warn", "handover.place_copy.source_no_longer_main", { operationId });
+      log("warn", "handover-place-copy.source_no_longer_main", { operationId });
       return { kind: "source_no_longer_main", operationId };
     }
     const held = await digestOf(accepted);
@@ -287,7 +287,7 @@ export async function placeAcceptedCopyAtStart(args: {
     await swapIn(steps, accepted, venueDir);
     // `copy_placed` is recorded next: it must never reach the disk ahead of the swap it reports.
     await steps.reachDisk(venueDir);
-    log("info", "handover.place_copy.placed", { operationId });
+    log("info", "handover-place-copy.placed", { operationId });
     return { kind: "copy_placed_owed", operationId, swapped: true };
   } finally {
     hold.release();
@@ -314,12 +314,12 @@ export async function placeAcceptedCopyForStart(
   } catch (error) {
     const errno = errnoOf(error);
     if (errno === "ENOSPC" && neededBytes !== undefined) {
-      args.log("error", "handover.place_copy.no_room", { neededBytes });
+      args.log("error", "handover-place-copy.no_room", { neededBytes });
       throw new AppError("handover.placement_no_room", { neededBytes });
     }
     if (errno === undefined || errno === "ENOSPC" || sqliteFailureOf(error) !== null) throw error;
     const reason = (error as Error).message;
-    args.log("error", "handover.place_copy.failed", { errno, reason });
+    args.log("error", "handover-place-copy.failed", { errno, reason });
     throw new AppError("handover.placement_failed", { errno }, { reason });
   }
 }
@@ -338,7 +338,7 @@ async function removeAcceptedCopy(
       if (errnoOf(error) !== "ENOTEMPTY") throw error;
     });
   } catch (error) {
-    log("error", "handover.place_copy.remove_failed", { operationId, errno: errnoOf(error) });
+    log("error", "handover-place-copy.remove_failed", { operationId, errno: errnoOf(error) });
   }
 }
 
@@ -363,7 +363,7 @@ export async function removePlacedCopies(args: {
       if (placed !== null) await removeAcceptedCopy(stateDir, name, log);
     }
   } catch (error) {
-    log("error", "handover.place_copy.sweep_failed", { error: String(error) });
+    log("error", "handover-place-copy.sweep_failed", { error: String(error) });
   }
 }
 

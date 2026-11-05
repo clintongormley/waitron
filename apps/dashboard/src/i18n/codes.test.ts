@@ -833,7 +833,7 @@ it.each([
   );
 });
 
-it("has a sentence in both languages for each handover refusal", () => {
+it("has a sentence in both languages for these handover refusals", () => {
   const GENERIC_EN = codeMessage("test.unmapped_code", "en");
   const GENERIC_ES = codeMessage("test.unmapped_code", "es");
   for (const code of [

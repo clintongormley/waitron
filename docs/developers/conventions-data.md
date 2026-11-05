@@ -925,7 +925,7 @@ Real code does write them, legitimately: the setup-mode provision route reaches 
 `nodes` and `deployment`; joining as a spare (`apps/server/src/adopt.ts`) reaches `deployment`,
 `node_mode`, `node_mirror_link`, `node_primary_key`, `node_recovery_key` and `node_signing_key`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
 `node_mode`; first setup and replacing the recovery key reach `node_recovery_key`; first setup and
-`waitron-credentials rotate` reach `node_signing_key`; a handover (`apps/server/src/handover-store.ts`) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
+`waitron-credentials rotate` reach `node_signing_key`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
 (`PUT /management-api/venue-details/legal-name`, owner A494) reaches `tenants` through
 `packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone, and the
 dashboard's privacy contact (`PUT /management-api/venue-privacy`, A980 S1a) reaches it through
@@ -3261,7 +3261,7 @@ lock, not that every writer of the file takes it.
 
 | Caller | Runs | Decision |
 | --- | --- | --- |
-| `apps/server/src/boot.ts` | the server | locks four times in turn: the stamp probe, the pre-migration trigger read (`missingBeforeMigration`, `apps/server/src/append-only-watch.ts`), the migrate, and the long-lived store, which holds it until the server closes or its start fails. Between them the folder is briefly free, unless the container entry (`node-entry.ts`) started the server: its hold covers those gaps |
+| `apps/server/src/boot.ts` | the server | locks five times in turn: placing a handover's accepted copy (`placeAcceptedCopyForStart`, `apps/server/src/handover-place-copy.ts`), the stamp probe, the pre-migration trigger read (`missingBeforeMigration`, `apps/server/src/append-only-watch.ts`), the migrate, and the long-lived store, which holds it until the server closes or its start fails. Between them the folder is briefly free, unless the container entry (`node-entry.ts`) started the server: its hold covers those gaps |
 | `apps/server/src/backup-supervisor.ts` (`reload`) | inside the server | shares the server's hold |
 | `apps/server/src/node-entry.ts` (`clearReplacedDatabases`, `assertNotAhead`) and the staged restore and staged reset it runs | the container entrypoint, the same process as the server | the staged restore, then the staged reset, each locks on its own and releases before `runEntry` takes `lockVenueDatabase` and holds it from clearing set-aside folders (`clearReplacedDatabases`) through the ahead check until `startServer` settles or an earlier step throws (on a box that waits for its peers, `startServer` returns as soon as the waiting start is listening, before the wait ends; see the backlog's _The waiting start's loose ends_). The ahead check's opens and the server's opens during its start share that hold |
 | `apps/server/src/restore.ts` (`writeValidated`) | `waitron-restore` (server stopped) and the staged restore | takes the lock before its first change and holds it to the end; its migrate and hook open share it. Refused while another process holds the folder |
@@ -4617,6 +4617,9 @@ downloaded copy before anything is placed (2026-09-25, slice 2 Task 9b). Boot's 
 them, and BEFORE `startServer`, so it reads a database nothing has migrated yet, because boot owns
 the migration now (`apps/server/src/boot.ts`). The ordering, and the one-direction comparison that
 lets a virgin venue directory pass it, are stated at `runEntry` in `apps/server/src/node-entry.ts`.
+Placing a handover's accepted copy replaces `venue.db` later, in `bootServer`, so `assertNotAhead`
+never reads that file; the handover's compare refuses a copy ahead of this image with the same code
+(`aheadOfThisImage`, `apps/server/src/handover-compare.ts`).
 
 The GAP, stated so nobody assumes coverage: BOOT and the bucket rebuild are the only migrating paths
 carrying the check, and every other path that migrates runs without one. Re-grepped 2026-09-25
@@ -4756,8 +4759,9 @@ Task 10, #652, recorded the same result on 2026-09-23.)
 So a comparison of two venue databases leaves the two tables out, as the stream loop's
 `tableContents` does (`apps/server/src/testing/stream-loop-scenario.ts`), and a check that lists a live or
 restored database's tables has to leave them out explicitly. The directory goes with the database it
-describes: `wipeVenueDatabases` (`apps/server/src/db-wipe.ts`) and `restoreDatabase`
-(`apps/server/src/restore.ts`) remove it with `venue.db`, and the stream supervisor removes it before
+describes: `wipeVenueDatabases` (`apps/server/src/db-wipe.ts`), `restoreDatabase`
+(`apps/server/src/restore.ts`) and placing a handover's accepted copy (`swapIn`,
+`apps/server/src/handover-place-copy.ts`) remove it with `venue.db`, and the stream supervisor removes it before
 it starts Litestream on a new generation (`packages/stream/src/supervisor.ts`). What Litestream itself
 does with a stale directory beside a replaced `venue.db` was not measured. Nothing finds a new piece
 of code that lists tables or empties the folder and forgets either.
@@ -5097,6 +5101,7 @@ from the reset:
 - promotion (`promoteMirrorRun`, `apps/server/src/boot.ts`): before promoting, where a failed
   deletion refuses the promotion, and again after stopping the backup supervisor and before the
   restart, where a failed deletion is logged and the restart goes ahead;
+- placing a handover's accepted copy (`placeAcceptedCopyAtStart`, `apps/server/src/handover-place-copy.ts`);
 - `waitron.sh reset`, which empties the state folder apart from `tls/` and the Start-again files in
   one removal, taking the note and `venue/` in no set order.
 

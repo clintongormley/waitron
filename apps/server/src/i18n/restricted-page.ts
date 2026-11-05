@@ -35,7 +35,7 @@ export const RESTRICTED_PAGE_WORDS: Readonly<
   },
 };
 
-/** Every event kind an operation records: its states, the offer's event and the final copy's. */
+/** Every event kind a source operation records: its states, the offer's event and the final copy's. */
 export type RestrictedStepKind = HandoverOperationState | "offer" | "final_state";
 
 /** Keyed by every kind, so a new state with no wording fails the typecheck. */

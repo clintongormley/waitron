@@ -1296,7 +1296,7 @@ async function restartWithM1Off(boxes: Boxes, selling: SellingSeen): Promise<Res
       OP,
       COPY_PLACED_EVENT,
     ).length,
-    placingsLogged: (await logged(m2, "handover.place_copy.placed")).length,
+    placingsLogged: (await logged(m2, "handover-place-copy.placed")).length,
     acceptedCopyKept: existsSync(acceptedCopyPath(m2.stateDir, OP)),
     ownRecordKept: recordIds(m2.venueFile).includes(selling.ownRecord),
     m1SweepsAtSwitchOff,

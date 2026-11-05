@@ -33,11 +33,10 @@ cloud_ in [the backlog](../backlog.md)) and Slice 9
 (S2's Parts F and G and three controls in `bench/sqlite-failover`; S2's row reads PASS since the
 owner's reading of 2026-11-03, see below).
 Left for the slices that add the callers:
-- `beginHandover` stores the role it is given even when the binding names this box as the other
-  side; the first caller must check the role against the binding.
 - A delayed `waitHandover` can overwrite the waiting reason a later step recorded.
-- `currentBinding` (no taxpayer row, no held chart) and `waitHandover` (unknown operation) treat a
-  missing row as a fault in Waitron; each caller must refuse those cases first with a coded answer.
+- `currentBinding` (no taxpayer row) and `waitHandover` (unknown operation) treat a missing row as a
+  fault in Waitron; the handover's routes check for a held chart first but refuse no missing
+  taxpayer row with a code.
 - A restriction already recorded is never rewritten (`handover.restriction_conflict`), so Slice 3
   and Task 10.3 skip the write when one exists.
 - `@waitron/membership` checks the endorsement count twice (`src/verify.ts`); deleting either
@@ -48,9 +47,6 @@ Left by Slice 2:
   restricted box never builds a `stepDown`, and nothing checks the binding's `sourceNodeId`
   against this box: the first route to reach `stepDown` (Slice 3's Task 3.3) must decide each,
   and whether `handover.operation_conflict`'s wording fits a stepdown's refusal.
-- `stepDown` throws the same error codes whether it threw at the first check of the first call (nothing stopped)
-  or after the gate closed (the box is restarting): a route must tell the two apart before acting
-  on the refusal, and Task 5.3's recording of `abandoned` depends on it.
 - A restricted box's `/health` body is the same as a box whose trading is not admitted yet, so an
   operator reading it cannot tell the two apart.
 - The `handover.stepping_down` refusal names no next step.
@@ -623,6 +619,12 @@ wrong, and none is reachable on a real box before A947 3b.
 Left open by A1018 Slice 5 (Ruling P29 allows such words until a screen shows them; Ruling R53). This
 is read from `apps/dashboard/src/i18n/codes.ts` at Slice 5's tip, and which words name a next step is
 a reader's judgement.
+
+**The list's two names:** the words call the chart both "list of boxes / lista de equipos" and
+"list of servers / lista de servidores" (`source_no_longer_main` and its neighbours); pick one.
+
+**No words at all:** `provisioning.database_ahead`, a compare reason the duty stores and the status
+route answers (`apps/server/src/handover-compare.ts`).
 
 **Words naming no next step:** `stepping_down`, `known_handover`, `peer_unknown`, `not_stepped_down`,
 `operation_unknown`, `final_copy_changed`, `not_a_spare`, `membership_mismatch`, `not_main_box`,
