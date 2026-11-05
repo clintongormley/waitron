@@ -673,6 +673,38 @@ describe("till-app: the read behind Split a table's panel", () => {
           expect(api.splitTable).toHaveBeenCalledOnce();
         });
 
+        it("a panel opened again while that read is out waits for it, then acts on what it brought", async () => {
+          fakeTimers();
+          let answerLines = () => {};
+          const el = await mounted("desktop", {
+            ...noBillApi(),
+            splitTable: vi.fn().mockResolvedValue({ partyId: "v-split", billIds: [] }),
+          });
+          await toPanel(el);
+          anotherTillStartsTheBill();
+          server.drafts.length = 0;
+          api.getTabLines!.mockImplementationOnce(
+            () =>
+              new Promise((resolve) => {
+                answerLines = () => resolve({ lines: [], revision: 0 });
+              }),
+          );
+          await rereadBills(el, firstBill());
+          expect(splitButton(el).disabled).toBe(true);
+
+          await backAndAgain(el);
+          await flush(el, 6);
+          expect(splitButton(el).disabled).toBe(true);
+          answerLines();
+          await flush(el, 6);
+
+          expect(splitButton(el).variant).toBe("primary");
+          expect(splitButton(el).disabled).toBe(false);
+          await press(el, "[data-split-confirm]");
+          await flush(el, 6);
+          expect(api.splitTable).toHaveBeenCalledOnce();
+        });
+
         it("a floor read failing during the reload keeps the table names", async () => {
           fakeTimers();
           const el = await mounted("desktop", noBillApi());
@@ -2060,11 +2092,33 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
       await pressSplit(el);
 
       expect(api.splitTable).toHaveBeenCalledOnce();
-      expect(api.splitTable!.mock.calls[0]![2].wholeBillIds.toSorted()).toEqual(["b2", "b3"]);
+      expect(api.splitTable!.mock.calls[0]![2]).toEqual(whole("b2", "b3"));
       expect(api.splitTable!.mock.calls[0]![4]).toEqual([
         noEdit("b2"),
         noEdit("b3", { editorVersion: 2 }),
       ]);
+    });
+
+    it("a whole bill and a loose source: the edits go sorted by bill, not whole bills first", async () => {
+      const el = await threeBillPanel({
+        getSplitSources: vi.fn().mockResolvedValue({
+          bills: [
+            ...threeRead().bills.filter(({ billId }) => billId !== "b2"),
+            {
+              billId: "b2",
+              lines: [dish("steak", 1), dish("wine", 2)],
+              balance: balance("b2", "20.00"),
+            },
+          ],
+        }),
+      });
+      await tick(el, "b3");
+      await pickDish(el, "b2", "steak");
+
+      await pressSplit(el);
+
+      expect(api.splitTable).toHaveBeenCalledOnce();
+      expect(api.splitTable!.mock.calls[0]![4]).toEqual([noEdit("b2"), noEdit("b3")]);
     });
 
     it("a bill moved before the press, past the limit: the sentence, and no question", async () => {

@@ -15834,8 +15834,7 @@ export class TillApp extends LitElement {
    * up: pressed sooner, or after a failed read, Split still sends the old revision for the server to
    * judge. */
   async #readReopenedRows(prompt: object, partyId: string): Promise<void> {
-    await this.#readSplitSources(partyId);
-    if (this.#splitPanel?.prompt === prompt && !this.#splitRowsBehind())
+    if (await this.#readSplitSources(partyId))
       this.#splitTablePrompts.set(prompt, this.#partyComposition([]));
   }
 
@@ -15848,7 +15847,8 @@ export class TillApp extends LitElement {
       this.#leaveSplitRead();
   }
 
-  async #readSplitSources(partyId: string): Promise<void> {
+  /** Answers whether its rows are the ones on the panel now: not if it failed or was overtaken. */
+  async #readSplitSources(partyId: string): Promise<boolean> {
     this.#splitReadAbort?.abort();
     const controller = (this.#splitReadAbort = new AbortController());
     const generation = ++this.#splitReadGeneration;
@@ -15859,6 +15859,7 @@ export class TillApp extends LitElement {
         this.#splitReadAbort = undefined;
         this.splitRead = read;
         this.#followSplitAnswer(read);
+        return true;
       }
     } catch {
       if (generation === this.#splitReadGeneration) {
@@ -15867,6 +15868,7 @@ export class TillApp extends LitElement {
         if (this.splitRead === null) this.splitRead = "failed";
       }
     }
+    return false;
   }
 
   #leaveSplitRead(): void {
@@ -15918,12 +15920,14 @@ export class TillApp extends LitElement {
       )
         return;
       await this.#followBillsRead(answer, before, true);
-      // The panel now draws what this read found, so Split acts on it, not on what it opened with.
-      if (panel === this.#splitPanel && answer.bills !== null)
-        this.#splitTablePrompts.set(panel.prompt, this.#partyComposition([]));
+      // Whichever panel is open now draws what this read found, so Split acts on that, not on what
+      // it opened with.
+      const open = this.#splitPanel;
+      if (open !== undefined && answer.bills !== null)
+        this.#splitTablePrompts.set(open.prompt, this.#partyComposition([]));
     } finally {
       panel.reloading = false;
-      if (this.#splitPanel === undefined || this.#splitPanel === panel) this.splitReloading = false;
+      this.splitReloading = this.#splitPanel?.reloading === true;
     }
   }
 
