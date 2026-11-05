@@ -6066,6 +6066,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **Three adjustment-portion refusal checks also pass with shortened ID lists.** Qualify the
+  intended mixed-row, note and course refusals with accepting controls, without weakening the
+  existing error-code and unchanged-row assertions.
+  [Detail](backlog/ci.md#three-adjustment-portion-refusal-checks-also-pass-with-shortened-id-lists).
+
 - **The logo retry check can outwait its test deadline** (left open by A1332, #2458). Its 300-frame
   request wait can exceed the unchanged 15-second case deadline when Chromium throttles frames.
   [Detail](backlog/ci.md#the-logo-retry-check-can-outwait-its-test-deadline).
@@ -6659,7 +6664,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A974. Finish the remaining English names in general code.**
   Remaining names include till boot and counter-payment fixtures; server till-API, fiscal-sale
-  and other order fixtures, including the order-portion adjustments suite; shared helper consumers and file names. Keep accented search fixtures unchanged. Low priority.
+  and other order fixtures; shared helper consumers and file names. Keep accented search fixtures unchanged. Low priority.
   [Detail](backlog/architecture.md#a974-finish-the-remaining-english-names-in-general-code).
 
 - **Setup's receipt-language selection still reads inherited object properties.** Its
@@ -6668,8 +6673,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A976. Finish the server's English test-venue defaults.**
-  Party bill-action, bill-move, reprint and order-portion counter/filing suites still use Spanish
-  display samples; counter order-portion test descriptions, other helpers and screen expectations remain. Low priority.
+  Party bill-action, bill-move, reprint and order-portion counter/filing/adjustment suites still use Spanish
+  display samples; counter and adjustment order-portion test descriptions, other helpers and screen expectations remain. Low priority.
   [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).
 
 - **Cloud's cost-test fixtures still carry Spanish operation and street examples.** The two

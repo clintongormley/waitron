@@ -3,6 +3,25 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
+## Three adjustment-portion refusal checks also pass with shortened ID lists
+
+A974's 5 November 2026 naming review observed that three cases in
+`apps/server/src/order-portions.adjustments.test.ts` still pass after their request is shortened:
+
+- The two "two croquetas from two rounds" cases (one kitchen note, one course) still pass when
+  `lineIds` contains only the first croquette ID.
+- The "a cancel naming portions of two different rows" case still passes when its list contains
+  only the burger ID.
+
+The driver repeated those three mutations together in the disposable review checkout:
+`pnpm --filter @waitron/server exec vitest run src/order-portions.adjustments.test.ts -t 'two croquetas from two rounds|a cancel naming portions of two different rows'`
+reported three passes. Source was restored exactly. This does not establish why the shortened
+requests are refused. Removing `lineIds` failed the reviewer's checks; replacing the cancel's
+croquette ID with the second burger ID also failed. Keep the existing refusal and unchanged-row
+assertions, and add accepting controls that distinguish the intended note/course/mixed-row
+condition from another invalid-request condition before changing these cases. No production
+fault was established by these probes.
+
 ## Tests that read a built command's error output fail under Claude Code
 
 The command's stderr
