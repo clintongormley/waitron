@@ -1327,8 +1327,10 @@ An empty page before that total is reached refuses reuse; the combined listing s
 pass every identity, completeness, unique-name and result check above. Other API listings
 retain their single-page policy.
 
-Each API command has a 15-second timeout; the workflow step has a three-minute limit. An
-unexpected process failure fails changes rather than creating permission to skip checks.
+Each API command has at most fifteen seconds, capped by the remainder of a 150-second
+monotonic lookup budget. Exhaustion returns the normal-CI fallback before starting another
+read. The workflow step retains its three-minute limit. An unexpected process failure fails
+changes rather than creating permission to skip checks.
 
 The changes summary links the source PR run and the earlier full main run, with the PR attempt,
 head and tree. Its separate reuse outputs skip lint, root guards, repeated builds and tests,
@@ -1387,7 +1389,8 @@ unknown. A 1 November campaign receipt for run `41320048947`, attempt 2, records
 100-record failure and recovery using 10-record pages.
 
 The aggregate now asks for 30-record pages through `gh api --paginate`. It retains its existing
-jq verdict, 21 tries, thirty-second delay, twelve-minute step and fifteen-minute job limits.
+21 tries, thirty-second delay, twelve-minute step and fifteen-minute job limits. Its jq verdict
+retains the existing checks and also retries if the pages disagree about their total count.
 An incomplete combined listing still retries and ultimately fails. The reuse verifier uses
 the same smaller page size for both source attempts; an API failure falls back to normal CI.
 This handles the reproduced page-size sensitivity without claiming recovery from every 502.
@@ -1395,6 +1398,10 @@ This handles the reproduced page-size sensitivity without claiming recovery from
 Run `pnpm exec vitest run scripts/ci-reuse.test.mjs scripts/ci-workflow.test.mjs` for the
 controlled qualification. The API stub refuses 100-record job requests. Complete smaller-page
 answers succeed; partial listings, later failed jobs and invalid reuse evidence are refused.
+Slow successful lookups exhaust the reuse budget and return the normal-CI fallback; the
+command runner receives a shorter timeout as that budget runs out. The live qualification uses the current-head PR run
+before landing and its fresh main run afterwards, including the aggregate while its own job
+is still running. Do not rerun the historical failed attempt for this check.
 These checks exercise the local consumers, not GitHub's service-side failure mechanism.
 
 ### Two pushes to `main` must never share a concurrency group
@@ -2044,7 +2051,7 @@ lines name many absent files, rebuild the table from the newest six successful `
 
 ```bash
 dir=$(mktemp -d); for run in <six run ids>; do
-  gh api "repos/clintongormley/waitron/actions/runs/$run/jobs?per_page=100&filter=latest" \
+  gh api --paginate "repos/clintongormley/waitron/actions/runs/$run/jobs?per_page=30&filter=latest" \
     --jq '.jobs[] | select(.name | startswith("test-server (")) | .id' |
   while read -r id; do gh run view --repo clintongormley/waitron --job "$id" --log > "$dir/$run-$id.log"; done
 done

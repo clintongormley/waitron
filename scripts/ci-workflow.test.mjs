@@ -1216,6 +1216,20 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
     FOUR_RUNS_TEST_TIMEOUT_MS,
   );
 
+  it(
+    "refuses a job total that changes between smaller pages",
+    () => {
+      const result = runCrossCheck(needsFor("lint", "test-heavy"), [
+        page([apiJob("lint", "success")], 2) +
+          "\n" +
+          page([apiJob("test-heavy (1)", "success")], 3),
+      ]);
+      expect(result.status, result.output).not.toBe(0);
+      expect(result.output).toContain("job count changed between pages");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
   const finishedJob = (name) => ({
     ...apiJob(name, null, "in_progress"),
     id: 456,

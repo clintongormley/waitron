@@ -3889,9 +3889,11 @@ jobs:
                missing: [.[] | select((.jobs | length) == 0) | .id],
                pending: [.[].jobs[] | select(.status != "completed") | .name],
                read: ($jobs | length),
-               total: $pages[0].total_count}
+               total: $pages[0].total_count,
+               changed_total: any($pages[]; .total_count != $pages[0].total_count)}
             | . + if (.bad | length) > 0 then {verdict: "fail", reason: "not succeeded or skipped: \(.bad | join(", "))"}
                   elif (.duplicate | length) > 0 then {verdict: "retry", reason: "duplicate job evidence: \(.duplicate | unique | join(", "))"}
+                  elif .changed_total then {verdict: "retry", reason: "job count changed between pages"}
                   elif .read != .total then {verdict: "retry", reason: "read \(.read) of \(.total) jobs"}
                   elif (.missing | length) > 0 then {verdict: "retry", reason: "no job in the jobs API for: \(.missing | join(", "))"}
                   elif (.pending | length) > 0 then {verdict: "retry", reason: "not completed: \(.pending | join(", "))"}

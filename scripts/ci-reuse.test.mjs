@@ -1,9 +1,11 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { performance } from "node:perf_hooks";
+import childProcess, { execFileSync, spawnSync } from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { URL } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const modulePath = new URL("./ci-reuse.mjs", import.meta.url);
 const repository = "clintongormley/waitron";
@@ -148,6 +150,71 @@ describe("small job-list pages", () => {
     });
   });
 
+  it("falls back before the workflow deadline when successful page reads consume the reuse budget", async () => {
+    const findReuse = await verifier();
+    const { api, data } = fixture();
+    manyJobs(data);
+    let elapsed = 0;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => elapsed);
+    try {
+      const slowApi = (path, timeout = 15_000) => {
+        elapsed += Math.min(timeout, 12_500);
+        if (timeout < 12_500) throw new Error("API timeout");
+        return api(path);
+      };
+      expect(findReuse(context, slowApi, workflow)).toBeNull();
+      expect(elapsed).toBeLessThan(180_000);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("caps the real command runner at the remaining reuse budget", async () => {
+    const source = await import(modulePath.href);
+    const { api, data } = fixture();
+    manyJobs(data);
+    const dir = mkdtempSync(join(tmpdir(), "waitron-a1340-deadline-"));
+    scratch.push(dir);
+    let elapsed = 0;
+    const budgets = [];
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => elapsed);
+    const command = vi
+      .spyOn(childProcess, "execFileSync")
+      .mockImplementation((_command, args, options) => {
+        budgets.push(options.timeout);
+        elapsed += Math.min(options.timeout, 14_000);
+        if (options.timeout < 14_000) throw new Error("API timeout");
+        return JSON.stringify(api(args[1]));
+      });
+    syncBuiltinESMExports();
+    try {
+      expect(
+        source.runReuse(
+          {
+            GITHUB_EVENT_NAME: context.event,
+            GITHUB_REF: context.ref,
+            GITHUB_SHA: sha,
+            GITHUB_REPOSITORY: repository,
+            GITHUB_RUN_ID: "43",
+            GITHUB_OUTPUT: join(dir, "output"),
+            GITHUB_STEP_SUMMARY: join(dir, "summary"),
+          },
+          undefined,
+          workflow,
+        ),
+      ).toBeNull();
+      expect(budgets.at(-1)).toBe(10_000);
+      expect(elapsed).toBe(150_000);
+      expect(readFileSync(join(dir, "output"), "utf8")).toBe(
+        "reuse=false\nreuse_run=\nreuse_sha=\n",
+      );
+    } finally {
+      command.mockRestore();
+      syncBuiltinESMExports();
+      clock.mockRestore();
+    }
+  });
+
   it.each(["jobs", "mainJobs"])("refuses incomplete or invalid later %s pages", async (key) => {
     const findReuse = await verifier();
     for (const defect of [
@@ -158,6 +225,7 @@ describe("small job-list pages", () => {
       "duplicate",
       "count changed",
       "API error",
+      "extra row past total",
     ]) {
       const { api, data } = fixture();
       manyJobs(data);
@@ -173,7 +241,9 @@ describe("small job-list pages", () => {
         if (defect === "failed") job.conclusion = "failure";
         if (defect === "wrong head") job.head_sha = "d".repeat(40);
         if (defect === "wrong attempt") job.run_attempt = 2;
-        if (defect === "duplicate") job.name = data[key].jobs[0].name;
+        if (defect === "duplicate") job.name = "test-server (1)";
+        if (defect === "extra row past total")
+          answer.jobs.push({ ...job, id: 2000, name: "test-server (32)" });
         return answer;
       };
       expect(findReuse(context, brokenApi, workflow), defect).toBeNull();

@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import { URL, pathToFileURL } from "node:url";
@@ -5,7 +6,7 @@ import { URL, pathToFileURL } from "node:url";
 const shaPattern = /^[a-f0-9]{40}$/;
 const positiveInteger = (value) => Number.isSafeInteger(value) && value > 0;
 
-export function findReuse(context, api, workflow) {
+export function findReuse(context, readApi, workflow) {
   const { event, ref, sha, repository, runId } = context;
   if (
     event !== "push" ||
@@ -16,6 +17,14 @@ export function findReuse(context, api, workflow) {
   )
     return null;
   try {
+    const deadline = performance.now() + 150_000;
+    const api = (path) => {
+      const remaining = Math.floor(deadline - performance.now());
+      if (remaining <= 0) throw new Error("Reuse lookup deadline reached");
+      const response = readApi(path, Math.min(15_000, remaining));
+      if (performance.now() >= deadline) throw new Error("Reuse lookup deadline reached");
+      return response;
+    };
     const prefix = `repos/${repository}`;
     const current = api(`${prefix}/actions/runs/${runId}`);
     if (
@@ -206,11 +215,11 @@ function readJobs(api, attempt) {
   return { jobs, total_count: count };
 }
 
-function githubApi(path) {
+function githubApi(path, timeout = 15_000) {
   return JSON.parse(
     execFileSync("gh", ["api", path], {
       encoding: "utf8",
-      timeout: 15_000,
+      timeout,
       maxBuffer: 8 * 1024 * 1024,
       stdio: ["ignore", "pipe", "pipe"],
     }),
