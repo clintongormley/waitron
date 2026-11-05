@@ -3,6 +3,8 @@ import { StatementSync } from "node:sqlite";
 import { asc, eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
+  installChangeFeed,
+  removeChangeFeed,
   appendOrderAmendment,
   locations,
   locationDayCutoverChanges,
@@ -386,6 +388,37 @@ describe("durable attendance discovery", () => {
       expect((await next())?.businessDay).toBe("2026-01-05");
     },
   );
+
+  it("records boot's rebuilt trigger cookie for the following restart", async () => {
+    const { beginAttendanceDiscovery } = await import("./attendance-discovery.js");
+    const sources = [{ table: "sessions", type: "session" }];
+    await installChangeFeed(suite.db, sources);
+    await signIn("2026-01-05T12:00:00Z");
+    await begin();
+    await drain();
+    const before = await suite.db.select().from(attendanceSourceState);
+    const schemaVersionBeforeMigrations = suite.db.execute<{ schema_version: number }>(
+      sql`pragma schema_version`,
+    ).rows[0]!.schema_version;
+    removeChangeFeed(suite.db);
+    await installChangeFeed(suite.db, sources);
+    const current = suite.db.execute<{ schema_version: number }>(sql`pragma schema_version`)
+      .rows[0]!.schema_version;
+    expect(current).toBeGreaterThan(schemaVersionBeforeMigrations);
+    await run((tx) =>
+      beginAttendanceDiscovery(tx, {
+        generation: "after-trigger-rebuild",
+        schemaVersionBeforeMigrations,
+      }),
+    );
+    const updated = await suite.db.select().from(attendanceSourceState);
+    expect(updated.map((row) => [row.id, row.generation, row.cursor, row.completed])).toEqual(
+      before.map((row) => [row.id, row.generation, row.cursor, row.completed]),
+    );
+    await begin("following-restart");
+    expect(await suite.db.select().from(attendanceSourceState)).toEqual(updated);
+    expect((await next())?.businessDay).toBe("2026-01-05");
+  });
 
   it("rolls back a source page and its cursor together before resuming the same generation", async () => {
     await signIn("2026-01-05T12:00:00Z");
