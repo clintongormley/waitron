@@ -100,12 +100,7 @@ async function save(f: Fixture, input: unknown) {
       input,
       fiscal.validateOperationDescription,
     );
-    await VENUE_SERVICE.saveDepartmentReceiptSettings(
-      tx,
-      checked.scope,
-      f.departmentId,
-      checked.input,
-    );
+    await VENUE_SERVICE.saveDepartmentReceiptSettings(tx, f.departmentId, checked.input);
   });
 }
 const body = (extra: Partial<DepartmentReceiptWrite> = {}): DepartmentReceiptWrite => ({

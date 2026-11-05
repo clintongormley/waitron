@@ -28,7 +28,7 @@ export async function establishDormantContract(args: {
   operatorId: string;
   recoveryKey?: boolean;
 }) {
-  const primary = { nodeId: nodeId(args.sourceId), locationId: args.locationId };
+  const primary = { nodeId: nodeId(args.sourceId) };
   const bases = [
     { code: "FA", purpose: "standard" },
     { code: "FF", purpose: "full" },
@@ -37,7 +37,7 @@ export async function establishDormantContract(args: {
   await stampDeployment(args.db, "production");
   await args.db
     .insert(nodes)
-    .values({ id: primary.nodeId, locationId: primary.locationId, name: "Original primary" });
+    .values({ id: primary.nodeId, locationId: args.locationId, name: "Original primary" });
   await args.db
     .insert(invoiceSeries)
     .values(bases.map((base) => ({ ...base, nodeId: primary.nodeId })));

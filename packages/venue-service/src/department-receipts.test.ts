@@ -74,7 +74,6 @@ describe("department receipt storage", () => {
     await scoped((tx) =>
       receipts.writeDepartmentReceipt(
         tx,
-        f.cfg,
         f.id,
         {
           logo: `${"a".repeat(64)}.png`,
@@ -99,14 +98,14 @@ describe("department receipt storage", () => {
     expect(
       await scoped((tx) => receipts.readPrintedDepartmentReceipt(tx, f.cfg, f.id, "80mm")),
     ).toMatchObject({ logo: { bits: new Uint8Array([64]) } });
-    expect(await scoped((tx) => receipts.readDepartmentLogoRasters(tx, f.cfg, f.id))).toEqual(pair);
+    expect(await scoped((tx) => receipts.readDepartmentLogoRasters(tx, f.id))).toEqual(pair);
     await scoped((tx) =>
-      receipts.writeDepartmentReceipt(tx, f.cfg, f.id, { footerMessage: { "es-ES": "Adiós" } }),
+      receipts.writeDepartmentReceipt(tx, f.id, { footerMessage: { "es-ES": "Adiós" } }),
     );
     expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual({
       footerMessage: { "es-ES": "Adiós" },
     });
-    expect(await scoped((tx) => receipts.readDepartmentLogoRasters(tx, f.cfg, f.id))).toBeNull();
+    expect(await scoped((tx) => receipts.readDepartmentLogoRasters(tx, f.id))).toBeNull();
     const rows = (
       await suite.db.execute(
         sql`select department_id from department_receipts where department_id = ${f.id}`,
@@ -116,9 +115,7 @@ describe("department receipt storage", () => {
   });
   it("keeps recorded receipt settings internally while hiding deleted departments from management", async () => {
     const f = await fixture();
-    await scoped((tx) =>
-      receipts.writeDepartmentReceipt(tx, f.cfg, f.id, { email: "old@example.com" }),
-    );
+    await scoped((tx) => receipts.writeDepartmentReceipt(tx, f.id, { email: "old@example.com" }));
     await suite.db.update(departments).set({ active: false }).where(eq(departments.id, f.id));
     await expect(
       scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id)),
@@ -136,12 +133,10 @@ describe("department receipt storage", () => {
   });
   it("refuses unknown ids without changing the saved row", async () => {
     const a = await fixture();
-    await scoped((tx) =>
-      receipts.writeDepartmentReceipt(tx, a.cfg, a.id, { phone: "+34911234567" }),
-    );
+    await scoped((tx) => receipts.writeDepartmentReceipt(tx, a.id, { phone: "+34911234567" }));
     const id = randomUUID();
     await expect(
-      scoped((tx) => receipts.writeDepartmentReceipt(tx, a.cfg, id, { phone: "+34917654321" })),
+      scoped((tx) => receipts.writeDepartmentReceipt(tx, id, { phone: "+34917654321" })),
     ).rejects.toMatchObject({ code: "department.not_found" });
     await expect(
       scoped((tx) => receipts.readDepartmentReceipt(tx, a.cfg, id)),
@@ -155,13 +150,7 @@ describe("department receipt storage", () => {
     for (const pictures of [undefined, { ...pair, "80mm": { ...pair["80mm"], data: "?" } }]) {
       await expect(
         scoped((tx) =>
-          receipts.writeDepartmentReceipt(
-            tx,
-            f.cfg,
-            f.id,
-            { logo: `${"a".repeat(64)}.png` },
-            pictures,
-          ),
+          receipts.writeDepartmentReceipt(tx, f.id, { logo: `${"a".repeat(64)}.png` }, pictures),
         ),
       ).rejects.toThrow();
     }
@@ -204,7 +193,7 @@ describe("department receipt storage", () => {
     expect(plain).not.toHaveProperty("unreadable");
     expect(plain.receipt).toEqual({ phone: "+34911234567" });
     await scoped((tx) =>
-      receipts.writeDepartmentReceipt(tx, f.cfg, f.id, { logo: `${"a".repeat(64)}.png` }, pair),
+      receipts.writeDepartmentReceipt(tx, f.id, { logo: `${"a".repeat(64)}.png` }, pair),
     );
     const kept = await scoped((tx) =>
       receipts.readPrintedDepartmentReceipt(tx, f.cfg, f.id, "58mm"),
@@ -286,7 +275,7 @@ describe("department receipt storage", () => {
     expect(
       await scoped((tx) => receipts.readPrintedDepartmentReceipt(tx, f.cfg, f.id, "80mm")),
     ).toMatchObject({ logo: { bits: new Uint8Array([64]) } });
-    expect(await scoped((tx) => receipts.readDepartmentLogoRasters(tx, f.cfg, f.id))).toBeNull();
+    expect(await scoped((tx) => receipts.readDepartmentLogoRasters(tx, f.id))).toBeNull();
   });
   it("contains an optional SELECT failure with a bounded diagnostic while a management read still refuses", async () => {
     const f = await fixture();
@@ -337,7 +326,7 @@ describe("department receipt storage", () => {
       receipt: { logo: `${"a".repeat(64)}.png`, footerMessage: { "es-ES": "Gracias" } },
       logo: null,
     });
-    expect(await scoped((tx) => receipts.readDepartmentLogoRasters(tx, f.cfg, f.id))).toBeNull();
+    expect(await scoped((tx) => receipts.readDepartmentLogoRasters(tx, f.id))).toBeNull();
   });
   it("uses the validator's UTF-16 length bound for imported translated entries", async () => {
     const f = await fixture();
@@ -540,7 +529,7 @@ describe("receipt department lookups", () => {
   it("makes storage available through the module seat", async () => {
     const f = await fixture();
     await scoped((tx) =>
-      receipts.VENUE_SERVICE.writeDepartmentReceipt(tx, f.cfg, f.id, { email: "seat@example.com" }),
+      receipts.VENUE_SERVICE.writeDepartmentReceipt(tx, f.id, { email: "seat@example.com" }),
     );
     expect(
       await scoped((tx) => receipts.VENUE_SERVICE.readDepartmentReceipt(tx, f.cfg, f.id)),
@@ -551,7 +540,7 @@ describe("receipt department lookups", () => {
       ),
     ).toEqual({ receipt: { email: "seat@example.com" }, logo: null });
     expect(
-      await scoped((tx) => receipts.VENUE_SERVICE.readDepartmentLogoRasters(tx, f.cfg, f.id)),
+      await scoped((tx) => receipts.VENUE_SERVICE.readDepartmentLogoRasters(tx, f.id)),
     ).toBeNull();
   });
 });
@@ -562,7 +551,7 @@ describe("department-owned address and fiscal description", () => {
     async (printAddress) => {
       const f = await fixture();
       const receipt = { printAddress, operationDescription: "Dining service" };
-      await scoped((tx) => receipts.writeDepartmentReceipt(tx, f.cfg, f.id, receipt));
+      await scoped((tx) => receipts.writeDepartmentReceipt(tx, f.id, receipt));
       expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual(
         receipt,
       );
@@ -578,7 +567,7 @@ describe("department-owned address and fiscal description", () => {
   it("clears both fields without taking the other department or location value", async () => {
     const f = await fixture();
     await scoped((tx) =>
-      receipts.writeDepartmentReceipt(tx, f.cfg, f.id, {
+      receipts.writeDepartmentReceipt(tx, f.id, {
         printAddress: true,
         operationDescription: "Dining service",
       }),
@@ -589,12 +578,12 @@ describe("department-owned address and fiscal description", () => {
     });
     const other = await scoped((tx) => createDepartment(tx, { name: "Deli" }));
     await scoped((tx) =>
-      receipts.writeDepartmentReceipt(tx, f.cfg, other.id, {
+      receipts.writeDepartmentReceipt(tx, other.id, {
         printAddress: true,
         operationDescription: "Other department",
       }),
     );
-    await scoped((tx) => receipts.writeDepartmentReceipt(tx, f.cfg, f.id, {}));
+    await scoped((tx) => receipts.writeDepartmentReceipt(tx, f.id, {}));
     expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual({});
   });
   it.each([
@@ -639,9 +628,7 @@ describe("receipt and printing policy transaction", () => {
     });
     const receipt = { printAddress: false, operationDescription: "Dining service" };
     const policy = { receiptPrintMode: "on_request" as const, printTradingName: false };
-    await scoped((tx) =>
-      receipts.saveDepartmentReceiptSettings(tx, f.cfg, f.id, { receipt, policy }),
-    );
+    await scoped((tx) => receipts.saveDepartmentReceiptSettings(tx, f.id, { receipt, policy }));
     expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual(receipt);
     expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.id))).toEqual(policy);
     expect(
@@ -662,7 +649,7 @@ describe("receipt and printing policy transaction", () => {
   it("rolls receipt and department state back when the subsequent policy write is refused", async () => {
     const f = await fixture();
     await scoped((tx) =>
-      receipts.writeDepartmentReceipt(tx, f.cfg, f.id, { operationDescription: "Old description" }),
+      receipts.writeDepartmentReceipt(tx, f.id, { operationDescription: "Old description" }),
     );
     await suite.db.execute(
       sql`CREATE TRIGGER test_receipt_policy_refusal AFTER UPDATE OF receipt ON department_receipts BEGIN UPDATE departments SET active = 0 WHERE id = NEW.department_id; END`,
@@ -670,7 +657,7 @@ describe("receipt and printing policy transaction", () => {
     try {
       await expect(
         scoped((tx) =>
-          receipts.saveDepartmentReceiptSettings(tx, f.cfg, f.id, {
+          receipts.saveDepartmentReceiptSettings(tx, f.id, {
             receipt: { operationDescription: "New description" },
             policy: { receiptPrintMode: "on_request", printTradingName: false },
           }),
@@ -700,7 +687,7 @@ describe("receipt and printing policy transaction", () => {
       ).rejects.toMatchObject({ code: "department.not_found" });
       await expect(
         scoped((tx) =>
-          receipts.saveDepartmentReceiptSettings(tx, f.cfg, id, {
+          receipts.saveDepartmentReceiptSettings(tx, id, {
             receipt: {},
             policy: { receiptPrintMode: "auto", printTradingName: true },
           }),
@@ -712,9 +699,7 @@ describe("receipt and printing policy transaction", () => {
 
 it("keeps a JSON-looking string distinct from a JSON array", async () => {
   const f = await fixture();
-  await scoped((tx) =>
-    receipts.writeDepartmentReceipt(tx, f.cfg, f.id, { operationDescription: "[]" }),
-  );
+  await scoped((tx) => receipts.writeDepartmentReceipt(tx, f.id, { operationDescription: "[]" }));
   expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual({
     operationDescription: "[]",
   });
@@ -726,9 +711,7 @@ it.each([
   { label: "permitted text whitespace", value: "Dining\tand drinks\n" },
 ])("reads a valid $label description without changing its spelling", async ({ value }) => {
   const f = await fixture();
-  await scoped((tx) =>
-    receipts.writeDepartmentReceipt(tx, f.cfg, f.id, { operationDescription: value }),
-  );
+  await scoped((tx) => receipts.writeDepartmentReceipt(tx, f.id, { operationDescription: value }));
   expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual({
     operationDescription: value,
   });

@@ -256,7 +256,6 @@ export async function readPrintedDepartmentReceipt(
 
 export async function readDepartmentLogoRasters(
   tx: Transaction,
-  _cfg: DepartmentReceiptScope,
   departmentId: string,
 ): Promise<ReceiptLogoRasters | null> {
   const [row] = await tx
@@ -278,7 +277,6 @@ export async function readDepartmentLogoRasters(
 
 export async function writeDepartmentReceipt(
   tx: Transaction,
-  _cfg: DepartmentReceiptScope,
   departmentId: string,
   receipt: DepartmentReceiptConfig,
   rasters?: ReceiptLogoRasters,
@@ -350,12 +348,11 @@ export async function readDepartmentReceiptPolicy(
 
 export async function saveDepartmentReceiptSettings(
   tx: Transaction,
-  cfg: DepartmentReceiptScope,
   departmentId: string,
   input: DepartmentReceiptWrite,
   rasters?: ReceiptLogoRasters,
 ): Promise<void> {
-  await writeDepartmentReceipt(tx, cfg, departmentId, input.receipt, rasters);
+  await writeDepartmentReceipt(tx, departmentId, input.receipt, rasters);
   await setDepartmentSalePolicyField(
     tx,
     departmentId,

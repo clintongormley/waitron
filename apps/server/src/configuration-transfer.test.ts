@@ -2164,7 +2164,7 @@ it("transfers a department's receipt logo with its image and pictures, and the i
   const pictures = await drawLogoRasters(photo.bytes);
   await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, { name: "Logo receipt" });
-    await writeDepartmentReceipt(tx, cfg, department.id, { logo }, pictures);
+    await writeDepartmentReceipt(tx, department.id, { logo }, pictures);
     await tx.insert(tenantReceipts).values({ receipt: { headerSubtitle: "Retired default" } });
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -6826,7 +6826,7 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
     const own = await createDepartment(tx, { name: "Own receipt" });
     const empty = await createDepartment(tx, { name: "Empty receipt" });
     const imported = await createDepartment(tx, { name: "Bad optional receipt" });
-    await writeDepartmentReceipt(tx, cfg, own.id, authored, pictures);
+    await writeDepartmentReceipt(tx, own.id, authored, pictures);
     await tx.insert(departmentReceipts).values({
       departmentId: imported.id,
       receipt: {

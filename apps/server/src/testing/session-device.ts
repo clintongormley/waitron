@@ -81,8 +81,3 @@ export async function deviceRequestCfg<C extends TradingContext>(
 export async function orderDeviceOrigin(db: Database): Promise<DeviceOrigin> {
   return deviceOrigin(await seedSessionDevice(db));
 }
-
-/** The origin and place of an order a fixture writes straight to the table: the dashboard, at `locationId`. */
-export function dashboardOrderAt(locationId: string) {
-  return { source: "dashboard", deviceId: null, locationId } as const;
-}

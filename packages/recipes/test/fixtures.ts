@@ -1,5 +1,5 @@
 import { beforeEach } from "vitest";
-import { CORE_MIGRATIONS, ingredients, recipeLines, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, ingredients, recipeLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -11,15 +11,10 @@ import {
   createUnit,
 } from "@waitron/catalogue";
 
-export interface SeededVenue {
-  locationId: string;
-}
-
 /** Seeds the taxpayer, the venue and a node. */
-export async function seedVenueWithNode(db: Database): Promise<SeededVenue> {
+export async function seedVenueWithNode(db: Database): Promise<void> {
   await seedVenue(db, { name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Test op" });
   await seedNode(db);
-  return { locationId: await venueLocationId(db) };
 }
 
 /** Seed a catalogue + one product; returns the product id, for recipe tests. */
