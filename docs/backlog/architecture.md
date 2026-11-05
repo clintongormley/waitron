@@ -408,7 +408,7 @@ until A977).
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Other private naming sites remain in the till's boot and counter-payment suites and
   shared-fixture consumers in the server split-bill and move-bill suites, other order fixtures,
-  and shared helpers such as `made-here.test.ts`.
+  and shared helper consumers such as `made-here.test.ts`. Accented move-line bindings also remain.
   Fixture strings remain separate from this naming work. The counter, filing and adjustment
   order-portion suites retain Spanish dish samples under A976; counter and adjustment test
   descriptions also stay with A976.
@@ -802,13 +802,29 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
 - **A974. Finish the remaining English names in general code.** Remaining names include till boot and
   counter-payment fixtures; shared-fixture consumers in the server split-bill and move-bill suites,
-  other order fixtures, shared helpers and file names.
+  other order fixtures, shared helper consumers and file names.
   Keep accented search fixtures unchanged. Other fixture text stays with A976, including catalogue
   display names, recipe ingredient names and seasonal venue and zone names, printer-screen display
   labels, counter-screen display text and station-screen display names, plus kitchen-ticket grouping,
   payment/queue widget display text,
   variant media fixtures and device/printer deletion fixture text.
   [Detail](architecture.md#a913s-fix-items-general-code-english-only). Low priority.
+
+### A974 review assertion gaps
+
+Strengthen the no-kitchen served-refusal setup in `till-api.groups.test.ts` and the extras/replay
+checks in `till-api.fiscal-sale-paths.test.ts`. In the naming review’s installed disposable checkout,
+these simultaneous substitutions left the seven selected cases passing: omit the no-preparation
+routing write; rename the parent product instead of the cheese extra; supply the extras-list id
+instead of the cheese product id in the refused frozen input; read the settled working-order
+count instead of the fiscal-record count. These observations identify gaps in those checks,
+not demonstrated product failures. Retain every existing refusal, frozen-name and count assertion;
+add observations that distinguish the intended setup and each relevant result.
+
+Repeat the controlled substitutions with the two complete suites, or first select
+`-t 'needs no kitchen|files an extras pick|a sale cannot hand over|park & retrieve'`.
+The private-name AST replay and types caught reference mistakes that the current value-only
+checks did not.
 
 ## A976. Finish the server's English test-venue defaults.
 

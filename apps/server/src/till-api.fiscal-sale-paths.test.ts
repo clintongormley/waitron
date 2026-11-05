@@ -198,36 +198,36 @@ async function setupVenue(): Promise<{
   });
   const { catalogueId, available, operatorId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const comida = await createCategory(tx, { name: "Comida" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
+    const foodCategory = await createCategory(tx, { name: "Comida" });
+    const drinkCategory = await createCategory(tx, { name: "Bebidas" });
     const seededUnits = await tx.execute<{ id: string; seed_key: string }>(sql`
       select id, seed_key from units where seed_key = 'kg'`);
     const kgId = seededUnits.rows.find((unit) => unit.seed_key === "kg")!.id;
-    const jamon = await createProduct(tx, {
+    const ham = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: comida.id,
+      categoryId: foodCategory.id,
       name: "Jamón cortado",
       unitId: kgId,
       unitPrice: "24.90",
       vatClass: "reduced",
     });
-    const agua = await createProduct(tx, {
+    const water = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinkCategory.id,
       name: "Agua mineral",
       unitId: null, // Each (no unit).
       unitPrice: "1.50",
       vatClass: "general",
     });
     await assignCatalogueToVenue(tx, cat.id);
-    const jamonItem = await addProductToMenu(tx, {
+    const hamMenuItem = await addProductToMenu(tx, {
       menuId: cat.id,
-      productId: jamon.id,
+      productId: ham.id,
       grossPrice: "24.90",
     });
-    const aguaItem = await addProductToMenu(tx, {
+    const waterMenuItem = await addProductToMenu(tx, {
       menuId: cat.id,
-      productId: agua.id,
+      productId: water.id,
       grossPrice: "1.50",
     });
     const counter = await tx.execute<{ zone_id: string }>(sql`
@@ -238,8 +238,8 @@ async function setupVenue(): Promise<{
     const defaultStation = sql`(select id from kitchen_stations
            where location_id = ${cfg.locationId} and is_default)`;
     await tx.insert(routingCells).values([
-      { locationId: cfg.locationId, categoryId: comida.id, stationId: defaultStation },
-      { locationId: cfg.locationId, categoryId: bebidas.id, stationId: defaultStation },
+      { locationId: cfg.locationId, categoryId: foodCategory.id, stationId: defaultStation },
+      { locationId: cfg.locationId, categoryId: drinkCategory.id, stationId: defaultStation },
     ]);
     // A staff person with a KNOWN PIN ("5555"), so the login route can verify their credential and
     // the sale is attributed to them.
@@ -248,8 +248,8 @@ async function setupVenue(): Promise<{
       .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     const menuItems = new Map([
-      [jamon.id, jamonItem.id],
-      [agua.id, aguaItem.id],
+      [ham.id, hamMenuItem.id],
+      [water.id, waterMenuItem.id],
     ]);
     return {
       catalogueId: cat.id,
@@ -623,14 +623,14 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // The two seeded, sellable products come back — the reduced-rate weighed one and the
     // general-rate each one — so the basket below genuinely mixes VAT rates.
     expect(products.map((p) => p.name).sort()).toEqual(["Agua mineral", "Jamón cortado"]);
-    const jamon = products.find((p) => p.unit.hardwareUnit === "kg")!; // 24.90 €/kg reduced(10%)
-    const agua = products.find((p) => p.unit.hardwareUnit === null)!; // 1.50 per unit general(21%)
+    const ham = products.find((p) => p.unit.hardwareUnit === "kg")!;
+    const water = products.find((p) => p.unit.hardwareUnit === null)!;
 
     const invalidQuantity = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
-        lines: [{ menuItemId: jamon.menuItemId, quantity: "0.2001" }],
+        lines: [{ menuItemId: ham.menuItemId, quantity: "0.2001" }],
         tender: { method: "cash", amount: "10.00" },
       }),
     });
@@ -639,7 +639,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       error: { code: "quantity.invalid", params: { reason: "precision" } },
     });
 
-    // 3. Ring a MIXED basket: 0.200 kg jamón (4.98 gross @10%) + 2 × agua (3.00 gross @21%) = 7.98,
+    // 3. Ring a MIXED basket: 0.200 kg ham (4.98 gross @10%) + 2 × water (3.00 gross @21%) = 7.98,
     // tendered 10.00 → 2.02 change. Two rate groups, so the vatBreakdown must carry a per-rate base
     // for each (findings §14: the base imponible split per rate is mandatory once rates mix).
     const saleRes = await app.request("/api/sales", {
@@ -647,8 +647,8 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         lines: [
-          { menuItemId: jamon.menuItemId, quantity: "0.200" },
-          { menuItemId: agua.menuItemId, quantity: "2" },
+          { menuItemId: ham.menuItemId, quantity: "0.200" },
+          { menuItemId: water.menuItemId, quantity: "2" },
         ],
         tender: { method: "cash", amount: "10.00" },
       }),
@@ -699,8 +699,8 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         lines: [
-          { menuItemId: jamon.menuItemId, quantity: "0.200" },
-          { menuItemId: agua.menuItemId, quantity: "2" },
+          { menuItemId: ham.menuItemId, quantity: "0.200" },
+          { menuItemId: water.menuItemId, quantity: "2" },
         ],
         tender: { method: "cash", amount: "10.00" },
       }),
@@ -1956,8 +1956,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
         band: string;
       }[];
     }[];
-    // The two agua are two queue items of 1, each on its own working line.
-    const queuedAgua = {
+    const queuedWater = {
       id: expect.any(String),
       allergy: null,
       workingOrderLineId: expect.any(String),
@@ -2003,7 +2002,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
         // KDS order-timing alerts (design §3/§6/§11): the venue's DEFAULT station carries the schema's
         // default thresholds — provisioning never overrides them.
         thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
-        items: [queuedAgua, queuedAgua],
+        items: [queuedWater, queuedWater],
       },
     ]);
 
@@ -2819,7 +2818,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
     suite.db,
     async (tx) => {
       // The extra is a PRODUCT of its own, taxed at its OWN class — `reduced`, where the dish is
-      // `general`, so the filed desglose has to carry two bands.
+      // `general`, so the filed VAT breakdown has to carry two bands.
       const cheese = await createProduct(tx, {
         catalogueId,
         categoryId: null,
