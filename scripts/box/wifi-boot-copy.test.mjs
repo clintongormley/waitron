@@ -8,6 +8,8 @@ import { clearTimeout, setTimeout } from "node:timers";
 import { TextEncoder, inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  WIFI_COPY_FAILURES,
+  WIFI_COPY_STATES,
   createWifiBootCopyPublisher,
   publishWifiBootCopy,
   wifiBootCopyStatus,
@@ -376,6 +378,29 @@ describe("createWifiBootCopyPublisher refuses deps that are not exactly right", 
     expect(() =>
       createWifiBootCopyPublisher({ bootRoot: "/boot", ownerUid: 0, inspectBootMount: vi.fn() }),
     ).not.toThrow();
+  });
+});
+
+describe("the copy's states and failures", () => {
+  it("lists the four states and the six failures, frozen", () => {
+    expect(WIFI_COPY_STATES).toEqual(["pending", "current", "absent", "failed"]);
+    expect(WIFI_COPY_FAILURES).toEqual([
+      "mount-unverified",
+      "root-changed",
+      "path-unsafe",
+      "permissions-unsafe",
+      "io-failed",
+      "publication-unverified",
+    ]);
+    expect(Object.isFrozen(WIFI_COPY_STATES)).toBe(true);
+    expect(Object.isFrozen(WIFI_COPY_FAILURES)).toBe(true);
+  });
+
+  it("puts a new publisher's state on the list, with no failure", async () => {
+    const f = await fixture();
+    const { state, failure } = f.make().status();
+    expect(WIFI_COPY_STATES).toContain(state);
+    expect(failure).toBeNull();
   });
 });
 

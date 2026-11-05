@@ -21,16 +21,16 @@ const KEYS = ["version", "ssidHex", "keyMgmt", "psk", "hidden"];
 const KEY_MANAGEMENT = ["wpa-psk", "sae"];
 // A network name is up to 32 arbitrary bytes and need not be UTF-8, so it travels as hex.
 const SSID_HEX = /^(?:[0-9a-f]{2}){1,32}$/;
-
-/** @param {unknown} value */
-export function isSsidHex(value) {
-  return typeof value === "string" && SSID_HEX.test(value);
-}
 const PRINTABLE_ASCII = /^[ -~]*$/;
 // NetworkManager's g_ascii_isxdigit accepts both letter cases (1.52.0,
 // src/libnm-core-impl/nm-utils.c:1249-1255).
 const PSK_HEX = /^[0-9a-fA-F]{64}$/;
 const SAE_MAX_BYTES = 256;
+
+/** @param {unknown} value */
+export function isSsidHex(value) {
+  return typeof value === "string" && SSID_HEX.test(value);
+}
 
 /** @param {'record-oversized'|'record-corrupt'|'record-unsupported'} reason */
 function refused(reason) {
