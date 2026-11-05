@@ -62,7 +62,7 @@ const printers: Printer[] = [
   },
   {
     id: "p2",
-    name: "Nube",
+    name: "Cloud",
     transport: "cloud_poll",
     host: null,
     port: null,
@@ -397,7 +397,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       const portable = {
         ...printers[0]!,
         portable: true,
-        holder: { deviceId: "d7", deviceName: "Móvil 2", personName: "Ana" },
+        holder: { deviceId: "d7", deviceName: "Mobile 2", personName: "Ana" },
       };
       const { el, host } = await mountWidget<PrintersScreen>(
         "dashboard-printers-screen",
