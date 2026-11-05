@@ -1384,10 +1384,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Loose ends left by A788 (the business-day start changes at the next changeover).**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a788)
 
-- **Eleven `receipts.*` strings in `apps/dashboard/src/i18n/strings.ts` have no reader** — found
+- **Nine `receipts.*` strings in `apps/dashboard/src/i18n/strings.ts` have no reader** — found
   while doing A755 (#1809); none had one before it either: `departments_zones`,
   `language_copies`, `language_receipts`, `language_save_error`, `not_printed`, `preview_for`,
-  `preview_paper`, `trading_name_location`, `trim_save_error`, `venue_defaults` and `venue_wide`.
+  `preview_paper`, `trim_save_error` and `venue_defaults`.
 
 - **Loose ends left by A720.**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a720)
@@ -4582,9 +4582,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   its server permission, hide unavailable items and empty groups, same rule for direct URLs and the
   landing screen.
 
-- **Dashboard-wide location context** — one persistent location dropdown in the banner; classify
-  every screen and API as venue-wide (the whole database) or location-scoped first.
-
 - **The admin's Edit user form has no Language** chooser; a person's `locale` can only be set on Your
   profile.
 
@@ -4990,7 +4987,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to.**
   [Detail](backlog/workforce.md#a707-on-a-phone-a-paint-grids-block-menu-or-copy-to-chooser-can-cover-the-block-it-belongs-to).
 
-- **A708. The special-day staffing painter draws every date on the location's baseline changeover,
+- **A708. The special-day staffing painter draws every date on the venue's baseline changeover,
   while each date's opening hours and staffing slots use that date's own.** Needs a decision on
   how one grid shows dates with different changeovers.
   [Detail](backlog/workforce.md#a708-special-day-staffing-on-a-date-with-its-own-changeover).
@@ -6560,19 +6557,14 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
 
 - **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
-  2026-11-01, high priority; nothing new is built on locations meanwhile). Still open: S18e,
-  S19 and the schema slices S20–S28; every other slice has landed. S18 has a plan
+  2026-11-01, high priority; nothing new is built on locations meanwhile). Still open: S18e
+  and the schema slices S20–S28; every other slice has landed. S18 has a plan
   ([S18 plan](superpowers/plans/2026-11-04-a1301-s18-contract-cleanup.md)); its S18e builds the
   approved [venue-id design](superpowers/specs/2026-11-04-a1301-venue-id-design.md) and is held by
   A1308, since it adds a table.
   [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
   [plan](superpowers/plans/2026-11-01-a1301-remove-location.md).
   [Detail](backlog/architecture.md#a1301-remove-the-location-concept-the-venue-holds-everything-a-location-held)
-
-- **A1301 S5 left "location" in files other slices own.** Wording to change:
-  `apps/server/scripts/demo-seed/seed-catalogue.ts` (S19), and the
-  English and Spanish guide `content-and-images.md`, whose receipt-language paragraph still speaks
-  of "the location's default".
 
 - **The setup app's configuration preview types four address fields as always text.**
   `ConfigurationPreview.venue` in `apps/setup/src/api/client.ts` is `VenueDraft`'s shape, which
@@ -6694,11 +6686,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md).
   Build waits for A739; retained protection comes first. Google disable protects every active administrator.
   [Detail](backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up)
-
-- **Station deletion's draft-location filter needs a discriminating test.** Add a second-location
-  draft case that fails without the clause, or establish by running the real writers that it is
-  redundant before removing it. Its necessity remains unverified.
-  [Detail](backlog/architecture.md#station-deletions-draft-location-filter-needs-a-discriminating-test).
 
 - **The order-line schema's variant-name comment mistakes missing customer text for a null map.**
   `packages/db/src/schema/orders.ts` says `variantDescriptions` is null when the variant has no
@@ -7062,7 +7049,7 @@ conflict.
 
 - **One tenant per database everywhere, the cloud included, and the schema carries no tenant
   column** (2026-09-14; #378). A tenant is one taxpayer (`country` + `tax_id`), held as the single
-  row of `tenants` with its `id` pinned to 1, owning all of its locations. Nothing filters a query
+  row of `tenants` with its `id` pinned to 1. Nothing filters a query
   by a tenant; a query that wants "this tenant's rows" reads the table. Guard:
   `scripts/no-tenant-column.test.ts` (text-matching, and blind to test files). The cloud is a
   dedicated instance per tenant, hosted in Spain — a server process and a SQLite file streamed to
@@ -7107,7 +7094,7 @@ partial scope; the detail for a live thread is in its area.
 | 3   | Fiscal layer                 | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`)                                                                                                                                                                                                                                                                                   | F3 asesor/XSD confirmations; the owner's real-certificate checks after A795 lands (A888); cert distribution to a promoted node      |
 | 4   | Payment layer                | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329)                                                                                                                                                                                                                                                    | webhook `recordSale` hand-off; reconcile remediation UI; Tap-to-Pay on the handheld (_Payments and card readers_)                                                             |
 | 5   | Identity                     | persons/sessions, PIN (+ wrong-PIN back-off: per device at sign-in and for override PINs), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby                                                        | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce                                                                |
-| 6   | Locations                    | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297)                                                                                                                                                                                                                                                                                                                                       | multiple-location creation/editing/deactivation; then location-scope the by-id verb family                                                                                    |
+| 6   | Venue                        | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297)                                                                                                                                                                                                                                                                                                                                       | multiple-location creation/editing/deactivation; then location-scope the by-id verb family                                                                                    |
 | 7   | Counter POS                  | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, receipt configuration, receipt/drawer printing, cash-drawer authorization — operable end to end                                                                                                                                                                                                                                                        | —                                                                                                                                                                             |
 | 8   | Reporting                    | daily close, frozen _cierre Z_, VAT summary, modelo 303 output+input VAT + DR303 file and its download route and its dashboard screen, purchase-invoice UI; dashboard sales screen (with a category sales report, at time of sale or current, printable) + business-overview home                                                                                                                                                 | fiscal filing remainder parked (_Reporting — the fiscal remainder_)                                                                                                           |
 | 9   | Deployment                   | the box as two containers with `waitron.sh` install/reset (#285, #314); guided node onboarding (#296); boot diagnosability (#310); CA-trust onboarding + per-OS certificate walkthrough (#330); till reroute S1–S6; promotion endpoint (#272)                                                                                                                                                                                     | USB installer (B3); cloud standby live link + the Waitron Cloud boundary                                                                                                      |
@@ -7119,7 +7106,7 @@ partial scope; the detail for a live thread is in its area.
 | 15  | Online ordering              | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (later phase)                                                                                                                                                     |
 | 16  | Workforce                    | _registro de jornada_ library (chain per node since #268), till clocking and breaks, D2 scheduling, roster authoring + approvals, staff request path + portal; own/manager Hours and PDF/CSV working-time exports | inspector remote access; advisor export checks; wage-computation engine (convenio-gated); D3 payroll export (integrate-not-build)                                         |
 | 17  | Accounting export            | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (core subset; extends Reporting)                                                                                                                                  |
-| 18  | Menu/recipes/allergens       | EU-14 allergens, declared directly on the product since #345 (recipes are removed under A1308, owner 2026-11-04), product images, location↔menu membership, extras and options lists end to end (the legacy option groups are gone — Task 13 dropped their tables), per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | menu schedule (publishing landed, #677); customer-facing menu surface parked       |
+| 18  | Menu/recipes/allergens       | EU-14 allergens, declared directly on the product since #345 (recipes are removed under A1308, owner 2026-11-04), product images, venue↔menu membership, extras and options lists end to end (the legacy option groups are gone — Task 13 dropped their tables), per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | menu schedule (publishing landed, #677); customer-facing menu surface parked       |
 | 19  | Opening hours & channel sync | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (Google Business Profile / Maps)                                                                                                                                  |
 | 20  | Procurement & inventory      | received purchase invoices (`@waitron/purchasing`, feeds modelo 303)                                                                                                                                                                                                                                                                                                                                                              | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked); AI forecast deferred                                                                                           |
 

@@ -32,7 +32,7 @@ What constrains the next change to the wizard:
   which passes Spain's own check as a company's: it is safe only because a demo box files nothing.
   Prepare and Live start with an empty tax ID and legal name, and leaving Demo for either clears both
   from the draft (`#onPatch`, `apps/setup/src/setup-app.ts`). Leaving Demo also clears an explicitly
-  automatic location name with its draft ownership marker; a name you authored remains. The
+  automatic venue name with its draft ownership marker; a name you authored remains. The
   Demo/Live/Demo cases in `apps/setup/src/setup-app-venue.unsaved-changes.test.ts` cover both paths.
 - **Default both series codes to values that survive a cold restore.** A cold restore appends
   `-<installation number>` and `stripOwnSuffixes` would then re-number a trailing `-<digits>`, so
@@ -44,7 +44,7 @@ What constrains the next change to the wizard:
   over from an earlier attempt copies that attempt's stored venue, which holds it
   (`#acceptFirstIdentity` and `#replaceFirstSetup` in `apps/setup/src/setup-app.ts`). Product
   sales use the description you save in the **Receipts** tab of each department's dialog, or the
-  fiscal module's default description when the department has none; the generic location field is
+  fiscal module's default description when the department has none; the venue's own description is
   not their fallback.
 
 ## Open owner call — setup always stores a language on the account

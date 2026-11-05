@@ -293,7 +293,7 @@ and dated implementation receipts.
 The build covers a Spanish recipient's saved tax ID, name and address, a separate full-invoice
 series, taxpayer domicile, filed receipt data and replay, original/duplicate printing, delivery
 status and retry, staff handover confirmation, invoice lookup, and reporting. Paper and till
-omit the location address when an F1 shows its filed taxpayer domicile; phone/email and the
+omit the venue address when an F1 shows its filed taxpayer domicile; phone/email and the
 F2/absent-domicile controls remain. Automatic F1 credit/refund/cancellation is refused.
 The operation day is the owner's provisional service-start rule, awaiting asesor confirmation.
 

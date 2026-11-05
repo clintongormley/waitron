@@ -149,7 +149,7 @@ _2026-10-22 (A969): the fallback error, fallback alert and empty-table pairs mov
 
 | file:line | text | English beside it? |
 | --- | --- | --- |
-| `packages/provisioning/src/venue-apply.ts:308` | kitchen station «Cocina» | **No.** Written for every new location |
+| `packages/provisioning/src/venue-apply.ts:308` | kitchen station «Cocina» | **No.** Written for every new venue |
 | `packages/venue-service/src/service-steps.ts:110–138` | «Montar mesa», «Tomar nota», «¿Algo más?» (also for every new department) | Yes, but `:123` picks Spanish for every language except English (A900) |
 | `packages/layouts/src/device-profile.ts:131–152` | «Mostrador», «Cocina», «Móvil» | Yes, but `DEFAULT_PROFILE_LANGUAGE = "es"` (`:152`) |
 | `apps/server/scripts/settle-invoice-first.ts:126–177` | «Comida», «Descuento», «Supervisora» | No. An operator script that accepts `WAITRON_ENV=production` (`:13`); the lines become filed records |

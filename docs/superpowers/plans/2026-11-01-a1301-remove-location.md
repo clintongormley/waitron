@@ -134,6 +134,8 @@ Not covered, and why:
   plan-only backlog part may run now).
 - **S20–S28** (the schema slices and the reset window) are a separate plan, written once F1–F5 and
   S18 have landed.
+- **2026-11-05:** S19 has its own plan,
+  [`2026-11-05-a1301-s19-text-sweep.md`](2026-11-05-a1301-s19-text-sweep.md).
 
 ## Dependencies, tasks and who lands each slice
 
@@ -533,6 +535,19 @@ function no longer reads the scope. It fails before the change. It is marked
 - **The live-query table names** (`location_day_cutover_changes`, `{ type: "locations" }`) and the
   unique-index column lists (`columns: ["location_id", "name"]`) named as leftovers below go with
   S23 and S24.
+- **2026-11-05 (S19): comments in schema files that use "location" as plain prose.** S19 edits
+  no file under `packages/*/src/schema/` (A1308's hold), so the slice that touches each file
+  rewords or deletes these: `packages/db/src/schema/catalogue.ts:27`,
+  `device-profile-printers.ts:17-18`, `device-profiles.ts:23`, `devices.ts:76`,
+  `dining-tables.ts:9`, `floor-zones.ts:11`, `nodes.ts:16`, `orders.ts:108,150`,
+  `station-printers.ts:7-8` and `tenants.ts:86` (all under `packages/db/src/schema/`);
+  `packages/workforce-es/src/schema/convenio-config.ts:27,93,99`;
+  `packages/workforce/src/schema/roster-versions.ts:52`;
+  `packages/workforce/src/schema/shift-templates.ts:16`. One of them is false today:
+  `device-profile-printers.ts:17-18` says a listed printer "is offered only to devices at its own
+  location", but #2396 (S10, `2c68d547c0`) removed the filter `p.locationId === device.locationId`
+  from `apps/server/src/device-equipment.ts`
+  (`git show 2c68d547c0 -- apps/server/src/device-equipment.ts`).
 
 ---
 

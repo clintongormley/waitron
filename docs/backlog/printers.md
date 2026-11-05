@@ -851,8 +851,8 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   manager holding both `printer.manage` and `cash.drawer`, with no per-till check — left as it
   is (owner, 2026-10-02).
 
-- **A receipt prints in one language; the location's is the default, and staff may choose another
-  at the till (C113, owner 2026-09-30, #1014; amended by A497, owner 2026-10-11).** The location's
+- **A receipt prints in one language; the venue's is the default, and staff may choose another
+  at the till (C113, owner 2026-09-30, #1014; amended by A497, owner 2026-10-11).** The venue's
   receipt language is the first entry of its saved list (`locations.invoice_locales`); **in
   Catalonia it is fixed to Catalan**
   ([regional-language-rules.md](../compliance/regional-language-rules.md), Catalonia). A choice
@@ -865,7 +865,7 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   2026-10-11). Until A497, no choice was offered when the original printed.
 
 - **A copy can be printed in another receipt language (C114, #1022; narrowed by A497, owner
-  2026-10-11).** The till's choice and a copy are both offered in the location's receipt language,
+  2026-10-11).** The till's choice and a copy are both offered in the venue's receipt language,
   then in each of the pack's receipt languages (Spanish, Catalan, Galician and Basque today) that is
   one of the venue's content languages (`readOfferedReceiptLanguages`,
   `apps/server/src/venue-locale.ts`); a copy is also offered in the sale's own language. No English

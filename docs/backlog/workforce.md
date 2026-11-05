@@ -37,7 +37,7 @@ and frozen-history assertions intact; do not replace them with a bare event-time
 
 The special-day staffing painter draws every date's column, and the blocks in it, on the read's one
 `cutover`, which `readSpecialDayStaffing` (`packages/staffing/src/paint.ts`) takes from
-`clock.dayCutover`: the location's baseline changeover, not necessarily the one in force on each
+`clock.dayCutover`: the venue's baseline changeover, not necessarily the one in force on each
 date. Each date's opening hours behind the paint (`resolveDepartmentsDays`) and the month's slot
 count (`slotsForDay` in `packages/staffing/src/month.ts`, given `day.dayCutover`) use that date's
 own changeover. So when a changeover change is scheduled, a block can be drawn longer than the
