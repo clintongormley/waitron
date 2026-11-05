@@ -408,8 +408,9 @@ until A977).
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Other private naming sites remain in the till's boot and counter-payment suites and
   shared-fixture consumers in the server split-bill and move-bill suites; party seating,
-  bill-editing, moved-dish, waiting-course and other order fixtures;
-  and shared helper consumers such as `made-here.test.ts`. Accented move-line bindings also remain.
+  bill-editing, moved-dish, waiting-course and other order fixtures; remaining receipt-print and
+  working-order bindings; and shared helper consumers such as `made-here.test.ts`. Accented move-line
+  bindings also remain.
   Fixture strings remain separate from this naming work. The receipt-print and working-order
   suites retain Spanish display samples under A976. The counter, filing and adjustment
   order-portion suites retain Spanish dish samples under A976; counter and adjustment test
@@ -804,7 +805,9 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
 - **A974. Finish the remaining English names in general code.** Remaining names include till boot and
   counter-payment fixtures; shared-fixture consumers in the server split-bill and move-bill suites,
-  party seating, bill-editing, moved-dish, waiting-course and other order fixtures, shared helper consumers and file names.
+  party seating, bill-editing, moved-dish, waiting-course and other order fixtures, shared helper
+  consumers and file names. Receipt-print retains `bebidas`; working-order retains `bebidas`,
+  `punto`, `taza`, `uno`, `dos`, `doble`, `leche`, `grande` and `avena`.
   Keep accented search fixtures unchanged. The receipt-print and working-order suites retain their
   display samples under A976.
   Other fixture text stays with A976, including catalogue
@@ -815,6 +818,14 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   [Detail](architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
 ### A974 review assertion gaps
+
+Keep the parent-category and variant-category fixture destinations distinct in the working-order
+variant-routing case. On 5 November 2026, the driver changed only the glasses-category route from
+`glassStation.id` to `barStation.id` in an installed disposable checkout; all 240 working-order
+cases still passed. The two routes then share the destination the case expects, so that fixture
+cannot distinguish choosing the variant's category from choosing the parent's. This is a fixture
+check limitation, not a demonstrated product failure. Preserve the existing routing assertions and
+add a check that the competing fixture destinations differ before exercising parent-category routing.
 
 Strengthen the no-kitchen served-refusal setup in `till-api.groups.test.ts` and the extras/replay
 checks in `till-api.fiscal-sale-paths.test.ts`. In the naming review’s installed disposable checkout,
@@ -845,7 +856,7 @@ some changes can legitimately preserve the observation a case makes.
 
 - **A976. Finish the server's English test-venue defaults.** Spanish display samples remain in
   `party-bill-actions.test.ts`, `party-move-bill.test.ts`, `party-arriving-dishes.test.ts`,
-  `receipt-guests.test.ts`, `till-api.reprint.test.ts`,
+  `receipt-guests.test.ts`, `receipt-print.test.ts`, `working-order.test.ts`, `till-api.reprint.test.ts`,
   `order-portions.counter.test.ts`, `order-portions.filing.test.ts`,
   `order-portions.adjustments.test.ts`, `till-api.transfer.test.ts`,
   `till-api.move-bill.test.ts`, `till-api.split-bill.test.ts`, `till-api.groups.test.ts`,
