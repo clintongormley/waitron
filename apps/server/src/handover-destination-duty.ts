@@ -165,6 +165,12 @@ interface HeldCopy {
   found: CopyFileChecks;
 }
 
+/** What a pass has to do for the operation it read: fetch and compare, post, or ask for the placing start. */
+interface DutyWork {
+  kind: "fetch" | "post" | "place";
+  operation: HandoverOperation;
+}
+
 async function discardCopy(path: string): Promise<void> {
   await rm(path, { force: true });
   await rm(`${path}.partial`, { force: true });
@@ -245,26 +251,55 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     });
   }
 
-  /** The one operation this duty should be working on now, read fresh, or `null`. */
-  async function workToDo(): Promise<HandoverOperation | null> {
+  /** The one thing this duty should be doing now, read fresh, or `null`. */
+  async function readWork(): Promise<DutyWork | null> {
     const { mode } = await readNodeMode(deps.node, deps.nodeId);
     if (mode !== "mirror") {
       await noteOperationOffMirror(deps);
       return null;
     }
     const operation = await readOpenHandoverOperation(deps.node, deps.nodeId);
-    return operation?.role === "destination" &&
-      operation.scenario === "controlled" &&
-      (operation.state === "prepared" || operation.state === "copy_accepted")
-      ? operation
-      : null;
+    if (operation?.role !== "destination" || operation.scenario !== "controlled") return null;
+    if (operation.state === "prepared") return { kind: "fetch", operation };
+    if (operation.state === "copy_accepted") return { kind: "post", operation };
+    if (operation.state !== "filing_assumed") return null;
+    // The old box has given up filing to this box, and the start that places the copy is owed until
+    // it has recorded this event.
+    const placed = await readHandoverEvent(
+      deps.node,
+      deps.nodeId,
+      operation.operationId,
+      COPY_PLACED_EVENT,
+    );
+    return placed === null ? { kind: "place", operation } : null;
   }
 
   /** `operation`'s row now, unless a stop or another writer ended this duty's work on it. */
   async function stillWorkingOn(operation: HandoverOperation): Promise<HandoverOperation | null> {
     if (signal.aborted) return null;
-    const current = await workToDo();
-    return current?.operationId === operation.operationId ? current : null;
+    const work = await readWork();
+    return work !== null &&
+      work.kind !== "place" &&
+      work.operation.operationId === operation.operationId
+      ? work.operation
+      : null;
+  }
+
+  /** `current` must be the row as just read. Writes and logs only when the reason changes. */
+  async function recordWait(
+    current: HandoverOperation,
+    reason: ErrorCode | null,
+    detail: Readonly<Record<string, unknown>> = {},
+  ): Promise<void> {
+    if (current.waitingReason === reason) return;
+    if (reason !== null) {
+      deps.log("info", "handover-destination.waiting", {
+        operationId: current.operationId,
+        reason,
+        ...detail,
+      });
+    }
+    await waitHandover(deps, current.operationId, reason);
   }
 
   async function waitOn(
@@ -273,13 +308,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     detail: Readonly<Record<string, unknown>> = {},
   ): Promise<void> {
     const current = await stillWorkingOn(operation);
-    if (current === null || current.waitingReason === reason) return;
-    deps.log("info", "handover-destination.waiting", {
-      operationId: operation.operationId,
-      reason,
-      ...detail,
-    });
-    await waitHandover(deps, operation.operationId, reason);
+    if (current !== null) await recordWait(current, reason, detail);
   }
 
   /** `operationId` must come from a stored row. A failure is logged and never thrown. */
@@ -377,7 +406,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     const current = await stillWorkingOn(operation);
     if (current === null) return discard();
     held = { operationId, indicator, path, compareDueAt: 0, found: {} };
-    if (current.waitingReason !== null) await waitHandover(deps, operationId, null);
+    await recordWait(current, null);
     // Another writer may have closed the operation while the reason was being cleared.
     const cleared = await stillWorkingOn(operation);
     if (cleared === null) return discard();
@@ -534,27 +563,6 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     return true;
   }
 
-  /** Whether the old box has given up filing to this box and the start that places the copy has not run. */
-  async function placingStartOwed(): Promise<HandoverOperation | null> {
-    const { mode } = await readNodeMode(deps.node, deps.nodeId);
-    if (mode !== "mirror") return null;
-    const operation = await readOpenHandoverOperation(deps.node, deps.nodeId);
-    if (
-      operation?.role !== "destination" ||
-      operation.scenario !== "controlled" ||
-      operation.state !== "filing_assumed"
-    ) {
-      return null;
-    }
-    const placed = await readHandoverEvent(
-      deps.node,
-      deps.nodeId,
-      operation.operationId,
-      COPY_PLACED_EVENT,
-    );
-    return placed === null ? operation : null;
-  }
-
   /** What the start that places would read here. A chart too broken to read says nothing there. */
   async function placingWouldStop(operation: HandoverOperation): Promise<boolean> {
     try {
@@ -575,33 +583,28 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       await removeClosedFolders();
       sweptAtStart = true;
     }
-    // A start that places records the event before this duty runs, and a start that refuses to place
-    // is one this asks for no longer, so this cannot loop; a restart sent before the shutdown handlers
-    // are in, on a box where Node is process 1, does nothing.
-    const owed = await placingStartOwed();
-    if (owed !== null) {
-      const { operationId } = owed;
-      if (await placingWouldStop(owed)) {
-        if (owed.waitingReason !== "handover.source_no_longer_main") {
-          deps.log("info", "handover-destination.waiting", {
-            operationId,
-            reason: "handover.source_no_longer_main",
-          });
-          await waitHandover(deps, operationId, "handover.source_no_longer_main");
-        }
-        return true;
-      }
-      if (owed.waitingReason !== null) await waitHandover(deps, operationId, null);
-      deps.log("warn", "handover-destination.restart_asked_again", { operationId });
-      deps.restart();
-      return true;
-    }
-    const operation = await workToDo();
-    if (operation === null) {
+    const work = await readWork();
+    if (work === null) {
       if (!sweptNow) await removeClosedFolders();
       return false;
     }
-    if (operation.state === "copy_accepted") {
+    const { kind, operation } = work;
+    if (kind === "place") {
+      // A start that places records the event before this duty runs, and a start that refuses to
+      // place is one this asks for no longer, so this cannot loop; a restart sent before the shutdown
+      // handlers are in, on a box where Node is process 1, does nothing.
+      if (await placingWouldStop(operation)) {
+        await recordWait(operation, "handover.source_no_longer_main");
+        return true;
+      }
+      await recordWait(operation, null);
+      deps.log("warn", "handover-destination.restart_asked_again", {
+        operationId: operation.operationId,
+      });
+      deps.restart();
+      return true;
+    }
+    if (kind === "post") {
       await postAcceptance(operation);
       return true;
     }
