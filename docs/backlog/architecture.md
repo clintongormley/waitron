@@ -814,7 +814,9 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
 ## A976. Finish the server's English test-venue defaults.
 
-- **A976. Finish the server's English test-venue defaults.** Bookings’ native suites use English
+- **A976. Finish the server's English test-venue defaults.** Spanish display samples remain in
+  `party-bill-actions.test.ts`, `party-move-bill.test.ts` and `till-api.reprint.test.ts`; these belong
+  to A976 rather than the private-name work in A974. Bookings’ native suites use English
   sample location, operation, contact and note text. Native provisioning and floor-plan-set route
   suites use English venue, operation and menu samples; their Spanish locale and starter-content
   checks remain. UI switch behavior and accessibility suites
