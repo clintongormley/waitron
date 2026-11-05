@@ -2286,10 +2286,10 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
       .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
     await storeDepartmentReceipt(departmentId!, { operationDescription: "Restaurante" });
     await configureReceipt(v.cfg, { mode: "auto", printerId: await makePrinter() });
-    const mesa4 = await v.table("Mesa 4");
-    const mesa5 = await v.table("Mesa 5");
-    const { partyId, tabId } = await seat(v, mesa4);
-    await join(v, partyId, mesa5);
+    const table4Id = await v.table("Mesa 4");
+    const table5Id = await v.table("Mesa 5");
+    const { partyId, tabId } = await seat(v, table4Id);
+    await join(v, partyId, table5Id);
     if (name !== undefined) await nameParty(v, partyId, name);
     await orderForParty(v, partyId, ["Burger"], tabId);
 
@@ -2314,8 +2314,8 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
 
   it("names a party's bill by its own label once the party holds no table", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mesa4 = await v.table("Mesa 4");
-    const { partyId, tabId } = await seat(v, mesa4);
+    const table4Id = await v.table("Mesa 4");
+    const { partyId, tabId } = await seat(v, table4Id);
     await nameParty(v, partyId, "Ana");
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
@@ -2330,10 +2330,10 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
 
   it("still names a counter order's delivery table", async () => {
     const v = await setupPartyVenue(suite.db);
-    const terraza = await v.table("Terraza 2");
+    const terraceTableId = await v.table("Terraza 2");
     const orderId = randomUUID();
     await inTx(v, (tx) =>
-      createOpenOrder(tx, v.cfg, orderId, [], null, { deliveryTableId: terraza }),
+      createOpenOrder(tx, v.cfg, orderId, [], null, { deliveryTableId: terraceTableId }),
     );
 
     const { orderLabel } = await inTx(v, (tx) => readReceiptOrder(tx, orderId));
