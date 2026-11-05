@@ -1824,7 +1824,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     });
   }
 
-  it("keeps a bill with no edit state when ticked from becoming permission after refresh", async () => {
+  it("keeps missing metadata at prompt opening from becoming permission after refresh", async () => {
     const state = { missing: true };
     const listDrafts = vi.fn(async (partyId: string) => {
       const snapshot = await server.listDrafts(partyId);
