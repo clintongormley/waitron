@@ -235,6 +235,7 @@ text; "removed" deletes the key from both catalogues.
 | guide | `printers.add_help` | new | Waitron lists the printers its print agents find. Not listed? Check it is on; for a network printer, type its address under Check a known address. | Waitron muestra las impresoras que encuentran sus agentes de impresión. ¿No aparece? Comprueba que esté encendida; si es de red, escribe su dirección en Comprobar una dirección conocida. |
 | 2 | `printers.ruler_print` | changed | Print width test | Imprimir prueba de ancho |
 | 2 | `printers.resolution_hint` | changed | Print the width test. Choose the last number you can see in full on the ruler, and measure the QR code’s black square without its white border. You do not need to scan it. | Imprime la prueba de ancho. Elige el último número de la regla que se ve entero y mide el cuadrado negro del código QR sin su borde blanco. No hace falta escanearlo. |
+| 2 | `printers.ruler_last_number` | changed (Spanish only) | Last number fully visible on the ruler | Último número que se ve completo |
 | 2 | `printers.qr_square` | new | QR code’s black square | Cuadrado negro del código QR |
 | 2 | `printers.test_qr_help` | removed | (was the separate QR paragraph; its words are now in `printers.resolution_hint`) | |
 | guide | `printers.calibration_help` | new | Calibration sets how wide Waitron prints and how large the QR code comes out. Run it again if you change the paper width. | La calibración fija el ancho de impresión y el tamaño del código QR. Repítela si cambias el ancho del papel. |
@@ -243,9 +244,9 @@ text; "removed" deletes the key from both catalogues.
 | 4 | `printers.calibration_drawer` | changed | Cash drawer and portable use | Cajón portamonedas y uso portátil |
 
 Both help bubbles are named with the existing `help.badge_label` (Help: {part} / Ayuda: {part}),
-filled with the existing `printers.add_printer` (Add a printer / Añadir impresora) and
-`printers.calibration_layout` (Set paper width and resolution / Ajusta el ancho y la resolución),
-and link with the existing `help.guide_link` (Read more in the guide / Más información en la guía).
+filled with the title of the window each sits on: the existing `printers.add_printer` (Add a
+printer / Añadir impresora) and `printers.calibrate` (Calibrate printer / Calibrar impresora), and
+link with the existing `help.guide_link` (Read more in the guide / Más información en la guía).
 
 Unchanged and reused by point 2's result row: `printers.paper_width` (Paper width / Ancho del
 papel), `printers.resolution` (Print resolution / Resolución de impresión),
@@ -822,7 +823,7 @@ words alone.
 
 This task needs the guide's `calibrate` section, so do Task 9 Step 1 first, then:
 - [ ] **Step 1:** `it("explains calibration in a help bubble that links to the guide")` — on step 1
-  a `wt-help-tooltip` has `mode="help-mode"`, `aria-label` `fill("help.badge_label", { part: t("printers.calibration_layout") })`,
+  a `wt-help-tooltip` has `mode="help-mode"`, `aria-label` `fill("help.badge_label", { part: t("printers.calibrate") })`,
   text `t("printers.calibration_help")` and `guide-href` `guideHref("printers.calibrate")`.
 - [ ] **Step 2: Run** it — FAILS (no bubble).
 - [ ] **Step 3: Implement.**

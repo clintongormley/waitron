@@ -728,6 +728,9 @@ describe("guided printer calibration", () => {
         q(el, 'wt-combobox[name="printer-ruler-number"]')!.parentElement!,
         q(el, "[data-test=calibration-results]")!,
       ];
+      // Saved 80 mm at 180 dpi draws 512 dots, so 576 brings up the warning line.
+      await chooseOption(el, "printer-ruler-number", "576");
+      rows.push(q(el, "[data-test=ruler-disagrees]")!);
       for (const row of rows) {
         const box = row.getBoundingClientRect();
         expect(box.width).toBeGreaterThan(0);
@@ -1111,7 +1114,7 @@ describe("printer configuration tabs", () => {
     const tooltip = q(el, "[data-test=edit-printer-modal] wt-help-tooltip")!;
     expect(tooltip.getAttribute("mode")).toBe("help-mode");
     expect(tooltip.getAttribute("aria-label")).toBe(
-      fill("help.badge_label", { part: t("printers.calibration_layout") }),
+      fill("help.badge_label", { part: t("printers.calibrate") }),
     );
     expect(tooltip.textContent!.trim()).toBe(t("printers.calibration_help"));
     expect(tooltip.getAttribute("guide-href")).toBe(guideHref("printers.calibrate"));
@@ -5399,6 +5402,7 @@ describe("printer setup refinements", () => {
     q(el, "[data-test=calibrate-printer-details]")!.click();
     await flush(el);
     await chooseOption(el, "printer-ruler-number", "360");
+    expect(text(el, "[data-test=calibration-result-paper]")).toBe(t("printers.paper_width_58"));
     await clickAndAwaitClose(el, "edit-printer-modal", "cancel-edit-printer");
     await flush(el);
     expect(api.updatePrinter).not.toHaveBeenCalled();

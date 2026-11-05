@@ -5471,7 +5471,7 @@ export const es: Record<StringKey, string> = {
   "printers.ruler_print": "Imprimir prueba de ancho",
   "printers.print_test_page": "Imprimir página de prueba",
   "printers.test_page_sent": "Página de prueba enviada a {name}",
-  "printers.ruler_last_number": "Último número de la regla que se ve entero",
+  "printers.ruler_last_number": "Último número que se ve completo",
   "printers.ruler_disagrees":
     "La regla muestra {ruler} puntos, pero este ancho de papel y esta resolución imprimen {setting} puntos. Vuelve a comprobar la regla y el cuadrado del código QR.",
   "printers.sample_hint":

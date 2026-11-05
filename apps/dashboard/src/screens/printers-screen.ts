@@ -388,6 +388,9 @@ export class PrintersScreen extends LitElement {
         gap: var(--wt-space-3);
         max-width: var(--wt-field-max-width);
       }
+      .ruler-disagrees {
+        max-width: var(--wt-field-max-width);
+      }
       .calibration-results > div {
         flex: 1 1 calc(var(--wt-space-6) * 6);
         min-width: 0;
@@ -3480,7 +3483,7 @@ export class PrintersScreen extends LitElement {
           ? html`<wt-help-tooltip
               slot="help"
               mode="help-mode"
-              aria-label=${fill("help.badge_label", { part: t("printers.calibration_layout") })}
+              aria-label=${fill("help.badge_label", { part: t("printers.calibrate") })}
               guide-href=${guideHref("printers.calibrate")}
               guide-label=${t("help.guide_link")}
               >${t("printers.calibration_help")}</wt-help-tooltip
@@ -3560,7 +3563,7 @@ export class PrintersScreen extends LitElement {
           </dl>
           ${
             this.rulerNumber !== "" && Number(this.rulerNumber) !== settingDots
-              ? html`<p role="status" data-test="ruler-disagrees">
+              ? html`<p role="status" class="ruler-disagrees" data-test="ruler-disagrees">
                   ${fill("printers.ruler_disagrees", { ruler: this.rulerNumber, setting: String(settingDots) })}
                 </p>`
               : nothing
