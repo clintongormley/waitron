@@ -3,10 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
+import { kitchenStations, withTransaction } from "@waitron/db";
+import { businessDayBounds } from "@waitron/shared";
+import { readScopedPassBoard } from "../../src/pass-board.js";
+import { listStationQueues } from "../../src/working-order.js";
 import { installBenchClock, type BenchClock } from "./bench-clock.js";
 import { openBenchVenue, type BenchVenue } from "./bench-venue.js";
-import { PAYMENT_ROUTES } from "./profile.js";
-import { countRows, tradeDay } from "./trading-day.js";
+import { BENCH_PROFILE, PAYMENT_ROUTES } from "./profile.js";
+import { countRows, dayEvents, planDay, tradeDay, type PlanningVenue } from "./trading-day.js";
 
 // Each case migrates and seeds a venue (1.3 s locally) and trades a few bills (about 0.12 s each);
 // the limit leaves a slower CI runner many times that.
@@ -34,6 +38,26 @@ async function freshVenue(start: string, seed = 1): Promise<BenchVenue> {
 
 function rows(venue: BenchVenue, query: ReturnType<typeof sql>) {
   return venue.db.all<Record<string, unknown>>(query);
+}
+
+/** The distinct dishes anywhere in a station or pass answer: objects with an id, a name and a state. */
+function dishesIn(answer: unknown): number {
+  const dishes = new Set<string>();
+  const walk = (value: unknown) => {
+    if (Array.isArray(value)) for (const entry of value) walk(entry);
+    else if (value !== null && typeof value === "object") {
+      const record = value as Record<string, unknown>;
+      if (
+        typeof record.id === "string" &&
+        typeof record.name === "string" &&
+        typeof record.state === "string"
+      )
+        dishes.add(record.id);
+      for (const child of Object.values(record)) walk(child);
+    }
+  };
+  walk(answer);
+  return dishes.size;
 }
 
 describe("tradeDay", () => {
@@ -157,6 +181,36 @@ describe("tradeDay", () => {
   );
 
   it(
+    "leaves no dish of a finished day on any station's list or the pass",
+    async () => {
+      const venue = await freshVenue("2025-11-03T08:00:00Z");
+      await tradeDay(venue, "2025-11-03", 4);
+
+      for (const screen of venue.kitchenScreens) {
+        const response = await venue.app.request("/api/device/station-screen", {
+          headers: { cookie: screen.cookie },
+        });
+        expect(response.status).toBe(200);
+        expect.soft(dishesIn(await response.json()), screen.name).toBe(0);
+      }
+      const stationIds = (
+        await venue.db.select({ id: kitchenStations.id }).from(kitchenStations)
+      ).map((station) => station.id);
+      const lists = await withTransaction(venue.db, async (tx) => ({
+        stations: [...(await listStationQueues(tx, stationIds)).values()],
+        pass: await readScopedPassBoard(
+          tx,
+          { stationIds: null, zoneIds: null },
+          { release: false },
+        ),
+      }));
+      expect.soft(dishesIn(lists.stations), "stations").toBe(0);
+      expect.soft(dishesIn(lists.pass), "pass").toBe(0);
+    },
+    CASE_TIMEOUT_MS,
+  );
+
+  it(
     "refuses a day that starts before the bench clock",
     async () => {
       const venue = await freshVenue("2025-11-05T08:00:00Z");
@@ -166,6 +220,66 @@ describe("tradeDay", () => {
     },
     CASE_TIMEOUT_MS,
   );
+});
+
+describe("planDay", () => {
+  /** The venue `openBenchVenue` seeds, as far as planning reads it. */
+  function seededShape(seed: number): PlanningVenue {
+    const zonesPerDepartment = BENCH_PROFILE.zones / BENCH_PROFILE.departments;
+    return {
+      seed,
+      dishes: Array.from({ length: BENCH_PROFILE.dishes }, (_, n) => ({
+        productId: `product-${n}`,
+        menuItemId: `dish-${n}`,
+      })),
+      zones: Array.from({ length: BENCH_PROFILE.zones }, (_, z) => ({
+        id: `zone-${z}`,
+        departmentId: `department-${Math.floor(z / zonesPerDepartment)}`,
+        tableIds: Array.from({ length: BENCH_PROFILE.tablesPerZone }, (_, t) => `table-${z}.${t}`),
+      })),
+      tills: Array.from({ length: BENCH_PROFILE.tills }, (_, t) => ({
+        id: `till-${t}`,
+        name: `Till ${t}`,
+        cookie: "",
+        departmentId: `department-${t % BENCH_PROFILE.departments}`,
+      })),
+    };
+  }
+
+  it("never has more parties at once in a department than its tables, on any day of the year", () => {
+    const venue = seededShape(1);
+    const tables = new Map<string, number>();
+    for (const zone of venue.zones)
+      tables.set(zone.departmentId, (tables.get(zone.departmentId) ?? 0) + zone.tableIds.length);
+    const overfull: string[] = [];
+    const first = new Date(`${BENCH_PROFILE.startDate}T00:00:00Z`);
+    for (let n = 0; n < BENCH_PROFILE.days; n++) {
+      const at = new Date(first);
+      at.setUTCDate(first.getUTCDate() + n);
+      const day = at.toISOString().slice(0, 10);
+      const { startAt } = businessDayBounds(
+        {
+          timeZone: BENCH_PROFILE.timeZone,
+          dayCutover: BENCH_PROFILE.dayCutover,
+          cutoverChanges: [],
+        },
+        day,
+      );
+      const plans = planDay(venue, day, BENCH_PROFILE.billsPerDay, Date.parse(startAt), undefined);
+      const seated = new Map<string, number>();
+      let peak = 0;
+      for (const event of dayEvents(plans)) {
+        const department = plans[event.bill]!.zone.departmentId;
+        const change = event.step.kind === "seat" ? 1 : event.step.kind === "finish" ? -1 : 0;
+        const now = (seated.get(department) ?? 0) + change;
+        seated.set(department, now);
+        peak = Math.max(peak, now - tables.get(department)!);
+      }
+      if (peak > 0) overfull.push(`${day} +${peak}`);
+    }
+
+    expect(overfull).toEqual([]);
+  });
 });
 
 describe("installBenchClock", () => {

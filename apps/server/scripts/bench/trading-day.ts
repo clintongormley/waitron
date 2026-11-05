@@ -82,7 +82,8 @@ type Step =
   | { kind: "advance"; round: number; to: "preparing" | "ready" }
   | { kind: "served"; round: number }
   | { kind: "pay" }
-  | { kind: "finish" };
+  | { kind: "finish" }
+  | { kind: "handOver" };
 
 interface Event {
   at: number;
@@ -110,9 +111,7 @@ export async function tradeDay(
     day,
   );
   const plans = planDay(venue, day, bills, Date.parse(bounds.startAt), options.seats);
-  const events = plans
-    .flatMap(eventsOf)
-    .sort((a, b) => a.at - b.at || a.bill - b.bill || a.order - b.order);
+  const events = dayEvents(plans);
   const routes: Record<PaymentRoute, number> = {
     pay: 0,
     "payments-reader": 0,
@@ -230,6 +229,11 @@ export async function tradeDay(
       if (order?.status !== "settled")
         throw new Error(`bench: bill ${bill.tabId} is ${order?.status} after ${plan.route}`);
       routes[plan.route] += 1;
+    } else if (step.kind === "handOver") {
+      // A table bill's dishes stay on their stations' lists until a till collects the paid order.
+      await call(cookie, "POST", `/api/orders/${bill.tabId}/collect`, {
+        submissionId: randomUUID(),
+      });
     } else {
       const expectedEdits = await withTransaction(venue.db, async (tx) => {
         const edits = [];
@@ -400,8 +404,11 @@ function shiftOf(venue: BenchVenue, day: string) {
     .map(({ waiter }) => waiter);
 }
 
-function planDay(
-  venue: BenchVenue,
+/** What planning a day reads of the venue. */
+export type PlanningVenue = Pick<BenchVenue, "seed" | "dishes" | "zones" | "tills">;
+
+export function planDay(
+  venue: PlanningVenue,
   day: string,
   bills: number,
   dayStart: number,
@@ -429,7 +436,7 @@ function planDay(
     seatTimes.sort((a, b) => a - b);
   }
   let previousDelta = 0;
-  return seatTimes.map((seatAt, index) => {
+  const plans = seatTimes.map((seatAt, index): PlannedBill => {
     // Paired bills hold exactly twice the mean between them, so any even count of bills does too.
     const delta = index % 2 === 0 ? between(-1, 1) : -previousDelta;
     previousDelta = delta;
@@ -455,6 +462,37 @@ function planDay(
       route: routes[index]!,
     };
   });
+  return waitForTables(venue, plans);
+}
+
+/**
+ * A full room makes the next party wait: each bill, in the order it arrived, takes the table in its
+ * department that frees first, and is seated then if that is later than it arrived.
+ */
+function waitForTables(venue: PlanningVenue, plans: PlannedBill[]): PlannedBill[] {
+  const freeAt = new Map<string, number[]>();
+  for (const zone of venue.zones)
+    freeAt.set(zone.departmentId, [
+      ...(freeAt.get(zone.departmentId) ?? []),
+      ...zone.tableIds.map(() => -Infinity),
+    ]);
+  for (const plan of plans) {
+    const tables = freeAt.get(plan.zone.departmentId)!;
+    const first = tables.indexOf(Math.min(...tables));
+    const stay = eventsOf(plan).find((event) => event.step.kind === "finish")!.at - plan.seatAt;
+    // Seated the instant a table frees, it still sorts after that finish: the bill leaving arrived
+    // first, so it has the lower index.
+    plan.seatAt = Math.max(plan.seatAt, tables[first]!);
+    tables[first] = plan.seatAt + stay;
+  }
+  return plans;
+}
+
+/** Every step of the day's bills, in the order `tradeDay` sends them. */
+export function dayEvents(plans: readonly PlannedBill[]): Event[] {
+  return plans
+    .flatMap(eventsOf)
+    .sort((a, b) => a.at - b.at || a.bill - b.bill || a.order - b.order);
 }
 
 function eventsOf(plan: PlannedBill): Event[] {
@@ -474,6 +512,7 @@ function eventsOf(plan: PlannedBill): Event[] {
   const end = 3 + plan.rounds.length * 18;
   at(end + 6, { kind: "pay" });
   at(end + 8, { kind: "finish" });
+  at(end + 9, { kind: "handOver" });
   return events;
 }
 
