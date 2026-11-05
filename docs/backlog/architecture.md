@@ -1132,8 +1132,6 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   The `devices-screen.test.ts` suite still needs its
   disabled-device, till, pairing, kitchen-screen profile, returning-device station and printer
   sample names cleaned.
-  The order-list suite still uses `Mesa 5` as a table sample.
-  Its `orders-screen.a11y.test.ts` twin still uses `Mesa 5`, `Barra` and `Oficina` samples.
   Menu-preview accessibility states still use `Terraza` as a sample menu name.
   Audit the remaining `Terraza` occurrences in the menu-screen, look-card and equipment-label
   test suites before the next cleanup slices.

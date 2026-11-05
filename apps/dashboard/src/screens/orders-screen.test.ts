@@ -14,7 +14,7 @@ const ROW: OrderRowDto = {
   label: "Lunch",
   partyId: null,
   partyName: null,
-  tables: ["Mesa 5"],
+  tables: ["Table 5"],
   counter: false,
   saleId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
   invoiceNumber: "A/12",
@@ -557,7 +557,7 @@ describe("dashboard Orders", () => {
   it("waits for a pause before searching a table name", async () => {
     const { el, api } = await loaded();
     el.shadowRoot!.querySelector("wt-input[name=table]")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "Mesa 5" }, bubbles: true, composed: true }),
+      new CustomEvent("wt-change", { detail: { value: "Table 5" }, bubbles: true, composed: true }),
     );
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(api.listOrderPages).toHaveBeenCalledTimes(1);
@@ -565,7 +565,7 @@ describe("dashboard Orders", () => {
     await vi.waitFor(() =>
       expect(
         (api.background.listOrderPages as ReturnType<typeof vi.fn>).mock.lastCall?.[0].table,
-      ).toBe("Mesa 5"),
+      ).toBe("Table 5"),
     );
   });
 
