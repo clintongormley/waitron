@@ -131,7 +131,7 @@ normal list; a paired printer stays listed; Show all devices still shows everyth
 from the same `bluetoothctl info` reading a scan already takes of listed devices, paired ones
 included (`parseBluetoothctlInfo`: `Icon: printer`, an imaging class with the printer bit, or the
 Serial Port profile; the owner's printer's recorded `info` carries all three, `bluetooth.test.ts`).
-The agent's paired report now asks `info` of each paired address it holds no answer for
+The agent's paired report now asks `info` of each paired address it holds no reading for
 (`printerKinds`) and sends `printerLike: true | false` beside the address, absent when it could not
 tell. An address has one `info` running at a time, which a scan and a paired report share, and at
 most eight run at once between them. The listing and the wait for `info` answers share the

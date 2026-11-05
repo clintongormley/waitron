@@ -291,8 +291,8 @@ It needs the fixed image on the box first: run
 and where the printer falls among them; then unpair the printer with Waitron's Unpair, which also
 switches it off, since Add a printer lists a paired Bluetooth device unless its agent's `info`
 reading says it is not a printer, and a switched-on printer's device, whether or not a scan marked
-it (A404); restart the print agent (`docker compose restart print-agent`) so it holds no earlier
-reading of the printer; open Add a printer repeatedly, record on which scan it is first listed
+it (A404); restart the print agent (`docker compose restart print-agent`) and wait a minute, so neither
+the agent nor the server holds an earlier reading of the printer; open Add a printer repeatedly, record on which scan it is first listed
 without Show all devices, and look for `bluetooth info failed` lines in
 `docker compose logs print-agent`.
 
@@ -718,7 +718,7 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   a paired printer stay listed and that a paired non-printer, such as headphones on another
   computer's agent, not be. The paired listing (`bluetoothctl devices Paired`) carries only an
   address and a name, so the agent asks `bluetoothctl info` of each paired device it holds no
-  answer for and reads it as a scan does (`parseBluetoothctlInfo` in
+  reading for and reads it as a scan does (`parseBluetoothctlInfo` in
   `apps/print-agent/src/bluetooth.ts`: printer icon, imaging class with the printer bit, or the
   Serial Port profile). A device whose `info` failed, did not answer within the paired report's
   deadline, or answered with no icon, class or profile to judge by, or whose agent is older than

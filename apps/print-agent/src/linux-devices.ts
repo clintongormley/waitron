@@ -29,8 +29,9 @@ export interface LinuxDeviceOptions {
   devRoot?: string;
   bluetooth?: BluetoothHost;
   scanNetwork?: () => Promise<DiscoveredDevice[]>;
-  /** Bounds a paired report: the listing and the wait for its devices' kinds share it. With the
-   * default `bluetooth` it also kills a paired listing BlueZ has not answered. */
+  /** A paired report's deadline: the wait for its devices' kinds gets only what the listing left of
+   * it. With the default `bluetooth` it also kills a paired listing, and an `info` the report
+   * starts, that BlueZ has not answered. */
   bluetoothListTimeoutMs?: number;
   log?: HostLog;
   now?: () => number;
@@ -215,7 +216,7 @@ export function createLinuxDevices(
       const startedAt = now();
       const listed = await sharedListing();
       const elapsed = now() - startedAt;
-      const left = elapsed < 0 ? listTimeoutMs : Math.max(0, listTimeoutMs - elapsed);
+      const left = elapsed < 0 ? 0 : Math.max(0, listTimeoutMs - elapsed);
       const kinds = await bluetooth
         .printerKinds(listed.map((d) => d.mac).filter(isBluetoothAddress), left)
         .catch((error: unknown) => {

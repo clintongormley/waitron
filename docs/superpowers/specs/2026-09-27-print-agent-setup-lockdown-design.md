@@ -121,7 +121,7 @@ also offer the Serial Port service. When scanning, the agent asks BlueZ about ea
 (`bluetoothctl info <address>` is the expected source) and reports, beside each device, whether it
 looks like a printer: the printer icon or class, or the Serial Port service.
 
-_2026-11-05 (A404): the agent also asks `bluetoothctl info` of each paired device it holds no answer
+_2026-11-05 (A404): the agent also asks `bluetoothctl info` of each paired device it holds no reading
 for and says in its paired report whether it is a printer; Add a printer also lists a paired device
 unless that answer says it is not one._
 

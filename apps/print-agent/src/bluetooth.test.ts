@@ -654,7 +654,10 @@ describe("createBluetoothctlHost — printerKinds() and scan() share their `info
   const macrotask = () => new Promise((resolve) => setTimeout(resolve, 0));
 
   it("never runs more than eight `info` at once between them, nor two of one address", async () => {
-    const paired = Array.from({ length: 8 }, (_, i) => `AA:BB:CC:DD:E1:0${i}`);
+    const paired = Array.from(
+      { length: MAX_BLUETOOTH_INFO_DEVICES },
+      (_, i) => `AA:BB:CC:DD:E1:${i.toString(16).padStart(2, "0")}`,
+    );
     const others = ["AA:BB:CC:DD:E2:01", "AA:BB:CC:DD:E2:02"];
     const held: Array<() => void> = [];
     const running = new Map<string, number>();
@@ -680,16 +683,16 @@ describe("createBluetoothctlHost — printerKinds() and scan() share their `info
     });
     const host = createBluetoothctlHost({ run });
     const kinds = host.printerKinds(paired, WAIT);
-    await vi.waitFor(() => expect(held).toHaveLength(8));
+    await vi.waitFor(() => expect(held).toHaveLength(MAX_BLUETOOTH_INFO_DEVICES));
     const scanning = host.scan();
     await vi.waitFor(() => expect(run).toHaveBeenCalledWith(["devices"]));
     await macrotask();
     for (const release of held) release();
     expect((await scanning).map((d) => d.localKey)).toStrictEqual([...others, ...paired]);
-    expect((await kinds).size).toBe(8);
-    expect(peak).toBe(8);
+    expect((await kinds).size).toBe(MAX_BLUETOOTH_INFO_DEVICES);
+    expect(peak).toBe(MAX_BLUETOOTH_INFO_DEVICES);
     expect(sameAddressTwice).toBe(false);
-    expect(infoCalls(run)).toHaveLength(8);
+    expect(infoCalls(run)).toHaveLength(MAX_BLUETOOTH_INFO_DEVICES);
   });
 
   it("does not let a paired report's late failure undo a scan's answer: the scan waits for the `info` already running", async () => {

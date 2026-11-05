@@ -377,13 +377,13 @@ describe("createLinuxDevices — pairedBluetooth()", () => {
     });
   });
 
-  // The listing and the wait for kinds share one deadline; a clock that stepped back leaves the
-  // whole deadline, never more.
+  // The listing and the wait for kinds share one deadline; after a clock that stepped back the
+  // listing's time is unknown, so the kinds get no wait.
   it.each([
     ["a listing that took 2 seconds", 2_000, 1_000],
     ["a listing that took the whole deadline", 3_000, 0],
     ["a listing that outran it", 3_500, 0],
-    ["a clock that stepped back", -60_000, 3_000],
+    ["a clock that stepped back", -60_000, 0],
   ])(
     "waits for kinds only for what the listing left of the deadline (%s)",
     async (_case, listingTook, waited) => {

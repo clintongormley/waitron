@@ -158,7 +158,7 @@ export function createBluetoothctlHost(opts: {
   const scanSeconds = opts.scanSeconds ?? 6;
   // Per address: whether its last answer marked it, the scan count when it was asked, whether that
   // answer said nothing of its kind, and the failure last logged for it, so a repeating failure is
-  // logged once. A scan drops the addresses its listing no longer holds.
+  // logged once.
   const readings = new Map<
     string,
     { printerLike: boolean; askedAt: number; unclassified?: true; lastFailure?: string }
