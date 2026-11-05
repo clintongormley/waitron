@@ -192,7 +192,13 @@ export class TillSplitPicker extends LitElement {
             .indeterminate=${live(tick === "some")}
             ?disabled=${waitsForTakeOver}
             aria-describedby=${waitsForTakeOver ? reasonId : nothing}
-            @change=${() => this.#emit(toggleBill(source, this.split))}
+            @change=${() => {
+              const next = toggleBill(source, this.split);
+              this.#emit(next);
+              // That disables this tick, which would drop focus to the page.
+              if (source.held !== null && billTick(source, next) === "none")
+                void this.focusTakeOver(id);
+            }}
           />
           <span class="name" data-split-name>${billLabel(source.bill)}</span>
         </label>

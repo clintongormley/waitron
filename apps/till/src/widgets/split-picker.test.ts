@@ -361,6 +361,19 @@ describe("till-split-picker", () => {
     },
   );
 
+  it("unticking a held bill disables its tick, so focus goes to the bill's Take over", async () => {
+    const { el } = await picker([source("b1", 1, DISHES, { held: luis })], wholeOf("b1"));
+    el.addEventListener("split-picks", (event) => {
+      el.split = (event as CustomEvent<{ split: SplitPicks }>).detail.split;
+    });
+    await userEvent.click(header(el, "b1"));
+    await el.updateComplete;
+    expect(header(el, "b1").disabled).toBe(true);
+    await expect
+      .poll(() => el.shadowRoot!.activeElement)
+      .toBe(q(el, '[data-split-take-over="b1"]'));
+  });
+
   it("a holder with no name draws the unnamed words", async () => {
     const { el } = await picker([source("b1", 1, DISHES, { held: nobody })]);
     expect(billText(el, "b1")).toContain(t("table.others_draft_unnamed"));
