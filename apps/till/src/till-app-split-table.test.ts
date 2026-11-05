@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { BillBalance, Draft, PartyBill, SplitSources, TabLine } from "./api/client.js";
 import { codeMessage } from "./i18n/codes.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
@@ -3484,6 +3484,351 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
       expect(api.splitTable).toHaveBeenCalledOnce();
       expect(sentEdits()).toEqual([b2Taken]);
+    });
+
+    describe("reached", () => {
+      type DraftsRead = Awaited<ReturnType<typeof server.listDrafts>>;
+      const title = (words: string) =>
+        `A803 split: a ticked bill someone else's order reaches: ${words}`;
+      const editOf = (read: DraftsRead, billId: string) =>
+        read.billEdits.find((edit) => edit.billId === billId)!;
+      const replacingEdit = (read: DraftsRead, billId: string, change: Record<string, unknown>) =>
+        read.billEdits.map((edit) => (edit.billId === billId ? { ...edit, ...change } : edit));
+
+      /** The shape another person's save through the real route answers: both lists move. */
+      function withForeignDraft(snapshot: DraftsRead, billId: string): DraftsRead {
+        const draft: Draft = { ...luisOn(billId), revision: 0 };
+        return {
+          drafts: [...snapshot.drafts, draft],
+          billEdits: replacingEdit(snapshot, billId, {
+            editorId: draft.ownerId,
+            editorName: draft.ownerName,
+            editorVersion: editOf(snapshot, billId).editorVersion + 1,
+            draftId: draft.id,
+            draftRevision: 0,
+          }),
+        };
+      }
+
+      /** After a send the draft has gone, and the edit state has moved on from what was ticked. */
+      const withOrderSent = (snapshot: DraftsRead, billId: string): DraftsRead => ({
+        drafts: snapshot.drafts,
+        billEdits: replacingEdit(snapshot, billId, {
+          editorVersion: editOf(snapshot, billId).editorVersion + 2,
+        }),
+      });
+
+      const threeBills = () => [...bills(), partyBill("b3", 3, "30.00")];
+      const threeAnswered = (): SplitSources => ({
+        bills: [
+          ...answered().bills,
+          { billId: "b3", lines: [dish("flan", 1)], balance: balance("b3", "30.00") },
+        ],
+      });
+      const b3Whole = noEdit("b3");
+      let reading: (snapshot: DraftsRead) => DraftsRead;
+      beforeEach(() => {
+        reading = (snapshot) => snapshot;
+      });
+
+      const threeBillApi = () => ({
+        listDrafts: vi.fn(async (partyId: string) => reading(await server.listDrafts(partyId))),
+        getPartyBills: vi.fn().mockResolvedValue(threeBills()),
+        getSplitSources: vi.fn().mockResolvedValue(threeAnswered()),
+      });
+
+      async function panel(over: Record<string, unknown> = {}) {
+        server.bills.add("b3");
+        return panelWith({ ...threeBillApi(), ...over });
+      }
+
+      async function reached(el: TillApp, billId = "b2"): Promise<void> {
+        reading = (snapshot) => withForeignDraft(snapshot, billId);
+        await refreshDrafts(el);
+      }
+
+      const namesLuis = (el: TillApp) =>
+        picker(el)!.shadowRoot!.querySelector("[data-split-bill='b2']")!.textContent;
+      /** Clicks first, so that a split that does go out is what the failure prints. */
+      async function expectNothingSends(el: TillApp): Promise<void> {
+        await userEvent.click(splitButton(el), { force: true });
+        await flush(el, 6);
+        expect(api.splitTable!.mock.calls).toEqual([]);
+        expect(q(el, "[data-split-pick]")).not.toBeNull();
+        expect(row(el, "b2")).not.toBeNull();
+        expect(namesLuis(el)).toContain("Luis");
+        expect(refusal(el)!.textContent).toContain(heldWords());
+        expect(splitButton(el).disabled).toBe(true);
+        expect(splitButton(el).variant).toBe("secondary");
+
+        q(el, 'wt-number-stepper[name="stayingGuests"]')!
+          .shadowRoot!.querySelector("input")!
+          .dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+          );
+        await flush(el, 6);
+
+        expect(api.splitTable!.mock.calls).toEqual([]);
+        expect(server.saveDraft).not.toHaveBeenCalled();
+        expect(server.takeOverDraft).not.toHaveBeenCalled();
+      }
+
+      const expectSentOnce = (selection: unknown, edits: unknown[]) =>
+        expect(api.splitTable).toHaveBeenCalledExactlyOnceWith(
+          "v1",
+          "t5",
+          selection,
+          3,
+          edits,
+          noGuests,
+        );
+
+      const twoDishes = (): SplitSources => ({
+        bills: [
+          answered().bills[0]!,
+          {
+            billId: "b2",
+            lines: [dish("steak", 1), dish("chips", 2)],
+            balance: balance("b2", "20.00"),
+          },
+          threeAnswered().bills[2]!,
+        ],
+      });
+
+      it(title("the only tick, whole"), async () => {
+        const el = await panel();
+        await tick(el, "b2");
+
+        await reached(el);
+
+        await expectNothingSends(el);
+        expect(tickBox(el, "b2").checked).toBe(true);
+      });
+
+      it(title("the only pick, loose"), async () => {
+        const el = await panel({ getSplitSources: vi.fn().mockResolvedValue(twoDishes()) });
+        await pickDish(el, "b2", "steak");
+        expect(tickBox(el, "b2").indeterminate).toBe(true);
+
+        await reached(el);
+
+        await expectNothingSends(el);
+        expect(tickBox(el, "b2").indeterminate).toBe(true);
+
+        await tick(el, "b2");
+        expect(tickBox(el, "b2").checked).toBe(false);
+        expect(tickBox(el, "b2").indeterminate).toBe(false);
+        await pressSplit(el);
+
+        expectSentOnce(whole(), []);
+      });
+
+      it(title("with another bill ticked"), async () => {
+        const el = await panel();
+        await tick(el, "b2");
+        await tick(el, "b3");
+
+        await reached(el);
+
+        await expectNothingSends(el);
+        expect(tickBox(el, "b2").checked).toBe(true);
+        expect(tickBox(el, "b3").checked).toBe(true);
+      });
+
+      it(title("untick"), async () => {
+        const el = await panel();
+        await tick(el, "b2");
+        await tick(el, "b3");
+        await reached(el);
+
+        await tick(el, "b2");
+        expect(tickBox(el, "b2").checked).toBe(false);
+        expect(splitButton(el).disabled).toBe(false);
+        await pressSplit(el);
+
+        expectSentOnce(whole("b3"), [b3Whole]);
+        expect(server.takeOverDraft).not.toHaveBeenCalled();
+      });
+
+      it(title("take over"), async () => {
+        const mine = { billId: "b2", editorVersion: 2, draftId: "draft-b2", draftRevision: 1 };
+        const el = await panel();
+        await tick(el, "b2");
+        await tick(el, "b3");
+        await reached(el);
+        const draft: Draft = {
+          ...luisOn("b2"),
+          ownerId: "p1",
+          ownerName: "Ana",
+          takenOverFrom: { personId: "p2", name: "Luis" },
+        };
+        const myEdit = { ...mine, editorId: "p1", editorName: "Ana" };
+        server.takeOverDraft.mockImplementationOnce(async () => {
+          reading = (snapshot) => ({
+            drafts: [...snapshot.drafts, draft],
+            billEdits: replacingEdit(snapshot, "b2", myEdit),
+          });
+          return { draft, edit: myEdit };
+        });
+
+        await taken(el);
+
+        expect(server.takeOverDraft).toHaveBeenCalledExactlyOnceWith(
+          "v1",
+          "draft-b2",
+          {
+            revision: 0,
+            expectedEdit: { billId: "b2", editorVersion: 1, draftId: "draft-b2", draftRevision: 0 },
+            submissionId: expect.any(String),
+          },
+          expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        );
+        expect(api.splitTable).not.toHaveBeenCalled();
+        expect(tickBox(el, "b2").checked).toBe(true);
+        await pressSplit(el);
+
+        expectSentOnce(whole("b2", "b3"), [mine, b3Whole]);
+      });
+
+      it(title("the order goes"), async () => {
+        const el = await panel();
+        await tick(el, "b2");
+        await reached(el);
+        expect(splitButton(el).disabled).toBe(true);
+
+        reading = (snapshot) => withOrderSent(snapshot, "b2");
+        await refreshDrafts(el);
+
+        expect(row(el, "b2")).toBeNull();
+        expect(tickBox(el, "b2").checked).toBe(true);
+        expect(splitButton(el).variant).toBe("primary");
+        expect(splitButton(el).disabled).toBe(false);
+
+        await pressSplit(el);
+        expect(api.splitTable).not.toHaveBeenCalled();
+        expect(refusal(el)!.textContent).toContain(changedWords("Bill 2"));
+
+        await pressSplit(el);
+        expectSentOnce(whole("b2"), [noEdit("b2", { editorVersion: 2 })]);
+      });
+
+      it(title("an old prompt"), async () => {
+        const el = await panel();
+        const order = tableOrder(el)!;
+        await press(el, "[data-action-back]");
+        let prompt: object | undefined;
+        order.addEventListener(
+          "split-table-open",
+          (event) => (prompt = (event as CustomEvent<{ prompt: object }>).detail.prompt),
+          { once: true },
+        );
+        await press(el, '[data-target="t5"]');
+        await tick(el, "b2");
+        await reached(el);
+
+        emit(order, "split-table", {
+          tableId: "t5",
+          selection: whole("b2"),
+          guestCounts: noGuests,
+          prompt,
+        });
+        await flush(el, 6);
+
+        expect(prompt).toBeDefined();
+        expect(api.splitTable).not.toHaveBeenCalled();
+        expect(banner(el)!.textContent).toContain(changedWords("Bill 2"));
+        expect(refusal(el)!.textContent).toContain(heldWords());
+      });
+
+      it(title("a request already out"), async () => {
+        const splitTable = vi.fn().mockImplementationOnce(async () => {
+          reading = (snapshot) => withForeignDraft(snapshot, "b2");
+          throw { code: "draft.out_of_date", billId: "b2" };
+        });
+        const el = await panel({ splitTable });
+        await tick(el, "b2");
+        const reads = api.listDrafts!.mock.calls.length;
+
+        await pressSplit(el);
+
+        expect(api.listDrafts!.mock.calls.length).toBeGreaterThan(reads);
+        expect(splitTable).toHaveBeenCalledOnce();
+        expect(tickBox(el, "b2").checked).toBe(true);
+        expect(row(el, "b2")).not.toBeNull();
+        expect(namesLuis(el)).toContain("Luis");
+        expect(refusal(el)!.textContent).toContain(heldWords());
+        expect(splitButton(el).variant).toBe("secondary");
+        expect(splitButton(el).disabled).toBe(true);
+
+        await userEvent.click(splitButton(el), { force: true });
+        await flush(el, 6);
+        expect(splitTable).toHaveBeenCalledOnce();
+      });
+
+      const without = (billId: string) => ({
+        bills: threeAnswered().bills.filter((bill) => bill.billId !== billId),
+      });
+      const billsWithout = (billId: string) =>
+        threeBills().filter((bill) => bill.workingOrderId !== billId);
+
+      it(title("a ticked bill gone"), async () => {
+        fakeTimers();
+        const el = await panel();
+        await tick(el, "b2");
+        await reached(el);
+
+        api.getSplitSources!.mockResolvedValue(without("b2"));
+        await rereadBills(el, billsWithout("b2"));
+        expect(splitButton(el).disabled).toBe(false);
+
+        await pressSplit(el);
+        expect(api.splitTable).not.toHaveBeenCalled();
+        expect(refusal(el)!.textContent).toContain(
+          t("table.split_bill_gone").replace("{bill}", "Bill 2"),
+        );
+
+        await pressSplit(el);
+        expectSentOnce(whole(), []);
+      });
+
+      it(title("in Spanish"), async () => {
+        server.bills.add("b2");
+        server.bills.add("b3");
+        const el = await mounted("desktop", { ...threeBillApi(), splitTable: vi.fn() });
+        setLocale("es-ES");
+        await toPanel(el);
+        await tick(el, "b2");
+
+        await reached(el);
+
+        expect(refusal(el)!.textContent).toContain(
+          t("table.split_taken", "es-ES").replace("{who}", "Luis"),
+        );
+        expect(splitButton(el).textContent!.trim()).toBe(t("table.split_guests_confirm", "es-ES"));
+        expect(api.splitTable).not.toHaveBeenCalled();
+      });
+
+      it(title("a ticked bill goes and comes back"), async () => {
+        fakeTimers();
+        const el = await panel();
+        await tick(el, "b2");
+        await tick(el, "b3");
+        await reached(el);
+
+        api.getSplitSources!.mockResolvedValue(without("b2"));
+        await rereadBills(el, billsWithout("b2"));
+        api.getSplitSources!.mockResolvedValue(threeAnswered());
+        await rereadBills(el, [...billsWithout("b2"), partyBill("b2", 4, "20.00")]);
+
+        expect(tickBox(el, "b2").checked).toBe(false);
+
+        await pressSplit(el);
+        expect(api.splitTable).not.toHaveBeenCalled();
+        expect(refusal(el)!.textContent).toContain(changedWords("Bill 4"));
+
+        await pressSplit(el);
+        expectSentOnce(whole("b3"), [b3Whole]);
+      });
     });
   });
 
