@@ -1252,6 +1252,40 @@ describe("the folder of an operation that closed", () => {
     expect(existsSync(folderOf(NO_ROW))).toBe(true);
   });
 
+  it("a wait on a live operation lists the folders once, at the start, whatever the passes", async () => {
+    const r = await rig();
+    const closed = join(r.stateDir, "handover", OP);
+    await advanceHandover(r.m2Store, OP, "replaced", {});
+    await beginHandover(r.m2Store, r.binding(OTHER_OP), "destination");
+    await mkdir(closed, { recursive: true });
+    await r.listen(r.m1App({ restricted: false }));
+    vi.mocked(readdir).mockClear();
+    await r.start();
+    await vi.waitFor(() => expect(r.statusReads()).toBeGreaterThan(3), { timeout: 10_000 });
+    expect(existsSync(closed)).toBe(false);
+    const listings = vi
+      .mocked(readdir)
+      .mock.calls.filter(([path]) => path === join(r.stateDir, "handover"));
+    // Failing case, a sweep at every pass: one listing for each status read and more.
+    expect(listings).toHaveLength(1);
+  });
+
+  it("a pass with no work lists the folders once, the first of them included", async () => {
+    const r = await rig();
+    await advanceHandover(r.m2Store, OP, "replaced", {});
+    vi.mocked(readdir).mockClear();
+    const duty = (await r.start())!;
+    const listings = () =>
+      vi.mocked(readdir).mock.calls.filter(([path]) => path === join(r.stateDir, "handover"));
+    await vi.waitFor(() => expect(listings()).toHaveLength(1));
+    await settle();
+    expect(listings()).toHaveLength(1);
+    duty.wake();
+    await vi.waitFor(() => expect(listings()).toHaveLength(2));
+    await settle();
+    expect(listings()).toHaveLength(2);
+  });
+
   it("a closed operation's folder that cannot be removed is logged, and the next wake tries again", async () => {
     const r = await rig();
     await advanceHandover(r.m2Store, OP, "replaced", {});

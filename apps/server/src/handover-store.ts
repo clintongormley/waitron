@@ -1,3 +1,5 @@
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
 import { withNodeTransaction, type NodeDatabase, type NodeTransaction } from "@waitron/db";
 import {
@@ -14,6 +16,7 @@ import {
   appendHandoverEventTx,
   beginHandoverOperationTx,
   readHandoverOperation,
+  type HandoverOperation,
 } from "@waitron/node-db";
 import { AppError, type ErrorCode } from "@waitron/shared";
 import "./errors.js";
@@ -113,6 +116,21 @@ export async function advanceHandoverTx(
     envelope: envelope === undefined ? null : canonicalize(envelope as unknown as CanonicalValue),
   });
   await advanceHandoverOperationTx(tx, nodeId, operationId, to, null);
+}
+
+/**
+ * The operations this box took the destination role in that have a folder under `stateDir`. A
+ * source's folder is its capture and a folder no row names is nothing of ours, so neither is yielded.
+ */
+export async function* destinationOperationFolders(
+  deps: HandoverStoreDeps,
+  stateDir: string,
+): AsyncGenerator<HandoverOperation> {
+  const names = await readdir(join(stateDir, "handover")).catch(() => []);
+  for (const name of names) {
+    const row = await readHandoverOperation(deps.node, deps.nodeId, name);
+    if (row?.role === "destination") yield row;
+  }
 }
 
 /** Closes a source operation that never stepped down, storing the refusal a repeat answers. */

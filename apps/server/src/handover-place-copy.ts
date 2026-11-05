@@ -3,7 +3,6 @@ import {
   chmod,
   copyFile,
   open,
-  readdir,
   rename,
   rm,
   rmdir,
@@ -15,7 +14,7 @@ import { lockVenueDatabase, withNodeTransaction, type NodeDatabase } from "@wait
 import { parseIndicator, type RetainedRevision } from "@waitron/handover";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import { mergeModulePreparationRevisions } from "@waitron/provisioning";
-import { appendHandoverEventTx, readHandoverEvent, readHandoverOperation } from "@waitron/node-db";
+import { appendHandoverEventTx, readHandoverEvent } from "@waitron/node-db";
 import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
 import { NODE_FILE, SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
@@ -24,7 +23,7 @@ import { errnoOf } from "./errno.js";
 import { acceptedCopyPath } from "./handover-acceptance.js";
 import { digestFileIfPresent, FINAL_STATE_EVENT } from "./handover-capture.js";
 import { oldBoxStillMain } from "./handover-chart.js";
-import { waitHandoverTx } from "./handover-store.js";
+import { destinationOperationFolders, waitHandoverTx } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { isReadableChart } from "./membership-trust.js";
 import { INCOMING_SUFFIX, VENUE_FILE_MODE } from "./restore.js";
@@ -366,12 +365,9 @@ export async function removePlacedCopies(args: {
 }): Promise<void> {
   const { node, nodeId, stateDir, log } = args;
   try {
-    const names = await readdir(join(stateDir, "handover")).catch(() => []);
-    for (const name of names) {
-      const row = await readHandoverOperation(node, nodeId, name);
-      if (row?.role !== "destination") continue;
-      const placed = await readHandoverEvent(node, nodeId, name, COPY_PLACED_EVENT);
-      if (placed !== null) await removeAcceptedCopy(stateDir, name, log);
+    for await (const { operationId } of destinationOperationFolders({ node, nodeId }, stateDir)) {
+      const placed = await readHandoverEvent(node, nodeId, operationId, COPY_PLACED_EVENT);
+      if (placed !== null) await removeAcceptedCopy(stateDir, operationId, log);
     }
   } catch (error) {
     log("error", "handover-place-copy.sweep_failed", { error: String(error) });

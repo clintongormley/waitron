@@ -1,4 +1,4 @@
-import { mkdir, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -12,7 +12,6 @@ import {
 import type { CanonicalValue, RoutableServer } from "@waitron/membership";
 import {
   readHandoverEvent,
-  readHandoverOperation,
   readMirrorLink,
   readNodeMode,
   readOpenHandoverOperation,
@@ -31,7 +30,7 @@ import type { Statfs } from "./free-bytes.js";
 import { movedOnFromSource, oldBoxStillMain } from "./handover-chart.js";
 import { COPY_PLACED_EVENT } from "./handover-place-copy.js";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
-import { advanceHandover, waitHandover } from "./handover-store.js";
+import { advanceHandover, destinationOperationFolders, waitHandover } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { boxDownload, boxExchange } from "./mirror-bundle-fetch.js";
 import type { PeerQueryPurpose, PeerStatusBody } from "./peer-status-api.js";
@@ -230,6 +229,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
   let woken = false;
   let rouse: () => void = () => {};
   let held: HeldCopy | undefined;
+  let sweptAtStart = false;
 
   const wake = () => {
     woken = true;
@@ -299,15 +299,12 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
 
   /**
    * An operation that closes from `prepared` leaves a whole venue's copy nothing will read again.
-   * A source's folder is its own capture (`handover-capture.ts`).
+   * Swept when the duty starts and on a pass with no work, never at each tick of a wait on a live
+   * operation.
    */
   async function removeClosedFolders(): Promise<void> {
-    const names = await readdir(join(deps.stateDir, "handover")).catch(() => []);
-    for (const name of names) {
-      const row = await readHandoverOperation(deps.node, deps.nodeId, name);
-      if (row?.role === "destination" && (row.state === "abandoned" || row.state === "replaced")) {
-        await removeFolder(row.operationId);
-      }
+    for await (const { operationId, state } of destinationOperationFolders(deps, deps.stateDir)) {
+      if (state === "abandoned" || state === "replaced") await removeFolder(operationId);
     }
   }
 
@@ -581,7 +578,11 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
   }
 
   async function pass(): Promise<boolean> {
-    await removeClosedFolders();
+    const sweptNow = !sweptAtStart;
+    if (sweptNow) {
+      await removeClosedFolders();
+      sweptAtStart = true;
+    }
     // A start that places records the event before this duty runs, and a start that refuses to place
     // is one this asks for no longer, so this cannot loop; a restart sent before the shutdown handlers
     // are in, on a box where Node is process 1, does nothing.
@@ -604,7 +605,10 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       return true;
     }
     const operation = await workToDo();
-    if (operation === null) return false;
+    if (operation === null) {
+      if (!sweptNow) await removeClosedFolders();
+      return false;
+    }
     if (operation.state === "copy_accepted") {
       await postAcceptance(operation);
       return true;
