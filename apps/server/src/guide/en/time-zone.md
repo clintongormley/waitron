@@ -6,7 +6,7 @@ If the venue's saved time zone is missing or invalid, Waitron stops trading befo
 
 ## Choose and confirm {#confirm}
 
-Choose the time zone for the venue's location. The suggestion comes from its saved country and province; check it rather than assuming it is correct. Nothing is selected or confirmed for you.
+Choose the venue's time zone. The suggestion comes from its saved country and province; check it rather than assuming it is correct. Nothing is selected or confirmed for you.
 
 Check the local date and time, the UTC offset in minutes and the business date. The business date can be yesterday before your retained day changeover. For example, at 01:30 on 15 October with a 06:00 changeover, the business date is 14 October.
 

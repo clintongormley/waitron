@@ -99,12 +99,12 @@ Add the language again to resume using those translations. The default language'
 During setup, the receipt-language choices and review use the wizard's screen language for their
 names. Changing the wizard's screen language keeps your selected receipt language.
 
-Your receipt-language settings remain independent. A receipt prints in one language. Each
-location's default is chosen in the **Defaults** card of **Venue settings**, which fixes it to
-Catalan in Catalonia, and staff can choose another language for a sale, or for a copy, at the till.
-The till offers the location's receipt language and, in Spain, whichever of Spanish, Catalan,
-Galician and Basque are among your content languages, so adding English content does not add an
-English receipt.
+Your receipt-language settings remain independent. A receipt prints in one language. The
+venue's default is chosen in the **Defaults** card of **Venue settings**, which fixes it to Catalan
+in Catalonia, and staff can choose another language for a sale, or for a copy, at the till. The
+till offers the venue's receipt language and, in Spain, whichever of Spanish, Catalan, Galician and
+Basque are among your content languages, so adding English content does not add an English
+receipt.
 
 The receipt's language chooses its headings. Dish names, units and option answers come from the
 names stored with the order, so editing translations or changing the content default does not

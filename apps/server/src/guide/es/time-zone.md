@@ -6,7 +6,7 @@ Si la zona horaria guardada del local falta o no es válida, Waitron detiene las
 
 ## Elegir y confirmar {#confirm}
 
-Elige la zona horaria de la ubicación del local. La sugerencia procede del país y la provincia guardados; compruébala en lugar de darla por correcta. No hay ninguna opción seleccionada ni confirmada de antemano.
+Elige la zona horaria del local. La sugerencia procede del país y la provincia guardados; compruébala en lugar de darla por correcta. No hay ninguna opción seleccionada ni confirmada de antemano.
 
 Comprueba la fecha y hora local, el desfase UTC en minutos y la jornada. Antes del cambio de jornada conservado, la jornada puede ser la de ayer. Por ejemplo, a las 01:30 del 15 de octubre con un cambio a las 06:00, la jornada es el 14 de octubre.
 

@@ -100,11 +100,11 @@ Durante la configuración, las opciones del idioma del ticket y el resumen muest
 en el idioma de la pantalla. Cambiar el idioma de la pantalla conserva el idioma del ticket elegido.
 
 Los idiomas de los tickets son independientes. Cada ticket se imprime en un idioma. El
-predeterminado de la ubicación se elige en **Valores predeterminados**, en **Datos del local**, y se
-fija al catalán en Cataluña. El personal puede elegir otro idioma para una venta o una copia en la
-caja. La caja ofrece el idioma del ticket de la ubicación y, en España, el español, el catalán, el
-gallego y el euskera que estén entre los idiomas del contenido. Añadir inglés al contenido no añade
-un ticket en inglés.
+predeterminado del local se elige en **Valores predeterminados**, en **Datos del local**, y se fija
+al catalán en Cataluña. El personal puede elegir otro idioma para una venta o una copia en la caja.
+La caja ofrece el idioma del ticket del local y, en España, el español, el catalán, el gallego y el
+euskera que estén entre los idiomas del contenido. Añadir inglés al contenido no añade un ticket en
+inglés.
 
 El idioma del ticket elige sus encabezados. Los nombres de los platos, las unidades y las respuestas
 proceden del pedido guardado. Editar traducciones o cambiar el predeterminado no cambia los nombres
