@@ -5715,6 +5715,7 @@ export class TillTableOrderScreen extends LitElement {
     const sources = this.#splitSources();
     if (sources?.some((source) => source.bill.workingOrderId === billId) === false) {
       const name = bill ?? billNumberLabel({ billNumber: null });
+      this.#splitGone.delete(billId);
       this.splitMessage = this.#saySplitStop(billId, name, false);
       return;
     }

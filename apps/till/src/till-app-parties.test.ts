@@ -11748,7 +11748,7 @@ describe("till-app: split-table editing observations", () => {
   });
 
   for (const change of ["API", "bill", "party"] as const) {
-    it.each(["success", "refusal", "guest refusal"])(
+    it.each(change === "bill" ? ["success"] : ["success", "refusal", "guest refusal"])(
       "ignores a late %s after changing " + change,
       async (outcome) => {
         const pending = held();
@@ -11803,6 +11803,76 @@ describe("till-app: split-table editing observations", () => {
       },
     );
   }
+
+  it.each([
+    {
+      outcome: "refusal",
+      refused: { code: "draft.out_of_date" },
+      error: codeMessage("draft.out_of_date"),
+      splitRefusal: null,
+    },
+    {
+      outcome: "guest refusal",
+      refused: { code: "management.request_invalid", field: "guestCounts.leaving" },
+      error: null,
+      splitRefusal: {
+        tableId: "t5",
+        selection: oneBill("wo-check"),
+        staying: "2",
+        leaving: "1",
+        field: "leaving",
+        message: t("seat.guest_count_invalid"),
+      },
+    },
+  ])(
+    "still says a late $outcome after changing bill, and a second press sends one request",
+    async ({ refused, error, splitRefusal }) => {
+      const pending = held();
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([atTwo, table5, table7]),
+        listDrafts: observations(),
+        splitTable: pending.call,
+      });
+      const press = () =>
+        emit(tableOrder(el)!, "split-table", {
+          tableId: "t5",
+          selection: oneBill("wo-check"),
+          guestCounts: guests,
+        });
+      await openMesa(el);
+      press();
+      await expect.poll(() => pending.call.mock.calls.length).toBe(1);
+      emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+      await flush(el);
+      const seen = () => ({
+        bill: tableOrder(el)?.orderId,
+        party: tableOrder(el)?.party?.id,
+        error: banner(el)?.textContent ?? null,
+        splitRefusal: tableOrder(el)?.splitRefusal,
+        tables: vi.mocked(api.getTablesState).mock.calls.length,
+        bills: vi.mocked(api.getPartyBills).mock.calls.length,
+      });
+      const before = seen();
+
+      pending.answer.refuse(refused);
+      await flush(el, 5);
+
+      expect(seen()).toEqual({ ...before, error, splitRefusal });
+
+      press();
+      await expect.poll(() => pending.call.mock.calls.length).toBe(2);
+      await flush(el, 5);
+      expect(pending.call).toHaveBeenCalledTimes(2);
+      expect(pending.call).toHaveBeenLastCalledWith(
+        "v1",
+        "t5",
+        oneBill("wo-check"),
+        3,
+        [edit],
+        guests,
+      );
+    },
+  );
 });
 
 describe("till-app: Split a table's list of tables", () => {

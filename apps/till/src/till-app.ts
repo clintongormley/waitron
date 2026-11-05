@@ -12109,6 +12109,8 @@ export class TillApp extends LitElement {
       }
       return answer;
     } catch {
+      // The floor may have moved the party's revision by now, and no list says whether the rows did.
+      this.#splitBillsSeen = undefined;
       if (
         read === this.#partyBillsRead &&
         !background &&
@@ -15783,8 +15785,9 @@ export class TillApp extends LitElement {
   };
   /** Whose answer {@link splitRead} may hold, which outlives the panel for a refusal's reopen. */
   #splitReadParty?: string;
-  /** The bills list {@link splitRead}'s rows were read against, or nothing if a read since failed or
-   * was dropped. Outlives the panel: a list read while it is closed must not count as seen. */
+  /** The bills list {@link splitRead}'s rows were read against, or nothing if a sources read since
+   * failed or was dropped, or a bills read failed. Outlives the panel: a list read while it is closed
+   * must not count as seen. */
   #splitBillsSeen?: string;
   #splitReadGeneration = 0;
   #splitReadAbort?: AbortController;
@@ -15903,18 +15906,14 @@ export class TillApp extends LitElement {
     this.splitReloading = true;
     const visit = this.#orderVisit;
     try {
+      // Only leaving ends this: a panel closed during these reads leaves a party that still needs
+      // its bill and sync.
       await this.#reloadTables();
-      if (panel !== this.#splitPanel) return;
+      if (visit !== this.#orderVisit) return;
       this.#rememberOrderParty();
       const before = this.partyBills;
       const answer = await this.#loadPartyBills(undefined, false, true);
-      // The floor can give this table to another party, which closes the panel and still needs its
-      // bill and sync; anything else that closed the panel is the waiter's own doing.
-      if (
-        panel !== this.#splitPanel &&
-        (visit !== this.#orderVisit || this.orderParty?.id === panel.partyId)
-      )
-        return;
+      if (visit !== this.#orderVisit) return;
       await this.#followBillsRead(answer, before, true);
       // Whichever panel is open now draws what this read found, so Split acts on that, not on what
       // it opened with.
@@ -19523,11 +19522,12 @@ export class TillApp extends LitElement {
     }
     this.errorKey = undefined;
     const refusalAsked = this.splitRefusal;
+    const session = this.#operatorSession;
     try {
       await this.api.putLocale(code);
       // The preference is saved; a detached till skips only the local repaint.
       if (!this.isConnected) return;
-      this.#dropSplitRefusalForLanguage(refusalAsked);
+      if (session === this.#operatorSession) this.#dropSplitRefusalForLanguage(refusalAsked);
       setLocale(code);
     } catch {
       this.errorKey = "locale.save_failed";
@@ -19535,8 +19535,8 @@ export class TillApp extends LitElement {
   }
 
   /** A new language draws a new screen, which reopens no panel for a refusal it is handed at birth.
-   * The waiter answered the unsaved-work question for `asked`; one that landed since has only flashed
-   * by, so the banner keeps it. */
+   * One held when the language was chosen goes silently; one that landed since has only flashed by,
+   * so the banner keeps it. */
   #dropSplitRefusalForLanguage(asked: SplitRefusal | null): void {
     const refusal = this.splitRefusal;
     if (refusal === null) return;

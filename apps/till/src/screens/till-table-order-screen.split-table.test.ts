@@ -1969,6 +1969,23 @@ describe("A803 split: Everything ticked", () => {
     expect(sent).toHaveLength(1);
   });
 
+  it("Everything ticked: a first bill's reads still out disable Split anyway until they are done", async () => {
+    const { el, sent } = await everythingTicked();
+    split(el).click();
+    await settled(el);
+    const anyway = () => q<HTMLElement & { disabled: boolean }>(el, "[data-split-anyway]")!;
+    expect(anyway().disabled).toBe(false);
+
+    el.splitReloading = true;
+    await settled(el);
+    expect(anyway().disabled).toBe(true);
+
+    el.splitReloading = false;
+    await settled(el);
+    expect(anyway().disabled).toBe(false);
+    expect(sent).toEqual([]);
+  });
+
   it("Everything ticked: Enter from a stepper under the question sends nothing and moves no one", async () => {
     const { el, sent } = await everythingTicked();
     const moved = heard(el, "move-guests");
