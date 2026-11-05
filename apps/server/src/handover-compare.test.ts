@@ -102,6 +102,23 @@ vi.mock("node:worker_threads", async (importOriginal) => {
   return { ...real, Worker: CountedWorker };
 });
 
+const fileFlushes = vi.hoisted(() => ({
+  seen: null as null | ((path: string) => Promise<void>),
+}));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const real = await importOriginal<typeof import("node:fs/promises")>();
+  const open = async (...args: Parameters<typeof real.open>) => {
+    const handle = await real.open(...args);
+    const sync = handle.sync.bind(handle);
+    handle.sync = async () => {
+      await sync();
+      await fileFlushes.seen?.(String(args[0]));
+    };
+    return handle;
+  };
+  return { ...real, open };
+});
+
 const fileReads = vi.hoisted(() => ({ paths: [] as string[] }));
 vi.mock("node:fs", async (importOriginal) => {
   const real = await importOriginal<typeof import("node:fs")>();
@@ -1460,6 +1477,25 @@ describe("the spare's duty runs the real comparison", () => {
       await vi.waitFor(async () => expect((await r.row()).state).toBe("filing_assumed"), {
         timeout: 15_000,
       });
+    }, 60_000);
+
+    it("flushes the folder holding the moved file before it records anything", async () => {
+      const r = await dutyRig();
+      await mkdir(dirname(r.path), { recursive: true });
+      await copyFile(finalCopyPath(r.m1State, OP), r.path);
+      const folder = dirname(acceptedCopyPath(r.m2State, OP));
+      const recordedAtFlush: unknown[] = [];
+      fileFlushes.seen = async (path) => {
+        if (path === folder) recordedAtFlush.push(await acceptedEvent(r));
+      };
+      try {
+        const deps = { node: suite.node, ring: RING, nodeId: r.m2.nodeId, stateDir: r.m2State };
+        await acceptFinalCopy(deps, await r.row(), r.indicator, r.path);
+      } finally {
+        fileFlushes.seen = null;
+      }
+      expect(recordedAtFlush).toEqual([null]);
+      expect(await acceptedEvent(r)).not.toBeNull();
     }, 60_000);
 
     it("a file that cannot be moved into place records nothing", async () => {

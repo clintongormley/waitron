@@ -242,7 +242,13 @@ export function mountHandoverSourceStartApi(
         `${contactUrl.replace(/\/+$/, "")}${OFFER_PATH}`,
         envelope,
       );
-    } catch {
+    } catch (error) {
+      // The one answer covers a fault in this box's own key too, so only this line tells them apart.
+      log("warn", "handover-source-start.offer_not_sent", {
+        operationId,
+        destinationNodeId,
+        error: String(error),
+      });
       return unreachable(destinationNodeId);
     }
     if (answer.status < 200 || answer.status > 299) {
@@ -360,7 +366,15 @@ export function mountHandoverSourceStartApi(
       return abandon(operationId, { code: "handover.membership_changed", params: {} });
     }
     // Before the offer goes, as `answerToOffer` reads the same key: a read that fails sends nothing.
-    const joined = await holdsJoinedSpare(deps, destinationNodeId).catch(() => null);
+    const joined = await holdsJoinedSpare(deps, destinationNodeId).catch((error: unknown) => {
+      // The refusal below reads as the other box's fault, so only this line names this box's own key.
+      log("warn", "handover-source-start.spare_check_failed", {
+        operationId,
+        destinationNodeId,
+        error: String(error),
+      });
+      return null;
+    });
     if (joined === null) return abandon(operationId, unreachable(destinationNodeId));
     if (!joined) {
       return abandon(operationId, {

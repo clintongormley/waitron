@@ -1,22 +1,16 @@
 import type { Hono } from "hono";
 import { readNodeMembership } from "@waitron/db";
-import type { HandoverRole, HandoverState, SignedHandoverEnvelope } from "@waitron/handover";
+import type { SignedHandoverEnvelope } from "@waitron/handover";
 import type { CanonicalValue } from "@waitron/membership";
 import { readHandoverOperation, type HandoverOperation } from "@waitron/node-db";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { signAsThisBox } from "./handover-signing.js";
 import type { Logger } from "./logger.js";
-import type { PeerStatusApiDeps } from "./peer-status-api.js";
+import type { PeerOperationStatus, PeerStatusApiDeps } from "./peer-status-api.js";
 import "./errors.js";
 
-export interface HandoverStatusBody {
-  operationId: string;
-  role: HandoverRole;
-  scenario: "controlled" | "emergency";
-  state: HandoverState;
-  sourceNodeId: string;
-  destinationNodeId: string;
+export interface HandoverStatusBody extends PeerOperationStatus {
   waitingReason: string | null;
   handoverPage?: string;
 }

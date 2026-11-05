@@ -495,6 +495,25 @@ describe("POST /api/node/handover/offer", () => {
   });
 
   describe("another operation", () => {
+    it("two identical offers at once get one answer and record one operation", async () => {
+      const envelope = envelopeOf();
+      const [first, second] = await Promise.all([post(envelope), post(envelope)]);
+      expect((await signedStatusOf(first)).state).toBe("prepared");
+      expect((await signedStatusOf(second)).state).toBe("prepared");
+      expect(events()).toHaveLength(1);
+    });
+
+    it("refuses a controlled offer while an emergency operation is open", async () => {
+      await beginHandover(
+        store(),
+        { ...binding, operationId: OTHER_OP, scenario: "emergency" },
+        "destination",
+      );
+      expect(await post(envelopeOf())).toEqual(
+        refusal(409, "handover.operation_in_progress", { operationId: OTHER_OP }),
+      );
+    });
+
     it("refuses `handover.operation_in_progress` while another is open", async () => {
       await post(envelopeOf({ operationId: OTHER_OP }));
       expect(await post(envelopeOf())).toEqual(

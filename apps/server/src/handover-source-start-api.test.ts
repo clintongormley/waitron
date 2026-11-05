@@ -107,6 +107,7 @@ let spareApp: Hono;
 let gate: HandoverGate;
 let exchange: Exchange;
 let exchanged: string[];
+const logged: { level: string; message: string; detail: unknown }[] = [];
 let stepDownAfterOffer: ReturnType<typeof vi.fn<HandoverSourceStartDeps["stepDownAfterOffer"]>>;
 let socket: TLSSocket;
 let mainState: string;
@@ -194,7 +195,7 @@ function mount(
       }) as typeof fetch,
       ...overrides,
     },
-    () => undefined,
+    (level, message, detail) => void logged.push({ level, message, detail }),
   );
   built.post("/sale", (c) => c.json({ sold: true }));
   return built;
@@ -855,6 +856,25 @@ describe("an offer the spare refuses", () => {
     await expectAbandoned("handover.destination_unreachable", { destinationNodeId: spare });
   });
 
+  it("an offer that could not be sent logs why, beside the plain refusal", async () => {
+    exchange = offerAnswers(() => {
+      throw new Error("connection refused");
+    });
+    logged.length = 0;
+    expect(await start()).toEqual(
+      refusal(409, "handover.destination_unreachable", { destinationNodeId: spare }),
+    );
+    expect(logged).toContainEqual({
+      level: "warn",
+      message: "handover-source-start.offer_not_sent",
+      detail: {
+        operationId: expect.any(String),
+        destinationNodeId: spare,
+        error: expect.stringContaining("connection refused"),
+      },
+    });
+  });
+
   it("repeats a refusal with no params when its code carries none", async () => {
     exchange = offerAnswers(() => answered(409, { error: { code: "handover.not_a_spare" } }));
     expect(await start()).toEqual(refusal(409, "handover.not_a_spare"));
@@ -1045,8 +1065,18 @@ describe("the same operation again", () => {
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
     });
 
+    logged.length = 0;
     const answer = await start({}, mount({ ring: otherRing }));
 
+    expect(logged).toContainEqual({
+      level: "warn",
+      message: "handover-source-start.spare_check_failed",
+      detail: {
+        operationId: expect.any(String),
+        destinationNodeId: spare,
+        error: expect.stringContaining("credentials.decrypt_failed"),
+      },
+    });
     expect({ answer, state: operations()[0]!.state, exchanged }).toEqual({
       answer: refusal(409, "handover.destination_unreachable", { destinationNodeId: spare }),
       state: "abandoned",
