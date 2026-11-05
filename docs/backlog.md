@@ -5862,7 +5862,8 @@ Not in any track until the standalone primary is done.
 
 - **The peer-status route's minor follow-ups.** A bad signature from a known box answers 403, the
   operation id is not checked as a UUID, and a body of any size is read before the signature check,
-  here and on the two handover source routes (Slice 4). Left open by A1018 Slice 3. [Detail](backlog/replication-cloud.md#the-peer-status-routes-minor-follow-ups)
+  here, on the two handover source routes (Slice 4), on the offer and on the acceptance (Slice 5).
+  Left open by A1018 Slice 3. [Detail](backlog/replication-cloud.md#the-peer-status-routes-minor-follow-ups)
 
 - **The carry-on page's unexpected-failure sentence does not call itself a fault in Waitron**
   (`failed` in `apps/server/src/i18n/waiting-page.ts`). A refused disk write lands there too, so
@@ -5885,16 +5886,140 @@ Not in any track until the standalone primary is done.
   plan yet builds its path, including whose invoice series the new main box takes. A947 3b's table
   expects Slice 5 to reach these venues. Left open by A1018 Slice 5 (Ruling P9).
 
-- **A1018 Slice 5 must merge the old box's never-activated minute names into the new box's own
-  preparation file (Task 5.7).** The owner decided on 2026-11-04 that such a name counts as used
-  (Slice 4's Ruling R3, built as planned in #2442); until Task 5.7 is built a spare can still reuse
-  one (`apps/server/src/handover-minute-history.test.ts`, case 2).
-  [Decision](backlog/replication-cloud.md#decisions-and-deliberate-limits)
+- **FOR THE OWNER, settle before A947 3b lands: a selling box that takes a newer chart naming another
+  main box keeps selling and filing.** It stops only when the chart fences it, and a third box's
+  promotion can leave it `serving-secondary`, which does not. Two boxes filing could not be repaired.
+  Left open by A1018 Slice 5 (Ruling R42).
+  [Detail](backlog/replication-cloud.md#a-selling-box-that-takes-a-newer-chart-naming-another-main-box-keeps-selling-and-filing)
 
-- **The signed peer query names no route.** In review, one envelope a box signed was accepted by
-  `/api/node/peer-status` and twice by the final-copy route; Slice 5's status reads must not sign
-  the same shape (bind a purpose field to the route, or a nonce accepted once). Left open by A1018
-  Slice 4 (Slice 4's Ruling R10).
+- **FISCAL, settle before A947 3b lands: after a handover the new main box gives no certificate
+  expiry warning.** Filing and a renewal work, but every reader looks up the install record by this
+  box's node id, and the record names the old box. The owner decides which box the record belongs
+  to. Left open by A1018 Slice 5 (Ruling R51).
+  [Detail](backlog/replication-cloud.md#after-a-handover-the-new-main-box-gives-no-certificate-expiry-warning)
+
+- **A spare needs the main box's backup settings, and nothing carries them yet.** The owner's answer
+  (2026-11-04): joining gives `backup.env`, later changes follow, and a spare that was off catches
+  up. Until then a venue with a recovery key is refused `handover.backup_settings_differ` at the
+  offer, the main box still selling. Goes in A947 3b's plan, with A1273. Ruling O3.
+
+- **A dormant setup held from an earlier event can drop a series the old box added; settle before
+  Slice 13 or 3b-F.** The switch-on then activates on the old series and says nothing (run, A1018
+  Slice 5's Ruling R39). Beside it: a second live standard series made a sale answer a plain
+  `server.internal` 500 in a test fixture, cause not traced.
+
+- **The first hand-back is refused after the giving box has stopped filing; settle before Slice 13
+  or 3b-F.** M2 to M1 answers `sif.allocation_invalid` `standby_already_active` at the first request,
+  because M1's registration stays active (run on a promoted database standing in for the copy).
+  Left open by A1018 Slice 5 (Ruling R40).
+
+- **A different key under the same version passes the handover's comparison.** It compares ring
+  versions only, so M2 places a copy whose sealed rows it cannot open, and filing then refuses (both
+  run in a test). A real join copies the ring (`apps/server/src/adopt.ts`), so no real box reaches
+  it today. Left open by A1018 Slice 5 (Ruling R49).
+
+- **A new box has no way out while a third box is main.** At `copy_accepted` or `filing_assumed` it
+  waits on `handover.source_no_longer_main`, and the emergency path refuses from those states (read,
+  not run); at `filing_assumed` neither the old box nor the new one files. Slice 6 has to show it.
+  Left open by A1018 Slice 5 (Ruling R43).
+
+- **A healthy third box makes a new main box wait, with nothing wrong.** The chart it minted carries
+  only its own endorsement and `peerKeyOf` does not read `nodes`, so the third box's answer is
+  `not_verified` (`apps/server/src/boot-peer-check.ts`, run). A neighbour of A1276, a different
+  symptom. Predates A1018 Slice 5 (Ruling R44).
+
+- **A placed copy can lose a newer chart.** Placing replaces the old file's chart, so a newer chart
+  still naming the old box is lost and M2 can mint below a term another box holds; placing's check
+  ignores the term; R41's way back loses the chart that cleared the wait. Nothing real mints such a
+  chart today. [Detail](backlog/replication-cloud.md#a-placed-copy-can-lose-a-newer-chart)
+
+- **The module preparation file grows with every write, and a handover cannot promise room in it.**
+  Every revision repeats all earlier entries under a 1 MiB cap. The handover's size check keeps room
+  for three writes now, and any further write can still fill the file. Left open by A1018 Slice 5
+  (Rulings R29, R30).
+  [Detail](backlog/replication-cloud.md#the-module-preparation-file-grows-with-every-write-and-a-handover-cannot-promise-room-in-it)
+
+- **A kill while placing a copy can reach the repair page in one narrow order.** It takes a box with
+  a first-setup record, tenant and location rows only in the old `-wal`, a kill from the side-file
+  step on, and placing before the ahead check. Production's order drains the `-wal` first
+  (`apps/server/src/boot.place-copy.test.ts` pins it). Left open by A1018 Slice 5 (Ruling R31).
+
+- **Backup settings the environment owns are not compared at a handover.** With `backup.env` absent
+  on both boxes both digests are `null`, whatever the two environments hold. Left open by A1018
+  Slice 5 (Ruling P15).
+
+- **A backup setting in `trading.env` or `secrets.env` is not compared at a handover.** Only a hand
+  edit puts one there (the writers read, not run). Two such boxes pass and can differ in a retention
+  count or a hidden recovery key. Left open by A1018 Slice 5 (Ruling R21).
+
+- **Nothing limits sign-in attempts on a box's operation routes.** Handover preparation, activation
+  and promote have no throttle, and one belongs on all of them. 32 attempts on an administrator's
+  email held their sign-in about 0.8 s and 64 about 2.5 s, with no refusal; nothing larger was run.
+  Left open by A1018 Slice 5 (Ruling R38).
+
+- **A real account's refused sign-in can take a fraction of a millisecond longer than an unknown
+  one's.** Measured at 0.03 to 0.24 ms at one attempt; it follows the one dummy hash all refusals
+  share (`checkManagerPassword`, `packages/identity/src/manager-login.ts`) and vanished with one
+  account and one unknown address. The login rule is absolute, so it needs a ruling. `git log -S`
+  finds that hash from 2026-08-30, before A1018.
+
+- **After a plain promote nobody sweeps the old box's open card payments.** That route writes no
+  activation row, and a fenced box no longer sweeps, so a payment stays `attempting` until a person
+  resolves it on the new box. A text search found no screen calling the route. Left open by A1018
+  Slice 5 (Rulings R47, R48).
+
+- **A failed promotion leaves `trading.env` behind.** `apps/server/src/promote.ts` writes it inside
+  the transaction's body, so a failed activation leaves it written (run: false, then true). On main
+  since at least #1587 (`git log -S`). A start with that leftover and no retry was not run.
+
+- **Two safe handover states stay open for good.** A box handed a fencing chart between the role and
+  its record, then killed, stays restricted at `filing_assumed`; one handed it between the venue save
+  and the role, then killed, stays a mirror holding an activation row and its own SIF. Neither sold
+  or filed in the runs, and no route clears them. Left open by A1018 Slice 5.
+
+- **A stepped-down old box answers a sale with a plain 404, so a till shows a generic "try again".**
+  It is safe (the till does not read the outcome as unknown), but "try again" keeps failing until the
+  new box is switched on; the stepping-down window just before answers 503 with its own words. Left
+  open by A1018 Slice 5.
+
+- **A new main box's chart post says too little in its log.** `chart_not_accepted` cannot tell a
+  refusal from a chart the old box already holds, because the route answers one boolean, and a
+  switched-off old box logs only `AggregateError`, with no ids. A fix to the route's answer needs a
+  ruling. Left open by A1018 Slice 5 (Ruling R53).
+
+- **No test holds "M1 is restricted before, during and after" at every state.** It is true now, but
+  nothing holds it at `return_pending`, `return_complete` or `replaced`. Due before Slices 10 and 13
+  add code that changes those states. Left open by A1018 Slice 5.
+
+- **A waiting spare repeats work and log lines with no back-off.** A copy with a dangling row was
+  fetched whole 4 times in 17 s with the old box stopped, and other waits log every 5 s. Left open by
+  A1018 Slice 5 (Ruling R53).
+  [Detail](backlog/replication-cloud.md#a-waiting-spare-repeats-work-and-log-lines-with-no-back-off)
+
+- **The spare's digest of a copy takes no stop signal.** A stop during it waits for the read to end;
+  the cost on a large file was not measured. Left open by A1018 Slice 5 (Ruling R53).
+
+- **A hung integrity check on a copy has no time limit.** Only an answer, an exit or a stop ends the
+  wait, so the duty would wait with no reason recorded, and the frozen-process watchdog does not see
+  it (read, not run). Left open by A1018 Slice 5 (Ruling R53).
+
+- **A throw while checking a copy leaves no reason a person can read.** It reaches only the log, with
+  the old box stopped (run with a journal with no `hash` column). Left open by A1018 Slice 5 (Ruling
+  R53).
+
+- **The spare's folder clean-up reads any `readdir` failure as an empty folder.** A refusal to read
+  ends the sweep with no log line and leaves a closed operation's venue copy
+  (`apps/server/src/handover-destination-duty.ts`, read, not run). Left open by A1018 Slice 5 (Ruling
+  R53).
+
+- **A box can refuse its start while its `venue.db` already holds the accepted copy.** Killed just
+  after the swap with `accepted.db` then lost, two faults, entry's open has changed the digest, so
+  the start refuses `handover.accepted_copy_missing` (run). Left open by A1018 Slice 5 (Ruling R53).
+
+- **Slice 6's list: the handover words no screen shows yet.** Codes whose words name no next step,
+  words false at the stage they appear, and the "Unreadable" settings, each for Slice 6 to settle as
+  its screens first show them. Left open by A1018 Slice 5.
+  [Detail](backlog/replication-cloud.md#slice-6s-list-the-handover-words-no-screen-shows-yet)
 
 - **The handover summaries' and checks' minor follow-ups.** Untested choices and hand-kept lists in
   the module seat, the Veri*Factu summary and copy check, the payments summary and the manifest
@@ -6087,6 +6212,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   [Detail](backlog/replication-cloud.md#a-promoting-standby-may-list-itself-with-an-empty-contacturl)
 
 ### CI, tests and developer tooling
+
+- **A change to the till alone does not run the handover's end-to-end test.** The test loads the
+  till's router by path, and a till-only change selects no `@waitron/server` (`scripts/changed-scope.mjs`),
+  so it can pass and a main push can reuse that pass; the next server pull request then fails for a
+  reason it did not cause. Left open by A1018 Slice 5.
 
 - **Three adjustment-portion refusal checks also pass with shortened ID lists.** Qualify the
   intended mixed-row, note and course refusals with accepting controls, without weakening the

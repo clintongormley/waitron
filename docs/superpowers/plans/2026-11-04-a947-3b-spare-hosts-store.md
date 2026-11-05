@@ -398,6 +398,7 @@ the A1018 plan, not run.
 | A1284, an environment-set vault key | no | no production box sets it (`deploy/` names none, per the entry) |
 | A1285, the staged reset and `secrets.env` | **partly** | Task 3.2: on a box that joined, the staged reset now removes `secrets.env` (fact 19). The entry's other cases are untouched |
 | A1295, the venue authority pair in backups | **yes, by removal** | Task 3.1: a joined spare's authority becomes its `tls/ca.crt` and `tls/ca.key`, which backup verification already checks as a pair; `venue-ca.*` go |
+| A spare's backup settings (the owner's answer of 2026-11-04, A1018 Slice 5's Ruling O3): joining gives `backup.env`, later changes follow, and a spare that was off catches up | **not yet planned here** | No task carries it yet. It is still to be written, docs-only, before 3b-1 starts, saying how it relates to A1273's key ring (Decision D7). Until it lands, the offer refuses `handover.backup_settings_differ` on a venue with a recovery key, the main box still selling |
 | A1296, code-quality follow-ups from 3a | no | none is on 3b's path except the hand-written HTTPS client; 3b extends that one client (`boxExchange`) rather than adding a second |
 
 ---
@@ -445,7 +446,8 @@ the A1018 plan, not run.
   - **Tests of the starts' answers bind `0.0.0.0` and inject the socket**: the responder is off on a
     loopback-only listener (`mdns.ts:55`), so a boot test that binds loopback sees no answers at all
     (`boot.mirror.test.ts:495` already binds `0.0.0.0`).
-- **D4 — Box-to-box calls use one transport**: `boxExchange` (`mirror-bundle-fetch.ts:117`), with
+- **D4 — Box-to-box calls use one transport** (with one exception since A1018 Slice 5: `boxDownload`
+  beside it opens its own request for the final copy, and Task 4.1 must reach it too): `boxExchange` (`mirror-bundle-fetch.ts:117`), with
   the mDNS lookup for `.local` names and the venue authority pinned. Each address the lookup returns
   is tried in turn under the pin, so a false answer from another device costs one failed connection,
   not the call. Every box holds the venue authority as `tls/ca.crt` after Task 3.1, so every
@@ -1126,7 +1128,10 @@ PR body's first line says so.
 **Files:** Modify `mirror-bundle-fetch.ts` (`boxExchange` resolves the URL's host with
 `lookupBoxName` and connects to each address in turn, with `servername` the host and the same
 trust, until one completes the TLS handshake; a handshake failure on every address is the call's
-failure). Test `mirror-bundle-fetch.test.ts`.
+failure), and `boxDownload` in the same file finds the name the same way: it opens its own request
+for a handover's final copy (A1018 Slice 5), so a lookup in `boxExchange` alone would leave the new
+box unable to reach the old one on real boxes. Share the request-opening code, or carry the lookup
+across. Test `mirror-bundle-fetch.test.ts`.
 
 - [ ] **Step 1: Write the failing tests** against local HTTPS servers: "connects to the address the
   lookup gave and checks the certificate against the name" (lookup stubbed to `127.0.0.1`, URL
@@ -2071,12 +2076,17 @@ Waits for Q1. Full review path; the fiscal suites run unedited unless a row says
 - that `establish` can run on the spare once its copy holds its own `nodes` row and the main box's
   active filing registration (`hour-dormant-standby.ts:199-245`), with a person signed in on the
   spare against the copy's password hashes;
-- that a setup written at joining records the main box's invoice series bases as they were then,
-  and that a series the main box adds later would make the switch-on refuse: suggested by
-  "refuses an incomplete base set instead of dropping a configured series"
-  (`hour-standby-activation.test.ts:270`), not run with a later-added series;
+- that a setup written at joining records the main box's invoice series bases as they were then;
 - that neither the A1018 plan nor A947's 4b says who writes the setup before an activation (a search of the
   A1018 plan for "dormant" and "establish" finds no such step).
+
+**Run since (A1018 Slice 5's review of its dormant-setup step, 2026-11-05):** with a setup already
+held and a series the main box added later, or a series it replaced, the switch-on does **not**
+refuse. A real selection and promotion on M2 printed `OK` on the old series, and the new one was gone
+with no word. With no setup held, a fourth series is refused at the first request,
+`series_configuration_unsupported`, and a replaced one is carried correctly. Revision 4's guess that
+it refuses came from a test's title. Slice 5's Ruling R39 leaves this to be settled before this PR or
+Slice 13: see the backlog's entry on a dormant setup.
 
 Task F.1 runs the first of these under the option the owner picks.
 
@@ -2195,8 +2205,8 @@ manager on shift switches to the spare from a till, signing in as herself.
   page asks you to sign in once more ("Finish joining"), and the spare writes its setup then. If you
   walk away first, the spare keeps asking, and until you sign in it cannot be switched on. This
   changes §4 item 3, adds a screen, and records the series as they were on Friday; a series added to
-  the main box later may make Saturday's switch refuse (read from one test's title and inputs, not
-  run).
+  the main box later is dropped at Saturday's switch with no refusal, if that setup is still held
+  (run, A1018 Slice 5's Ruling R39; Task F.0).
 
 Revision 1's alternative, "the main box writes it and the copy carries it", cannot work: the copy
 does not carry that file.

@@ -26,7 +26,10 @@ handover tables in `node.db`, the server's handover store and signer), Slice 2 (
 the restricted start), Slice 3 (#2436: a box asks the other box before it sells, and waits if it
 cannot reach it), Slice 4 (the final copy and its indicator), Slice 4b (A764: every payment
 records the box that started it, and each box's card sweep resolves only the payments it owns; what
-it leaves open is under _Payments and card readers_ in [the backlog](../backlog.md)) and Slice 9
+it leaves open is under _Payments and card readers_ in [the backlog](../backlog.md)), Slice 5 (the
+controlled handover's server half, proved only by a simulation of two boxes in one process and
+reachable on real boxes after A947 3b; what it leaves open is under _Replication, failover and the
+cloud_ in [the backlog](../backlog.md)) and Slice 9
 (S2's Parts F and G and three controls in `bench/sqlite-failover`; S2's row reads PASS since the
 owner's reading of 2026-11-03, see below).
 Left for the slices that add the callers:
@@ -504,6 +507,10 @@ Left open by A1018 Slice 3 (`apps/server/src/peer-status-api.ts`):
 - The route, and the two handover source routes (Slice 4, `apps/server/src/handover-source-api.ts`)
   through the same `verifiedPeerQuery`, read a body of any size, read the chart and unseal this
   box's key before the signature is checked; a small body limit, or checking the envelope's shape first, would bound it.
+- Slice 5's routes read the same way. A real mirror start took a 30 MiB unsigned body on the offer
+  (`apps/server/src/handover-destination-api.ts`) and answered 400 after reading it, and an unsigned
+  64 MiB body on the acceptance (`apps/server/src/handover-source-api.ts`) was buffered and parsed
+  before its 400. Neither sets a `bodyLimit`, as `cloud-api.ts` does.
 - `boot.adoption-allocation.test.ts` imports from `@waitron/db` twice, and its pending-adoption
   case repeats its sibling's setup; `boot.restricted.test.ts`'s full-start case checks only the
   answer's shape, not its signature.
@@ -522,6 +529,128 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
   connected refunds).
 - `scripts/handover-manifest-complete.test.ts` has no reverse check: a manifest row naming a table
   or file that no longer exists still passes.
+
+## A selling box that takes a newer chart naming another main box keeps selling and filing
+
+Settle before A947 3b lands; left open by A1018 Slice 5 (Ruling R42), for the owner to decide,
+because the cure stops a selling box. `apps/server/src/node-membership-api.ts` and
+`apps/server/src/boot-peer-check.ts` stop a box only when the chart fences it (`isFencedStanding`),
+and a third box's promotion leaves a box `serving-secondary`, which does not fence. Run through real
+starts on the Slice 5 branch; on main since #2436. It needs a third box promoted over a running main
+box, so no real venue reaches it before 3b.
+
+The same class, from the 5.8b review: a chart naming a third box main with M2 `serving-secondary`,
+saved after the role, then a kill: the real start answers `acceptingSales: true`, with M2 `activated`
+and primary, and the third box is not asked because it has not joined. That chart was hand-signed
+with M1's key. `nextStandings` would give `sell-only`, which does fence, but only for a box that was
+main in the chart it minted from; a third box promoted from M1's first chart would leave M2
+`serving-secondary`, which was not run.
+
+## After a handover the new main box gives no certificate expiry warning
+
+FISCAL; settle before A947 3b lands; left open by A1018 Slice 5 (Ruling R51). The fix decides which
+box a fiscal install record belongs to, which is the owner's call. Every reader looks the record up
+by this box's node id, and the only row, inside the copy, names the old box: `certificate-card.ts`,
+`certificate-alerts.ts`, `certificate-reminders.ts`, `certificate-diagnosis.ts`,
+`certificate-install.ts`, `provisioning-secret.ts`, and its own SQL in
+`backup-verification-secrets.ts`. Filing reads the sealed certificate, not this record.
+
+Run on M2 after the whole simulated handover, with M1's certificate 5 days from expiry:
+- no certificate alert, where M1 had `fiscal.certificate_expiring`, and no reminder email;
+- the card reads "Installed: not recorded" with a "Replace certificate" button and no dates (the
+  words are read from the card's code and a browser case);
+- a backup of M2's file fails the certificate check as `invalid`;
+- the sealed certificate opens, with the same fingerprint, and a real mutual-TLS request using it
+  answered 200, and a renewal works.
+
+Read, not run: when the certificate expires, sales go on and records wait, and the first thing that
+speaks is `fiscal.submission_delayed` about 4 hours later, with nothing naming the certificate.
+`handover-controlled.e2e.test.ts` records the missing record as `it.fails`.
+
+## A placed copy can lose a newer chart
+
+Three points from the reviews of A1018 Slice 5's placing, left open by that slice:
+- A newer chart still naming the old box is lost at placing, so M2 then mints below a term another
+  box may hold, and such a box would answer `not_newer`. Not run for that exact case.
+- The check judges by who is main and ignores the term. With the copy at term 5 naming the old box
+  and the old file at term 4 with a third box main, a real start did not place and waited on
+  `handover.source_no_longer_main`, where placing was safe.
+- Ruling R41's way back loses the chart that cleared the wait: after a start that placed, the chart
+  read term 3, not 7. The superseded term 6 sent again was then accepted, which stops activation (the
+  safe side). With no re-send M2 would mint term 4, below the 7 others hold.
+
+Nothing real mints a chart naming the old box after a third box's promotion (read); the tests' way
+back is signed by M2's own key. `mintNextMembershipDocument`'s `minTerm` exists if a ruling wants it.
+
+## The module preparation file grows with every write, and a handover cannot promise room in it
+
+Left open by A1018 Slice 5 (Rulings R29, R30). `module-preparation-state.json` repeats all earlier
+entries in every revision and is capped at 1 MiB; a venue needs about 20 attempts to get near (Ruling
+R30's figure), with no handover involved. At the limit every later module operation refuses
+`setup.attempt_invalid`.
+
+`modulePreparationMergeFits` (`packages/provisioning/src/module-preparation-state.ts`) estimates room
+from the file itself for three writes now: the dormant setup, the wait and the selection. **Any
+further write can still fill the file**, so it is a check on the likely shapes and promises nothing.
+If it does fill, M2 fails to activate after the old box has given up filing, with no exit but the
+file's owner clearing it. The cure is a format change: stop repeating the earlier entries, or lift
+the cap. The owner sees this in Slice 5's PR.
+
+## A waiting spare repeats work and log lines with no back-off
+
+Left open by A1018 Slice 5 (Ruling R53). Each was a review's point, none loses data or files anything
+wrong, and none is reachable on a real box before A947 3b.
+- **A copy with a dangling row is fetched again for ever.** A real duty at the 5-second tick, a real
+  download from the real route over 17 seconds, with the row written into each downloaded file
+  standing in for an old box holding it: 4 whole fetches, the old box stopped, no back-off, and a
+  `handover-destination.waiting` line each pass, until a person abandons. `compareRetryMs` (60 s)
+  does not apply to a refusal the spare fetches again.
+- `handover.final_copy_changed` and `handover.summary_failed` repeat every 5 s.
+- `handover-destination.post_failed` warns on every tick, about 17,000 lines a day with the old box
+  off, for as long as the wait lasts.
+- A closed operation's folder that cannot be removed logs at error level on every pass while another
+  operation is open.
+- With nothing free on the disk, every tick logs `handover-destination.waiting` and `pass_failed`
+  `storage.disk_full`, and the named reason is not stored (a real 0-byte filesystem).
+
+## Slice 6's list: the handover words no screen shows yet
+
+Left open by A1018 Slice 5 (Ruling P29 allows such words until a screen shows them; Ruling R53). This
+is read from `apps/dashboard/src/i18n/codes.ts` at Slice 5's tip, and which words name a next step is
+a reader's judgement.
+
+**Words naming no next step:** `stepping_down`, `known_handover`, `peer_unknown`, `not_stepped_down`,
+`operation_unknown`, `final_copy_changed`, `not_a_spare`, `membership_mismatch`, `not_main_box`,
+`venue_not_supported`, `destination_not_spare`, `destination_not_joined`, `destination_unaddressable`,
+`backup_settings_differ`, `modules_differ`, `key_ring_mismatch`, `indicator_untrusted`, `chain_broken`,
+`preparation_state_too_large`, `summary_mismatch`, `summary_unreadable`, `copy_lacks_destination`,
+`authoriser_not_permitted`, `preparation_state_unusable`, `accepted_copy_missing`,
+`indicator_mismatch`, `copy_check_failed` (all `handover.`).
+
+**Words false, or misleading, where they appear:**
+- `operation_in_progress` says "or abandon it", and the spare has no way to abandon. "Start a new
+  handover" gets this code until the spare closes its copy.
+- "Unreadable" settings: `settings_unreadable` and `destination_settings_unreadable` name a repair a
+  person with no terminal cannot do. The first says "keeps selling" even if a newer chart stops the
+  box during the status query, and the second says "start a new handover" with the old box stopped.
+- `destination_unreachable` says "This box keeps selling" when a chart arrives during an offer that
+  then fails, on a box that is stopping; `restarted_before_stepdown` says the same when stored after
+  a chart naming no main box.
+- `source_unreachable` also covers a local disk error on the spare, a real full disk on the old box
+  (its 507) and a chart with the old box gone from it, and says "Nothing was changed".
+- `not_main_box` says "Nothing was changed" when also answered after `abandoned`.
+- `key_ring_mismatch` says "this box uses", the wrong box when the spare shows it.
+- `indicator_mismatch`, `copy_check_failed`, `not_stepped_down` say nothing changed, reused at
+  `copy_accepted`, after the spare accepted.
+- `copy_damaged` says "damaged" and "fetching it again" for a row the old box itself holds, which a
+  fresh fetch cannot cure.
+- `no_room_to_place` with nothing free is not stored, so the screen shows the earlier reason.
+- A module's name in `chain_broken` or `summary_mismatch` reaches only the log.
+- The recovery page's entries for `accepted_copy_missing`, `copy_mismatch` and
+  `preparation_state_unusable` offer only a retry.
+- A third box is main: there is no way out to offer yet (see "A new box has no way out while a third
+  box is main").
+- Spanish uses both "traspaso" and "cambio de servidor"; pick one.
 
 ## A1185: a venue not yet connected sees no prices
 

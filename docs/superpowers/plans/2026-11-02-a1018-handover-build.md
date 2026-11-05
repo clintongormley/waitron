@@ -420,7 +420,9 @@ a box holds at most one open operation. The two early closings:
 
 - **`abandoned`** — a controlled operation in which the source never stepped down. On M1: the
   offer failed or the stepdown refused at its first check (Task 5.3 records it at once), or the box restarted between recording `prepared`
-  and the stepdown's node transaction (the next start records it, Task 3.4). Nothing can have
+  and the stepdown's node transaction (the next start records it, Task 3.4), or a newer chart
+  stepped the box down while the operation was still `prepared` (its restricted start records it,
+  storing `handover.superseded_during_start`, Slice 5's Ruling R12). Nothing can have
   relied on such an operation: M1 captures no final copy unless it holds the restriction
   (`handover.not_stepped_down`, Task 4.7), so M2 can never accept one. On M2: only when M1's
   signed status reports that operation `abandoned` (Task 5.4). A
@@ -541,7 +543,7 @@ modules' non-database state (`apps/server/src/backup-sources.ts:50-62`).
 | `change_log` | `venue.db` | rebuildable, inside the copy | a dashboard signal deleted by the transaction that wrote it; a leftover row is delivered once on M2 |
 | `node_sealed_state` | `venue.db` | source-only, inside the copy | M1's state files sealed with M1's recovery key, which M2 cannot open; M2 writes its own row |
 | `recovery_packs` | `venue.db` | source-only, inside the copy | keyed by M1's node id; M2 reads its own or none |
-| `fiscal_certificate_installs`, `fiscal_certificate_reminders` | `venue.db` | source-only, inside the copy | keyed by M1's node id. The certificate itself is in `tenant_credentials`. What M2's certificate card shows after activation is asserted in Task 5.10; if it shows no certificate, that is reported as a follow-up FISCAL task, not patched here |
+| `fiscal_certificate_installs`, `fiscal_certificate_reminders` | `venue.db` | source-only, inside the copy | keyed by M1's node id. The certificate itself is in `tenant_credentials`. Every reader of the install record looks it up by this box's node id, so on M2 they find none (Slice 5's Ruling R51): the backlog's entry "[After a handover the new main box gives no certificate expiry warning](../../backlog/replication-cloud.md#after-a-handover-the-new-main-box-gives-no-certificate-expiry-warning)". A FISCAL follow-up, not patched here |
 | `tenant_credentials` | `venue.db` | transferred, inside the copy | sealed under the venue key ring (`packages/credentials/src/schema/tenant-credentials.ts`), so usable on M2 only when M2's ring holds every version: the ring check below |
 | `secrets.env` (key ring) | state | transferred, earlier | reached M2 at joining (A947 3a Task 14a); the indicator lists the ring's key versions and M2 refuses `handover.key_ring_mismatch` when it lacks one (backlog A1273) |
 | `trading.env` | state | destination-owned | M2 keeps its own node id; promotion rewrites it (`boot.ts:3067-3075`) |
@@ -565,14 +567,18 @@ same shape.
 | M1 starts a controlled handover (Task 5.3): `node.db` `prepared` → offer to M2 → stepdown's node transaction | after `prepared`, before the stepdown's node transaction (offer unsent, unanswered or answered) | M1's next start moves it to `abandoned`, then the start check runs: it sells once M2 answers = (rule 4), and waits if M2 is silent (rule 5), as any box with a joined peer does (Task 3.4); M2, if it recorded `prepared`, closes when M1's status reports `abandoned` (Task 5.4) | 3.4 "a source operation left at `prepared`…"; 5.3 "a stepdown that throws…"; 5.4 "M1's status reporting… `abandoned`" |
 | | the offer was refused, or the stepdown refused at its first check | M1 records `abandoned` at once and keeps selling | 5.3 |
 | | the stepdown's write failed | M1 restarts as a normal box, and its next start moves the operation to `abandoned` (first row) | 5.3 |
+| | a newer chart stepped the box down while the operation is still `prepared` (Slice 5's Ruling R12) | the restricted start moves it to `abandoned` storing `handover.superseded_during_start`, and tolerates a failed write, which leaves it `prepared` until a later start's write succeeds. With the gate closed and a stored restriction naming no operation, the route answers that same code, a repeat included. A stepped-down box records nothing and offers nothing | `boot.restricted.test.ts` "a newer chart during the offer refuses the start…"; `start-peer-check.test.ts`; `handover-source-start-api.test.ts` "a newer chart during the offer…" |
 | Stepdown (Task 2.4, as built): read-only check → gate → signal duties → restriction → answer → admitted requests → close (awaits the duties first) → restart | anywhere after the restriction's node transaction, or the answer is lost | M1 starts restricted; a repeated request is answered from the stored operation by the restricted start | 2.6; 5.3 "a retry after the restart…"; 2.4 "the caller… receives its full answer body" |
 | Capture (Task 4.7): copy file → `final_state` event | after the file, before the event | the next request captures again from an unchanged `venue.db` (a restricted start writes nothing to it, Task 2.2) and records one event | 4.7 "a crash between the copy and the event…" |
 | M2 fetches the copy (Task 5.4) | any point | the duty retries every 5 s while M2 is at `prepared`; partial files are discarded | 5.4 |
 | M2 accepts (Task 5.5): `node.db` `copy_accepted` → post acceptance → M1 records `filing_relinquished` → answer → M2 records `filing_assumed` | M2 restarts after `copy_accepted`, or the answer is lost | the posting duty re-posts the same stored acceptance; M1 answers its stored relinquishment byte for byte | 5.5 "M2 restarted at `copy_accepted`…"; 5.6 "a repeated acceptance…"; 5.8 "a reboot of M1 between relinquishment and M2's assumption…" |
 | M2 places the copy (Task 5.7): file swap → `copy_placed` event | mid-swap; after the swap, before the event | mid-swap: placed again from the kept `accepted.db`; after the swap: the live digest equals the indicator's, so only the event is recorded | 5.7 |
+| | the restart signal after `filing_assumed` is lost | a duty pass that finds this operation at `filing_assumed` with no `copy_placed` asks for the restart again, every pass (Slice 5's Ruling R33) | `boot.place-copy.test.ts` "a restart lost as a signal…" |
+| | the old `venue.db` holds a chart that no longer names the source as main (Slice 5's Ruling R41) | not placed: `accepted.db` is kept, the box starts as the mirror it is and waits on `handover.source_no_longer_main`; the duty asks for no restart for this operation while that is so, and rechecks; a chart naming the source again lets the next start place | `boot.handover-chart-moved-on.test.ts`, `boot.place-copy.test.ts` |
 | Activation (Tasks 5.8, 7.4): one `venue.db` transaction (module activation, `trading.env`, chart; handover rows with it or right after) → `node.db` role and `activated` → restart | before the venue commit | still a mirror at `filing_assumed` / `emergency_declared`; the page repeats the activation | 5.8 "a lost activation answer…"; 7.5 "a reboot between declaration and activation…" |
 | | after the venue commit, before the `node.db` records | `finishPromotedRole` makes it primary (`promoted-role.ts:39-62`); the `handover_activations` row committed with the chart (Task 5.8), so Task 5.8b records `activated`; the start check asks the source but does not wait for it (rule 3, when M1 is its only peer); it sells | 5.8b "M2 killed between…"; 7.4 "a crash after the activation commit…" |
-| A controlled handover stuck at `copy_accepted` or later, M1 gone for good | — | M2 waits on M1, by design: once final-copy acceptance exists, design §7 keeps the controlled operation and its selected M2 "until its state and filing assignment are recovered", and an emergency may not replace it (`handover.controlled_unresolved`, Task 7.3). M2 is still a mirror and files nothing | 7.3 "refused from `copy_accepted`" |
+| | after the role, before `activated` (Task 5.8b) | the next start finds the mode already primary and the `handover_activations` row committed; Task 5.8b records `activated`, the source joins `activatedFrom`, and it sells | `handover-activation-repair.test.ts` "M2 killed after the role, before the activated record…" |
+| A controlled handover stuck at `copy_accepted` or later, M1 gone for good | — | M2 waits on M1, by design: once final-copy acceptance exists, design §7 keeps the controlled operation and its selected M2 "until its state and filing assignment are recovered", and an emergency may not replace it (`handover.controlled_unresolved`, Task 7.3). M2 is still a mirror and files nothing. The same holds while a third box is main: M2 waits on `handover.source_no_longer_main` at `copy_accepted` or `filing_assumed`, with no way out built (Slice 5's Ruling R43); at `filing_assumed` neither the old box nor M2 files | 7.3 "refused from `copy_accepted`" |
 | | the answer is lost | a repeat answers `activated` and takes no second name | 5.8; 7.4 |
 | M2 hands its chart to M1 (Tasks 5.10, 10.4) | the post is lost, or M1 is off | the return watch re-posts while M1 reports an older term | 10.4 "posts M2's chart…" |
 | Emergency declaration (Task 7.3): one node transaction (old controlled operation to `replaced` first, then the new one) | before or after the commit; the answer is lost | before: nothing recorded, the person presses again; after: the same operation id answers the stored declaration | 7.3; 7.5 |
@@ -652,7 +658,9 @@ Task 5.10's simulation runs it against a stand-in AEAT, and Slice 5 changes no d
   (`packages/db/src/client.ts:98`) first; delete `<state>/backup-room-note.json` through
   `deleteBackupRoomNote` before the file changes, and add the file to `REPLACES` in
   `scripts/backup-room-note.test.ts`, as `apps/server/src/restore.ts:590` does; move the side
-  files (`SIDE_FILE_SUFFIXES`) with it and remove Litestream's `.venue.db-litestream/`, as
+  files (`SIDE_FILE_SUFFIXES`) with it, or for Task 5.7 remove them (Slice 5's Ruling R31: that
+  old file is replaced on purpose and `accepted.db` is kept until `copy_placed`), and remove
+  Litestream's `.venue.db-litestream/`, as
   `apps/server/src/db-wipe.ts:22-27` and `restore.ts:651` do; never unlink `venue.lock` or
   `migrations.lock` (`db-wipe.ts:9-15`).
 - **Migration numbers are indicative**; `drizzle-kit generate` assigns them. A collision on rebase
@@ -2016,7 +2024,7 @@ except that Tasks 4.4 and 4.5's interface lines were amended in place.
   selected and never activated when its clock reads that name's minute (case 2), and that placing
   M1's history as `module-evidence/` the restore way does not stop it (case 2c), so Step 3's
   fallback is not built. The manifest's `module-preparation-state.json` row is `transferred`, and
-  Task 5.7 is to merge M1's retained selections, carried in the signed indicator, into M2's own
+  Task 5.7 merges M1's retained selections, carried in the signed indicator, into M2's own
   preparation file (case 2b). The owner decided on 2026-11-04 that such a name counts as used.
 - **The signed peer query is bound to neither a route nor a time window (Slice 4's Ruling R10).**
   One envelope M2 signed was accepted by `peer-status` and twice by `final-copy`; Task 5.4's note
@@ -2506,7 +2514,9 @@ the offer's row to `read-only-exemptions.ts` (Task 3.2). Test
 `apps/server/src/handover-destination-api.test.ts`.
 
 **Interfaces — Produces:** `POST /api/node/handover/offer`, body a `stepdown` envelope signed by
-M1 whose body is `{ binding, authorisedBy: personId }`. M2 refuses `handover.not_a_spare` unless it
+M1 whose body is `{ binding, authorisedBy: personId, settings, imageMigrations }` (Slice 5's
+Rulings O3 and R25: `settings` holds the digests of `backup.env` and `modules.json` and the key
+ring versions, and `imageMigrations` a digest of the image's migration hashes). M2 refuses `handover.not_a_spare` unless it
 is a mirror, `handover.peer_unknown` unless the signer is the binding's source and a key it trusts,
 `handover.membership_mismatch` (409) when the binding's chart term or digest differs from M2's held
 chart, and `handover.operation_in_progress` when another operation is open. Otherwise it records
@@ -2590,9 +2600,11 @@ M1 at `prepared` is not enough: M2 answers the offer before M1's stepdown starts
 status read can land while M1 is still `prepared` and about to step down (review round 3, C2).
 M1 itself turns a `prepared` it will never step down for into `abandoned` — on a failed offer or
 a stepdown refused at its first check (Task 5.3), and at its next start (Task 3.4), including after
-a stepdown whose write failed — so the abandon M2 waits for always
-comes while M1 runs. A stepped-down M1 never reports `abandoned` (Task 1.3), so it is never left
-behind.
+a stepdown whose write failed — and at the restricted start of
+a box a newer chart stepped down while the operation was still `prepared` (Slice 5's Ruling R12,
+`closeSupersededOperation` in `apps/server/src/start-peer-check.ts`). That last write may fail and
+is tolerated; the operation then stays `prepared` until a later start's write succeeds. An M1 that
+stepped down for this operation never reports `abandoned` (Task 1.3), so it is never left behind.
 
 Slice 4 notes (2026-11-03):
 - Slice 4's Ruling R10: the signed peer query (`PeerQueryBody` in `apps/server/src/peer-status-api.ts`:
@@ -2620,7 +2632,7 @@ Slice 4 notes (2026-11-03):
 #### Task 5.5: M2 compares and accepts the final copy
 
 **Files:** Create `apps/server/src/handover-compare.ts`. Test `apps/server/src/handover-compare.test.ts`
-(Review Focus 5).
+(Review Focus 5). The order and the codes below changed in the build: see "Slice 5 as built".
 
 **Interfaces — Produces:**
 `compareFinalCopy(deps, operation, indicator: SignedHandoverEnvelope<FinalStateIndicator>, copyPath: string): Promise<{ ok: true } | { ok: false; reason: ErrorCode; detail: CanonicalValue }>`.
@@ -2699,17 +2711,23 @@ acceptance for another indicator refuses `handover.indicator_mismatch`.
 
 Slice 4 probe (2026-11-03): placing the file as module-evidence does not reach promotion; merge M1's retained selections into M2's own module-preparation-state.json before the copy is placed (handover-minute-history.test.ts case 2b). The owner decided on 2026-11-04 that a name selected and never activated counts as used.
 
-**Files:** Create `apps/server/src/handover-place-copy.ts`; modify `boot.ts` (before the store
-opens, as `runStagedRestore` does, `apps/server/src/restore-request.ts:344-642`, place
-`accepted.db` as `venue.db` when the operation is at `filing_assumed` and not yet placed; `node.db`
-is never touched); add the file to `REPLACES` in `scripts/backup-room-note.test.ts`. Test
+**Files:** Create `apps/server/src/handover-place-copy.ts`; modify `boot.ts` (at the top of `bootServer`, before the
+store opens, `placeAcceptedCopyForStart` places `accepted.db` as `venue.db` when the operation is
+at `filing_assumed` and not yet placed; `node.db` is never touched. `runStagedRestore`, at
+`apps/server/src/restore-request.ts:344`, is called from `node-entry.ts:680`, not `boot.ts`, and
+entry's ahead check runs after it and before `startServer`, so placing runs later than a staged
+restore and after that check, Ruling P19); add the file to `REPLACES` in `scripts/backup-room-note.test.ts`. Test
 `apps/server/src/handover-place-copy.test.ts`.
 
 **Interfaces — Produces:** on receiving the relinquishment M2 records `filing_assumed` and
 restarts; at start it places the copy under the house rules (Global Constraints → "Replacing or
-removing the live `venue.db`": `lockVenueDatabase`, `deleteBackupRoomNote` first, the old file and
-its side files moved aside as `restoreDatabase` does, `apps/server/src/restore.ts:661-694`,
-Litestream's folder removed) and records `copy_placed` as an event. `accepted.db` is **copied**
+removing the live `venue.db`": `lockVenueDatabase`, `deleteBackupRoomNote` first; no `restoreDatabase`
+and no set-aside folder, Slice 5's Ruling R31: it copies `accepted.db` to `venue.db.incoming` and
+flushes it, removes Litestream's folder and the old side files, flushes the folder, renames over
+`venue.db`, and flushes the folder on both the swapped and the already-equal path, so `venue.db`
+is there at every moment) and records `copy_placed` as an event. Before it swaps, it reads the
+chart in the old `venue.db`; a chart no longer naming the source as main stops it placing (Slice
+5's Ruling R41, the crash table). `accepted.db` is **copied**
 into place and kept until `copy_placed` is recorded, and "already placed" is decided by the live
 `venue.db`'s SHA-256 equalling the indicator's digest — so a restart after the swap and before the
 event records the event without placing again, and a restart mid-swap places again from the kept
@@ -2763,8 +2781,9 @@ an email, but `withAuthenticatedOperation`, which `invoke` uses, takes only a `p
 through `checkManagerPassword` by id (`:112-113`), which hashes against a dummy for a person it
 cannot find (`packages/identity/src/manager-login.ts:56-65`). So the identity package gains one
 export, `personIdForLoginEmail(db, email): Promise<string>`, beside the private `findPersonLogin`
-(`manager-login.ts:37`): it does **no** hashing, and answers the person's id, or a fresh random
-UUID when no active account has that email. `withAuthenticatedOperation` then does its one hash in
+(`manager-login.ts:37`): it does **no** hashing, and answers the person's id, or, when no active
+account has that email, an id derived from the email under a key made once per process and shaped
+as a UUID, so an unknown email queues as a known one does (Slice 5's Ruling R37). `withAuthenticatedOperation` then does its one hash in
 both cases and refuses an unknown id with `password.invalid`, as it refuses a wrong password.
 
 - [ ] **Step 1: Write the failing tests.** "a controlled operation at `filing_assumed` gets a clock
@@ -2786,15 +2805,16 @@ both cases and refuses an unknown id with `password.invalid`, as it refuses a wr
 
 **Files:** Create `apps/server/src/handover-activation.ts` (importing Task 5.7b's
 `handoverPromotionContext`); add the activate row to `read-only-exemptions.ts`. Test
-`apps/server/src/handover-activation.test.ts` (Review Focus 4). The route first calls
-`requireNodeOperationHttps`, and turns the email into a person id with `personIdForLoginEmail`
-exactly as Task 5.7b does.
+`apps/server/src/handover-activation.test.ts` (Review Focus 4), with the M1 reboot case in
+`handover-relinquish.test.ts` and the real-restart cases in `boot.handover-chart-moved-on.test.ts`.
+The route first calls `requireNodeOperationHttps`, and turns the email into a person id with
+`personIdForLoginEmail` exactly as Task 5.7b does.
 
 **Interfaces — Produces:** `POST /api/node/handover/:operationId/activate` with
-`{ signIn: { email, password, totp? }, comparisonId }`: the person signs in against the placed copy
+`{ moduleOperation: { binding, input }, signIn: { email, password, totp? } }` (Ruling P22, the shape
+the promote route takes; `select` has spent the comparison by then): the person signs in against the placed copy
 (`password.invalid` for every credential failure) and must hold `node.promote` there; the clock
-comparison and minute selection were prepared through Task 5.7b's route, which `comparisonId`
-names. It promotes through the same
+comparison and minute selection were prepared through Task 5.7b's route. It promotes through the same
 path the promote route uses — `nodePreparation.withPromotion(operation, signIn, context, …)`
 (`apps/server/src/promote-api.ts:129-138`) with `context = handoverPromotionContext(operation)` (Task 5.7b), here `{ oldNodeNeutralised: true,
 noParallelRecovery: true, oldMachineRelinquished: true }`, justified by the recorded
@@ -2836,7 +2856,8 @@ Task 5.8b.
 #### Task 5.8b: A start that finds an activation half-recorded finishes it
 
 **Files:** `apps/server/src/handover-activation-repair.ts`, called from Task 3.4's repair hook,
-before the start check. Test `apps/server/src/handover-activation-repair.test.ts` (Review Focus 4).
+before the start check. Test `apps/server/src/handover-activation-repair.test.ts` (Review Focus 4), with the pure cases in
+`apps/server/src/start-peer-check.test.ts`.
 
 **Interfaces — Produces:** for an open operation in which this box is the destination, **at
 `filing_assumed` or `emergency_declared`**, on a box whose mode is no longer `mirror`, **with a
@@ -2849,8 +2870,10 @@ Its source joins `activatedFrom` (Task 3.4).
 
 - [ ] **Step 1: Write the failing tests** (real `startServer`, a crash seam between the venue
   commit and the node.db record): **"M2 killed between the activation's `venue.db` commit and its
-  `node.db` record restarts and sells"**, with M1 switched off (control: without the repair, the
-  start check waits and the test prints `acceptingSales: false`); **"a box whose own chart names
+  `node.db` record restarts and sells"**, with M1 switched off, recording the operation `activated` and M1 in
+  `readActivatedFrom` (control, Ruling P24: without the repair the operation stays `filing_assumed`
+  and the set is empty. Selling is no control, because Task 3.4's R21 also carries it; a pure case
+  with a chart another box signed is where `activatedFrom` decides); **"a box whose own chart names
   it primary but holds no `handover_activations` row for the operation is not recorded as
   activated"**; "an operation at `prepared` or `copy_accepted` is never repaired"; "a mirror is
   left alone".
@@ -2862,13 +2885,16 @@ Its source joins `activatedFrom` (Task 3.4).
 #### Task 5.9: The new main box takes over the old box's payment collection
 
 **Files:** `apps/server/src/handover-collection.ts` supplies Task 4b.2's "boxes this box has taken
-over from" set, read from `handover_activations` rows whose `destination_node_id` is this box.
-Test `apps/server/src/handover-collection.test.ts`.
+over from" set, read from `handover_activations` rows whose `destination_node_id` is this box
+(`readTakenOverFrom`, followed back through each source, Ruling P25). Tests
+`apps/server/src/handover-collection.test.ts` for that set, and
+`apps/server/src/boot.handover-collection.test.ts` for the sweep through a real start (Ruling R47:
+it runs only on a box that is neither fenced nor a mirror).
 
 - [ ] **Step 1: Write the failing tests.** "after activation, M2's sweep resolves M1's
   `attempting` payment once" (provider stand-in counts one call); "before activation it does
   not"; "a box that took over from nobody sweeps only its own".
-- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-collection.test.ts` — FAIL.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-collection.test.ts src/boot.handover-collection.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "server: the new main box resolves the old box's open card payments, and no one else does"`.
@@ -2891,10 +2917,10 @@ boxes in one process, not physical qualification.
   `pendiente` record with **M1's** identity and its own first sale with **its own**; the open
   table is on M2; M2's sweep, not M1's, resolves the card payment; a till router pointed at both
   moves to M2; **M1 is then switched off and M2 restarted: M2 starts selling, without waiting**
-  (it does not count M1 as a peer, Task 3.4); and what M2's certificate card shows (the manifest's open row: if it shows no
-  certificate, the test records that as `it.fails` with a comment naming the follow-up, and the
-  PR reports it).
-- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-controlled.e2e.test.ts` — PASS (it pins Tasks 5.2–5.9). Control: comment out the restricted start's early return and the assertion that M1 starts no new filing after its stepdown fails.
+  (it does not count M1 as a peer, Task 3.4); and the install record M2 cannot find, which the
+  test records as `it.fails` (Slice 5's Ruling R51: wider than the certificate card, see
+  "Slice 5 as built").
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-controlled.e2e.test.ts` — PASS (it pins Tasks 5.2–5.9). Control, corrected after the 5.10b review: with the restricted start's early return left out alone, M1's start check also waits (an open source operation gives `wait`), so the "no new filing" case still passes (3 failed, 7 passed, M2's cases only, on the 10-case half). The control that fails it removes the early return and also makes the start check answer proceed: 6 failed, with "no new filing" at `expected [3 entries] to deeply equal [2]`.
 - [ ] **Step 3: Commit** `git commit -s -m "server: a controlled handover between two simulated boxes, end to end"`.
 
 #### Task 5.11: Final checks for Slice 5
@@ -2902,12 +2928,173 @@ boxes in one process, not physical qualification.
 - [ ] As Task 2.8, plus the root guards in Task 5.1's Step 4. PR first line: FISCAL; "adds the
   `handover` migration set; reachable on real boxes after A947 3b".
 
+#### Slice 5 as built (2026-11-05)
+
+The build departed from the task texts above in the ways below; those texts were corrected where
+this section says so and are otherwise left as written. Task 5.10's test is **a simulation of two
+boxes in one process, not physical qualification**, and it covers no third box (Ruling R44). The
+"R" and "P" numbers in this section are this slice's own; other slices' rulings carry their slice's
+name. The receipts are in the slice's ledger and review files, and the PR.
+
+**What differs from the task texts:**
+- Compare's order (Ruling P13): shape of the indicator, signature, binding, digest and size,
+  integrity, the ahead check and modules, the module copy checks, settings and ring, retained
+  selections, summaries. Codes the task did not name: `copy_lacks_destination`,
+  `authoriser_not_permitted`, `summary_unreadable`, `copy_check_failed`,
+  `preparation_state_too_large`, `relinquishment_invalid`, `no_room_to_place`.
+- The offer refuses what Task 5.5 would refuse later, with M1 still selling: `backup_settings_differ`,
+  `modules_differ`, `key_ring_mismatch` (Rulings O3, R25). Task 5.5's comparison stays.
+- A dormant setup is written on M2 under the switcher's sign-in, from the placed copy, inside Task
+  5.7b's route (Ruling O1). Task 5.10's fixture writes none.
+- Placing does not use `restoreDatabase` (Ruling R31; Task 5.7 corrected). The crash table gained
+  rows for Rulings R12, R33 and R41, and for "after the role, before `activated`".
+- The tests of Tasks 5.8, 5.8b and 5.9 live partly in other files (those tasks corrected).
+
+**On rebasing past A1301 S18f:** remove `locationId` from
+`apps/server/src/testing/handover-activation-kill-child.ts` and from the fixture in
+`apps/server/src/handover-controlled.e2e.test.ts`. They pass it because this branch's base requires
+it, and main's `trading-config.ts` no longer names it.
+
+**Rulings kept, each with its cost if wrong.** P rulings are read, not run, unless a probe is named.
+
+- P1, the handover module's real file list: a few extra guard runs.
+- P2, source and destination are declared foreign keys, `person_id` a plain id: a regenerated
+  migration before landing.
+- P3, destination routes mount on every full start: the offer refuses on a primary with
+  `handover.not_a_spare`.
+- P4, exemption rows may hold `:operationId` as one path segment: a small security-sensitive
+  function, so it has its own test and review.
+- P5, one status read for both roles, needing no sign-in: it exposes an operation's state and the page
+  address without sign-in.
+- P6, the offer's order, codes and record: one more translation of an event's name.
+- P7, the start's order, with a new `handover.not_main_box`: one code.
+- P8, an open gate after the catch means record `abandoned`, a closed one rethrows: none.
+- P9, a venue with no promotion module is refused `handover.venue_not_supported` at the start:
+  such venues wait for a later task.
+- P10, a `purpose` inside the signed query: two files and their test helpers.
+- P11, `boxDownload` beside `boxExchange`: a second client, against 3b's intent to keep one, and
+  3b's name lookup must reach it (3b's Task 4.1 says so now).
+- P12, one driver duty on M2 with stated retry rules: 60 s is a starting value.
+- P13, compare's order: one reorder from the plan's text.
+- P14, two checks before M2 accepts: two codes, and a role read that must follow any change to
+  permission storage (A1002). Amended by R22.
+- P15, settings compared as values: changes what M1 signs; the digest stays an unsalted hash over a
+  file holding the backup recovery key. Limit: on settings the environment owns, nothing compares.
+- P16, M1's retained selections travel inside the signed indicator and merge at placement.
+- P17, Task 5.5 owns recording `filing_assumed`, Task 5.7 the restart: one code.
+- P18, Task 5.6's requirements and stored answer. No cost stated.
+- P19, placement at the top of `bootServer` under the venue lock. Its `restoreDatabase` step is
+  replaced by R31.
+- P20, nothing activates before `copy_placed`: none.
+- P21, the binding is tied to the operation: a second-generation handover with a dormant setup
+  naming an earlier box is refused until settled. Unreachable today.
+- P22, Task 5.8's body is `{ moduleOperation, signIn }`: Slice 6's page sends the same.
+- P23, restart order and retries: a parameter on an existing function, and promote's own tests
+  re-run.
+- P24, Task 5.8b's real control: none.
+- P25, the taken-over set, read once at start and followed back through each source: a few lines.
+- P26, an ordinary promotion is refused only before activation: none.
+- P27, the chart is posted to M1 once per start: one post per restart while the operation is open.
+- P28, the fixture states what real boxes will get from 3b: a large fixture. Amended by O1.
+- P29, the list of new codes; words naming no next step are allowed until Slice 6. No cost stated.
+- P30, this upkeep. P31, the mutation config is unchanged and tests pin the schema: if the sandbox
+  refused, a finding to report.
+- O1, the owner's answer: M2's switch-on writes the dormant setup under the switcher's sign-in: if
+  it could not run from a placed copy, the build stopped there. It ran.
+- O3 (replaces O2), the owner's answer: M1's offer carries the digests and ring versions and M2
+  refuses at the offer; the transfer itself belongs in A947 3b: one field and three refusals.
+- S1, placement inside boot under the entry's hold is not refused (read; 5.7d's real start runs it).
+- R1, R45, R50, which reviews cover which pieces: at worst one larger review or one wrong comment.
+- R2, an offer's operation id must be safe as a folder name: one extra check.
+- R3, an offer whose source the held chart does not name as main is refused: one refusal.
+- R4, R5, an offer must be a controlled one: a 400 where a status would do.
+- R6, one in-process turn covers the offer and the promotion, and a duty or placement acts only on a
+  mirror: one small guard; a two-process race is outside it.
+- R7, the turn's check runs after sign-in, inside the authenticated body: none.
+- R8, a promote meeting an offer being recorded is refused at once: a retry, and the refusal can
+  name an operation that then never records.
+- R9, the handover route requires HTTPS and same origin: a dashboard on plain HTTP cannot start a
+  handover.
+- R10, a retry of a stored `prepared` rechecks the chart: a retry after a chart change starts over.
+- R11, unsigned refusals from the spare stay believed: an attacker on the network can stop a
+  handover being started, not fake one.
+- R12, R13, a restricted start closes a `prepared` source operation under
+  `handover.superseded_during_start`: one `node.db` write on a restricted start, which sells and
+  files nothing either way.
+- R14, `boxDownload` flushes and creates its file owner-only: one extra sync per download.
+- R15, the download's limit is silence, not total time: a stalled download waits for one limit.
+- R16, "fetch never restarts" means within one process run: one extra download after a restart.
+- R17, R36, R44, minors folded into fix rounds: none beyond a commit.
+- R18, the `modules.json` digest covers only the modules set to false: one filter to remove.
+- R19, M1 builds its own manifest before the offer: a venue whose file is damaged between offer and
+  stepdown waits until a person looks.
+- R20, an empty `backup.env` reads as no settings, and an empty ring is refused: one normalisation
+  and one refusal.
+- R21, the digest stays on `backup.env` alone: two boxes with hand-edited backup settings pass and
+  differ in a retention count or a hidden recovery key.
+- R22, the copy must hold this box's `nodes` row and key; nothing reads `location_id`: a row whose
+  location is gone passes this check.
+- R23, M1 refuses before anything stops when its own file lacks the destination's row: handovers
+  refused until 3b, unreachable on real boxes before then anyway.
+- R24, R26, integrity runs on a thread; a kept file skips repeated file checks in one process run
+  but gets one more streamed digest before compare answers ok: one streamed read per acceptance
+  attempt. R52 and R55 narrow what is kept.
+- R25, the offer carries a digest of the image's migrations: a handover is refused while the boxes
+  run different releases, including mid-upgrade; an emergency stays available.
+- R27, the duty does not post without `accepted.db`: a wait a person must look at.
+- R29, R30 (replace R28), room for two more revisions sized from the file itself, as a check that
+  catches the likely shapes, not a guarantee: M2 at the file's limit fails to activate after M1 has
+  given up filing, with no exit but the file's owner clearing it.
+- R31, placement as Task 5.7 now says: a box with a first-setup record whose old file holds its
+  rows only in the `-wal` reaches the repair page in a narrow window (backlog).
+- R32, the 128 MiB start refusal went to the owner as A1334: a false alarm, one look.
+- R33, the duty asks for the restart again every pass: repeated SIGTERMs during a slow shutdown.
+- R34, no room while placing has `handover.placement_no_room`: on a truly full disk the handover's
+  words show rather than the disk-full page.
+- R35, the duty does not post without room: M1 stays stepped down while M2 waits (backlog).
+- R37, an unknown email's id is derived from the email under a per-process key: it changes on
+  restart, which matters to nothing.
+- R38, no throttle on this slice's sign-ins: someone on the venue's network slows an administrator's
+  handover sign-in (backlog).
+- R39, a setup held under an earlier event with the same source counts as held: a real promotion
+  would activate on the old series and silently drop one the old box added (backlog: settle before
+  Slice 13 or 3b-F).
+- R40, the first hand-back's refusal is recorded, not fixed: Slice 13 must meet it (backlog).
+- R41, placing stops when the old file's chart has moved on: M2 waits where it could have gone on,
+  with the third box selling; a newer chart still naming M1 is not caught.
+- R42, a selling box that takes a chart naming another main box keeps selling: not fixed here. Two
+  boxes filing if a third is promoted over a running main box after 3b, unrepairable (backlog:
+  settle before 3b lands).
+- R43, no way out for M2 while a third box is main: a stale waiting operation until Slice 6.
+- R46, the repair requires the row's source and destination to match: none.
+- R47, R48, the card sweep runs only on a box neither fenced nor a mirror: a card payment open at a
+  plain promote stays `attempting` until a person resolves it on the new box (backlog).
+- R49, a different key under the same ring version is left to the backlog: a box with a wrong key
+  ring takes over and cannot open sealed rows.
+- R51, the certificate install record changes no code here: a new main box stays silent about an
+  expiring certificate until the follow-up lands; the first sign is `fiscal.submission_delayed`
+  about 4 hours after expiry (read, not run).
+- R52, every whole-database copy is created owner-only, a passing module-check fault is no longer
+  remembered, a throw on a remembered file clears the record, and the copy check runs
+  `foreign_key_check`: a copy with a dangling row is refused with the old box stopped until a person
+  abandons.
+- R53, the other returned points change no code: slow-to-explain waits in rare cases, before real
+  boxes can reach them (backlog).
+- R54, one fixture line in `handover-compare.test.ts`: none beyond that line.
+- R55, `summary_unreadable` on a remembered file is treated like a throw: one more whole-file digest
+  and integrity thread per retry.
+
+**For later slices:** Slice 6's words are listed in the backlog. "M1 is restricted before, during and
+after" has a test at some states only; it must cover the rest before Slices 10 and 13 add code that
+changes those states (backlog).
+
 ---
 
 ### Slice 6 — Controlled handover, screens and guide
 
 Not fiscal, unless Task 6.4 must give the fiscal module's clock element a promotion mode (then the
-PR says FISCAL and the owner lands it). Lands after Slice 5.
+PR says FISCAL and the owner lands it). Lands after Slice 5. The codes whose words this slice must
+change are listed in the backlog: [Slice 6's list](../../backlog/replication-cloud.md#slice-6s-list-the-handover-words-no-screen-shows-yet).
 
 #### Task 6.1: "Hand over to this box" on the Servers screen
 
@@ -3005,6 +3192,17 @@ countdown, sending the browser's `clock-challenge` and `compare-clocks` steps to
 ### Slice 7 — Emergency handover, server
 
 **FISCAL**. The owner lands it. Adds a second migration to the `handover` set.
+
+Notes from Slice 5's build:
+- An emergency's `handover_activations` row must copy its scenario, source and destination from the
+  operation: `finishInterruptedActivation` (`apps/server/src/handover-activation-repair.ts`) records
+  `activated` only when all three match and the destination is this box (Slice 5's Ruling R46).
+- A live old box whose offer gets `handover.operation_in_progress` records `abandoned` and keeps
+  selling, under words telling the person to finish or abandon the other handover. Whether it
+  should read that operation's status at that point is this slice's or Slice 10's call (read, not
+  run).
+- M1 up with its final copy gone: both boxes wait on `handover.final_copy_changed`, and the exit is
+  this slice's emergency path (read, not run).
 
 #### Task 7.1: The gap tables
 
@@ -3684,6 +3882,11 @@ the period, bucketed by their own *fecha de expedición*, as a separate line in 
 
 ### Slice 13 — Archive, the wipe gates, and becoming the spare
 
+Note from Slice 5's build (Ruling R40): the first hand-back, M2 to M1, answers
+`sif.allocation_invalid` `standby_already_active` at the first request, after M2 has given up
+filing, because M1's registration stays active. This slice's tasks must meet that: see the backlog's
+entry "[The first hand-back is refused](../../backlog.md)".
+
 **FISCAL** (it gates the wipe of a box that holds tax records). The owner lands it. It runs for a
 returning box after either scenario (decision 13).
 
@@ -3905,11 +4108,11 @@ the joint specification and Cloud's half.
 - **Whether `vf-recovery-hour` can drive a promotion** is found in Task 6.4; if not, that task
   touches fiscal UI code.
 - **Whether M2 sees every minute name M1 used from the copy alone**: no (Task 4.5's probe, case 2),
-  and the restore path's placement does not stop the reuse (case 2c); Task 5.7 is to merge M1's
+  and the restore path's placement does not stop the reuse (case 2c); Task 5.7 merges M1's
   retained selections into M2's preparation file (case 2b). The owner decided on 2026-11-04 that
   such a name counts as used.
-- **What M2's certificate card shows after activation** is found by Task 5.10; if it shows no
-  certificate, a FISCAL follow-up maps it.
+- **Which box a fiscal certificate install record belongs to after a handover** is the owner's
+  question and a FISCAL follow-up (Slice 5's Ruling R51): the backlog's entry "[After a handover the new main box gives no certificate expiry warning](../../backlog/replication-cloud.md#after-a-handover-the-new-main-box-gives-no-certificate-expiry-warning)".
 - **A return to a box other than the one the old box handed to** (M2 handed over to M3 before M1
   came back) is not built; Task 13.5 leaves M1 restricted and its records in its archive.
 - **Archive deletion** waits for A664's retention policy; nothing here deletes one.
@@ -4058,7 +4261,7 @@ sits at the top of the plan.
 | Finding | Checked by | What changed |
 | --- | --- | --- |
 | Smaller: the HTTPS and same-origin check | read `node-operation-https.ts` (TLS socket, same origin), `promote-api.ts:71,118` (both promote routes call it; the review's `:89` is off by a few lines, the point holds) | Applied to Tasks 5.7b, 5.8 and 7.3, each with a refusal test |
-| Smaller: an email never becomes a person, so every sign-in on the new routes is refused | read `operation-authentication.ts:102-113` (takes only a `personId`, hashes once itself), `manager-login.ts:37` (`findPersonLogin` is private), `:56-65` and `:86-96` (unknown accounts hash a dummy) | Applied under CLAUDE.md §3's login-refusal rule. Task 5.7b adds `personIdForLoginEmail`, which does no hashing and answers a fresh random id for an unknown email, so `withAuthenticatedOperation`'s one hash happens either way; Tasks 5.7b and 5.8 use it, with a test that an unknown email and a wrong password get the same answer after one hash each. Task 7.3 signs in with `loginManager` by email, which already does the dummy hash |
+| Smaller: an email never becomes a person, so every sign-in on the new routes is refused | read `operation-authentication.ts:102-113` (takes only a `personId`, hashes once itself), `manager-login.ts:37` (`findPersonLogin` is private), `:56-65` and `:86-96` (unknown accounts hash a dummy) | Applied under CLAUDE.md §3's login-refusal rule. Task 5.7b adds `personIdForLoginEmail`, which does no hashing and answers an id no person holds for an unknown email (written here as a fresh random id; a keyed id derived from the email since Slice 5's Ruling R37), so `withAuthenticatedOperation`'s one hash happens either way; Tasks 5.7b and 5.8 use it, with a test that an unknown email and a wrong password get the same answer after one hash each. Task 7.3 signs in with `loginManager` by email, which already does the dummy hash |
 | Smaller: Task 5.7b added to a file Task 5.8 creates | read the plan's order | Applied: Task 5.7b creates `handover-preparation.ts`; Task 5.8's `handover-activation.ts` imports from it |
 | 2 a declaration recorded before a failed clock check had no way back | read the states table, Task 8.1 and Task 1.4's one-open index | Applied as suggested: the preview reports `openEmergency`, and the page resumes an open `emergency_declared` operation from any device, straight to the sign-in and clock check; a new crash-table row and a test whose control shows the blank form refused |
 | 3 rule F counted a controlled operation still at `prepared` | read Task 3.1's status (no source field) against the M1-restarts-before-stepdown crash row | Applied. Task 3.1's status gains `sourceNodeId` and `destinationNodeId`; F counts an operation naming this box as source only at `emergency_declared` or later, or controlled at `copy_accepted` or later; tests for the `prepared` case (proceeds) and its control (`copy_accepted` supersedes) |
