@@ -408,9 +408,10 @@ until A977).
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Other private naming sites remain in the till's boot and counter-payment suites and
   shared-fixture consumers in the server split-bill and move-bill suites; party seating,
-  receipt-print, working-order, bill-editing, moved-dish, waiting-course and other order fixtures;
+  bill-editing, moved-dish, waiting-course and other order fixtures;
   and shared helper consumers such as `made-here.test.ts`. Accented move-line bindings also remain.
-  Fixture strings remain separate from this naming work. The counter, filing and adjustment
+  Fixture strings remain separate from this naming work. The receipt-print and working-order
+  suites retain Spanish display samples under A976. The counter, filing and adjustment
   order-portion suites retain Spanish dish samples under A976; counter and adjustment test
   descriptions also stay with A976.
   Keep accented search fixtures unchanged. String-selected product keys stay with their fixture text
@@ -803,9 +804,10 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
 - **A974. Finish the remaining English names in general code.** Remaining names include till boot and
   counter-payment fixtures; shared-fixture consumers in the server split-bill and move-bill suites,
-  party seating, receipt-print, working-order, bill-editing, moved-dish, waiting-course and other
-  order fixtures, shared helper consumers and file names.
-  Keep accented search fixtures unchanged. Other fixture text stays with A976, including catalogue
+  party seating, bill-editing, moved-dish, waiting-course and other order fixtures, shared helper consumers and file names.
+  Keep accented search fixtures unchanged. The receipt-print and working-order suites retain their
+  display samples under A976.
+  Other fixture text stays with A976, including catalogue
   display names, recipe ingredient names and seasonal venue and zone names, printer-screen display
   labels, counter-screen display text and station-screen display names, plus kitchen-ticket grouping,
   payment/queue widget display text,

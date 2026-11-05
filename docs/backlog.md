@@ -6668,8 +6668,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A974. Finish the remaining English names in general code.**
   Remaining names include till boot and counter-payment fixtures; shared-fixture consumers in the
-  server split-bill and move-bill suites; party seating, receipt-print, working-order, bill-editing,
-  moved-dish, waiting-course and other order fixtures; shared helper consumers and file names. Keep accented search fixtures unchanged. Low priority.
+  server split-bill and move-bill suites; party seating, bill-editing, moved-dish, waiting-course and other order fixtures; shared helper consumers and file names. Keep accented search fixtures unchanged. Low priority.
   [Detail](backlog/architecture.md#a974-finish-the-remaining-english-names-in-general-code).
 
 - **Strengthen the server group and fiscal-sale fixture checks.** The named no-kitchen
@@ -6688,7 +6687,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A976. Finish the server's English test-venue defaults.**
-  Party bill-action, bill-move, arriving-dish, receipt-guest, till-API bill-move/split/groups/fiscal-sale, reprint, transfer,
+  Receipt-print, working-order, party bill-action, bill-move, arriving-dish, receipt-guest, till-API bill-move/split/groups/fiscal-sale, reprint, transfer,
   portion-sale projection and order-portion counter/filing/adjustment suites still use Spanish
   display samples; fiscal-sale and counter/adjustment order-portion test descriptions, other
   helpers and screen expectations remain. Low priority.
