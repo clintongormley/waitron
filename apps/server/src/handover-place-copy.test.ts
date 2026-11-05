@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import {
+  appendFileSync,
   chmodSync,
   copyFileSync,
   existsSync,
@@ -18,7 +19,7 @@ import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   lockVenueDatabase,
@@ -49,6 +50,16 @@ import {
 } from "./handover-place-copy.js";
 import { advanceHandover, beginHandover, waitHandover } from "./handover-store.js";
 import type { Logger } from "./logger.js";
+
+const fileReads = vi.hoisted(() => ({ paths: [] as string[] }));
+vi.mock("node:fs", async (importOriginal) => {
+  const real = await importOriginal<typeof import("node:fs")>();
+  const createReadStream = (...args: Parameters<typeof real.createReadStream>) => {
+    fileReads.paths.push(String(args[0]));
+    return real.createReadStream(...args);
+  };
+  return { ...real, createReadStream };
+});
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const SOURCE = "11111111-1111-4111-8111-111111111111";
@@ -319,6 +330,52 @@ describe("placeAcceptedCopyAtStart", () => {
       // Failing case, placing again: `swapped: true` and another file number.
       expect(again).toEqual({ kind: "copy_placed_owed", operationId: OP, swapped: false });
       expect(statSync(b.live).ino).toBe(placedFile);
+    });
+
+    it("an old file of another size is not read to ask whether the copy is already there", async () => {
+      const b = await box();
+      appendFileSync(b.live, Buffer.alloc(4096));
+      fileReads.paths.length = 0;
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual({
+        kind: "copy_placed_owed",
+        operationId: OP,
+        swapped: true,
+      });
+      expect(fileReads.paths).toEqual([b.accepted]);
+      expect(sha(b.live)).toBe(sha(b.accepted));
+    });
+
+    it("an old file of the same size is read, as only its digest can answer", async () => {
+      const b = await box();
+      expect(statSync(b.live).size).toBe(statSync(b.accepted).size);
+      fileReads.paths.length = 0;
+      await placeAcceptedCopyAtStart(b.args);
+      expect(fileReads.paths).toEqual([b.live, b.accepted]);
+    });
+
+    it("an old file of another size that cannot be opened stays that failure, changing nothing", async () => {
+      const b = await box();
+      appendFileSync(b.live, Buffer.alloc(4096));
+      chmodSync(b.live, 0o000);
+      const before = statSync(b.live).size;
+      await expect(placeAcceptedCopyForStart(b.args)).rejects.toMatchObject({
+        code: "handover.placement_failed",
+        params: { errno: "EACCES" },
+      });
+      expect(statSync(b.live).size).toBe(before);
+      expect(existsSync(b.note)).toBe(true);
+    });
+
+    it("a folder where the old file should be stays that failure, changing nothing", async () => {
+      const b = await box();
+      rmSync(b.live);
+      mkdirSync(b.live);
+      await expect(placeAcceptedCopyForStart(b.args)).rejects.toMatchObject({
+        code: "handover.placement_failed",
+        params: { errno: "EISDIR" },
+      });
+      expect(existsSync(b.note)).toBe(true);
+      expect(existsSync(b.preparation)).toBe(false);
     });
 
     it("keeps accepted.db until copy_placed is recorded, and leaves no temporary file", async () => {

@@ -1,5 +1,14 @@
 import { existsSync } from "node:fs";
-import { chmod, copyFile, readdir, rename, rm, rmdir } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  open,
+  readdir,
+  rename,
+  rm,
+  rmdir,
+  type FileHandle,
+} from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { lockVenueDatabase, withNodeTransaction, type NodeDatabase } from "@waitron/db";
@@ -154,6 +163,23 @@ function acceptedCopyHolds(acceptedPath: string, chartText: string): boolean {
   }
 }
 
+/** Opened and read, not only looked up: what cannot be read stops the start, as a digest of it would. */
+async function sizeIfPresent(path: string): Promise<number | null> {
+  let handle: FileHandle;
+  try {
+    handle = await open(path, "r");
+  } catch (error) {
+    if (errnoOf(error) === "ENOENT") return null;
+    throw error;
+  }
+  try {
+    await handle.read(Buffer.alloc(1), 0, 1, 0);
+    return (await handle.stat()).size;
+  } finally {
+    await handle.close();
+  }
+}
+
 /**
  * A lost selection could let this box pick a minute the old box already used, so the start stops
  * rather than place the copy without them, while the live database is still as it was.
@@ -236,10 +262,11 @@ export async function placeAcceptedCopyAtStart(args: {
     const indicator = parseIndicator(
       (JSON.parse(awaiting.indicatorText) as { body?: unknown }).body,
     );
-    const { sha256 } = indicator.snapshot;
+    const { sha256, bytes } = indicator.snapshot;
     const live = join(venueDir, VENUE_FILE);
-    const liveDigest = (await digestFileIfPresent(live))?.sha256 ?? null;
-    if (liveDigest === sha256) {
+    const liveSize = await sizeIfPresent(live);
+    // A whole venue's file, and one of another size cannot have this digest.
+    if (liveSize === bytes && (await digestFileIfPresent(live))?.sha256 === sha256) {
       // A crashed run may have renamed and not flushed, and `copy_placed` is recorded next.
       await steps.reachDisk(venueDir);
       return { kind: "copy_placed_owed", operationId, swapped: false };
@@ -247,7 +274,7 @@ export async function placeAcceptedCopyAtStart(args: {
 
     const accepted = acceptedCopyPath(stateDir, operationId);
     // No server runs while this holds the lock, so no chart can arrive between this read and the swap.
-    if (liveDigest !== null && holdsMovedOnChart(live, accepted, awaiting, log)) {
+    if (liveSize !== null && holdsMovedOnChart(live, accepted, awaiting, log)) {
       log("warn", "handover-place-copy.source_no_longer_main", { operationId });
       return { kind: "source_no_longer_main", operationId };
     }
@@ -257,7 +284,7 @@ export async function placeAcceptedCopyAtStart(args: {
     // given up filing, so what is placed now is what this box files from.
     if (held.sha256 !== sha256) throw new AppError("handover.copy_mismatch", {});
 
-    args.onWriting?.(indicator.snapshot.bytes);
+    args.onWriting?.(bytes);
     await mergeSelections(
       merge,
       stateDir,
