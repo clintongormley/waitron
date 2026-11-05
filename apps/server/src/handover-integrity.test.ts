@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { mkdtemp, open, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -161,4 +162,75 @@ describe("isCopyIntact", () => {
     // `terminate` ends a thread with code 1; failing case: the test times out on a thread left running.
     expect(await exited).toBe(1);
   });
+
+  it("a stop answers only once the thread has gone, with the stop's reason", async () => {
+    const stopping = new AbortController();
+    let thread: Worker | undefined;
+    let exited = false;
+    let opened!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      opened = resolve;
+    });
+    const startWorker = (_source: string, options: WorkerOptions) => {
+      thread = new Worker(
+        `
+        const { workerData, parentPort } = require("node:worker_threads");
+        const { DatabaseSync } = require("node:sqlite");
+        const db = new DatabaseSync(workerData.path, { readOnly: true });
+        db.prepare("select * from one").all();
+        parentPort.postMessage("opened");
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);
+        `,
+        options,
+      );
+      thread.once("message", opened);
+      thread.once("exit", () => {
+        exited = true;
+      });
+      return thread;
+    };
+    try {
+      const outcome = isCopyIntact(database(), { signal: stopping.signal, startWorker }).catch(
+        (error: unknown) => error,
+      );
+      await ready;
+      const reason = new Error("stopping");
+      stopping.abort(reason);
+      expect(await outcome).toBe(reason);
+      // Failing case: `false`, so a caller could discard a file the thread still holds open.
+      expect(exited).toBe(true);
+    } finally {
+      await thread?.terminate();
+    }
+  });
+
+  /** A thread that never says it has gone, whose `terminate` does what the case asks. */
+  const stuckThread = (terminate: () => Promise<number>) => () =>
+    Object.assign(new EventEmitter(), { terminate }) as unknown as Worker;
+
+  it("a thread that does not go is waited for only so long, then the stop's reason answers", async () => {
+    const stopping = new AbortController();
+    const outcome = isCopyIntact(database(), {
+      signal: stopping.signal,
+      startWorker: stuckThread(() => new Promise(() => {})),
+      stopWaitMs: 20,
+    }).catch((error: unknown) => error);
+    const reason = new Error("stopping");
+    stopping.abort(reason);
+    // Failing case: the test times out on a promise that never settles.
+    expect(await outcome).toBe(reason);
+  }, 5000);
+
+  it("a terminate that fails answers with the stop's reason, without waiting out the limit", async () => {
+    const stopping = new AbortController();
+    const outcome = isCopyIntact(database(), {
+      signal: stopping.signal,
+      startWorker: stuckThread(() => Promise.reject(new Error("no such thread"))),
+      stopWaitMs: 60_000,
+    }).catch((error: unknown) => error);
+    const reason = new Error("stopping");
+    stopping.abort(reason);
+    // Failing case: the test times out, well short of `stopWaitMs`.
+    expect(await outcome).toBe(reason);
+  }, 5000);
 });
