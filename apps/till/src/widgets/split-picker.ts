@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { baseStyles } from "@waitron/ui";
@@ -108,6 +108,26 @@ export class TillSplitPicker extends LitElement {
   /** Names a dish or an extra. */
   @property({ attribute: false }) nameOf: (line: TabLine) => string = (line) => line.name ?? "";
   @property({ attribute: false }) money: (amount: string) => string = (amount) => amount;
+
+  /** Waits for the row, which replaces the bill's dishes in the draw a read has just asked for. */
+  async focusTakeOver(billId: string): Promise<void> {
+    await this.updateComplete;
+    const button = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      `[data-split-take-over="${CSS.escape(billId)}"]`,
+    );
+    await button?.updateComplete;
+    button?.focus();
+  }
+
+  /** A bill's dishes give way to its take-over row, which would drop focus held among them. A bill
+   * still drawing its dishes has no such row, so its focus stays. */
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (!changed.has("sources")) return;
+    const active = (this.renderRoot as ShadowRoot).activeElement;
+    if (active?.localName !== "till-portion-picker") return;
+    const billId = active.closest<HTMLElement>("[data-split-bill]")?.dataset.splitBill;
+    if (billId !== undefined) void this.focusTakeOver(billId);
+  }
 
   #emit(split: SplitPicks): void {
     this.dispatchEvent(

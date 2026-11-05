@@ -53,6 +53,8 @@ function dish(id: string, lineNo: number, price: string, over: Partial<TabLine> 
   };
 }
 
+const billNumberInSpanish = (n: number) => fill(t("floor.unsent_bill", "es-ES"), { n: String(n) });
+
 const garcia: TableParty = {
   ...switcherParty,
   name: "García",
@@ -513,7 +515,7 @@ describe("Split a table's panel", () => {
 
   it.each([
     ["en-GB", "T7 is left with nothing to pay"],
-    ["es-ES", "T7 se queda sin nada que pagar"],
+    ["es-ES", fill(t("table.split_nothing_to_pay", "es-ES"), { table: "T7" })],
   ])(
     "with only paid bills staying the staying line in %s says nothing to pay, with no amount",
     async (locale, line) => {
@@ -532,7 +534,14 @@ describe("Split a table's panel", () => {
 
   it.each([
     ["en-GB", "T7 keeps Bill 2 · €40.00"],
-    ["es-ES", `T7 se queda con Cuenta 2 · ${formatMoney(decimal("40.00"), "es-ES")}`],
+    [
+      "es-ES",
+      fill(t("table.split_keeps", "es-ES"), {
+        table: "T7",
+        what: billNumberInSpanish(2),
+        amount: formatMoney(decimal("40.00"), "es-ES"),
+      }),
+    ],
   ])(
     "a paid bill beside one with an amount owing leaves the staying line's amount in %s",
     async (locale, line) => {
@@ -581,7 +590,7 @@ describe("Split a table's panel", () => {
 
     it.each([
       ["en-GB", "T7 is left with nothing to pay"],
-      ["es-ES", "T7 se queda sin nada que pagar"],
+      ["es-ES", fill(t("table.split_nothing_to_pay", "es-ES"), { table: "T7" })],
     ])("€20 received on €30, its unpaid €10 dish picked, in %s", async (locale, line) => {
       setLocale(locale);
       const el = await mountScreen({
@@ -753,7 +762,14 @@ describe("Split a table's panel", () => {
 
   it.each([
     ["en-GB", "T7 keeps an empty bill · €0.00"],
-    ["es-ES", `T7 se queda con una cuenta vacía · ${formatMoney(decimal("0.00"), "es-ES")}`],
+    [
+      "es-ES",
+      fill(t("table.split_keeps", "es-ES"), {
+        table: "T7",
+        what: t("table.split_empty_bill", "es-ES"),
+        amount: formatMoney(decimal("0.00"), "es-ES"),
+      }),
+    ],
   ])(
     "with no bill staying and none paid the staying line in %s says an empty bill, with its amount",
     async (locale, line) => {
@@ -1128,6 +1144,63 @@ describe("Split a table's panel", () => {
       expect(nativeInput(el, "leaving").value).toBe("2");
     });
 
+    describe("a count holding focus when the till goes busy", () => {
+      const control = (el: TillTableOrderScreen, selector: string) =>
+        stepper(el, "leaving").shadowRoot!.querySelector<HTMLElement>(selector)!;
+      async function focusThenBusy(el: TillTableOrderScreen, selector: string) {
+        control(el, selector).focus();
+        expect(stepper(el, "leaving").shadowRoot!.activeElement).toBe(control(el, selector));
+        el.busy = true;
+        await expect.poll(() => document.activeElement).toBe(document.body);
+      }
+
+      it.each([
+        ["the typed count", "input"],
+        ["the plus button", '[data-step="1"]'],
+      ])("%s gets focus back when the till is free", async (_name, selector) => {
+        const el = await mountScreen();
+        await toPanel(el);
+        await typeCount(el, "leaving", "2");
+        await focusThenBusy(el, selector);
+
+        el.busy = false;
+
+        await expect
+          .poll(() => stepper(el, "leaving").shadowRoot!.activeElement)
+          .toBe(control(el, selector));
+      });
+
+      it("focus the waiter has since moved elsewhere stays there", async () => {
+        const el = await mountScreen();
+        await toPanel(el);
+        await focusThenBusy(el, "input");
+        const back = q(el, "[data-action-back]")!;
+        back.focus();
+
+        el.busy = false;
+        await el.updateComplete;
+        await stepper(el, "leaving").updateComplete;
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        expect(focused(el)).toBe(back);
+      });
+
+      it("a busy till with focus off the counts moves nothing when it is free", async () => {
+        const el = await mountScreen();
+        await toPanel(el);
+        const back = q(el, "[data-action-back]")!;
+        back.focus();
+
+        el.busy = true;
+        await el.updateComplete;
+        el.busy = false;
+        await el.updateComplete;
+        await stepper(el, "leaving").updateComplete;
+
+        expect(focused(el)).toBe(back);
+      });
+    });
+
     it("refuses a bad count sent with Enter and dispatches nothing", async () => {
       const el = await mountScreen();
       const sent = heard(el, "split-table");
@@ -1205,6 +1278,88 @@ function resolved(el: TillTableOrderScreen, property: "color" | "marginTop", tok
 
 /** The screen's focus, read through its shadow root. */
 const focused = (el: TillTableOrderScreen) => el.shadowRoot!.activeElement as HTMLElement | null;
+
+describe("A803 split: the steps before the panel follow the party", () => {
+  const threeTables = [table("t7"), table("t8"), table("t9")];
+  const onTables = (...tableIds: string[]) => ({ ...garcia, tableIds });
+  const listOpen = (el: TillTableOrderScreen) => q(el, "[data-split-table]") !== null;
+
+  async function toList(over: Partial<TillTableOrderScreen>) {
+    const el = await mountScreen({ tables: threeTables, ...over });
+    const opened = heard(el, "split-table-open");
+    await click(el, "[data-move-split]");
+    await click(el, '[data-action="split-table"]');
+    expect(listOpen(el)).toBe(true);
+    return { el, opened };
+  }
+
+  it.each([[true], [false]])(
+    "a party left on one table closes the list, focus on the \u22ee (panel live: %s)",
+    async (splitPanelLive) => {
+      const { el, opened } = await toList({ splitPanelLive });
+      q(el, '[data-target="t8"]')!.focus();
+
+      el.party = onTables("t7");
+      await settled(el);
+
+      expect(listOpen(el)).toBe(false);
+      expect(opened).toEqual([]);
+      expect(focused(el)?.matches("[data-table-menu]")).toBe(true);
+    },
+  );
+
+  it.each([[true], [false]])(
+    "another party taking over this bill closes the list (panel live: %s)",
+    async (splitPanelLive) => {
+      const { el, opened } = await toList({ splitPanelLive });
+
+      el.party = { ...onTables("t7", "t8", "t9"), id: "another", name: "Bob" };
+      await settled(el);
+
+      expect(listOpen(el)).toBe(false);
+      expect(opened).toEqual([]);
+    },
+  );
+
+  it("the same party losing one of three tables keeps the list, without that table", async () => {
+    const { el } = await toList({ party: onTables("t7", "t8", "t9") });
+
+    el.party = onTables("t7", "t9");
+    await settled(el);
+
+    expect(listOpen(el)).toBe(true);
+    expect(q(el, '[data-target="t8"]')).toBeNull();
+    expect(q(el, '[data-target="t9"]')).not.toBeNull();
+  });
+
+  describe("the bills of the step Task 14a removes", () => {
+    async function toBills() {
+      const opened = await toList({ splitPanelLive: false, party: onTables("t7", "t8", "t9") });
+      await click(opened.el, '[data-target="t8"]');
+      expect(q(opened.el, '[data-target="none"]')).not.toBeNull();
+      return opened;
+    }
+
+    it("the table leaving the party closes them, with nothing opened", async () => {
+      const { el, opened } = await toBills();
+
+      el.party = onTables("t7", "t9");
+      await settled(el);
+
+      expect(q(el, "[data-split-table]")).toBeNull();
+      expect(opened).toEqual([]);
+    });
+
+    it("the party losing another table keeps them", async () => {
+      const { el } = await toBills();
+
+      el.party = onTables("t7", "t8");
+      await settled(el);
+
+      expect(q(el, '[data-target="none"]')).not.toBeNull();
+    });
+  });
+});
 
 describe("A803 split: a re-read", () => {
   it("a re-read: a picked dish paid elsewhere drops, and its row says Paid", async () => {
@@ -2108,7 +2263,7 @@ describe("A803 split: a read and a selected bill", () => {
     setLocale("es-ES");
     el.requestUpdate();
     await settled(el);
-    expect(sentence(el)).toBe("Toma los platos sin enviar de Ana y Luis antes de separar.");
+    expect(sentence(el)).toBe(fill(t("table.split_taken", "es-ES"), { who: "Ana y Luis" }));
   });
 
   it("a read and a selected bill: one holder of two bills is named once", async () => {
@@ -2126,7 +2281,7 @@ describe("A803 split: a read and a selected bill", () => {
     setLocale("es-ES");
     el.requestUpdate();
     await settled(el);
-    expect(sentence(el)).toBe("Toma los platos sin enviar antes de separar.");
+    expect(sentence(el)).toBe(t("table.split_taken_unnamed", "es-ES"));
   });
 
   it("a read and a selected bill: nothing sends while held, by a real click, a click on the host or Enter", async () => {
@@ -2262,7 +2417,7 @@ describe("A803 split: a read and a selected bill", () => {
     await settled(el);
     await press(el);
     expect(sentence(el)).toBe(
-      "Cuenta 3 ya no está en esta mesa o ya se ha pagado. Revisa lo marcado y elige Separar de nuevo.",
+      fill(t("table.split_bill_gone", "es-ES"), { bill: billNumberInSpanish(3) }),
     );
   });
 
@@ -2359,7 +2514,7 @@ describe("A803 split: a read and a selected bill", () => {
     await settled(el);
     await press(el);
     expect(sentence(el)).toBe(
-      "Cuenta 1 ha cambiado mientras elegías. Revisa su fila y elige Separar de nuevo.",
+      fill(t("table.split_changed", "es-ES"), { bill: billNumberInSpanish(1) }),
     );
   });
 
@@ -2407,7 +2562,7 @@ describe("A803 split: a read and a selected bill", () => {
       const { el, sent } = await threePicked();
 
       expect(tick(el, "b1")!.checked).toBe(true);
-      expect(textOf(el, "[data-split-takes]")).toContain("Bill 1");
+      expect(textOf(el, "[data-split-takes]")).toBe("T8 takes Bill 1 · €30.00");
       expect(q(el, "[data-split-new-bill-note]")).toBeNull();
 
       await press(el);
@@ -2446,6 +2601,244 @@ describe("A803 split: a read and a selected bill", () => {
     await press(el);
     expect(sent).toHaveLength(1);
     expect(refusalLine(el)).toBeNull();
+  });
+
+  describe("focus when a read holds a bill", () => {
+    const onTakeOver = (el: TillTableOrderScreen, billId: string) =>
+      splitPicker(el)!.shadowRoot!.activeElement === takeOverRow(el, billId);
+    const dishBox = (el: TillTableOrderScreen, billId: string, row: string) =>
+      dishRows(el, billId)!.shadowRoot!.querySelector<HTMLInputElement>(`[data-pick="${row}"]`)!;
+
+    async function asking() {
+      const el = await mountScreen();
+      await toPanel(el);
+      for (const id of ["b1", "b2", "b3"]) await tickBill(el, id);
+      await press(el);
+      expect(q(el, "[data-split-question]")).not.toBeNull();
+      return el;
+    }
+
+    it.each(["[data-split-move-guests]", "[data-split-anyway]"])(
+      "a read and a selected bill: focus on the question's %s goes to the bill's Take over",
+      async (button) => {
+        const el = await asking();
+        q(el, button)!.focus();
+
+        el.partyDrafts = [draft("b2", "ana", "Ana")];
+        await settled(el);
+
+        expect(q(el, "[data-split-question]")).toBeNull();
+        await expect.poll(() => onTakeOver(el, "b2")).toBe(true);
+      },
+    );
+
+    it("a read and a selected bill: focus on Split goes to the first held bill's Take over", async () => {
+      const { el } = await selected();
+      split(el).focus();
+
+      el.partyDrafts = [draft("b3", "luis", "Luis"), draft("b1", "ana", "Ana")];
+      await settled(el);
+
+      expect(split(el).disabled).toBe(true);
+      await expect.poll(() => onTakeOver(el, "b1")).toBe(true);
+    });
+
+    it("a read and a selected bill: focus skips a held bill that is not ticked", async () => {
+      const el = await mountScreen();
+      await toPanel(el);
+      await tickBill(el, "b3");
+      split(el).focus();
+
+      el.partyDrafts = [draft("b1", "ana", "Ana"), draft("b3", "luis", "Luis")];
+      await settled(el);
+
+      await expect.poll(() => onTakeOver(el, "b3")).toBe(true);
+    });
+
+    it("a read and a selected bill: focus among a bill's dishes goes to its own Take over when they give way", async () => {
+      const { el } = await selected();
+      dishBox(el, "b1", "soup").focus();
+
+      el.partyDrafts = [draft("b1", "ana", "Ana"), draft("b3", "luis", "Luis")];
+      await settled(el);
+
+      await expect.poll(() => onTakeOver(el, "b1")).toBe(true);
+    });
+
+    it("a read and a selected bill: focus among the dishes of a bill still drawn stays there", async () => {
+      const { el } = await selected();
+      const box = dishBox(el, "b1", "soup");
+      box.focus();
+
+      el.partyDrafts = [draft("b3", "luis", "Luis")];
+      await settled(el);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      expect(dishRows(el, "b1")!.shadowRoot!.activeElement).toBe(box);
+    });
+
+    it("a read and a selected bill: focus anywhere else stays where it is", async () => {
+      const { el } = await selected();
+      const back = q(el, "[data-action-back]")!;
+      back.focus();
+
+      el.partyDrafts = [draft("b1", "ana", "Ana")];
+      await settled(el);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      expect(focused(el)).toBe(back);
+    });
+  });
+
+  describe("a stop waiting when the bill comes back", () => {
+    async function goneThenBack() {
+      const opened = await selected();
+      opened.el.splitRead = withoutBills("b3");
+      await settled(opened.el);
+      expect(tick(opened.el, "b3")).toBeNull();
+      opened.el.splitRead = read(
+        { b1: lines("b1"), b2: lines("b2"), b3: lines("b3") },
+        { b1: "97.00", b2: "40.00", b3: "39.00" },
+      );
+      await settled(opened.el);
+      return opened;
+    }
+
+    it("a read and a selected bill: a gone bill listed again, unticked, is told as changed, never sent without a word", async () => {
+      const { el, sent } = await goneThenBack();
+      expect(tick(el, "b3")!.checked).toBe(false);
+
+      await press(el);
+      expect(sent).toEqual([]);
+      expect(sentence(el)).toBe(changed("Bill 3"));
+
+      await press(el);
+      expect(sent).toHaveLength(1);
+      expect(sent[0]!).toMatchObject({
+        selection: { wholeBillIds: [], loose: [{ billId: "b1", lineIds: ["salad"] }] },
+      });
+    });
+
+    it("a read and a selected bill: a gone bill listed again and ticked again never says it has left", async () => {
+      const { el, sent } = await goneThenBack();
+      await tickBill(el, "b3");
+
+      await press(el);
+      expect(sent).toEqual([]);
+      expect(sentence(el)).toBe(changed("Bill 3"));
+
+      await press(el);
+      expect(sent).toHaveLength(1);
+      expect(sent[0]!).toMatchObject({ selection: { wholeBillIds: ["b3"] } });
+    });
+  });
+
+  describe("the order of what stops a press", () => {
+    const stopsGoneBill = async (el: TillTableOrderScreen) => {
+      el.splitRead = withoutBills("b3");
+      await settled(el);
+    };
+
+    it("a read and a selected bill: a marked count speaks first, and the stop still waits for the next press", async () => {
+      const { el, sent } = await selected();
+      await stopsGoneBill(el);
+      await typeCount(el, "leaving", "0");
+
+      await press(el);
+      expect(sent).toEqual([]);
+      expect(refusalLine(el)).toBeNull();
+      expect(bottom(el).error).toBe(t("form.fix_fields"));
+
+      await typeCount(el, "leaving", "1");
+      await press(el);
+      expect(sent).toEqual([]);
+      expect(sentence(el)).toBe(gone("Bill 3"));
+
+      await press(el);
+      expect(sent).toHaveLength(1);
+    });
+
+    it("a read and a selected bill: with everything ticked the stop speaks first, then the question asks", async () => {
+      const el = await mountScreen();
+      const sent = heard<SplitTableDetail>(el, "split-table");
+      await toPanel(el);
+      for (const id of ["b1", "b2", "b3"]) await tickBill(el, id);
+      await stopsGoneBill(el);
+
+      await press(el);
+      expect(sent).toEqual([]);
+      expect(sentence(el)).toBe(gone("Bill 3"));
+      expect(q(el, "[data-split-question]")).toBeNull();
+
+      await press(el);
+      expect(sent).toEqual([]);
+      expect(refusalLine(el)).toBeNull();
+      expect(q(el, "[data-split-question]")).not.toBeNull();
+    });
+
+    it("a read and a selected bill: a stop arriving under the question takes one Split anyway, beside the question", async () => {
+      const el = await mountScreen();
+      const sent = heard<SplitTableDetail>(el, "split-table");
+      await toPanel(el);
+      for (const id of ["b1", "b2", "b3"]) await tickBill(el, id);
+      await press(el);
+      expect(q(el, "[data-split-question]")).not.toBeNull();
+      await typeCount(el, "leaving", "1");
+      await stopsGoneBill(el);
+      expect(q(el, "[data-split-question]")).not.toBeNull();
+
+      await click(el, "[data-split-anyway]");
+      await settled(el);
+      expect(sent).toEqual([]);
+      expect(sentence(el)).toBe(gone("Bill 3"));
+      expect(q(el, "[data-split-question]")).not.toBeNull();
+
+      await click(el, "[data-split-anyway]");
+      await settled(el);
+      expect(sent).toHaveLength(1);
+      expect(sent[0]!).toMatchObject({ selection: { wholeBillIds: ["b1", "b2"] } });
+    });
+
+    it("a read and a selected bill: a gone bill speaks before a changed one, whichever bill comes first", async () => {
+      const { el, sent } = await selected();
+      await pickDish(el, "b1", "soup");
+      el.splitRead = read(
+        { b1: lines("b1"), b2: lines("b2") },
+        { b1: "97.00", b2: "40.00" },
+        {
+          b1: {
+            received: "10.00",
+            paidLines: [{ lineId: "salad", lineNo: 2, paidQuantity: "1.000" }],
+          },
+        },
+      );
+      await settled(el);
+
+      await press(el);
+      expect(sentence(el)).toBe(gone("Bill 3"));
+      await press(el);
+      expect(sentence(el)).toBe(changed("Bill 1"));
+      expect(sent).toEqual([]);
+      await press(el);
+      expect(sent).toHaveLength(1);
+    });
+
+    it("a read and a selected bill: a changed stop still takes one press after its bill's picks are unticked, and its sentence stays true", async () => {
+      const { el, sent } = await selected();
+      await pickDish(el, "b1", "soup");
+      el.splitRead = paidSalad();
+      await settled(el);
+      await pickDish(el, "b1", "soup");
+      expect(ticked(el).picks.has("b1")).toBe(false);
+
+      await press(el);
+      expect(sent).toEqual([]);
+      expect(sentence(el)).toBe(changed("Bill 1"));
+
+      await press(el);
+      expect(sent).toHaveLength(1);
+      expect(sent[0]!).toMatchObject({ selection: { wholeBillIds: ["b3"], loose: [] } });
+    });
   });
 
   it("a read and a selected bill: a read changing nothing stops nothing", async () => {

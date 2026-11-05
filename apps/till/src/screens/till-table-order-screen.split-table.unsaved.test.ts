@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
+import type { TillPartyNameDialog } from "../widgets/party-name-dialog.js";
 import type { TillSplitPicker } from "../widgets/split-picker.js";
 import type { SplitSources, TabLine, TableParty, TableState } from "../api/client.js";
 import "./till-table-order-screen.js";
@@ -958,13 +960,18 @@ describe("Split a table's panel and a late refusal", () => {
     message: "Refused",
   } satisfies SplitRefusal;
 
+  function declinedOn(screen: TillTableOrderScreen) {
+    const told: SplitRefusalDeclinedDetail[] = [];
+    screen.addEventListener("split-refusal-declined", (event) =>
+      told.push((event as CustomEvent<SplitRefusalDeclinedDetail>).detail),
+    );
+    return told;
+  }
+
   /** The first panel has sent its split and closed; a second is open on the other table. */
   async function secondPanel() {
     const opened = await mount();
-    const told: SplitRefusalDeclinedDetail[] = [];
-    opened.screen.addEventListener("split-refusal-declined", (event) =>
-      told.push((event as CustomEvent<SplitRefusalDeclinedDetail>).detail),
-    );
+    const told = declinedOn(opened.screen);
     await pressSplit(opened.screen);
     expect(panelOpen(opened.screen)).toBe(false);
     q(opened.screen, "[data-move-split]")!
@@ -1045,6 +1052,59 @@ describe("Split a table's panel and a late refusal", () => {
     await typeCount(screen, "staying", "5");
     await typeCount(screen, "leaving", "");
     expect(unload()).toBe(false);
+  });
+
+  it("a typed name survives a reopen behind its window, which keeps focus and its keys", async () => {
+    const { el: app } = await mountWidget<SplitTableLeaveApp>("split-table-leave-test-app", {});
+    const screen = app.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+    await screen.updateComplete;
+    const told = declinedOn(screen);
+    q(screen, '[data-action="name"]')!.click();
+    await settled(screen);
+    const dialog = q<TillPartyNameDialog>(screen, "till-party-name-dialog")!;
+    await dialog.updateComplete;
+    const nameField = dialog.shadowRoot!.querySelector<HTMLElement>("wt-input")!;
+    const input = nameField.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    await expect.poll(() => nameField.shadowRoot!.activeElement).toBe(input);
+    await userEvent.keyboard("7");
+    expect(input.value).toBe("7");
+
+    await refuse(screen);
+
+    expect(panelOpen(screen)).toBe(true);
+    expect(q(screen, "[data-split-refusal]")!.textContent!.trim()).toBe("Refused");
+    expect(whole(screen)).toEqual(["other"]);
+    expect(q(screen, "till-party-name-dialog")).toBe(dialog);
+    expect(input.value).toBe("7");
+    expect(told).toEqual([]);
+    expect(nameField.shadowRoot!.activeElement).toBe(input);
+
+    await userEvent.keyboard("8");
+    expect(input.value).toBe("78");
+  });
+
+  it("a panel reopening onto a held bill takes focus to its heading, whatever had focus in the panel before", async () => {
+    const { screen } = await secondPanel();
+    screen.partyDrafts = [
+      {
+        id: "draft-other",
+        partyId: party.id,
+        billId: "other",
+        ownerId: "luis",
+        ownerName: "Luis",
+        revision: 0,
+        lines: [],
+        takenOverFrom: null,
+      },
+    ];
+    await settled(screen);
+    q(screen, "[data-split-confirm]")!.focus();
+
+    await refuse(screen);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    expect(q(screen, "[data-split-confirm]")!.hasAttribute("disabled")).toBe(true);
+    expect(screen.shadowRoot!.activeElement).toBe(q(screen, "[data-split-pick] h2"));
   });
 
   it("a panel holding work out of the page stays, and the app is told once it is put back", async () => {

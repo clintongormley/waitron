@@ -11949,6 +11949,36 @@ describe("till-app: Split a table retains the guests prompt observation", () => 
     await order.updateComplete;
   });
 
+  it("the list of tables closes, sending nothing, when a read leaves the party on one table", async () => {
+    const floor = { left: false };
+    let answerMerge = () => {};
+    const { el } = await mountApp({
+      getTablesState: vi.fn(async () =>
+        floor.left
+          ? [seated({}, { tableIds: ["t4"] }), table({ id: "t5", label: "5" })]
+          : [atTwo, table5],
+      ),
+      mergeBills: vi.fn(() => new Promise<void>((resolve) => (answerMerge = resolve))),
+    });
+    const order = await openMesa(el);
+    emit(order, "merge-bills", { fromBillId: "wo-check" });
+    await flush(el);
+    for (const selector of ["[data-move-split]", '[data-action="split-table"]']) {
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>(selector)!);
+      await flush(el);
+    }
+    expect(order.shadowRoot!.querySelector("[data-split-table]")).not.toBeNull();
+
+    floor.left = true;
+    answerMerge();
+    await flush(el, 5);
+
+    expect(order.party?.tableIds).toEqual(["t4"]);
+    await order.updateComplete;
+    expect(order.shadowRoot!.querySelector("[data-split-table]")).toBeNull();
+    expect(api.splitTable).not.toHaveBeenCalled();
+  });
+
   async function prompt(el: TillApp, billId = "wo-check") {
     const order = tableOrder(el)!;
     for (const selector of [

@@ -184,6 +184,7 @@ import {
 } from "../state/portion-selection.js";
 import "../widgets/portion-picker.js";
 import "../widgets/split-picker.js";
+import type { TillSplitPicker } from "../widgets/split-picker.js";
 import {
   leftWithNothingToPay,
   anywayNote,
@@ -1454,8 +1455,12 @@ export class TillTableOrderScreen extends LitElement {
   #splitObserved: string | null = "";
   /** The last read this panel saw answer: a later failed read keeps its rows. */
   #splitAnswered?: SplitSources;
+  /** A refusal not yet weighed against what is open, which only a screen in the page can see. */
+  #splitRefusalDue: SplitRefusal | null = null;
   /** A refusal the panel did not reopen for, until the app can be told. */
   #splitDeclined?: SplitRefusal;
+  /** The count's control that held focus when the till went busy. */
+  #busyFocus?: HTMLElement;
   /** Bills a read took away or changed, each stopping one press with its name as last drawn. */
   #splitGone = new Map<string, string>();
   #splitChanged = new Map<string, string>();
@@ -2170,6 +2175,7 @@ export class TillTableOrderScreen extends LitElement {
     this.#followStoredGuests();
     this.#countMoveDestination();
     if (changed.has("busy") && this.busy) this.#actionScope?.changed();
+    if (changed.has("busy")) this.#followBusyFocus();
     this.#shownBill = this.bills.find((bill) => bill.workingOrderId === this.orderId);
     if (
       this.payUnsentFor !== null &&
@@ -5273,28 +5279,31 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #followSplitPanel(refusalChanged: boolean, partySwitched: boolean): void {
-    const onTables = this.actionStep === "split-table" || this.actionStep === "split-table-bill";
+    const onList = this.actionStep === "split-table";
+    const onTable =
+      this.actionStep === "split-table-bill" || this.actionStep === "split-table-pick";
     if (
-      (onTables && this.party === null) ||
-      (this.actionStep === "split-table-pick" &&
-        (partySwitched || !this.#splitPanelHolds(this.splitTableId)))
+      ((onList || onTable) && partySwitched) ||
+      (onList && (this.party?.tableIds.length ?? 0) < 2) ||
+      (onTable && !this.#splitPanelHolds(this.splitTableId))
     )
       this.#closeActions();
-    const refusal = refusalChanged ? this.splitRefusal : null;
-    if (
-      refusal !== null &&
-      "selection" in refusal &&
-      !partySwitched &&
-      this.#splitPanelHolds(refusal.tableId)
-    ) {
-      if (this.#actionsHoldWork()) this.#splitDeclined = refusal;
-      else this.#reopenSplitPick(refusal);
+    if (refusalChanged) this.#splitRefusalDue = this.splitRefusal;
+    if (partySwitched) this.#splitRefusalDue = null;
+    if (this.isConnected) {
+      const refusal = this.#splitRefusalDue;
+      this.#splitRefusalDue = null;
+      if (refusal !== null && "selection" in refusal && this.#splitPanelHolds(refusal.tableId)) {
+        if (this.#actionsHoldWork()) this.#splitDeclined = refusal;
+        else this.#reopenSplitPick(refusal);
+      }
     }
     this.#tidySplit();
   }
 
-  /** Read directly from the baseline, since a screen out of the page has no scope to ask. A question
-   * is checked anywhere in the till: replacing this step's scope would close one covering it. */
+  /** Read directly from the baseline, since a screen just put back has no scope to ask yet. A
+   * question is checked anywhere in the till: replacing this step's scope would close one covering
+   * it. */
   #actionsHoldWork(): boolean {
     const baseline = this.#actionBaseline;
     return (
@@ -5303,10 +5312,9 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** Dispatched only in the page, so the app hears it however long the screen was out. */
   #tellSplitDeclined(): void {
     const refusal = this.#splitDeclined;
-    if (refusal === undefined || !this.isConnected) return;
+    if (refusal === undefined) return;
     this.#splitDeclined = undefined;
     this.#dispatch("split-refusal-declined", { refusal } satisfies SplitRefusalDeclinedDetail);
   }
@@ -5359,14 +5367,23 @@ export class TillTableOrderScreen extends LitElement {
       this.#splitChanged.delete(id);
     }
     for (const id of changed) this.#splitChanged.set(id, lastDrawn(id));
-    const held = heldSelected(sources, split).length > 0;
-    if (held) this.splitMessage = null;
-    if (this.splitAsking && (held || !nothingStays(sources, split))) {
-      const active = (this.renderRoot as ShadowRoot).activeElement;
-      this.#leaveSplitQuestion();
-      if (active?.matches("[data-split-move-guests], [data-split-anyway]"))
-        void this.#focusOnceDrawn("[data-split-confirm]");
+    // A bill listed again has not left, yet it came back unticked, so it still stops one press.
+    for (const source of sources) {
+      const name = this.#splitGone.get(source.bill.workingOrderId);
+      if (name === undefined) continue;
+      this.#splitGone.delete(source.bill.workingOrderId);
+      this.#splitChanged.set(source.bill.workingOrderId, name);
     }
+    const [held] = heldSelected(sources, split);
+    if (held !== undefined) this.splitMessage = null;
+    const active = (this.renderRoot as ShadowRoot).activeElement;
+    const onQuestion = active?.matches("[data-split-move-guests], [data-split-anyway]") === true;
+    const questionGoes = this.splitAsking && (held !== undefined || !nothingStays(sources, split));
+    if (questionGoes) this.#leaveSplitQuestion();
+    if (held !== undefined) {
+      if ((onQuestion || active?.matches("[data-split-confirm]")) && this.#stepFocus === undefined)
+        void this.#focusTakeOver(held.bill.workingOrderId);
+    } else if (questionGoes && onQuestion) void this.#focusOnceDrawn("[data-split-confirm]");
     if (samePicks(split.whole, picks.whole) && sameBillPicks(split.picks, picks.picks)) return;
     this.splitPicks = split;
     this.#actionScope?.changed();
@@ -5417,6 +5434,34 @@ export class TillTableOrderScreen extends LitElement {
   async #focusOnceDrawn(selector: string): Promise<void> {
     await this.updateComplete;
     this.renderRoot.querySelector<HTMLElement>(selector)?.focus();
+  }
+
+  /** Split can no longer take focus once a bill is held, so it goes to what the sentence asks for. */
+  async #focusTakeOver(billId: string): Promise<void> {
+    await this.updateComplete;
+    await this.renderRoot
+      .querySelector<TillSplitPicker>("till-split-picker")
+      ?.focusTakeOver(billId);
+  }
+
+  /** A disabled control drops focus to the page, where no key reaches the panel, and it stays there. */
+  #followBusyFocus(): void {
+    if (this.busy) {
+      const active = (this.renderRoot as ShadowRoot).activeElement;
+      this.#busyFocus = active?.matches("[data-split-pick] wt-number-stepper")
+        ? ((active.shadowRoot?.activeElement as HTMLElement | null) ?? undefined)
+        : undefined;
+      return;
+    }
+    const control = this.#busyFocus;
+    this.#busyFocus = undefined;
+    if (control !== undefined) void this.#refocusCount(control);
+  }
+
+  async #refocusCount(control: HTMLElement): Promise<void> {
+    await this.updateComplete;
+    await ((control.getRootNode() as ShadowRoot).host as LitElement).updateComplete;
+    if (document.activeElement === document.body) control.focus();
   }
 
   #anyBillPaid(): boolean {

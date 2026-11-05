@@ -876,6 +876,91 @@ it.each([
     expect((await question(app)).open).toBe(false);
   },
 );
+async function noStepOpen() {
+  const { el: app } = await mountWidget<ActionsLeaveApp>("actions-leave-test-app", {});
+  const screen = app.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+  await screen.updateComplete;
+  return { app, screen, told: declinedOn(screen) };
+}
+async function putBack(app: ActionsLeaveApp, screen: TillTableOrderScreen) {
+  app.shadowRoot!.prepend(screen);
+  await screen.updateComplete;
+}
+it("A803 late refusal: a refusal landing out of the page sees a question opened elsewhere once it is put back", async () => {
+  const { app, screen, told } = await noStepOpen();
+  const elsewhere = app.leave.coordinator.register<string>({
+    id: {},
+    current: () => "typed",
+    snapshot: (value) => value,
+    equal: () => false,
+    restore() {},
+  });
+  const leaving = app.leave.coordinator.request({
+    scopes: "all",
+    reason: "navigation",
+    proceed() {},
+  });
+  const asked = await question(app);
+  expect(asked.open).toBe(true);
+
+  screen.remove();
+  await refuseLate(screen);
+  expect(told).toEqual([]);
+  await putBack(app, screen);
+  await app.updateComplete;
+
+  expect(asked.open).toBe(true);
+  expect(splitPanelOpen(screen)).toBe(false);
+  expect(told).toEqual([{ refusal: lateRefusal }]);
+
+  await answer(app, "keep");
+  expect(await leaving).toBe("kept");
+  elsewhere.dispose();
+});
+it("A803 late refusal: with nothing in the way, a refusal landing out of the page reopens once it is put back, and not again", async () => {
+  const { app, screen, told } = await noStepOpen();
+
+  screen.remove();
+  await refuseLate(screen);
+  expect(splitPanelOpen(screen)).toBe(false);
+  await putBack(app, screen);
+
+  expect(splitPanelOpen(screen)).toBe(true);
+  expect(told).toEqual([]);
+
+  await click(screen, "[data-action-back]");
+  await answer(app, "discard");
+  await screen.updateComplete;
+  expect(splitPanelOpen(screen)).toBe(false);
+  screen.remove();
+  await screen.updateComplete;
+  await putBack(app, screen);
+  expect(splitPanelOpen(screen)).toBe(false);
+});
+it("A803 late refusal: a refusal the app takes back while the screen is out says nothing once it is put back", async () => {
+  const { app, screen, told } = await noStepOpen();
+
+  screen.remove();
+  await refuseLate(screen);
+  screen.splitRefusal = null;
+  await screen.updateComplete;
+  await putBack(app, screen);
+
+  expect(splitPanelOpen(screen)).toBe(false);
+  expect(told).toEqual([]);
+});
+it("A803 late refusal: a party switch while the screen is out drops a refusal that was waiting", async () => {
+  const { app, screen, told } = await noStepOpen();
+
+  screen.remove();
+  await refuseLate(screen);
+  screen.party = { ...party, id: "another" };
+  await screen.updateComplete;
+  await putBack(app, screen);
+
+  expect(splitPanelOpen(screen)).toBe(false);
+  expect(told).toEqual([]);
+});
 it("A803 late refusal: with no step open the panel reopens and nothing is declined", async () => {
   const { el: app } = await mountWidget<ActionsLeaveApp>("actions-leave-test-app", {});
   const screen = app.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
