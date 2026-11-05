@@ -21,12 +21,14 @@
 // - The dashboard session is minted; the password it then signs in with is checked for real.
 // - M1's certificate is sealed as setup seals one, not through the dashboard's install route.
 // - The test calls `startServer`, so production's entry steps before it never run.
+// - `WAITRON_MIN_TICK_MS` and `WAITRON_MAX_TICK_MS` set how often its duties run.
 //
 // What is a stand-in for the outside world, here and later in the run:
 // - AEAT is `createFakeAeat`, reached through the real drain, one record to a batch, and records what
 //   each box sent. The drain opens the sealed certificate with the box's own keys first, as the real
-//   transport does, but no TLS uses it. AEAT's clock reading answers nothing, and the fake's own clock
-//   runs 60 seconds ahead. `WAITRON_FISCAL_TEST_SUBMISSIONS` lets a preproduction box file to it.
+//   transport does, but no TLS uses it. AEAT's clock reading answers nothing, the fake's own clock
+//   runs 60 seconds ahead, and the drain leaves out the real path's `observeAuthorityTime`, so AEAT's
+//   answer time never reaches the box's clock. `WAITRON_FISCAL_TEST_SUBMISSIONS` lets a preproduction box file to it.
 // - The card provider is `FakePaymentProvider` behind the held Stripe credential, and Stripe's
 //   reconciler finds nothing. A sweep on M1 hears no answer for an open payment; one on M2 captures.
 //   The pending-card loop sleeps at most 50 ms between passes.
@@ -270,14 +272,14 @@ const HELD_MS = 500;
 const START_MS = 10_000;
 const ROUTER_PROBE_MS = 5_000;
 // Each stage's limit covers its starts and waits, plus time for the requests that have no limit of
-// their own, so a hang fails that stage alone and names it. The hook covers the stages and the first
-// setup, and stays well under the 10 minutes `test-server` allows, checkout and setup included. The
-// sum of every wait plus the 79 seconds a run took at a load average of 84 is under the hook's limit.
+// their own. A hang stops the run at that stage and names the stage; earlier stages' cases still
+// report.
 const STEPDOWN_MS = 3 * START_MS + 50_000 + 15_000;
 const PLACING_MS = START_MS + 40_000 + 15_000;
 const SELLING_MS = 4 * START_MS + 2 * ROUTER_PROBE_MS + 60_000 + 20_000;
 const RESTARTS_MS = 2 * START_MS + 15_000 + 10_000;
-const HOOK_MS = STEPDOWN_MS + PLACING_MS + SELLING_MS + RESTARTS_MS + 30_000;
+const FIRST_SETUP_MS = 90_000;
+const HOOK_MS = STEPDOWN_MS + PLACING_MS + SELLING_MS + RESTARTS_MS + FIRST_SETUP_MS;
 
 function hold() {
   let release!: () => void;
@@ -353,18 +355,29 @@ function seamsFor(box: Box): StartServerSeams {
 
 /** Set once teardown begins: a stage its limit gave up on may still be running. */
 let runEnded = false;
+// Called first by teardown as well: a stage `within` gave up on never leaves its own `finally`.
+let releaseAeat = (): void => {};
+// Teardown waits for these, however the stage ended, so it never removes a folder under a start.
+const startsRunning = new Set<Promise<void>>();
 
 async function start(box: Box): Promise<void> {
   if (runEnded) throw new Error(`${box.name} started after the run ended`);
   box.restartAsked = hold();
   const starting = startServer(box.env, box.env, seamsFor(box));
-  try {
-    box.server = await within(starting, START_MS, `${box.name}'s start`);
-  } catch (error) {
-    void starting.then(
-      (late) => late.close(),
+  let gaveUp = false;
+  startsRunning.add(
+    starting.then(
+      async (late) => {
+        if (gaveUp || runEnded) await late.close();
+      },
       () => {},
-    );
+    ),
+  );
+  try {
+    const server = await within(starting, START_MS, `${box.name}'s start`);
+    if (!runEnded) box.server = server;
+  } catch (error) {
+    gaveUp = true;
     throw error;
   }
 }
@@ -835,6 +848,8 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
   await start(m2);
   await start(m1);
   const m1Selling = (await nodeProbe(m1)).acceptingSales;
+  // Here, or a first start that waits fails at the first sale with a bare 404.
+  expect(m1Selling, "M1's first start is not selling: read handover.start_check").toBe(true);
   const m2SellingBefore = (await nodeProbe(m2)).acceptingSales;
 
   const filed = await sale(boxes);
@@ -843,8 +858,8 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
     timeout: 10_000,
   });
 
-  // Released on any way out of this block, or the drain never ends and neither does the close.
   const aeat = hold();
+  releaseAeat = aeat.release;
   let attemptingRef: string;
   let m2SeedHeld: StepdownSeen["m2SeedHeld"];
   let m1SweepsBeforeStepdown: number;
@@ -1304,7 +1319,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
 
   beforeAll(async () => {
     scratch = await mkdtemp(join(tmpdir(), "waitron-handover-controlled-"));
-    boxes = await twoBoxes(scratch);
+    boxes = await within(twoBoxes(scratch), FIRST_SETUP_MS, "M1's first setup");
     stepdown = await within(offerToStepdown(boxes), STEPDOWN_MS, "the stage up to M1's stepdown");
     // Held back, so a run in which M2 never gets there still reports what M1 did meanwhile.
     try {
@@ -1327,7 +1342,8 @@ describe("a controlled handover between two boxes, simulated in one process", ()
 
   afterAll(async () => {
     runEnded = true;
-    kill.mockRestore();
+    releaseAeat();
+    await Promise.allSettled(startsRunning);
     const closing = [
       boxes?.m1.server?.close(),
       boxes?.m2.server?.close(),
@@ -1335,6 +1351,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
       boxes?.m2.agent?.close(),
     ];
     const closed = await Promise.allSettled(closing);
+    kill.mockRestore();
     if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
     for (const result of closed) if (result.status === "rejected") throw result.reason;
   }, 60_000);
