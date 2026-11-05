@@ -611,21 +611,6 @@ assertion, without changing its check or wait. Next: use that snapshot and
 the existing failure screenshot to distinguish a wide scrolling box, delayed layout and missing
 resize delivery before changing the screen or its test.
 
-## Qualify smaller job-API pages for CI reruns
-
-Reproduce the summary's job-list retrieval failure with smaller pages while retaining complete
-job enumeration, current-head and attempt matching, and the strict result checks. On main run
-[42051923779](https://github.com/clintongormley/waitron/actions/runs/42051923779), attempt 2,
-all 83 other jobs completed successfully or were skipped, but summary job `127352382136`
-timed out after 12 minutes of HTTP 502 responses from the jobs API. A driver query with
-`per_page=100` also returned 502; its paired `per_page=30` query succeeded, and pagination
-recovered all 84 jobs. These responses do not establish GitHub's internal cause or prove a
-workflow repair. A 1 November 2026 campaign record for run `41320048947`, attempt 2, describes
-the same 100-per-page failure and complete recovery through 10-per-page requests.
-
-Qualify both fixture-controlled complete/partial page results and a real rerun before calling
-this fixed. Increasing retries alone repeats the already observed failure.
-
 ## Explain the two older silent pnpm setup stalls
 
 Reproduce the two earlier silent setup failures before assigning their cause. Main run

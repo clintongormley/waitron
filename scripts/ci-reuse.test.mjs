@@ -1,9 +1,11 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { performance } from "node:perf_hooks";
+import childProcess, { execFileSync, spawnSync } from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { URL } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const modulePath = new URL("./ci-reuse.mjs", import.meta.url);
 const repository = "clintongormley/waitron";
@@ -79,6 +81,10 @@ function fixture() {
       [base]: { sha: base, tree: { sha: baseTree } },
     },
   };
+  const jobPage = (evidence, path) => {
+    const page = Number(new URL(`https://api.example.test/${path}`).searchParams.get("page") ?? 1);
+    return { ...evidence, jobs: evidence.jobs.slice((page - 1) * 30, page * 30) };
+  };
   const api = (path) => {
     if (path === `repos/${repository}/actions/runs/40`) return data.main;
     if (
@@ -86,8 +92,8 @@ function fixture() {
       `repos/${repository}/actions/workflows/10/runs?head_sha=${base}&event=push&branch=main&per_page=100`
     )
       return data.mainRuns;
-    if (path === `repos/${repository}/actions/runs/40/attempts/1/jobs?per_page=100`)
-      return data.mainJobs;
+    if (path.startsWith(`repos/${repository}/actions/runs/40/attempts/1/jobs?per_page=30`))
+      return jobPage(data.mainJobs, path);
     if (path === `repos/${repository}/actions/runs/43`) return data.current;
     if (path === `repos/${repository}/actions/runs/42`) return data.run;
     if (path === `repos/${repository}/commits/${sha}/pulls?per_page=100`) return data.prs;
@@ -96,8 +102,8 @@ function fixture() {
       `repos/${repository}/actions/workflows/10/runs?head_sha=${head}&event=pull_request&per_page=100`
     )
       return data.runs;
-    if (path === `repos/${repository}/actions/runs/42/attempts/1/jobs?per_page=100`)
-      return data.jobs;
+    if (path.startsWith(`repos/${repository}/actions/runs/42/attempts/1/jobs?per_page=30`))
+      return jobPage(data.jobs, path);
     if (path.startsWith(`repos/${repository}/git/commits/`))
       return data.commits[path.split("/").at(-1)];
     throw new Error(`Unexpected API request: ${path}`);
@@ -110,6 +116,140 @@ async function verifier() {
   expect(source.findReuse, "the CI reuse verifier must exist").toBeTypeOf("function");
   return source.findReuse;
 }
+
+describe("small job-list pages", () => {
+  function manyJobs(data) {
+    for (const key of ["jobs", "mainJobs"]) {
+      const template = data[key].jobs.find((job) => job.name === "test-server (1)");
+      data[key].jobs.push(
+        ...Array.from({ length: 30 }, (_, i) => ({
+          ...template,
+          id: 1000 + i,
+          name: `test-server (${i + 2})`,
+        })),
+      );
+      data[key].total_count = data[key].jobs.length;
+    }
+  }
+
+  it("reuses complete PR and main evidence when 100-record requests return HTTP 502", async () => {
+    const findReuse = await verifier();
+    const { api, data } = fixture();
+    manyJobs(data);
+    const sizeSensitiveApi = (path) => {
+      if (/\/jobs\?per_page=100/.test(path)) throw new Error("HTTP 502");
+      return api(path);
+    };
+    expect(findReuse(context, sizeSensitiveApi, workflow)).toEqual({
+      sha: head,
+      runId: 42,
+      attempt: 1,
+      tree,
+      baseSha: base,
+      baseRunId: 40,
+    });
+  });
+
+  it("falls back before the workflow deadline when successful page reads consume the reuse budget", async () => {
+    const findReuse = await verifier();
+    const { api, data } = fixture();
+    manyJobs(data);
+    let elapsed = 0;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => elapsed);
+    try {
+      const slowApi = (path, timeout = 15_000) => {
+        elapsed += Math.min(timeout, 12_500);
+        if (timeout < 12_500) throw new Error("API timeout");
+        return api(path);
+      };
+      expect(findReuse(context, slowApi, workflow)).toBeNull();
+      expect(elapsed).toBeLessThan(180_000);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("caps the real command runner at the remaining reuse budget", async () => {
+    const source = await import(modulePath.href);
+    const { api, data } = fixture();
+    manyJobs(data);
+    const dir = mkdtempSync(join(tmpdir(), "waitron-a1340-deadline-"));
+    scratch.push(dir);
+    let elapsed = 0;
+    const budgets = [];
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => elapsed);
+    const command = vi
+      .spyOn(childProcess, "execFileSync")
+      .mockImplementation((_command, args, options) => {
+        budgets.push(options.timeout);
+        elapsed += Math.min(options.timeout, 14_000);
+        if (options.timeout < 14_000) throw new Error("API timeout");
+        return JSON.stringify(api(args[1]));
+      });
+    syncBuiltinESMExports();
+    try {
+      expect(
+        source.runReuse(
+          {
+            GITHUB_EVENT_NAME: context.event,
+            GITHUB_REF: context.ref,
+            GITHUB_SHA: sha,
+            GITHUB_REPOSITORY: repository,
+            GITHUB_RUN_ID: "43",
+            GITHUB_OUTPUT: join(dir, "output"),
+            GITHUB_STEP_SUMMARY: join(dir, "summary"),
+          },
+          undefined,
+          workflow,
+        ),
+      ).toBeNull();
+      expect(budgets.at(-1)).toBe(10_000);
+      expect(elapsed).toBe(150_000);
+      expect(readFileSync(join(dir, "output"), "utf8")).toBe(
+        "reuse=false\nreuse_run=\nreuse_sha=\n",
+      );
+    } finally {
+      command.mockRestore();
+      syncBuiltinESMExports();
+      clock.mockRestore();
+    }
+  });
+
+  it.each(["jobs", "mainJobs"])("refuses incomplete or invalid later %s pages", async (key) => {
+    const findReuse = await verifier();
+    for (const defect of [
+      "missing",
+      "failed",
+      "wrong head",
+      "wrong attempt",
+      "duplicate",
+      "count changed",
+      "API error",
+      "extra row past total",
+    ]) {
+      const { api, data } = fixture();
+      manyJobs(data);
+      const runId = key === "jobs" ? 42 : 40;
+      const brokenApi = (path) => {
+        const answer = api(path);
+        if (!path.includes(`/runs/${runId}/attempts/1/jobs?`) || !path.endsWith("&page=2"))
+          return answer;
+        if (defect === "API error") throw new Error("HTTP 502");
+        if (defect === "missing") return { ...answer, jobs: [] };
+        if (defect === "count changed") return { ...answer, total_count: answer.total_count + 1 };
+        const job = answer.jobs[0];
+        if (defect === "failed") job.conclusion = "failure";
+        if (defect === "wrong head") job.head_sha = "d".repeat(40);
+        if (defect === "wrong attempt") job.run_attempt = 2;
+        if (defect === "duplicate") job.name = "test-server (1)";
+        if (defect === "extra row past total")
+          answer.jobs.push({ ...job, id: 2000, name: "test-server (32)" });
+        return answer;
+      };
+      expect(findReuse(context, brokenApi, workflow), defect).toBeNull();
+    }
+  });
+});
 
 describe("main CI reuse", () => {
   it("accepts a merged same-repository PR with equal API trees and a complete successful CI attempt", async () => {

@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import { URL, pathToFileURL } from "node:url";
@@ -5,7 +6,7 @@ import { URL, pathToFileURL } from "node:url";
 const shaPattern = /^[a-f0-9]{40}$/;
 const positiveInteger = (value) => Number.isSafeInteger(value) && value > 0;
 
-export function findReuse(context, api, workflow) {
+export function findReuse(context, readApi, workflow) {
   const { event, ref, sha, repository, runId } = context;
   if (
     event !== "push" ||
@@ -16,6 +17,14 @@ export function findReuse(context, api, workflow) {
   )
     return null;
   try {
+    const deadline = performance.now() + 150_000;
+    const api = (path) => {
+      const remaining = Math.floor(deadline - performance.now());
+      if (remaining <= 0) throw new Error("Reuse lookup deadline reached");
+      const response = readApi(path, Math.min(15_000, remaining));
+      if (performance.now() >= deadline) throw new Error("Reuse lookup deadline reached");
+      return response;
+    };
     const prefix = `repos/${repository}`;
     const current = api(`${prefix}/actions/runs/${runId}`);
     if (
@@ -78,9 +87,7 @@ export function findReuse(context, api, workflow) {
       candidate.head_commit.tree_id === head.tree.sha;
     if (!admitted(run)) return null;
 
-    const evidence = api(
-      `${prefix}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`,
-    );
+    const evidence = readJobs(api, `${prefix}/actions/runs/${run.id}/attempts/${run.run_attempt}`);
     const { jobs, total_count: count } = evidence;
     if (
       !Array.isArray(jobs) ||
@@ -146,8 +153,9 @@ export function findReuse(context, api, workflow) {
       candidate.run_attempt === main.run_attempt &&
       candidate.head_commit.tree_id === base.tree.sha;
     if (!mainAdmitted(main)) return null;
-    const mainEvidence = api(
-      `${prefix}/actions/runs/${main.id}/attempts/${main.run_attempt}/jobs?per_page=100`,
+    const mainEvidence = readJobs(
+      api,
+      `${prefix}/actions/runs/${main.id}/attempts/${main.run_attempt}`,
     );
     const mainJobs = mainEvidence.jobs;
     if (
@@ -181,11 +189,37 @@ export function findReuse(context, api, workflow) {
   }
 }
 
-function githubApi(path) {
+function readJobs(api, attempt) {
+  const path = `${attempt}/jobs?per_page=30`;
+  const first = api(path);
+  const count = first.total_count;
+  if (
+    !positiveInteger(count) ||
+    !Array.isArray(first.jobs) ||
+    !first.jobs.length ||
+    first.jobs.length > 30
+  )
+    throw new Error("Invalid jobs page");
+  const jobs = [...first.jobs];
+  for (let page = 2; jobs.length < count; page++) {
+    const next = api(`${path}&page=${page}`);
+    if (
+      next.total_count !== count ||
+      !Array.isArray(next.jobs) ||
+      !next.jobs.length ||
+      next.jobs.length > 30
+    )
+      throw new Error("Incomplete jobs listing");
+    jobs.push(...next.jobs);
+  }
+  return { jobs, total_count: count };
+}
+
+function githubApi(path, timeout = 15_000) {
   return JSON.parse(
     execFileSync("gh", ["api", path], {
       encoding: "utf8",
-      timeout: 15_000,
+      timeout,
       maxBuffer: 8 * 1024 * 1024,
       stdio: ["ignore", "pipe", "pipe"],
     }),
