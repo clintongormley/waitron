@@ -3472,6 +3472,18 @@ export class PrintersScreen extends LitElement {
       }}
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep < 3 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
     >
+      ${
+        this.calibrationStep === 1
+          ? html`<wt-help-tooltip
+              slot="help"
+              mode="help-mode"
+              aria-label=${fill("help.badge_label", { part: t("printers.calibration_layout") })}
+              guide-href=${guideHref("printers.calibrate")}
+              guide-label=${t("help.guide_link")}
+              >${t("printers.calibration_help")}</wt-help-tooltip
+            >`
+          : nothing
+      }
       <div class="form-fields">
         ${this.#renderRefreshError()}
         <p role="status">

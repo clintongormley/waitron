@@ -1679,6 +1679,8 @@ export const en = {
   "printers.calibration_progress": "Step {step} of 3",
   "printers.calibration_job_failed": "Not printed: {reason}",
   "printers.calibration_layout": "Set paper width and resolution",
+  "printers.calibration_help":
+    "Calibration sets how wide Waitron prints and how large the QR code comes out. Run it again if you change the paper width.",
   "printers.calibration_receipt": "Test the receipt",
   "printers.calibration_drawer": "Cash drawer and portable use",
   "printers.resolution_hint":
@@ -5460,6 +5462,8 @@ export const es: Record<StringKey, string> = {
   "printers.calibration_progress": "Paso {step} de 3",
   "printers.calibration_job_failed": "No se ha impreso: {reason}",
   "printers.calibration_layout": "Ajusta el ancho y la resolución",
+  "printers.calibration_help":
+    "La calibración fija el ancho de impresión y el tamaño del código QR. Repítela si cambias el ancho del papel.",
   "printers.calibration_receipt": "Prueba el recibo",
   "printers.calibration_drawer": "Cajón portamonedas y uso portátil",
   "printers.resolution_hint":

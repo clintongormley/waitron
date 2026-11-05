@@ -1101,6 +1101,23 @@ describe("printer configuration tabs", () => {
     expect(tooltip.getAttribute("guide-label")).toBe(t("help.guide_link"));
   });
 
+  it("explains calibration in a help bubble that links to the guide", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    await openCalibration(el);
+    expect(q(el, "[data-test=calibration-step-1]")!.checkVisibility()).toBe(true);
+    const tooltip = q(el, "[data-test=edit-printer-modal] wt-help-tooltip")!;
+    expect(tooltip.getAttribute("mode")).toBe("help-mode");
+    expect(tooltip.getAttribute("aria-label")).toBe(
+      fill("help.badge_label", { part: t("printers.calibration_layout") }),
+    );
+    expect(tooltip.textContent!.trim()).toBe(t("printers.calibration_help"));
+    expect(tooltip.getAttribute("guide-href")).toBe(guideHref("printers.calibrate"));
+    expect(tooltip.getAttribute("guide-label")).toBe(t("help.guide_link"));
+  });
+
   it("puts Add agent under the empty agent table's sentence, opening the same pairing", async () => {
     const api = stubApi({ listAgents: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
