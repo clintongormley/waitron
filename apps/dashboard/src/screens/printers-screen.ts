@@ -75,6 +75,13 @@ import type {
   PrinterProfileOffer,
 } from "../api/client.js";
 
+/** The printer details form, as it would be saved. */
+interface DetailEditValues {
+  name: string;
+  host: string;
+  port: string;
+}
+
 interface PrinterDraft {
   name: string;
   host: string;
@@ -328,9 +335,13 @@ export class PrintersScreen extends LitElement {
       [hidden] {
         display: none;
       }
-      .wizard-back {
+      .wizard-back,
+      .footer-start {
         display: flex;
         gap: var(--wt-space-2);
+      }
+      .footer-start {
+        flex-wrap: wrap;
       }
       /* A row of fields is one line of the form: in a modal it takes a field's width, so the button
          beside a field stays beside it instead of at the modal's far edge. */
@@ -340,16 +351,6 @@ export class PrintersScreen extends LitElement {
         gap: var(--wt-space-3);
         align-items: flex-end;
         max-width: var(--wt-field-max-width);
-      }
-      .status-heading {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: space-between;
-        align-items: center;
-        gap: var(--wt-space-3);
-        margin-block: var(--wt-space-4);
-        width: 100%;
-        max-width: var(--wt-form-max-width);
       }
       .status-grid {
         display: grid;
@@ -700,21 +701,15 @@ export class PrintersScreen extends LitElement {
   @state() private calibrationStep = 1;
   @state() private detailActiveSavingIds = new Set<string>();
   @state() private detailActiveError: string | null = null;
-  @state() private detailName: {
+  @state() private detailEdit: {
     id: string;
-    value: string;
-    saving: boolean;
-    error: string | null;
-  } | null = null;
-  #detailNameScope?: DraftScope<string>;
-  #detailConnectionScope?: DraftScope<{ host: string; port: string }>;
-  @state() private detailConnection: {
-    id: string;
+    name: string;
     host: string;
     port: string;
     saving: boolean;
     error: string | null;
   } | null = null;
+  #detailEditScope?: DraftScope<DetailEditValues>;
   @state() private testingDrawer = false;
   @state() private drawerTestSent = false;
   @state() private drawerOutcome = "";
@@ -2496,11 +2491,7 @@ export class PrintersScreen extends LitElement {
         @click=${(event: Event) => {
           const button = event.currentTarget as HTMLElement;
           this.#showPrinterStatus(p.id, this.#rowMenuButton(button) ?? button);
-          this.#openDetailName(p);
-          void this.updateComplete.then(() => {
-            if (this.detailName?.id === p.id)
-              this.renderRoot.querySelector<HTMLElement>('[name="printer-detail-name"]')?.focus();
-          });
+          this.#openDetailEdit(p);
         }}
         >${t("action.edit")}</wt-button
       >
@@ -2573,70 +2564,57 @@ export class PrintersScreen extends LitElement {
   #resetPrinterSections(): void {
     this.#disposeDetailDrafts();
     this.detailActiveError = null;
-    this.detailName = null;
-    this.detailConnection = null;
   }
 
   #disposeDetailDrafts(): void {
-    this.#detailNameScope?.dispose();
-    this.#detailNameScope = undefined;
-    this.#detailConnectionScope?.dispose();
-    this.#detailConnectionScope = undefined;
+    this.#detailEditScope?.dispose();
+    this.#detailEditScope = undefined;
+    this.detailEdit = null;
   }
 
-  #openDetailName(printer: Printer): void {
-    this.#detailNameScope?.dispose();
-    this.detailName = { id: printer.id, value: printer.name, saving: false, error: null };
-    this.#detailNameScope = draftScopeFor<string>(this, {
-      id: {},
-      current: () => this.detailName!.value.trim(),
-      snapshot: (value) => value,
-      equal: (a, b) => a === b,
-      restore: (value) => {
-        this.detailName = { ...this.detailName!, value, error: null };
-      },
-    }).scope;
-  }
-
-  #detailConnectionValues(): { host: string; port: string } {
-    const draft = this.detailConnection!;
+  /** The draft as it would be saved: trimmed, and a port of digits read as a number. */
+  #detailEditValues(): DetailEditValues {
+    const draft = this.detailEdit!;
     const port = draft.port.trim();
-    return { host: draft.host.trim(), port: /^\d+$/.test(port) ? String(Number(port)) : port };
+    return {
+      name: draft.name.trim(),
+      host: draft.host.trim(),
+      port: /^\d+$/.test(port) ? String(Number(port)) : port,
+    };
   }
 
-  #openDetailConnection(printer: Printer): void {
-    this.#detailConnectionScope?.dispose();
-    this.detailConnection = {
+  #openDetailEdit(printer: Printer): void {
+    this.#detailEditScope?.dispose();
+    this.detailEdit = {
       id: printer.id,
+      name: printer.name,
       host: printer.host ?? "",
       port: printer.port === null ? "" : String(printer.port),
       saving: false,
       error: null,
     };
-    this.#detailConnectionScope = draftScopeFor(this, {
+    this.#detailEditScope = draftScopeFor<DetailEditValues>(this, {
       id: {},
-      current: () => this.#detailConnectionValues(),
+      current: () => this.#detailEditValues(),
       snapshot: (value) => ({ ...value }),
-      equal: (a, b) => a.host === b.host && a.port === b.port,
+      equal: (a, b) => a.name === b.name && a.host === b.host && a.port === b.port,
       restore: (value) => {
-        this.detailConnection = { ...this.detailConnection!, ...value, error: null };
+        this.detailEdit = { ...this.detailEdit!, ...value, error: null };
       },
     }).scope;
+    void this.updateComplete.then(() => {
+      if (this.detailEdit?.id === printer.id)
+        this.renderRoot.querySelector<HTMLElement>('[name="printer-detail-name"]')?.focus();
+    });
   }
 
-  async #cancelDetail(owner: "name" | "connection"): Promise<void> {
-    const scope = owner === "name" ? this.#detailNameScope : this.#detailConnectionScope;
+  async #cancelDetailEdit(): Promise<void> {
+    const scope = this.#detailEditScope;
     const proceed = () => {
-      scope?.dispose();
-      if (owner === "name") {
-        this.#detailNameScope = undefined;
-        this.detailName = null;
-      } else {
-        this.#detailConnectionScope = undefined;
-        this.detailConnection = null;
-      }
+      if (scope !== this.#detailEditScope) return;
+      this.#disposeDetailDrafts();
       void this.updateComplete.then(() => {
-        this.renderRoot.querySelector<HTMLElement>(`[data-test=edit-printer-${owner}]`)?.focus();
+        this.renderRoot.querySelector<HTMLElement>("[data-test=edit-printer-details]")?.focus();
       });
     };
     const coordinator = leaveCoordinatorFor(this);
@@ -2645,83 +2623,51 @@ export class PrintersScreen extends LitElement {
     else proceed();
   }
 
-  async #saveDetailConnection(printer: Printer): Promise<void> {
-    const scope = this.#detailConnectionScope;
-    if (!scope || saveActionState(scope).unchanged) return;
-    const draft = this.detailConnection;
-    if (draft?.id !== printer.id || draft.saving) return;
-    const host = draft.host.trim();
+  #detailEditErrors(printer: Printer): DetailEditValues {
+    const draft = this.detailEdit;
+    if (draft?.id !== printer.id) return { name: "", host: "", port: "" };
     const port = draft.port.trim();
-    if (!host || (port && (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535))) {
-      this.detailConnection = {
-        ...draft,
-        error: t(!host ? "printers.host_required" : "printers.port_invalid"),
-      };
-      return;
-    }
-    this.detailConnection = { ...draft, saving: true, error: null };
-    try {
-      await this.api.updatePrinter(printer.id, { host, port: port ? Number(port) : null });
-    } catch (error) {
-      if (!this.isConnected || scope !== this.#detailConnectionScope) return;
-      this.detailConnection = {
-        ...this.detailConnection!,
-        saving: false,
-        error: codeMessage(codeOf(error)),
-      };
-      return;
-    }
-    if (!this.isConnected || scope !== this.#detailConnectionScope) return;
-    scope.commit({ host, port: port ? String(Number(port)) : "" });
-    if (scope.isDirty())
-      this.detailConnection = { ...this.detailConnection!, saving: false, error: null };
-    else {
-      scope.dispose();
-      this.#detailConnectionScope = undefined;
-      this.detailConnection = null;
-    }
-    await this.#load();
-  }
-
-  #detailConnectionErrors(): { host: string; port: string } {
-    const draft = this.detailConnection;
-    if (!draft) return { host: "", port: "" };
-    const port = draft.port.trim();
+    const network = printer.transport === "network_tcp";
     return {
-      host: draft.host.trim() ? "" : t("printers.host_required"),
+      name: draft.name.trim() ? "" : t("form.name_required"),
+      host: network && !draft.host.trim() ? t("printers.host_required") : "",
       port:
-        port && (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)
+        network && port && (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)
           ? t("printers.port_invalid")
           : "",
     };
   }
 
-  async #saveDetailName(printer: Printer): Promise<void> {
-    const scope = this.#detailNameScope;
+  async #saveDetailEdit(printer: Printer): Promise<void> {
+    const scope = this.#detailEditScope;
     if (!scope || saveActionState(scope).unchanged) return;
-    const draft = this.detailName;
+    const draft = this.detailEdit;
     if (draft?.id !== printer.id || draft.saving) return;
-    const name = draft.value.trim();
-    if (!name) {
-      this.detailName = { ...draft, error: t("form.name_required") };
-      return;
+    const errors = this.#detailEditErrors(printer);
+    if (errors.name || errors.host || errors.port) return;
+    const values = this.#detailEditValues();
+    const patch: { name?: string; host?: string; port?: number | null } = {};
+    if (values.name !== printer.name) patch.name = values.name;
+    const savedPort = printer.port === null ? "" : String(printer.port);
+    if (
+      printer.transport === "network_tcp" &&
+      (values.host !== (printer.host ?? "") || values.port !== savedPort)
+    ) {
+      patch.host = values.host;
+      patch.port = values.port ? Number(values.port) : null;
     }
-    this.detailName = { ...draft, saving: true, error: null };
+    this.detailEdit = { ...draft, saving: true, error: null };
     try {
-      await this.api.updatePrinter(printer.id, { name });
+      if (Object.keys(patch).length > 0) await this.api.updatePrinter(printer.id, patch);
     } catch (error) {
-      if (!this.isConnected || scope !== this.#detailNameScope) return;
-      this.detailName = { ...this.detailName!, saving: false, error: codeMessage(codeOf(error)) };
+      if (!this.isConnected || scope !== this.#detailEditScope) return;
+      this.detailEdit = { ...this.detailEdit!, saving: false, error: codeMessage(codeOf(error)) };
       return;
     }
-    if (!this.isConnected || scope !== this.#detailNameScope) return;
-    scope.commit(name);
-    if (scope.isDirty()) this.detailName = { ...this.detailName!, saving: false, error: null };
-    else {
-      scope.dispose();
-      this.#detailNameScope = undefined;
-      this.detailName = null;
-    }
+    if (!this.isConnected || scope !== this.#detailEditScope) return;
+    scope.commit(values);
+    if (scope.isDirty()) this.detailEdit = { ...this.detailEdit!, saving: false, error: null };
+    else this.#disposeDetailDrafts();
     await this.#load();
   }
 
@@ -2750,7 +2696,7 @@ export class PrintersScreen extends LitElement {
 
   /** Closing the details asks first when a detail draft is dirty, through the address change. */
   readonly #beforeDetailsClose = async (): Promise<boolean> => {
-    if (this.detailName?.saving || this.detailConnection?.saving) return false;
+    if (this.detailEdit?.saving) return false;
     const leaving = this.#url.write({ printer: null });
     if (!leaving) {
       this.#resetPrinterSections();
@@ -2779,22 +2725,140 @@ export class PrintersScreen extends LitElement {
           this.selectedPrinterId === null
             ? nothing
             : p
-              ? this.#renderPrinterStatus(p)
+              ? this.detailEdit?.id === p.id
+                ? this.#renderDetailEditForm(p)
+                : this.#renderPrinterStatus(p)
               : html`<p role="status">
                   ${this.loading ? t("printers.table_loading") : codeMessage("printer.not_found")}
                 </p>`
         }
       </div>
-      <wt-form-actions slot="footer">
-        <wt-button
-          slot="cancel"
-          data-test="printer-details-close"
-          @click=${(event: Event) =>
-            void (event.currentTarget as HTMLElement).closest("wt-modal")?.requestClose("cancel")}
-          >${t("action.close")}</wt-button
-        >
-      </wt-form-actions>
+      ${
+        p && this.detailEdit?.id === p.id
+          ? this.#renderDetailEditActions(p)
+          : html`<wt-form-actions slot="footer">
+              <div slot="cancel" class="footer-start">
+                <wt-button
+                  data-test="printer-details-close"
+                  @click=${(event: Event) =>
+                    void (event.currentTarget as HTMLElement)
+                      .closest("wt-modal")
+                      ?.requestClose("cancel")}
+                  >${t("action.close")}</wt-button
+                >
+                ${
+                  p
+                    ? html`<wt-button
+                        variant=${this.detailActiveSavingIds.has(p.id) ? "secondary" : "danger"}
+                        data-test="delete-printer-detail"
+                        ?disabled=${this.detailActiveSavingIds.has(p.id)}
+                        @click=${(event: Event) =>
+                          void this.#requestDetailDelete(p, event.currentTarget as HTMLElement)}
+                        >${t("action.delete")}</wt-button
+                      >`
+                    : nothing
+                }
+              </div>
+              ${
+                p
+                  ? html`<wt-button
+                        slot="secondary"
+                        data-test="calibrate-printer-details"
+                        @click=${(event: Event) => {
+                          this.#openPrinter(p, event);
+                        }}
+                        >${t("printers.calibrate")}</wt-button
+                      ><wt-button
+                        data-test="edit-printer-details"
+                        @click=${() => {
+                          this.#openDetailEdit(p);
+                        }}
+                        >${t("action.edit")}</wt-button
+                      >`
+                  : nothing
+              }
+            </wt-form-actions>`
+      }
     </wt-modal>`;
+  }
+
+  #renderDetailEditForm(p: Printer): TemplateResult {
+    const draft = this.detailEdit!;
+    const errors = this.#detailEditErrors(p);
+    const change = (field: keyof DetailEditValues) => (event: CustomEvent<{ value: string }>) => {
+      if (!(event.currentTarget as HTMLElement).isConnected) return;
+      event.stopPropagation();
+      if (this.detailEdit?.id !== p.id) return;
+      this.detailEdit = { ...this.detailEdit, [field]: event.detail.value, error: null };
+      this.#detailEditScope?.changed();
+    };
+    return html`<div
+      class="form-fields"
+      data-test="printer-details-form"
+      @keydown=${(event: KeyboardEvent) =>
+        submitOnEnter(event, this.renderRoot.querySelector("[data-test=save-printer-details]"))}
+    >
+      <wt-input
+        name="printer-detail-name"
+        label=${t("printers.name")}
+        required
+        ?disabled=${draft.saving}
+        .value=${draft.name}
+        .invalid=${errors.name !== ""}
+        .error=${errors.name}
+        @wt-change=${change("name")}
+      ></wt-input>
+      ${
+        p.transport === "network_tcp"
+          ? html`<wt-input
+                name="printer-detail-host"
+                label=${t("printers.host")}
+                required
+                ?disabled=${draft.saving}
+                .value=${draft.host}
+                .invalid=${errors.host !== ""}
+                .error=${errors.host}
+                @wt-change=${change("host")}
+              ></wt-input>
+              <wt-input
+                name="printer-detail-port"
+                label=${t("printers.port")}
+                type="number"
+                ?disabled=${draft.saving}
+                .value=${draft.port}
+                .invalid=${errors.port !== ""}
+                .error=${errors.port}
+                @wt-change=${change("port")}
+              ></wt-input>`
+          : nothing
+      }
+    </div>`;
+  }
+
+  #renderDetailEditActions(p: Printer): TemplateResult {
+    const draft = this.detailEdit!;
+    const errors = this.#detailEditErrors(p);
+    const invalid = errors.name !== "" || errors.host !== "" || errors.port !== "";
+    const save = saveActionState(this.#detailEditScope);
+    return html`<wt-form-actions
+      slot="footer"
+      .error=${bottomMessage(draft.error, invalid ? t("form.fix_fields") : null)}
+    >
+      <wt-button
+        slot="cancel"
+        data-test="cancel-printer-details"
+        ?disabled=${draft.saving}
+        @click=${() => void this.#cancelDetailEdit()}
+        >${t("action.cancel")}</wt-button
+      >
+      <wt-button
+        variant=${save.variant}
+        data-test="save-printer-details"
+        ?disabled=${save.unchanged || draft.saving || invalid}
+        @click=${() => void this.#saveDetailEdit(p)}
+        >${t("action.save")}</wt-button
+      >
+    </wt-form-actions>`;
   }
 
   #renderPrinterStatus(p: Printer): TemplateResult {
@@ -2886,79 +2950,6 @@ export class PrintersScreen extends LitElement {
       },
     ];
     return html`<section data-test="printer-status">
-      <div class="status-heading">
-        ${
-          this.detailName?.id === p.id
-            ? html`<div class="form-fields">
-                <wt-input
-                  name="printer-detail-name"
-                  label=${t("printers.name")}
-                  required
-                  ?disabled=${this.detailName.saving}
-                  @keydown=${(event: KeyboardEvent) =>
-                    submitOnEnter(
-                      event,
-                      this.renderRoot.querySelector("[data-test=save-printer-name]"),
-                    )}
-                  .value=${this.detailName.value}
-                  .invalid=${this.detailName.error === t("form.name_required")}
-                  .error=${this.detailName.error === t("form.name_required") ? this.detailName.error : ""}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    if (!(event.currentTarget as HTMLElement).isConnected) return;
-                    event.stopPropagation();
-                    if (this.detailName?.id === p.id)
-                      this.detailName = {
-                        ...this.detailName,
-                        value: event.detail.value,
-                        error: event.detail.value.trim() ? null : t("form.name_required"),
-                      };
-                    this.#detailNameScope?.changed();
-                  }}
-                ></wt-input>
-                ${
-                  this.detailName.error === t("form.name_required")
-                    ? html`<p role="alert">${t("form.fix_fields")}</p>`
-                    : nothing
-                }
-                ${
-                  this.detailName.error !== null &&
-                  this.detailName.error !== t("form.name_required")
-                    ? html`<p role="alert" data-test="printer-name-refusal">
-                        ${this.detailName.error}
-                      </p>`
-                    : nothing
-                }
-                <wt-form-actions>
-                  <wt-button
-                    data-test="cancel-printer-name"
-                    ?disabled=${this.detailName.saving}
-                    @click=${() => void this.#cancelDetail("name")}
-                    >${t("action.cancel")}</wt-button
-                  >
-                  <wt-button
-                    variant=${saveActionState(this.#detailNameScope).variant}
-                    data-test="save-printer-name"
-                    ?disabled=${saveActionState(this.#detailNameScope).unchanged || this.detailName.saving || !this.detailName.value.trim()}
-                    @click=${() => void this.#saveDetailName(p)}
-                    >${t("action.save")}</wt-button
-                  >
-                </wt-form-actions>
-              </div>`
-            : html`<wt-button
-                data-test="edit-printer-name"
-                @click=${() => {
-                  this.#openDetailName(p);
-                  void this.updateComplete.then(() => {
-                    if (this.detailName?.id === p.id)
-                      this.renderRoot
-                        .querySelector<HTMLElement>('[name="printer-detail-name"]')
-                        ?.focus();
-                  });
-                }}
-                >${t("action.edit")}</wt-button
-              >`
-        }
-      </div>
       <div class="status-grid">
         <section data-test="printer-section-status" aria-labelledby="printer-details-status">
           <h3 id="printer-details-status">${t("printers.status")}</h3>
@@ -2973,14 +2964,6 @@ export class PrintersScreen extends LitElement {
                 void this.#setDetailActive(p, event.detail.checked);
               }}
             ></wt-switch>
-            <wt-button
-              variant=${this.detailActiveSavingIds.has(p.id) ? "secondary" : "danger"}
-              data-test="delete-printer-detail"
-              ?disabled=${this.detailActiveSavingIds.has(p.id)}
-              @click=${(event: Event) =>
-                void this.#requestDetailDelete(p, event.currentTarget as HTMLElement)}
-              >${t("action.delete")}</wt-button
-            >
           </div>
           ${
             this.detailActiveError
@@ -3010,111 +2993,24 @@ export class PrintersScreen extends LitElement {
         >
           <h3 id="printer-details-connection">${t("printers.connection")}</h3>
           ${settingsRows(connection)}
-          ${
-            p.transport === "network_tcp"
-              ? this.detailConnection?.id === p.id
-                ? html`<div
-                    class="form-fields"
-                    @keydown=${(event: KeyboardEvent) =>
-                      submitOnEnter(
-                        event,
-                        this.renderRoot.querySelector("[data-test=save-printer-connection]"),
-                      )}
-                  >
-                    <wt-input
-                      name="printer-detail-host"
-                      label=${t("printers.host")}
-                      ?disabled=${this.detailConnection.saving}
-                      .value=${this.detailConnection.host}
-                      .invalid=${!!this.#detailConnectionErrors().host}
-                      .error=${this.#detailConnectionErrors().host}
-                      required
-                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                        if (!(event.currentTarget as HTMLElement).isConnected) return;
-                        if (this.detailConnection?.id === p.id)
-                          this.detailConnection = {
-                            ...this.detailConnection,
-                            host: event.detail.value,
-                            error: null,
-                          };
-                        this.#detailConnectionScope?.changed();
-                      }}
-                    ></wt-input>
-                    <wt-input
-                      name="printer-detail-port"
-                      label=${t("printers.port")}
-                      type="number"
-                      ?disabled=${this.detailConnection.saving}
-                      .value=${this.detailConnection.port}
-                      .invalid=${!!this.#detailConnectionErrors().port}
-                      .error=${this.#detailConnectionErrors().port}
-                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                        if (!(event.currentTarget as HTMLElement).isConnected) return;
-                        if (this.detailConnection?.id === p.id)
-                          this.detailConnection = {
-                            ...this.detailConnection,
-                            port: event.detail.value,
-                            error: null,
-                          };
-                        this.#detailConnectionScope?.changed();
-                      }}
-                    ></wt-input>
-                    ${this.detailConnection.error ? html`<p role="alert">${this.detailConnection.error}</p>` : nothing}
-                    ${
-                      this.#detailConnectionErrors().host || this.#detailConnectionErrors().port
-                        ? html`<p role="alert">${t("form.fix_fields")}</p>`
-                        : nothing
-                    }
-                    <wt-form-actions>
-                      <wt-button
-                        data-test="cancel-printer-connection"
-                        ?disabled=${this.detailConnection.saving}
-                        @click=${() => void this.#cancelDetail("connection")}
-                        >${t("action.cancel")}</wt-button
-                      >
-                      <wt-button
-                        variant=${saveActionState(this.#detailConnectionScope).variant}
-                        data-test="save-printer-connection"
-                        ?disabled=${saveActionState(this.#detailConnectionScope).unchanged || this.detailConnection.saving || !!this.#detailConnectionErrors().host || !!this.#detailConnectionErrors().port}
-                        @click=${() => void this.#saveDetailConnection(p)}
-                        >${t("action.save")}</wt-button
-                      >
-                    </wt-form-actions>
-                  </div>`
-                : html`<wt-button
-                    data-test="edit-printer-connection"
-                    @click=${() => {
-                      this.#openDetailConnection(p);
-                    }}
-                    >${t("action.edit")}</wt-button
-                  >`
-              : nothing
-          }
         </section>
         <section data-test="printer-section-calibration" aria-labelledby="printer-details-paper">
           <h3 id="printer-details-paper">${t("printers.details_paper")}</h3>
           ${settingsRows(paper)}
-          <div class="status-actions">
-            ${
-              p.portable
-                ? html`<wt-button
+          ${
+            p.portable
+              ? html`<div class="status-actions">
+                  <wt-button
                     data-test="open-equipment-label"
                     @click=${(event: Event) => {
                       this.#labelOpener = event.currentTarget as HTMLElement;
                       this.labelPrinterId = p.id;
                     }}
                     >${t("equipment.label")}</wt-button
-                  >`
-                : nothing
-            }
-            <wt-button
-              data-test="calibrate-printer-details"
-              @click=${(event: Event) => {
-                this.#openPrinter(p, event);
-              }}
-              >${t("printers.calibrate")}</wt-button
-            >
-          </div>
+                  >
+                </div>`
+              : nothing
+          }
         </section>
       </div>
     </section>`;
@@ -4358,20 +4254,8 @@ export class PrintersScreen extends LitElement {
     this.deleteActionError = "";
   }
 
-  /** The printer page's editors are asked to leave first, as any other way off the page would. */
   async #requestDetailDelete(p: Printer, opener: HTMLElement): Promise<void> {
     if (this.detailActiveSavingIds.has(p.id)) return;
-    const scopes = [this.#detailNameScope, this.#detailConnectionScope].flatMap((scope) =>
-      scope ? [scope.id] : [],
-    );
-    const coordinator = leaveCoordinatorFor(this);
-    if (coordinator && scopes.length > 0) {
-      const outcome = await coordinator.request({ scopes, reason: "navigation", proceed() {} });
-      if (outcome !== "proceeded" || this.selectedPrinterId !== p.id) return;
-    }
-    this.#disposeDetailDrafts();
-    this.detailName = null;
-    this.detailConnection = null;
     this.#openDelete(p, opener);
   }
 

@@ -646,7 +646,9 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       expect(
         detailsEditButton(el, "edit", "name")!.getBoundingClientRect().right,
       ).toBeLessThanOrEqual(
-        q(el, "[data-test=printer-section-status]")!.getBoundingClientRect().right,
+        q(el, "[data-test=printer-details-modal]")!
+          .shadowRoot!.querySelector("dialog")!
+          .getBoundingClientRect().right,
       );
       await expectNoA11yViolations(host);
       await page.screenshot({

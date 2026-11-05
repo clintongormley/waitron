@@ -914,7 +914,7 @@ describe("under the dashboard's leave coordinator", () => {
     expect(await state(el, "save-agent")).toEqual(ready);
   });
 
-  it("the name and connection editors open quiet and wake on an edit", async () => {
+  it("the details form opens quiet and wakes on a name or an address edit", async () => {
     history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
     const el = await mountShared();
     await vi.waitFor(() => expect(detailsEditButton(el, "edit", "name")).not.toBeNull());
@@ -924,8 +924,7 @@ describe("under the dashboard's leave coordinator", () => {
     await typeInto(el, "[name=printer-detail-name]", "Kitchen 2");
     expect(await state(el, detailsEditTest("save", "name"))).toEqual(ready);
 
-    openDetailsEdit(el, "connection");
-    await vi.waitFor(() => expect(detailsEditButton(el, "save", "connection")).not.toBeNull());
+    await typeInto(el, "[name=printer-detail-name]", "Kitchen");
     expect(await state(el, detailsEditTest("save", "connection"))).toEqual(quiet);
     await typeInto(el, "[name=printer-detail-port]", "9101");
     expect(await state(el, detailsEditTest("save", "connection"))).toEqual(ready);

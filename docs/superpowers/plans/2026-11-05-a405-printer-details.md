@@ -600,6 +600,31 @@ PR 1:
     gap from them, so the "at least `--wt-space-4` below the fields" check becomes "both end at or
     above the facts' top"; the `--wt-space-3` spacing between Delete and the switch is unchanged.
     Task 4b moves Delete to the footer and replaces both with its footer-order cases.
+- Task 4b, as built:
+  - The two "… both above the Status facts" layout cases are deleted and replaced by "at 1280px / at
+    390px the details' footer reads Close, Delete, then Calibrate and Edit on the right".
+  - "offers detail edits and calibration without a second general printer editor": Edit and
+    Calibrate are in the footer, and no `edit-printer-name` or `edit-printer-connection` exists
+    (it used to assert no `edit-printer-details`, which is now the one Edit).
+  - "the printer page offers Delete beside its Active switch, and a dirty name editor asks first"
+    → "Delete is offered in the details' footer, not while editing".
+  - `printers-screen.save-state.test.ts` "the name and connection editors open quiet and wake on an
+    edit" → "the details form opens quiet and wakes on a name or an address edit": it asserted two
+    separate editors (the connection Save quiet while the name was changed).
+  - `printers-screen.a11y.test.ts` "keeps printer details readable…": Edit's right edge is held
+    within the window rather than the Status section, since Edit is now in the footer.
+  - Inline name and connection cases read a refusal or `form.fix_fields` from the form's one bottom
+    message instead of `printer-name-refusal`, `printer-section-connection` or `printer-status`,
+    same text: "rejects an emptied required network host in printer details", "shows a connection
+    refusal while leaving its Save available for retry", "shows a refused inline name save below
+    the form and leaves Save available", "locks the inline name while its save is pending and
+    unlocks it on refusal", "explains an empty inline printer name beside its field", "keeps a
+    refused network connection edit available to retry", "locks network fields while their save is
+    pending and unlocks them on refusal", "re-checks connection fields after an invalid edit and
+    allows Save when both are valid", "leaves the inline printer name Save
+    working after a refusal that names no field", and "starts the inline printer name form again
+    when it is reopened" (its "no refusal" check now reads an empty bottom message; the old
+    selector could no longer match anything).
 
 PR 2:
 - `apps/server/src/print-api.printer-wiring.test.ts` "GET /management-api/printer-profiles lists a

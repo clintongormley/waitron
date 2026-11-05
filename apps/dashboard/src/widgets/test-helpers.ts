@@ -615,9 +615,11 @@ function deepFind(root: ParentNode, selector: string): HTMLElement | null {
   return null;
 }
 
-/** The `data-test` of a printer details editor's button. */
+/** The `data-test` of the printer details form's button. The details hold one form for the name
+ * and the address, so `part` only says which field the caller is about to use. */
 export function detailsEditTest(action: DetailsEditAction, part: DetailsEditPart): string {
-  return `${action}-printer-${part}`;
+  void part;
+  return `${action}-printer-details`;
 }
 
 export function detailsEditButton<T extends HTMLElement = HTMLElement>(
@@ -628,8 +630,11 @@ export function detailsEditButton<T extends HTMLElement = HTMLElement>(
   return deepFind(el.shadowRoot!, `[data-test=${detailsEditTest(action, part)}]`) as T | null;
 }
 
+/** Presses the details' Edit; when the form is already open there is nothing to press. */
 export function openDetailsEdit(el: HTMLElement, part: DetailsEditPart): void {
-  detailsEditButton(el, "edit", part)!.click();
+  const edit = detailsEditButton(el, "edit", part);
+  if (edit) edit.click();
+  else if (!detailsEditButton(el, "save", part)) throw new Error("No printer details are open.");
 }
 
 export function saveDetailsEdit(el: HTMLElement, part: DetailsEditPart): void {
