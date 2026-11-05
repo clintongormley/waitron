@@ -259,7 +259,7 @@ export async function runOnce(
     }
     await deps.archive(staged);
     dumped = true;
-    // The whole venue database in plaintext, created under the process umask.
+    // `archiveTo` already creates this plaintext copy 0600; an injected `archive` need not.
     await chmod(staged, 0o600);
     if (deps.stagingEstimateBytes) await checkStagingSpace(deps, (await stat(staged)).size);
     const metadata = assembleArchiveEntries(manifest, null, parts);

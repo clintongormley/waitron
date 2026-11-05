@@ -274,7 +274,7 @@ async function rememberedModuleChecks(
 ): Promise<Refusal | null> {
   if (found.moduleChecks !== undefined) return found.moduleChecks;
   const answer = await moduleCheckRefused(modules, query);
-  // A check that threw says nothing about the file, so the next try asks it again.
+  // A check can throw on a passing fault or on a damaged page, so the next try asks it again.
   if (answer?.reason !== "handover.copy_check_failed") found.moduleChecks = answer;
   return answer;
 }

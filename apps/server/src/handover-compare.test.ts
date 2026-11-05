@@ -528,7 +528,7 @@ describe("compareFinalCopy", () => {
       expect(altered.prepare("pragma integrity_check").all()).toEqual([{ integrity_check: "ok" }]);
       expect(altered.prepare("pragma foreign_key_check").all().length).toBeGreaterThan(0);
       altered.close();
-      // Failing case: the integrity check alone passes this, and a later step answers instead.
+      // Failing case: with the integrity check alone, this copy passes: `{ ok: true }`.
       expect(await r.compareRow(await r.resignedForFile())).toEqual(
         refused("handover.copy_damaged"),
       );
@@ -807,7 +807,7 @@ describe("compareFinalCopy", () => {
       expect(checkCopy).toHaveBeenCalledTimes(2);
     });
 
-    it("a module's check that threw is not kept: the throw says nothing about the file", async () => {
+    it("a module's check that threw is not kept: the next try asks it again", async () => {
       const r = await rig();
       const checkCopy = vi.fn(async (): Promise<"ok" | "broken"> => "ok");
       checkCopy.mockRejectedValueOnce(new Error("a passing fault"));
@@ -1177,7 +1177,7 @@ describe("compareFinalCopy", () => {
       );
     });
 
-    it("a row for this box with this box's key is enough, whatever else the row holds", async () => {
+    it("a row for this box with this box's key passes with a different name", async () => {
       const r = await rig();
       alter(r.path, `update nodes set name = 'Elsewhere' where id = '${r.m2.nodeId}'`);
       expect(await r.compareRow(await r.resignedForFile())).toEqual({ ok: true });

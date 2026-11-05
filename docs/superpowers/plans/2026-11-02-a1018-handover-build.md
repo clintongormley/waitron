@@ -2639,8 +2639,8 @@ Slice 4 notes (2026-11-03):
 In this order, each failure recording `waitHandover(reason)` and leaving M1 stepped down:
 indicator signed by the binding's source (`handover.indicator_untrusted`); its binding equals the
 operation's (`handover.indicator_mismatch`); the received file's SHA-256 and size equal the
-indicator's (`handover.copy_mismatch`); `PRAGMA integrity_check` is `ok`
-(`handover.copy_damaged`); every module's copy check passes (Task 4.1, `checkHandoverCopy`;
+indicator's (`handover.copy_mismatch`); `PRAGMA integrity_check` is `ok` and
+`PRAGMA foreign_key_check` returns no row (`handover.copy_damaged`); every module's copy check passes (Task 4.1, `checkHandoverCopy`;
 `handover.chain_broken` naming the module); no set's version is ahead of M2's image
 (`provisioning.database_ahead`, as `assertNotAhead`); the module set and versions equal M2's
 (`handover.modules_differ`); `backup.env` and `modules.json` digests equal M2's
@@ -3076,8 +3076,12 @@ it, and main's `trading-config.ts` no longer names it.
   about 4 hours after expiry (read, not run).
 - R52, every whole-database copy is created owner-only, a passing module-check fault is no longer
   remembered, a throw on a remembered file clears the record, and the copy check runs
-  `foreign_key_check`: a copy with a dangling row is refused with the old box stopped until a person
-  abandons.
+  `foreign_key_check`: a copy with a dangling row is refused with the old box stopped, which reverses
+  R22's cost line for such a row. R56 corrects the cost: on this branch nothing gets the old box out
+  (from `source_stepped_down` the only moves are `filing_relinquished` or `replaced`,
+  `packages/handover/src/states.ts:35`, and no code outside tests writes `emergency_declared`); a
+  person's way out is Slice 7's emergency declaration. A check for such a row on the old box before
+  it stops selling would avoid the stop; not built (backlog).
 - R53, the other returned points change no code: slow-to-explain waits in rare cases, before real
   boxes can reach them (backlog).
 - R54, one fixture line in `handover-compare.test.ts`: none beyond that line.

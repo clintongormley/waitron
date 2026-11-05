@@ -603,8 +603,13 @@ wrong, and none is reachable on a real box before A947 3b.
 - **A copy with a dangling row is fetched again for ever.** A real duty at the 5-second tick, a real
   download from the real route over 17 seconds, with the row written into each downloaded file
   standing in for an old box holding it: 4 whole fetches, the old box stopped, no back-off, and a
-  `handover-destination.waiting` line each pass, until a person abandons. `compareRetryMs` (60 s)
-  does not apply to a refusal the spare fetches again.
+  `handover-destination.waiting` line each pass. On this branch nothing gets the old box out: from
+  `source_stepped_down` the only moves are `filing_relinquished` or `replaced`
+  (`packages/handover/src/states.ts:35`), moving a real old box to `abandoned` threw
+  `handover.step_out_of_order`, and no code outside tests writes `emergency_declared`. A person's way
+  out is Slice 7's emergency declaration. A check for such a row on the old box before it stops
+  selling would avoid the stop; not built. `compareRetryMs` (60 s) does not apply to a refusal the
+  spare fetches again.
 - `handover.final_copy_changed` and `handover.summary_failed` repeat every 5 s.
 - `handover-destination.post_failed` warns on every tick, about 17,000 lines a day with the old box
   off, for as long as the wait lasts.

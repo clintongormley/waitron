@@ -5992,8 +5992,10 @@ Not in any track until the standalone primary is done.
   add code that changes those states. Left open by A1018 Slice 5.
 
 - **A waiting spare repeats work and log lines with no back-off.** A copy with a dangling row was
-  fetched whole 4 times in 17 s with the old box stopped, and other waits log every 5 s. Left open by
-  A1018 Slice 5 (Ruling R53).
+  fetched whole 4 times in 17 s with the old box stopped, and other waits log every 5 s. On this
+  branch nothing gets the old box out of that; a person's way out is Slice 7's emergency declaration,
+  and a check for such a row on the old box before it stops selling is not built. Left open by A1018
+  Slice 5 (Rulings R53, R56).
   [Detail](backlog/replication-cloud.md#a-waiting-spare-repeats-work-and-log-lines-with-no-back-off)
 
 - **The spare's digest of a copy takes no stop signal.** A stop during it waits for the read to end;
@@ -6001,7 +6003,9 @@ Not in any track until the standalone primary is done.
 
 - **A hung integrity check on a copy has no time limit.** Only an answer, an exit or a stop ends the
   wait, so the duty would wait with no reason recorded, and the frozen-process watchdog does not see
-  it (read, not run). Left open by A1018 Slice 5 (Ruling R53).
+  it (read, not run). A stop ends the wait, not the thread: on a 1.14 GiB copy a stop at 2 s rejected
+  at 2,001 ms and the thread lived until 11,425 ms, when `integrity_check` returned. Left open by
+  A1018 Slice 5 (Ruling R53).
 
 - **A throw while checking a copy leaves no reason a person can read.** It reaches only the log, with
   the old box stopped (run with a journal with no `hash` column). Left open by A1018 Slice 5 (Ruling
