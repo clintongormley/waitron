@@ -442,7 +442,13 @@ describe("A803 monetary comparison: operations on portions through the real path
   });
   let db: Database;
   let cfg: WithVenueRowId<DeviceRequestConfig>;
-  let ids: { croqueta: string; burger: string; cheese: string; toppings: string; reasonId: string };
+  let ids: {
+    croquette: string;
+    burger: string;
+    cheese: string;
+    toppings: string;
+    reasonId: string;
+  };
 
   beforeAll(() => {
     db = suite.db;
@@ -467,7 +473,7 @@ describe("A803 monetary comparison: operations on portions through the real path
             vatClass: "reduced",
           })
         ).id;
-      const croqueta = await product("Croqueta", "3.33");
+      const croquette = await product("Croqueta", "3.33");
       const burger = await product("Burger", "3.33");
       const cheese = await product("Cheese", "0.35");
       const toppings = (
@@ -500,12 +506,12 @@ describe("A803 monetary comparison: operations on portions through the real path
           noteRequired: false,
         })
       ).id;
-      return { croqueta, burger, cheese, toppings, reasonId };
+      return { croquette, burger, cheese, toppings, reasonId };
     });
   });
 
-  const croquetas = (count: number): ProductLine => ({
-    productId: ids.croqueta,
+  const croquettes = (count: number): ProductLine => ({
+    productId: ids.croquette,
     quantity: String(count),
   });
   const burgersWithCheese = (count: number): ProductLine => ({
@@ -695,9 +701,9 @@ describe("A803 monetary comparison: operations on portions through the real path
 
   it("A803 monetary comparison: one of three €3.33 dishes moved to another bill", async () => {
     await withTransaction(db, async (tx) => {
-      const todayBill = await groupedBill(tx, [croquetas(3)]);
+      const todayBill = await groupedBill(tx, [croquettes(3)]);
       const todayMoved = await splitPartyBill(tx, cfg, todayBill, [{ lineNo: 1, quantity: "1" }]);
-      const bill = await portionBill(tx, [croquetas(3)]);
+      const bill = await portionBill(tx, [croquettes(3)]);
       const moved = await splitPartyBill(tx, cfg, bill.billId, [{ lineNo: 3 }]);
 
       const staying = await fileBill(tx, bill.billId, bill.bindings);
@@ -732,9 +738,9 @@ describe("A803 monetary comparison: operations on portions through the real path
 
   it("A803 monetary comparison: one of three €3.33 dishes cancelled", async () => {
     await withTransaction(db, async (tx) => {
-      const todayBill = await groupedBill(tx, [croquetas(3)]);
+      const todayBill = await groupedBill(tx, [croquettes(3)]);
       await cancelLine(tx, cfg, todayBill, 1, "1", OPERATOR);
-      const bill = await portionBill(tx, [croquetas(3)]);
+      const bill = await portionBill(tx, [croquettes(3)]);
       await cancelLine(tx, cfg, bill.billId, 2, undefined, OPERATOR);
 
       const today = await fileBill(tx, todayBill);
@@ -765,9 +771,9 @@ describe("A803 monetary comparison: operations on portions through the real path
 
   it("A803 monetary comparison: a discount on one of three €3.33 dishes", async () => {
     await withTransaction(db, async (tx) => {
-      const todayBill = await groupedBill(tx, [croquetas(3)]);
+      const todayBill = await groupedBill(tx, [croquettes(3)]);
       await discountLine(tx, todayBill, 1, "1.00", "1");
-      const bill = await portionBill(tx, [croquetas(3)]);
+      const bill = await portionBill(tx, [croquettes(3)]);
       await discountLine(tx, bill.billId, 1, "1.00");
 
       const today = await fileBill(tx, todayBill);
@@ -801,8 +807,8 @@ describe("A803 monetary comparison: operations on portions through the real path
 
   it("A803 monetary comparison: two €3.33 dishes, one moved out and back, file as the original row", async () => {
     await withTransaction(db, async (tx) => {
-      const original = await fileBill(tx, await groupedBill(tx, [croquetas(2)]));
-      const bill = await portionBill(tx, [croquetas(2)]);
+      const original = await fileBill(tx, await groupedBill(tx, [croquettes(2)]));
+      const bill = await portionBill(tx, [croquettes(2)]);
       const moved = await splitPartyBill(tx, cfg, bill.billId, [{ lineNo: 2 }]);
       await moveBack(tx, moved.billId, bill.billId);
 
@@ -814,7 +820,7 @@ describe("A803 monetary comparison: operations on portions through the real path
 
   it("A803 monetary comparison: today, a dish moved out and back stays a row of its own", async () => {
     await withTransaction(db, async (tx) => {
-      const todayBill = await groupedBill(tx, [croquetas(2)]);
+      const todayBill = await groupedBill(tx, [croquettes(2)]);
       const moved = await splitPartyBill(tx, cfg, todayBill, [{ lineNo: 1, quantity: "1" }]);
       await moveBack(tx, moved.billId, todayBill);
 

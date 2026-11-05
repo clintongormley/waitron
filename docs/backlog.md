@@ -6661,7 +6661,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only).
 
 - **A974. Finish the remaining English names in general code.**
-  Remaining names include till boot and counter-payment fixtures; server till-API, fiscal-sale
+  Remaining names include till boot and counter-payment fixtures; server split-bill, fiscal-sale
   and other order fixtures; shared helper consumers and file names. Keep accented search fixtures unchanged. Low priority.
   [Detail](backlog/architecture.md#a974-finish-the-remaining-english-names-in-general-code).
 
@@ -6671,8 +6671,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A976. Finish the server's English test-venue defaults.**
-  Party bill-action, bill-move, reprint and order-portion counter/filing/adjustment suites still use Spanish
-  display samples; counter and adjustment order-portion test descriptions, other helpers and screen expectations remain. Low priority.
+  Party bill-action, bill-move, reprint, transfer, portion-sale projection and order-portion
+  counter/filing/adjustment suites still use Spanish display samples; counter and adjustment order-portion test descriptions, other helpers and screen expectations remain. Low priority.
   [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).
 
 - **Cloud's cost-test fixtures still carry Spanish operation and street examples.** The two
