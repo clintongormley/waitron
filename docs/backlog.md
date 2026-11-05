@@ -1111,11 +1111,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **With three lists the dropdown already scrolls, so "+ Add options list…" sits at or just below
   its bottom edge when it opens** — left open by A218 (#1082).
 
-- **In Spanish the folded line reads "IVA: Reduced (10%)"** — left open by A219 (#1065). The VAT
-  class name is the stored label, which `taxLabel` shows untranslated, and on `main` before #1065
-  the VAT dropdown already read it the same way. Where those labels come from, and whether they
-  should be translated, is not checked.
-
 - **Left open by #1188's review, none started** — the pricing unit dialog (W66, #1188).
   [Detail](backlog/catalogue.md#left-open-by-1188s-review-none-started-the-pricing-unit-dialog-w66)
 
@@ -2052,13 +2047,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   is a decision. The counter's Waiting list and department transfers (`counter-waiting.ts`,
   `department-transfers.ts`) show no bill number or name at all.
 
-- **A1238. A party named like a placeholder, such as "{into}", can come out wrong in four till
+- **A1238. A party named like a placeholder, such as "{tables}", can come out wrong in two till
   sentences (seen in A803 slice 2's review).** Each fills its placeholders one after another, so a
   first name holding the second placeholder gets the second name written into it:
-  `partyScope` in `apps/till/src/widgets/table-targets.ts`, `table.combine_scope` in
-  `apps/till/src/screens/till-floor-screen.ts` and `till-table-order-screen.ts`, and the
-  `{table}`/`{party}` sentence in `till-table-order-screen.ts`. `git blame` dates each before the
-  slice. Use `fill` (`apps/till/src/i18n/t.ts`), as the slice did for bill names.
+  `partyScope` in `apps/till/src/widgets/table-targets.ts`, and the `{table}`/`{party}` heading in
+  `apps/till/src/screens/till-table-order-screen.ts`. Use `fill` (`apps/till/src/i18n/t.ts`), as the
+  slice did for bill names.
 
 - **A1236. After paying one bill of three, the table screen says "Table 3 paid" and offers Finish
   table first (seen in A803 slice 2's LOOK).** Two bills were still unpaid. In files slice 2 did
@@ -4808,8 +4802,10 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
   wording.**
   [Detail](backlog/languages.md#the-adjustment-reason-and-venue-delete-windows-still-use-older-wording)
 
-- **The file pickers' "Choose File / No file chosen" follow the browser's language**, not the
-  chooser; the browser draws them.
+- **File pickers the browser still draws show "Choose File / No file chosen" in the browser's
+  language**, not the chooser's. Left: the setup app's certificate, restore, bucket restore and
+  live source screens, the dashboard's node recovery panel, and the fiscal first-setup, recovery
+  key and offline custodian pages. `wt-file-input` hides that control and draws its own words.
 
 - **The till's Spanish catalogue guard does not scan error-code messages or allergen names.**
   [Detail](backlog/languages.md#decisions-and-deliberate-limits)
@@ -5764,7 +5760,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   reports).**
   [Detail](backlog/box.md#loose-ends-left-by-668-686-a57-a60-and-723-the-pause-test-and-the-buckets-error-reports)
 
-- **A venue preparing to go live sends real email through SMTP (A987) — BUILD.**
+- **A venue preparing to go live sends real email through SMTP (A987) — BUILD.** Prepare still
+  refuses email in setup and in settings. Left: Cut B's diagnostic screens, then the settings and
+  the Prepare wizard and routing cut.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
 
 - **Support an office SMTP server's own certificate authority — OPEN.** A987 keeps certificate
@@ -6043,9 +6041,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   [Host evidence and next steps](operations/a951-host-evidence.md).
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
-- **Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side
-  networking and `@waitron/tunnel`'s retirement; first-contact trust bootstrap; and the cloud-standby
-  end-to-end proof. Do not restart the cloud-standby work until the boundary contract is settled.
+- **Waitron retains:** box-side networking and `@waitron/tunnel`'s retirement; first-contact trust
+  bootstrap; and the cloud-standby end-to-end proof. Do not restart the cloud-standby work until the boundary contract is settled.
   [Detail](backlog/replication-cloud.md#waitron-retains)
 
 - **SQLite + Litestream replaces PostgreSQL.** Next: slice 3, seats and promotion.
@@ -6559,10 +6556,6 @@ _Formerly parts of B9 and Track C._ Open work:
 
 - **The version-14 browser helpers are unused.** Whether `browserSupportsPasskeys()` would
   improve the login screen's `browserSupportsWebAuthnAutofill()` gate has not been assessed.
-
-- **Dependabot's `fast-uri` security updater reports an older latest resolvable version.**
-  Diagnose `security_update_not_possible` in [run 40069322027](https://github.com/clintongormley/waitron/actions/runs/40069322027):
-  it reports 3.1.8 even though a targeted pnpm refresh resolves 3.1.9 without an override.
 
 - **Dependabot's Zod security run reported an older latest resolvable version.**
   [Detail](backlog/dependencies.md#dependabots-zod-security-run-reported-an-older-latest-resolvable-version)
