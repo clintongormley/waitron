@@ -618,6 +618,18 @@ and cloud operations. See [documentation ownership](../cloud-ownership.md).
 
 ## A951. The box's lasting tunnel and public-certificate client
 
+The complete [appliance successor](../superpowers/specs/2026-11-05-a951-appliance-v1-successor.md)
+is proposed for D582 cross-review. The owner chose server-trusted current local
+permission for v1, with application DB access/sign-in/TLS unchanged; the rejected
+protected store-owner/ingress is not a dependency. A compromised server can forge
+the local approval half for the exact provisioned binding; independent original
+current Cloud-owner checks and fixed helper/safety/custody restrictions remain.
+D must disposition the final server-publication L boundary versus later supervisor
+opening/ack, exact private grammar, provisioning authentication and adapter/signer
+semantics, then produce the complete shared signed corpus. Full appliance
+acceptance and affected integration remain gated; the successor supplies no runtime
+proof. The latest plan/intake amendment records exact full-file digest and scope.
+
 All five [plan](../superpowers/plans/2026-10-22-a951-connection.md) cuts have owner
 build approval. D560's exact G1 mapping acceptance remains isolated planning only;
 D136's complete routing requirements remain accepted solely for isolated T4
@@ -628,7 +640,9 @@ remain open.
 E proposes the [Debian host successor](../superpowers/specs/2026-11-05-a951-debian13-host-profile.md),
 `proposal-2026-11-05.1`, incorporating the entire immutable predecessor and H.
 It changes only the host target to native x86_64 Debian 13 with distinct profile
-`a951-debian13-systemd-docker-v1`; matching G acceptance is absent. Use the newest
+`a951-debian13-systemd-docker-v1`; G's 13:15 relay agrees this target for
+engineering planning only. Canonical ledger return/runtime qualification remain
+separate. Use the newest
 plan amendment and [intake](../developers/cloud-connection.md#a951-build-intake)
 for exact publication digests and acceptance scopes.
 

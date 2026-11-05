@@ -360,6 +360,41 @@ abort signal so deliberate shutdown does not record a service outage.
 
 ## A951 build intake
 
+### Complete appliance successor proposal: 5 November 2026
+
+E publishes the [complete appliance successor](../superpowers/specs/2026-11-05-a951-appliance-v1-successor.md),
+`waitron-a951-appliance-v1` / `proposal-2026-11-05.1`, full-file SHA-256
+`5f88b065b2ac8a0c8d860dcaf195ec2abd5a8fe18d5e4c58a891c6702e71bc24`, including final LF. This is an unaccepted
+proposal for D582 cross-review, not an executable or runtime acceptance.
+The [dated plan amendment](../superpowers/plans/2026-10-22-a951-connection.md#appliance-successor-proposal-5-november-2026)
+records the affected T1/T2/T3/T5 and qualification obligations.
+
+The owner chose the existing server's current-permission check for v1. Keep normal
+application database access, sign-in and TLS custody; do not introduce the rejected
+protected store-owner/ingress service. A compromised server can supply false local
+approval for the exact provisioned binding. Cloud must still independently recheck
+its original current owner; the supervisor key authenticates a constrained server
+assertion, not a human. Fixed helper actions, independent safety/packet/socket
+guards and all remaining gates continue to apply.
+
+Local issue is pending only; consume re-reads original live session/current
+`system.manage` and durably spends inside the same short write turn, with no RPC.
+The successor carries exact approval/context/pin encodings, original expiry and
+Q/Permit correlations, action-specific anchor rules and unknown/replay ordering.
+It proposes final server publication L after a fresh permission check, separate
+from supervisor opening/acknowledgement. D must disposition that race/completion
+boundary, private grammar, provisioning authentication, adapter semantics and
+signer realization before affected integration. D then owns the shared signed
+corpus and Cloud receiver/one-use ledger. No new owner-held secret is introduced.
+
+G's 13:15 relay agrees the Debian target solely for engineering planning; its
+canonical ledger return and runtime qualification remain separate. All inherited
+artifact bytes remain unchanged. Full appliance acceptance, both executable
+consumers and qualified pair remain **NONE**; admission **CLOSED**. All new runtime,
+crash/race/size/native checks are UNRUN, A1308 holds any required table, the shared
+journal/reserve gains no allowance, and G2–G7/privacy retain their remaining gates.
+Production manifests remain empty and `.local` independent.
+
 ### Debian host-profile proposal: 5 November 2026
 
 E publishes the [Debian successor](../superpowers/specs/2026-11-05-a951-debian13-host-profile.md),
