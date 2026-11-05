@@ -372,8 +372,8 @@ async function within<T>(promise: Promise<T>, ms: number, what: string): Promise
 /**
  * M1's first setup through the real minute selection and activation, on the pattern of
  * `firstSetupOnM1` in `./testing/handover-placed-copy.ts`, with the selection kept in M1's state
- * folder. Its clock starts in the past because no later name may be ahead of a real clock, and M2's
- * selection reads a real one.
+ * folder. Its clock starts behind real time because a real box's name is never ahead of real time,
+ * and a name on the same minute as M2's selection would make M2 wait up to a minute.
  */
 function applyWithFirstSetup(stateDir: string): typeof applyVenue {
   return async (actions, deps) => {
