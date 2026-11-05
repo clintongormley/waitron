@@ -1386,3 +1386,110 @@ describe("A803 split: the route", () => {
     });
   });
 });
+
+describe("A803 race replay: through the route", () => {
+  async function anaAtThree() {
+    const { ana, second, billId } = await anaAtTwo();
+    const third = await freeTable();
+    const joined = await post(`/api/parties/${ana.partyId}/join`, {
+      tableId: third,
+      expectedPartyRevision: revisionOf(ana.partyId),
+    });
+    expect(joined.status).toBe(200);
+    return { ana, second, third, billId };
+  }
+
+  function counts() {
+    return venue.db.all<{ parties: number; bills: number; notices: number; events: number }>(sql`
+      select
+        (select count(*) from parties) as parties,
+        (select count(*) from working_orders) as bills,
+        (select count(*) from kitchen_notices) as notices,
+        (select count(*) from order_group_events) as events`)[0]!;
+  }
+
+  function lineOf(billId: string) {
+    return venue.db.all<{ id: string }>(
+      sql`select id from working_order_lines where working_order_id = ${billId} order by line_no`,
+    )[0]!.id;
+  }
+
+  function billsOf(partyId: string) {
+    return venue.db
+      .all<{ id: string }>(sql`select id from working_orders where party_id = ${partyId}`)
+      .map((row) => row.id);
+  }
+
+  it("A803 race replay: a lost reply's resend of a successful split is refused, and no second party, bill or notice exists", async () => {
+    const { ana, second, billId } = await anaAtTwo();
+    const path = `/api/parties/${ana.partyId}/split-table`;
+    const body = await observedTableActionBody(venue.db, path, {
+      tableId: second,
+      selection: { wholeBillIds: [billId], loose: [] },
+      expectedPartyRevision: revisionOf(ana.partyId),
+    });
+    const before = counts();
+
+    const first = await send(venue.app, venue.cookie, "POST", path, body);
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    const after = counts();
+    expect(after.parties).toBe(before.parties + 1);
+    expect(after.notices).toBeGreaterThan(before.notices);
+    const revision = revisionOf(ana.partyId);
+
+    const resend = await send(venue.app, venue.cookie, "POST", path, body);
+
+    expect(resend.status).toBe(409);
+    expect(resend.json).toMatchObject({ code: "party.out_of_date" });
+    expect(counts()).toEqual(after);
+    expect(revisionOf(ana.partyId)).toBe(revision);
+    expect(tablesOf(first.json.partyId as string)).toEqual([second]);
+    expect(billsOf(first.json.partyId as string)).toEqual([billId]);
+  });
+
+  for (const first of ["whole", "loose"] as const) {
+    it(`A803 race replay: two tills on one party, one picking Bill 2 whole and the other Bill 2's dish loose: one commits (${first} sent first)`, async () => {
+      const { ana, second, third, billId } = await anaAtThree();
+      const dish = lineOf(billId);
+      const path = `/api/parties/${ana.partyId}/split-table`;
+      const bodies = {
+        whole: await observedTableActionBody(venue.db, path, {
+          tableId: second,
+          selection: { wholeBillIds: [billId], loose: [] },
+          expectedPartyRevision: revisionOf(ana.partyId),
+        }),
+        loose: await observedTableActionBody(venue.db, path, {
+          tableId: third,
+          selection: { wholeBillIds: [], loose: [{ billId, lineIds: [dish] }] },
+          expectedPartyRevision: revisionOf(ana.partyId),
+        }),
+      };
+      const sent =
+        first === "whole" ? (["whole", "loose"] as const) : (["loose", "whole"] as const);
+      const before = counts();
+
+      const answers = await Promise.all([
+        send(venue.app, venue.cookie, "POST", path, bodies[sent[0]]),
+        send(venue.app, venue.cookie2, "POST", path, bodies[sent[1]]),
+      ]);
+
+      expect(answers.map((answer) => answer.status).sort()).toEqual([200, 409]);
+      const wonAt = answers.findIndex((answer) => answer.status === 200);
+      expect(answers[1 - wonAt]!.json).toMatchObject({ code: "party.out_of_date" });
+      expect(counts().parties).toBe(before.parties + 1);
+      const winner = sent[wonAt]!;
+      const tableOf = { whole: second, loose: third };
+      const newParty = answers[wonAt]!.json.partyId as string;
+      expect(tablesOf(newParty)).toEqual([tableOf[winner]]);
+      expect(tablesOf(ana.partyId)).toEqual([
+        ana.tableId,
+        tableOf[winner === "whole" ? "loose" : "whole"],
+      ]);
+      const onNewParty = venue.db.all<{ id: string }>(sql`
+        select l.id from working_order_lines l
+        join working_orders o on o.id = l.working_order_id
+        where o.party_id = ${newParty}`);
+      expect(onNewParty).toEqual([{ id: dish }]);
+    });
+  }
+});

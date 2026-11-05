@@ -18,8 +18,18 @@ import {
   type BillEditExpected,
   type BillEditState,
 } from "./order-drafts.js";
-import { combineParties, joinTables, moveGuests } from "./table-actions.js";
-import { mergeBills } from "./bill-actions.js";
+import {
+  combineParties,
+  joinTables,
+  moveGuests,
+  splitTable,
+  type SplitSelection,
+} from "./table-actions.js";
+import { mergeBills, moveDishes } from "./bill-actions.js";
+import { takeBillPayment } from "./bill-payments.js";
+import { fireGroup } from "./order-groups.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
+import { openTillSession } from "./testing/session-device.js";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { recallToDraft } from "./draft-recall.js";
@@ -28,7 +38,14 @@ import { submitGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { createTable } from "./testing/live-table.js";
-import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
+import {
+  inTx,
+  paymentRows,
+  provisionBillVenue,
+  seatedWith,
+  send,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 
 let venue: BillVenue;
 useVenueDb({
@@ -626,4 +643,415 @@ describe("table composition compares every affected bill before moving anything"
       expect(await allRows()).toEqual(before);
     },
   );
+});
+
+describe("A803 race replay: Split a table against another command, from one read", () => {
+  type Racer = () => Promise<unknown>;
+
+  /** Starts both commands in the order written, and reads every row when the first one ends. */
+  async function race(commands: Record<string, Racer>) {
+    const trace: string[] = [];
+    let rowsAfterFirst: Record<string, unknown[]> | undefined;
+    let open!: () => void;
+    const barrier = new Promise<void>((resolve) => (open = resolve));
+    const names = Object.keys(commands);
+    const run = async (name: string) => {
+      await barrier;
+      trace.push(`asked ${name}`);
+      try {
+        return await commands[name]!();
+      } finally {
+        trace.push(`ended ${name}`);
+        rowsAfterFirst ??= await allRows();
+      }
+    };
+    const racing = Promise.allSettled(names.map(run));
+    open();
+    const settled = await racing;
+    return {
+      names,
+      trace,
+      rowsAfterFirst: rowsAfterFirst!,
+      outcomes: Object.fromEntries(names.map((name, i) => [name, settled[i]!])),
+    };
+  }
+
+  /**
+   * The command asked first committed and the other was refused `code`, writing nothing, with both
+   * in flight together.
+   */
+  async function judge(raced: Awaited<ReturnType<typeof race>>, code: string) {
+    const { names, trace, outcomes, rowsAfterFirst } = raced;
+    const firstEnd = trace.findIndex((entry) => entry.startsWith("ended"));
+    expect(trace.slice(0, firstEnd).filter((entry) => entry.startsWith("asked"))).toHaveLength(2);
+    const winners = names.filter((name) => outcomes[name]!.status === "fulfilled");
+    expect(winners).toHaveLength(1);
+    expect(winners[0]).toBe(names[0]);
+    const loser = outcomes[names[1]!] as PromiseRejectedResult;
+    expect(loser.reason).toMatchObject({ code });
+    expect(await allRows()).toEqual(rowsAfterFirst);
+    return (outcomes[names[0]!] as PromiseFulfilledResult<unknown>).value;
+  }
+
+  async function freeTable() {
+    const { id } = await inTx(venue, (tx) =>
+      createTable(tx, venue.cfg, {
+        label: `Race-${randomUUID().slice(0, 8)}`,
+        zoneId: venue.zoneId,
+      }),
+    );
+    return id;
+  }
+
+  function revisionOf(partyId: string) {
+    return venue.db.all<{ revision: number }>(
+      sql`select revision from parties where id = ${partyId}`,
+    )[0]!.revision;
+  }
+
+  async function joinFree(partyId: string) {
+    const tableId = await freeTable();
+    const expectedEdits = await edits(partyId);
+    await inTx(venue, (tx) =>
+      joinTables(tx, venue.cfg, partyId, tableId, {
+        operatorId: venue.operatorId,
+        expectedEdits,
+        expectedPartyRevision: revisionOf(partyId),
+        otherPartyId: null,
+      }),
+    );
+    return tableId;
+  }
+
+  function linesOf(billId: string) {
+    return venue.db.all<{ id: string; name: string; lineNo: number; groupId: string | null }>(sql`
+      select id, name, line_no as lineNo, group_id as groupId
+      from working_order_lines where working_order_id = ${billId} order by line_no`);
+  }
+
+  const namesOn = (billId: string) => linesOf(billId).map((line) => line.name);
+  const lineNamed = (billId: string, name: string) =>
+    linesOf(billId).find((line) => line.name === name)!;
+
+  function holderOf(tableId: string) {
+    return venue.db.all<{ partyId: string }>(sql`
+      select party_id as partyId from party_tables
+      where table_id = ${tableId} and left_at is null`)[0]?.partyId;
+  }
+
+  function billsOf(partyId: string) {
+    return venue.db
+      .all<{ id: string }>(sql`select id from working_orders where party_id = ${partyId}`)
+      .map((row) => row.id);
+  }
+
+  function howMany(table: string) {
+    return venue.db.all<{ n: number }>(sql`select count(*) as n from ${sql.identifier(table)}`)[0]!
+      .n;
+  }
+
+  function groupStateOf(groupId: string) {
+    return venue.db.all<{ partyId: string; state: string }>(sql`
+      select party_id as partyId, state from order_groups where id = ${groupId}`)[0]!;
+  }
+
+  function firedAtOf(lineId: string) {
+    return venue.db.all<{ firedAt: string | null }>(sql`
+      select fired_at as firedAt from ticket_items where working_order_line_id = ${lineId}`)[0]!
+      .firedAt;
+  }
+
+  /** Split a table's command, carrying the revision and edit states read now. */
+  async function splitOf(
+    partyId: string,
+    tableId: string,
+    selection: SplitSelection,
+    operatorId = venue.operatorId,
+  ): Promise<Racer> {
+    const named = [...selection.wholeBillIds, ...selection.loose.map((entry) => entry.billId)];
+    const expectedEdits = await inTx(venue, async (tx) => {
+      const read: BillEditExpected[] = [];
+      for (const billId of named) read.push(await readBillEditState(tx, billId));
+      return read;
+    });
+    const options = { operatorId, expectedEdits, expectedPartyRevision: revisionOf(partyId) };
+    return () =>
+      inTx(venue, (tx) => splitTable(tx, venue.cfg, partyId, tableId, selection, options));
+  }
+
+  const orders = [
+    ["left", "right"],
+    ["right", "left"],
+  ] as const;
+
+  for (const order of orders) {
+    it(`A803 race replay: two splits of one party from one read: one commits, the other is refused, and one new party exists (${order[0]} asked first)`, async () => {
+      const ana = await seatedWith(venue, "Tarta", "Caña", "Pulpo");
+      const tables = {
+        left: await joinFree(ana.partyId),
+        right: await joinFree(ana.partyId),
+      };
+      const dishes = {
+        left: lineNamed(ana.tabId, "Caña").id,
+        right: lineNamed(ana.tabId, "Pulpo").id,
+      };
+      const commands = {
+        left: await splitOf(ana.partyId, tables.left, {
+          wholeBillIds: [],
+          loose: [{ billId: ana.tabId, lineIds: [dishes.left] }],
+        }),
+        right: await splitOf(ana.partyId, tables.right, {
+          wholeBillIds: [],
+          loose: [{ billId: ana.tabId, lineIds: [dishes.right] }],
+        }),
+      };
+      const partiesBefore = howMany("parties");
+
+      const raced = await race({ [order[0]]: commands[order[0]], [order[1]]: commands[order[1]] });
+
+      const won = (await judge(raced, "party.out_of_date")) as { partyId: string };
+      expect(howMany("parties")).toBe(partiesBefore + 1);
+      expect(holderOf(tables[order[0]])).toBe(won.partyId);
+      expect(holderOf(tables[order[1]])).toBe(ana.partyId);
+      expect(namesOn(ana.tabId)).toEqual(
+        order[0] === "left" ? ["Tarta", "Pulpo"] : ["Tarta", "Caña"],
+      );
+      expect(billsOf(won.partyId).flatMap(namesOn)).toEqual([
+        order[0] === "left" ? "Caña" : "Pulpo",
+      ]);
+    });
+  }
+
+  for (const order of [
+    ["pay", "split"],
+    ["split", "pay"],
+  ] as const) {
+    it(`A803 race replay: a split with a loose dish and a payment taking that dish: one commits (${order[0]} asked first)`, async () => {
+      // Two dishes of one price, so a payment naming the first line's number could not pass by
+      // paying the dish left on the bill if a split renumbered its lines.
+      const ana = await seatedWith(venue, "Tarta", "Tarta");
+      const table = await joinFree(ana.partyId);
+      const [dish, staying] = linesOf(ana.tabId);
+      const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, ana.tabId));
+      const operator = {
+        personId: venue.operatorId,
+        sessionId: await openTillSession(venue.db, {
+          deviceId: venue.cfg.origin.deviceId,
+          personId: venue.operatorId,
+        }),
+      };
+      const commands = {
+        split: await splitOf(ana.partyId, table, {
+          wholeBillIds: [],
+          loose: [{ billId: ana.tabId, lineIds: [dish!.id] }],
+        }),
+        pay: () =>
+          takeBillPayment(
+            {
+              db: venue.db,
+              backend: venue.backend,
+              clock: venue.clock,
+              admission: testTradingAdmission(),
+            },
+            venue.cfg,
+            ana.tabId,
+            {
+              submissionId: randomUUID(),
+              expectedEdit,
+              kind: "items",
+              lines: [{ lineNo: dish!.lineNo }],
+              method: "cash",
+              tendered: "18.00",
+              applied: "18.00",
+              tip: "0.00",
+            },
+            operator,
+          ),
+      };
+      const events = howMany("order_group_events");
+      const notices = howMany("kitchen_notices");
+      const idsOn = (billId: string) => linesOf(billId).map((line) => line.id);
+
+      const raced = await race({ [order[0]]: commands[order[0]], [order[1]]: commands[order[1]] });
+
+      const payments = await paymentRows(venue, ana.tabId);
+      if (order[0] === "pay") {
+        await judge(raced, "bill.line_paid");
+        expect(howMany("order_group_events")).toBe(events);
+        expect(howMany("kitchen_notices")).toBe(notices);
+        expect(holderOf(table)).toBe(ana.partyId);
+        expect(idsOn(ana.tabId)).toEqual([dish!.id, staying!.id]);
+        expect(payments).toHaveLength(1);
+      } else {
+        const won = (await judge(raced, "tab.line_not_found")) as { partyId: string };
+        expect(holderOf(table)).toBe(won.partyId);
+        expect(idsOn(ana.tabId)).toEqual([staying!.id]);
+        expect(billsOf(won.partyId).flatMap(idsOn)).toEqual([dish!.id]);
+        expect(payments).toEqual([]);
+      }
+    });
+  }
+
+  for (const order of [
+    ["takeOver", "split"],
+    ["split", "takeOver"],
+  ] as const) {
+    it(`A803 race replay: a take-over and a split of that bill: one commits and no dish is lost (${order[0]} asked first)`, async () => {
+      const ana = await seatedWith(venue, "Pulpo");
+      const table = await joinFree(ana.partyId);
+      const saved = await inTx(venue, async (tx) =>
+        saveDraft(tx, venue.cfg, ana.partyId, venue.adminId, {
+          billId: ana.tabId,
+          draftId: null,
+          revision: 0,
+          expectedEdit: await readBillEditState(tx, ana.tabId),
+          lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
+        }),
+      );
+      const draftId = saved.draft!.id;
+      const asked = {
+        revision: saved.draft!.revision,
+        expectedEdit: saved.edit,
+        submissionId: randomUUID(),
+      };
+      const commands = {
+        split: await splitOf(
+          ana.partyId,
+          table,
+          { wholeBillIds: [ana.tabId], loose: [] },
+          venue.adminId,
+        ),
+        takeOver: () =>
+          inTx(venue, (tx) =>
+            takeOverDraft(tx, venue.cfg, ana.partyId, draftId, venue.operatorId, asked),
+          ),
+      };
+
+      const raced = await race({ [order[0]]: commands[order[0]], [order[1]]: commands[order[1]] });
+
+      const draftLines = await venue.db
+        .select({ menuItemId: orderDraftLines.menuItemId })
+        .from(orderDraftLines)
+        .where(eq(orderDraftLines.draftId, draftId));
+      expect(draftLines).toHaveLength(1);
+      expect(namesOn(ana.tabId)).toEqual(["Pulpo"]);
+      const after = await inTx(venue, (tx) => readBillEditState(tx, ana.tabId));
+      expect(after.draftId).toBe(draftId);
+      if (order[0] === "takeOver") {
+        await judge(raced, "draft.out_of_date");
+        expect(after.editorId).toBe(venue.operatorId);
+        expect(holderOf(table)).toBe(ana.partyId);
+        expect(billsOf(ana.partyId)).toEqual([ana.tabId]);
+      } else {
+        const won = (await judge(raced, "draft.not_found")) as { partyId: string };
+        expect(after.editorId).toBe(venue.adminId);
+        expect(holderOf(table)).toBe(won.partyId);
+        expect(billsOf(won.partyId)).toEqual([ana.tabId]);
+      }
+    });
+  }
+
+  for (const order of [
+    ["move", "split"],
+    ["split", "move"],
+  ] as const) {
+    it(`A803 race replay: a split and a Move dishes of the same dish: one commits (${order[0]} asked first)`, async () => {
+      const ana = await seatedWith(venue, "Tarta", "Caña");
+      const table = await joinFree(ana.partyId);
+      const caña = lineNamed(ana.tabId, "Caña").id;
+      const moving = {
+        partyId: ana.partyId,
+        operatorId: venue.operatorId,
+        expectedPartyRevision: revisionOf(ana.partyId),
+        expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, ana.tabId))],
+      };
+      const commands = {
+        split: await splitOf(ana.partyId, table, {
+          wholeBillIds: [],
+          loose: [{ billId: ana.tabId, lineIds: [caña] }],
+        }),
+        move: () => inTx(venue, (tx) => moveDishes(tx, venue.cfg, ana.tabId, null, [caña], moving)),
+      };
+
+      const raced = await race({ [order[0]]: commands[order[0]], [order[1]]: commands[order[1]] });
+
+      const won = (await judge(raced, "party.out_of_date")) as {
+        partyId?: string;
+        billId?: string;
+      };
+      expect(namesOn(ana.tabId)).toEqual(["Tarta"]);
+      if (order[0] === "move") {
+        expect(holderOf(table)).toBe(ana.partyId);
+        expect(namesOn(won.billId!)).toEqual(["Caña"]);
+        expect(billsOf(ana.partyId)).toContain(won.billId);
+      } else {
+        expect(holderOf(table)).toBe(won.partyId);
+        expect(billsOf(won.partyId!).flatMap(namesOn)).toEqual(["Caña"]);
+        expect(billsOf(ana.partyId)).toEqual([ana.tabId]);
+      }
+    });
+  }
+
+  for (const order of [
+    ["fire", "split"],
+    ["split", "fire"],
+  ] as const) {
+    it(`A803 race replay: a split and Fire of a held group holding a loose pick: each table ends right (${order[0]} asked first)`, async () => {
+      const ana = await seatedWith(venue, "Pulpo");
+      const table = await joinFree(ana.partyId);
+      await inTx(venue, (tx) =>
+        submitGroups(tx, venue.cfg, ana.partyId, {
+          groups: [
+            {
+              release: "hold",
+              lines: [
+                { menuItemId: venue.offerFor("Tarta"), quantity: "1" },
+                { menuItemId: venue.offerFor("Caña"), quantity: "1" },
+              ],
+            },
+          ],
+          operatorId: venue.operatorId,
+          billId: ana.tabId,
+          expectedPartyRevision: revisionOf(ana.partyId),
+          submissionId: randomUUID(),
+        }),
+      );
+      const caña = lineNamed(ana.tabId, "Caña");
+      const tarta = lineNamed(ana.tabId, "Tarta");
+      const source = caña.groupId!;
+      const firing = {
+        operatorId: venue.operatorId,
+        expectedPartyRevision: revisionOf(ana.partyId),
+        submissionId: randomUUID(),
+      };
+      const commands = {
+        split: await splitOf(ana.partyId, table, {
+          wholeBillIds: [],
+          loose: [{ billId: ana.tabId, lineIds: [caña.id] }],
+        }),
+        fire: () => inTx(venue, (tx) => fireGroup(tx, venue.cfg, ana.partyId, source, firing)),
+      };
+
+      const raced = await race({ [order[0]]: commands[order[0]], [order[1]]: commands[order[1]] });
+
+      const won = (await judge(raced, "party.out_of_date")) as { partyId: string };
+      if (order[0] === "fire") {
+        expect(holderOf(table)).toBe(ana.partyId);
+        expect(groupStateOf(source)).toEqual({ partyId: ana.partyId, state: "fired" });
+        expect(lineNamed(ana.tabId, "Caña").groupId).toBe(source);
+        expect(firedAtOf(caña.id)).toEqual(expect.any(String));
+        expect(firedAtOf(tarta.id)).toEqual(expect.any(String));
+      } else {
+        expect(holderOf(table)).toBe(won.partyId);
+        expect(groupStateOf(source)).toEqual({ partyId: ana.partyId, state: "held" });
+        expect(lineNamed(ana.tabId, "Tarta").groupId).toBe(source);
+        const [newBill] = billsOf(won.partyId);
+        const moved = lineNamed(newBill!, "Caña");
+        expect(moved.groupId).not.toBe(source);
+        expect(groupStateOf(moved.groupId!)).toEqual({ partyId: won.partyId, state: "held" });
+        expect(firedAtOf(moved.id)).toBeNull();
+        expect(firedAtOf(tarta.id)).toBeNull();
+      }
+    });
+  }
 });
