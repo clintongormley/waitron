@@ -360,6 +360,40 @@ abort signal so deliberate shutdown does not record a service outage.
 
 ## A951 build intake
 
+### Native publication requirements acceptance: 5 November 2026
+
+E matches D582's acceptance of the exact private native grammar and engineering
+requirements in [Waitron `54f734643828379ae7e96d639931f610184c8efa`](https://github.com/clintongormley/waitron/blob/54f734643828379ae7e96d639931f610184c8efa/docs/superpowers/specs/2026-11-05-a951-native-publication-protocol.md):
+`waitron-a951-native-publication-v1` / `proposal-2026-11-05.1`, complete-file
+SHA-256 `db920d5bd340d29c9cdaaf85dd42a0021ce1f401f8ff54740c6c9102a82f5018`, including final LF.
+The campaign-local D disposition, `native-disposition.md`, has complete-file
+SHA-256 `5a33aa87b52443b0d4595bba36f876dc8b3a8607c20c0d0f24207d8fe319888d`.
+Both were independently rehashed for this intake. The [dated plan amendment](../superpowers/plans/2026-10-22-a951-connection.md#native-publication-requirements-acceptance-amendment-5-november-2026)
+records the provenance and complete scope. It supersedes only the pending native
+grammar-review status below; historical bodies and immutable proposal bytes stay
+unchanged.
+
+The agreement permits independently unconnected implementation and synthetic byte
+examples. It covers the private records/control messages, invocation-bound caller
+lifetime, publication/acknowledgement/effect ordering and retained-status,
+replay/deadline/crash/budget requirements. It supplies no accepted executable
+consumer, native runtime, private corpus or connected-appliance qualification.
+Before the affected native boundary connects, both ledgers need matching companion
+digest/scope and both full executable consumer commits, and launch must check the
+root-provisioned accepted-contract registry. Canonical Cloud-ledger publication
+and registry population are not evidenced by this intake.
+
+D retains receiver/provisioning authentication, response/error semantics, Cloud's
+one-use ledger and the shared signed corpus. Native realization, cross-store
+durability, actual peak writes, crash/race/EOF/descriptor behavior and exact Debian
+qualification remain open. All new native runtime checks remain UNRUN. Preserve
+independent C/L permission boundaries and the owner's server-trust choice, the
+single journal/reserve, every host/path/privacy gate, the exact 83-byte empty
+production manifests and independent `.local`. Any required table stays
+A1308/A760-held. Accepted executable consumers, connected acceptance and runtime
+pair NONE; admission CLOSED. T3/T4/Cut A remains incomplete; no partial foundation
+finish, push, PR or landing follows.
+
 ### Native publication protocol proposal and D582 disposition: 5 November 2026
 
 E proposes the [private native protocol](../superpowers/specs/2026-11-05-a951-native-publication-protocol.md),

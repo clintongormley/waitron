@@ -760,8 +760,14 @@ required. Both owning current-permission checks and the independent later safety
 fences still need implementation proof. The dated plan/intake amendment records
 the exact final-disposition receipt and scope; full connected acceptance stays open.
 
-E proposes the [native private protocol](../superpowers/specs/2026-11-05-a951-native-publication-protocol.md)
-for D's exact-byte review before native integration. Native caller/signer custody,
+E and D agree the exact [native private protocol](../superpowers/specs/2026-11-05-a951-native-publication-protocol.md)
+requirements for implementation and synthetic byte examples. The newest
+[plan amendment](../superpowers/plans/2026-10-22-a951-connection.md#native-publication-requirements-acceptance-amendment-5-november-2026)
+records protocol digest `db920d5b…5018` and D disposition `5a33aa87…888d`.
+Both ledgers still need the matching companion digest/scope and both full
+executable consumer commits before the affected native boundary connects; launch
+must check the root-provisioned accepted-contract registry. No executable,
+private-corpus, runtime or connected acceptance follows. Native caller/signer custody,
 publication/ack/status consumers, cross-store durability, replay/crash/expiry and
 peak-budget evidence remain open. D owns receiver/provisioning authentication,
 Cloud one-use ledger and the shared signed corpus. The owner-selected server-trust
