@@ -32,7 +32,7 @@ Abre **Configuración de la cuenta** desde el menú de cuenta para cambiar tus p
 acceso. Puedes seguir gestionando tu correo, contraseña, PIN, llaves de acceso y verificación en
 dos pasos.
 
-En **Seguridad**, elige **Añadir passkey** junto a **Passkeys** y confirma tu contraseña.
+En **Seguridad**, elige **Añadir passkey** junto a **Passkeys**.
 Sigue las instrucciones de tu gestor de contraseñas para añadirla. Cada passkey muestra
 cuándo la añadiste y cuándo la usaste por última vez.
 

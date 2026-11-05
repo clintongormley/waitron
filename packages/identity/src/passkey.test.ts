@@ -261,7 +261,7 @@ describe("passkey registration", () => {
   });
 
   it.each([["   "], [undefined]])(
-    "names a passkey given the name %j after the password manager that made it",
+    "uses the verified provider name for the absent or blank client value %j",
     async (name) => {
       const { personId, token } = await openManagementSession(suite.db, "admin");
       mockVerify.mockResolvedValue(verified("cred-unnamed", undefined, GOOGLE));
@@ -274,7 +274,7 @@ describe("passkey registration", () => {
     },
   );
 
-  it("leaves an unnamed passkey unnamed when its password manager is not on the list", async () => {
+  it("stores no name when the verified password manager is unknown", async () => {
     const { personId, token } = await openManagementSession(suite.db, "admin");
     const unknown = "12345678-1234-1234-1234-123456789abc";
     mockVerify.mockResolvedValue(verified("cred-unknown-provider", undefined, unknown));

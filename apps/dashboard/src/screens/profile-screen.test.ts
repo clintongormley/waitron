@@ -1470,7 +1470,7 @@ describe("your profile — errors at the bottom of the form, not above it", () =
   it("keeps a refusal whose params name a field the form does not show in the bottom message", async () => {
     const saveProfile = vi
       .fn()
-      .mockRejectedValue({ code: "profile.invalid", params: { field: "passkeyName" } });
+      .mockRejectedValue({ code: "profile.invalid", params: { field: "pin" } });
     const { el } = await mount({ saveProfile });
     await editDetails(el);
     input(el, "displayName", "Alex R");
@@ -1479,11 +1479,11 @@ describe("your profile — errors at the bottom of the form, not above it", () =
     expect(await nativeSaveDisabled(el)).toBe(false);
   });
 
-  it("keeps a passkey refusal for a removed field beside Add", async () => {
+  it("keeps a passkey refusal for an unshown field beside Add", async () => {
     const { el } = await mount({
       passkeyRegisterVerify: vi
         .fn()
-        .mockRejectedValue({ code: "profile.invalid", params: { field: "passkeyName" } }),
+        .mockRejectedValue({ code: "profile.invalid", params: { field: "displayName" } }),
     });
     await click(el, "add-passkey");
     input(el, "currentPassword", "current");
@@ -1836,6 +1836,7 @@ describe("A403 passkey controls", () => {
       const hint = el.shadowRoot!.querySelector<HTMLElement>(".hint")!;
       expect(row!.contains(hint)).toBe(true);
       expect(hint.getBoundingClientRect().top).toBeGreaterThanOrEqual(button.bottom);
+      expect(Math.abs(hint.getBoundingClientRect().right - button.right)).toBeLessThanOrEqual(1);
       const bottom = row!.getBoundingClientRect().bottom - hint.getBoundingClientRect().bottom;
       expect(bottom).toBeGreaterThanOrEqual(12);
     }
