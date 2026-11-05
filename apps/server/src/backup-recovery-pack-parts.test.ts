@@ -651,7 +651,7 @@ describe("the server key's seat", () => {
     const keyed = await inTx((tx) =>
       buildServerKeyPart(tx, context, {
         seat,
-        node: { nodeId, locationId: locationId(VENUE) },
+        node: { nodeId },
         keyInForce: {
           name: "2026-09-02 · OLD",
           holder: { kind: "pack", number: 2, madeOn: "2026-09-02", received: true },

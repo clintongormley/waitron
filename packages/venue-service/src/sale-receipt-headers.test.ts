@@ -36,7 +36,7 @@ describe("sale receipt header snapshot", () => {
     const venueId = await venueLocationId(db);
     const locationId = brandLocationId(venueId);
     const nodeId = await seedNode(db);
-    await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, { locationId, nodeId }));
+    await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, { nodeId }));
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "RC", purpose: "standard" })

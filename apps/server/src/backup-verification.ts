@@ -39,7 +39,7 @@ import {
 } from "./backup-verification-secrets.js";
 import { buildBackupVerificationTarget } from "./backup-verification-target.js";
 import { errnoOf } from "./errno.js";
-import { readArtifactNode } from "./restore.js";
+import { readArtifactNode, readArtifactVenueId } from "./restore.js";
 
 export interface BackupVerificationDeps {
   artifactPath: string;
@@ -267,7 +267,7 @@ export async function verifyBackupArtifact(
     }
     const secrets = await verifyBackupStateSecrets(
       validated.secretEntries,
-      node,
+      { ...node, venueId: await readArtifactVenueId(validated) },
       deps.now(),
       sealedState,
     );

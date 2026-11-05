@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readTenant, stampDeployment } from "@waitron/db";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { applyVenue, type VenueApplyDeps } from "../src/venue-apply.js";
@@ -58,7 +58,7 @@ export async function applyAllocatedTestVenue(
   const initialNodeId = deps.initialNodeId ?? randomUUID();
   const initialAdministratorId = deps.initialAdministratorId ?? randomUUID();
   const fixture = allocationFixture({
-    node: { nodeId: nodeId(initialNodeId), locationId: locationId(randomUUID()) },
+    node: { nodeId: nodeId(initialNodeId) },
     bases,
     identity: "S000001",
     taxpayerNif: taxpayer.taxId,

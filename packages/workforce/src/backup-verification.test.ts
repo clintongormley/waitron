@@ -208,7 +208,7 @@ async function run(
             throw new Error("Undeclared non-database read");
           },
         },
-        source: { nodeId: node, locationId: place, environment: "preproduction", createdAt: at },
+        source: { nodeId: node, environment: "preproduction", createdAt: at },
         sourceSchema: 1,
         targetSchema: 1,
         signal: new AbortController().signal,

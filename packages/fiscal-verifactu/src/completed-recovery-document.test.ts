@@ -114,14 +114,6 @@ describe("the pack's server-key page seat", () => {
     );
   }
 
-  // A1301: deleted with cfg in S18
-  it("names the venue without reading the supplied location scope", async () => {
-    const result = await page({
-      target: { ...node, locationId: locationId("a0000000-0000-4000-8000-000000000091") },
-      newKey,
-    });
-    expect(result.keyFile).toEqual({ ...scope, nodeKey });
-  });
   it("refuses a missing venue with venue.not_found", async () => {
     await suite.db.execute(sql`pragma foreign_keys = off`);
     try {

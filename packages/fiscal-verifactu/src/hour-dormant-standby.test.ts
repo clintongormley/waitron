@@ -125,15 +125,6 @@ it("reserves dormant configuration before the standby node exists", async () => 
   expect(reserved.state).toMatchObject({ kind: "hour-dormant", binding: reserveBinding, bases });
   expect(history).toEqual([]);
 });
-// A1301: deleted with cfg in S18
-it("reserves and establishes dormant state without reading the supplied location scope", async () => {
-  const reserved = await reserve(
-    { ...primary, locationId: locationId("a0000000-0000-4000-8000-000000000091") },
-    { ...standby, locationId: locationId("a0000000-0000-4000-8000-000000000092") },
-  );
-  await establish(reserved.state);
-  expect(value).toEqual({ version: 1, entries: [], dormant: [reserved.state] });
-});
 it("reads retained dormant state with exactly five keys", () => {
   const state = {
     kind: "hour-dormant",

@@ -33,7 +33,6 @@ export interface BackupVerificationContext {
   readonly entries: BackupEntries;
   readonly source: {
     readonly nodeId: string;
-    readonly locationId: string;
     readonly environment: "preproduction" | "production";
     readonly createdAt: string;
   };

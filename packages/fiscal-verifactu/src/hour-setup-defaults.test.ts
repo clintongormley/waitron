@@ -2,7 +2,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { withTransaction, deployment } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationHost } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { createHostedHourPreparation } from "./hour-preparation.js";
@@ -119,11 +118,7 @@ it("the default host clock provider reaches the unchanged real activation writer
   await withOperationAuthority(binding, "administrator", (authority) =>
     f.preparation.prepare({ binding, authority, input: selected.input }, (operation) =>
       withTransaction(suite.db, (tx) =>
-        activatePreparedModuleAllocation(
-          tx,
-          { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) },
-          operation,
-        ),
+        activatePreparedModuleAllocation(tx, { nodeId: TENANT_A.nodeId }, operation),
       ),
     ),
   );

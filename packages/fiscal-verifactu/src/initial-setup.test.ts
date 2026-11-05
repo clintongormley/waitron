@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { deployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locationId } from "@waitron/shared";
 import type { InitialSetupContext } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedSoldRegistro, seedTenants, TENANT_A } from "../test/fixtures.js";
@@ -459,11 +458,7 @@ it("the historical paper collector activates independently bound evidence", asyn
     (authority) =>
       operations.prepare({ binding: context.binding, authority, input: f.input }, (prepared) =>
         withTransaction(suite.db, (tx) =>
-          activatePreparedModuleAllocation(
-            tx,
-            { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) },
-            prepared,
-          ),
+          activatePreparedModuleAllocation(tx, { nodeId: TENANT_A.nodeId }, prepared),
         ),
       ),
   );

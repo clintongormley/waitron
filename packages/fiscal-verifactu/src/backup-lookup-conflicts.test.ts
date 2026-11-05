@@ -83,7 +83,6 @@ it.each(["valid", "registro_id", "case_id", "changed-evidence"] as const)(
             },
             source: {
               nodeId: seeded.nodeId,
-              locationId: seeded.locationId,
               environment: "production",
               createdAt: NOW.toISOString(),
             },

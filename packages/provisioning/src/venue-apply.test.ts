@@ -160,7 +160,6 @@ describe("applyVenue: the one taxpayer row", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
     const shortCutover = request("B10000005");
     shortCutover.dayCutover = "06:00";
     const retry = applyVenue(planVenue(shortCutover, ALL_MODULES), {
@@ -169,7 +168,6 @@ describe("applyVenue: the one taxpayer row", () => {
     });
 
     await expect(retry).resolves.toMatchObject({
-      locationId: venueId,
       nodeId: first.nodeId,
       seriesIds: first.seriesIds,
     });
@@ -192,7 +190,7 @@ describe("applyVenue: the one taxpayer row", () => {
         db: suite.db,
         modules: ALL_MODULES,
       }),
-    ).resolves.toMatchObject({ locationId: venueId });
+    ).resolves.toBeDefined();
   });
 
   it("refuses a re-run whose tax id differs, by name", async () => {
@@ -491,7 +489,6 @@ describe("applyVenue", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
     const second = await applyVenue(planVenue(request("B99999999"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -500,7 +497,6 @@ describe("applyVenue", () => {
     const tenants = await suite.db.execute<{ n: number }>(sql`
       select count(*) as n from tenants where country = 'ES' and tax_id = 'B99999999'`);
     expect(tenants.rows[0]?.n).toBe(1);
-    expect(second.locationId).toBe(venueId);
     expect(second.nodeId).toBe(first.nodeId);
     const venueRows = await suite.db.execute<{
       locations: number;
@@ -932,7 +928,7 @@ it("reuses the current dated start without clearing the location timeline", asyn
       db: suite.db,
       modules: ALL_MODULES,
     }),
-  ).resolves.toMatchObject({ locationId: venueId, nodeId: first.nodeId });
+  ).resolves.toMatchObject({ nodeId: first.nodeId });
   expect(await suite.db.select().from(locationDayCutoverChanges)).toHaveLength(2);
   expect(await suite.db.select().from(locationBusinessDaySettings)).toEqual([
     { locationId: venueId, revision: 3 },

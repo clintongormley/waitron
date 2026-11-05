@@ -168,7 +168,6 @@ async function setupVenue(): Promise<{
     { db, modules: ALL_MODULES },
   );
   const designated: AdoptResult = {
-    locationId: venue.locationId,
     nodeId: venue.nodeId,
   };
   await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, designated.nodeId);
@@ -289,7 +288,7 @@ async function post(app: Hono, body: unknown): Promise<Response> {
   const primary = (await db.select().from(nodes))[0]!;
   const fixture = await standbyContract(
     db,
-    { nodeId: nodeId(primary.id), locationId: locationId(primary.locationId) },
+    { nodeId: nodeId(primary.id) },
     request.standbyNodeId,
     [
       { code: "FA", purpose: "standard" },

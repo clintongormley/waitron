@@ -1,12 +1,11 @@
 import type { Transaction } from "@waitron/db";
-import type { LocationId, NodeId } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import type { InitialSetupContribution } from "./initial-setup.js";
 import type { ModuleOperationInput } from "./operation-input.js";
 import type { ModuleOperationPreparation } from "./operation-preparation.js";
 
 /** These identities come from rows the host inserted or read. */
 export interface ProvisionedNode {
-  readonly locationId: LocationId;
   readonly nodeId: NodeId;
 }
 

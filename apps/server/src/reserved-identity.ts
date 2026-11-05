@@ -18,7 +18,7 @@ import {
   type ModuleOperations,
   type WaitronModule,
 } from "@waitron/module";
-import { AppError, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { AppError, nodeId as brandNodeId } from "@waitron/shared";
 import type { ReservedIdentity } from "./mirror-bundle.js";
 import "./errors.js";
 
@@ -83,10 +83,7 @@ export async function establishReservedStandbyIdentity(
         publicKey: standby.publicKey,
         endorsement: reserved.endorsement,
       });
-      const standbyNode = {
-        locationId: brandLocationId(venueId),
-        nodeId: brandNodeId(standby.nodeId),
-      };
+      const standbyNode = { nodeId: brandNodeId(standby.nodeId) };
       for (const m of modules) {
         if (m.provisioning?.standby === undefined) continue;
         const operation = moduleOperationFor(prepared, m.name, standbyNode.nodeId, "establish");

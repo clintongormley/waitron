@@ -83,10 +83,7 @@ it("enumerates the higher retired other-node hour that current-node readers omit
           withCollectedModuleAllocation(
             operation,
             async (request) => ({ ...request, evidence }),
-            (write) =>
-              withTransaction(suite.db, (tx) =>
-                write(tx, { nodeId, locationId: locationId(TENANT_A.locationId) }),
-              ),
+            (write) => withTransaction(suite.db, (tx) => write(tx, { nodeId })),
           ),
       );
     });
@@ -403,7 +400,6 @@ it("reads the newest fiscal record's time only through the floor reader, never t
             withTransaction(suite.db, (tx) =>
               write(tx, {
                 nodeId: TENANT_A.nodeId,
-                locationId: locationId(TENANT_A.locationId),
               }),
             ),
         ),

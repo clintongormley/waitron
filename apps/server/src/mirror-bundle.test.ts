@@ -111,7 +111,6 @@ async function setupVenue(): Promise<AdoptResult> {
     { db, modules: ALL_MODULES },
   );
   const designated: AdoptResult = {
-    locationId: venue.locationId,
     nodeId: venue.nodeId,
   };
   await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, designated.nodeId);
@@ -160,7 +159,6 @@ describe("assembleMirrorBundle (primary side)", () => {
     const { bundle } = await allocatedBundle(standby, { designated: stale });
     expect(bundle.designated).not.toHaveProperty("seriesId");
     expect(bundle.designated.nodeId).toBe(designated.nodeId);
-    expect(bundle.designated.locationId).toBe(venueId);
   });
 
   it("assembles a bundle carrying tenant + node identity and the box's connection details", async () => {

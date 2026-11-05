@@ -79,7 +79,6 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
     { db: suite.db, modules: ALL_MODULES },
   );
   const designated: AdoptResult = {
-    locationId: venue.locationId,
     nodeId: venue.nodeId,
   };
   const adminPersonId = await withTransaction(db, (tx) => {

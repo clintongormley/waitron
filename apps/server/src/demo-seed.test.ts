@@ -54,7 +54,6 @@ beforeEach(async () => {
   })();
   RESULT = {
     nodeId: ids.nodeId,
-    locationId: ids.locationId,
     seriesIds: [ids.seriesId],
     seeded: [],
   };

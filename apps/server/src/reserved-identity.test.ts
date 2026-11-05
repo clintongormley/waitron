@@ -95,11 +95,7 @@ describe("establishReservedStandbyIdentity", () => {
     );
     expect(series.rows[0]!.n).toBe(0);
     await fixture.transaction(suite.db, "promote", (tx, operation) =>
-      ALLOCATED_FISCAL_STANDBY.activate!(
-        tx,
-        { nodeId: brandNodeId(standby.nodeId), locationId },
-        operation,
-      ),
+      ALLOCATED_FISCAL_STANDBY.activate!(tx, { nodeId: brandNodeId(standby.nodeId) }, operation),
     );
     const sif = await withTransaction(suite.db, (tx) =>
       currentSif(tx, brandNodeId(standby.nodeId)),

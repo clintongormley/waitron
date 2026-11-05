@@ -199,7 +199,7 @@ async function reserve(standby = generateStandbyIdentity()) {
       relayUrl: "https://relay.test",
       boxHostname: "waitron.local",
       accountKey: "test-account-key",
-      designated: { nodeId: PRIMARY, locationId: LOCATION },
+      designated: { nodeId: PRIMARY },
       standby,
       moduleOperations: new Map([
         [held.binding.module, { binding: held.binding, authority, input: held.input }],
@@ -465,7 +465,7 @@ it("a refused public adoption retains its independently signed reservation witho
               relayUrl: "https://relay.test",
               boxHostname: "waitron.local",
               accountKey: "test-account-key",
-              designated: { nodeId: PRIMARY, locationId: LOCATION },
+              designated: { nodeId: PRIMARY },
               standby,
               moduleOperations: new Map([
                 [held.binding.module, { binding: held.binding, authority, input: held.input }],

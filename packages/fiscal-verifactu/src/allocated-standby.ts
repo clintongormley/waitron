@@ -204,7 +204,6 @@ export const ALLOCATED_FISCAL_STANDBY: StandbyProvisioning = {
       return refuse("reservation_mismatch");
     const primary = {
       nodeId: held.context.sourceId as ProvisionedNode["nodeId"],
-      locationId: standby.locationId,
     };
     await establishDormantAllocation(
       tx,

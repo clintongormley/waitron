@@ -8,7 +8,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locationId } from "@waitron/shared";
 import { withOperationAuthority } from "@waitron/module";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -397,11 +396,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
     const result = await withOperationAuthority(scope.binding, scope.administratorId, (authority) =>
       configured.prepare({ binding: scope.binding, authority, input: f.input }, (ready) =>
         withTransaction(suite.db, (tx) =>
-          activatePreparedModuleAllocation(
-            tx,
-            { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) },
-            ready,
-          ),
+          activatePreparedModuleAllocation(tx, { nodeId: TENANT_A.nodeId }, ready),
         ),
       ),
     );
@@ -415,11 +410,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
     const replay = await withOperationAuthority(scope.binding, scope.administratorId, (authority) =>
       configured.prepare({ binding: scope.binding, authority, input: f.input }, (ready) =>
         withTransaction(suite.db, (tx) =>
-          activatePreparedModuleAllocation(
-            tx,
-            { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) },
-            ready,
-          ),
+          activatePreparedModuleAllocation(tx, { nodeId: TENANT_A.nodeId }, ready),
         ),
       ),
     );
@@ -581,11 +572,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
     const continued = await withOperationAuthority(paperBinding, operator, (authority) =>
       offline.prepare({ binding: paperBinding, authority, input: paperInput }, (ready) =>
         withTransaction(suite.db, (tx) =>
-          activatePreparedModuleAllocation(
-            tx,
-            { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) },
-            ready,
-          ),
+          activatePreparedModuleAllocation(tx, { nodeId: TENANT_A.nodeId }, ready),
         ),
       ),
     );
@@ -683,11 +670,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
           { binding: scope.binding, authority, input: f.input },
           (ready) =>
             withTransaction(suite.db, (tx) =>
-              activatePreparedModuleAllocation(
-                tx,
-                { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) },
-                ready,
-              ),
+              activatePreparedModuleAllocation(tx, { nodeId: TENANT_A.nodeId }, ready),
             ),
         ),
       ),

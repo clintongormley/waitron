@@ -17,12 +17,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, posix, sep } from "node:path";
 import { eq } from "drizzle-orm";
-import {
-  AppError,
-  isAppError,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-} from "@waitron/shared";
+import { AppError, isAppError, nodeId as brandNodeId } from "@waitron/shared";
 import {
   insertNodeSeriesTx,
   readLiveSeriesIdTx,
@@ -32,7 +27,6 @@ import {
   readStandardSeriesIdTx,
   retireNodeSeriesTx,
   withTransaction,
-  venueLocationId,
   type Database,
   type NodeDatabase,
   type Transaction,
@@ -861,7 +855,7 @@ export async function resolveArtifactNode(
   const { node } = readArtifactIdentity(entries);
   const [stored] = await db.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, node.nodeId));
   if (stored === undefined) throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
-  return { ...node, locationId: brandLocationId(await venueLocationId(db)) };
+  return { ...node };
 }
 
 export async function readArtifactNode(
@@ -874,9 +868,27 @@ export async function readArtifactNode(
       "select l.id from nodes n join locations l on l.id = n.location_id where n.id = ?",
       [node.nodeId],
     )) {
-      if (typeof row.id === "string") return { ...node, locationId: brandLocationId(row.id) };
+      if (typeof row.id === "string") return { ...node };
     }
     throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
+  } finally {
+    await opened.close();
+  }
+}
+
+/** Interim: the id of the copy's one venue row, for backup settings; S18e or S28 removes it. */
+export async function readArtifactVenueId(
+  copy: Pick<ValidatedArtifact, "secretEntries" | "databasePath">,
+): Promise<string> {
+  const { node } = readArtifactIdentity(copy.secretEntries);
+  const opened = await openBackupQuery(copy.databasePath);
+  try {
+    const ids: unknown[] = [];
+    for await (const row of opened.query.rows("select id from locations limit 2")) ids.push(row.id);
+    const [id] = ids;
+    if (ids.length !== 1 || typeof id !== "string")
+      throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
+    return id;
   } finally {
     await opened.close();
   }

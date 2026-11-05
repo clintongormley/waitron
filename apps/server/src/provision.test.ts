@@ -198,7 +198,7 @@ describe("provisionVenue", () => {
       sql`select cast(count(*) as int) as n from devices`,
     );
     expect(devices.rows[0]!.n).toBe(0);
-    for (const id of [result.locationId, result.nodeId, result.seriesIds[0]]) {
+    for (const id of [result.nodeId, result.seriesIds[0]]) {
       expect(typeof id).toBe("string");
       expect((id as string).length).toBeGreaterThan(0);
     }
@@ -331,12 +331,10 @@ describe("provisionVenue", () => {
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       request,
     );
-    const venueId = await venueLocationId(db);
 
     const recovered = await recoverProvisionedVenue(db, request);
 
     expect(recovered).toEqual({
-      locationId: venueId,
       nodeId: minted.nodeId,
       seriesIds: minted.seriesIds,
       seeded: [],

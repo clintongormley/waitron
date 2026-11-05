@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
@@ -26,7 +26,7 @@ export async function initialSetupInput(
   const targetNodeId = nodeId(randomUUID());
   const administratorId = randomUUID();
   const fixture = allocationFixture({
-    node: { nodeId: targetNodeId, locationId: locationId(randomUUID()) },
+    node: { nodeId: targetNodeId },
     identity: "S000001",
     environment,
     taxpayerNif: (() => {

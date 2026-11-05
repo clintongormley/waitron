@@ -264,7 +264,6 @@ async function verify() {
         },
         source: {
           nodeId: node.nodeId,
-          locationId: node.locationId,
           environment: "preproduction",
           createdAt: time,
         },

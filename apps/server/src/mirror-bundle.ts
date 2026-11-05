@@ -1,7 +1,7 @@
 import "./errors.js";
 import { readFile } from "node:fs/promises";
 import { eq } from "drizzle-orm";
-import { AppError, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { AppError, nodeId as brandNodeId } from "@waitron/shared";
 import {
   nodes,
   readDeploymentEnvironment,
@@ -135,10 +135,7 @@ export function refuseFullChart(
 // `mirror.membership_full` when it has no place left for the standby.
 export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBundle> {
   const operations = snapshotModuleOperations(deps.moduleOperations);
-  const standby = {
-    nodeId: brandNodeId(deps.standby.nodeId),
-    locationId: brandLocationId(deps.designated.locationId),
-  };
+  const standby = { nodeId: brandNodeId(deps.standby.nodeId) };
   const { tenant, primaryNode } = await withTransaction(deps.appDb, async (tx) => {
     // Safe: every provisioned database holds the taxpayer row and the designated node's row.
     const t = (await readTenant(tx))!;
@@ -178,10 +175,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
         const held = await readNodeMembership(tx);
         refuseRemovedStandby(held, deps.standby.nodeId);
         refuseFullChart(held, deps.standby.nodeId);
-        const primary = {
-          locationId: brandLocationId(deps.designated.locationId),
-          nodeId: brandNodeId(deps.designated.nodeId),
-        };
+        const primary = { nodeId: brandNodeId(deps.designated.nodeId) };
         const states: Record<string, unknown> = {};
         const series: { code: string; purpose: string }[] = [];
         for (const m of modules) {
@@ -214,7 +208,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   );
 
   return {
-    designated: { nodeId: deps.designated.nodeId, locationId: deps.designated.locationId },
+    designated: { nodeId: deps.designated.nodeId },
     tenant: { country: tenant.country, taxId: tenant.taxId },
     primaryNode: {
       name: primaryNode.name,

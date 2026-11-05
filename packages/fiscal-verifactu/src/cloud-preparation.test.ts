@@ -608,14 +608,3 @@ it("refuses reporting when the stored node is absent", async () => {
     await suite.db.execute(sql`pragma foreign_keys = on`);
   }
 });
-
-// A1301: deleted with cfg in S18
-it("reports a committed Cloud allocation without location scope", async () => {
-  await activate();
-  expect(
-    await collectReport(undefined, {
-      ...node,
-      locationId: locationId("f0000000-0000-4000-8000-000000000099"),
-    }),
-  ).toEqual(await collectReport());
-});

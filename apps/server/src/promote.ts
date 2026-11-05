@@ -7,7 +7,6 @@ import {
   readNodeMembership,
   readStandardSeriesId,
   requireStamp,
-  venueLocationId,
   withNodeTransaction,
   withTransaction,
   writeNodeMembershipTx,
@@ -33,7 +32,7 @@ import {
   type ProvisionedNode,
   type WaitronModule,
 } from "@waitron/module";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { refreshDeploymentHolders, type DeploymentHolders } from "./deployment-holders.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import { assertHeldDocumentReadable } from "./membership-trust.js";
@@ -253,10 +252,7 @@ export async function promoteMirrorToPrimary(
     .from(nodes)
     .where(eq(nodes.id, deps.nodeId));
   if (stored === undefined) throw new AppError("node.not_found", { id: deps.nodeId });
-  const node = {
-    nodeId: brandNodeId(deps.nodeId),
-    locationId: brandLocationId(await venueLocationId(deps.db)),
-  };
+  const node = { nodeId: brandNodeId(deps.nodeId) };
 
   assertNotFenced(held, deps.nodeId);
   const document = await mintNextMembershipDocument(

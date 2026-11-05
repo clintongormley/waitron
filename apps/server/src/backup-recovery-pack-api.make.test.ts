@@ -27,7 +27,7 @@ import { readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { PART_WORDS, readRecoveryPackPdf, type RecoveryPackPage } from "@waitron/recovery-pack";
-import { AppError, locationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { ARCHIVE_PURPOSE, writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
@@ -100,9 +100,8 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
-  const venueId = await venueLocationId(suite.db);
   const nodeId = await seedNode(suite.db);
-  node = { nodeId, locationId: locationId(venueId) };
+  node = { nodeId };
   await setNodePublicKey(suite.db, nodeId, "SIGNER_PUBLIC_KEY");
   keyInForce = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, nodeId);
   await withTransaction(suite.db, async (tx) => {

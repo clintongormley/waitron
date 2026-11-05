@@ -589,7 +589,7 @@ it.each(["venue", "module", "publication"] as const)(
     if (kind === "venue")
       f.deps.recoverProvision = async (request) => ({
         ...(await recover(request)),
-        locationId: "changed-location" as never,
+        nodeId: "changed-node",
       });
     if (kind === "module") {
       const module = f.host.modules.find((entry) => entry.name === MODULE)!;

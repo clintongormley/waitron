@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { deployment, invoiceSeries, readTenant, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { isAppError, locationId as brandLocationId } from "@waitron/shared";
+import { isAppError } from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";
 import { allocationFixture } from "../test/allocation-fixture.js";
 import { ALLOCATED_FISCAL_RESTORE } from "./allocated-lifecycle.js";
@@ -26,7 +26,6 @@ beforeAll(() => {
 });
 
 const NODE: ProvisionedNode = {
-  locationId: brandLocationId(TENANT_A.locationId),
   nodeId: TENANT_A.nodeId,
 };
 const SIF = { nif: "89890001K", idSistemaInformatico: "WT" } as const;
@@ -217,11 +216,7 @@ describe("restoreFiscal", () => {
     // Through the REAL append path (appendToChain computes the hash and derives primer_registro),
     // before and after the hook — never a fixture that writes the hash by hand.
     const seededNode = await seedNode(db);
-    const { rows } = await db.execute<{ location_id: string }>(
-      sql`select location_id from nodes where id = ${seededNode.nodeId}`,
-    );
     const node: ProvisionedNode = {
-      locationId: brandLocationId(rows[0]!.location_id),
       nodeId: seededNode.nodeId,
     };
     const sale1 = await seedSale(db, seededNode, 1);

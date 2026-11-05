@@ -36,7 +36,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { readRecoveryKeyVerifier } from "@waitron/node-db";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { planVenue, quoteIdent } from "@waitron/provisioning";
 import { mintBreakGlassSecret } from "../break-glass.js";
 import {
@@ -468,7 +468,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     const dirsB = await boxDirs(scratch, "box-b");
     const portB = await freePort();
     const recoveryFixture = allocationFixture({
-      node: { nodeId: nodeId(a.nodeId), locationId: locationId(a.locationId) },
+      node: { nodeId: nodeId(a.nodeId) },
       taxpayerNif: "74000001P",
       identity: "P000042",
       recoveryKey: true,

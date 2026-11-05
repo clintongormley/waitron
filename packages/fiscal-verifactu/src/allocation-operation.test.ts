@@ -708,14 +708,3 @@ it("refuses allocation references when the stored node is absent", async () => {
     readAllocated(bases, { ...node, nodeId: "missing" as typeof node.nodeId }),
   ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "node_mismatch" } });
 });
-
-// A1301: deleted with cfg in S18
-it("reads committed allocation references without location scope", async () => {
-  const committed = await activateForRead();
-  expect(
-    await readAllocated(bases, {
-      ...node,
-      locationId: locationId("f0000000-0000-4000-8000-000000000099"),
-    }),
-  ).toEqual(committed.series);
-});

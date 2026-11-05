@@ -27,6 +27,7 @@ import {
 } from "./backup-verification-protocol.js";
 import * as entry from "./backup-verification-entry.js";
 import * as archiveReaders from "./backup-verification-archive.js";
+import * as backupConfig from "./backup-config.js";
 
 vi.mock("node:fs/promises", async (original) => {
   const real = await original<typeof import("node:fs/promises")>();
@@ -709,6 +710,13 @@ describe("complete backup verification", () => {
       reason: "secret_invalid",
       modules: [],
     });
+  });
+  it("checks the captured backup settings against the copy's own venue id", async () => {
+    const f = await fixture();
+    const load = vi.spyOn(backupConfig, "loadBackupConfig");
+    await seal(f);
+    expect(await verify(f)).toMatchObject({ status: "passed" });
+    expect(load.mock.calls.map(([, venueId]) => venueId)).toEqual([locationId, locationId]);
   });
   it("rejects a placed key layout whose effective key came only from excluded backup.env", async () => {
     const f = await fixture();

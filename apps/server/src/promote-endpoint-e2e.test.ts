@@ -524,10 +524,9 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       seed.nodeId,
     );
     const keyFixture = allocationFixture({
-      node: { nodeId: brandNodeId(seed.nodeId), locationId: brandLocationId(MIRROR_LOCATION_ID) },
+      node: { nodeId: brandNodeId(seed.nodeId) },
       primary: {
         nodeId: brandNodeId(MIRROR_ORIGIN_NODE_ID),
-        locationId: brandLocationId(MIRROR_LOCATION_ID),
       },
       taxpayerNif: "90222222F",
       identity: "P000042",

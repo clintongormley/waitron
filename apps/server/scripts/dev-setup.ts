@@ -15,7 +15,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
-import { openVenueDatabase, withTransaction, type Database } from "@waitron/db";
+import { openVenueDatabase, venueLocationId, withTransaction, type Database } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { listDeviceProfiles } from "@waitron/layouts";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -244,7 +244,7 @@ async function provisionVenue(
   const ids = {
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,
-    locationId: venue.locationId,
+    locationId: await venueLocationId(db),
   };
 
   const selection = await readDemoSeedSelection(db);

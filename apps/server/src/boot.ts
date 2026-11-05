@@ -2592,7 +2592,7 @@ async function bootServer(
     testClock: seams.testClock,
     db,
     nodeDb: store.node,
-    node: { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId },
+    node: { nodeId: tradingContext.nodeId },
     modules: enabledModules(ALL_MODULES, moduleConfig),
     credentialKeyRing: totpKeyRing,
     stateDir: config.stateDir,
@@ -2613,7 +2613,7 @@ async function bootServer(
       trading: tradingAdmission,
     }),
     liveOperations: createLiveModuleOperation({
-      node: { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId },
+      node: { nodeId: tradingContext.nodeId },
       preparation: nodePreparation,
       requestFromBox: seams.requestFromBox,
     }),
@@ -3267,7 +3267,7 @@ async function bootServer(
             ? `https://${tunnelConfig.relayHost}:${tunnelConfig.relayPort}/`
             : undefined,
         boxHostname: BOX_HOSTNAME,
-        designated: { ...config.node, locationId: nodeLocationId },
+        designated: { ...config.node },
         accountKey: accountKey.toString("base64"),
         credentialKeyRing: totpKeyRing,
       },

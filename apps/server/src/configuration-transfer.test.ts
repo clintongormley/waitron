@@ -3881,12 +3881,14 @@ it("carries each table's short name, and the import sets the live table's key fr
       .map((row) => row.short_name),
   ).toEqual(["Rt1"]);
 
-  const target = await applyVenue(planVenue(venue("B14142135"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B14142135"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
-  expect(await importedShortNames(target)).toEqual([{ shortName: "Rt1", shortNameKey: "rt1" }]);
+  expect(await importedShortNames({ locationId: await venueLocationId(targetSuite.db) })).toEqual([
+    { shortName: "Rt1", shortNameKey: "rt1" },
+  ]);
   const plan = await targetSuite.db
     .select({ shortName: floorPlanTables.shortName })
     .from(floorPlanTables)
@@ -3925,7 +3927,7 @@ it("imports a file with no short names, at this version, with none", async () =>
       delete copy.short_name;
       return copy;
     });
-  const target = await applyVenue(planVenue(venue("B22360679"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B22360679"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) =>
@@ -3943,7 +3945,9 @@ it("imports a file with no short names, at this version, with none", async () =>
         versions,
       ),
   });
-  expect(await importedShortNames(target)).toEqual([{ shortName: null, shortNameKey: null }]);
+  expect(await importedShortNames({ locationId: await venueLocationId(targetSuite.db) })).toEqual([
+    { shortName: null, shortNameKey: null },
+  ]);
   const plan = await targetSuite.db
     .select({ shortName: floorPlanTables.shortName })
     .from(floorPlanTables)
@@ -5944,7 +5948,9 @@ describe("special days in a configuration transfer", () => {
         { locationId: venueId, name: "Grill" },
       ]);
     });
-    const { cfg, stations } = await named(suite.db, source);
+    const { cfg, stations } = await named(suite.db, {
+      locationId: await venueLocationId(suite.db),
+    });
     const bar = { kind: "station" as const, id: stations.get("Bar")! };
     await withTransaction(suite.db, async (tx) => {
       await insertSpecialDay(tx, cfg, { date: "2026-12-24", name: "Christmas Eve" });
@@ -5978,7 +5984,7 @@ describe("special days in a configuration transfer", () => {
   });
 
   it("carries special dates with fresh ids while leaving station schedules behind", async () => {
-    const { source, versions, transferred } = await preparedWithSpecialDays("B44001122");
+    const { versions, transferred } = await preparedWithSpecialDays("B44001122");
     expect(transferred.tables).not.toHaveProperty("station_day_states");
     for (const table of [
       "station_fallbacks",
@@ -5989,19 +5995,23 @@ describe("special days in a configuration transfer", () => {
     ])
       expect(transferred.tables).not.toHaveProperty(table);
 
-    const target = await applyVenue(planVenue(venue("B44001133"), ALL_MODULES), {
+    await applyVenue(planVenue(venue("B44001133"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
 
-    const expected = await specialDaysByName(suite.db, source);
+    const expected = await specialDaysByName(suite.db, {
+      locationId: await venueLocationId(suite.db),
+    });
     expect(expected.dates.map((date) => date.date)).toEqual([
       "2026-12-24",
       "2026-12-25",
       "2027-01-01",
     ]);
-    const actual = await specialDaysByName(targetSuite.db, target);
+    const actual = await specialDaysByName(targetSuite.db, {
+      locationId: await venueLocationId(targetSuite.db),
+    });
     expect(actual.dates).toEqual(expected.dates);
 
     const sourceIds = new Set(transferred.tables.special_days!.map((row) => row.id));
@@ -6039,7 +6049,9 @@ describe("special days in a configuration transfer", () => {
     await withTransaction(suite.db, (tx) =>
       tx.insert(kitchenStations).values({ locationId: venueId, name: "Pass" }),
     );
-    const { cfg, stations } = await named(suite.db, source);
+    const { cfg, stations } = await named(suite.db, {
+      locationId: await venueLocationId(suite.db),
+    });
     const pass = { kind: "station" as const, id: stations.get("Pass")! };
     await withTransaction(suite.db, async (tx) => {
       await insertSpecialDay(tx, cfg, { date: "2026-12-31", name: "New Year's Eve" });
@@ -6053,12 +6065,14 @@ describe("special days in a configuration transfer", () => {
     expect(transferred.tables).not.toHaveProperty("hours_week_cells");
     expect(transferred.tables).not.toHaveProperty("special_date_hours");
 
-    const target = await applyVenue(planVenue(venue("B44002222"), ALL_MODULES), {
+    await applyVenue(planVenue(venue("B44002222"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
-    const imported = await named(targetSuite.db, target);
+    const imported = await named(targetSuite.db, {
+      locationId: await venueLocationId(targetSuite.db),
+    });
     const importedPass = { kind: "station" as const, id: imported.stations.get("Pass")! };
     const read = await withTransaction(targetSuite.db, async (tx) => ({
       eve: await namedOn(tx, imported.cfg, "2026-12-31"),
@@ -6198,7 +6212,7 @@ describe("public holidays in a configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const cfg = scope(source);
+    const cfg = scope({ locationId: await venueLocationId(suite.db) });
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(
         sql`insert into holiday_geographies (id, location_id, country, province_code, city, city_key) values (${randomUUID()}, ${cfg.locationId}, 'ES', '28', 'Madrid', 'madrid')`,
@@ -6209,11 +6223,16 @@ describe("public holidays in a configuration transfer", () => {
         closedAllDay: true,
       });
     });
-    await moveTo(suite.db, source, "Lleida", "Vielha e Mijaran");
+    await moveTo(
+      suite.db,
+      { locationId: await venueLocationId(suite.db) },
+      "Lleida",
+      "Vielha e Mijaran",
+    );
     await withTransaction(suite.db, async (tx) => {
       await saveHolidayArea(tx, { areaKey: "aran" });
     });
-    await moveTo(suite.db, source, "Madrid", "  MADRID ");
+    await moveTo(suite.db, { locationId: await venueLocationId(suite.db) }, "Madrid", "  MADRID ");
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
       ALL_MODULES,
@@ -6242,7 +6261,7 @@ describe("public holidays in a configuration transfer", () => {
     expect(text).not.toContain("f85e22b21de215dafdc2491eab6a535b0c92e744c8d2ae79d3d4c0532c9770e0");
     expect(text).not.toContain("ES-2026.1");
 
-    const target = await applyVenue(planVenue(venue("B45001133"), ALL_MODULES), {
+    await applyVenue(planVenue(venue("B45001133"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
@@ -6323,7 +6342,12 @@ describe("public holidays in a configuration transfer", () => {
       special.rows[0]!.id,
     );
 
-    await moveTo(targetSuite.db, target, "Lleida", "Vielha e Mijaran");
+    await moveTo(
+      targetSuite.db,
+      { locationId: await venueLocationId(targetSuite.db) },
+      "Lleida",
+      "Vielha e Mijaran",
+    );
     const inVielha = await read();
     expect(inVielha.model.areaRequired).toBe(false);
     expect(inVielha.aran.facts.map(({ scope, name }) => ({ scope, name }))).toEqual([
@@ -6331,7 +6355,12 @@ describe("public holidays in a configuration transfer", () => {
     ]);
     expect(inVielha.epiphany.facts.map(({ scope }) => scope)).toEqual(["national"]);
 
-    await moveTo(targetSuite.db, target, "Madrid", "Madrid");
+    await moveTo(
+      targetSuite.db,
+      { locationId: await venueLocationId(targetSuite.db) },
+      "Madrid",
+      "Madrid",
+    );
     expect((await read()).model.chosen).toEqual(inMadrid.model.chosen);
   });
 
@@ -7802,7 +7831,7 @@ describe("seasons in a configuration transfer", () => {
       encodeConfigurationBundle(bundle, "a strong passphrase"),
       "a strong passphrase",
     );
-    const target = await applyVenue(planVenue(venue("B35792469"), ALL_MODULES), {
+    await applyVenue(planVenue(venue("B35792469"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
@@ -7814,7 +7843,9 @@ describe("seasons in a configuration transfer", () => {
       { name: "Harvest", startsOn: "09-15", colour: "teal" },
       { name: STARTER_SEASON_NAMES.Winter.es, startsOn: "12-01", colour: "blue" },
     ]);
-    expect(await seasonsOf(targetSuite.db, target)).toEqual(exported);
+    expect(
+      await seasonsOf(targetSuite.db, { locationId: await venueLocationId(targetSuite.db) }),
+    ).toEqual(exported);
     expect(await saturdays(targetSuite.db)).toEqual([
       { season: "Harvest", period: "Dinner", starts_at: "20:00:00", ends_at: "02:00:00" },
       {

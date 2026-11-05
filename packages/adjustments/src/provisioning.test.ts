@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
@@ -110,27 +109,6 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
     ]);
     expect(seeded.every((reason) => reason.maxAmount === null)).toBe(true);
     expect(await db.select().from(adjustmentSettings)).toEqual([]);
-  });
-
-  // A1301: deleted with cfg in S18
-  it("names the starters from the venue whatever location the node names", async () => {
-    const node = await provisionedNode({
-      country: "ES",
-      province: null,
-      invoiceLocales: ["es-ES", "en-GB"],
-    });
-
-    await db.transaction((tx) =>
-      ADJUSTMENTS_PROVISIONING.seed!.run(tx, {
-        ...node,
-        locationId: brandLocationId(randomUUID()),
-      }),
-    );
-
-    expect((await reasons()).map((reason) => [reason.name, reason.names])[0]).toEqual([
-      expected["Entry error"]!.es,
-      { en: "Entry error", es: expected["Entry error"]!.es },
-    ]);
   });
 
   it("gives it an English plain name, with a name in each content language, where the venue's first invoice language is English", async () => {

@@ -236,9 +236,7 @@ describe("core backup source binding", () => {
       );
     }
   }
-  async function verify(
-    binding = { nodeId: "source", locationId: "venue", environment: "preproduction" as const },
-  ) {
+  async function verify(binding = { nodeId: "source", environment: "preproduction" as const }) {
     return queries(before.db, after.db, (a, b) =>
       verifyCoreBackupData({ before: a, after: b, ...binding }),
     );
@@ -286,20 +284,32 @@ describe("core backup source binding", () => {
     },
   );
 
-  it.each(["nodeId", "locationId"] as const)(
-    "source identity %s disagreement refuses",
-    async (field) => {
-      seed();
-      expect(
-        await verify({
-          nodeId: "source",
-          locationId: "venue",
-          environment: "preproduction",
-          [field]: "other",
-        }),
-      ).toBe(false);
-    },
-  );
+  it.each(["nodeId"] as const)("source identity %s disagreement refuses", async (field) => {
+    seed();
+    expect(await verify({ environment: "preproduction", [field]: "other" })).toBe(false);
+  });
+
+  it("refuses a copy with no venue row", async () => {
+    seed();
+    for (const db of [before.db, after.db]) {
+      db.run(sql`pragma foreign_keys = off`);
+      try {
+        db.run(sql`delete from locations`);
+      } finally {
+        db.run(sql`pragma foreign_keys = on`);
+      }
+    }
+    expect(await verify()).toBe(false);
+  });
+
+  it("refuses a copy with two venue rows", async () => {
+    seed();
+    for (const db of [before.db, after.db])
+      db.run(
+        sql`insert into locations (id, name, invoice_locales, operation_description) values ('second-venue', 'Second venue', '["en"]', 'Restaurant')`,
+      );
+    expect(await verify()).toBe(false);
+  });
 
   it("source environment disagreement refuses", async () => {
     seed();
@@ -554,7 +564,6 @@ describe("core backup source binding", () => {
           before: a,
           after: b,
           nodeId: "source",
-          locationId: "venue",
           environment: "preproduction",
         }),
       ),

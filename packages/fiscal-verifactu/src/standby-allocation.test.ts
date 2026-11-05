@@ -277,13 +277,3 @@ describe("a dormant standby allocation checked against stored venue facts", () =
     });
   });
 });
-
-// A1301: deleted with cfg in S18
-it("validates a standby allocation without source location scope", async () => {
-  expect(
-    await check(undefined, context, {
-      ...primary,
-      locationId: locationId("f0000000-0000-4000-8000-000000000099"),
-    }),
-  ).toEqual(await check());
-});

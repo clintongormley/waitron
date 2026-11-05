@@ -63,7 +63,6 @@ it("recovers the existing location, node and all three series without allocating
       ALL_MODULES,
     ),
   ).toEqual({
-    locationId: f.venueId,
     nodeId: f.target.nodeId,
     seriesIds: f.target.seriesIds,
     seeded: [],
@@ -73,7 +72,6 @@ it("recovers the existing location, node and all three series without allocating
   );
   const defaulted = { ...venue, fullSeriesCode: undefined };
   expect(await recoverProvisionedVenue(suite.db, { venue: defaulted }, ALL_MODULES)).toEqual({
-    locationId: f.venueId,
     nodeId: f.target.nodeId,
     seriesIds: f.target.seriesIds,
     seeded: [],

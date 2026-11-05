@@ -160,7 +160,6 @@ async function verify(options: { sourceSchema?: number | null; nodeId?: string }
         },
         source: {
           nodeId: options.nodeId ?? TENANT_A.nodeId,
-          locationId: TENANT_A.locationId,
           environment: "preproduction",
           createdAt,
         },

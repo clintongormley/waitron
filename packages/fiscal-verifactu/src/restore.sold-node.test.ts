@@ -3,7 +3,6 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { deployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locationId as brandLocationId } from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";
 import { appendToChain } from "./chain.js";
 import { currentSif, esPrimerRegistro } from "./registro-sif.js";
@@ -16,11 +15,7 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 describe("restoreFiscal", () => {
   it("restores a sold node onto the supplied SIF with an empty chain head", async () => {
     const seededNode = await seedNode(suite.db);
-    const { rows } = await suite.db.execute<{ location_id: string }>(
-      sql`select location_id from nodes where id = ${seededNode.nodeId}`,
-    );
     const node: ProvisionedNode = {
-      locationId: brandLocationId(rows[0]!.location_id),
       nodeId: seededNode.nodeId,
     };
     const sale = await seedSale(suite.db, seededNode, 1);

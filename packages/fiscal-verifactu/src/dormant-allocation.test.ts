@@ -348,13 +348,3 @@ describe("persisting a named spare's dormant paper allocation", () => {
     expect(await rows("fiscal_reservations")).toEqual(before);
   });
 });
-
-// A1301: deleted with cfg in S18
-it("establishes a dormant allocation without target location scope", async () => {
-  expect(
-    await establish(undefined, context, {
-      ...target,
-      locationId: locationId("f0000000-0000-4000-8000-000000000099"),
-    }),
-  ).toEqual({ reservationEventId: join.eventId, allocationId: allocation.allocationId });
-});

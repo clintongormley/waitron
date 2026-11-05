@@ -51,7 +51,7 @@ afterEach(async () => {
 });
 function bundle(): MirrorBundle {
   return {
-    designated: { locationId: LOCATION, nodeId: PRIMARY },
+    designated: { nodeId: PRIMARY },
     tenant: { country: "ES", taxId: "89890001K" },
     primaryNode: { name: "Primary", filingModule: "fiscal-verifactu", taxModule: null },
     environment: "preproduction",

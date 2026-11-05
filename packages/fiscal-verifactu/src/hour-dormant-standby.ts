@@ -267,7 +267,6 @@ export async function establishHourDormant(
   if (!equal(dormant, held.input)) return refuse();
   const primary = {
     nodeId: operation!.binding.sourceId as ProvisionedNode["nodeId"],
-    locationId: standby.locationId,
   };
   const current = await configuration(tx, primary, standby, operation!.binding, true);
   if (!equal(current, dormant)) return refuse();

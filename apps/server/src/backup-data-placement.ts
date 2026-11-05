@@ -7,6 +7,7 @@ import { OPTIONAL_BACKUP_STATE } from "./backup-optional-state.js";
 import type { Logger } from "./logger.js";
 import {
   readArtifactNode,
+  readArtifactVenueId,
   restoreDatabase,
   restoreSecrets,
   type ValidatedArtifact,
@@ -55,7 +56,8 @@ export async function placeBackupData(
     if (!allowed.has(entry.name))
       throw new AppError("restore.unexpected_entry", { name: entry.name });
   }
-  const node = await readArtifactNode(validated);
+  await readArtifactNode(validated);
+  const venueId = await readArtifactVenueId(validated);
   const read = (name: string) =>
     validated.secretEntries.find((entry) => entry.name === "secrets/" + name)?.bytes;
   const secretsEnv = read("secrets.env");
@@ -67,7 +69,8 @@ export async function placeBackupData(
     backupEnv: read("backup.env") ?? null,
   });
   loadRecoveryKey(env);
-  loadBackupConfig(env, node.locationId);
+  // Interim: the copy's venue row id; removed by S18e or S28.
+  loadBackupConfig(env, venueId);
   await placeBackupDatabase(validated.databasePath, input, validated.nodeDump);
   await restoreSecrets({
     entries: validated.secretEntries.filter((entry) => entry.name !== "secrets/backup.env"),
