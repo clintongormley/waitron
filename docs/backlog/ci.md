@@ -611,29 +611,25 @@ assertion, without changing its check or wait. Next: use that snapshot and
 the existing failure screenshot to distinguish a wide scrolling box, delayed layout and missing
 resize delivery before changing the screen or its test.
 
-## Identify which pnpm setup command failed
+## Diagnose the next pnpm setup stall from its named command
 
-A746 gives healthy version checks the installer's normal allowance and retains a controlled
-slow-check regression. The original intermittent A737 hook retry was not reproduced. The setup
-script reports the same `attempt N of 3 failed or stalled: npm install` line whether installation
-or the version check failed, so stderr alone may not distinguish them. On recurrence, retain
-separate statuses and timings for both commands before assigning the cause. The controlled
-short-limit measurement is in [the CI guide](../developers/ci-and-gates.md#give-a-healthy-version-check-its-normal-allowance).
+A1338 adds live phase, command, status and elapsed-time reports, and bounds the initial
+`packageManager` read. Controlled silent Node, install and version-check stubs exercise the
+reporting and limits. They do not identify what ran during the original CI stalls.
 
-On 2026-10-28, main run [40644939856](https://github.com/clintongormley/waitron/actions/runs/40644939856)
-reported workforce job `122671628160` in `Set up pnpm` from `06:37:54Z` through repeated
-API snapshots. At the cancellation request that step had lasted 438 seconds; the same step in
-successful run `40626865577` lasted two seconds. Normal cancellation left that job active while
-other jobs finished cancelling. After force-cancellation, the run and job completed as cancelled.
-`gh run view 40644939856 --job 122671628160 --log` then answered `log not found: 122671628160`;
-the job-log REST endpoint returned HTTP 404. Recover runner-side evidence and distinguish a running
-command from stale runner reporting before changing the installer, retry limits or job deadline.
-The cause is unverified. Lane F retains the snapshots in `receipts/a976-media-localized-20261028/`.
-At the watcher's request, `gh run rerun 40644939856 --job 122671628160` started one second sample
-on the same commit. Job `122690326840` completed setup in two seconds on its first attempt and
-passed the workforce suite and coverage checks. The overrun did not recur in that sample; this
-does not diagnose the first attempt or demonstrate a repair. If a step again outlives its own
-five-minute limit, retain the recurrence before changing any command deadline.
+Retain the next recurrence's last `start` and `end` lines, then reproduce that named operation
+before changing its limits. Prefix cleanup and writing `GITHUB_PATH` remain outside the command
+timeouts; a cleanup start without an end needs evidence from that operation, not an npm retry.
+The earlier main run [40644939856](https://github.com/clintongormley/waitron/actions/runs/40644939856),
+job `122671628160`, stayed active through cancellation and its final job log was unavailable.
+Run [42034714487](https://github.com/clintongormley/waitron/actions/runs/42034714487),
+job `127269970638`, timed out in setup with no script output and no tests run. Both fresh-runner
+samples passed without diagnosing the first attempt. Keep those historical causes unverified.
+The legacy attempt summary still names npm after a version failure; use the preceding named-phase
+status and mismatch reports to identify the failed operation. Changing that retained summary
+needs approval for its existing exact-output checks.
+The controlled reproduction and limits are in
+[the CI guide](../developers/ci-and-gates.md#every-pnpm-setup-is-bounded).
 
 ## The step-watch guard received an undefined held-thread result
 
