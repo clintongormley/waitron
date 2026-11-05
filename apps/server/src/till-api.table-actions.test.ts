@@ -22,6 +22,7 @@ import { createTable } from "./testing/live-table.js";
 import { numbersOf } from "./testing/bill-identities.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
+import { tableSnapshot } from "./testing/table-snapshot.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { mountTillApi } from "./till-api.js";
 import { decimal } from "@waitron/shared";
@@ -1409,6 +1410,57 @@ describe("A803 race replay: through the route", () => {
         (select count(*) from order_group_events) as events`)[0]!;
   }
 
+  function partyRow(partyId: string) {
+    return venue.db.all<{ revision: number }>(sql`select * from parties where id = ${partyId}`)[0]!;
+  }
+
+  /** Leaves out `devices`: a request stamps its till's `last_seen_at` when due, so two runs can differ. */
+  function rowsExceptSightings() {
+    return tableSnapshot(venue.db, ["devices"]);
+  }
+
+  /**
+   * Per table, how many rows a span added and which columns of how many rows it changed. A count of
+   * rows and a set of columns, because two runs write different ids and times.
+   */
+  function rowChanges(before: Record<string, unknown[]>, after: Record<string, unknown[]>) {
+    const changes: Record<string, { added: number; changed: number; columns: string[] }> = {};
+    for (const [table, rows] of Object.entries(after)) {
+      const columns = new Set<string>();
+      let changed = 0;
+      rows.slice(0, before[table]!.length).forEach((row, at) => {
+        const was = before[table]![at] as Record<string, unknown>;
+        const differing = Object.entries(row as object).filter(([key, v]) => v !== was[key]);
+        if (differing.length > 0) changed += 1;
+        for (const [key] of differing) columns.add(key);
+      });
+      const added = rows.length - before[table]!.length;
+      if (added !== 0 || changed > 0) {
+        changes[table] = { added, changed, columns: [...columns].sort() };
+      }
+    }
+    return changes;
+  }
+
+  async function splitBodies(at: Awaited<ReturnType<typeof anaAtThree>>) {
+    const path = `/api/parties/${at.ana.partyId}/split-table`;
+    return {
+      whole: await observedTableActionBody(venue.db, path, {
+        tableId: at.second,
+        selection: { wholeBillIds: [at.billId], loose: [] },
+        expectedPartyRevision: revisionOf(at.ana.partyId),
+      }),
+      loose: await observedTableActionBody(venue.db, path, {
+        tableId: at.third,
+        selection: {
+          wholeBillIds: [],
+          loose: [{ billId: at.billId, lineIds: [lineOf(at.billId)] }],
+        },
+        expectedPartyRevision: revisionOf(at.ana.partyId),
+      }),
+    };
+  }
+
   function lineOf(billId: string) {
     return venue.db.all<{ id: string }>(
       sql`select id from working_order_lines where working_order_id = ${billId} order by line_no`,
@@ -1437,6 +1489,7 @@ describe("A803 race replay: through the route", () => {
     expect(after.parties).toBe(before.parties + 1);
     expect(after.notices).toBeGreaterThan(before.notices);
     const revision = revisionOf(ana.partyId);
+    const rowsAfterFirst = await tableSnapshot(venue.db);
 
     const resend = await send(venue.app, venue.cookie, "POST", path, body);
 
@@ -1444,6 +1497,7 @@ describe("A803 race replay: through the route", () => {
     expect(resend.json).toMatchObject({ code: "party.out_of_date" });
     expect(counts()).toEqual(after);
     expect(revisionOf(ana.partyId)).toBe(revision);
+    expect(await tableSnapshot(venue.db)).toEqual(rowsAfterFirst);
     expect(tablesOf(first.json.partyId as string)).toEqual([second]);
     expect(billsOf(first.json.partyId as string)).toEqual([billId]);
   });
@@ -1453,21 +1507,12 @@ describe("A803 race replay: through the route", () => {
       const { ana, second, third, billId } = await anaAtThree();
       const dish = lineOf(billId);
       const path = `/api/parties/${ana.partyId}/split-table`;
-      const bodies = {
-        whole: await observedTableActionBody(venue.db, path, {
-          tableId: second,
-          selection: { wholeBillIds: [billId], loose: [] },
-          expectedPartyRevision: revisionOf(ana.partyId),
-        }),
-        loose: await observedTableActionBody(venue.db, path, {
-          tableId: third,
-          selection: { wholeBillIds: [], loose: [{ billId, lineIds: [dish] }] },
-          expectedPartyRevision: revisionOf(ana.partyId),
-        }),
-      };
+      const bodies = await splitBodies({ ana, second, third, billId });
       const sent =
         first === "whole" ? (["whole", "loose"] as const) : (["loose", "whole"] as const);
       const before = counts();
+      const partyBefore = partyRow(ana.partyId);
+      const rowsBefore = await rowsExceptSightings();
 
       const answers = await Promise.all([
         send(venue.app, venue.cookie, "POST", path, bodies[sent[0]]),
@@ -1477,8 +1522,29 @@ describe("A803 race replay: through the route", () => {
       expect(answers.map((answer) => answer.status).sort()).toEqual([200, 409]);
       const wonAt = answers.findIndex((answer) => answer.status === 200);
       expect(answers[1 - wonAt]!.json).toMatchObject({ code: "party.out_of_date" });
-      expect(counts().parties).toBe(before.parties + 1);
       const winner = sent[wonAt]!;
+      expect(counts()).toEqual({
+        parties: before.parties + 1,
+        bills: before.bills + (winner === "loose" ? 1 : 0),
+        notices: before.notices + 1,
+        events: before.events + 1,
+      });
+      expect(partyRow(ana.partyId)).toEqual({ ...partyBefore, revision: partyBefore.revision + 1 });
+      // Against the same split sent alone: a read at the first answer misses a refused request's
+      // write that lands before that answer.
+      const raced = rowChanges(rowsBefore, await rowsExceptSightings());
+      const alone = await anaAtThree();
+      const aloneBodies = await splitBodies(alone);
+      const rowsBeforeAlone = await rowsExceptSightings();
+      const answer = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/parties/${alone.ana.partyId}/split-table`,
+        aloneBodies[winner],
+      );
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+      expect(raced).toEqual(rowChanges(rowsBeforeAlone, await rowsExceptSightings()));
       const tableOf = { whole: second, loose: third };
       const newParty = answers[wonAt]!.json.partyId as string;
       expect(tablesOf(newParty)).toEqual([tableOf[winner]]);

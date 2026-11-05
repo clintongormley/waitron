@@ -827,8 +827,8 @@ describe("A803 race replay: Split a table against another command, from one read
     ["split", "pay"],
   ] as const) {
     it(`A803 race replay: a split with a loose dish and a payment taking that dish: one commits (${order[0]} asked first)`, async () => {
-      // Two dishes of one price, so a payment naming the first line's number could not pass by
-      // paying the dish left on the bill if a split renumbered its lines.
+      // Two dishes of one price, so if a split renumbered its lines, this payment would commit
+      // against the staying dish and the case would go red.
       const ana = await seatedWith(venue, "Tarta", "Tarta");
       const table = await joinFree(ana.partyId);
       const [dish, staying] = linesOf(ana.tabId);
