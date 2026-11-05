@@ -18,7 +18,7 @@ describe("orders filter in the address", () => {
       anyDate: false,
       credited: true,
       staff: "1b4e28ba-2fa1-41d2-883f-0016d3cca427",
-      table: "Mesa 5",
+      table: "Table 5",
       q: "A/12",
     };
     const written = writeOrdersFilter(filter);

@@ -13,7 +13,7 @@ const row: OrderRowDto = {
   label: null,
   partyId: null,
   partyName: null,
-  tables: ["Mesa 5"],
+  tables: ["Table 5"],
   counter: false,
   saleId: "sale-1",
   invoiceNumber: "A/12",
@@ -40,7 +40,7 @@ const api = {
   listOrderPages: vi.fn().mockResolvedValue({ rows: [row], next: null, from: null, to: null }),
   listOrderStaff: vi.fn().mockResolvedValue({ staff: [] }),
   getOrder: vi.fn().mockResolvedValue(detail),
-  getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Barra" }]),
+  getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Bar printer" }]),
   liveData: new LiveData(),
 } as unknown as DashboardApi;
 
@@ -95,8 +95,8 @@ const fullApi = {
         retryOriginal: null,
         print: {
           printers: [
-            { id: "printer-1", name: "Barra", kind: "receipt" },
-            { id: "page-1", name: "Oficina", kind: "a4" },
+            { id: "printer-1", name: "Bar printer", kind: "receipt" },
+            { id: "page-1", name: "Office printer", kind: "a4" },
           ],
           designation: "duplicate",
         },
