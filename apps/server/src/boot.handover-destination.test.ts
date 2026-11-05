@@ -45,6 +45,7 @@ import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -52,6 +53,11 @@ import { setupVenue } from "./testing/venue-fixtures.js";
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
   return ephemeralHttpMock();
+});
+
+vi.mock("./handover-source-api.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./handover-source-api.js")>();
+  return { ...actual, mountHandoverSourceApi: vi.fn(actual.mountHandoverSourceApi) };
 });
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
@@ -266,11 +272,14 @@ const operation = (nodeId: string, operationId: string) =>
 
 describe("the spare's handover duty in a full start", () => {
   it("a mirror reads its open operation at boot, and an offer wakes it for the next", async () => {
+    vi.mocked(mountHandoverSourceApi).mockClear();
     const { nodeId, asked, binding } = await boot("mirror");
     await vi.waitFor(async () => expect((await operation(nodeId, OP))?.state).toBe("abandoned"), {
       timeout: 15_000,
     });
     expect(asked).toEqual([OP]);
+    // HTTP cannot tell: the read-only gate answers 403 for the route, mounted or not.
+    expect(mountHandoverSourceApi).not.toHaveBeenCalled();
 
     const answer = await fetch(`http://127.0.0.1:${httpPort()}/api/node/handover/offer`, {
       method: "POST",

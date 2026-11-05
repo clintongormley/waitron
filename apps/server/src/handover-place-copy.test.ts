@@ -538,13 +538,15 @@ describe("placeAcceptedCopyAtStart", () => {
 
       await expect(
         recordCopyPlaced({
-          node: {} as NodeDatabase,
+          node: {
+            withWriteLock: () => Promise.reject(new Error("write refused")),
+          } as unknown as NodeDatabase,
           nodeId: NODE,
           stateDir: b.stateDir,
           operationId: OP,
           log: b.args.log,
         }),
-      ).rejects.toThrow();
+      ).rejects.toThrow("write refused");
 
       expect(existsSync(b.accepted)).toBe(true);
     });

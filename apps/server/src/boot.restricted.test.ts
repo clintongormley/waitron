@@ -342,6 +342,12 @@ describe("a full start's stepdown, through its test seam", () => {
     const answer = await askForIndicator(port);
     expect(answer.status).toBe(404);
     expect(answer.code).not.toBe("handover.operation_unknown");
+    const acceptance = await fetch(
+      `http://127.0.0.1:${port}/api/node/handover/${FINAL_COPY_OP}/acceptance`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+    );
+    expect(acceptance.status).toBe(404);
+    expect(await acceptance.text()).not.toContain("handover.");
   }, 60_000);
 
   it("a full start answers the handover status read", async () => {

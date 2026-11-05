@@ -509,6 +509,21 @@ describe("modulePreparationMergeFits", () => {
     expect(await modulePreparationMergeFits({ stateDir: options.stateDir }, [])).toBe(false);
   });
 
+  it("counts the file in bytes, not characters", async () => {
+    const { options, path } = await fixture();
+    const large = stored({ eventId: "large" }, "x".repeat(240_000));
+    const last = (text: string) => stored({ eventId: "exact" }, text);
+    const twoBytesEach = "é".repeat(
+      Math.ceil((LIMIT - bytesNeeded([], [large, last("")]) + 1) / 2),
+    );
+    expect(bytesNeeded([], [large, last(twoBytesEach)])).toBeGreaterThan(LIMIT);
+    await fs.writeFile(
+      path,
+      JSON.stringify({ version: 1, revisions: [large, last(twoBytesEach)] }),
+    );
+    expect(await modulePreparationMergeFits({ stateDir: options.stateDir }, [])).toBe(false);
+  });
+
   it("counts this box's own revisions with the incoming ones", async () => {
     const { options } = await fixture();
     const sizeable = "x".repeat(SIZEABLE);

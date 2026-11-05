@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { createServer as createHttpsServer, type Server as HttpsServer } from "node:https";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -101,6 +102,8 @@ async function boxes(
     sourceInChart?: boolean;
     limitMs?: number;
     signWithUnknownKey?: boolean;
+    scenario?: "controlled" | "emergency";
+    chart?: "minted" | "none" | "the old box's";
   } = {},
 ) {
   const material = mintAuthority();
@@ -177,19 +180,20 @@ async function boxes(
           signature: signDocumentBody(minted.body, stranger.privateKey),
         }
       : minted;
-  await writeNodeMembership(newBox.db, chart);
+  await writeNodeMembership(newBox.db, options.chart === "the old box's" ? held : chart);
 
   await stampDeployment(newBox.db, "preproduction");
   if (options.operation !== false) {
     await beginHandover(
       { node: newBox.node, nodeId: m2 },
-      await currentBinding({ db: newBox.db }, "controlled", m1, m2, OP),
+      await currentBinding({ db: newBox.db }, options.scenario ?? "controlled", m1, m2, OP),
       options.role ?? "destination",
     );
     await withNodeTransaction(newBox.node, (tx) =>
       advanceHandoverOperationTx(tx, m2, OP, options.state ?? "activated", null),
     );
   }
+  if (options.chart === "none") await newBox.db.run(sql`delete from node_membership`);
   await setNodeMode({ venue: newBox.db, node: newBox.node }, m2, options.mode ?? "primary");
   if (options.link !== "none") {
     await writeMirrorLink(newBox.node, m2, {
@@ -245,6 +249,21 @@ describe("the new main box tells the old box its chart, once per start", () => {
     ]);
   });
 
+  it("posts for an emergency operation at activated too", async () => {
+    const { chart, requests, start } = await boxes({ scenario: "emergency" });
+    await start().settled;
+    expect(requests).toEqual([MEMBERSHIP_POST]);
+    expect(await readNodeMembership(oldBox.db)).toEqual(chart);
+  });
+
+  it("a box still holding the old box's own chart posts it, and the old box changes nothing", async () => {
+    const { held, requests, start, events } = await boxes({ chart: "the old box's" });
+    await start().settled;
+    expect(requests).toEqual([MEMBERSHIP_POST]);
+    expect(await readNodeMembership(oldBox.db)).toEqual(held);
+    expect(events()).toEqual(["warn handover-activation.chart_not_accepted"]);
+  });
+
   it.each<[string, Parameters<typeof boxes>[0]]>([
     ["no operation", { operation: false }],
     ["the operation at prepared", { state: "prepared" }],
@@ -254,6 +273,7 @@ describe("the new main box tells the old box its chart, once per start", () => {
     ["this box the operation's source", { role: "source" }],
     ["a mirror", { mode: "mirror" }],
     ["the source not in the chart", { sourceInChart: false }],
+    ["no chart on this box", { chart: "none" }],
   ])("posts nothing with %s", async (_name, options) => {
     const { held, requests, start, events } = await boxes(options);
     await start().settled;

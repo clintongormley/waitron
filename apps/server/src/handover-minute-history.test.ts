@@ -1,5 +1,5 @@
 // Does a spare promoted from M1's database copy avoid every minute name M1 used, without M1's
-// module-preparation-state.json? Each case but the control puts the spare's clock on the minute of
+// module-preparation-state.json? The cases asking this put the spare's clock on the minute of
 // M1's later name, where a reused name prints `selected` with that name and an avoided one prints
 // `waiting`.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -571,7 +571,7 @@ describe("a merged file close to its limit", () => {
     return { s, minute, m1List };
   };
 
-  it.each([
+  const FILLED_SHAPES = [
     { title: "few selections", m1: 0, m2: 0, venueHistory: false, waits: true },
     {
       title: "30 past attempts that never waited",
@@ -596,7 +596,9 @@ describe("a merged file close to its limit", () => {
       venueHistory: true,
       waits: true,
     },
-  ])(
+  ];
+
+  it.each(FILLED_SHAPES)(
     "filled to the last byte the size check takes, $title: the spare still waits, selects and promotes",
     async ({ m1, m2, venueHistory, waits }) => {
       const { s, minute, m1List } = await rig(m1, m2, { venueHistory, waits });
@@ -607,32 +609,7 @@ describe("a merged file close to its limit", () => {
     120_000,
   );
 
-  it.each([
-    { title: "few selections", m1: 0, m2: 0, venueHistory: false, waits: true },
-    {
-      title: "30 past attempts that never waited",
-      m1: 30,
-      m2: 0,
-      venueHistory: false,
-      waits: false,
-    },
-    { title: "the most attempts one box holds", m1: 20, m2: 0, venueHistory: false, waits: true },
-    {
-      title: "the most, reading the venue's history",
-      m1: 20,
-      m2: 0,
-      venueHistory: true,
-      waits: true,
-    },
-    { title: "two boxes' lists", m1: 14, m2: 14, venueHistory: false, waits: true },
-    {
-      title: "two lists, reading the venue's history",
-      m1: 13,
-      m2: 13,
-      venueHistory: true,
-      waits: true,
-    },
-  ])(
+  it.each(FILLED_SHAPES)(
     "filled to the last byte the size check takes, $title: the switch-on writes its setup, then the spare waits, selects and promotes",
     async ({ m1, m2, venueHistory, waits }) => {
       const { s, minute, m1List } = await rig(

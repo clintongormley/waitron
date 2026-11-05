@@ -959,12 +959,14 @@ describe("the handover's preparation route", () => {
       };
       const challenge = await send({ action: "clock-challenge" });
       expect(challenge.id).toEqual(expect.any(String));
-      expect(
-        await send({
-          action: "compare-clocks",
-          browser: { challengeId: challenge.id, instantMs: Date.now() },
-        }),
-      ).toMatchObject({ clock: expect.any(Object) });
+      const compared = await send({
+        action: "compare-clocks",
+        browser: { challengeId: challenge.id, instantMs: Date.now() },
+      });
+      expect(compared).toMatchObject({ clock: expect.any(Object) });
+      expect(await send({ action: "select", comparisonId: compared.id })).toMatchObject({
+        status: "selected",
+      });
     } finally {
       await agent?.close();
       await server?.close();

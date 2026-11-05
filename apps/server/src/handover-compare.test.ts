@@ -416,6 +416,17 @@ describe("compareFinalCopy", () => {
     });
   });
 
+  it("a forged signature over a wrong binding is refused for the signature", async () => {
+    const r = await rig();
+    const envelope = {
+      ...r.resigned((body) => {
+        body.binding.venue.taxId = "B00000000";
+      }),
+      signature: r.indicator.signature,
+    };
+    expect(await r.compareRow(envelope)).toEqual(refused("handover.indicator_untrusted"));
+  });
+
   describe("the binding", () => {
     it.each<[string, (body: Mutable) => void]>([
       ["another operation", (body) => void (body.binding.operationId = OTHER_OP)],
@@ -478,6 +489,12 @@ describe("compareFinalCopy", () => {
       expect(await r.compareRow(await r.resignedForFile())).toEqual(
         refused("handover.copy_damaged"),
       );
+    });
+
+    it("a file that is not a database, under the indicator as signed, is refused for its bytes", async () => {
+      const r = await rig();
+      await writeFile(r.path, "x".repeat(8192));
+      expect(await r.compareRow()).toEqual(refused("handover.copy_mismatch"));
     });
 
     it("a file that is not a database at all is refused", async () => {
