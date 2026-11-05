@@ -333,7 +333,7 @@ describe("a pending card refund and the table actions", () => {
     });
 
     expect(split.status).toBe(200);
-    expect(split.json).toEqual({ partyId: expect.any(String), billId });
+    expect(split.json).toEqual({ partyId: expect.any(String), billIds: [billId] });
     expect(partyOfBill(billId)).toBe(split.json.partyId);
     const after = await charges(billId);
     expect(after).toEqual(before);

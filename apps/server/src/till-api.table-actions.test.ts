@@ -207,7 +207,7 @@ describe("the table action routes", () => {
     });
 
     expect(answer.status).toBe(200);
-    expect(answer.json.billId).toBe(ana.tabId);
+    expect(answer.json.billIds).toEqual([ana.tabId]);
     const partyId = answer.json.partyId as string;
     const read = await send(
       venue.app,
@@ -232,8 +232,8 @@ describe("the table action routes", () => {
     });
 
     expect(answer.status).toBe(200);
-    expect(answer.json.billId).toEqual(expect.any(String));
-    expect(await statusOf(venue, answer.json.billId as string)).toBe("open");
+    expect(answer.json.billIds).toEqual([expect.any(String)]);
+    expect(await statusOf(venue, (answer.json.billIds as string[])[0]!)).toBe("open");
   });
 
   for (const path of ["move", "join", "split-table"]) {
@@ -614,7 +614,7 @@ describe("the table action routes", () => {
 
     const first = await splitOf(ana.partyId, second, ana.tabId);
     expect(first.status).toBe(200);
-    expect(first.json).toEqual({ partyId: expect.any(String), billId: ana.tabId });
+    expect(first.json).toEqual({ partyId: expect.any(String), billIds: [ana.tabId] });
     expect(revisionOf(ana.partyId)).toBe(revision + 1);
   });
 });
@@ -715,7 +715,7 @@ describe("A803 action results:", () => {
 
     expect(answer.status).toBe(200);
     const newParty = answer.json.partyId as string;
-    expect(answer.json).toEqual({ partyId: newParty, billId: ana.tabId });
+    expect(answer.json).toEqual({ partyId: newParty, billIds: [ana.tabId] });
     expect(newParty).not.toBe(ana.partyId);
     expect(tablesOf(newParty)).toEqual([second]);
     expect(await numbersOf(venue, newParty)).toEqual([[ana.tabId, 1, null]]);
@@ -736,8 +736,8 @@ describe("A803 action results:", () => {
 
     expect(answer.status).toBe(200);
     const newParty = answer.json.partyId as string;
-    const newBill = answer.json.billId as string;
-    expect(answer.json).toEqual({ partyId: newParty, billId: expect.any(String) });
+    const newBill = (answer.json.billIds as string[])[0]!;
+    expect(answer.json).toEqual({ partyId: newParty, billIds: [expect.any(String)] });
     expect(shownBillsOf(newParty)).toEqual([{ id: newBill, status: "open", lines: 0 }]);
     expect(await numbersOf(venue, newParty)).toEqual([[newBill, 1, null]]);
     expect(await numbersOf(venue, ana.partyId)).toEqual(stayingBefore);
@@ -762,7 +762,7 @@ describe("A803 action results:", () => {
 
     expect(answer.status).toBe(200);
     const newParty = answer.json.partyId as string;
-    expect(answer.json).toEqual({ partyId: newParty, billId: ana.tabId });
+    expect(answer.json).toEqual({ partyId: newParty, billIds: [ana.tabId] });
     expect(shownBillsOf(newParty)).toEqual([{ id: ana.tabId, status: "open", lines: 1 }]);
     const staying = shownBillsOf(ana.partyId);
     expect(staying).toEqual([{ id: expect.any(String), status: "open", lines: 0 }]);
