@@ -2131,7 +2131,7 @@ the `mutation-shared` row below records the earlier unsharded job.
 | mutation.yml       | mutation-db (matrix shards)       | 8.8 (since the SQLite switch); 12.2 (run 38241392066) | 25    |
 | mutation.yml       | mutation-db-aggregate             | 0.3                            | 5     |
 | mutation.yml       | mutation-node-db                  | not yet measured in CI; the Stryker run took 8 seconds locally | 10    |
-| mutation.yml       | mutation-handover                 | not yet measured in CI; the Stryker run took 3 seconds locally | 10    |
+| mutation.yml       | mutation-handover                 | 3.4 (run 42075592113)          | 10    |
 | stripe-sandbox.yml | stripe-sandbox                    | 0.7                            | 5     |
 | codeql.yml         | analyze (matrix of four languages) | 24.0 (javascript-typescript)  | 50    |
 
