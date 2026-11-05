@@ -6664,7 +6664,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A974. Finish the remaining English names in general code.**
   Remaining names include till boot and counter-payment fixtures; server till-API, fiscal-sale
-  and other order fixtures, including order-portion suites; shared helper consumers and file names. Keep accented search fixtures unchanged. Low priority.
+  and other order fixtures, including the order-portion adjustments suite; shared helper consumers and file names. Keep accented search fixtures unchanged. Low priority.
   [Detail](backlog/architecture.md#a974-finish-the-remaining-english-names-in-general-code).
 
 - **Setup's receipt-language selection still reads inherited object properties.** Its
