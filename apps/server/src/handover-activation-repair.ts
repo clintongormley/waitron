@@ -5,8 +5,8 @@ import { advanceHandover } from "./handover-store.js";
 
 /**
  * Finishes a destination's activation whose venue save committed and whose `node.db` record was
- * lost. The row alone says it committed: the activation writes it in the transaction that writes the
- * chart (`handover-activation.ts`), so a box made primary some other way is never recorded.
+ * lost. It takes the save as committed from a `handover_activations` row that names this operation,
+ * its scenario, its source and this box as destination; with no such row it records nothing.
  */
 export async function finishInterruptedActivation(deps: {
   db: Database;
@@ -17,6 +17,14 @@ export async function finishInterruptedActivation(deps: {
   if (open === null || open.role !== "destination") return;
   if (open.state !== "filing_assumed" && open.state !== "emergency_declared") return;
   if ((await readNodeMode(deps.node, deps.nodeId)).mode === "mirror") return;
-  if ((await readHandoverActivation(deps.db, open.operationId)) === null) return;
+  const row = await readHandoverActivation(deps.db, open.operationId);
+  if (
+    row === null ||
+    row.scenario !== open.scenario ||
+    row.sourceNodeId !== open.sourceNodeId ||
+    row.destinationNodeId !== open.destinationNodeId ||
+    row.destinationNodeId !== deps.nodeId
+  )
+    return;
   await advanceHandover(deps, open.operationId, "activated", {});
 }

@@ -153,6 +153,7 @@ async function insertOperation(
     scenario?: "controlled" | "emergency";
     state: HandoverState;
     sourceNodeId?: string;
+    destinationNodeId?: string;
   },
 ): Promise<void> {
   await withNodeTransaction(suite.node, async (tx) => {
@@ -162,7 +163,7 @@ async function insertOperation(
       role: row.role,
       scenario: row.scenario ?? "controlled",
       sourceNodeId: row.sourceNodeId ?? (row.role === "source" ? nodeId : PEER.nodeId),
-      destinationNodeId: row.role === "source" ? PEER.nodeId : nodeId,
+      destinationNodeId: row.destinationNodeId ?? (row.role === "source" ? PEER.nodeId : nodeId),
       binding: {},
       fingerprint: "f".repeat(64),
       state: row.state,
@@ -308,18 +309,48 @@ describe("the repairs before the start check", () => {
 describe("a destination whose activation committed and whose node.db record was lost", () => {
   const suite = useVenueDb({ migrations });
 
-  async function holdActivationRow(nodeId: string, operationId = OP): Promise<void> {
+  async function holdActivationRow(
+    nodeId: string,
+    row: {
+      operationId?: string;
+      scenario?: "controlled" | "emergency";
+      sourceNodeId?: string;
+      destinationNodeId?: string;
+    } = {},
+  ): Promise<void> {
+    const operationId = row.operationId ?? OP;
     await withTransaction(suite.db, (tx) =>
       insertHandoverActivationTx(tx, {
         operationId,
-        scenario: "controlled",
-        sourceNodeId: PEER.nodeId,
-        destinationNodeId: nodeId,
+        scenario: row.scenario ?? "controlled",
+        sourceNodeId: row.sourceNodeId ?? PEER.nodeId,
+        destinationNodeId: row.destinationNodeId ?? nodeId,
         evidence: signEnvelope("status", {} as never, PEER),
         personId: operationId,
         activatedAt: "2026-10-16T12:40:00.000Z",
       }),
     );
+  }
+
+  /** A joined box that is neither end of the operation: `handover_activations` keys into `nodes`. */
+  const THIRD_BOX = "00000000-0000-4000-8000-0000000000dd";
+  async function joinThirdBox(nodeId: string): Promise<void> {
+    const [own] = await suite.db
+      .select({ locationId: nodes.locationId })
+      .from(nodes)
+      .where(eq(nodes.id, nodeId));
+    await suite.db.insert(nodes).values({
+      id: THIRD_BOX,
+      locationId: own!.locationId,
+      name: "Third",
+      publicKey: generateNodeKeyPair().publicKey,
+    });
+  }
+
+  async function expectUnrecorded(nodeId: string): Promise<void> {
+    expect(await stateOf(nodeId)).toBe("filing_assumed");
+    expect(await readActivatedFrom(suite.node, nodeId)).toEqual(new Set());
+    expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
   }
 
   const repair = (nodeId: string) => repairAtStart({ db: suite.db, node: suite.node, nodeId });
@@ -334,7 +365,7 @@ describe("a destination whose activation committed and whose node.db record was 
     async (scenario, state) => {
       const b = await box(suite);
       await insertOperation(suite, b.nodeId, { role: "destination", scenario, state });
-      await holdActivationRow(b.nodeId);
+      await holdActivationRow(b.nodeId, { scenario });
 
       await repair(b.nodeId);
       await repair(b.nodeId);
@@ -359,9 +390,61 @@ describe("a destination whose activation committed and whose node.db record was 
   it("a row for another operation changes nothing", async () => {
     const b = await box(suite);
     await insertOperation(suite, b.nodeId, { role: "destination", state: "filing_assumed" });
-    await holdActivationRow(b.nodeId, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+    await holdActivationRow(b.nodeId, { operationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" });
     await repair(b.nodeId);
     expect(await stateOf(b.nodeId)).toBe("filing_assumed");
+  });
+
+  it("a row naming another destination leaves the operation unrecorded", async () => {
+    const b = await box(suite);
+    await joinThirdBox(b.nodeId);
+    await insertOperation(suite, b.nodeId, { role: "destination", state: "filing_assumed" });
+    await holdActivationRow(b.nodeId, { destinationNodeId: THIRD_BOX });
+    await repair(b.nodeId);
+    await expectUnrecorded(b.nodeId);
+  });
+
+  it("a row naming another source leaves the operation unrecorded", async () => {
+    const b = await box(suite);
+    await joinThirdBox(b.nodeId);
+    await insertOperation(suite, b.nodeId, { role: "destination", state: "filing_assumed" });
+    await holdActivationRow(b.nodeId, { sourceNodeId: THIRD_BOX });
+    await repair(b.nodeId);
+    await expectUnrecorded(b.nodeId);
+  });
+
+  it("a row of the other scenario leaves the operation unrecorded", async () => {
+    const b = await box(suite);
+    await insertOperation(suite, b.nodeId, { role: "destination", state: "filing_assumed" });
+    await holdActivationRow(b.nodeId, { scenario: "emergency" });
+    await repair(b.nodeId);
+    await expectUnrecorded(b.nodeId);
+  });
+
+  it("a row agreeing with an operation that names another destination leaves it unrecorded", async () => {
+    const b = await box(suite);
+    await joinThirdBox(b.nodeId);
+    await insertOperation(suite, b.nodeId, {
+      role: "destination",
+      state: "filing_assumed",
+      destinationNodeId: THIRD_BOX,
+    });
+    await holdActivationRow(b.nodeId, { destinationNodeId: THIRD_BOX });
+    await repair(b.nodeId);
+    await expectUnrecorded(b.nodeId);
+  });
+
+  it("a row naming this box under an operation that names another destination leaves it unrecorded", async () => {
+    const b = await box(suite);
+    await joinThirdBox(b.nodeId);
+    await insertOperation(suite, b.nodeId, {
+      role: "destination",
+      state: "filing_assumed",
+      destinationNodeId: THIRD_BOX,
+    });
+    await holdActivationRow(b.nodeId);
+    await repair(b.nodeId);
+    await expectUnrecorded(b.nodeId);
   });
 
   it.each(["prepared", "copy_accepted"] as const)(
@@ -406,6 +489,17 @@ describe("a destination whose activation committed and whose node.db record was 
       await holdActivationRow(b.nodeId);
       await repair(b.nodeId);
       expect((await check(suite, b, peerFetch("silent"))).result).toBe("proceed");
+    });
+
+    it.each([
+      ["another destination", { destinationNodeId: THIRD_BOX }],
+      ["another source", { sourceNodeId: THIRD_BOX }],
+    ])("with a row naming %s, the same box waits on that source", async (_name, row) => {
+      const b = await onThatChart();
+      await joinThirdBox(b.nodeId);
+      await holdActivationRow(b.nodeId, row);
+      await repair(b.nodeId);
+      expect((await check(suite, b, peerFetch("silent"))).result).toBe("wait");
     });
 
     it("control: with no row the same box waits on that source", async () => {
