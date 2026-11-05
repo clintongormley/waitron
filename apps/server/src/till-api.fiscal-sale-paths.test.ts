@@ -574,12 +574,12 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     expect(ticket.qr.length).toBeGreaterThan(0);
 
     // 4. A GENUINE chained fiscal record exists for this node — one, hashed.
-    const registros = await withTransaction(suite.db, async (tx) => {
+    const fiscalRecords = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(registrosFacturacion);
     });
-    expect(registros.length).toBe(1);
-    expect(registros[0]!.nodeId).toBe(cfg.nodeId);
-    expect(registros[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
+    expect(fiscalRecords.length).toBe(1);
+    expect(fiscalRecords[0]!.nodeId).toBe(cfg.nodeId);
+    expect(fiscalRecords[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
 
     // 5. The sale is attributed to the logged-in operator — the whole point of the session guard.
     const saleRows = await withTransaction(suite.db, async (tx) => {
@@ -710,12 +710,12 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // 6. Two chained fiscal records: the first opens the chain (`primerRegistro`, no predecessor
     // pointer), and the second increments `secuencia` and carries the first's huella as
     // `anteriorHuella`.
-    const registros = await withTransaction(suite.db, async (tx) => {
+    const fiscalRecords = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
-    expect(registros).toHaveLength(2);
+    expect(fiscalRecords).toHaveLength(2);
 
-    const [first, second] = registros;
+    const [first, second] = fiscalRecords;
     expect(first!.nodeId).toBe(cfg.nodeId);
     expect(first!.secuencia).toBe(1);
     expect(first!.primerRegistro).toBe(true);
@@ -755,10 +755,10 @@ describe("sale-time device from the authenticated session (SP-A.2 cutover)", () 
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
     // Refused before the fiscal write — the unrecoverable record is never touched (CLAUDE.md §5).
-    const registros = await withTransaction(suite.db, async (tx) => {
+    const fiscalRecords = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(registrosFacturacion);
     });
-    expect(registros).toHaveLength(0);
+    expect(fiscalRecords).toHaveLength(0);
   });
 
   it("refuses a cash sale from a kitchen display, whose profile does not take cash — 403 device.cash_not_allowed", async () => {
@@ -794,10 +794,10 @@ describe("sale-time device from the authenticated session (SP-A.2 cutover)", () 
     });
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ error: { code: "device.cash_not_allowed" } });
-    const registros = await withTransaction(suite.db, async (tx) => {
+    const fiscalRecords = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(registrosFacturacion);
     });
-    expect(registros).toHaveLength(0);
+    expect(fiscalRecords).toHaveLength(0);
   });
 });
 
@@ -856,7 +856,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     //    under its id and attributed to the logged-in operator.
     const after = await withTransaction(suite.db, async (tx) => {
       return {
-        registros: await tx.select().from(registrosFacturacion),
+        fiscalRecords: await tx.select().from(registrosFacturacion),
         wo: await tx
           .select({ status: workingOrders.status })
           .from(workingOrders)
@@ -866,7 +866,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
           .from(sales),
       };
     });
-    expect(after.registros).toHaveLength(1);
+    expect(after.fiscalRecords).toHaveLength(1);
     expect(after.wo).toEqual([{ status: "settled" }]);
     expect(after.saleRows).toEqual([{ workingOrderId, operatorId }]);
 
@@ -939,7 +939,7 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
       const workingOrderId = randomUUID();
       const filed = () =>
         withTransaction(suite.db, async (tx) => ({
-          registros: await tx.select().from(registrosFacturacion),
+          fiscalRecords: await tx.select().from(registrosFacturacion),
           wo: await tx
             .select({ status: workingOrders.status })
             .from(workingOrders)
@@ -975,7 +975,7 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
         ordinals: [1, 2],
       });
       const afterPay = await filed();
-      expect(afterPay.registros).toHaveLength(1);
+      expect(afterPay.fiscalRecords).toHaveLength(1);
       expect(afterPay.wo).toEqual([{ status: "settled" }]);
 
       expect((await pay()).status).toBe(200);
@@ -986,7 +986,7 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
         ordinals: [1, 2],
       });
       const afterReplay = await filed();
-      expect(afterReplay.registros).toHaveLength(1);
+      expect(afterReplay.fiscalRecords).toHaveLength(1);
       expect(afterReplay.wo).toEqual([{ status: "settled" }]);
     },
   );
@@ -1237,14 +1237,14 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
 
     const after = await withTransaction(suite.db, async (tx) => {
       return {
-        registros: await tx.select().from(registrosFacturacion),
+        fiscalRecords: await tx.select().from(registrosFacturacion),
         wo: await tx
           .select({ status: workingOrders.status })
           .from(workingOrders)
           .where(eq(workingOrders.id, workingOrderId)),
       };
     });
-    expect(after.registros).toHaveLength(0);
+    expect(after.fiscalRecords).toHaveLength(0);
     expect(after.wo).toEqual([{ status: "open" }]);
   });
 
@@ -2051,11 +2051,11 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
           .select({ status: workingOrders.status })
           .from(workingOrders)
           .where(eq(workingOrders.id, workingOrderId)),
-        registros: await tx.select().from(registrosFacturacion),
+        fiscalRecords: await tx.select().from(registrosFacturacion),
       };
     });
     expect(after.wo).toEqual([{ status: "settled" }]);
-    expect(after.registros).toHaveLength(1); // exactly one chained record, filed at collect
+    expect(after.fiscalRecords).toHaveLength(1); // exactly one chained record, filed at collect
 
     // 6. Collect records the payment, not the handover, so the paid order stays on the station's
     //    display.
@@ -2371,11 +2371,11 @@ describe("handheld sales and device capability gates", () => {
 
     // Exactly one chained record, the same chain-opening shape a counter cash sale files, under
     // `cfg.nodeId`: the SIF is the node, not the device.
-    const registros = await withTransaction(suite.db, async (tx) => {
+    const fiscalRecords = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
-    expect(registros).toHaveLength(1);
-    const [only] = registros;
+    expect(fiscalRecords).toHaveLength(1);
+    const [only] = fiscalRecords;
     expect(only!.nodeId).toBe(cfg.nodeId);
     expect(only!.secuencia).toBe(1);
     expect(only!.primerRegistro).toBe(true);
@@ -2408,11 +2408,11 @@ describe("handheld sales and device capability gates", () => {
     expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/); // NumSerieFactura-shaped, e.g. "A/1"
 
     // Exactly one chained record, the same chain-opening shape as the handheld cash case above.
-    const registros = await withTransaction(suite.db, async (tx) => {
+    const fiscalRecords = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
-    expect(registros).toHaveLength(1);
-    const [only] = registros;
+    expect(fiscalRecords).toHaveLength(1);
+    const [only] = fiscalRecords;
     expect(only!.nodeId).toBe(cfg.nodeId);
     expect(only!.secuencia).toBe(1);
     expect(only!.primerRegistro).toBe(true);
@@ -2621,10 +2621,10 @@ describe("handheld sales and device capability gates", () => {
       expect(await statusOf(id)).toBe("settled");
     }
 
-    const registros = await withTransaction(suite.db, (tx) =>
+    const fiscalRecords = await withTransaction(suite.db, (tx) =>
       tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia),
     );
-    expect(registros.map((r) => [r.nodeId, r.secuencia])).toEqual([
+    expect(fiscalRecords.map((r) => [r.nodeId, r.secuencia])).toEqual([
       [cfg.nodeId, 1],
       [cfg.nodeId, 2],
     ]);
@@ -2666,10 +2666,10 @@ describe("handheld sales and device capability gates", () => {
       expect(await statusOf(id)).toBe("settled");
     }
 
-    const registros = await withTransaction(suite.db, (tx) =>
+    const fiscalRecords = await withTransaction(suite.db, (tx) =>
       tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia),
     );
-    expect(registros.map((r) => [r.nodeId, r.secuencia])).toEqual([
+    expect(fiscalRecords.map((r) => [r.nodeId, r.secuencia])).toEqual([
       [cfg.nodeId, 1],
       [cfg.nodeId, 2],
     ]);
@@ -2815,12 +2815,12 @@ describe("handheld sales and device capability gates", () => {
 it("files an extras pick and an options answer through cash checkout and reprints their saved facts", async () => {
   const { cfg, catalogueId, available, operatorId } = await setupVenue();
   const product = available.find((item) => item.pricingUnit === "each")!;
-  const { extraListId, quesoId, optionListId, labelId } = await withTransaction(
+  const { extraListId, cheeseId, optionListId, labelId } = await withTransaction(
     suite.db,
     async (tx) => {
       // The extra is a PRODUCT of its own, taxed at its OWN class — `reduced`, where the dish is
       // `general`, so the filed desglose has to carry two bands.
-      const queso = await createProduct(tx, {
+      const cheese = await createProduct(tx, {
         catalogueId,
         categoryId: null,
         name: "Queso",
@@ -2838,7 +2838,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
           // Two of one product, which is what this sale picks: `maxPicks` counts the quantities.
           maxPicks: 2,
           active: true,
-          items: [{ productId: queso.id, maxQuantity: 2, preselected: false, price: "0.35" }],
+          items: [{ productId: cheese.id, maxQuantity: 2, preselected: false, price: "0.35" }],
         },
         LOCALE,
       );
@@ -2862,13 +2862,13 @@ it("files an extras pick and an options answer through cash checkout and reprint
       await publishWorkingMenu(tx, catalogueId);
       return {
         extraListId: extras.id,
-        quesoId: queso.id,
+        cheeseId: cheese.id,
         optionListId: options.id,
         labelId: options.labels[0]!.id,
       };
     },
   );
-  const extras = [{ listId: extraListId, picks: [{ productId: quesoId, quantity: 2 }] }];
+  const extras = [{ listId: extraListId, picks: [{ productId: cheeseId, quantity: 2 }] }];
   const options = [{ listId: optionListId, labelId }];
   const app = new Hono();
   mountTillApi(app, apiDeps(cfg), noopLog);
@@ -3057,7 +3057,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
   // Rename the extra's product AFTER the sale: what a replay and a reprint read must be the names the
   // sale froze, never the catalogue's current ones.
   await withTransaction(suite.db, async (tx) => {
-    await updateProduct(tx, quesoId, { name: "Manchego" });
+    await updateProduct(tx, cheeseId, { name: "Manchego" });
   });
   const replay = await app.request("/api/sales", {
     method: "POST",
@@ -3743,7 +3743,7 @@ describe("a sale cannot hand over settled extras or options", () => {
     const { cfg, catalogueId, available, operatorId } = await setupVenue();
     const product = available.find((item) => item.pricingUnit === "each")!;
     const lists = await withTransaction(suite.db, async (tx) => {
-      const queso = await createProduct(tx, {
+      const cheese = await createProduct(tx, {
         catalogueId,
         categoryId: null,
         name: "Queso",
@@ -3760,7 +3760,7 @@ describe("a sale cannot hand over settled extras or options", () => {
           minPicks: 0,
           maxPicks: 2,
           active: true,
-          items: [{ productId: queso.id, maxQuantity: 2, preselected: false, price: "0.35" }],
+          items: [{ productId: cheese.id, maxQuantity: 2, preselected: false, price: "0.35" }],
         },
         LOCALE,
       );
@@ -3781,13 +3781,13 @@ describe("a sale cannot hand over settled extras or options", () => {
         { kind: "options", id: options.id },
       ]);
       await publishWorkingMenu(tx, catalogueId);
-      return { queso, extras, options };
+      return { cheese, extras, options };
     });
     // The list sells this cheese at 0.35, two at most.
     const settled = {
       frozenExtras: [
         {
-          productId: lists.queso.id,
+          productId: lists.cheese.id,
           name: "Queso",
           descriptions: {},
           kitchenName: null,
