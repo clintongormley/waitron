@@ -246,8 +246,8 @@ async function counterOrder(...names: string[]): Promise<string> {
 
 describe("split a bill", () => {
   it("puts the chosen items on a new bill of the same party, from a bill that was itself split off", async () => {
-    const mesa4 = await v.table("Mesa 4");
-    const { partyId, tabId } = await seat(v, mesa4);
+    const table4 = await v.table("Mesa 4");
+    const { partyId, tabId } = await seat(v, table4);
     await order(v, tabId, "Burger", "Vino", "Agua");
     const first = await splitOff(partyId, tabId, [2, 3]);
 
@@ -263,7 +263,7 @@ describe("split a bill", () => {
       })),
     ).toEqual([{ name: "Agua", price: 200, vat: "general" }]);
     expect(await openingBillOfParty(v, partyId)).toBe(tabId);
-    expect(await activeTablesOf(v, partyId)).toEqual([mesa4]);
+    expect(await activeTablesOf(v, partyId)).toEqual([table4]);
   });
 
   it("refuses a presented bill, changing nothing", async () => {
@@ -728,11 +728,11 @@ describe("a held dish on a whole table bill presented or paid before its group f
 
 describe("merge bills", () => {
   it("moves every line onto the bill merged into, keeping its group and credit, and abandons the other", async () => {
-    const mesa = await v.table("Mesa 20");
-    const { partyId, tabId } = await seat(v, mesa);
+    const table = await v.table("Mesa 20");
+    const { partyId, tabId } = await seat(v, table);
     await orderForParty(v, partyId, ["Burger", "Vino"]);
     const second = await splitOff(partyId, tabId, [2]);
-    const [vino] = await lineRows(second);
+    const [wine] = await lineRows(second);
     const tablesBefore = await activeTablesOf(v, partyId);
     const revision = await revisionOf(v, partyId);
 
@@ -752,18 +752,18 @@ describe("merge bills", () => {
         name: "Burger",
         price: 1200,
         vat: "general",
-        groupId: vino!.groupId,
+        groupId: wine!.groupId,
         creditedTo: OPERATOR,
       },
-      { name: "Vino", price: 3000, vat: "general", groupId: vino!.groupId, creditedTo: OPERATOR },
+      { name: "Vino", price: 3000, vat: "general", groupId: wine!.groupId, creditedTo: OPERATOR },
     ]);
-    expect(vino!.groupId).not.toBeNull();
-    expect(lines[1]!.id).toBe(vino!.id);
+    expect(wine!.groupId).not.toBeNull();
+    expect(lines[1]!.id).toBe(wine!.id);
     expect(await lineRows(second)).toEqual([]);
     expect((await billRow(v, second)).status).toBe("abandoned");
     expect((await billRow(v, tabId)).status).toBe("open");
     expect(await activeTablesOf(v, partyId)).toEqual(tablesBefore);
-    expect(tablesBefore).toEqual([mesa]);
+    expect(tablesBefore).toEqual([table]);
     const party = await partyRow(v, partyId);
     expect({
       openingBillId: await openingBillOfParty(v, partyId),
@@ -885,8 +885,8 @@ describe("merge bills", () => {
 
 describe("transfer items", () => {
   it("moves the chosen items, keeping price, VAT class, group and credit, and moves the revision on by one", async () => {
-    const mesa = await v.table("Mesa 30");
-    const { partyId, tabId } = await seat(v, mesa);
+    const table = await v.table("Mesa 30");
+    const { partyId, tabId } = await seat(v, table);
     await orderForParty(v, partyId, ["Burger", "Vino", "Paella"]);
     const second = await splitOff(partyId, tabId, [2]);
     const [burger] = await lineRows(tabId);
@@ -919,7 +919,7 @@ describe("transfer items", () => {
       revision: revision + 1,
       openingBillId: tabId,
     });
-    expect(await activeTablesOf(v, partyId)).toEqual([mesa]);
+    expect(await activeTablesOf(v, partyId)).toEqual([table]);
   });
 
   const SIDES = ["from", "to"] as const;
@@ -1128,9 +1128,9 @@ describe("sent work moved between a party's bills at two of its tables", () => {
     const patio = await v.table(`Patio ${label}`);
     const moving = await commandFor(v, partyId);
     await inTx(v, (tx) => moveGuests(tx, v.cfg, partyId, patio, { ...moving, otherPartyId: null }));
-    const terraza = await v.table(`Terraza ${label}`);
+    const terrace = await v.table(`Terraza ${label}`);
     const sent = await commandFor(v, partyId);
-    await inTx(v, (tx) => joinTables(tx, v.cfg, partyId, terraza, { ...sent, otherPartyId: null }));
+    await inTx(v, (tx) => joinTables(tx, v.cfg, partyId, terrace, { ...sent, otherPartyId: null }));
     // The control: this printer does print the MOVED slips the move makes.
     const control = await printedBy(printerId);
     expect(control.length).toBeGreaterThan(0);
