@@ -715,7 +715,7 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   Split is pressed again, and never disables Split by itself. The till's `errorKey` banner is used only when
   there is no panel to reopen: the party no longer holds the table, holds only that table, the waiter has
   other work open (above), or the refusal names a bill the till's list has lost during the request, whose name it
-  will not guess. A refusal arriving after the waiter has left the party or the table says nothing at all. So `table.not_shared` reads on the banner when the party really has one table, and at the panel's foot
+  will not guess. A refusal arriving after the waiter has left the party or the table says nothing at all. A waiter who has only switched bill on that party has left neither, so still hears the refusal, and a second press sends one request. So `table.not_shared` reads on the banner when the party really has one table, and at the panel's foot
   when the till still shows two. A `split-table` with no `prompt` that finds no edit state composes at Send and
   says so on the banner as today (D20): it never came from a panel.
 
@@ -732,7 +732,7 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   `split-refusal-declined`, with `SplitRefusalDeclinedDetail` (`{ refusal }`, the same object it was handed):
   from `updated`, once. A refusal landing while the screen is out of the page waits until it is put back,
   because a question open elsewhere in the till can only be seen from the page; the screen then decides
-  and, if it declines, tells. A party switch or the app taking the refusal back drops one still waiting. A language saved from the order screen draws a new screen, which reopens nothing, so the app takes back the refusal it holds as the save succeeds: said on the banner if it landed after the language was chosen, silently if the waiter was already looking at it when they chose. It is silent when it
+  and, if it declines, tells. A party switch or the app taking the refusal back drops one still waiting. A saved language draws a new screen, which reopens no panel for a refusal it is handed at birth. So as the save succeeds, whichever screen the language was chosen from, the app takes back the refusal it holds: one that landed after the language was chosen is said on the banner, and one it already held when they chose goes silently, seen or not. A refusal that reaches the app after the save reopens as any other. A save that finishes after that person has signed out takes back nothing and says nothing. The screen is silent when it
   reopens, and for a refusal the party or table rules above already stop, which the app has
   sent to the banner itself. So the app keeps `said` beside the refusal it hands over, and on the event, if
   `refusal === this.splitRefusal`, sets `splitRefusal = null` and `errorKey = said`. It assigns `said` and not
@@ -766,12 +766,21 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   | `sale.total_exceeds_simplified_limit` | Its existing words (in `TABLE_REFUSALS`, `till-app.ts:620`) | nothing |
   | anything else, including another `management.request_invalid` and a refusal carrying `recoveryUrl` | `tableWriteError`, through `errorText(…, "panel")` | nothing |
 
-  **What the rows were read against.** The panel's rows describe the read they came from, so a reopening never
-  hides a change behind them. The app keeps the bills list the sources were last read against (`#splitBillsSeen`)
+  **What the rows were read against.** The panel's rows describe the read they came from, and a press does not
+  carry a revision past a change those rows have not shown. This rests on the bills list moving whenever a dish
+  does (measured on `move-dishes` and a new round; a rename moves the revision alone, and the rows do not change).
+  The app keeps the bills list the sources were last read against (`#splitBillsSeen`)
   across the closed panel, and a list read while the panel is closed, the different-people question included, does
   not count as seen. A panel that reopens compares, and reads the sources if the list differs. A row above that
   reads no sources, with no change to the list, still reads none. A sources read that fails, or that the panel's
-  closing drops, counts as not seen, so the next timed read tries again. A floor read that fails while the panel
+  closing drops, counts as not seen, so the next timed read tries again. A bills read that fails counts as not seen
+  too, whoever asked for it, because the floor may already have moved the party's revision and no list says whether
+  the rows moved with it. So when a refusal's bills read fails, the reopening reads the sources, even if nothing had
+  changed; once they answer, the panel shows them and the next press carries the floor's revision. If that sources
+  read fails as well, the old rows stay under the row's own words (for `party.out_of_date`, "so it has been
+  reloaded"; for a lost reply, `table.error`), Split stays enabled, and a press carries the old revision for the
+  server to judge. The next timed read brings the rows without moving that revision, and if the server refuses the
+  press, that refusal's reopening brings both. A floor read that fails while the panel
   is open or due to reopen keeps the last floor, as a failed bills read keeps the last list: the panel names its
   tables from the floor, and comparing against an empty floor would say the party has gone from a table it holds.
 
@@ -781,7 +790,7 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   `#onRefundExcess` (`till-app.ts:17830`) opens nothing but that bill, and every other caller, which sends
   no `billId`, behaves as today. If that bill has left the party by the press, nothing opens and
   `table.split_bill_gone` says so: at the panel's foot, the panel staying open, or on the banner for the banner's
-  Refund.
+  Refund. At the foot that takes the place of the stop waiting for that bill, so the next press sends.
   - That bill on screen: the Refund dialog opens over the panel; the ticks stay, and `tidySplit` runs on
     the re-read after it.
   - Another bill: the screen stops the event at the panel and asks through `#leavingActions`, as any
@@ -833,7 +842,9 @@ Changing from B to A later removes one call in `splitTable` and changes those th
     stop at `draft.out_of_date` (run at Task 12a's fix review, N4, and Task 12b's, I1). That does not let a
     ticked bill past: its observation is what stops it, recorded as missing when it has no edit state. A party
     gaining its first bill with the panel open (D14) has its sync, bill on screen and revision all move, so
-    `#reloadSplitParty` replaces the composition under the panel's prompt: the waiter now sees those rows.
+    `#reloadSplitParty` replaces the composition under the panel's prompt: the waiter now sees those rows. A panel
+    closed during those reads, by the floor or by the waiter, does not stop them, because the party still needs its
+    bill and sync. Only leaving the table does.
   - One observation per selected bill. The screen dispatches `split-table-observe { prompt, billIds }`
     whenever the set of whole bills and loose sources changes, `#tidySplit`'s changes included, and when a
     refusal reopens the panel. It does not fire when the panel closes on send, so a refused count finds its
@@ -1031,6 +1042,7 @@ prints" that slip, and spec §3.7, four days later, ended it.
 | 28 | `till-app-parties.test.ts:2540`, `:2542` "shows %s in its own words" | detail shape only (as 18b). The banner assertion is unchanged: their party holds one table (`:110`), so there is no panel to reopen. `:2541` likewise, the table not being held. Their two-table twins, at the foot, are new in Task 12d | 14a |
 | 29 | `till-app-parties.test.ts:11820-11834` "refuses to move a bill whose editing observation is missing" | detail shape only (as 18b). The banner assertion is unchanged: no `prompt`, so it composes at Send as today (D20) | 14a |
 | 30 | `till-api.today-joins.test.ts:975`, the `toEqual` of "Split a table that takes a table out of a group answers the room's new revision" | `billId: await onlyBill(split.partyId)` becomes `billIds: [await onlyBill(split.partyId)]`, with the cast above it. Reason: row 13 moves this case's body to a selection, and a selection answers `{ partyId, billIds, zoneRevisions? }`, never `billId` (D10). Task 5's old request still answers `billId`, so this stays green until then | 14b |
+| 31 | `till-app-parties.test.ts:11828`, two rows of the describe "till-app: split-table editing observations", which were "ignores a late refusal after changing bill" and "ignores a late guest refusal after changing bill" (`:11752`'s `it.each`) and are now "still says a late refusal after changing bill, and a second press sends one request" and the same for a guest refusal | **Behaviour, D16 (plan line 718, with Task 12d's review S6), under the owner's 2026-10-05 rule.** Before: bill, party, banner, `splitRefusal`, floor reads and bills reads all as they stood before the refusal, because the old one-bill event's path said nothing after a bill switch. After: bill, party, floor reads and bills reads still as they stood; the banner holds `draft.out_of_date`'s words with `splitRefusal` null, or there is no banner and `splitRefusal` equals exactly the refused count's fields; and a second press sends exactly one request with its arguments named. "ignores a late success after changing bill" and the API and party rows are unedited: `bill`'s `it.each` now lists only `success` | 14a's fix round |
 
 `testing/table-action-fixture.ts`'s `splitTable` accepts `billId | null | SplitSelection`. It answers
 `{ partyId, billId: billIds[0] }`, and adds `billIds` only for a selection, because 7 existing cases pin the
@@ -1590,7 +1602,7 @@ Question 2 is approved: this goes ahead.
   `rg -n 'split-guests|SplitGuests|split-table-bill|splitPanelLive|split_table_bill_heading|split_no_bill|split_guests_title' apps docs/developers docs/operations scripts`. `split-table-open` and `#splitTablePrompts` stay (D20), so they are not in it. Also `rg -n 'data-target="none"' apps/till/src`, which must end empty.
 - [ ] **Failing check.** It cannot be red by a test; the check is that the `rg` above prints only the historical dated plans after the edit (4a's Task 9b precedent).
 - [ ] Move `SplitGuestsDetail` to `widgets/guest-count.ts` and its imports with it (`till-table-order-screen.ts:117`, `:266`). Delete `widgets/split-guests-dialog.ts`, its three test files, the screen's `split-table-bill`, `#splitGuestsDialog`, `#splitTableBills`' bill buttons, `splitPanelLive` from the screen, the app and every test, `billId` from `SplitTableDetail`, `SplitRefusal` and `split-table-open`, the app's mapping from it, and the words. The comment at `till-table-order-screen.ts:2050` loses "split-guests".
-- [ ] Row 18b: every remaining `split-table` emit and stub in `till-app-parties.test.ts` and `till-app-table-service.test.ts` sends `selection`, each pinned behaviour otherwise unchanged. The exceptions are row 27, whose banner assertion changes as that row says, and rows 28 and 29, whose banner assertions must stay green untouched: a red there is a stop, because it means D16's reopen rule is not as written. Delete rows 23–26's old cases and the screen cases in "Deleted checks" whose new home now exists, confirming each home exists by name. In `.split-table.test.ts`'s "the steps before the panel follow the party", delete the describe "the bills of the step Task 14a removes" and the `panel live: false` row of its two `it.each`; the `split-table-bill` half of `#followSplitPanel` goes with the step.
+- [ ] Row 18b: every remaining `split-table` emit and stub in `till-app-parties.test.ts` and `till-app-table-service.test.ts` sends `selection`, each pinned behaviour otherwise unchanged. The exceptions are row 27, whose banner assertion changes as that row says, row 31, which changes as it says, and rows 28 and 29, whose banner assertions must stay green untouched: a red there is a stop, because it means D16's reopen rule is not as written. Delete rows 23–26's old cases and the screen cases in "Deleted checks" whose new home now exists, confirming each home exists by name. In `.split-table.test.ts`'s "the steps before the panel follow the party", delete the describe "the bills of the step Task 14a removes" and the `panel live: false` row of its two `it.each`; the `split-table-bill` half of `#followSplitPanel` goes with the step.
 - [ ] `design-system.md:2871`, `:2883`, `:1090-1095`: name the panel's guests, not the window, and the focus sentence; `:2883` keeps its "reconnect case", now in `.split-table.unsaved.test.ts`. `conventions-data.md:4727` stays true (`guestCounts`).
 - [ ] **GREEN.** All of `src/screens/till-table-order-screen*.test.ts`, `src/till-app-parties.test.ts`, `src/till-app-table-service.test.ts`, `src/till-app-split-table.test.ts`, `src/widgets/split-picker*.test.ts`; till types; `pnpm exec vitest run scripts/native-form-fields.test.ts`.
 - [ ] **Commit.** `git commit -s -m "A803 4c: the one-bill split steps and guests window go"`.

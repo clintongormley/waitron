@@ -825,6 +825,86 @@ describe("till-app: the read behind Split a table's panel", () => {
           });
         });
 
+        describe("leaving the table during the reload", () => {
+          const reopen = async (el: TillApp) => {
+            emit(tableOrder(el)!, "back-to-floor");
+            await flush(el);
+            emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+            await flush(el, 6);
+          };
+
+          it("while the floor read is out: the bills are not read for the table left", async () => {
+            fakeTimers();
+            const el = await mounted("desktop", noBillApi());
+            await toPanel(el);
+            anotherTillStartsTheBill();
+            let answerFloor = () => {};
+            api.getTablesState!.mockImplementationOnce(
+              () =>
+                new Promise((resolve) => {
+                  answerFloor = () =>
+                    resolve([table("t4", "4", noBill), table("t5", "5", noBill), table7]);
+                }),
+            );
+            await rereadBills(el, firstBill());
+            emit(tableOrder(el)!, "back-to-floor");
+            await flush(el);
+            const bills = api.getPartyBills!.mock.calls.length;
+
+            answerFloor();
+            await flush(el, 6);
+
+            expect(tableOrder(el)).toBeNull();
+            expect(api.getPartyBills!.mock.calls.length).toBe(bills);
+          });
+
+          it("while the bills read is out, and back to a new panel: its answer leaves that panel's revision alone", async () => {
+            fakeTimers();
+            const el = await mounted("desktop", {
+              ...noBillApi(),
+              setPartyName: vi.fn().mockResolvedValue({ revision: 9 }),
+              splitTable: vi.fn().mockResolvedValue({ partyId: "v-split", billIds: [] }),
+            });
+            await toPanel(el);
+            anotherTillStartsTheBill();
+            let answerBills = () => {};
+            api.getPartyBills!.mockResolvedValueOnce(firstBill()).mockImplementationOnce(
+              () =>
+                new Promise((resolve) => {
+                  answerBills = () => resolve(firstBill());
+                }),
+            );
+            await vi.advanceTimersByTimeAsync(15_000);
+            await flush(el, 6);
+
+            await reopen(el);
+            await toPanel(el);
+            const opened = tableOrder(el)!.party!.revision;
+            const later = party({
+              revision: 9,
+              tableIds: ["t4", "t5"],
+              billCount: 1,
+              openingBillId: "b9",
+            });
+            api.getTablesState!.mockResolvedValue([
+              table("t4", "4", later),
+              table("t5", "5", later),
+              table7,
+            ]);
+            emit(tableOrder(el)!, "name-party", { name: "Ana" });
+            await flush(el, 6);
+            expect(tableOrder(el)!.party?.revision).toBe(9);
+
+            answerBills();
+            await flush(el, 6);
+            await press(el, "[data-split-confirm]");
+            await flush(el, 6);
+
+            expect(api.splitTable).toHaveBeenCalledOnce();
+            expect(api.splitTable!.mock.calls[0]![3]).toBe(opened);
+          });
+        });
+
         it("the floor giving this table to another party opens that party's bill", async () => {
           fakeTimers();
           const el = await mounted("desktop", noBillApi());
@@ -4212,6 +4292,19 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           await pressSplit(el);
 
           expect(api.splitTable!.mock.calls[1]![3]).toBe(3);
+        });
+
+        it("with nothing changed, the reopening still reads the sources, once", async () => {
+          const el = await panelWith(refused({ code: "party.out_of_date" }));
+          await tick(el, "b2");
+          api.getPartyBills!.mockRejectedValueOnce(lost());
+          const sources = reads().sources;
+
+          await pressSplit(el);
+          await flush(el, 6);
+
+          expect(tableOrder(el)!.splitRefusal).not.toBeNull();
+          expect(reads().sources).toBe(sources + 1);
         });
 
         it("a bills read failing behind an open panel counts too: a refusal that reads nothing still brings the rows up to the floor", async () => {
