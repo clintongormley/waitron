@@ -3874,6 +3874,11 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **No promise about how long a known-address check takes end to end.** The dialog polls and
   reports a fresh result, but nothing bounds the round trip from pressing the button to an answer.
 
+- **Calibration's step 2 and step 3 buttons span the whole dialog; step 1's ends with its fields**
+  (found by A404's look, 2026-11-05). "Print sample receipt" and "Test open drawer" could end at
+  `--wt-field-max-width`, right-aligned, as "Print width test" does
+  (`apps/dashboard/src/screens/printers-screen.ts`, `#renderEditPrinter`).
+
 - **While a discovery window is open, a device not reported within 45 seconds drops off the list**
   until its next report; 45 seconds does not cover every scan pass (C102, #953).
 
