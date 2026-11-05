@@ -2499,17 +2499,16 @@ describe("a party's receipt prints its guests and the amount per person", () => 
     return { v, pays };
   }
 
-  /** A sale's `sales` and `registros_facturacion` rows, less ids, numbers, times and chain links. */
   function filedFacts(v: { db: typeof suite.db }, saleId: string) {
     const strip = (row: Record<string, unknown>, keys: string[]) =>
       Object.fromEntries(Object.entries(row).filter(([key]) => !keys.includes(key)));
     const [sale] = v.db.all<Record<string, unknown>>(sql`select * from sales where id = ${saleId}`);
-    const [registro] = v.db.all<Record<string, unknown>>(
+    const [fiscalRecord] = v.db.all<Record<string, unknown>>(
       sql`select * from registros_facturacion where sale_id = ${saleId}`,
     );
     return {
       sale: strip(sale!, ["id", "working_order_id", "invoice_number", "issued_at"]),
-      registro: strip(registro!, [
+      fiscalRecord: strip(fiscalRecord!, [
         "id",
         "sale_id",
         "secuencia",
