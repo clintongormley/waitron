@@ -1093,7 +1093,11 @@ Tab button and no side drawer.
   (`data-action-panel`) beside the order while it is open. Its heading takes focus and the panel is
   scrolled into view; Back and Escape close it (Escape closes an open list first) and return focus
   to the ⋮'s trigger, and focus returns there too when a naming or guests window opened from the ⋮
-  closes, and when Split closes Split a table's panel.
+  closes, and when Split closes Split a table's panel. That panel's refusals sit at its foot, per
+  [Forms](#forms). The till's banner says one only when no panel can come back: the party no longer
+  holds the table or holds only that table, other work holds unsaved input or a leave question, the
+  refusal names a bill the till's list has lost, a saved language has drawn the screen afresh, or a
+  take-over was refused after the panel closed under its dialog. A refusal arriving after the waiter has left the party or the table says nothing.
 - **The foot**, in order: the Finish table refusal, only after Finish table was refused
   (`role="alert"`, with Take payment and Record unpaid departure, brought into view at
   1024×768 and at 390×844); this bill's total; "Still to pay at this table" with the party's
@@ -2639,6 +2643,35 @@ its starting-zone error, unless the department has no active zone at all: then t
 so and points to Departments and zones, and no starting zone is asked for (owner, 2026-10-16, A752). Its unchanged Save stays quiet and disabled; an edit stays blocked until its scope is fixed. There is no error summary at the top of a form: it makes the page jump when it clears.
 Besides an unchanged draft, a save already in progress or a nested window open (below), only the
 form's own checks disable the action; an error that comes back from a request never does (owner rule, 2026-09-29).
+
+Split a table's panel (A803 4c) departs from these in three ways. `till-table-order-screen.split-table.test.ts`
+pins the first two and `till-app-split-table.test.ts` the third, and that a failed read after a refused
+split leaves Split enabled; both read this panel alone, with stubbed reads, and nothing checks another
+panel for the same behaviour.
+
+**(a) A first read that fails says so at once.** The panel's rows come from a read, so a failed
+first read shows `table.split_read_failed` in `wt-form-actions`'s bottom message, before any press,
+with Split quiet and disabled, until a read answers. A later read that fails keeps the last rows,
+says nothing and leaves Split as it was. Its precedents: the Products browser's Move and Delete
+dialog, whose confirm is quiet after the summary failed; `wt-delete-dialog`, whose Delete is quiet
+while `readError` is set; and the period delete dialog, whose bottom says when its impact read
+failed.
+
+**(b) A selection someone else's change rules out says so at once.** While a ticked bill holds
+someone else's unsent order, the foot shows `table.split_taken`, naming each holder and what to do
+(`table.split_taken_unnamed` if any holder has no name), before any press, and Split is drawn
+`secondary` and disabled. That is A427's rule for a button its row's own state rules out, and
+`wt-delete-dialog` likewise lists what refuses a delete as it opens. The bill's row offers Take over
+draft and its tick can be cleared; Split comes back once no ticked bill is held, by either of those
+or by a read showing the order gone. The hold is the row's state and not a refusal: if the read
+after a refused split fails, no bill shows held and Split stays enabled.
+
+**(c) A refused take-over has a line of its own** (`data-split-take-over-refusal`), below whatever the foot already says, where the list below says one
+message. While a ticked bill is held that is the held sentence, and each says something the other
+does not: what stands in the way, and that the take-over failed. With no ticked bill held, it sits
+beside a no-field refusal or a stopped press's sentence if one is showing; no case pins that pair,
+only the held one. The line goes when the next take-over is pressed, when a press of Split gets past
+the hold, and when the panel closes. A marked count's bottom message still follows both.
 
 - mark every required field with `required`; `wt-input` renders the visible asterisk and forwards
   the native constraint. A field with `hide-label` draws no asterisk, so where one sits in a table
@@ -5845,6 +5878,76 @@ decides, and its refusal closes the panel with its words. Guards: `portion-selec
 `portion-picker.test.ts` and `portion-picker.a11y.test.ts` (one widget, both themes), and
 `till-table-order-screen.move-dishes.test.ts`; nothing checks another screen that might draw its
 own dish list instead of this widget.
+
+Split a table draws every bill of the party, in number order, through `till-split-picker`
+(`apps/till/src/widgets/split-picker.ts`), which holds no picks of its own: the selection model
+(`apps/till/src/state/split-selection.ts`) gives each change, the widget emits `split-picks`, and the
+screen hands the selection back and keeps it in its action draft scope. Each bill's dishes are this
+same `till-portion-picker`, with these additions.
+
+- **The whole-bill header** is a native tick labelled with the bill's name, then `{amount} paid` when
+  the bill has received money (money a card in progress has only reserved is not counted), then the
+  bill's total. The tick is checked for a whole bill and indeterminate for a bill with picks. Pressing
+  it makes an unticked or part-ticked bill whole and clears a whole one. Picking every dish of a bill
+  makes it whole too, unless a dish is paid or the bill holds this person's own unsent dishes, which
+  say `table.split_own_unsent` under the header and go only with the whole bill.
+- **A `whole` row** of a whole bill draws ticked with no stepper. A paid dish stays ticked and
+  disabled, saying why; a row the floor stops is not stopped, because the whole bill keeps its
+  payments. Unticking a row leaves the bill's other rows picked.
+- **The summary** under the bills says what the leaving table takes and the staying table keeps, each
+  with its amount (`table.split_takes`, `table.split_keeps`, `an empty bill` for a side with nothing).
+  `table.split_nothing_to_pay` replaces the staying line when what stays owes nothing and holds its
+  own money, or only paid bills stay (`leftWithNothingToPay`), or the party has no bill to draw. `table.split_new_bill_note`
+  shows only while a single dish is ticked. These describe the rows on screen; the server decides.
+- **A take-over row** replaces the rows of a bill someone else's unsent order holds: `{name} has an
+  unsent order`, or `table.draft_taken_by`'s words for an order taken from this person, with Take over
+  draft, which opens the screen's own take-over dialog. There is no bulk take-over. While such a bill
+  is not ticked its tick is disabled, tied to `table.split_take_over_first` by `aria-describedby`.
+  Split is quiet and disabled while a take-over is out. On the answer the bill's row goes and it keeps
+  its tick and picks; a refusal goes at the foot ([Forms](#forms)) and the bill stays held.
+- **A presented bill** goes whole or stays: `table.split_presented` under its header, its tick
+  working, its rows pale and disabled with that sentence as their `aria-description`, and no picks.
+- **Everything ticked.** When a press finds nothing would stay (`nothingStays`), the action row gives
+  way to `table.split_nothing_stays` and its note, announced, with focus on **Move guests** (primary,
+  moving the party with its guest count), **Split anyway** (secondary, disabled while a count is
+  marked invalid) and Back, which goes back to the action row. Changing a tick, a read that gives
+  something to stay, and a read that holds a ticked bill each go back to it too.
+
+A press of Split checks in turn: a held ticked bill (nothing happens, and the button is disabled
+anyway), an invalid count, then a stop a read left waiting, then Everything ticked.
+
+**A read never takes a selected bill away silently.** A read can change a ticked bill in four ways
+(`tidySplit`, whose `gone` and `changed` the screen keeps as stops for later presses):
+
+1. **Someone else's unsent order reaches it.** It stays ticked, whole or with its picks; a selected
+   bill someone else's order reaches is never dropped. Its take-over row and the foot's sentence show
+   at once and Split is held. Focus on Split or the question's buttons goes to the first such bill's
+   Take over draft, and focus among a bill's dishes to that bill's own. Unticking clears it, picks
+   included, and its tick then cannot be set until the order is taken over or goes. When a read shows
+   the order gone, its rows, tick and picks return, and its edit state has moved, so the app's
+   comparison below stops the first press with `table.split_changed`.
+2. **It is gone**: the read no longer lists it. It leaves the selection, and the next press sends
+   nothing and says `table.split_bill_gone`, one bill per press. Listed again before that press, it
+   has come back unticked, and the stop becomes `table.split_changed`.
+3. **A pick is lost**: a picked dish was paid or removed, or the bill was presented. The pick goes, its
+   row shows why, and the next press sends nothing and says `table.split_changed`.
+4. **Picks become the whole bill**: every dish left is picked. The bill turns whole, the summary names
+   it, and the next press sends nothing and says `table.split_changed`. Once whole it follows the
+   whole-bill rule, so a later dish reaching it stops nothing and the summary shows the new total.
+
+A whole bill presented or part-paid by a read stays whole and stops nothing, and an unticked bill
+gaining an order gets its row and stops nothing. Behind these the app keeps, for each selected bill,
+the edit state seen when it was ticked (`split-table-observe`) and, at Send, compares the selected
+bills: one missing or moved sends no request and reopens the panel with `table.split_changed`. A
+take-over from the panel and the screen's own stop replace that bill's record, so one change stops one
+press.
+
+Guards: `split-selection.test.ts`; `split-picker.test.ts` and `split-picker.a11y.test.ts` (one widget,
+both themes, its listed states, not the foot); `till-table-order-screen.split-table.test.ts` and
+`.split-table.unsaved.test.ts` (the screen with reads handed in as properties); and
+`till-app-split-table.test.ts` (the real app against a stubbed API, not a server, which is where the
+comparison at Send is checked). Nothing checks another screen that might draw its own dish list
+instead of these widgets.
 
 ### The kitchen screen's cards
 

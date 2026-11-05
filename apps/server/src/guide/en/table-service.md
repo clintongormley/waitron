@@ -325,6 +325,12 @@ meantime, the till names that bill before the reason, such as **Bill 2: This bil
 someone else has unsent dishes on either bill, take over their order first. Open **Move dishes…**
 again to choose afresh.
 
+## Split a table {#split-table}
+
+When some of a party move to a table of their own, open the **⋮** menu, choose **Split a table** and
+tap the table that leaves. Tick what goes with it: whole bills, or single dishes from any bill. Set
+each table's guests, then choose **Split**.
+
 ## Move a bill or split a table with dishes on hold {#held-dishes-move}
 
 A bill with dishes on hold can go to another table with **Move this bill** or **Split a table**.
@@ -343,7 +349,7 @@ If someone else has dishes on the bill that are not sent yet, take over their or
 A bill keeps its number for as long as it stays with the party. Merging one bill into another leaves
 a gap: merge Bill 2 into Bill 1 and Bills 1 and 3 remain. A bill that arrives from another table or
 from the counter takes the party's next number, and so do the bills of a table you join. A table
-split off with a bill starts again at Bill 1, and so does a table seated again after its party
+split off with bills starts again at Bill 1, and so does a table seated again after its party
 finishes. A bill keeps its name when it moves, including to the counter, where it has no number. You
 can name a bill only at a table. The name is not printed on kitchen tickets or receipts.
 
