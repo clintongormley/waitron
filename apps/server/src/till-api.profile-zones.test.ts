@@ -66,7 +66,7 @@ import {
   split,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { moveGuests } from "./testing/table-action-fixture.js";
+import { oneBill, moveGuests } from "./testing/table-action-fixture.js";
 import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 
@@ -1016,7 +1016,12 @@ const ROUTES: readonly Row[] = [
     "POST /api/parties/:id/split-table",
     "POST",
     (x) => `/api/parties/${x.deliParty}/split-table`,
-    (x) => ({ tableId: x.deliTable, billId: null, expectedPartyRevision: 0, expectedEdits: [] }),
+    (x) => ({
+      tableId: x.deliTable,
+      selection: oneBill(null),
+      expectedPartyRevision: 0,
+      expectedEdits: [],
+    }),
     deliTableZone,
   ],
   [

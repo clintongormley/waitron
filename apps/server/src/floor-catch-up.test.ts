@@ -1,5 +1,5 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { observedTableActionBody } from "./testing/table-action-fixture.js";
+import { oneBill, observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -392,7 +392,7 @@ describe("the till's floor routes catch today's plan up", () => {
 
     const split = await send("POST", `/api/parties/${p2}/split-table`, {
       tableId: z.t4,
-      billId: null,
+      selection: oneBill(null),
       expectedPartyRevision: await revisionOf(v, p2),
     });
     expect(split.status).toBe(200);
@@ -554,7 +554,7 @@ describe("on a new business day, the till's floor routes reset today's plan befo
     [
       "split",
       "split-table",
-      async (partyId) => ({ tableId: await joinSecond(partyId), billId: null }),
+      async (partyId) => ({ tableId: await joinSecond(partyId), selection: oneBill(null) }),
     ],
   ];
 

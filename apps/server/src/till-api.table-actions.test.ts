@@ -1,4 +1,4 @@
-import { observedTableActionBody } from "./testing/table-action-fixture.js";
+import { oneBill, observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -167,13 +167,13 @@ describe("the table action routes", () => {
 
     const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: second.toUpperCase(),
-      billId: billId.toUpperCase(),
+      selection: oneBill(billId.toUpperCase()),
       expectedPartyRevision: revisionOf(ana.partyId),
     });
 
     expect(answer.status).toBe(200);
-    expect(Object.keys(answer.json).sort()).toEqual(["billId", "partyId"]);
-    expect(answer.json.billId).toBe(billId);
+    expect(Object.keys(answer.json).sort()).toEqual(["billIds", "partyId"]);
+    expect(answer.json.billIds).toEqual([billId]);
     expect(tablesOf(answer.json.partyId as string)).toEqual([second]);
     expect(tablesOf(ana.partyId)).toEqual([ana.tableId]);
   });
@@ -202,7 +202,7 @@ describe("the table action routes", () => {
 
     const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: second,
-      billId: ana.tabId,
+      selection: oneBill(ana.tabId),
       expectedPartyRevision: revisionOf(ana.partyId),
     });
 
@@ -227,7 +227,7 @@ describe("the table action routes", () => {
 
     const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: second,
-      billId: null,
+      selection: oneBill(null),
       expectedPartyRevision: revisionOf(ana.partyId),
     });
 
@@ -243,7 +243,7 @@ describe("the table action routes", () => {
       const answer = await send(venue.app, "", "POST", `/api/parties/${ana.partyId}/${path}`, {
         toTableId: randomUUID(),
         tableId: randomUUID(),
-        billId: null,
+        selection: oneBill(null),
         expectedPartyRevision: ana.revision,
       });
 
@@ -256,7 +256,7 @@ describe("the table action routes", () => {
       const answer = await post(`/api/parties/not-a-uuid/${path}`, {
         toTableId: randomUUID(),
         tableId: randomUUID(),
-        billId: null,
+        selection: oneBill(null),
         expectedPartyRevision: 0,
       });
 
@@ -275,7 +275,7 @@ describe("the table action routes", () => {
         const answer = await post(`/api/parties/${ana.partyId}/${path}`, {
           toTableId: randomUUID(),
           tableId: randomUUID(),
-          billId: null,
+          selection: oneBill(null),
           ...(revision === undefined ? {} : { expectedPartyRevision: revision }),
         });
 
@@ -534,16 +534,16 @@ describe("the table action routes", () => {
 
     const table = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: "not-a-uuid",
-      billId: null,
+      selection: oneBill(null),
       expectedPartyRevision: revision,
     });
     const noTable = await post(`/api/parties/${ana.partyId}/split-table`, {
-      billId: null,
+      selection: oneBill(null),
       expectedPartyRevision: revision,
     });
     const bill = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: second,
-      billId: "not-a-uuid",
+      selection: oneBill("not-a-uuid"),
       expectedPartyRevision: revision,
     });
     const noBill = await post(`/api/parties/${ana.partyId}/split-table`, {
@@ -558,10 +558,16 @@ describe("the table action routes", () => {
     });
     expect(noTable.status).toBe(400);
     expect(noTable.json).toMatchObject({ params: { field: "tableId" } });
-    expect(bill.status).toBe(409);
-    expect(bill.json).toMatchObject({ code: "tab.not_open", params: { tabId: "not-a-uuid" } });
+    expect(bill.status).toBe(400);
+    expect(bill.json).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "selection" },
+    });
     expect(noBill.status).toBe(400);
-    expect(noBill.json).toMatchObject({ params: { field: "billId" } });
+    expect(noBill.json).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "selection" },
+    });
     expect(revisionOf(ana.partyId)).toBe(revision);
   });
 
@@ -573,7 +579,7 @@ describe("the table action routes", () => {
     const splitOf = (partyId: string, tableId: string, bill: string | null, rev = revision) =>
       post(`/api/parties/${partyId}/split-table`, {
         tableId,
-        billId: bill,
+        selection: oneBill(bill),
         expectedPartyRevision: rev,
       });
 
@@ -703,7 +709,7 @@ describe("A803 action results:", () => {
 
     const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: second,
-      billId: ana.tabId,
+      selection: oneBill(ana.tabId),
       expectedPartyRevision: revisionOf(ana.partyId),
     });
 
@@ -724,7 +730,7 @@ describe("A803 action results:", () => {
 
     const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: second,
-      billId: null,
+      selection: oneBill(null),
       expectedPartyRevision: revision,
     });
 
@@ -750,7 +756,7 @@ describe("A803 action results:", () => {
 
     const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: second,
-      billId: ana.tabId,
+      selection: oneBill(ana.tabId),
       expectedPartyRevision: revision,
     });
 
@@ -799,7 +805,7 @@ describe("A803 action results:", () => {
     const revision = revisionOf(ana.partyId);
     const split = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: second,
-      billId: null,
+      selection: oneBill(null),
       expectedPartyRevision: revision,
     });
     const empty = await seatedWith(venue, "Tarta");
@@ -833,7 +839,7 @@ describe("A803 action results:", () => {
     const answers = [
       await post(`/api/parties/${ana.partyId}/split-table`, {
         tableId: second,
-        billId,
+        selection: oneBill(billId),
         expectedPartyRevision: revisionOf(ana.partyId),
       }),
       await post(`/api/parties/${ana.partyId}/join`, {
@@ -885,7 +891,7 @@ describe("Split a table's guest counts", () => {
 
     const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: second,
-      billId: null,
+      selection: oneBill(null),
       expectedPartyRevision: revisionOf(ana.partyId),
       guestCounts: { staying: 3, leaving: 2 },
     });
@@ -900,7 +906,7 @@ describe("Split a table's guest counts", () => {
 
     const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: second,
-      billId: null,
+      selection: oneBill(null),
       expectedPartyRevision: revisionOf(ana.partyId),
       guestCounts: { staying: null, leaving: null },
     });
@@ -915,7 +921,7 @@ describe("Split a table's guest counts", () => {
 
     const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: second,
-      billId: null,
+      selection: oneBill(null),
       expectedPartyRevision: revisionOf(ana.partyId),
     });
 
@@ -929,7 +935,7 @@ describe("Split a table's guest counts", () => {
 
     const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: second,
-      billId: null,
+      selection: oneBill(null),
       expectedPartyRevision: revisionOf(ana.partyId),
       guests: { staying: 0, leaving: 2 },
     });
@@ -959,7 +965,7 @@ describe("Split a table's guest counts", () => {
 
     const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
       tableId: second,
-      billId: null,
+      selection: oneBill(null),
       expectedPartyRevision: revision,
       guestCounts: guests,
     });
@@ -986,7 +992,7 @@ describe("Split a table's guest counts", () => {
     const splitOf = (partyId: string, tableId: string, billId: string | null) =>
       post(`/api/parties/${partyId}/split-table`, {
         tableId,
-        billId,
+        selection: oneBill(billId),
         expectedPartyRevision: revisionOf(partyId),
         guestCounts: { staying: 1, leaving: 1 },
       });
@@ -1235,18 +1241,27 @@ describe("A803 split: the route", () => {
     expect(tablesOf(ana.partyId)).toContain(second);
   });
 
-  it("the old request with a bill id still works beside the new one", async () => {
+  it.each([
+    ["a bill id", (bill: string) => bill],
+    ["null", () => null],
+  ])("a body with %s as billId and no selection refuses, moving nothing", async (_, billOf) => {
     const { ana, second, pulpoBill } = await anaWith("Tarta");
+    const revision = revisionOf(ana.partyId);
 
     const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
+      expectedEdits: [],
       tableId: second,
-      billId: pulpoBill,
-      expectedPartyRevision: revisionOf(ana.partyId),
+      billId: billOf(pulpoBill),
+      expectedPartyRevision: revision,
     });
 
-    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    expect(answer.json).toEqual({ partyId: answer.json.partyId, billId: pulpoBill });
-    expect(tablesOf(answer.json.partyId as string)).toEqual([second]);
+    expect(answer.status).toBe(400);
+    expect(answer.json).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "selection" },
+    });
+    expect(revisionOf(ana.partyId)).toBe(revision);
+    expect(tablesOf(ana.partyId).sort()).toEqual([ana.tableId, second].sort());
   });
 
   it("a body naming both goes by its selection", async () => {

@@ -1,6 +1,6 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
-import { observedTableActionBody } from "./testing/table-action-fixture.js";
+import { oneBill, observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -428,7 +428,7 @@ describe("a split that puts the table back", () => {
     const split = (await ok(
       post(`/api/parties/${p}/split-table`, {
         tableId: b,
-        billId: null,
+        selection: oneBill(null),
         expectedPartyRevision: await revision(p),
       }),
     )) as { partyId: string };
@@ -965,14 +965,14 @@ describe("a party change that changes a room answers its revision", () => {
     const split = (await ok(
       post(`/api/parties/${p}/split-table`, {
         tableId: b,
-        billId: null,
+        selection: oneBill(null),
         expectedPartyRevision: await revision(p),
       }),
-    )) as { partyId: string; billId: string };
+    )) as { partyId: string; billIds: string[] };
 
     expect(split).toEqual({
       partyId: split.partyId,
-      billId: await onlyBill(split.partyId),
+      billIds: [await onlyBill(split.partyId)],
       zoneRevisions: { [zoneId]: read + 1 },
     });
     expect(split.partyId).not.toBe(p);

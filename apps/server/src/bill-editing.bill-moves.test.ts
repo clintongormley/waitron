@@ -862,7 +862,7 @@ describe("bill move HTTP boundaries require observed edits and use the authentic
         expectedOtherPartyRevision: into.revision,
         fromBillId: into.tabId,
         tableId: from.tableId,
-        billId: from.tabId,
+        selection: oneBill(from.tabId),
       };
       expect((await send(venue.app, venue.cookie, "GET", "/api/till")).status).toBe(200);
       const before = await allRows();

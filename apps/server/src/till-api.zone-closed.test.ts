@@ -1,4 +1,4 @@
-import { observedRelocationSender } from "./testing/table-action-fixture.js";
+import { oneBill, observedRelocationSender } from "./testing/table-action-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
@@ -346,19 +346,19 @@ describe("existing service in a closed zone", () => {
     at("23:45");
     const answer = await request(v, "POST", `/api/parties/${seated.partyId}/split-table`, {
       tableId: second.id,
-      billId: null,
+      selection: oneBill(null),
       expectedPartyRevision: party!.revision,
     });
     expect(answer.status).toBe(200);
     expect(answer.json).toMatchObject({
       partyId: expect.any(String),
-      billId: expect.any(String),
+      billIds: [expect.any(String)],
     });
     expect(
       await suite.db
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        .where(eq(workingOrders.id, answer.json.billId as string)),
+        .where(eq(workingOrders.id, (answer.json.billIds as string[])[0]!)),
     ).toEqual([{ status: "open" }]);
   });
 

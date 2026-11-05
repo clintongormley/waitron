@@ -76,8 +76,9 @@ export async function combineParties(
   });
 }
 
-export function oneBill(billId: string): SplitSelection {
-  return { wholeBillIds: [billId], loose: [] };
+/** The selection of one whole bill; null selects nothing, so the new party gets an empty bill. */
+export function oneBill(billId: string | null): SplitSelection {
+  return { wholeBillIds: billId === null ? [] : [billId], loose: [] };
 }
 
 /** The bills a selection names, each once and sorted; a malformed one names only what it spells. */
@@ -123,12 +124,7 @@ export async function splitTable(
   options: SplitOptions,
   attendance?: OrderAttendance,
 ): Promise<{ partyId: string; billId: string; billIds?: string[] }> {
-  const selection =
-    chosen === null
-      ? { wholeBillIds: [], loose: [] }
-      : typeof chosen === "string"
-        ? oneBill(chosen)
-        : chosen;
+  const selection = chosen === null || typeof chosen === "string" ? oneBill(chosen) : chosen;
   const expectedEdits: BillEditExpected[] = [];
   if (options.expectedEdits === undefined)
     for (const billId of billsNamedBy(selection))
@@ -164,8 +160,8 @@ export async function observedTableActionBody(
   return withTransaction(db, async (tx) => {
     if (match[2] === "split-table") {
       const expectedEdits: BillEditExpected[] = [];
-      const billIds = typeof ask.billId === "string" ? [ask.billId] : billsNamedBy(ask.selection);
-      for (const billId of billIds) expectedEdits.push(await readBillEditState(tx, billId));
+      for (const billId of billsNamedBy(ask.selection))
+        expectedEdits.push(await readBillEditState(tx, billId));
       return { expectedEdits, ...ask };
     }
     const tableId = match[2] === "join" ? ask.tableId : ask.toTableId;

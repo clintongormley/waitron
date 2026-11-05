@@ -3180,14 +3180,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (typeof tableId !== "string" || !isUuid(tableId)) {
         throw new AppError("table.not_joined", { tableId: String(tableId), partyId });
       }
-      const selection: SplitSelection =
-        body.selection !== undefined
-          ? requireSplitSelection(body.selection)
-          : {
-              wholeBillIds:
-                body.billId === null ? [] : [requireOtherBill(body.billId, "billId").toLowerCase()],
-              loose: [],
-            };
+      const selection = requireSplitSelection(body.selection);
       const expectedPartyRevision = requireRevision(
         body.expectedPartyRevision,
         "expectedPartyRevision",
@@ -3230,9 +3223,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
                 ...split.looseSourceIds,
                 split.billIds.at(-1)!,
               ]);
-            return body.selection === undefined
-              ? { partyId: split.partyId, billId: split.billIds[0]! }
-              : { partyId: split.partyId, billIds: split.billIds };
+            return { partyId: split.partyId, billIds: split.billIds };
           });
         },
         log,

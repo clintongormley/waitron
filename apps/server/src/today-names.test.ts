@@ -18,7 +18,7 @@ import {
 import { createStation } from "./kitchen.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { readBillEditState } from "./bill-editing.js";
-import { partyBillEditsForTest } from "./testing/table-action-fixture.js";
+import { oneBill, partyBillEditsForTest } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { listOrders } from "./orders-list.js";
 import { finishTable, holderOf } from "./testing/party-close-fixture.js";
@@ -456,7 +456,7 @@ async function seatedPair(names: { own: string; nine: string } | null) {
 async function splitTableOff(partyId: string, tableId: string, billId: string | null) {
   await post(`/api/parties/${partyId}/split-table`, {
     tableId,
-    billId,
+    selection: oneBill(billId),
     expectedPartyRevision: await revisionOf(v, partyId),
     expectedEdits: await inTx(v, async (tx) =>
       billId === null ? [] : [await readBillEditState(tx, billId)],
