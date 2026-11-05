@@ -7,7 +7,7 @@ coordination matters even when both clocks are correct.
 
 ## Review the business and clock
 
-Choose Live in the local setup wizard. Enter the business, location and administrator details.
+Choose Live in the local setup wizard. Enter the business, venue and administrator details.
 If you imported a prepared configuration, review whether it belongs to this same taxpayer before
 continuing. Complete the applicable certificate, email and separate preproduction readiness steps.
 The readiness sample uses its own database and grants no production identity.

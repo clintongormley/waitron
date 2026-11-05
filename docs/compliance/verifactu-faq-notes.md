@@ -90,6 +90,8 @@ several shops, each treated as an independent SIF with its own `numero_instalaci
 **Bears on:** the Locations (sub-project 6) design — the unit of SIF is the node/location, and a tenant
 can hold several. (See also §9 below: those shops may even fall under *different regimes*.)
 
+_2026-11-05 (A1301): roadmap row 6 is now "Venue"; a box holds one venue, and the node owns the fiscal identity._
+
 ## 5. There is **no registration of the SIF with AEAT** — compliance is the manufacturer's *Declaración Responsable*
 
 The FAQ describes no *alta*/*censo*/inscription of the SIF, the software, or the producer with AEAT.

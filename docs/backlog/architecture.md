@@ -1040,8 +1040,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. The owner answered
   every design question (lane B's A1268 does the working-time hashes; the working-time export names
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
-  slices. Still open: S18e and the schema slices S20–S28; every other slice has landed. S19
-  ([S19 plan](../superpowers/plans/2026-11-05-a1301-s19-text-sweep.md)) swept the text; the
+  slices. Still open: S18e and the schema slices S20–S28; every other slice has landed. The
   personal-data export's `location` key and its readme line go with S22, and the backup screen's
   folder wording goes with S18e.
   `@waitron/db`'s `readVenue`, `readVenueClock`, `readVenueClockAndPlace` and the interim
