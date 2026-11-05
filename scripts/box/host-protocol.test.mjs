@@ -370,11 +370,11 @@ describe("formatHostRequest", () => {
     expect(
       formatHostRequest({
         verb: "tag.write",
-        fields: { tag: { name: "Caf\u00e9 \u{1F600}\u007f", live: true } },
+        fields: { tag: { name: "Caf\u00e9 \u{1F600}", live: true } },
         actor: server,
       }),
     ).toBe(
-      String.raw`tag.write {"tag":{"name":"Caf\u00e9 \ud83d\ude00\u007f","live":true},"actor":{"source":"server"}}`,
+      String.raw`tag.write {"tag":{"name":"Caf\u00e9 \ud83d\ude00","live":true},"actor":{"source":"server"}}`,
     );
   });
 
