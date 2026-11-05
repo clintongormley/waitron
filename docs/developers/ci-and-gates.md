@@ -2273,7 +2273,10 @@ Every workflow step that sets pnpm up runs `bash scripts/ci-setup-pnpm.sh` under
 `packageManager` with a bounded `sed` command, installs it with
 `npm install --global --prefix "$RUNNER_TEMP/pnpm-setup"`, checks
 that the installed `pnpm --version` prints that version, and puts the prefix's `bin` on
-`GITHUB_PATH`. Each npm attempt runs under `timeout` (60 s, `PNPM_SETUP_ATTEMPT_SECONDS`) with a
+`GITHUB_PATH`. The text reader expects a single quoted `packageManager` key and value on one
+line in this committed manifest. It does not parse JSON structure: a nested key can be picked up
+instead, and malformed JSON containing that line can pass the version check. Each npm attempt
+runs under `timeout` (60 s, `PNPM_SETUP_ATTEMPT_SECONDS`) with a
 forced kill 10 s later (`PNPM_SETUP_KILL_SECONDS`); the version check has its own 10 s limit
 (`PNPM_SETUP_VERSION_SECONDS`) with a 2 s kill, and a check that fails or is stopped fails the
 attempt even when it printed the right version. Three attempts, then the step fails. The initial
@@ -2299,18 +2302,19 @@ output does not by itself mean npm is running. Cleanup still runs outside these 
 [42037652276](https://github.com/clintongormley/waitron/actions/runs/42037652276) had 81 completed
 pnpm-setup steps: median 2 s, with successful steps lasting 10, 12 and 17 s. These are whole-step
 times, including installation and version checking, not measurements of the initial read alone.
-After A1338, run [42051923779](https://github.com/clintongormley/waitron/actions/runs/42051923779)
+After A1338, attempt 1 of run [42051923779](https://github.com/clintongormley/waitron/actions/runs/42051923779)
 logged `packageManager read: end status=124 elapsed=10s` in jobs `127331413062`, `127331413369`
 and `127331413397`, before any installer attempt or test. Another setup step passed in 12 s.
 A slow first Node start is a hypothesis; those logs establish the timed-out operation, not why
-Node waited. The slow-Node stub reproduces the resulting setup refusal.
+Node waited. With the former Node reader, the slow-Node stub reproduced the refusal.
 
 **2026-11-05, A1339:** the initial read uses `sed` rather than starting Node before the workflow
 sets Node up. The slow-Node regression case must still install the manifest's version on its first
 attempt and publish its bin directory; the read-timeout cases use a slow reader stub and retain
 their refusal and forced-kill checks. The read, install and version phases keep their separate
-limits and progress reports. This removes the initial Node dependency; it does not explain the
-two earlier five-minute silent stalls.
+limits and progress reports. npm still starts Node inside its install attempt, which has the
+longer 60 s allowance and can retry. Removing the initial Node dependency does not explain the
+two earlier silent stalls.
 
 **2026-11-05, A1338 (the Node reader was replaced by A1339):** run [42034714487](https://github.com/clintongormley/waitron/actions/runs/42034714487),
 job `127269970638`, logged the setup invocation at `13:25:05Z` and the step timeout at

@@ -439,7 +439,6 @@ describe("ci-setup-pnpm.sh", () => {
   });
 
   it("stops before calling npm when no timeout command is on PATH", () => {
-    // Only what the script runs before its timeout lookup, so no timeout command is reachable.
     const tools = temporaryDirectory("ci-setup-pnpm-tools-");
     symlinkSync(process.execPath, join(tools, "node"));
     const dirname = spawnSync("sh", ["-c", "command -v dirname"], { encoding: "utf8" });
@@ -454,7 +453,7 @@ describe("ci-setup-pnpm.sh", () => {
     );
     expect(probe.status, "the PATH must really hide every timeout command").not.toBe(0);
     const node = spawnSync(BASH, ["-c", "node -p 1"], { encoding: "utf8", env: { PATH: path } });
-    expect(node.stdout, "node must still run, or the script stops before the lookup").toBe("1\n");
+    expect(node.stdout, "the fixture's Node shim must remain usable").toBe("1\n");
     const result = run("ok", { PATH: path });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("none of gnutimeout, gtimeout or timeout is on PATH");

@@ -6271,6 +6271,11 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **Retain failure screenshots for long browser test names.**
   [Detail](backlog/ci.md#retain-failure-screenshots-for-long-browser-test-names).
 
+- **Qualify smaller job-API pages for CI reruns.**
+  The summary can time out on repeated HTTP 502 responses while the jobs themselves have finished.
+  Keep complete enumeration and the current head, attempt and result checks.
+  [Detail](backlog/ci.md#qualify-smaller-job-api-pages-for-ci-reruns).
+
 - **Explain the two older silent pnpm setup stalls.**
   Both lacked command progress reports; replacing the initial Node read does not establish their cause.
   [Detail](backlog/ci.md#explain-the-two-older-silent-pnpm-setup-stalls).
