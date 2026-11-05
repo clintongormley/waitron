@@ -1777,6 +1777,58 @@ test("does not ask a guarded dialog on a page-body Escape that ends a text compo
   expect(decide).toHaveBeenCalledExactlyOnceWith("escape");
 });
 
+/** The keydown listeners added to the document from now on and not yet removed. */
+function documentKeydownListeners(): Set<unknown> {
+  const live = new Set<unknown>();
+  const add = vi.spyOn(document, "addEventListener");
+  const remove = vi.spyOn(document, "removeEventListener");
+  onTestFinished(() => {
+    add.mockRestore();
+    remove.mockRestore();
+  });
+  add.mockImplementation(function (
+    this: Document,
+    ...args: Parameters<Document["addEventListener"]>
+  ) {
+    if (args[0] === "keydown") live.add(args[1]);
+    EventTarget.prototype.addEventListener.apply(this, args);
+  });
+  remove.mockImplementation(function (
+    this: Document,
+    ...args: Parameters<Document["removeEventListener"]>
+  ) {
+    if (args[0] === "keydown") live.delete(args[1]);
+    EventTarget.prototype.removeEventListener.apply(this, args);
+  });
+  return live;
+}
+
+test("listens on the document for a page-body Escape only while a dialog is open", async () => {
+  const listening = documentKeydownListeners();
+  const first = (await mount(
+    '<wt-dialog heading="First">One</wt-dialog><wt-dialog heading="Second">Two</wt-dialog>',
+  )) as WtDialog;
+  const second = host.querySelectorAll("wt-dialog")[1]!;
+  await second.updateComplete;
+  expect(listening.size).toBe(0);
+  first.open = true;
+  await first.updateComplete;
+  expect(listening.size).toBe(1);
+  second.open = true;
+  await second.updateComplete;
+  expect(listening.size).toBe(1);
+  first.open = false;
+  await first.updateComplete;
+  expect(listening.size).toBe(1);
+  second.remove();
+  expect(listening.size).toBe(0);
+  host.append(second);
+  expect(listening.size).toBe(1);
+  second.open = false;
+  await second.updateComplete;
+  expect(listening.size).toBe(0);
+});
+
 test("scrolls a body row's new message only just into view", async () => {
   const { el, body } = await openAtPhoneSize(
     '<input name="note" /><div style="height: 1800px">Lines</div><wt-form-actions><button>Check</button></wt-form-actions><div style="height: 1800px">More lines</div>',

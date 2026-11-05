@@ -146,8 +146,20 @@ export class WtDialog extends LitElement {
   private static readonly openDialogs = new Set<WtDialog>();
   private static openings = 0;
 
-  static {
-    document.addEventListener("keydown", (event) => WtDialog.escapeFromPageBody(event));
+  private static readonly onDocumentKeydown = (event: KeyboardEvent): void =>
+    WtDialog.escapeFromPageBody(event);
+
+  /** The document is listened to only while a dialog is open, never on import: the package is
+   * also loaded where there is no document. */
+  private static track(dialog: WtDialog): void {
+    if (WtDialog.openDialogs.size === 0)
+      document.addEventListener("keydown", WtDialog.onDocumentKeydown);
+    WtDialog.openDialogs.add(dialog);
+  }
+
+  private static untrack(dialog: WtDialog): void {
+    if (WtDialog.openDialogs.delete(dialog) && WtDialog.openDialogs.size === 0)
+      document.removeEventListener("keydown", WtDialog.onDocumentKeydown);
   }
 
   /** A focused control that is disabled drops focus to the page body, outside every dialog.
@@ -255,7 +267,7 @@ export class WtDialog extends LitElement {
   }
 
   override disconnectedCallback(): void {
-    WtDialog.openDialogs.delete(this);
+    WtDialog.untrack(this);
     this.bodyResize.disconnect();
     this.messageResize.disconnect();
     this.observedMessage = null;
@@ -340,13 +352,13 @@ export class WtDialog extends LitElement {
         this.returnTarget = focused === document.body ? null : focused;
         this.openedAt = ++WtDialog.openings;
         this.showModalWithOpeningFocus();
-        WtDialog.openDialogs.add(this);
+        WtDialog.track(this);
         this.watchContent();
       }
       // Also when the browser has already closed the dialog itself, as on Escape.
       if (!this.open) {
         this.unwatchContent();
-        WtDialog.openDialogs.delete(this);
+        WtDialog.untrack(this);
         this.lastFocused = null;
       }
       if (!this.open && this.dialog.open) {
@@ -383,7 +395,7 @@ export class WtDialog extends LitElement {
    * over it, in order. */
   private returnToOpeningOrder(): void {
     if (!this.dialog.open) return;
-    WtDialog.openDialogs.add(this);
+    WtDialog.track(this);
     if (this.dialog.matches(":modal")) return;
     const above = [...WtDialog.openDialogs]
       .filter((other) => other.openedAt > this.openedAt)
