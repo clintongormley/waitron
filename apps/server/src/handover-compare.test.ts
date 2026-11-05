@@ -89,6 +89,7 @@ import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 import { START_FREE_SPACE_FLOOR } from "./start-space.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
+import { stopShortOfAccepting } from "./testing/stop-short-of-accepting.js";
 
 const integrityThreads = vi.hoisted(() => ({ paths: [] as string[] }));
 vi.mock("node:worker_threads", async (importOriginal) => {
@@ -1504,12 +1505,11 @@ describe("the spare's duty runs the real comparison", () => {
       return duty;
     };
     /** As boot starts it, past accepting. The plain `start` stops short, for the checks before it. */
-    const startAccepting = (overrides: Partial<DestinationDutyDeps> = {}) =>
-      start({ ...overrides, accept: undefined });
+    const startAccepting = start;
     const m1Row = async () => (await readHandoverOperation(suite.node, r.m1.nodeId, OP))!;
     const copyReads = () => requests.filter((line) => line.endsWith("/final-copy")).length;
     const stopped = (overrides: Partial<DestinationDutyDeps>) =>
-      start({ accept: null, ...overrides });
+      start({ ...stopShortOfAccepting(), ...overrides });
     /** What M1 owes for `acceptanceText`, with `change` made and signed as M1, unless `by` says. */
     const relinquishment = (
       acceptanceText: string,

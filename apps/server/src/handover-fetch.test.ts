@@ -60,6 +60,7 @@ import type { Logger } from "./logger.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
+import { stopShortOfAccepting } from "./testing/stop-short-of-accepting.js";
 import { boxDownload } from "./mirror-bundle-fetch.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
@@ -237,10 +238,14 @@ async function rig({ mode = "mirror" as "mirror" | "primary" } = {}) {
     log,
     restart: () => {},
     tickMs: TICK_MS,
-    accept: null,
+    compare: async () => ({ ok: true }),
   };
   async function start(overrides: Partial<DestinationDutyDeps> = {}) {
-    const duty = await startHandoverDestinationDuty({ ...deps, ...overrides });
+    const duty = await startHandoverDestinationDuty({
+      ...deps,
+      ...stopShortOfAccepting(),
+      ...overrides,
+    });
     if (duty !== undefined) closers.push(() => duty.stop());
     return duty;
   }
@@ -1148,7 +1153,7 @@ describe("a stop or a changed row while a request is out", () => {
     await r.stepDownM1();
     await r.listen(r.m1App({ restricted: true }));
     let release = () => {};
-    const compare = vi.fn<NonNullable<DestinationDutyDeps["compare"]>>(
+    const compare = vi.fn<DestinationDutyDeps["compare"]>(
       (_operation, _indicator, _path, { signal }) =>
         new Promise((_resolve, reject) => {
           release = () => reject(new Error("released"));

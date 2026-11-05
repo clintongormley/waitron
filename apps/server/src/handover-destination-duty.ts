@@ -103,18 +103,15 @@ export interface DestinationDutyDeps {
    * `compareRetryMs`, except a refusal in `REFUSALS_FETCHED_AGAIN`. `options.found` belongs to that
    * one file.
    */
-  compare?: (
+  compare: (
     operation: HandoverOperation,
     indicator: unknown,
     copyPath: string,
     options: CompareOptions,
   ) => Promise<CompareOutcome>;
   compareRetryMs?: number;
-  /**
-   * Told of a file a compare passed. `acceptFinalCopy` unless named; `null` holds the file and goes
-   * no further, for a test of a step before this one.
-   */
-  accept?: typeof acceptFinalCopy | null;
+  /** Told of a file a compare passed. `acceptFinalCopy` unless named. */
+  accept?: typeof acceptFinalCopy;
   acceptanceLimitMs?: number;
   /** A clock that only runs forward, for the limit on comparing again. */
   monotonicNow?: () => number;
@@ -164,7 +161,6 @@ interface HeldCopy {
   operationId: string;
   indicator: unknown;
   path: string;
-  compared: boolean;
   compareDueAt: number;
   found: CopyFileChecks;
 }
@@ -224,7 +220,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
   const tickMs = deps.tickMs ?? TICK_MS;
   const download = deps.download ?? boxDownload;
   const compareRetryMs = deps.compareRetryMs ?? COMPARE_RETRY_MS;
-  const accept = deps.accept === undefined ? acceptFinalCopy : deps.accept;
+  const accept = deps.accept ?? acceptFinalCopy;
   const monotonicNow = deps.monotonicNow ?? (() => performance.now());
   let woken = false;
   let rouse: () => void = () => {};
@@ -380,7 +376,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     // The download can outlast the operation, the box's being a mirror, or this duty.
     const current = await stillWorkingOn(operation);
     if (current === null) return discard();
-    held = { operationId, indicator, path, compared: false, compareDueAt: 0, found: {} };
+    held = { operationId, indicator, path, compareDueAt: 0, found: {} };
     if (current.waitingReason !== null) await waitHandover(deps, operationId, null);
     // Another writer may have closed the operation while the reason was being cleared.
     const cleared = await stillWorkingOn(operation);
@@ -389,13 +385,13 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
   }
 
   async function compareHeld(copy: HeldCopy, operation: HandoverOperation): Promise<void> {
-    if (copy.compared || monotonicNow() < copy.compareDueAt) return;
+    if (monotonicNow() < copy.compareDueAt) return;
     copy.compareDueAt = monotonicNow() + compareRetryMs;
-    const outcome = await deps.compare?.(operation, copy.indicator, copy.path, {
+    const outcome = await deps.compare(operation, copy.indicator, copy.path, {
       found: copy.found,
       signal,
     });
-    if (outcome !== undefined && !outcome.ok) {
+    if (!outcome.ok) {
       if (REFUSALS_FETCHED_AGAIN.has(outcome.reason)) {
         held = undefined;
         await discardCopy(copy.path);
@@ -403,16 +399,9 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       return waitOn(operation, outcome.reason, { detail: outcome.detail });
     }
     const current = await stillWorkingOn(operation);
-    if (outcome !== undefined && accept !== null) {
-      if (current === null) return;
-      await accept(deps, current, copy.indicator, copy.path);
-      held = undefined;
-      return;
-    }
-    copy.compared = true;
-    if (current !== null && current.waitingReason !== null) {
-      await waitHandover(deps, operation.operationId, null);
-    }
+    if (current === null) return;
+    await accept(deps, current, copy.indicator, copy.path);
+    held = undefined;
   }
 
   /**
