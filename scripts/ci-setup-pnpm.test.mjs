@@ -15,8 +15,6 @@ import { join } from "node:path";
 import { clearTimeout, setTimeout } from "node:timers";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
-// PATH stubs keep network installs and deliberately slow Node reads out of the real environment.
-
 const root = join(import.meta.dirname, "..");
 const script = join(import.meta.dirname, "ci-setup-pnpm.sh");
 const VERSION = /^pnpm@(\d+\.\d+\.\d+)/.exec(
@@ -88,7 +86,8 @@ chmodSync(join(STUB_BIN, "npm"), 0o755);
 writeFileSync(
   join(STUB_BIN, "node"),
   `#!/bin/sh
-case "$STUB_NODE_MODE" in
+if [ -n "$STUB_STATE" ]; then printf '%s\\n' "$*" >> "$STUB_STATE/node.args"; fi
+case "\${STUB_READ_MODE:-$STUB_NODE_MODE}" in
   slow) sleep 2 ;;
   ignore-term) trap '' TERM; sleep 6 ;;
 esac
@@ -96,6 +95,19 @@ exec "${process.execPath}" "$@"
 `,
 );
 chmodSync(join(STUB_BIN, "node"), 0o755);
+
+const realSed = spawnSync("sh", ["-c", "command -v sed"], { encoding: "utf8" }).stdout.trim();
+writeFileSync(
+  join(STUB_BIN, "sed"),
+  `#!/bin/sh
+case "$STUB_READ_MODE" in
+  slow) sleep 2 ;;
+  ignore-term) trap '' TERM; sleep 6 ;;
+esac
+exec "${realSed}" "$@"
+`,
+);
+chmodSync(join(STUB_BIN, "sed"), 0o755);
 
 const BASH = spawnSync("bash", ["-c", "command -v bash"], { encoding: "utf8" }).stdout.trim();
 
@@ -130,6 +142,7 @@ function run(mode, env = {}, scriptPath = script) {
     runnerTemp,
     githubPath: read("github-path"),
     npmArgs: read("npm.args"),
+    nodeArgs: read("node.args"),
     gnutimeoutCalls: read("gnutimeout.calls"),
   };
 }
@@ -188,8 +201,18 @@ async function observeInstallStart() {
 }
 
 describe("ci-setup-pnpm.sh", () => {
-  it("bounds a silent packageManager read before an install attempt can start", () => {
+  it("installs without waiting for a slow Node executable to read packageManager", () => {
     const result = run("ok", { STUB_NODE_MODE: "slow", PNPM_SETUP_READ_SECONDS: "1" });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.npmArgs).toContain(`pnpm@${VERSION}`);
+    expect(result.stdout).toContain(`pnpm ${VERSION} installed on attempt 1 of 3`);
+    expect(result.githubPath).toBe(`${join(result.runnerTemp, "pnpm-setup", "bin")}\n`);
+    expect(result.nodeArgs).toBe("");
+  });
+
+  it("bounds a silent packageManager read before an install attempt can start", () => {
+    const result = run("ok", { STUB_READ_MODE: "slow", PNPM_SETUP_READ_SECONDS: "1" });
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(1);
     expect(result.stderr).toContain("packageManager read: start");
@@ -200,7 +223,7 @@ describe("ci-setup-pnpm.sh", () => {
   });
 
   it("forces a silent read to stop when it ignores the polite timeout signal", () => {
-    const result = run("ok", { STUB_NODE_MODE: "ignore-term", PNPM_SETUP_READ_SECONDS: "1" });
+    const result = run("ok", { STUB_READ_MODE: "ignore-term", PNPM_SETUP_READ_SECONDS: "1" });
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(1);
     expect(result.stderr).toMatch(/packageManager read: end status=137 elapsed=[0-9]+s/);
@@ -210,7 +233,7 @@ describe("ci-setup-pnpm.sh", () => {
   });
 
   it("allows a slow packageManager read to finish inside its own allowance", () => {
-    const result = run("ok", { STUB_NODE_MODE: "slow", PNPM_SETUP_READ_SECONDS: "10" });
+    const result = run("ok", { STUB_READ_MODE: "slow", PNPM_SETUP_READ_SECONDS: "10" });
     expect(result.status, result.stderr).toBe(0);
     expect(result.stderr).toContain("packageManager read: end status=0");
     expect(result.githubPath).toBe(`${join(result.runnerTemp, "pnpm-setup", "bin")}\n`);
@@ -416,7 +439,6 @@ describe("ci-setup-pnpm.sh", () => {
   });
 
   it("stops before calling npm when no timeout command is on PATH", () => {
-    // Only what the script runs before its timeout lookup, so no timeout command is reachable.
     const tools = temporaryDirectory("ci-setup-pnpm-tools-");
     symlinkSync(process.execPath, join(tools, "node"));
     const dirname = spawnSync("sh", ["-c", "command -v dirname"], { encoding: "utf8" });
@@ -431,7 +453,7 @@ describe("ci-setup-pnpm.sh", () => {
     );
     expect(probe.status, "the PATH must really hide every timeout command").not.toBe(0);
     const node = spawnSync(BASH, ["-c", "node -p 1"], { encoding: "utf8", env: { PATH: path } });
-    expect(node.stdout, "node must still run, or the script stops before the lookup").toBe("1\n");
+    expect(node.stdout, "the fixture's Node shim must remain usable").toBe("1\n");
     const result = run("ok", { PATH: path });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("none of gnutimeout, gtimeout or timeout is on PATH");
@@ -449,4 +471,35 @@ describe("ci-setup-pnpm.sh", () => {
     expect(result.stderr).toContain("packageManager");
     expect(result.npmArgs).toBe("");
   });
+
+  it.each([
+    ['{"packageManager":"pnpm@8.1.2"}', "8.1.2"],
+    ['{\n  "packageManager": "pnpm@8.2.3+sha512.abc"\n}\n', "8.2.3"],
+  ])("installs the exact version from manifest %s", (manifest, version) => {
+    const copy = temporaryDirectory("ci-setup-pnpm-manifest-");
+    mkdirSync(join(copy, "scripts"));
+    copyFileSync(script, join(copy, "scripts", "ci-setup-pnpm.sh"));
+    writeFileSync(join(copy, "package.json"), manifest);
+    const result = run("ok", {}, join(copy, "scripts", "ci-setup-pnpm.sh"));
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.npmArgs).toContain(`pnpm@${version}`);
+    expect(result.stdout).toContain(`pnpm ${version} installed on attempt 1 of 3`);
+    expect(result.githubPath).toBe(`${join(result.runnerTemp, "pnpm-setup", "bin")}\n`);
+    expect(result.nodeArgs).toBe("");
+  });
+
+  it.each([undefined, null, 12, "npm@9.15.0"])(
+    "refuses missing or non-pnpm packageManager %s before installation",
+    (packageManager) => {
+      const copy = temporaryDirectory("ci-setup-pnpm-invalid-manifest-");
+      mkdirSync(join(copy, "scripts"));
+      copyFileSync(script, join(copy, "scripts", "ci-setup-pnpm.sh"));
+      writeFileSync(join(copy, "package.json"), JSON.stringify({ packageManager }));
+      const result = run("ok", {}, join(copy, "scripts", "ci-setup-pnpm.sh"));
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("package.json packageManager must be pnpm@");
+      expect(result.npmArgs).toBe("");
+      expect(result.githubPath).toBe("");
+    },
+  );
 });

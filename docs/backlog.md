@@ -6271,9 +6271,14 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **Retain failure screenshots for long browser test names.**
   [Detail](backlog/ci.md#retain-failure-screenshots-for-long-browser-test-names).
 
-- **Diagnose the next pnpm setup stall from its named command.**
-  Keep the two earlier silent stalls unverified; use the new phase/status/timing reports on recurrence.
-  [Detail](backlog/ci.md#diagnose-the-next-pnpm-setup-stall-from-its-named-command).
+- **Qualify smaller job-API pages for CI reruns.**
+  The summary can time out on repeated HTTP 502 responses while the jobs themselves have finished.
+  Keep complete enumeration and the current head, attempt and result checks.
+  [Detail](backlog/ci.md#qualify-smaller-job-api-pages-for-ci-reruns).
+
+- **Explain the two older silent pnpm setup stalls.**
+  Both lacked command progress reports; replacing the initial Node read does not establish their cause.
+  [Detail](backlog/ci.md#explain-the-two-older-silent-pnpm-setup-stalls).
 
 - **Root guard deadlines under extreme external load (left open by A751).**
   [Detail](backlog/ci.md#at-a-load-average-near-60-more-root-guard-files-fail-on-time).
