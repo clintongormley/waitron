@@ -679,7 +679,10 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   `#prepareRelocation("move", table, …)` with `actionVerb = "move"`, then the `move-guests` event
   (`till-table-order-screen.ts:4810-4849`). It moves the party off **all** its tables to the leaving
   table and keeps the party's guest count, so the steppers' values are not used; the question names the
-  tables that would be left. Split anyway sends the split with the counts. Changing a tick returns to
+  tables that would be left. Split anyway sends the split with the counts, and is disabled while a count is
+  marked invalid; Move guests is not, as it uses neither count. The question and its note are announced
+  (`role="alert"`), since focus goes to Move guests. A read that takes the question away while focus is on
+  one of its buttons moves focus to Split. Changing a tick returns to
   the action row, and so does a read that holds a selected bill (D21), so neither Split nor Split anyway can
   go past it.
 
@@ -691,12 +694,21 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   screen. 4a closes its panel for good on a refusal; here a split is many ticks, so they are not thrown
   away (master plan: "retain a losing editor's local unsaved work"; root `CLAUDE.md` §3).
 
+  **A refusal never replaces other work** (ruled at Task 11c's review, finding I1). The panel closes the
+  moment Split is pressed and the refusal comes back later, so by then the waiter may have opened something
+  else. If another step holds unsaved work (Move dishes with a pick or a destination, a second Split panel
+  with a tick or a count, on any of the party's tables), or a leave question is open anywhere in the till, the panel
+  does not reopen: that step and its question stay exactly as they are, nothing is lost, and the refusal goes
+  on the banner. The refused split's ticks are not kept; the banner says what happened and the waiter
+  presses Split again when ready. With no step open, or an open step holding nothing unsaved, the panel
+  reopens as above.
+
   **Where the sentence goes** (Forms contract, `design-system.md:2653-2672`). The panel is a form: it has
   two fields. A refusal naming a count goes under that stepper, with `form.fix_fields` at the bottom. Any
   other refusal is one sentence at the bottom, above the buttons, on its own line and announced, until
   Split is pressed again, and never disables Split by itself. The till's `errorKey` banner is used only when
-  there is no panel to reopen: the party no longer holds the table, holds only that table, or the waiter has
-  left. So `table.not_shared` reads on the banner when the party really has one table, and at the panel's foot
+  there is no panel to reopen: the party no longer holds the table, holds only that table, the waiter has
+  left, or the waiter has other work open (above). So `table.not_shared` reads on the banner when the party really has one table, and at the panel's foot
   when the till still shows two. A `split-table` with no `prompt` that finds no edit state composes at Send and
   says so on the banner as today (D20): it never came from a panel.
 
@@ -707,6 +719,17 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   other caller keeps it as it is. `#onPartyOutOfDate` gains a last parameter, `say`, defaulting to assigning
   `errorKey`. The label of any bill the sentence names is read **before** the re-read, because the bill may
   have left the list by then.
+
+  **The screen says when it declined.** Only the screen knows whether a step holds unsaved work, so the app
+  still sets `splitRefusal` and the screen answers. When it does not reopen for that reason it dispatches
+  `split-refusal-declined`, with `SplitRefusalDeclinedDetail` (`{ refusal }`, the same object it was handed):
+  from `updated`, once, and if the screen is out of the page, once it is put back. It is silent when it
+  reopens, and for a refusal the party or table rules above already stop, which the app has
+  sent to the banner itself. So the app keeps `said` beside the refusal it hands over, and on the event, if
+  `refusal === this.splitRefusal`, sets `splitRefusal = null` and `errorKey = said`. It assigns `said` and not
+  `message`, because `message` was composed for the panel's colours. For a refusal naming a count `said` is
+  `seat.guest_count_invalid`; for the rows whose reopened panel shows D21's state instead of a sentence it is
+  `table.split_changed`, naming the bill.
 
   `errorText` answers a string or a template (`till-app.ts:1478`), and `wt-form-actions`'s `error` is declared
   a string, so the screen draws `<p class="form-message" role="alert" data-split-refusal>` directly above its
@@ -1356,7 +1379,7 @@ The old `split-table-bill` step stays what a waiter sees: **a new step `split-ta
 - [ ] **Failing tests**, `.split-table.test.ts`:
   - Re-reads: a picked dish paid elsewhere drops, with `Paid` (what the next press does is Task 11d); a party switch or the table leaving closes the panel, sending nothing.
   - What the app observes (D20): `split-table-observe` with the prompt and the sorted ids fires on a bill ticked, a dish picked off a bill, a bill unticked, `#tidySplit` dropping a tick, and a refusal reopening the panel. It does not fire on a count change, or when the panel closes on send.
-  - Reopening (D16): `splitRefusal` with a `field` reopens with what was sent and the same prompt, the message under that stepper, `form.fix_fields` at the bottom, Split enabled; without a `field` reopens with the ticks, no field marked, the message in `[data-split-refusal]` with `role="alert"`, before `wt-form-actions` in document order, Split enabled, gone when Split is pressed again; a template message draws its button; a refusal for a table no longer held, or for a party left on one table, does not reopen; a reopened panel counts as changed; focus after Split and after Back to the ⋮.
+  - Reopening (D16): `splitRefusal` with a `field` reopens with what was sent and the same prompt, the message under that stepper, `form.fix_fields` at the bottom, Split enabled; without a `field` reopens with the ticks, no field marked, the message in `[data-split-refusal]` with `role="alert"`, before `wt-form-actions` in document order, Split enabled, gone when Split is pressed again; a template message draws its button; a refusal for a table no longer held, or for a party left on one table, does not reopen; a reopened panel counts as changed; focus after Split and after Back to the ⋮. A refusal arriving while another step holds unsaved work, or while a leave question is open, leaves them as they are and dispatches `split-refusal-declined`; with an untouched step or none it reopens and dispatches nothing (`.actions-unsaved.test.ts`, `.split-table.unsaved.test.ts`).
   - Refund for a bill not on screen (D16): pressing `[data-refund-excess]` with another bill's id asks; Keep leaves the ticks and dispatches nothing past the screen; Discard closes the panel and lets `refund-excess` through. For the bill on screen it asks nothing and lets it through.
   - Everything ticked (D15): Split swaps to the question with both tables named; Move guests sends `table-relocation-open` then `move-guests` with the leaving table; Split anyway sends the split; a tick change returns to Split; Back returns to Split, not out; the note's table names plural when two stay; with only a paid bill staying the note is `table.split_anyway_note_paid`.
 - [ ] **RED.** `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.split-table.test.ts -t 're-read|observe|reopen|Refund|Everything'`.
@@ -1451,10 +1474,12 @@ This is D21 on the screen. The app's half, through a real read, is Task 12f.
   - **Refund, bill on screen:** `bill.received_exceeds_total` shows "Refund {amount}" in the bottom message; pressing opens the Refund dialog on that bill.
   - **Refund, bill not on screen:** with the refusal's `workingOrderId` naming Bill 2 and Bill 1 on screen, pressing Refund and answering Discard switches to Bill 2, and the dialog offers Bill 2's payment, pre-filled; answering Keep switches nothing and opens nothing, and the ticks stay.
   - An excess refusal from Move dishes, with no `billId`, behaves as today.
-- [ ] **RED.** `pnpm --filter @waitron/till exec vitest run src/till-app-split-table.test.ts -t 'refus|lost reply|Refund|read is out|recovery link|Two tables'`.
-- [ ] **Implement.** D16's other rows. The app says nothing until the row's reads are done: the money row calls `billWriteError` and `#loadPartyBills` itself; `#onPartyOutOfDate` gains `say`. `errorText` gains `surface`. A named refusal uses `#refusedDestination`'s rule, generalised to any bill of the selection. `CounterError`'s `excess` gains `billId` and `bill`; `refund-excess` carries `billId`; `#onRefundExcess` switches first where needed and refuses to open anything but that bill.
+  - **A refusal while other work is open, through the real app (D16, finding I1 of Task 11c's review):** Move dishes open with a dish picked when a no-field refusal comes back, its read held: no banner while the read is out; released: Move dishes still open, the pick there, no panel, no `[data-split-refusal]`, `splitRefusal` null, and the sentence on the banner. The same with Move dishes' leave question open, which stays open. The same with a second Split panel holding a tick on the other table. A refusal naming a count: `seat.guest_count_invalid` on the banner. `draft.taken_over`, whose reopened panel would show D21's state: `table.split_changed` naming the bill on the banner. A refusal carrying `recoveryUrl`: the banner's link, naming `--wt-color-on-danger`. An untouched open step: the panel reopens, `banner` null. A declined refusal whose `refusal` is no longer `splitRefusal`, because Split was pressed again: says nothing.
+  - **A failed re-read after a refusal:** a refusal whose sources read fails reopens with the last rows and Split enabled (D14, D21). The screen alone draws no rows in that case (Task 11c's review, finding M8), because closing the panel clears its last answer: this holds only if the app keeps handing the last answered read rather than `"failed"`, so this case pins that.
+- [ ] **RED.** `pnpm --filter @waitron/till exec vitest run src/till-app-split-table.test.ts -t 'refus|lost reply|Refund|read is out|recovery link|Two tables|other work|failed re-read'`.
+- [ ] **Implement.** `@split-refusal-declined` beside `@split-table` in the shared listeners, with `said` kept beside `splitRefusal` (D16, "The screen says when it declined"). D16's other rows. The app says nothing until the row's reads are done: the money row calls `billWriteError` and `#loadPartyBills` itself; `#onPartyOutOfDate` gains `say`. `errorText` gains `surface`. A named refusal uses `#refusedDestination`'s rule, generalised to any bill of the selection. `CounterError`'s `excess` gains `billId` and `bill`; `refund-excess` carries `billId`; `#onRefundExcess` switches first where needed and refuses to open anything but that bill.
 - [ ] **GREEN.** The file; `.split-table.test.ts`; `src/till-app-parties.test.ts`; `src/till-app-table-service.test.ts`.
-- [ ] **Deletion controls.** Bill name in front removed → its case red. Reopen removed → reopen case red. `billId` dropped from the `refund-excess` event → the not-on-screen case red, naming the on-screen bill's payment. `errorKey` not cleared on reopen → the "no banner" assertion red. The table-gone check after a lost reply removed → the first lost-reply case red, showing `table.error` for a split that went through. `surface` ignored → the recovery link case red, naming `--wt-color-on-danger`. The money row going through `#onBillMoneyRefusal` → the no-banner-while-a-read-is-out case red. `party.tableIds.length > 1` removed from the reopen check → `till-app-parties.test.ts:2540` red at Task 14a; before then, this task's one-table recovery case red.
+- [ ] **Deletion controls.** Bill name in front removed → its case red. Reopen removed → reopen case red. `billId` dropped from the `refund-excess` event → the not-on-screen case red, naming the on-screen bill's payment. `errorKey` not cleared on reopen → the "no banner" assertion red. The table-gone check after a lost reply removed → the first lost-reply case red, showing `table.error` for a split that went through. `surface` ignored → the recovery link case red, naming `--wt-color-on-danger`. The money row going through `#onBillMoneyRefusal` → the no-banner-while-a-read-is-out case red. `party.tableIds.length > 1` removed from the reopen check → `till-app-parties.test.ts:2540` red at Task 14a; before then, this task's one-table recovery case red. The `@split-refusal-declined` listener removed → the other-work cases red, the banner empty. `message` assigned in place of `said` → the other-work recovery case red. The `refusal === this.splitRefusal` check removed → the pressed-again case red.
 - [ ] **Commit.** `git commit -s -m "A803 4c: Split a table's refusals say what happened at the foot of the panel and keep the picks"`.
 
 ## Task 12e: take-over rows (about 40 calls)
