@@ -525,7 +525,7 @@ Changing from B to A later removes one call in `splitTable` and changes those th
       bill's party. A table that joined in the same millisecond counts as held, since the clock cannot say
       which came first; the cost is a missed slip, only for a join in the same millisecond as the send. A table
       that left in the same millisecond a paper was written counts as gone from that paper, because a floor pass
-      writes its slip in the same millisecond as the leave and that slip sends the dish on from that table
+      can write its slip in the same millisecond as the leave and that slip sends the dish on from that table
       (`De: Mesa 209`, `A: Mesa 210`). The cost, read and not run, is an extra slip, since a paper with fewer
       names can only tell a dish more often. Times
       are compared as instants (`Date.parse`), not as text, so no spelling rule is leaned on.
@@ -549,7 +549,7 @@ Changing from B to A later removes one call in `splitTable` and changes those th
       A review ran it.
     - **A combined party's dish whose table did not change:** any table on the list leaving prints a slip
       though the paper's table stays: a table that joined after the paper printed, or either table when
-      the ticket named both. Extra slips, the price of no missed slip in those histories, and a departure
+      the ticket named both. Extra slips, the price of no missed slip for a combined party's paper in 3,000 random histories built to combine often, none of them with named groups, today's merges or held dishes, and a departure
       from "only" in Question 3's rule, as the reprint is. Ran: the three "an accepted extra slip: …" cases.
       The count in the random histories is in R15.
     - **The same when the table leaves a named group whose name stays,** though the paper may have printed
@@ -560,7 +560,7 @@ Changing from B to A later removes one call in `splitTable` and changes those th
       a dish can be told again on every split that follows a combine. Ran at this rule: Mesa 803 + 804, send,
       then five times 803 splits off and its new party takes 804 back: none, then four slips, each
       `De: Mesa 803, 804 / A:  Mesa 804`, though 804 was on the paper throughout. With no combine between
-      splits, five tables split in turn printed one slip, then none. The cost is paper, so it stays.
+      splits, four tables of five split off in turn printed one slip, then none. The cost is paper, so it stays.
     - **Told again after a clock step back past a combine:** a later slip's time falls before the closing, so
       each listed table leaving tells the dish again. Ran at this rule as a stand-in, `closed_at` rewritten an
       hour ahead rather than a clock set: four listed tables leaving printed `[1, 1, 1, 1]`.
@@ -1576,8 +1576,8 @@ Waits for Question 2. Built on its default; the PR cannot land until it is answe
 - [ ] Dated one-line pointers, never rewrites: spec §3.7 "Bill numbers"; `2026-11-01-a803-4-portion-picker.md` Cut 4c: "built from `2026-11-04-a803-4c-split-table-picker.md`, whose findings correct this outline"; `2026-10-14-a650-moved-slips-design.md` §0 ruling 1 and its rows 8, 9 and 18: the same sentence as above.
 - [ ] **Record pass.** Append "## Build record (4c)" to this plan: what was built versus planned, departures with reasons, line numbers that moved, the control table.
 - [ ] PR body in plain English: what the waiter and the kitchen see; no venue reset, no schema change; "Changed test checks" (every row), "Moved till-app cases" and "Deleted checks"; "For the owner": Questions 1 and 2 hold landing until answered, and the lane lands it after that; Question 3's default, naming the two rulings; and, in plain words, that the route now issues an invoice for a bill it leaves fully paid, by the function Move dishes calls, no fiscal function changed, and that **one split can issue more than one invoice in one transaction when loose picks finish several part-paid bills**, naming the two cases that pin it in `split-table.fiscal.test.ts`: "two loose sources left paid make two invoices, in bill-number order, the second chained on the first" and "a refusal at the second invoice leaves no sale and no record, and takes no number". Say also that the bill the old `billId` request names now gets a zone check too, where before only the party did. Say also that a bill someone else's order reaches stays ticked and holds Split (D21), naming Task 12f's title. Then `/finish-branch` with this plan named.
-  - "For the owner" also says: a dish of a combined party is told the first time any of that party's tables leaves, so a cook can get a slip for a dish whose table did not change, as the price of no missed slip in those histories.
-  - "For the owner" also says: a ticket naming one table is not told when that table leaves a group whose name stays, because nothing records when a group got its name; D6 already states it.
+  - "For the owner" also says: a dish of a combined party is told the first time any of that party's tables leaves, so a cook can get a slip for a dish whose table did not change, as the price of no missed slip for a combined party's paper in 3,000 random histories built to combine often, none of them with named groups, today's merges or held dishes.
+  - "For the owner" also says: an open party's dish whose ticket named one table is not told when that table leaves a group whose name stays, because the read goes by the shown name; D6 already states it.
 - [ ] Ledger `Status: in progress` until landed.
 
 ## Task list and sizes
