@@ -2160,6 +2160,11 @@ export class TillTableOrderScreen extends LitElement {
     // a switch, which keeps a refusal the app still holds from reopening its window.
     const partySwitched = changed.has("party") && changed.get("party")?.id !== this.party?.id;
     this.#followSplitPanel(changed.has("splitRefusal"), partySwitched);
+    if (
+      (changed as PropertyValues).get("actionStep") === "split-table-pick" &&
+      this.actionStep !== "split-table-pick"
+    )
+      this.#dispatch("split-table-leave", {});
     this.#watchServe();
     this.#watchActions();
     this.#followStoredGuests();

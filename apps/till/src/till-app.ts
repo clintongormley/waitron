@@ -16,7 +16,14 @@ import {
   type AllergyConfirmDetail,
   type AllergyFieldRefusal,
 } from "./widgets/party-allergy-dialog.js";
-import type { BillEditExpected, BillUnsent, LateSend, Tender } from "./api/client.js";
+import type {
+  BillEditExpected,
+  BillUnsent,
+  Draft as PartyDraft,
+  LateSend,
+  SplitSources,
+  Tender,
+} from "./api/client.js";
 import { billHasUnsent, billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import {
   endedPeriodOf,
@@ -449,6 +456,10 @@ type Drill = { kind: "table-order" | "ticket" | "paid" | TillDestination };
 
 /** A till draws no table buttons; one shared list, so the shell never sees a new one. */
 const NO_BAR_TABLES: readonly BarTable[] = Object.freeze([]);
+const NO_PARTY_DRAFTS: readonly PartyDraft[] = Object.freeze([]);
+
+const billsSeen = (bills: readonly PartyBill[]): string =>
+  JSON.stringify(bills.map((bill) => [bill.workingOrderId, bill.revision]));
 
 interface ReleasedBill {
   personId: string;
@@ -3168,6 +3179,8 @@ export class TillApp extends LitElement {
   @state() private revealOtherDrafts = 0;
   @state() private guestsRefusal: { value: string; message: string } | null = null;
   @state() private splitRefusal: SplitRefusal | null = null;
+  /** Null until a panel's first read answers; "failed" only while no read has answered. */
+  @state() private splitRead: SplitSources | "failed" | null = null;
   /** The line a change refused as started offers to cancel; the table screen opens its Cancel. */
   @state() private cancelOffer: number | null = null;
   @state() private editDeadEnds: {
@@ -4222,6 +4235,10 @@ export class TillApp extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
+    if (this.#splitPanel !== undefined && this.#splitPanel.partyId !== this.orderParty?.id) {
+      this.#leaveSplitRead();
+      this.splitRead = null;
+    }
     const paying = this.billPaying;
     if (
       paying?.refusal != null &&
@@ -11972,6 +11989,7 @@ export class TillApp extends LitElement {
       if (read === this.#partyBillsRead) {
         const before = this.partyBills;
         this.partyBills = bills;
+        this.#followSplitBills(party.id, bills);
         this.#syncDraftBillStatus();
         void this.#loadBillBalance(balance);
         if (follow) await this.#followBillsRead(answer, before);
@@ -15591,8 +15609,56 @@ export class TillApp extends LitElement {
   #onSplitTableOpen(event: Event): void {
     const { billId, prompt } = (event as CustomEvent<{ billId?: string | null; prompt: object }>)
       .detail;
-    if (billId === undefined) return;
+    if (billId === undefined) {
+      this.#openSplitRead(event);
+      return;
+    }
     this.#splitTablePrompts.set(prompt, this.#billComposition(billId === null ? [] : [billId]));
+  }
+
+  #splitPanel?: { partyId: string; billsSeen: string };
+  #splitReadGeneration = 0;
+  #splitReadAbort?: AbortController;
+
+  #openSplitRead(event: Event): void {
+    const party = this.orderParty;
+    this.#leaveSplitRead();
+    this.splitRead = null;
+    // The screen draws its new step before this app's next update reaches it, and what it draws
+    // from an earlier answer would stay on the panel.
+    (event.composedPath()[0] as TillTableOrderScreen).splitRead = null;
+    if (party === null) return;
+    this.#splitPanel = { partyId: party.id, billsSeen: billsSeen(this.partyBills) };
+    void this.#readSplitSources(party.id);
+  }
+
+  async #readSplitSources(partyId: string): Promise<void> {
+    this.#splitReadAbort?.abort();
+    const controller = (this.#splitReadAbort = new AbortController());
+    const generation = ++this.#splitReadGeneration;
+    try {
+      const read = await this.api.getSplitSources(partyId, { signal: controller.signal });
+      if (generation === this.#splitReadGeneration) this.splitRead = read;
+    } catch {
+      if (generation === this.#splitReadGeneration && this.splitRead === null)
+        this.splitRead = "failed";
+    }
+  }
+
+  #leaveSplitRead(): void {
+    this.#splitPanel = undefined;
+    this.#splitReadGeneration++;
+    this.#splitReadAbort?.abort();
+    this.#splitReadAbort = undefined;
+  }
+
+  #followSplitBills(partyId: string, bills: readonly PartyBill[]): void {
+    const panel = this.#splitPanel;
+    if (panel?.partyId !== partyId) return;
+    const seen = billsSeen(bills);
+    if (seen === panel.billsSeen) return;
+    panel.billsSeen = seen;
+    void this.#readSplitSources(partyId);
   }
 
   async #onSplitTable(event: Event): Promise<void> {
@@ -19142,6 +19208,9 @@ export class TillApp extends LitElement {
       .revealOtherDrafts=${this.revealOtherDrafts}
       .guestsRefusal=${this.guestsRefusal}
       .splitRefusal=${this.splitRefusal}
+      .splitRead=${this.splitRead}
+      .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
+      .personId=${this.#draftSync?.personId ?? ""}
       .busy=${this.submitting || this.invoiceRecipientReading}
       .groupCommandBusy=${this.groupCommandBusy}
       .handheld=${this.handheldMode}
@@ -19285,6 +19354,9 @@ export class TillApp extends LitElement {
           .revealOtherDrafts=${this.revealOtherDrafts}
           .guestsRefusal=${this.guestsRefusal}
           .splitRefusal=${this.splitRefusal}
+          .splitRead=${this.splitRead}
+          .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
+          .personId=${this.#draftSync?.personId ?? ""}
           .busy=${this.submitting || this.invoiceRecipientReading}
           .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheldMode}
@@ -19629,6 +19701,7 @@ export class TillApp extends LitElement {
         }}
         @join-tables=${(event: Event) => void this.#ownBillsChange(() => this.#onJoinTables(event))}
         @split-table-open=${(event: Event) => this.#onSplitTableOpen(event)}
+        @split-table-leave=${() => this.#leaveSplitRead()}
         @split-table=${(event: Event) => void this.#ownBillsChange(() => this.#onSplitTable(event))}
         @name-party=${(event: Event) => void this.#onNameParty(event)}
         @name-bill=${(event: Event) => void this.#onNameBill(event)}
