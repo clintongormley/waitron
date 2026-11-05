@@ -3444,7 +3444,7 @@ Use `wt-help-tooltip` for an explanation too long for a hint, and for a field th
 where a hint would never show, and for a control with no text box to hold a hint — a file picker,
 a tick box, a dropdown that starts empty (owner, 2026-11-03). Outside the setup wizard it takes `mode="help-mode"`, so it shows
 only while help is on (see Help mode). The setup wizard's shop step decides which field gets which in its
-`FIELD_HINT` and `FIELD_HELP` maps for its text fields. The location name is in both: `#field` gives
+`FIELD_HINT` and `FIELD_HELP` maps for its text fields. The venue name is in both: `#field` gives
 it the "?" and no hint in Demo, where it starts filled in, and the hint otherwise. The
 receipt-language choice keeps its own
 "?" (`apps/setup/src/screens/venue-screen.ts`). One exception (owner, 2026-10-16, A755): Venue
@@ -3543,7 +3543,7 @@ This command printed nothing:
 `grep -rn "\.description\b\|description:" apps/till/src apps/server/src --include='*.ts' | grep -v '\.test\.ts'`
 (a control over `apps/dashboard/src` printed 30 lines). The wider `grep -rln description` hits in
 those folders, read one by one, include no product description (they are names of lines, options,
-sections, products and units, a location's operation description, and comments); under
+sections, products and units, the venue's operation description, and comments); under
 `packages/*/src` the first command's only product-description hits are in `packages/catalogue` and
 the column's declaration in `packages/db`. So the hint and the reader disagree in one way: the hint
 shows the default-language description in another language, while every reader carries nothing
@@ -3746,8 +3746,7 @@ authenticated screen. In Demo and Preparation, put `wt-demo-bar` above it; in Li
 at the top. The menu and page content belong underneath the banner. The
 banner shows the venue's logo when one is set (`wt-venue-logo`, `size="banner"`, alt empty,
 Waitron's lockup in its fallback slot), else the canonical Waitron lockup, and then the deployment
-tenant's legal name, not a location name: one deployment database represents one tenant, while
-that tenant can contain several locations. While a browser with no saved copy of the venue's theme
+tenant's legal name. While a browser with no saved copy of the venue's theme
 waits for its first theme read, the logo's place is an empty `wt-venue-logo` `size="banner"` box; a
 read that fails or passes its 5-second limit (`VENUE_THEME_TIME_LIMIT_MS`) ends the wait with the
 lockup.
@@ -6267,7 +6266,7 @@ printing, address printing, logo, phone, email, the installed tax-agency descrip
 subtitle and footer. Its fields stop at the form width, and the form and printed preview sit
 beside each other where they fit and stack on a phone; the preview column holds an empty strut as
 wide as 80 mm paper (`paperStrut`, `apps/dashboard/src/widgets/print-paper.ts`), so it keeps its
-width before a preview draws. The tab does not repeat the venue's address; when the location
+width before a preview draws. The tab does not repeat the venue's address; when the venue
 has none, one sentence under the address switch says so. The logo is `dashboard-image-upload`'s
 `logo` presentation: the picture on paper white, in a fixed box the size it prints on 80 mm paper
 at 203 dpi (about 238 × 76 px; a smaller logo is enlarged, as printing enlarges it), which opens

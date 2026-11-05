@@ -574,7 +574,7 @@ command against it treat that entrypoint differently:
     /app/bin-restore.js restore --from-bucket /recovery-pack.pdf --confirm-venue <tax-id>
   ```
 
-  It prints the business name, tax id and location of the copy it found, and restores nothing
+  It prints the business name, tax id and venue name of the copy it found, and restores nothing
   unless `--confirm-venue` names that tax id. If the old box wrote to the bucket in the last ten
   minutes, or that cannot be checked, it stops and says so; add `--confirm-old-box-gone` only when
   the old box is switched off for good. A backup file whose box was copying to a bucket gets the

@@ -12,7 +12,7 @@ their full text.
   - **Receipt:** every fixed word C113 added in Catalan, Galician and Basque checked against an
     official or authoritative source (for example Termcat, the Acadèmia Valenciana de la Llengua,
     the Real Academia Galega or Xunta terminology, Euskaltzaindia or Euskalterm), each with a
-    provenance row quoting the source; and Valencian as its own receipt language — which locations
+    provenance row quoting the source; and Valencian as its own receipt language — which venues
     may or must use it (provinces 03, 12 and 46), what the law requires there, with sources, and
     which printed words differ from Catalan.
   - **Whole app:** the dashboard, the till and setup offered in all four beside English and

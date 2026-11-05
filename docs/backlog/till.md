@@ -2080,7 +2080,7 @@ handles belong to A672. (2026-10-16: A672 built those corner handles.) The curre
   `!important` cursor rule can still win over the sheet.
 - **Individual tables keep the later floor contract (A435 step 6, 2026-10-11).** Delete is a master
   draft edit with Undo until Save; today's release remains deferred. There is no table active flag
-  or immediate table write route. Labels remain unique across the location. Hierarchy Delete is
+  or immediate table write route. Labels remain unique across the venue. Hierarchy Delete is
   separate and removes saved/today/reset state after refusing live work. Only terminal booking
   and delivery table pointers may release with copied labels; recorded fiscal, sale, receipt,
   order/line context and finished transfer facts stay. See the

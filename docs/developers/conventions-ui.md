@@ -768,9 +768,7 @@ copying the tables.
 Put it at the very top of the page at full width, with the menu and content underneath. Show the
 venue's logo when one is set (Waitron's lockup while it cannot load), else the canonical Waitron
 lockup, and then the deployment tenant's legal name on login and every authenticated screen. Put the account menu (a person-icon `wt-row-actions` popover holding Account settings, Theme,
-Language and Log out) at the trailing edge only when a session exists. Use the tenant name, not a location: a
-deployment database has one tenant and that tenant can contain several locations
-(`packages/db/src/schema/tenants.ts`).
+Language and Log out) at the trailing edge only when a session exists.
 
 ## An open page notices a box update from one response header
 
@@ -1397,7 +1395,7 @@ pin the mask itself.
 What stays visible, on purpose (the S10 plan's decisions 4 to 7 and 10):
 
 - **The names of things**, even when staff type a person's name into one: a saved table's label, a
-  device's name, a location's name, an order's label. The one exception is a table's name for today,
+  device's name, the venue's name, an order's label. The one exception is a table's name for today,
   normally a booking's surname, which travels as `todayName` and is masked.
 - **The venue's own legal name and tax number are masked**, because for a sole trader they are a
   person's name and DNI-based number. This is why `taxId` is a bare name on the list: it is the
@@ -2291,7 +2289,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 ### The dashboard banner
 
 - **The dashboard banner is persistent identity chrome** — top of the page, full width, the tenant's
-  legal name (not a location). The account menu (a person-icon `wt-row-actions` popover holding
+  legal name. The account menu (a person-icon `wt-row-actions` popover holding
   Account settings, Theme, Language and Log out) sits at the trailing edge only when a session exists.
 
 ### The hardware transport seam

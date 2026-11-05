@@ -42,7 +42,7 @@ export async function seedFloor(
     limit 1`);
   const defaultPolicy = defaults[0];
   if (defaultPolicy === undefined) {
-    throw new Error(`seedFloor: no default service zone for location ${locationId}`);
+    throw new Error("seedFloor: the venue has no default service zone");
   }
 
   const { floor } = dataSet;

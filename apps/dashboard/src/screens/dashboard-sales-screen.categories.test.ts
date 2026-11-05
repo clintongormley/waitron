@@ -756,7 +756,7 @@ describe("dashboard-sales-screen — printing the category report", () => {
     const el = await mount(api);
     expect(q(el, "print-printer")).toBeNull();
     expect(q(el, "no-printers")!.textContent!.trim()).toBe(
-      "No active printer at this location. Ask a manager to add one under Printers.",
+      "No active printer at this venue. Ask a manager to add one under Printers.",
     );
     const button = q<HTMLElement & { disabled: boolean }>(el, "print-categories")!;
     expect(button.disabled).toBe(true);

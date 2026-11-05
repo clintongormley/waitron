@@ -30,7 +30,7 @@ separate retained preproduction sample database.
 | `keyring` | nothing at all — no venue directory, no files       | once per deployment |
 | `venue`   | a migrated venue directory and host-state directory | once per venue      |
 
-`venue` creates the taxpayer row, a location, a node and its standard, full and rectificative
+`venue` creates the taxpayer row, the venue, a node and its standard, full and rectificative
 invoice series, then runs each composed module's provisioning seed (the fiscal module's registers the
 node as a SIF and starts its chain) — replacing the retired `apps/server/sql/bootstrap-tenant.sql`
 (removed 2026-08-04, #57).
@@ -72,7 +72,7 @@ tmux's own buffer under some configurations, still has it.
 ### `venue`
 
 Stands a sellable venue up in one transaction: the taxpayer row (`tenants` holds exactly one), an
-**admin person**, a location, a node, and standard, full and rectificative invoice series, and
+**admin person**, the venue, a node, and standard, full and rectificative invoice series, and
 then every composed module's provisioning seed — the fiscal module's registers the node as a
 Veri\*Factu SIF and starts its chain. It replaced the retired
 `apps/server/sql/bootstrap-tenant.sql`.

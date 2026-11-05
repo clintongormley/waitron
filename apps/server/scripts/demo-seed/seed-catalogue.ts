@@ -61,7 +61,7 @@ async function resolveStationIds(
     limit 1`);
   const kitchen = defaults[0]?.id;
   if (kitchen === undefined) {
-    throw new Error(`seedCatalogues: no default station found for location ${locationId}`);
+    throw new Error("seedCatalogues: the venue has no default station");
   }
   await tx.execute(sql`
     update kitchen_stations set name = ${plain(names.kitchen)}, colour = 'orange'
@@ -85,15 +85,13 @@ async function resolveStationIds(
     )
     .returning({ id: kitchenStations.id });
   if (bar === undefined || upstairsBar === undefined || deli === undefined) {
-    throw new Error(
-      `seedCatalogues: failed to create the demo stations for location ${locationId}`,
-    );
+    throw new Error("seedCatalogues: failed to create the demo stations");
   }
   return { kitchen, bar: bar.id, upstairsBar: upstairsBar.id, deli: deli.id };
 }
 
 /**
- * The data set's restaurant menu becomes the location's default menu; the others are added beside
+ * The data set's restaurant menu becomes the venue's default menu; the others are added beside
  * it.
  */
 export async function seedCatalogues(

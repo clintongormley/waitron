@@ -361,11 +361,11 @@ by the answers):
   `{"email":"m***r@e***e.test",…,"event":"person.email_taken"}`. The
   venue's own legal name and tax number are masked too, because for a sole trader they are a
   person's: Jordi Puig Ferrer's refused restore logs
-  `{"legalName":"J***i P***g F***r","taxId":"1***Z","locationName":"Bar del Port",…}`, while the setup wizard and the
+  `{"legalName":"J***i P***g F***r","taxId":"1***Z","venueName":"Bar del Port",…}`, while the setup wizard and the
   restore command still show them. A table's name for today, normally a booking's surname, travels
   as `todayName` and is masked: `{"todayName":"S***r","field":"name",…}`. Left visible: the names of
   things, even when they name someone (a floor-plan table named "García" still logs
-  `{"label":"García",…}`, and so do a device named "Marta's phone" and a location named after its
+  `{"label":"García",…}`, and so do a device named "Marta's phone" and a venue named after its
   owner); email-shaped text inside a message, because the mask goes by key, not by pattern; the
   answer to the request, which keeps every detail; and the frozen-process watchdog's own line,
   which writes no person's details today. The recovery page's tail still shows lines the last

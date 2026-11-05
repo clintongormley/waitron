@@ -8,7 +8,7 @@ import type { Source } from "@waitron/shared";
  * A lighter port of `packages/workforce/src/chain-hash.ts`: an ORDERED array of name/value pairs
  * joined into a canonical string, SHA-256, uppercase hex.
  *
- * The chain is keyed per working order, not per location: an order's amendments form
+ * The chain is keyed per working order: an order's amendments form
  * their own short chain, opened by the `order_placed` genesis entry.
  */
 

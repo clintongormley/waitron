@@ -974,14 +974,14 @@ declare module "@waitron/shared" {
     /** A manager approved, for a device, a profile of another form factor than its active one. */
     "device_profile.incompatible": { field: "approvedProfileIds" };
     /**
-     * Accepting a device under a name an active device at its location already has
+     * Accepting a device under a name another active device already has
      * (`devices_location_label_active_key`). The admin renames the device.
      */
     "device.name_taken": Record<string, never>;
     /** The venue's region fixes its receipt language; `language` is that fixed language, never the
      * caller's value. */
     "receipt.language_fixed": { field: "receiptLanguage"; language: string };
-    /** A receipt-language change refused because `count` open orders at the location hold a line. */
+    /** A receipt-language change refused because `count` open orders hold a line. */
     "receipt.language_orders_open": { field: "receiptLanguage"; count: number };
     "receipt.not_printed": Record<string, never>;
     /**
@@ -1601,7 +1601,7 @@ declare module "@waitron/shared" {
      * confirms the old box is gone. */
     "restore.stream_source_unchecked": { reason: "clock" | "bucket" };
     /** The restored copy is a venue the operator has not confirmed: its legal name, tax id and
-     * location name, which the operator must recognise before anything is staged. */
+     * venue name, which the operator must recognise before anything is staged. */
     "restore.stream_venue_unconfirmed": { legalName: string; taxId: string; venueName: string };
     /** SQLite's `integrity_check` found the restored copy damaged, or could not open it. Carries no
      * SQLite text, which can name paths. */

@@ -549,7 +549,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La región del local fija el idioma del recibo, así que no se puede elegir otro.",
   },
   "receipt.language_orders_open": {
-    en: "Some orders at this location are still in progress in the current receipt language, so it cannot be changed yet.",
+    en: "Some orders at this venue are still in progress in the current receipt language, so it cannot be changed yet.",
     es: "Algunos pedidos de este local siguen en curso en el idioma actual del recibo, así que todavía no se puede cambiar.",
   },
   "department.name_taken": {

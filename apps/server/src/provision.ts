@@ -42,7 +42,7 @@ export function venueModuleConfig(base: ModuleConfig, fiscalTerritory: string): 
 export interface ProvisionRequest {
   /** The fiscal environment this box is being stamped for. Demo and Prepare are preproduction. */
   environment: "production" | "preproduction";
-  /** country/taxId/legalName/location/series/admin(hashed) — every field the wizard collects. */
+  /** Every field the wizard collects. */
   venue: VenueRequest;
   /** Server-derived from the selected Live journey; browser input cannot name a staged file directly. */
   configurationImport?: boolean;

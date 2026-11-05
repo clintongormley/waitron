@@ -90,23 +90,21 @@ Vite on `:5190`. `wa-wt ls` shows the ports when you run another worktree beside
 inspects that stack's box state and sends `/api` and `/media` to HTTP for a leaf-less demo or HTTPS
 for a server using its persisted self-signed leaf (`vite.config.ts`).
 
-1. **Provision a venue.** `waitron-provision venue` creates the taxpayer row, location, node (SIF)
+1. **Provision a venue.** `waitron-provision venue` creates the taxpayer row, the venue, the node (SIF)
    and invoice series a sellable venue needs — see
    ["Provisioning a venue"](../server/README.md#provisioning-a-venue) in the server README.
 
 2. **Read its node id.** The `venue` command prints it. You can also query
-   `venue.db` inside your provisioned directory for its location:
+   `venue.db` inside your provisioned directory for its node id:
 
    ```sql
-   select l.id as location_id, n.id as node_id
-   from locations l
-   join nodes n on n.location_id = l.id;
+   select id as node_id from nodes;
    ```
 
    Invoice issuance reads the live series for the invoice's purpose inside its write transaction,
    so switching series does not require a server restart.
 
-3. **Boot the server** with `WAITRON_NODE_ID`. Boot reads the location from the node’s database row. This is the normal server boot
+3. **Boot the server** with `WAITRON_NODE_ID`. A trading start refuses unless that node's row is in the database. This is the normal server boot
    ([server README](../server/README.md#running-it)) — the credential key ring and the rest apply
    unchanged, and the server must open the SAME venue directory you provisioned, or the till sells
    into a database nobody serves. The variables below identify the box and choose the till settings:
@@ -143,8 +141,7 @@ Kitchen reprints use the current frame and recorded names and bilingual allergy 
 resending an existing job keeps its bytes. Snapshot-unit selection still reads the formatter locale.
 Card slips use the saved sale's receipt language for words, dates and money.
 
-You do not supply a location setting. Ordinary trading reads the location from the configured
-node in the database. An adopted spare serves its pending status before looking for its own node row.
+You do not supply a venue setting: the box serves the one venue in its database. An adopted spare serves its pending status before looking for its own node row.
 
 After this identity-setting rename, reset your existing throwaway demo or test venue with
 `wa-wt reset demo <worktree-name>` before starting it. Provisioning writes the new settings;

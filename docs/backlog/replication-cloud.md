@@ -661,8 +661,8 @@ Keep the remaining work separate:
   processing, access, destinations and retention remain open, including staff
   metadata. Local receipts grant no export permission.
 
-A951 supplies reachability for one venue without a location parameter, schema or
-fixture. Keep staff TLS ending at the box, public HTTPS ending at Cloud with its
+A951 supplies reachability for one venue. Keep staff TLS ending at the box,
+public HTTPS ending at Cloud with its
 independent authenticated upstream, the original 83-byte empty production
 manifest without final LF, admission CLOSED and `.local` independent.
 Customer pages, routes, credentials and business operations remain with A1013

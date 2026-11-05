@@ -440,7 +440,7 @@ build; the original design's unanswered questions and earlier permission descrip
 Prepare requires a usable route before setup completes outside development. Live asks again;
 configuration export carries no mail settings or secrets. Settings → Email serves Prepare and
 Live; saved-relay changes and captured messages remain admin-only. The sender display uses the
-venue location's name. Keep current invoice documents, outbox outcomes and public reset privacy.
+venue's name. Keep current invoice documents, outbox outcomes and public reset privacy.
 
 Cut A supplies the structured failure classifier, bounded account sends and reminder adapters;
 its diagnostics preserve rejected versus unknown outcomes. Continue at Cut B's diagnostic screens,

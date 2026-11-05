@@ -24,7 +24,7 @@ export const en = {
   "zone_repair.confirm": "I confirm that this is the correct time zone for this venue.",
   "zone_repair.confirm_required": "Confirm that the selected time zone is correct.",
   "zone_repair.suggestion":
-    "Suggested for {country} {province}: {zone}. Check this against the venue’s location.",
+    "Suggested for {country} {province}: {zone}. Check this against where the venue is.",
   "zone_repair.cutover": "Day changeover",
   "zone_repair.local_time": "Local date and time",
   "zone_repair.offset": "UTC offset (minutes)",
@@ -545,11 +545,10 @@ export const en = {
   "receipts.subtitle": "Subtitle",
   "receipts.print_receipt": "Print a receipt",
   "receipts.print_trading_name": "Print the trading name above the legal name",
-  "receipts.venue_wide": "Every location",
   "receipts.venue_defaults": "Venue defaults",
   "receipts.header_subtitle_hint": "e.g. a tagline",
   "receipts.print_address": "Print the venue's address",
-  "receipts.no_address": "This location has no address saved. It is set during setup.",
+  "receipts.no_address": "This venue has no address saved. It is set during setup.",
   "receipts.phone": "Phone",
   "receipts.phone_hint": "e.g. +34 912 345 678",
   "receipts.email": "Email",
@@ -559,7 +558,6 @@ export const en = {
   "receipts.invalid_email": "Enter an email address such as name@example.com.",
   "receipts.invalid_logo": "Choose an image from the library.",
   "receipts.logo_not_found": "This image is no longer in the library. Choose another.",
-  "receipts.trading_name_location": "Edit the trading name in",
   "receipts.departments_zones": "Departments and zones",
   "receipts.footer_message_hint": "Printed at the bottom, e.g. a thank-you or opening hours",
   "receipts.operation_description_hint":
@@ -2510,8 +2508,7 @@ export const en = {
   "sales.printer": "Printer",
   "sales.print_categories": "Print category sales",
   "sales.print_sent": "Category sales sent to {printer}.",
-  "sales.no_printers":
-    "No active printer at this location. Ask a manager to add one under Printers.",
+  "sales.no_printers": "No active printer at this venue. Ask a manager to add one under Printers.",
 
   // The leading space is deliberate: the call site appends this directly to the name.
 
@@ -3776,7 +3773,7 @@ export const es: Record<StringKey, string> = {
   "zone_repair.confirm": "Confirmo que esta es la zona horaria correcta para este local.",
   "zone_repair.confirm_required": "Confirma que la zona horaria elegida es correcta.",
   "zone_repair.suggestion":
-    "Sugerida para {country} {province}: {zone}. Compruébala con la ubicación del local.",
+    "Sugerida para {country} {province}: {zone}. Compruébala con el lugar donde está el local.",
   "zone_repair.cutover": "Cambio de jornada",
   "zone_repair.local_time": "Fecha y hora local",
   "zone_repair.offset": "Desfase UTC (minutos)",
@@ -4307,7 +4304,6 @@ export const es: Record<StringKey, string> = {
   "receipts.subtitle": "Subtítulo",
   "receipts.print_receipt": "Imprimir un recibo",
   "receipts.print_trading_name": "Imprimir el nombre comercial encima del nombre legal",
-  "receipts.venue_wide": "Todos los locales",
   "receipts.venue_defaults": "Valores del local",
   "receipts.header_subtitle_hint": "p. ej., un lema",
   "receipts.print_address": "Imprimir la dirección del local",
@@ -4322,7 +4318,6 @@ export const es: Record<StringKey, string> = {
   "receipts.invalid_email": "Introduce un correo electrónico como nombre@ejemplo.com.",
   "receipts.invalid_logo": "Elige una imagen de la biblioteca.",
   "receipts.logo_not_found": "Esta imagen ya no está en la biblioteca. Elige otra.",
-  "receipts.trading_name_location": "Edita el nombre comercial en",
   "receipts.departments_zones": "Departamentos y zonas",
   "receipts.footer_message_hint": "Se imprime al final; p. ej., un agradecimiento o el horario",
   "receipts.operation_description_hint":
