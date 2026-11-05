@@ -229,7 +229,7 @@ A menu edition can also be queued to go live at a set minute, then moved or canc
 Its content is fixed when it is queued; a later change to the working menu is not in it. A patch
 (below) cancels every queued edition and queues a copy of each under a new number and version id,
 with the same content and time; the original then reads `cancelled`, with the patch's moment as its
-`cancelledAt`. The routes below take the time as a date and time on the venue location's clock,
+`cancelledAt`. The routes below take the time as a date and time on the venue's clock,
 answer the instant, and list each time as that clock shows it. Each of them, the publish route and
 the two patch routes need the `catalogue.manage` permission (403 `authorization.not_permitted`). A
 write that succeeds first marks the menu's editions whose time has come as activated, then makes its
@@ -260,7 +260,7 @@ On the two routes that take a time, the time refusals come before any of these: 
 `management.request_invalid` (400, `field` naming `activatesAt` or the part at fault); a minute the
 clock skips `menu_publication.time_skipped` (400, `date`, `time`); a minute it shows twice, sent
 without `occurrence: "earlier" | "later"`, `menu_publication.time_repeated` (400, `date`, `time`,
-`occurrences: [{ at, offset }]`); a location time zone that is not a named zone
+`occurrences: [{ at, offset }]`); a venue time zone that is not a named zone
 `time_zone.unreadable` (409), which the list answers too. Malformed ids answer
 `shared.invalid_id` (400).
 

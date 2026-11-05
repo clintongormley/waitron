@@ -306,7 +306,7 @@ called weaker than its name, the topic file lists what it does not see.
   venue-service importing it, and never names its address words in `apps/dashboard/src/navigation.ts`**.
   Nothing guards the second half. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **The dashboard banner is persistent identity chrome** — top of the page, full width, the tenant's
-  legal name (not a location). The account menu sits at the trailing edge only when a session exists.
+  legal name. The account menu sits at the trailing edge only when a session exists.
   [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
 - **The dashboard matches the browser's `Accept-Language` when no language is saved.** Guard against
   a late locale response overwriting an authenticated person's language or an explicit choice.

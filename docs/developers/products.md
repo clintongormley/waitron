@@ -108,7 +108,7 @@ comes from the published menu, and the rate from the day the invoice is issued, 
   line with no variant this is what the basket and a retrieved tab show after the product has been
   renamed or deleted; on a variant line they join it with `variant_name`.
 - `descriptions` — the customer-facing text, resolved through `customerPresentationText`, then
-  stored under exactly the location's saved receipt languages (`locations.invoice_locales`), every
+  stored under exactly the venue's saved receipt languages (`locations.invoice_locales`), every
   key holding the venue's default content language's text, or that half's staff name where the
   default has none (`defaultLanguageDescriptions`, `packages/catalogue/src/default-language-text.ts`,
   called by `priceOrderLines`, `apps/server/src/working-order.ts`). A receipt prints the entry for
@@ -944,13 +944,13 @@ Each extra stays separate. The retired Allergens screen has no destination or pr
 ### Regional practice names
 
 A demo set up in Catalonia or the Balearic Islands uses the pack's
-`casa-delgado-ca` data and Can Delgado location default. The stored tenant country
-and location province select the data. Catalan staff and kitchen names are a
+`casa-delgado-ca` data and Can Delgado as the default venue name. The stored tenant country
+and venue's province select the data. Catalan staff and kitchen names are a
 demo-only override; customer content remains Catalan, Spanish and English.
 The Valencian Community selects `casa-delgado-valencia`, with Casa Delgado de l'Horta
-as its location default. Its plain names use `ca-ES-valencia`; content starts in
+as its default venue name. Its plain names use `ca-ES-valencia`; content starts in
 Valencian, Spanish and English, while its default receipt language stays `es-ES`.
-Galicia selects `casa-delgado-gl`, with A Casa Delgado as its location default.
+Galicia selects `casa-delgado-gl`, with A Casa Delgado as its default venue name.
 Its plain names use `gl`, content starts in Galician, Spanish and English, and
 receipts default to `es-ES`.
 The staff screens remain English or Spanish. Madrid retains English/Spanish

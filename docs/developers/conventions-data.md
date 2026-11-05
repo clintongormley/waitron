@@ -4437,7 +4437,7 @@ state (`apps/server/src/till-clock-state.ts`) and the attendance reconcile's clo
 (`apps/server/src/attendance-discovery.ts`) all read it, so after a step back a person can clock out
 and in again and the till agrees. While the clock only moves forward and no correction is dated
 ahead of it, it answers what the old read did. Each node's chain holds every one of a person's
-entries on that node, and the entries carry no location. Still open (A1268 part 2): the hours
+entries on that node. Still open (A1268 part 2): the hours
 read, the end-of-day pass and the correction check order by time.
 Guards: `packages/workforce/src/clocking-step.test.ts`, `apps/server/src/till-clock-step.test.ts`.
 
