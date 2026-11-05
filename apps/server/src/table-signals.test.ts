@@ -86,7 +86,7 @@ async function withBar(v: PartyVenue): Promise<string> {
 }
 
 /** The station the venue ships with. */
-async function cocina(v: PartyVenue): Promise<string> {
+async function kitchenStationId(v: PartyVenue): Promise<string> {
   return inTx(v, async (tx) => {
     const [row] = await tx
       .select({ id: kitchenStations.id })
@@ -217,7 +217,7 @@ describe("the floor's attention signals", () => {
   it("A725 ready signals sort opposite dish insertion order by station name", async () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
-    const kitchen = await cocina(v);
+    const kitchen = await kitchenStationId(v);
     const table = await v.table("Mesa 2");
     const seated = await seat(v, table);
     await order(v, seated.tabId, "Burger", "Caña");
@@ -249,8 +249,8 @@ describe("the floor's attention signals", () => {
   it("does not signal a made-here drink as ready at Bar", async () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
-    const mesa2 = await v.table("Mesa 2");
-    const { tabId } = await seat(v, mesa2);
+    const table2 = await v.table("Mesa 2");
+    const { tabId } = await seat(v, table2);
     await order(v, tabId, "Caña", "Burger");
     await makeReady(v, tabId, "Caña");
     await inTx(v, (tx) =>
@@ -259,7 +259,7 @@ describe("the floor's attention signals", () => {
         .set({ madeHere: true })
         .where(and(eq(ticketItems.workingOrderId, tabId), eq(ticketItems.stationId, bar))),
     );
-    expect((await floorRow(v, mesa2)).signals).toEqual([]);
+    expect((await floorRow(v, table2)).signals).toEqual([]);
   });
   it("shows a just-seated party's Take order step until dishes are drafted", async () => {
     const v = await setupPartyVenue(suite.db);
@@ -314,8 +314,8 @@ describe("the floor's attention signals", () => {
       TAKE_ORDER,
       { name: "Bread?", start: "after_previous", courseId: null, minutes: 0 },
     ]);
-    const mesa2 = await v.table("Mesa 2");
-    const { partyId } = await seat(v, mesa2);
+    const table2 = await v.table("Mesa 2");
+    const { partyId } = await seat(v, table2);
     const { tabId } = await orderForParty(v, partyId, ["Caña"]);
     await makeReady(v, tabId, "Caña");
     const doneAt = new Date().toISOString();
@@ -323,7 +323,7 @@ describe("the floor's attention signals", () => {
       recordStepCompletions(tx, [{ partyId, stepId: takeOrder!, doneAt, doneBy: OPERATOR }]),
     );
 
-    expect((await floorRow(v, mesa2)).signals).toEqual([
+    expect((await floorRow(v, table2)).signals).toEqual([
       { kind: "service_step", steps: [{ stepId: bread, name: "Bread?", dueAt: doneAt }] },
       {
         kind: "ready",
@@ -343,15 +343,15 @@ describe("the floor's attention signals", () => {
   it("a step stops showing when the party leaves", async () => {
     const v = await setupPartyVenue(suite.db);
     await setSteps(v, await departmentOf(v, v.tables.zoneId), [TAKE_ORDER]);
-    const mesa2 = await v.table("Mesa 2");
-    const { partyId } = await seat(v, mesa2);
-    expect((await floorRow(v, mesa2)).signals.map((signal) => signal.kind)).toEqual([
+    const table2 = await v.table("Mesa 2");
+    const { partyId } = await seat(v, table2);
+    expect((await floorRow(v, table2)).signals.map((signal) => signal.kind)).toEqual([
       "service_step",
     ]);
 
     const finish = { partyId, ...(await commandFor(v, partyId)) };
     await inTx(v, (tx) => finishTable(tx, finish));
-    const row = await floorRow(v, mesa2);
+    const row = await floorRow(v, table2);
 
     expect(row.party).toBeNull();
     expect(row.signals).not.toContainEqual(expect.objectContaining({ kind: "service_step" }));
@@ -361,8 +361,8 @@ describe("the floor's attention signals", () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
     await inTx(v, (tx) => setReleaseReminderInEveryDepartment(tx, 10));
-    const mesa2 = await v.table("Mesa 2");
-    const { partyId, tabId } = await seat(v, mesa2);
+    const table2 = await v.table("Mesa 2");
+    const { partyId, tabId } = await seat(v, table2);
     await order(v, tabId, "Caña", "Caña", "Caña");
     const mains = await holdGroup(v, partyId, "Burger");
     const snooze = await command(v, partyId);
@@ -382,7 +382,7 @@ describe("the floor's attention signals", () => {
       ],
     };
 
-    expect((await floorRow(v, mesa2)).signals).toEqual([
+    expect((await floorRow(v, table2)).signals).toEqual([
       barReady,
       { kind: "held", count: 1 },
       { kind: "release_due", groupId: mains, dueAt: await remindAtOf(v, mains) },
@@ -394,24 +394,24 @@ describe("the floor's attention signals", () => {
     await pay(v, tabId, "21.00");
 
     // Paid, but the drinks still wait at the bar.
-    expect((await floorRow(v, mesa2)).signals).toEqual([barReady]);
+    expect((await floorRow(v, table2)).signals).toEqual([barReady]);
     expect(await billRequestedAt(v, partyId)).toBeNull();
 
     for (const lineNo of [1, 2, 3]) {
       await inTx(v, (tx) => serveLine(tx, v.cfg, tabId, lineNo));
     }
 
-    expect((await floorRow(v, mesa2)).signals).toEqual([]);
+    expect((await floorRow(v, table2)).signals).toEqual([]);
   });
 
   it("A725 counts ready dishes by station name and serving takes them off", async () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
-    const kitchen = await cocina(v);
-    const mesa2 = await v.table("Mesa 2");
-    const mesa8 = await v.table("Mesa 8");
-    const two = await seat(v, mesa2);
-    const eight = await seat(v, mesa8);
+    const kitchen = await kitchenStationId(v);
+    const table2 = await v.table("Mesa 2");
+    const table8 = await v.table("Mesa 8");
+    const two = await seat(v, table2);
+    const eight = await seat(v, table8);
     await inTx(v, (tx) =>
       addTabRound(tx, v.cfg, two.tabId, [
         { menuItemId: v.item("Caña"), quantity: "2" },
@@ -431,7 +431,7 @@ describe("the floor's attention signals", () => {
     const twoKitchen = await readyAtOf(v, two.tabId, "Burger");
     const eightBar = await readyAtOf(v, eight.tabId, "Caña");
 
-    expect((await floorRow(v, mesa2)).signals).toEqual([
+    expect((await floorRow(v, table2)).signals).toEqual([
       {
         kind: "ready",
         byStation: [
@@ -452,7 +452,7 @@ describe("the floor's attention signals", () => {
         ],
       },
     ]);
-    expect((await floorRow(v, mesa8)).signals).toEqual([
+    expect((await floorRow(v, table8)).signals).toEqual([
       {
         kind: "ready",
         byStation: [
@@ -473,7 +473,7 @@ describe("the floor's attention signals", () => {
     await inTx(v, (tx) =>
       markServed(tx, v.cfg, two.partyId, [{ lineId: line1, quantity: "1" }], serve),
     );
-    expect((await floorRow(v, mesa2)).signals).toEqual([
+    expect((await floorRow(v, table2)).signals).toEqual([
       {
         kind: "ready",
         byStation: [
@@ -498,7 +498,7 @@ describe("the floor's attention signals", () => {
     await inTx(v, (tx) => serveLine(tx, v.cfg, two.tabId, 1));
     await inTx(v, (tx) => serveLine(tx, v.cfg, two.tabId, 2));
 
-    expect((await floorRow(v, mesa2)).signals).toEqual([
+    expect((await floorRow(v, table2)).signals).toEqual([
       {
         kind: "ready",
         byStation: [
@@ -512,7 +512,7 @@ describe("the floor's attention signals", () => {
         ],
       },
     ]);
-    expect((await floorRow(v, mesa8)).signals).toEqual([
+    expect((await floorRow(v, table8)).signals).toEqual([
       {
         kind: "ready",
         byStation: [
@@ -531,7 +531,7 @@ describe("the floor's attention signals", () => {
   it("counts a weighed dish as one and puts stations in name order", async () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
-    const kitchen = await cocina(v);
+    const kitchen = await kitchenStationId(v);
     const pulpo = await inTx(v, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Pesados" });
       const category = await createCategory(tx, { name: "Raciones" });
@@ -548,8 +548,8 @@ describe("the floor's attention signals", () => {
       await assignCatalogueToVenue(tx, menu.id);
       return (await offerProducts(tx, v.cfg, { zone: "tables" })).offerFor(product.id);
     });
-    const mesa2 = await v.table("Mesa 2");
-    const { tabId } = await seat(v, mesa2);
+    const table2 = await v.table("Mesa 2");
+    const { tabId } = await seat(v, table2);
     await inTx(v, (tx) =>
       addTabRound(tx, v.cfg, tabId, [
         { menuItemId: pulpo, quantity: "0.350" },
@@ -559,7 +559,7 @@ describe("the floor's attention signals", () => {
     await makeReady(v, tabId, "Pulpo");
     await makeReady(v, tabId, "Caña");
 
-    expect((await floorRow(v, mesa2)).signals).toEqual([
+    expect((await floorRow(v, table2)).signals).toEqual([
       {
         kind: "ready",
         byStation: [
@@ -584,35 +584,35 @@ describe("the floor's attention signals", () => {
 
   it("warns of a long wait by the worst band over fired dishes still to serve", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mesa2 = await v.table("Mesa 2");
-    const { tabId } = await seat(v, mesa2);
+    const table2 = await v.table("Mesa 2");
+    const { tabId } = await seat(v, table2);
     await order(v, tabId, "Burger");
 
     await queuedAgo(v, tabId, 6);
-    expect((await floorRow(v, mesa2)).signals).toEqual([{ kind: "long_wait", band: "warm" }]);
+    expect((await floorRow(v, table2)).signals).toEqual([{ kind: "long_wait", band: "warm" }]);
 
     await queuedAgo(v, tabId, 20);
-    expect((await floorRow(v, mesa2)).signals).toEqual([{ kind: "long_wait", band: "forgotten" }]);
+    expect((await floorRow(v, table2)).signals).toEqual([{ kind: "long_wait", band: "forgotten" }]);
 
     await inTx(v, (tx) => serveLine(tx, v.cfg, tabId, 1));
-    expect((await floorRow(v, mesa2)).signals).toEqual([]);
+    expect((await floorRow(v, table2)).signals).toEqual([]);
   });
 
   it("does not count a held dish as waiting, however long ago it was taken", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mesa2 = await v.table("Mesa 2");
-    const { partyId, tabId } = await seat(v, mesa2);
+    const table2 = await v.table("Mesa 2");
+    const { partyId, tabId } = await seat(v, table2);
     await holdGroup(v, partyId, "Burger");
     await queuedAgo(v, tabId, 20);
-    const row = await floorRow(v, mesa2);
+    const row = await floorRow(v, table2);
 
     expect(row.signals).toEqual([{ kind: "held", count: 1 }]);
   });
 
   it("does not let an old held dish turn the table's band, while an old fired one does", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mesa2 = await v.table("Mesa 2");
-    const { partyId, tabId } = await seat(v, mesa2);
+    const table2 = await v.table("Mesa 2");
+    const { partyId, tabId } = await seat(v, table2);
     await order(v, tabId, "Caña");
     await holdGroup(v, partyId, "Burger");
     const at = new Date(Date.now() - 16 * 60_000).toISOString();
@@ -620,23 +620,23 @@ describe("the floor's attention signals", () => {
       tx.update(ticketItems).set({ queuedAt: at }).where(isNull(ticketItems.firedAt)),
     );
 
-    expect((await floorRow(v, mesa2)).timingBand).toBe("fresh");
+    expect((await floorRow(v, table2)).timingBand).toBe("fresh");
 
     await queuedAgo(v, tabId, 16);
 
-    expect((await floorRow(v, mesa2)).timingBand).toBe("forgotten");
+    expect((await floorRow(v, table2)).timingBand).toBe("forgotten");
   });
 
   it("counts a released group's dish as waiting from when it was fired, not from when it was held", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mesa2 = await v.table("Mesa 2");
-    const { partyId, tabId } = await seat(v, mesa2);
+    const table2 = await v.table("Mesa 2");
+    const { partyId, tabId } = await seat(v, table2);
     const mains = await holdGroup(v, partyId, "Burger");
     await queuedAgo(v, tabId, 20);
     const fire = await command(v, partyId);
     await inTx(v, (tx) => fireGroup(tx, v.cfg, partyId, mains, fire));
 
-    const row = await floorRow(v, mesa2);
+    const row = await floorRow(v, table2);
 
     expect(row.signals).toEqual([]);
     expect(row.timingBand).toBe("fresh");
@@ -644,8 +644,8 @@ describe("the floor's attention signals", () => {
 
   it("names the held group and the staff name of a dish that became unavailable in it, cancels nothing, and clears once it is available again", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mesa2 = await v.table("Mesa 2");
-    const { partyId, tabId } = await seat(v, mesa2);
+    const table2 = await v.table("Mesa 2");
+    const { partyId, tabId } = await seat(v, table2);
     // A dish in a fired group that became unavailable is already committed work: no signal for it.
     await orderForParty(v, partyId, ["Agua"], tabId);
     const mains = await holdGroup(v, partyId, "Burger", "Paella");
@@ -655,7 +655,7 @@ describe("the floor's attention signals", () => {
     await setAvailable("Burger", false);
     await setAvailable("Agua", false);
 
-    expect((await floorRow(v, mesa2)).signals).toEqual([
+    expect((await floorRow(v, table2)).signals).toEqual([
       { kind: "held", count: 2 },
       { kind: "held_unavailable", groupId: mains, lineNames: ["Burger"] },
     ]);
@@ -674,44 +674,44 @@ describe("the floor's attention signals", () => {
 
     await setAvailable("Burger", true);
 
-    expect((await floorRow(v, mesa2)).signals).toEqual([{ kind: "held", count: 2 }]);
+    expect((await floorRow(v, table2)).signals).toEqual([{ kind: "held", count: 2 }]);
   });
 
   it("marks a table holding dishes with how many, with reminders off", async () => {
     const v = await setupPartyVenue(suite.db);
     await inTx(v, (tx) => setReleaseReminderInEveryDepartment(tx, null));
-    const mesa2 = await v.table("Mesa 2");
-    const { partyId } = await seat(v, mesa2);
+    const table2 = await v.table("Mesa 2");
+    const { partyId } = await seat(v, table2);
     await holdGroup(v, partyId, "Burger", "Burger", "Paella");
 
-    expect((await floorRow(v, mesa2)).signals).toEqual([{ kind: "held", count: 3 }]);
+    expect((await floorRow(v, table2)).signals).toEqual([{ kind: "held", count: 3 }]);
   });
 
   it("counts each party's own held dishes, and stops once the group is fired", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mesa2 = await v.table("Mesa 2");
-    const mesa3 = await v.table("Mesa 3");
-    const two = await seat(v, mesa2);
-    const three = await seat(v, mesa3);
+    const table2 = await v.table("Mesa 2");
+    const table3 = await v.table("Mesa 3");
+    const two = await seat(v, table2);
+    const three = await seat(v, table3);
     const mains = await holdGroup(v, two.partyId, "Burger", "Paella");
     await holdGroup(v, three.partyId, "Burger");
 
-    expect((await floorRow(v, mesa2)).signals).toContainEqual({ kind: "held", count: 2 });
-    expect((await floorRow(v, mesa3)).signals).toContainEqual({ kind: "held", count: 1 });
+    expect((await floorRow(v, table2)).signals).toContainEqual({ kind: "held", count: 2 });
+    expect((await floorRow(v, table3)).signals).toContainEqual({ kind: "held", count: 1 });
 
     const fire = await command(v, two.partyId);
     await inTx(v, (tx) => fireGroup(tx, v.cfg, two.partyId, mains, fire));
 
-    expect((await floorRow(v, mesa2)).signals).not.toContainEqual(
+    expect((await floorRow(v, table2)).signals).not.toContainEqual(
       expect.objectContaining({ kind: "held" }),
     );
-    expect((await floorRow(v, mesa3)).signals).toContainEqual({ kind: "held", count: 1 });
+    expect((await floorRow(v, table3)).signals).toContainEqual({ kind: "held", count: 1 });
   });
 
   it("counts a held dish by what is left after a cancellation, a weighed dish as one, and no extra", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mesa2 = await v.table("Mesa 2");
-    const seated = await seat(v, mesa2);
+    const table2 = await v.table("Mesa 2");
+    const seated = await seat(v, table2);
     const placed = await inTx(v, (tx) =>
       placeGroupedRound(
         tx,
@@ -743,7 +743,7 @@ describe("the floor's attention signals", () => {
     const burger = lines.find((line) => line.name === "Burger")!;
     const paella = lines.find((line) => line.name === "Paella")!;
     const heldSignal = async () =>
-      (await floorRow(v, mesa2)).signals.filter((signal) => signal.kind === "held");
+      (await floorRow(v, table2)).signals.filter((signal) => signal.kind === "held");
     const cancel = (lineId: string, quantity: number) =>
       inTx(v, (tx) =>
         tx.insert(lineServiceCancellations).values({
@@ -797,24 +797,24 @@ describe("the floor's attention signals", () => {
 
   it("does not count a held dish on an abandoned bill", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mesa2 = await v.table("Mesa 2");
-    const { partyId, tabId } = await seat(v, mesa2);
+    const table2 = await v.table("Mesa 2");
+    const { partyId, tabId } = await seat(v, table2);
     await holdGroup(v, partyId, "Burger");
-    expect((await floorRow(v, mesa2)).signals).toContainEqual({ kind: "held", count: 1 });
+    expect((await floorRow(v, table2)).signals).toContainEqual({ kind: "held", count: 1 });
 
     await inTx(v, (tx) =>
       tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, tabId)),
     );
 
-    expect((await floorRow(v, mesa2)).signals).not.toContainEqual(
+    expect((await floorRow(v, table2)).signals).not.toContainEqual(
       expect.objectContaining({ kind: "held" }),
     );
   });
 
   it("does not count a held dish that was recalled", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mesa2 = await v.table("Mesa 2");
-    const { partyId, tabId } = await seat(v, mesa2);
+    const table2 = await v.table("Mesa 2");
+    const { partyId, tabId } = await seat(v, table2);
     const mains = await holdGroup(v, partyId, "Burger", "Paella");
     const lucia = await person(v, "Lucía");
     await inTx(v, (tx) =>
@@ -825,7 +825,7 @@ describe("the floor's attention signals", () => {
         lines: [draftLine(v, "Agua")],
       }),
     );
-    expect((await floorRow(v, mesa2)).signals).toContainEqual({ kind: "held", count: 2 });
+    expect((await floorRow(v, table2)).signals).toContainEqual({ kind: "held", count: 2 });
 
     await inTx(v, async (tx) => {
       const [draft] = await tx
@@ -841,7 +841,7 @@ describe("the floor's attention signals", () => {
         .values({ draftId: draft!.id, sourceLineId: burger!.id, position: 1 });
     });
 
-    expect((await floorRow(v, mesa2)).signals).toContainEqual({ kind: "held", count: 1 });
+    expect((await floorRow(v, table2)).signals).toContainEqual({ kind: "held", count: 1 });
   });
 
   it("readHeldCounts counts nothing for a party that is no longer open", async () => {
@@ -878,10 +878,10 @@ describe("the floor's attention signals", () => {
   it("gives joined tables the party's signals, and reads the bills a merged-in party kept", async () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
-    const mesa2 = await v.table("Mesa 2");
-    const mesa8 = await v.table("Mesa 8");
-    const into = await seat(v, mesa2);
-    const from = await seat(v, mesa8);
+    const table2 = await v.table("Mesa 2");
+    const table8 = await v.table("Mesa 8");
+    const into = await seat(v, table2);
+    const from = await seat(v, table8);
     // Mesa 8 paid for its caña, which is still at the bar when the parties join.
     await order(v, from.tabId, "Caña");
     await pay(v, from.tabId, "3.00");
@@ -892,7 +892,7 @@ describe("the floor's attention signals", () => {
       otherPartyId: from.partyId,
       expectedOtherPartyRevision: await revisionOf(v, from.partyId),
     };
-    await inTx(v, (tx) => joinTables(tx, v.cfg, into.partyId, mesa8, joining));
+    await inTx(v, (tx) => joinTables(tx, v.cfg, into.partyId, table8, joining));
     expect((await billsOn(v, from.partyId)).map((bill) => bill.status)).toEqual(["settled"]);
 
     const expected = [
@@ -909,23 +909,23 @@ describe("the floor's attention signals", () => {
         ],
       },
     ];
-    expect((await floorRow(v, mesa2)).signals).toEqual(expected);
-    expect((await floorRow(v, mesa8)).signals).toEqual(expected);
+    expect((await floorRow(v, table2)).signals).toEqual(expected);
+    expect((await floorRow(v, table8)).signals).toEqual(expected);
     // The floor's own figures count the kept bill's caña too, beside the party's own agua.
-    for (const tableId of [mesa2, mesa8]) {
+    for (const tableId of [table2, table8]) {
       expect(await floorRow(v, tableId)).toMatchObject({ pendingToServe: 2, readyToServe: 1 });
     }
   });
 
   it("keeps a paid bill's dishes in the floor's figures until they are served", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mesa2 = await v.table("Mesa 2");
-    const { tabId } = await seat(v, mesa2);
+    const table2 = await v.table("Mesa 2");
+    const { tabId } = await seat(v, table2);
     await order(v, tabId, "Caña", "Agua");
     await makeReady(v, tabId, "Caña");
     await pay(v, tabId, "5.00");
 
-    expect(await floorRow(v, mesa2)).toMatchObject({
+    expect(await floorRow(v, table2)).toMatchObject({
       hasOpenTab: false,
       pendingToServe: 2,
       readyToServe: 1,
@@ -934,20 +934,20 @@ describe("the floor's attention signals", () => {
     await inTx(v, (tx) => serveLine(tx, v.cfg, tabId, 1));
     await inTx(v, (tx) => serveLine(tx, v.cfg, tabId, 2));
 
-    expect(await floorRow(v, mesa2)).toMatchObject({ pendingToServe: 0, readyToServe: 0 });
+    expect(await floorRow(v, table2)).toMatchObject({ pendingToServe: 0, readyToServe: 0 });
   });
 
   it("shows a table that needs clearing, with no party at it", async () => {
     const v = await setupPartyVenue(suite.db);
     await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
-    const mesa2 = await v.table("Mesa 2");
-    const { partyId } = await seat(v, mesa2);
+    const table2 = await v.table("Mesa 2");
+    const { partyId } = await seat(v, table2);
     const finish = { partyId, ...(await commandFor(v, partyId)) };
     await inTx(v, (tx) => finishTable(tx, finish));
-    const row = await floorRow(v, mesa2);
+    const row = await floorRow(v, table2);
 
     expect(row.signals).toEqual([
-      { kind: "needs_clearing", since: (await tableNeedsClearingSince(v, mesa2))! },
+      { kind: "needs_clearing", since: (await tableNeedsClearingSince(v, table2))! },
     ]);
     expect(row.party).toBeNull();
   });
@@ -1038,9 +1038,9 @@ describe("each station's oldest ready time", () => {
       await routeProductTo(tx, v.productId("Caña"), id);
       return id;
     });
-    const kitchen = await cocina(v);
-    const mesa2 = await v.table("Mesa 2");
-    const seated = await seat(v, mesa2);
+    const kitchen = await kitchenStationId(v);
+    const table2 = await v.table("Mesa 2");
+    const seated = await seat(v, table2);
     await inTx(v, (tx) =>
       addTabRound(tx, v.cfg, seated.tabId, [
         ...quantities.map((quantity) => ({ menuItemId: v.item("Caña"), quantity })),
@@ -1053,13 +1053,13 @@ describe("each station's oldest ready time", () => {
       await setReadyAt(v, seated.tabId, index + 1, at(minute));
     }
     await setReadyAt(v, seated.tabId, quantities.length + 1, at("03"));
-    return { v, bar, kitchen, mesa2, ...seated };
+    return { v, bar, kitchen, table2, ...seated };
   }
 
   it("each station's ready entry carries its oldest ready time and its own warning minutes", async () => {
-    const { v, bar, kitchen, mesa2 } = await readyTable(["1", "1"]);
+    const { v, bar, kitchen, table2 } = await readyTable(["1", "1"]);
 
-    expect((await floorRow(v, mesa2)).signals).toEqual([
+    expect((await floorRow(v, table2)).signals).toEqual([
       {
         kind: "ready",
         byStation: [
@@ -1089,8 +1089,8 @@ describe("each station's oldest ready time", () => {
   ])(
     "the oldest ready time is the earliest stamp when its line comes %s",
     async (_place, minutes) => {
-      const { v, bar, mesa2 } = await readyTable(["1", "1", "1"], minutes);
-      const barEntry = (await floorRow(v, mesa2)).signals
+      const { v, bar, table2 } = await readyTable(["1", "1", "1"], minutes);
+      const barEntry = (await floorRow(v, table2)).signals
         .flatMap((signal) => (signal.kind === "ready" ? signal.byStation : []))
         .find((entry) => entry.stationId === bar);
 
@@ -1099,9 +1099,9 @@ describe("each station's oldest ready time", () => {
   );
 
   it("serving the oldest ready dish moves the oldest ready time to the next", async () => {
-    const { v, bar, mesa2, partyId, tabId } = await readyTable(["2", "1"]);
+    const { v, bar, table2, partyId, tabId } = await readyTable(["2", "1"]);
     const barEntry = async () =>
-      (await floorRow(v, mesa2)).signals
+      (await floorRow(v, table2)).signals
         .flatMap((signal) => (signal.kind === "ready" ? signal.byStation : []))
         .find((entry) => entry.stationId === bar);
 
@@ -1117,11 +1117,11 @@ describe("each station's oldest ready time", () => {
   });
 
   it("a ready dish with no stored ready time gives its station no oldest ready time", async () => {
-    const { v, bar, kitchen, mesa2, tabId } = await readyTable(["1", "1"]);
+    const { v, bar, kitchen, table2, tabId } = await readyTable(["1", "1"]);
     await setReadyAt(v, tabId, 3, null);
     await setReadyAt(v, tabId, 2, null);
 
-    expect((await floorRow(v, mesa2)).signals).toEqual([
+    expect((await floorRow(v, table2)).signals).toEqual([
       {
         kind: "ready",
         byStation: [
@@ -1174,8 +1174,8 @@ describe("the counter's tab list", () => {
   it("shows a counter tab without a table, labelled Ana, with its ready and long-wait signals", async () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
-    const mesa5 = await v.table("Mesa 5");
-    const { partyId, tabId } = await seat(v, mesa5);
+    const table5 = await v.table("Mesa 5");
+    const { partyId, tabId } = await seat(v, table5);
     await nameParty(v, partyId, "Ana");
     await order(v, tabId, "Burger", "Caña");
     const counterBill = await split(v, partyId, tabId, [2]);
@@ -1212,8 +1212,8 @@ describe("the counter's tab list", () => {
 describe("a bill request", () => {
   it("stays while one of two bills is unpaid, and goes when a bill payment settles the other", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mesa2 = await v.table("Mesa 2");
-    const { partyId, tabId } = await seat(v, mesa2);
+    const table2 = await v.table("Mesa 2");
+    const { partyId, tabId } = await seat(v, table2);
     await order(v, tabId, "Burger", "Caña");
     const other = await split(v, partyId, tabId, [2]);
     const requestedAt = await askForBill(v, partyId);
@@ -1221,7 +1221,7 @@ describe("a bill request", () => {
     await pay(v, tabId, "12.00");
 
     expect(await billRequestedAt(v, partyId)).toBe(requestedAt);
-    expect((await floorRow(v, mesa2)).signals).toContainEqual({
+    expect((await floorRow(v, table2)).signals).toContainEqual({
       kind: "bill_requested",
       requestedAt,
     });
@@ -1276,10 +1276,10 @@ describe("a bill request", () => {
 
   it("stays on the surviving party while a merged-in party's bill still owes, and goes when that bill is paid", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mesa2 = await v.table("Mesa 2");
-    const mesa8 = await v.table("Mesa 8");
-    const into = await seat(v, mesa2);
-    const from = await seat(v, mesa8);
+    const table2 = await v.table("Mesa 2");
+    const table8 = await v.table("Mesa 8");
+    const into = await seat(v, table2);
+    const from = await seat(v, table8);
     await order(v, into.tabId, "Burger", "Agua");
     const stray = await split(v, into.partyId, into.tabId, [2]);
     await order(v, from.tabId, "Caña");
@@ -1289,7 +1289,7 @@ describe("a bill request", () => {
       otherPartyId: from.partyId,
       expectedOtherPartyRevision: await revisionOf(v, from.partyId),
     };
-    await inTx(v, (tx) => joinTables(tx, v.cfg, into.partyId, mesa8, joining));
+    await inTx(v, (tx) => joinTables(tx, v.cfg, into.partyId, table8, joining));
     // By hand: a merge moves open and presented bills across (P13), so no product path leaves an
     // owing bill on the absorbed party today; D2 says such a bill counts until it is paid.
     await inTx(v, (tx) =>
@@ -1304,7 +1304,7 @@ describe("a bill request", () => {
     await pay(v, stray, "2.00");
 
     expect(await billRequestedAt(v, into.partyId)).toBeNull();
-    expect((await floorRow(v, mesa2)).signals).not.toContainEqual(
+    expect((await floorRow(v, table2)).signals).not.toContainEqual(
       expect.objectContaining({ kind: "bill_requested" }),
     );
   });

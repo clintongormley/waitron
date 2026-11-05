@@ -215,12 +215,12 @@ describe("A773 requested lifecycle: bill move", () => {
   it("refuses to change the course of a Requested dish, as for a released one (D43)", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      const postres = await createCourse(tx, { name: "Postres", displayOrder: 9 });
+      const desserts = await createCourse(tx, { name: "Postres", displayOrder: 9 });
       const [burger] = await requestedBurgers(tx, venue, ["burger"]);
       const before = await itemOf(tx, burger!.id);
 
       await expect(
-        setLineCourse(tx, venue.cfg, venue.party.tabId, burger!.lineNo, postres.id),
+        setLineCourse(tx, venue.cfg, venue.party.tabId, burger!.lineNo, desserts.id),
       ).rejects.toMatchObject({
         code: "ticket.already_fired",
         params: { workingOrderId: venue.party.tabId },
@@ -237,7 +237,7 @@ describe("A773 requested lifecycle: bill move", () => {
   it("still lets a held dish change course", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      const postres = await createCourse(tx, { name: "Postres", displayOrder: 9 });
+      const desserts = await createCourse(tx, { name: "Postres", displayOrder: 9 });
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
       await placeGroups(tx, venue.cfg, venue.party.partyId, {
         operatorId: OPERATOR,
@@ -246,10 +246,10 @@ describe("A773 requested lifecycle: bill move", () => {
       const [held] = await linesOf(tx, venue.party.tabId);
       expect(await itemOf(tx, held!.id)).toMatchObject({ requestedAt: null, firedAt: null });
 
-      await setLineCourse(tx, venue.cfg, venue.party.tabId, held!.lineNo, postres.id);
+      await setLineCourse(tx, venue.cfg, venue.party.tabId, held!.lineNo, desserts.id);
 
-      expect((await linesOf(tx, venue.party.tabId))[0]!.courseId).toBe(postres.id);
-      expect((await itemOf(tx, held!.id)).courseId).toBe(postres.id);
+      expect((await linesOf(tx, venue.party.tabId))[0]!.courseId).toBe(desserts.id);
+      expect((await itemOf(tx, held!.id)).courseId).toBe(desserts.id);
     });
   });
 

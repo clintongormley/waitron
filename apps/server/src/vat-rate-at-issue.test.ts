@@ -75,8 +75,8 @@ const NEW_YEAR = "2027-01-01T10:00:00.000Z";
 const MIDNIGHT = "2026-12-31T23:00:00.000Z";
 
 /** A 2.50 gross line split at each rate: base = gross × 100 ÷ (100 + rate), tax the difference. */
-const CANA_AT_10 = [{ rate: "10.00", base: "2.27", tax: "0.23" }];
-const CANA_AT_4 = [{ rate: "4.00", base: "2.40", tax: "0.10" }];
+const BEER_AT_10_PERCENT = [{ rate: "10.00", base: "2.27", tax: "0.23" }];
+const BEER_AT_4_PERCENT = [{ rate: "4.00", base: "2.40", tax: "0.10" }];
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -183,10 +183,10 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
         unitPrice,
         vatClass,
       });
-    const cana = await product("Caña", "2.50", "reduced");
+    const beer = await product("Caña", "2.50", "reduced");
     const burger = await product("Hamburguesa", "10.00", "reduced");
-    const queso = await product("Queso", "0.75", "reduced");
-    const vino = await product("Vino", "3.63", "general");
+    const cheese = await product("Queso", "0.75", "reduced");
+    const wine = await product("Vino", "3.63", "general");
     const extras = await createExtraList(
       tx,
       {
@@ -196,17 +196,17 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
         minPicks: 0,
         maxPicks: 2,
         active: true,
-        items: [{ productId: queso.id, maxQuantity: 1, preselected: false, price: "0.75" }],
+        items: [{ productId: cheese.id, maxQuantity: 1, preselected: false, price: "0.75" }],
       },
       LOCALE,
     );
     await writeProductModifiers(tx, burger.id, [{ kind: "extras", id: extras.id }]);
     await assignCatalogueToVenue(tx, menu.id);
     return {
-      cana: cana.id,
+      beer: beer.id,
       burger: burger.id,
-      queso: queso.id,
-      vino: vino.id,
+      cheese: cheese.id,
+      wine: wine.id,
       extrasListId: extras.id,
     };
   });
@@ -338,19 +338,19 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: eve,
       zoneId: v.counter.zoneId,
-      lines: one(v, v.products.cana),
+      lines: one(v, v.products.beer),
       tender: { method: "cash", amount: "2.50" },
     });
     at(NEW_YEAR);
     await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: newYear,
       zoneId: v.counter.zoneId,
-      lines: one(v, v.products.cana),
+      lines: one(v, v.products.beer),
       tender: { method: "cash", amount: "2.50" },
     });
 
-    expect(await filed(eve)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
-    expect(await filed(newYear)).toMatchObject({ total: 250, vatBreakdown: CANA_AT_4 });
+    expect(await filed(eve)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
+    expect(await filed(newYear)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_4_PERCENT });
   });
 
   it("a tab rung on the eve and paid on New Year's Day files the new rate for the dish, its extra and a round, at the same gross", async () => {
@@ -363,11 +363,11 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
         extras: [
           {
             listId: v.products.extrasListId,
-            picks: [{ productId: v.products.queso, quantity: 1 }],
+            picks: [{ productId: v.products.cheese, quantity: 1 }],
           },
         ],
       },
-      { menuItemId: v.tables.offerFor(v.products.vino), quantity: "1" },
+      { menuItemId: v.tables.offerFor(v.products.wine), quantity: "1" },
     ]);
 
     at(NEW_YEAR);
@@ -380,8 +380,8 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     const sale = await filed(tabId);
     expect(sale.lines.map((line) => [line.productId, line.vatRate])).toEqual([
       [v.products.burger, 400],
-      [v.products.queso, 400],
-      [v.products.vino, 2100],
+      [v.products.cheese, 400],
+      [v.products.wine, 2100],
     ]);
     expect(sale.total).toBe(1438);
   });
@@ -390,7 +390,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     const v = await setupVenue();
     at(EVE);
     const tabId = await openTableTab(v, [
-      { menuItemId: v.tables.offerFor(v.products.cana), quantity: "2" },
+      { menuItemId: v.tables.offerFor(v.products.beer), quantity: "2" },
     ]);
     const operator = {
       personId: OPERATOR,
@@ -426,7 +426,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
   it("a card charged across midnight files the rate of the day the invoice is issued, after the reader", async () => {
     const v = await setupVenue();
     at(EVE);
-    const id = await park(v, one(v, v.products.cana));
+    const id = await park(v, one(v, v.products.beer));
     at("2026-12-31T22:59:30.000Z");
 
     const out = await payWorkingOrderIntegrated(
@@ -442,15 +442,15 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
 
     expect(out.outcome).toBe("captured");
     const sale = await filed(id);
-    expect(sale).toMatchObject({ issuedAt: MIDNIGHT, total: 250, vatBreakdown: CANA_AT_4 });
-    expect(out.outcome === "captured" && out.ticket.vatBreakdown).toEqual(CANA_AT_4);
+    expect(sale).toMatchObject({ issuedAt: MIDNIGHT, total: 250, vatBreakdown: BEER_AT_4_PERCENT });
+    expect(out.outcome === "captured" && out.ticket.vatBreakdown).toEqual(BEER_AT_4_PERCENT);
   });
 
   it("an invoice issued on the eve keeps its rate at collection; one issued on New Year's Day takes the new rate", async () => {
     const v = await setupVenue("ticket_then_pay");
     at(EVE);
-    const before = await park(v, one(v, v.products.cana));
-    const after = await park(v, one(v, v.products.cana));
+    const before = await park(v, one(v, v.products.beer));
+    const after = await park(v, one(v, v.products.beer));
     await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, before, OPERATOR);
     await issueOrderInvoice(
       { ...deps(), admission: testTradingAdmission() },
@@ -473,14 +473,17 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
       OPERATOR,
     );
 
-    expect(await filed(before)).toMatchObject({ issuedAt: EVE, vatBreakdown: CANA_AT_10 });
-    expect(await filed(after)).toMatchObject({ issuedAt: NEW_YEAR, vatBreakdown: CANA_AT_4 });
+    expect(await filed(before)).toMatchObject({ issuedAt: EVE, vatBreakdown: BEER_AT_10_PERCENT });
+    expect(await filed(after)).toMatchObject({
+      issuedAt: NEW_YEAR,
+      vatBreakdown: BEER_AT_4_PERCENT,
+    });
   });
 
   it("ticket-then-pay: placed on the eve and collected on New Year's Day files the new rate", async () => {
     const v = await setupVenue("ticket_then_pay");
     at(EVE);
-    const id = await park(v, one(v, v.products.cana));
+    const id = await park(v, one(v, v.products.beer));
     await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
 
     at(NEW_YEAR);
@@ -504,27 +507,30 @@ describe("the day is the invoice's own, read once", () => {
     await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: early,
       zoneId: v.counter.zoneId,
-      lines: one(v, v.products.cana),
+      lines: one(v, v.products.beer),
       tender: { method: "cash", amount: "2.50" },
     });
     at(MIDNIGHT);
     await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: onTheDot,
       zoneId: v.counter.zoneId,
-      lines: one(v, v.products.cana),
+      lines: one(v, v.products.beer),
       tender: { method: "cash", amount: "2.50" },
     });
 
     expect(await filed(early)).toMatchObject({
       issuedAt: "2026-12-31T22:59:59.999Z",
-      vatBreakdown: CANA_AT_10,
+      vatBreakdown: BEER_AT_10_PERCENT,
     });
-    expect(await filed(onTheDot)).toMatchObject({ issuedAt: MIDNIGHT, vatBreakdown: CANA_AT_4 });
+    expect(await filed(onTheDot)).toMatchObject({
+      issuedAt: MIDNIGHT,
+      vatBreakdown: BEER_AT_4_PERCENT,
+    });
   });
 
   it("prices and dates the invoice from one reading, even when the clock crosses midnight during the request", async () => {
     const v = await setupVenue();
-    const id = await park(v, one(v, v.products.cana));
+    const id = await park(v, one(v, v.products.beer));
     at(new Date(Date.parse(MIDNIGHT) - 1).toISOString());
     time.tickMs = 1;
 
@@ -537,7 +543,7 @@ describe("the day is the invoice's own, read once", () => {
     // The first reading is the last millisecond of the eve; every later one is New Year's Day.
     expect(await filed(id)).toMatchObject({
       issuedAt: "2026-12-31T22:59:59.999Z",
-      vatBreakdown: CANA_AT_10,
+      vatBreakdown: BEER_AT_10_PERCENT,
     });
   });
 
@@ -560,7 +566,7 @@ describe("the day is the invoice's own, read once", () => {
       await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
         workingOrderId: east,
         zoneId: v.counter.zoneId,
-        lines: one(v, v.products.cana),
+        lines: one(v, v.products.beer),
         tender: { method: "cash", amount: "2.50" },
       });
       await suite.db
@@ -571,12 +577,18 @@ describe("the day is the invoice's own, read once", () => {
       await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
         workingOrderId: utc,
         zoneId: v.counter.zoneId,
-        lines: one(v, v.products.cana),
+        lines: one(v, v.products.beer),
         tender: { method: "cash", amount: "2.50" },
       });
 
-      expect(await filed(east)).toMatchObject({ offsetMinutes: 120, vatBreakdown: CANA_AT_4 });
-      expect(await filed(utc)).toMatchObject({ offsetMinutes: 0, vatBreakdown: CANA_AT_10 });
+      expect(await filed(east)).toMatchObject({
+        offsetMinutes: 120,
+        vatBreakdown: BEER_AT_4_PERCENT,
+      });
+      expect(await filed(utc)).toMatchObject({
+        offsetMinutes: 0,
+        vatBreakdown: BEER_AT_10_PERCENT,
+      });
     } finally {
       await suite.db
         .update(locations)
@@ -591,7 +603,7 @@ describe("publishing a menu before a rate's legal date", () => {
     const v = await setupVenue();
     at(EVE);
     await withTransaction(suite.db, (tx) => offerProducts(tx, v.cfg));
-    const eve = await park(v, one(v, v.products.cana));
+    const eve = await park(v, one(v, v.products.beer));
     await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: eve,
       lines: [],
@@ -599,7 +611,7 @@ describe("publishing a menu before a rate's legal date", () => {
     });
 
     at(NEW_YEAR);
-    const newYear = await park(v, one(v, v.products.cana));
+    const newYear = await park(v, one(v, v.products.beer));
     await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       workingOrderId: newYear,
       lines: [],
