@@ -435,6 +435,356 @@ describe("a refusal's own reads have a time limit", () => {
     expect(tableOrder(el)!.party?.revision).toBe(9);
     await expectPressCarriesTheRows(el, { "20.00": 9 });
   });
+
+  describe("a refusal's reads end with the visit and the press they were for", () => {
+    const stranger = party({
+      id: "v7",
+      revision: 50,
+      tableIds: ["t6"],
+      billCount: 1,
+      openingBillId: "wo-6",
+    });
+    const withStranger = [...atFloor(3), table("t6", "6", stranger)];
+    const billIds = (el: TillApp) => tableOrder(el)!.bills.map((bill) => bill.workingOrderId);
+
+    /** Back to the floor, then the same table's panel again with Bill 2 ticked. */
+    async function backToThePanel(el: TillApp): Promise<void> {
+      emit(tableOrder(el)!, "back-to-floor");
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+      await flush(el);
+      await toPanel(el);
+      await tick(el, "b2");
+    }
+
+    describe("another party's table, whose bills read fails", () => {
+      it.each([
+        ["with a refused press's floor read still out", "getTablesState"],
+        ["with a refused press's bills read still out", "getPartyBills"],
+        ["control: with no press refused", null],
+      ] as const)("%s: none of the last party's bills on screen", async (_case, hung) => {
+        const el = await billTwoTicked({
+          getTablesState: vi.fn().mockResolvedValue(withStranger),
+          ...refusedWith({ code: "party.out_of_date" }),
+        });
+        if (hung !== null) {
+          api[hung]!.mockReset().mockImplementation(never);
+          await press(el, "[data-split-confirm]");
+        }
+        await vi.advanceTimersByTimeAsync(1_000);
+        emit(tableOrder(el)!, "back-to-floor");
+        await flush(el);
+
+        api.getPartyBills!.mockReset().mockRejectedValue(lost());
+        emit(floor(el)!, "open-table", { tableId: "t6", seated: true });
+        await flush(el);
+
+        expect(tableOrder(el)!.party!.id).toBe("v7");
+        expect(billIds(el)).toEqual([]);
+        await vi.advanceTimersByTimeAsync(2 * LIMIT);
+        await flush(el);
+        expect(billIds(el)).toEqual([]);
+      });
+    });
+
+    it("the other party's reads have no refusal's limit", async () => {
+      const el = await billTwoTicked({
+        getTablesState: vi.fn().mockResolvedValue(withStranger),
+        ...refusedWith({ code: "party.out_of_date" }),
+      });
+      api.getTablesState!.mockReset().mockImplementation(never);
+      await press(el, "[data-split-confirm]");
+      emit(tableOrder(el)!, "back-to-floor");
+      await flush(el);
+
+      const bills = held<PartyBill[]>();
+      api.getPartyBills!.mockReset().mockImplementation(bills.read);
+      server.bills.add("wo-6");
+      emit(floor(el)!, "open-table", { tableId: "t6", seated: true });
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(LIMIT + 1_000);
+      await flush(el);
+      bills.calls[0]!.answer([partyBill("wo-6", 1, "50.00")]);
+      await flush(el);
+
+      expect(billIds(el)).toEqual(["wo-6"]);
+    });
+
+    it("a party that took the table while the refusal read: its own reads have no refusal's limit", async () => {
+      const el = await billTwoTicked(refusedWith({ code: "party.out_of_date" }));
+      const bills = held<PartyBill[]>();
+      const newcomer = party({ id: "v9", revision: 9, tableIds: ["t4"], openingBillId: "wo-9" });
+      api.getTablesState!.mockReset().mockResolvedValue([table("t4", "4", newcomer), table7]);
+      api.getPartyBills!.mockReset().mockImplementation(bills.read);
+      server.bills.add("wo-9");
+      await press(el, "[data-split-confirm]");
+      expect(tableOrder(el)!.party!.id).toBe("v9");
+
+      await vi.advanceTimersByTimeAsync(LIMIT + 1_000);
+      await flush(el);
+      bills.calls.at(-1)!.answer([partyBill("wo-9", 1, "90.00")]);
+      await flush(el);
+
+      expect(billIds(el)).toEqual(["wo-9"]);
+    });
+
+    describe("a second press refused within the first's limit, its floor read hung as well", () => {
+      async function secondPressHung(again: (el: TillApp) => Promise<void>) {
+        const words = await sentenceOfAFailedRead(() =>
+          api.getTablesState!.mockReset().mockRejectedValue(lost()),
+        );
+        const el = await billTwoTicked(refusedWith({ code: "party.out_of_date" }));
+        const shownFloor = tableOrder(el)!.tables;
+        api.getTablesState!.mockReset().mockImplementation(never);
+        await press(el, "[data-split-confirm]");
+        await vi.advanceTimersByTimeAsync(20_000);
+        await flush(el);
+        await again(el);
+        expect(shownFloor.length).toBeGreaterThan(0);
+        await press(el, "[data-split-confirm]");
+        expect(api.splitTable).toHaveBeenCalledTimes(2);
+        return { el, shownFloor, words };
+      }
+
+      async function thenTheSecondsLimitPasses(el: TillApp, shownFloor: unknown, words: string) {
+        await vi.advanceTimersByTimeAsync(5_000);
+        await flush(el);
+        expect(panelOpen(el), "the first's limit does not reopen it").toBe(false);
+        expect(tableOrder(el)!.tables).toBe(shownFloor);
+
+        await vi.advanceTimersByTimeAsync(LIMIT);
+        await flush(el);
+        expect(panelOpen(el)).toBe(true);
+        expect(tableOrder(el)!.tables.length).toBeGreaterThan(0);
+        expect(said(el)).toBe(words);
+        expect(said(el)).not.toContain(t("party.changed_gone"));
+      }
+
+      it("after going back to the floor: the floor stays, and the foot says what a failed read says", async () => {
+        const { el, shownFloor, words } = await secondPressHung(backToThePanel);
+        await thenTheSecondsLimitPasses(el, shownFloor, words);
+      });
+
+      it("from a panel opened again without leaving: the same", async () => {
+        const { el, shownFloor, words } = await secondPressHung(async (at) => {
+          await toPanel(at);
+          await tick(at, "b2");
+        });
+        await thenTheSecondsLimitPasses(el, shownFloor, words);
+      });
+    });
+
+    describe("a later press, its answer still out, with an earlier refusal's reads hung", () => {
+      async function pressedAgain(el: TillApp) {
+        await toPanel(el);
+        await tick(el, "b2");
+        api.splitTable!.mockReset().mockImplementation(never);
+        await press(el, "[data-split-confirm]");
+        expect(api.splitTable).toHaveBeenCalledOnce();
+      }
+
+      it.each([
+        [
+          "every read of the order hung",
+          ["getPartyBills", "getTabLines", "listGroups", "readCurrentOrders"],
+          ["bills", "lines", "groups", "currentOrders"],
+        ],
+        [
+          "its groups and kitchen reads hung",
+          ["listGroups", "readCurrentOrders"],
+          ["groups", "currentOrders"],
+        ],
+      ] as const)("%s: what they were to bring stays on screen", async (_case, hung, kept) => {
+        const el = await billTwoTicked({
+          ...refusedWith({ code: "party.out_of_date" }),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [dish("soup", 1)], revision: 0 }),
+        });
+        const screen = tableOrder(el)!;
+        const shown = kept.map((field) => screen[field]);
+        expect(screen.bills.length).toBeGreaterThan(0);
+        expect(screen.lines.length).toBeGreaterThan(0);
+        expect(screen.currentOrders).not.toBeNull();
+        for (const read of hung) api[read]!.mockReset().mockImplementation(never);
+        await press(el, "[data-split-confirm]");
+
+        await pressedAgain(el);
+
+        expect(kept.map((field) => tableOrder(el)![field])).toEqual(shown);
+        kept.forEach((field, at) => expect(tableOrder(el)![field], field).toBe(shown[at]));
+      });
+
+      it("the earlier refusal's drafts read says nothing over it", async () => {
+        const el = await billTwoTicked(refusedWith({ code: "draft.out_of_date", billId: "b2" }));
+        api.listDrafts!.mockReset().mockImplementation(never);
+        await press(el, "[data-split-confirm]");
+
+        await pressedAgain(el);
+        await vi.advanceTimersByTimeAsync(2 * LIMIT);
+        await flush(el);
+
+        expect(panelOpen(el)).toBe(false);
+        expect(noBanner(el)).toBe(true);
+      });
+    });
+
+    it("a press that goes through stops an earlier refusal's reads: its own failed floor read empties the floor as ever, and nothing is said", async () => {
+      const el = await billTwoTicked(refusedWith({ code: "party.out_of_date" }));
+      api.getTablesState!.mockReset().mockImplementation(never);
+      await press(el, "[data-split-confirm]");
+      await toPanel(el);
+      await tick(el, "b2");
+      api.splitTable!.mockReset().mockResolvedValue({ partyId: "v-split", billIds: ["b2"] });
+      api.getTablesState!.mockReset().mockRejectedValue(lost());
+      await press(el, "[data-split-confirm]");
+      await flush(el);
+
+      expect(tableOrder(el)!.tables).toEqual([]);
+      expect(panelOpen(el)).toBe(false);
+      await vi.advanceTimersByTimeAsync(2 * LIMIT);
+      await flush(el);
+      expect(panelOpen(el)).toBe(false);
+      expect(noBanner(el)).toBe(true);
+    });
+
+    describe("no limit's timer outlives the screen", () => {
+      /** The 25-second timers armed from here on, other than the floor poll's own. */
+      function limitTimers() {
+        const pending = new Set<unknown>();
+        let armed = 0;
+        const arm = globalThis.setTimeout;
+        const disarm = globalThis.clearTimeout;
+        vi.spyOn(globalThis, "setTimeout").mockImplementation(((run: () => void, ms?: number) => {
+          const timer = arm(() => {
+            pending.delete(timer);
+            run();
+          }, ms);
+          if (ms === LIMIT && !new Error().stack!.includes("pollFloor")) {
+            armed++;
+            pending.add(timer);
+          }
+          return timer;
+        }) as never);
+        vi.spyOn(globalThis, "clearTimeout").mockImplementation(((timer: never) => {
+          pending.delete(timer);
+          disarm(timer);
+        }) as never);
+        return {
+          get armed() {
+            return armed;
+          },
+          get pending() {
+            return pending.size;
+          },
+        };
+      }
+      const readsOfTheOrder = () =>
+        [api.getPartyBills!, api.getTabLines!, api.listGroups!, api.readCurrentOrders!].map(
+          (read) => read.mock.calls.length,
+        );
+      const leavings = {
+        "Back to the floor": async (el: TillApp) => {
+          emit(tableOrder(el)!, "back-to-floor");
+          await flush(el);
+          el.shadowRoot!.querySelector("wt-unsaved-changes")
+            ?.shadowRoot?.querySelector<HTMLElement>("[data-choice=discard]")
+            ?.click();
+        },
+        "the till taken off the page": (el: TillApp) => el.remove(),
+      };
+
+      it("the till's server replaced, with the floor read hung: none left", async () => {
+        const el = await billTwoTicked(refusedWith({ code: "party.out_of_date" }));
+        api.getTablesState!.mockReset().mockImplementation(never);
+        const timers = limitTimers();
+        await press(el, "[data-split-confirm]");
+        await flush(el);
+        expect(timers.pending).toBeGreaterThan(0);
+
+        el.api = { ...api } as unknown as TillApp["api"];
+        await flush(el);
+        expect(timers.pending).toBe(0);
+      });
+
+      describe.each(Object.keys(leavings) as (keyof typeof leavings)[])("%s", (how) => {
+        it.each([
+          ["floor", "getTablesState"],
+          ["bills", "getPartyBills"],
+          ["lines", "getTabLines"],
+          ["groups", "listGroups"],
+          ["kitchen", "readCurrentOrders"],
+        ] as const)(
+          "with the %s read hung: none left, and no read starts after",
+          async (_r, read) => {
+            const el = await billTwoTicked(refusedWith({ code: "party.out_of_date" }));
+            api[read]!.mockReset().mockImplementation(never);
+            const timers = limitTimers();
+            await press(el, "[data-split-confirm]");
+            await vi.advanceTimersByTimeAsync(1_000);
+            await flush(el);
+            expect(timers.armed, "the probe saw the limit").toBeGreaterThan(0);
+            expect(timers.pending).toBeGreaterThan(0);
+            const before = readsOfTheOrder();
+
+            await leavings[how](el);
+            await flush(el);
+            expect(timers.pending).toBe(0);
+
+            const armed = timers.armed;
+            await vi.advanceTimersByTimeAsync(4 * LIMIT);
+            await flush(el);
+            expect(readsOfTheOrder()).toEqual(before);
+            expect(timers.armed).toBe(armed);
+            expect(timers.pending).toBe(0);
+          },
+        );
+
+        it("a lost reply with the floor read hung: none left, and no read starts after", async () => {
+          const el = await billTwoTicked(refusedWith(lost()));
+          api.getTablesState!.mockReset().mockImplementation(never);
+          const timers = limitTimers();
+          await press(el, "[data-split-confirm]");
+          await flush(el);
+          expect(timers.pending).toBeGreaterThan(0);
+          const before = readsOfTheOrder();
+
+          await leavings[how](el);
+          await flush(el);
+          expect(timers.pending).toBe(0);
+
+          await vi.advanceTimersByTimeAsync(4 * LIMIT);
+          await flush(el);
+          expect(readsOfTheOrder()).toEqual(before);
+        });
+
+        it("with the drafts read hung: none left", async () => {
+          const el = await billTwoTicked(refusedWith({ code: "draft.out_of_date", billId: "b2" }));
+          api.listDrafts!.mockReset().mockImplementation(never);
+          const timers = limitTimers();
+          await press(el, "[data-split-confirm]");
+          await flush(el);
+          expect(timers.pending).toBeGreaterThan(0);
+
+          await leavings[how](el);
+          await flush(el);
+          expect(timers.pending).toBe(0);
+        });
+
+        it("with the rows' read behind a reopened panel hung: none left", async () => {
+          const el = await billTwoTicked(refusedWith({ code: "party.out_of_date" }));
+          api.getSplitSources!.mockReset().mockImplementation(never);
+          const timers = limitTimers();
+          await press(el, "[data-split-confirm]");
+          await flush(el);
+          expect(panelOpen(el)).toBe(true);
+          expect(timers.pending).toBeGreaterThan(0);
+
+          await leavings[how](el);
+          await flush(el);
+          expect(timers.pending).toBe(0);
+        });
+      });
+    });
+  });
 });
 
 describe("the sentence when party.out_of_date's table could not be read again (the owner's words, 2026-11-05)", () => {

@@ -807,6 +807,12 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   drafts answer write nothing, start no read, and a press still carries the rows on screen). With no refusal out, a
   drafts read keeps a request's 150 seconds.
 
+  **Those reads belong to their press** (fix round F). They end when the waiter leaves that visit or that party, at the
+  next press, or when the till leaves the page or its server is replaced: their timers stop, they start no further read,
+  nothing is said, and what a failed read would have emptied (the floor, the bills, the lines, the groups, the kitchen
+  read) stays. Another party's or another visit's reads have no refusal's limit, and a failed bills read there empties
+  the list as it always did.
+
   **What this does not reach.** Before a first answer there is no snapshot, so a first read that never answers leaves
   a blank panel with Split quiet and no words, until Back and the same table read again. A reload whose floor or bills
   read never answers starts no second reload on that panel, while the rows, their reads and Split go on, and a press

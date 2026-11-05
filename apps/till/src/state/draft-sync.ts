@@ -180,6 +180,12 @@ export interface DraftSyncOptions {
  */
 export const TABLE_REQUEST_LIMIT_MS = 150_000;
 
+/** A read shorter than a request's limit, which `stop` ends early. */
+export interface DraftReadBounds {
+  limitMs: number;
+  stop: AbortSignal;
+}
+
 /** A signal that aborts after `ms`, or with `also`; `done` clears the timer. */
 export function limited(ms: number, also?: AbortSignal): { signal: AbortSignal; done: () => void } {
   const own = new AbortController();
@@ -512,16 +518,20 @@ export class DraftSync {
   }
 
   /** A read never turns a retained local candidate into saved work. */
-  async load(limitMs?: number): Promise<boolean> {
+  async load(bounds?: DraftReadBounds): Promise<boolean> {
     if (this.#commanding || this.#correctingPlaces) return false;
-    return this.#load(limitMs);
+    return this.#load(bounds);
   }
 
-  async #load(limitMs = this.#options.requestLimitMs): Promise<boolean> {
+  async #load(bounds?: DraftReadBounds): Promise<boolean> {
     const command = this.#commandsStarted;
     const read = ++this.#reads;
     this.#cancelTimer();
-    const limit = limited(limitMs, this.#commandAbort?.signal);
+    const stops = [this.#commandAbort?.signal, bounds?.stop].filter((stop) => stop !== undefined);
+    const limit = limited(
+      bounds?.limitMs ?? this.#options.requestLimitMs,
+      stops.length === 0 ? undefined : AbortSignal.any(stops),
+    );
     let answer;
     try {
       // What a read answers past its limit goes nowhere, whether or not its request stopped.

@@ -644,12 +644,11 @@ describe("till-app: Split a table's rows and its revision are one read (D16)", (
       await timedRead(el);
 
       expect(api.getSplitSources!.mock.calls.length).toBe(rowsRead + 1);
-      expect(steak({}).firedAt).toBeNull();
       expect(marks(el)).toEqual([]);
       expect(api.listGroups!.mock.calls.length).toBe(groupsRead);
     });
 
-    it("Move dishes draws it from its own rows' read, whatever the till's groups say, and the panel's timed reads do not read those rows", async () => {
+    it("Move dishes draws it from its own rows' read, whatever the till's groups say, and neither the panel's timed reads nor closing the panel read those rows", async () => {
       const lines = (over: Partial<TabLine>) => ({ revision: 0, lines: [steak(over)] });
       const movePicker = (el: TillApp) =>
         q(el, "[data-move-dishes] till-portion-picker") as HTMLElement | null;
@@ -672,6 +671,11 @@ describe("till-app: Split a table's rows and its revision are one read (D16)", (
       await timedRead(el);
       await timedRead(el);
 
+      expect(api.getTabLines!.mock.calls.length).toBe(linesRead);
+      expect(moveMarks(el)).toEqual(["Held · Mains"]);
+
+      await press(el, "[data-action-back]");
+      await press(el, '[data-action="move-dishes"]');
       expect(api.getTabLines!.mock.calls.length).toBe(linesRead);
       expect(moveMarks(el)).toEqual(["Held · Mains"]);
     });
