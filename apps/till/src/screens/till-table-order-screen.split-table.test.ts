@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { html } from "lit";
 import type { PartyAllergyRead } from "@waitron/module";
 import { decimal, formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import type { TillSplitPicker } from "../widgets/split-picker.js";
 import "./till-table-order-screen.js";
-import type { SplitTableDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
+import type {
+  SplitRefusal,
+  SplitTableDetail,
+  TillTableOrderScreen,
+} from "./till-table-order-screen.js";
 import type {
   BillBalance,
   Draft,
@@ -1089,6 +1094,674 @@ describe("Split a table's panel", () => {
 
         expect(sent).toHaveLength(1);
       },
+    );
+  });
+});
+
+const refundButton = (billId: string) =>
+  html`<span class="error-action"
+    ><wt-button
+      data-refund-excess
+      @click=${(event: Event) =>
+        event.currentTarget!.dispatchEvent(
+          new CustomEvent("refund-excess", {
+            detail: { billId },
+            bubbles: true,
+            composed: true,
+          }),
+        )}
+      >Refund</wt-button
+    ></span
+  >`;
+
+const reopenedAt = (over: Partial<SplitRefusal> = {}) =>
+  ({
+    tableId: "t8",
+    selection: { wholeBillIds: ["b3"], loose: [{ billId: "b1", lineIds: ["salad"] }] },
+    staying: "3",
+    leaving: "2",
+    message: "Refused",
+    ...over,
+  }) as SplitRefusal;
+
+async function refuse(el: TillTableOrderScreen, refusal: SplitRefusal): Promise<void> {
+  el.splitRefusal = refusal;
+  await settled(el);
+}
+
+const ticked = (el: TillTableOrderScreen) => splitPicker(el)!.split;
+const refusalLine = (el: TillTableOrderScreen) => q(el, "[data-split-refusal]");
+const inPanel = (el: TillTableOrderScreen) => q(el, "[data-action-panel]") !== null;
+
+/** The screen's focus, read through its shadow root. */
+const focused = (el: TillTableOrderScreen) => el.shadowRoot!.activeElement as HTMLElement | null;
+
+describe("A803 split: a re-read", () => {
+  it("a re-read: a picked dish paid elsewhere drops, and its row says Paid", async () => {
+    const el = await mountScreen();
+    await toPanel(el);
+    await pickDish(el, "b1", "salad");
+    await pickDish(el, "b1", "soup");
+    const rows = board08.splitRead.bills[0]!.lines;
+    el.splitRead = read(
+      { b1: rows, b2: [dish("wine", 5, "40.00")], b3: [dish("fish", 6, "39.00")] },
+      { b1: "97.00", b2: "40.00", b3: "39.00" },
+      {
+        b1: {
+          received: "10.00",
+          paidLines: [{ lineId: "salad", lineNo: 2, paidQuantity: "1.000" }],
+        },
+      },
+    );
+    await settled(el);
+
+    expect([...ticked(el).picks.get("b1")!]).toEqual(["soup"]);
+    const salad = splitPicker(el)!
+      .shadowRoot!.querySelector('[data-split-bill="b1"] till-portion-picker')!
+      .shadowRoot!.querySelector('[data-pick-row="salad"]')!;
+    expect(salad.textContent).toContain(t("bill_pay.paid"));
+  });
+
+  it.each([
+    ["a party switch", { party: { ...garcia, id: "another", name: "Other" } }],
+    ["the table leaving", { party: { ...garcia, tableIds: ["t7", "t9"] } }],
+    ["the party going", { party: null }],
+    ["the party left on that one table", { party: { ...garcia, tableIds: ["t8"] } }],
+  ] as const)("a re-read: %s closes the panel, sending nothing", async (_name, change) => {
+    const el = await mountScreen();
+    const sent = heard<SplitTableDetail>(el, "split-table");
+    await toPanel(el);
+    await tickBill(el, "b2");
+
+    Object.assign(el, change);
+    await settled(el);
+
+    expect(inPanel(el)).toBe(false);
+    expect(sent).toEqual([]);
+  });
+
+  it("a re-read: the same party on the same table with a new count keeps the panel", async () => {
+    const el = await mountScreen();
+    await toPanel(el);
+    await tickBill(el, "b2");
+
+    el.party = { ...garcia, guestCount: 9 };
+    await settled(el);
+
+    expect([...ticked(el).whole]).toEqual(["b2"]);
+  });
+
+  it("a re-read: a screen with no party at the first draw has no panel and throws nothing", async () => {
+    const el = await mountScreen({ party: null });
+    expect(inPanel(el)).toBe(false);
+  });
+});
+
+describe("A803 split: what the app observes", () => {
+  type Observed = { prompt: object; billIds: string[] };
+
+  async function opened() {
+    const el = await mountScreen();
+    const prompts = heard<{ prompt: object }>(el, "split-table-open");
+    const seen = heard<Observed>(el, "split-table-observe");
+    await toPanel(el);
+    return { el, seen, prompt: prompts[0]!.prompt };
+  }
+
+  it("observe: nothing fires on opening", async () => {
+    const { seen } = await opened();
+    expect(seen).toEqual([]);
+  });
+
+  it("observe: a bill ticked, a dish picked off a bill and a bill unticked each fire, with the prompt and sorted ids", async () => {
+    const { el, seen, prompt } = await opened();
+
+    await tickBill(el, "b3");
+    expect(seen.at(-1)).toEqual({ prompt, billIds: ["b3"] });
+    expect(seen.at(-1)!.prompt).toBe(prompt);
+
+    await pickDish(el, "b1", "salad");
+    expect(seen.at(-1)).toEqual({ prompt, billIds: ["b1", "b3"] });
+
+    await tickBill(el, "b3");
+    expect(seen.at(-1)).toEqual({ prompt, billIds: ["b1"] });
+    expect(seen).toHaveLength(3);
+  });
+
+  it("observe: a second dish on a bill already in the set does not fire", async () => {
+    const { el, seen } = await opened();
+    await pickDish(el, "b1", "salad");
+    await pickDish(el, "b1", "soup");
+    expect(seen).toHaveLength(1);
+  });
+
+  it("observe: a re-read dropping a tick fires", async () => {
+    const { el, seen, prompt } = await opened();
+    await pickDish(el, "b1", "salad");
+    await tickBill(el, "b2");
+    expect(seen).toHaveLength(2);
+
+    el.bills = board08.bills.filter((bill) => bill.workingOrderId !== "b2");
+    await settled(el);
+
+    expect(seen.at(-1)).toEqual({ prompt, billIds: ["b1"] });
+    expect(seen).toHaveLength(3);
+  });
+
+  it("observe: a refusal reopening the panel fires, even for the set last observed", async () => {
+    const { el, seen, prompt } = await opened();
+    await tickBill(el, "b3");
+    await typeCount(el, "leaving", "2");
+    split(el).click();
+    await settled(el);
+    expect(seen).toHaveLength(1);
+
+    await refuse(
+      el,
+      reopenedAt({ selection: { wholeBillIds: ["b3"], loose: [] }, prompt, field: undefined }),
+    );
+
+    expect(seen).toHaveLength(2);
+    expect(seen[1]).toEqual({ prompt, billIds: ["b3"] });
+    expect(seen[1]!.prompt).toBe(prompt);
+  });
+
+  it("observe: a count change does not fire", async () => {
+    const { el, seen } = await opened();
+    await tickBill(el, "b3");
+    await typeCount(el, "staying", "3");
+    await typeCount(el, "leaving", "2");
+    expect(seen).toHaveLength(1);
+  });
+
+  it("observe: the panel closing on send does not fire", async () => {
+    const { el, seen } = await opened();
+    await tickBill(el, "b3");
+    split(el).click();
+    await settled(el);
+    expect(inPanel(el)).toBe(false);
+    expect(seen).toHaveLength(1);
+  });
+});
+
+describe("A803 split: reopening with a refusal", () => {
+  async function sentOnce() {
+    const el = await mountScreen();
+    const prompts = heard<{ prompt: object }>(el, "split-table-open");
+    const sent = heard<SplitTableDetail>(el, "split-table");
+    await toPanel(el);
+    await tickBill(el, "b3");
+    await pickDish(el, "b1", "salad");
+    await typeCount(el, "staying", "3");
+    await typeCount(el, "leaving", "2");
+    split(el).click();
+    await settled(el);
+    expect(inPanel(el)).toBe(false);
+    return { el, sent, prompt: prompts[0]!.prompt };
+  }
+
+  it("reopen: a refusal naming a count shows what was sent, under that stepper, with the bottom message and Split enabled", async () => {
+    const { el, sent, prompt } = await sentOnce();
+
+    await refuse(el, reopenedAt({ field: "leaving", message: "Too many", prompt }));
+
+    expect(inPanel(el)).toBe(true);
+    expect([...ticked(el).whole]).toEqual(["b3"]);
+    expect([...ticked(el).picks.get("b1")!]).toEqual(["salad"]);
+    expect(stepper(el, "staying").value).toBe("3");
+    expect(stepper(el, "leaving").value).toBe("2");
+    expect(stepper(el, "leaving").error).toBe("Too many");
+    expect(stepper(el, "staying").error).toBe("");
+    expect(bottom(el).error).toBe(t("form.fix_fields"));
+    expect(refusalLine(el)).toBeNull();
+    expect(split(el).disabled).toBe(false);
+    expect(split(el).getAttribute("variant")).toBe("primary");
+
+    split(el).click();
+    await settled(el);
+    expect(sent).toHaveLength(2);
+    expect(sent[1]!.prompt).toBe(prompt);
+    expect(sent[1]).toEqual(sent[0]);
+  });
+
+  it("reopen: a refused count's message goes when that count changes, not when the other does", async () => {
+    const { el, prompt } = await sentOnce();
+    await refuse(el, reopenedAt({ field: "leaving", message: "Too many", prompt }));
+
+    await typeCount(el, "staying", "4");
+    expect(stepper(el, "leaving").error).toBe("Too many");
+
+    await typeCount(el, "leaving", "1");
+    expect(stepper(el, "leaving").error).toBe("");
+    expect(bottom(el).error).toBe("");
+    expect(split(el).disabled).toBe(false);
+  });
+
+  it("reopen: a refused count's message goes when Split is pressed again", async () => {
+    const { el, prompt } = await sentOnce();
+    await refuse(el, reopenedAt({ field: "staying", message: "Too many", prompt }));
+    split(el).click();
+    await settled(el);
+    await refuse(el, reopenedAt({ message: "Another", prompt }));
+    expect(stepper(el, "staying").error).toBe("");
+    expect(bottom(el).error).toBe("");
+  });
+
+  it("reopen: a refusal with no field marks nothing and says it above the buttons, announced, until Split is pressed", async () => {
+    const { el, sent, prompt } = await sentOnce();
+
+    await refuse(el, reopenedAt({ message: "Bill 1 changed", prompt }));
+
+    expect([...ticked(el).whole]).toEqual(["b3"]);
+    expect(stepper(el, "staying").error).toBe("");
+    expect(stepper(el, "leaving").error).toBe("");
+    expect(bottom(el).error).toBe("");
+    const line = refusalLine(el)!;
+    expect(line.textContent!.trim()).toBe("Bill 1 changed");
+    expect(line.getAttribute("role")).toBe("alert");
+    expect(
+      line.compareDocumentPosition(bottom(el)) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(split(el).disabled).toBe(false);
+
+    await tickBill(el, "b2");
+    expect(refusalLine(el)).not.toBeNull();
+
+    await tickBill(el, "b2");
+    split(el).click();
+    await settled(el);
+    expect(refusalLine(el)).toBeNull();
+    expect(sent).toHaveLength(2);
+  });
+
+  it("reopen: Split pressed with a bad count takes the sentence away too", async () => {
+    const { el, sent, prompt } = await sentOnce();
+    await refuse(el, reopenedAt({ message: "Bill 1 changed", prompt }));
+    await typeCount(el, "leaving", "abc");
+
+    split(el).click();
+    await settled(el);
+
+    expect(refusalLine(el)).toBeNull();
+    expect(sent).toHaveLength(1);
+  });
+
+  it("reopen: a template message draws its button", async () => {
+    const { el, prompt } = await sentOnce();
+    await refuse(
+      el,
+      reopenedAt({
+        message: html`<span class="error-part">Over</span
+          ><span class="error-action"><wt-button data-refund-excess>Refund</wt-button></span>`,
+        prompt,
+      }),
+    );
+    const button = refusalLine(el)!.querySelector("wt-button[data-refund-excess]");
+    expect(button?.textContent).toBe("Refund");
+    const action = refusalLine(el)!.querySelector(".error-action")!;
+    const part = refusalLine(el)!.querySelector(".error-part")!;
+    expect(getComputedStyle(action).display).toBe("block");
+    expect(getComputedStyle(part).display).toBe("block");
+    expect(getComputedStyle(action).borderTopStyle).toBe("none");
+  });
+
+  it("reopen: a bill a re-read took away before the panel came back has lost its tick", async () => {
+    const { el, prompt } = await sentOnce();
+    el.bills = board08.bills.filter((bill) => bill.workingOrderId !== "b3");
+    await settled(el);
+
+    await refuse(el, reopenedAt({ prompt }));
+
+    expect([...ticked(el).whole]).toEqual([]);
+    expect([...ticked(el).picks.get("b1")!]).toEqual(["salad"]);
+  });
+
+  it("reopen: picks arrive before the read they belong to and are kept when it answers", async () => {
+    const { el, prompt } = await sentOnce();
+    el.splitRead = null;
+    await refuse(el, reopenedAt({ prompt }));
+    expect(inPanel(el)).toBe(true);
+    expect(q(el, "till-split-picker")).toBeNull();
+
+    el.splitRead = board08.splitRead;
+    await settled(el);
+
+    expect([...ticked(el).picks.get("b1")!]).toEqual(["salad"]);
+    expect([...ticked(el).whole]).toEqual(["b3"]);
+  });
+
+  it.each([
+    ["a table no longer held", { party: { ...garcia, tableIds: ["t7", "t9"] } }],
+    ["a party left on one table", { party: { ...garcia, tableIds: ["t8"] } }],
+    ["a party gone", { party: null }],
+  ] as const)("reopen: a refusal for %s does not reopen", async (_name, change) => {
+    const { el, prompt } = await sentOnce();
+    Object.assign(el, change);
+    await refuse(el, reopenedAt({ prompt }));
+    expect(inPanel(el)).toBe(false);
+  });
+
+  it("reopen: a refusal arriving with a party switch does not reopen", async () => {
+    const { el, prompt } = await sentOnce();
+    el.party = { ...garcia, id: "another" };
+    await refuse(el, reopenedAt({ prompt }));
+    expect(inPanel(el)).toBe(false);
+  });
+
+  it("reopen: a screen drawn afresh does not reopen for a refusal the app still holds", async () => {
+    const el = await mountScreen({ splitRefusal: reopenedAt() });
+    expect(inPanel(el)).toBe(false);
+  });
+
+  it("reopen: the panel takes focus when a refusal brings it back", async () => {
+    const { el, prompt } = await sentOnce();
+    await refuse(el, reopenedAt({ prompt }));
+    expect(focused(el)?.matches("[data-split-pick] h2")).toBe(true);
+  });
+
+  it("reopen: focus goes to the ⋮ after Split", async () => {
+    const { el, prompt } = await sentOnce();
+    await refuse(el, reopenedAt({ prompt }));
+
+    await userEvent.click(split(el));
+    await settled(el);
+
+    expect(inPanel(el)).toBe(false);
+    expect(focused(el)?.matches("[data-table-menu]")).toBe(true);
+  });
+
+  it("reopen: focus goes to the ⋮ after Back, which comes by way of the tables", async () => {
+    const { el, prompt } = await sentOnce();
+    await refuse(el, reopenedAt({ prompt }));
+
+    await userEvent.click(q(el, "[data-action-back]")!);
+    await settled(el);
+    expect(q(el, "[data-split-table]")).not.toBeNull();
+    expect(focused(el)?.matches("[data-split-table] h2")).toBe(true);
+
+    await userEvent.click(q(el, "[data-action-back]")!);
+    await settled(el);
+
+    expect(inPanel(el)).toBe(false);
+    expect(focused(el)?.matches("[data-table-menu]")).toBe(true);
+  });
+});
+
+describe("A803 split: Refund for a bill on screen", () => {
+  it("Refund for the bill on screen asks nothing and lets the event through", async () => {
+    const el = await mountScreen();
+    const heardRefund = heard<{ billId: string }>(el, "refund-excess");
+    await toPanel(el);
+    await refuse(el, reopenedAt({ message: refundButton("b1") }));
+
+    refusalLine(el)!.querySelector<HTMLElement>("[data-refund-excess]")!.click();
+    await settled(el);
+
+    expect(heardRefund).toEqual([{ billId: "b1" }]);
+    expect(inPanel(el)).toBe(true);
+    expect([...ticked(el).whole]).toEqual(["b3"]);
+  });
+});
+
+describe("A803 split: Everything ticked", () => {
+  async function everythingTicked(over: Partial<TillTableOrderScreen> = {}) {
+    const el = await mountScreen(over);
+    const opened = heard<{ prompt: object }>(el, "split-table-open");
+    const sent = heard<SplitTableDetail>(el, "split-table");
+    await toPanel(el);
+    for (const bill of el.bills)
+      if (bill.status !== "settled") await tickBill(el, bill.workingOrderId);
+    return { el, sent, prompt: opened[0]!.prompt };
+  }
+
+  it("Everything ticked: Split swaps to the question, naming both tables, and sends nothing", async () => {
+    const { el, sent } = await everythingTicked();
+
+    split(el).click();
+    await settled(el);
+
+    expect(sent).toEqual([]);
+    expect(q(el, "[data-split-confirm]")).toBeNull();
+    expect(textOf(el, "[data-split-question]")).toBe(
+      "Nothing would stay at T7. Move the guests to T8 instead?",
+    );
+    expect(textOf(el, "[data-split-anyway-note]")).toBe(
+      "Split anyway leaves T7 with an empty bill.",
+    );
+    expect(q(el, "[data-split-move-guests]")!.getAttribute("variant")).toBe("primary");
+    expect(q(el, "[data-split-move-guests]")!.textContent!.trim()).toBe(
+      t("table.action_move_guests"),
+    );
+    expect(q(el, "[data-split-anyway]")!.getAttribute("variant")).toBe("secondary");
+    expect(q(el, "[data-split-anyway]")!.textContent!.trim()).toBe("Split anyway");
+    expect(focused(el)?.matches("[data-split-move-guests]")).toBe(true);
+  });
+
+  it("Everything ticked: the question's Spanish words", async () => {
+    setLocale("es-ES");
+    const { el } = await everythingTicked();
+    split(el).click();
+    await settled(el);
+    expect(textOf(el, "[data-split-question]")).toBe(
+      "No quedaría nada en T7. ¿Mover los clientes a T8?",
+    );
+    expect(textOf(el, "[data-split-anyway-note]")).toBe(
+      "Separar igualmente deja T7 con una cuenta vacía.",
+    );
+    expect(q(el, "[data-split-anyway]")!.textContent!.trim()).toBe("Separar igualmente");
+  });
+
+  it("Everything ticked: the paid note's Spanish words", async () => {
+    setLocale("es-ES");
+    const { el } = await paidStays();
+    split(el).click();
+    await settled(el);
+    expect(textOf(el, "[data-split-anyway-note]")).toBe(
+      "Separar igualmente deja T7 sin nada que pagar.",
+    );
+  });
+
+  async function paidStays() {
+    return everythingTicked({
+      bills: [partyBill("b1", 1, "30.00", { status: "settled" }), partyBill("b2", 2, "40.00")],
+      splitRead: read(
+        { b1: [dish("soup", 1, "30.00")], b2: [dish("wine", 5, "40.00")] },
+        { b1: "30.00", b2: "40.00" },
+      ),
+    });
+  }
+
+  it("Everything ticked: a bad count is refused before the question", async () => {
+    const { el, sent } = await everythingTicked();
+    await typeCount(el, "leaving", "abc");
+    split(el).click();
+    await settled(el);
+    expect(q(el, "[data-split-question]")).toBeNull();
+    expect(sent).toEqual([]);
+  });
+
+  it("Everything ticked: Move guests sends table-relocation-open, then move-guests with the leaving table", async () => {
+    const { el, sent } = await everythingTicked();
+    const order: string[] = [];
+    let relocated: { verb: string; table: { id: string } | null; prompt: object } | undefined;
+    el.addEventListener("table-relocation-open", (event) => {
+      order.push(event.type);
+      relocated = (event as CustomEvent).detail;
+    });
+    const moved = heard<{ toTableId: string; prompt: object }>(el, "move-guests");
+    el.addEventListener("move-guests", (event) => order.push(event.type));
+    split(el).click();
+    await settled(el);
+
+    q(el, "[data-split-move-guests]")!.click();
+    await settled(el);
+
+    expect(order).toEqual(["table-relocation-open", "move-guests"]);
+    expect(relocated!.verb).toBe("move");
+    expect(relocated!.table!.id).toBe("t8");
+    expect(moved).toEqual([{ toTableId: "t8", prompt: relocated!.prompt }]);
+    expect(sent).toEqual([]);
+    expect(inPanel(el)).toBe(false);
+  });
+
+  it("Everything ticked: an app that delays Move guests sends nothing once a tick has changed", async () => {
+    const { el } = await everythingTicked();
+    let ready: (() => void) | undefined;
+    el.addEventListener("table-relocation-open", (event) => {
+      event.preventDefault();
+      ready = (event as CustomEvent<{ ready: () => void }>).detail.ready;
+    });
+    const moved = heard(el, "move-guests");
+    split(el).click();
+    await settled(el);
+    q(el, "[data-split-move-guests]")!.click();
+    await settled(el);
+
+    await tickBill(el, "b2");
+    ready!();
+    await settled(el);
+
+    expect(moved).toEqual([]);
+    expect(inPanel(el)).toBe(true);
+  });
+
+  it("Everything ticked: Split anyway sends the split with the counts and closes", async () => {
+    const { el, sent, prompt } = await everythingTicked();
+    await typeCount(el, "staying", "3");
+    await typeCount(el, "leaving", "2");
+    split(el).click();
+    await settled(el);
+
+    q(el, "[data-split-anyway]")!.click();
+    await settled(el);
+
+    expect(sent).toEqual([
+      {
+        tableId: "t8",
+        selection: { wholeBillIds: ["b1", "b2", "b3"], loose: [] },
+        guestCounts: { staying: 3, leaving: 2 },
+        prompt,
+      },
+    ]);
+    expect(inPanel(el)).toBe(false);
+  });
+
+  it("Everything ticked: a count made bad under the question stops Split anyway, marked, back at Split", async () => {
+    const { el, sent } = await everythingTicked();
+    split(el).click();
+    await settled(el);
+    await typeCount(el, "leaving", "abc");
+
+    q(el, "[data-split-anyway]")!.click();
+    await settled(el);
+
+    expect(sent).toEqual([]);
+    expect(q(el, "[data-split-question]")).toBeNull();
+    expect(stepper(el, "leaving").error).toBe(t("seat.guest_count_invalid"));
+  });
+
+  it("Everything ticked: Enter from a stepper under the question sends nothing and moves no one", async () => {
+    const { el, sent } = await everythingTicked();
+    const moved = heard(el, "move-guests");
+    split(el).click();
+    await settled(el);
+
+    nativeInput(el, "leaving").dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }),
+    );
+    await settled(el);
+
+    expect(sent).toEqual([]);
+    expect(moved).toEqual([]);
+    expect(q(el, "[data-split-question]")).not.toBeNull();
+  });
+
+  it("Everything ticked: a tick change returns to Split", async () => {
+    const { el } = await everythingTicked();
+    split(el).click();
+    await settled(el);
+
+    await tickBill(el, "b2");
+
+    expect(q(el, "[data-split-question]")).toBeNull();
+    expect(q(el, "[data-split-anyway]")).toBeNull();
+    expect(split(el)).not.toBeNull();
+  });
+
+  it("Everything ticked: a read that gives something to stay returns to Split", async () => {
+    const { el, sent } = await everythingTicked();
+    split(el).click();
+    await settled(el);
+
+    el.bills = [...board08.bills, partyBill("b4", 4, "10.00")];
+    el.splitRead = {
+      bills: [
+        ...board08.splitRead.bills,
+        ...read({ b4: [dish("tea", 7, "10.00")] }, { b4: "10.00" }).bills,
+      ],
+    };
+    await settled(el);
+
+    expect(q(el, "[data-split-question]")).toBeNull();
+    expect(sent).toEqual([]);
+  });
+
+  it.each([
+    ["Back", (el: TillTableOrderScreen) => q(el, "[data-action-back]")!.click()],
+    [
+      "Escape",
+      (el: TillTableOrderScreen) =>
+        q(el, "[data-action-panel]")!.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "Escape",
+            bubbles: true,
+            composed: true,
+            cancelable: true,
+          }),
+        ),
+    ],
+  ] as const)("Everything ticked: %s returns to Split, not out", async (_name, press) => {
+    const { el } = await everythingTicked();
+    split(el).click();
+    await settled(el);
+
+    press(el);
+    await settled(el);
+
+    expect(q(el, "[data-split-question]")).toBeNull();
+    expect(q(el, "[data-split-pick]")).not.toBeNull();
+    expect(split(el)).not.toBeNull();
+    expect([...ticked(el).whole].sort()).toEqual(["b1", "b2", "b3"]);
+    expect(focused(el)?.matches("[data-split-confirm]")).toBe(true);
+  });
+
+  it("Everything ticked: the note's table names are plural when two tables stay", async () => {
+    const threeTables = { ...garcia, tableIds: ["t6", "t7", "t8"] };
+    const { el } = await everythingTicked({
+      party: threeTables,
+      tables: [table("t6"), table("t7"), table("t8")],
+    });
+    split(el).click();
+    await settled(el);
+    expect(textOf(el, "[data-split-question]")).toBe(
+      "Nothing would stay at T6, T7. Move the guests to T8 instead?",
+    );
+    expect(textOf(el, "[data-split-anyway-note]")).toBe(
+      "Split anyway leaves T6, T7 with an empty bill.",
+    );
+  });
+
+  it("Everything ticked: with only a paid bill staying the note says nothing to pay", async () => {
+    const { el } = await paidStays();
+    split(el).click();
+    await settled(el);
+    expect(textOf(el, "[data-split-anyway-note]")).toBe(
+      "Split anyway leaves T7 with nothing to pay.",
     );
   });
 });

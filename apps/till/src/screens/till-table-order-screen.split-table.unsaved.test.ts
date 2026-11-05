@@ -6,7 +6,7 @@ import { setLocale, t } from "../i18n/t.js";
 import type { TillSplitPicker } from "../widgets/split-picker.js";
 import type { SplitSources, TabLine, TableParty, TableState } from "../api/client.js";
 import "./till-table-order-screen.js";
-import type { TillTableOrderScreen } from "./till-table-order-screen.js";
+import type { SplitRefusal, TillTableOrderScreen } from "./till-table-order-screen.js";
 import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 function dish(id: string, lineNo: number): TabLine {
@@ -99,6 +99,7 @@ class SplitTableLeaveApp extends LitElement {
         @split-table=${this.accept}
         @merge-bills=${this.accept}
         @switch-bill=${this.accept}
+        @refund-excess=${this.accept}
       ></till-table-order-screen
       >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
@@ -676,5 +677,191 @@ describe("Split a table's panel out of the page", () => {
     await typeCount(screen, "staying", "5");
     await typeCount(screen, "leaving", "");
     expect(unload()).toBe(false);
+  });
+});
+
+describe("Split a table's panel reopened by a refusal", () => {
+  type Refused = Partial<Extract<SplitRefusal, { selection: unknown }>>;
+
+  /** Sends what is in the panel, then has the app refuse it, as a split the panel closes on. */
+  async function reopen(screen: TillTableOrderScreen, over: Refused = {}) {
+    await pressSplit(screen);
+    expect(panelOpen(screen)).toBe(false);
+    screen.splitRefusal = {
+      tableId: "t8",
+      selection: { wholeBillIds: [], loose: [] },
+      staying: "5",
+      leaving: "",
+      field: "leaving",
+      message: "Refused",
+      ...over,
+    } as SplitRefusal;
+    await settled(screen);
+    expect(panelOpen(screen)).toBe(true);
+  }
+
+  it("a reopened panel counts as changed: it asks on Back, keeps on Keep and discards on Discard", async () => {
+    const { app, screen } = await mount();
+    await reopen(screen, { selection: { wholeBillIds: ["other"], loose: [] }, leaving: "2" });
+    expect(unload()).toBe(true);
+
+    await pressBack(screen);
+    await answer(app, "keep");
+    expect(panelOpen(screen)).toBe(true);
+    expect(whole(screen)).toEqual(["other"]);
+    expect(stepper(screen, "leaving").value).toBe("2");
+
+    await pressBack(screen);
+    await answer(app, "discard");
+    await expect.poll(() => tablesOpen(screen)).toBe(true);
+    expect(unload()).toBe(false);
+  });
+
+  it("a reopened panel's picks back to none are clean, measured from a panel opened afresh", async () => {
+    const { screen } = await mount();
+    await reopen(screen, {
+      selection: { wholeBillIds: [], loose: [{ billId: "main", lineIds: ["soup"] }] },
+    });
+    expect(picks(screen, "main")).toEqual(["soup"]);
+    expect(unload()).toBe(true);
+
+    await pickDish(screen, "main", "soup");
+
+    expect(unload()).toBe(false);
+  });
+
+  it("a count stored elsewhere moves a reopened panel's untouched staying side with it", async () => {
+    const { app, screen } = await mount();
+    await reopen(screen);
+    await storeCount(app, screen, 6);
+    expect(stepper(screen, "staying").value).toBe("6");
+    expect(unload()).toBe(false);
+  });
+
+  it("a typed staying count stored elsewhere counts as saved on a reopened panel", async () => {
+    const { app, screen } = await mount();
+    await reopen(screen, { staying: "3" });
+    expect(unload()).toBe(true);
+    await storeCount(app, screen, 3);
+    expect(stepper(screen, "staying").value).toBe("3");
+    expect(unload()).toBe(false);
+    await typeCount(screen, "staying", "5");
+    expect(unload()).toBe(true);
+  });
+
+  it("a split the panel stays open after keeps its counts and its refusal when taken out and put back", async () => {
+    const { app, screen } = await mount();
+    await reopen(screen, {
+      selection: { wholeBillIds: ["other"], loose: [] },
+      staying: "3",
+      leaving: "2",
+      message: "Too many",
+    });
+    await takeOut(screen);
+    await putBack(app, screen);
+    expect(whole(screen)).toEqual(["other"]);
+    expect(stepper(screen, "staying").value).toBe("3");
+    expect(stepper(screen, "leaving").value).toBe("2");
+    expect(stepper(screen, "leaving").error).toBe("Too many");
+    expect(unload()).toBe(true);
+  });
+
+  it("a split the panel stays open after keeps its Split, which commits with no question", async () => {
+    const { app, screen } = await mount();
+    await reopen(screen, { selection: { wholeBillIds: ["other"], loose: [] }, staying: "3" });
+    await pressSplit(screen);
+    expect(panelOpen(screen)).toBe(false);
+    expect(app.commands.at(-1)!.type).toBe("split-table");
+    expect(app.commands).toHaveLength(2);
+    expect(app.protectionAtSubmit.at(-1)).toBe(false);
+    expect(unload()).toBe(false);
+  });
+
+  it("a read dropping a reopened panel's only tick while it is taken out is told once it is put back", async () => {
+    const observed: { billIds: string[] }[] = [];
+    const { app, screen } = await mount();
+    screen.addEventListener("split-table-observe", (event) =>
+      observed.push((event as CustomEvent<{ billIds: string[] }>).detail),
+    );
+    await reopen(screen, {
+      selection: { wholeBillIds: ["other"], loose: [] },
+      prompt: {},
+    });
+    expect(observed.at(-1)!.billIds).toEqual(["other"]);
+    await takeOut(screen);
+    screen.bills = bills.filter((bill) => bill.workingOrderId !== "other");
+    await screen.updateComplete;
+    expect(observed).toHaveLength(1);
+    await putBack(app, screen);
+    await expect.poll(() => observed.at(-1)!.billIds).toEqual([]);
+  });
+
+  describe("Refund for a bill not on screen", () => {
+    const refund = (billId: string) =>
+      html`<wt-button
+        data-refund-excess
+        @click=${(event: Event) =>
+          event.currentTarget!.dispatchEvent(
+            new CustomEvent("refund-excess", {
+              detail: { billId },
+              bubbles: true,
+              composed: true,
+            }),
+          )}
+        >Refund</wt-button
+      >`;
+    const pressRefund = async (screen: TillTableOrderScreen) => {
+      q(screen, "[data-split-refusal] [data-refund-excess]")!.click();
+      await settled(screen);
+    };
+
+    async function refused(billId: string) {
+      const { app, screen } = await mount();
+      await reopen(screen, {
+        selection: { wholeBillIds: ["other"], loose: [] },
+        field: undefined,
+        message: refund(billId),
+      });
+      const before = app.commands.length;
+      return { app, screen, before };
+    }
+
+    it("Refund for another bill asks; Keep leaves the ticks and dispatches nothing past the screen", async () => {
+      const { app, screen, before } = await refused("other");
+
+      await pressRefund(screen);
+      expect((await question(app)).open).toBe(true);
+      expect(app.commands).toHaveLength(before);
+
+      await answer(app, "keep");
+      expect(app.commands).toHaveLength(before);
+      expect(panelOpen(screen)).toBe(true);
+      expect(whole(screen)).toEqual(["other"]);
+    });
+
+    it("Refund for another bill, Discard closes the panel and lets refund-excess through", async () => {
+      const { app, screen, before } = await refused("other");
+
+      await pressRefund(screen);
+      await answer(app, "discard");
+
+      await expect.poll(() => app.commands.length).toBe(before + 1);
+      expect(app.commands.at(-1)).toEqual({ type: "refund-excess", detail: { billId: "other" } });
+      await settled(screen);
+      expect(q(screen, "[data-action-panel]")).toBeNull();
+    });
+
+    it("Refund for the bill on screen asks nothing and lets it through", async () => {
+      const { app, screen, before } = await refused("main");
+
+      await pressRefund(screen);
+
+      expect((await question(app)).open).toBe(false);
+      expect(app.commands.slice(before)).toEqual([
+        { type: "refund-excess", detail: { billId: "main" } },
+      ]);
+      expect(panelOpen(screen)).toBe(true);
+      expect(whole(screen)).toEqual(["other"]);
+    });
   });
 });

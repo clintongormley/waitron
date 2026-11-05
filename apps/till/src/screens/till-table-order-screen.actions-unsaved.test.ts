@@ -215,7 +215,7 @@ it("Split a table's panel protects its ticks and counts, and Split submits with 
   screen.splitRead = {
     bills: bills.map(({ workingOrderId }) => ({
       billId: workingOrderId,
-      lines: workingOrderId === "other" ? lines : [],
+      lines,
       balance: {
         workingOrderId,
         status: "open",
