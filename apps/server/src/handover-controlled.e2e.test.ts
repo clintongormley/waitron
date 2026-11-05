@@ -24,9 +24,12 @@
 //
 // What is a stand-in for the outside world, here and later in the run:
 // - AEAT is `createFakeAeat`, reached through the real drain, one record to a batch, and records what
-//   each box sent; its client never opens the sealed certificate. AEAT's clock reading answers nothing.
+//   each box sent. The drain opens the sealed certificate with the box's own keys first, as the real
+//   transport does, but no TLS uses it. AEAT's clock reading answers nothing, and the fake's own clock
+//   runs 60 seconds ahead. `WAITRON_FISCAL_TEST_SUBMISSIONS` lets a preproduction box file to it.
 // - The card provider is `FakePaymentProvider` behind the held Stripe credential, and Stripe's
 //   reconciler finds nothing. A sweep on M1 hears no answer for an open payment; one on M2 captures.
+//   The pending-card loop sleeps at most 50 ms between passes.
 // - `restart` and a spied `process.kill` stand for the SIGTERM that ends a real process; the test
 //   starts the box again in this process.
 // - `requestFromBox` says no request comes from the box itself: every client here is on loopback.
@@ -40,6 +43,7 @@ import { randomUUID } from "node:crypto";
 import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { eq, sql } from "drizzle-orm";
@@ -175,13 +179,15 @@ vi.mock("@waitron/module", async (importOriginal) => {
       const real = actual.fiscalSlot(...args);
       if (real.id !== "verifactu") return real;
       const drainHere: typeof real.drain = async (
-        { db, environment, skipRetryMs, signal },
+        { db, ring, environment, skipRetryMs, signal },
         now,
       ) => {
         // Imported here: the fiscal package imports this mocked module, so a factory-time import
         // never settles.
         const { drain } = await import("@waitron/fiscal-verifactu");
         const { createFakeAeat } = await import("@waitron/verifactu/testing");
+        const { readCertMaterial } =
+          await import("@waitron/fiscal-verifactu/src/aeat-transport.js");
         const fake = createFakeAeat({ serverNow: new Date(Date.now() + 60_000) }).client();
         const venueFile = db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
         const client = {
@@ -207,7 +213,10 @@ vi.mock("@waitron/module", async (importOriginal) => {
         return drain(
           {
             db,
-            resolveClient: () => Promise.resolve(client),
+            resolveClient: async () => {
+              await readCertMaterial(db, ring);
+              return client;
+            },
             skipRetryMs,
             environment,
             maxRegistrosPorEnvio: 1,
@@ -258,6 +267,17 @@ const PASSWORD = "dashPass123";
 const SIGN_IN = { email: "owner@example.test", password: PASSWORD };
 /** How long the run keeps AEAT's answer back after the stepdown has answered. */
 const HELD_MS = 500;
+const START_MS = 10_000;
+const ROUTER_PROBE_MS = 5_000;
+// Each stage's limit covers its starts and waits, plus time for the requests that have no limit of
+// their own, so a hang fails that stage alone and names it. The hook covers the stages and the first
+// setup, and stays well under the 10 minutes `test-server` allows, checkout and setup included. The
+// sum of every wait plus the 79 seconds a run took at a load average of 84 is under the hook's limit.
+const STEPDOWN_MS = 3 * START_MS + 50_000 + 15_000;
+const PLACING_MS = START_MS + 40_000 + 15_000;
+const SELLING_MS = 4 * START_MS + 2 * ROUTER_PROBE_MS + 60_000 + 20_000;
+const RESTARTS_MS = 2 * START_MS + 15_000 + 10_000;
+const HOOK_MS = STEPDOWN_MS + PLACING_MS + SELLING_MS + RESTARTS_MS + 30_000;
 
 function hold() {
   let release!: () => void;
@@ -331,9 +351,22 @@ function seamsFor(box: Box): StartServerSeams {
   };
 }
 
+/** Set once teardown begins: a stage its limit gave up on may still be running. */
+let runEnded = false;
+
 async function start(box: Box): Promise<void> {
+  if (runEnded) throw new Error(`${box.name} started after the run ended`);
   box.restartAsked = hold();
-  box.server = await startServer(box.env, box.env, seamsFor(box));
+  const starting = startServer(box.env, box.env, seamsFor(box));
+  try {
+    box.server = await within(starting, START_MS, `${box.name}'s start`);
+  } catch (error) {
+    void starting.then(
+      (late) => late.close(),
+      () => {},
+    );
+    throw error;
+  }
 }
 
 /** A box's own request over its real TLS, the way a browser that trusts its authority makes one. */
@@ -730,13 +763,15 @@ interface StartCheck {
   peers: { nodeId: string; answer: string; counted: boolean; why?: string }[];
 }
 
-async function startChecks(box: Box): Promise<StartCheck[]> {
+async function logged<T>(box: Box, event: string): Promise<T[]> {
   const log = await readFile(join(box.stateDir, "logs", "waitron.log"), "utf8");
   return log
     .split("\n")
-    .filter((line) => line.includes('"handover.start_check"'))
-    .map((line) => JSON.parse(line) as StartCheck);
+    .filter((line) => line.includes(`"${event}"`))
+    .map((line) => JSON.parse(line) as T);
 }
+
+const startChecks = (box: Box) => logged<StartCheck>(box, "handover.start_check");
 
 /** Closes the box's running start and starts it again, by what that start's check logged. */
 async function startAgain(box: Box): Promise<StartCheck[]> {
@@ -805,7 +840,7 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
   const filed = await sale(boxes);
   await sendOutbox(boxes);
   await vi.waitFor(() => expect(filingStateOf(m1.venueFile, filed)).toBe("aceptado"), {
-    timeout: 20_000,
+    timeout: 10_000,
   });
 
   // Released on any way out of this block, or the drain never ends and neither does the close.
@@ -825,7 +860,7 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
     // Before the pass below, so it is due in that pass and only the stop keeps the pass from it.
     waiting = await sale(boxes);
     await sendOutbox(boxes);
-    await vi.waitFor(() => expect(outside.holdSubmit).toBeNull(), { timeout: 20_000 });
+    await vi.waitFor(() => expect(outside.holdSubmit).toBeNull(), { timeout: 10_000 });
 
     m1.card!.stallNextCollect();
     const paying = await ask(m1, "/api/pay", {
@@ -843,7 +878,7 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
     );
     expect(attempting, payingText).toBeDefined();
     attemptingRef = attempting!.payment_ref;
-    await vi.waitFor(() => expect(m1.sweeps).toBeGreaterThan(0), { timeout: 20_000 });
+    await vi.waitFor(() => expect(m1.sweeps).toBeGreaterThan(0), { timeout: 10_000 });
 
     m2SeedHeld = {
       tabs: readRows(m2.venueFile, "select id from working_orders where id = ?", boxes.openTabId)
@@ -875,9 +910,10 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
   } finally {
     aeat.release();
   }
-  await within(m1.restartAsked.wait, 60_000, "M1's restart after its stepdown");
+  await within(m1.restartAsked.wait, 20_000, "M1's restart after its stepdown");
   await m1.server!.close();
   const m1SweepsAtRestart = m1.sweeps;
+  const inFlightAfterStepdown = filingStateOf(m1.venueFile, inFlight);
 
   await start(m1);
   const m1Restricted = await nodeProbe(m1);
@@ -900,7 +936,7 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
     m1SweepsAtRestart,
     m1Restricted,
     m1RefusedSale,
-    inFlightAfterStepdown: filingStateOf(m1.venueFile, inFlight),
+    inFlightAfterStepdown,
     m1Certificate,
   };
 }
@@ -923,10 +959,10 @@ function quietSeen(boxes: Boxes, stepdown: StepdownSeen, stopsAsked: number): Qu
 async function fetchToPlacing(boxes: Boxes, stepdown: StepdownSeen): Promise<PlacingSeen> {
   const { m1, m2 } = boxes;
   await vi.waitFor(() => expect(operationRow(m2)?.state).toBe("filing_assumed"), {
-    timeout: 90_000,
+    timeout: 30_000,
     interval: 250,
   });
-  await within(m2.restartAsked.wait, 30_000, "M2's restart at filing_assumed");
+  await within(m2.restartAsked.wait, 10_000, "M2's restart at filing_assumed");
   const m2StateBeforePlacing = operationRow(m2)?.state;
   await m2.server!.close();
   await start(m2);
@@ -976,7 +1012,9 @@ interface TillRouter extends EventTarget {
 
 /**
  * The till's real router, loaded by path because `tsc` refuses an import from outside this package's
- * root, and it imports nothing itself.
+ * root, and it imports nothing itself. So a renamed method fails only at run time, and a change to
+ * the till alone does not select `@waitron/server` in CI (`scripts/changed-scope.mjs`), so it does not
+ * run this test: the next pull request touching the server is the one that goes red.
  */
 async function loadTillRouter(options: {
   origin: string;
@@ -984,7 +1022,7 @@ async function loadTillRouter(options: {
   storage: Pick<Storage, "getItem" | "setItem">;
   timeoutMs: number;
 }): Promise<TillRouter> {
-  const path = new URL("../../till/src/api/server-router.ts", import.meta.url).pathname;
+  const path = fileURLToPath(new URL("../../till/src/api/server-router.ts", import.meta.url));
   const { ServerRouter } = (await import(/* @vite-ignore */ path)) as {
     ServerRouter: new (opts: typeof options) => TillRouter;
   };
@@ -1015,6 +1053,13 @@ interface SellingSeen {
   m2Sweeps: number;
   m1Sweeps: number;
   m2Certificate: CertificateCard;
+  restartAfterPlacing: { m1Selling: boolean; m2Selling: boolean; batches: number };
+  restartAfterActivating: {
+    m1Selling: boolean;
+    m1Sale: number;
+    batchesFromM1: number;
+    repeatedActivate: unknown;
+  };
 }
 
 /** What the run saw through M2's two later starts, the second with M1 switched off. */
@@ -1026,6 +1071,7 @@ interface RestartsSeen {
   afterOffFiling: string | undefined;
   heard: HeardBatch[];
   placedEvents: number;
+  placingsLogged: number;
   acceptedCopyKept: boolean;
   ownRecordKept: boolean;
   m1SweepsAtSwitchOff: number;
@@ -1065,11 +1111,12 @@ async function switchOn(boxes: Boxes) {
     input: unknown;
   }>({ action: "select", comparisonId: compared.id });
   expect(selected.status).toBe("selected");
-  const activated = await post<unknown>("activate", {
-    moduleOperation: { binding, input: selected.input },
-    signIn: SIGN_IN,
-  });
-  return { selected, activated };
+  const activate = () =>
+    post<unknown>("activate", {
+      moduleOperation: { binding, input: selected.input },
+      signIn: SIGN_IN,
+    });
+  return { selected, activate, activated: await activate() };
 }
 
 /**
@@ -1082,7 +1129,7 @@ async function switchOnToSelling(boxes: Boxes, stepdown: StepdownSeen): Promise<
   const router = await loadTillRouter({
     origin: m1.url,
     // Both boxes answer over TLS on a loaded runner, and a slow answer would read as a box gone.
-    timeoutMs: 30_000,
+    timeoutMs: ROUTER_PROBE_MS,
     storage: {
       getItem: (key) => stored.get(key) ?? null,
       setItem: (key, value) => void stored.set(key, value),
@@ -1101,26 +1148,42 @@ async function switchOnToSelling(boxes: Boxes, stepdown: StepdownSeen): Promise<
   await router.probeNow();
   const routerBefore = { current: router.current, waiting: router.waiting };
 
-  const { selected, activated } = await switchOn(boxes);
-  await within(m2.restartAsked.wait, 30_000, "M2's restart after activating");
+  await startAgain(m1);
+  await startAgain(m2);
+  const restartAfterPlacing = {
+    m1Selling: (await nodeProbe(m1)).acceptingSales,
+    m2Selling: (await nodeProbe(m2)).acceptingSales,
+    batches: outside.submits.length,
+  };
+
+  const { selected, activate, activated } = await switchOn(boxes);
+  await within(m2.restartAsked.wait, 10_000, "M2's restart after activating");
   await startAgain(m2);
   const m2Probe = await nodeProbe(m2);
 
   // Not fatal here: M1's case reads the chart it holds, and the rest of the run does not need it.
   await vi
     .waitFor(() => expect(chartOf(m1).body.term).toBe(m2Probe.term), {
-      timeout: 30_000,
+      timeout: 10_000,
       interval: 100,
     })
     .catch(() => {});
+  await startAgain(m1);
+  const m1Sale = await ask(m1, "/api/sales", { cookie: boxes.venue.cookie, body: saleBody(boxes) });
+  const restartAfterActivating = {
+    m1Selling: (await nodeProbe(m1)).acceptingSales,
+    m1Sale: m1Sale.status,
+    batchesFromM1: outside.submits.filter((batch) => batch.venueFile === m1.venueFile).length,
+    repeatedActivate: await activate(),
+  };
   await vi.waitFor(
     () => expect(filingStateOf(m2.venueFile, stepdown.records.waiting)).toBe("aceptado"),
-    { timeout: 60_000, interval: 100 },
+    { timeout: 15_000, interval: 100 },
   );
   const ownRecord = await sale(boxes, m2);
   await sendOutbox(boxes, m2);
   await vi.waitFor(() => expect(filingStateOf(m2.venueFile, ownRecord)).toBe("aceptado"), {
-    timeout: 60_000,
+    timeout: 15_000,
     interval: 100,
   });
   const paymentIn = (box: Box) =>
@@ -1132,7 +1195,7 @@ async function switchOnToSelling(boxes: Boxes, stepdown: StepdownSeen): Promise<
   // Not fatal either: the sweep's case reads the payment.
   await vi
     .waitFor(() => expect(paymentIn(m2)).toEqual([{ state: "captured" }]), {
-      timeout: 30_000,
+      timeout: 10_000,
       interval: 100,
     })
     .catch(() => {});
@@ -1177,6 +1240,8 @@ async function switchOnToSelling(boxes: Boxes, stepdown: StepdownSeen): Promise<
     m2Sweeps: m2.sweeps,
     m1Sweeps: m1.sweeps,
     m2Certificate: await certificateCard(boxes, m2),
+    restartAfterPlacing,
+    restartAfterActivating,
   };
 }
 
@@ -1200,7 +1265,7 @@ async function restartWithM1Off(boxes: Boxes, selling: SellingSeen): Promise<Res
   const afterOffRecord = await sale(boxes, m2);
   await sendOutbox(boxes, m2);
   await vi.waitFor(() => expect(filingStateOf(m2.venueFile, afterOffRecord)).toBe("aceptado"), {
-    timeout: 60_000,
+    timeout: 15_000,
     interval: 100,
   });
   return {
@@ -1216,6 +1281,7 @@ async function restartWithM1Off(boxes: Boxes, selling: SellingSeen): Promise<Res
       OP,
       COPY_PLACED_EVENT,
     ).length,
+    placingsLogged: (await logged(m2, "handover.place_copy.placed")).length,
     acceptedCopyKept: existsSync(acceptedCopyPath(m2.stateDir, OP)),
     ownRecordKept: recordIds(m2.venueFile).includes(selling.ownRecord),
     m1SweepsAtSwitchOff,
@@ -1239,27 +1305,28 @@ describe("a controlled handover between two boxes, simulated in one process", ()
   beforeAll(async () => {
     scratch = await mkdtemp(join(tmpdir(), "waitron-handover-controlled-"));
     boxes = await twoBoxes(scratch);
-    stepdown = await offerToStepdown(boxes);
+    stepdown = await within(offerToStepdown(boxes), STEPDOWN_MS, "the stage up to M1's stepdown");
     // Held back, so a run in which M2 never gets there still reports what M1 did meanwhile.
     try {
-      placing = await fetchToPlacing(boxes, stepdown);
+      placing = await within(fetchToPlacing(boxes, stepdown), PLACING_MS, "the placing stage");
     } catch (error) {
       placingFailure = error;
     }
     quiet = quietSeen(boxes, stepdown, kill.mock.calls.length);
     if (placing !== undefined) {
       try {
-        selling = await switchOnToSelling(boxes, stepdown);
-        restarts = await restartWithM1Off(boxes, selling);
+        selling = await within(switchOnToSelling(boxes, stepdown), SELLING_MS, "the selling stage");
+        restarts = await within(restartWithM1Off(boxes, selling), RESTARTS_MS, "the restart stage");
       } catch (error) {
         if (selling === undefined) sellingFailure = error;
         restartsFailure = error;
       }
     }
     stopsAskedAtEnd = kill.mock.calls.length;
-  }, 600_000);
+  }, HOOK_MS);
 
   afterAll(async () => {
+    runEnded = true;
     kill.mockRestore();
     const closing = [
       boxes?.m1.server?.close(),
@@ -1267,8 +1334,9 @@ describe("a controlled handover between two boxes, simulated in one process", ()
       boxes?.m1.agent?.close(),
       boxes?.m2.agent?.close(),
     ];
-    await Promise.allSettled(closing);
+    const closed = await Promise.allSettled(closing);
     if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
+    for (const result of closed) if (result.status === "rejected") throw result.reason;
   }, 60_000);
 
   const seen = (): { b: Boxes; run: StepdownSeen; later: QuietSeen } => {
@@ -1308,8 +1376,8 @@ describe("a controlled handover between two boxes, simulated in one process", ()
   });
 
   // Control, run locally and not committed: the start's early return alone left out, M1 waits on M2
-  // at its start check, sells nothing, and only M2's three cases fail. With `checkPeers` also
-  // answering proceed, this case and the next two fail, the next with three batches against two.
+  // at its start check, sells nothing, and M2's cases fail. With `checkPeers` also answering proceed,
+  // this case and the next two fail, the next with three batches against two.
   it("after its restart M1 answers acceptingSales false and serves no sale", () => {
     const { b, run } = seen();
     expect(run.m1Restricted).toMatchObject({ nodeId: b.m1.nodeId, acceptingSales: false });
@@ -1454,7 +1522,19 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     expect(on.routerMoves).toEqual([{ from: b.m1.url, to: b.m2.url }]);
   });
 
-  it("M2's next start beside M1 gets M1's signed answer, holding the same chart", () => {
+  it("one more restart of both boxes after placing, and after activating, leaves one filing box", () => {
+    const { on } = sold();
+    expect(on.restartAfterPlacing).toEqual({ m1Selling: false, m2Selling: false, batches: 2 });
+    expect(on.restartAfterActivating).toEqual({
+      m1Selling: false,
+      m1Sale: 404,
+      batchesFromM1: 2,
+      repeatedActivate: { activated: true, restarting: false },
+    });
+    expect(on.m2.acceptingSales).toBe(true);
+  });
+
+  it("M2's next start beside M1 verifies M1's signed answer", () => {
     const { b, after } = restarted();
     expect(after.withM1Up.checks).toMatchObject([
       { result: "proceed", peers: [{ nodeId: b.m1.nodeId, answer: "=", counted: false }] },
@@ -1482,6 +1562,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
   it("M2's later starts place nothing: the copy was placed once and its own sale is still there", () => {
     const { after } = restarted();
     expect(after.placedEvents).toBe(1);
+    expect(after.placingsLogged).toBe(1);
     expect(after.acceptedCopyKept).toBe(false);
     expect(after.ownRecordKept).toBe(true);
   });
@@ -1504,9 +1585,9 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     expect(on.m2Certificate.revision).toBe(run.m1Certificate.revision);
   });
 
-  // Follow-up, A1018 plan Task 5.10: the card reads the install row by this box's node id, and the
-  // row the copy brought names M1, so M2 files with the certificate while its card shows none. When
-  // the fiscal follow-up maps the row, this case starts failing here and becomes a plain `it`.
+  // Fiscal follow-up (A1018 plan Task 5.10): the install record is looked up by this box's node id and
+  // names M1, so the card reads "Installed: not recorded", and expiry alerts, reminders, diagnosis and
+  // backup's certificate check lose it too; filing and a renewal work.
   it.fails("M2's certificate card shows that certificate", () => {
     expect(sold().on.m2Certificate.installed).toMatchObject({ source: "setup", kind: "sello" });
   });
