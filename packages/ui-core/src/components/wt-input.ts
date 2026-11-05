@@ -83,6 +83,11 @@ export class WtInput extends LitElement {
     this.hasEnd = (event.target as HTMLSlotElement).assignedElements().length > 0;
   }
 
+  /** Selects the whole value, so typing replaces it. Does nothing before the first render. */
+  select(): void {
+    this.shadowRoot?.querySelector("input")?.select();
+  }
+
   override render() {
     const hasError = this.error !== "";
     const hasHint = this.hint !== "";

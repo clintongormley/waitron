@@ -744,7 +744,7 @@ export class ProductList extends LitElement {
     // Fitted first, or focus scrolls the table sideways to show the whole uncapped box.
     this.#fitNames();
     box.focus();
-    box.shadowRoot!.querySelector("input")!.select();
+    box.select();
   }
 
   /** `show()` moves no focus, so the person's place on the page is kept. */

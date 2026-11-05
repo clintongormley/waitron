@@ -11,6 +11,7 @@ export const GUIDE_LINKS = {
   "box-status.retry-now": { page: "box-status", section: "retry-now" },
   "box-status.clock-behind": { page: "box-status", section: "clock-behind" },
   "data-protection.staff-notice": { page: "data-protection", section: "staff-notice" },
+  "printers.add-printer": { page: "printers", section: "add-printer" },
 } as const;
 
 export type GuideLink = keyof typeof GUIDE_LINKS;

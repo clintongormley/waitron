@@ -29,12 +29,15 @@ export interface BluetoothHost {
   pair(mac: string, pin?: string): Promise<PairResult>;
   paired(): Promise<BluetoothDevice[]>;
   forget(mac: string): Promise<BluetoothCommandResult>;
+  /** Whether each address is a printer, by the same `info` reading a scan takes, waiting at most
+   * `waitMs` for answers; an address whose kind is not known by then is left out. */
+  printerKinds(macs: string[], waitMs: number): Promise<Map<string, boolean>>;
 }
 
-/** `info` is asked of at most this many listed devices per scan, all at once, so the command's own
- * deadline bounds the whole batch. Unmarked devices are asked never-asked first, then asked longest
- * ago, and named before unnamed among equals, then in listing order; the rest wait for a later
- * scan. */
+/** At most this many `info` requests run at once, between a scan and a paired report. A scan asks
+ * its batch all at once, so the command's own deadline bounds it: unmarked devices never-asked
+ * first, then asked longest ago, and named before unnamed among equals, then in listing order; the
+ * rest wait for a later scan. */
 export const MAX_BLUETOOTH_INFO_DEVICES = 8;
 
 const DEVICE_LINE = /Device\s+([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})(?:\s+(.*))?$/;
@@ -76,16 +79,17 @@ function cleanLines(text: string): string[] {
 }
 
 /** Modalias is never read: once paired, the owner's printer reported Apple's vendor id (owner's box,
- * BlueZ 5.82, 2026-09-29). */
-export function parseBluetoothctlInfo(text: string): { printerLike?: true } {
+ * BlueZ 5.82, 2026-09-29). `unclassified` is an answer with no readable icon, class or profile, which
+ * says nothing about what the device is. */
+export function parseBluetoothctlInfo(text: string): { printerLike?: true; unclassified?: true } {
   let icon: string | undefined;
-  let classOfDevice = 0;
+  let classOfDevice: number | undefined;
   const uuids = new Set<string>();
   for (const line of cleanLines(text)) {
     const field = INFO_FIELD.exec(line);
     if (field === null) continue;
     const [, key, value] = field as unknown as [string, string, string];
-    if (key === "Icon") icon = value;
+    if (key === "Icon") icon = value === "" ? undefined : value;
     else if (key === "Class") {
       const hex = /^0x([0-9a-f]+)/i.exec(value);
       if (hex !== null) classOfDevice = Number.parseInt(hex[1]!, 16);
@@ -94,10 +98,13 @@ export function parseBluetoothctlInfo(text: string): { printerLike?: true } {
       if (uuid !== null) uuids.add(uuid[1]!.toLowerCase());
     }
   }
+  if (icon === undefined && classOfDevice === undefined && uuids.size === 0) {
+    return { unclassified: true };
+  }
+  const cod = classOfDevice ?? 0;
   const printerLike =
     icon === "printer" ||
-    ((classOfDevice & MAJOR_CLASS_MASK) === IMAGING_MAJOR_CLASS &&
-      (classOfDevice & PRINTER_MINOR_BIT) !== 0) ||
+    ((cod & MAJOR_CLASS_MASK) === IMAGING_MAJOR_CLASS && (cod & PRINTER_MINOR_BIT) !== 0) ||
     uuids.has(SERIAL_PORT_UUID);
   return printerLike ? { printerLike: true } : {};
 }
@@ -137,10 +144,10 @@ export function parseRemoveResult(
 }
 
 /** `scanSeconds` bounds the inquiry, so airtime noise never runs continuously. `listTimeoutMs`
- * kills the paired listing: with the system bus up and no BlueZ on it, bluetoothctl 5.82 was still
- * waiting when killed after 8 seconds. It is a kill rather than bluetoothctl's own `--timeout`,
- * which bluetoothctl waits out in full even after BlueZ has answered (see
- * bluetooth-availability.test.ts). */
+ * kills the paired listing and an `info` a paired report starts: with the system bus up and no BlueZ
+ * on it, bluetoothctl 5.82 was still waiting when killed after 8 seconds. It is a kill rather than
+ * bluetoothctl's own `--timeout`, which bluetoothctl waits out in full even after BlueZ has answered
+ * (see bluetooth-availability.test.ts). */
 export function createBluetoothctlHost(opts: {
   run: (args: string[], runOpts?: BluetoothctlRunOptions) => Promise<string>;
   pair?: (mac: string, pin?: string) => Promise<PairResult>;
@@ -149,16 +156,53 @@ export function createBluetoothctlHost(opts: {
   log?: HostLog;
 }): BluetoothHost {
   const scanSeconds = opts.scanSeconds ?? 6;
-  // Per listed address: whether it was marked, the scan that last asked, and the failure last
-  // logged for it, so a repeating failure is logged once. A marked address is not asked again while
-  // listed.
+  // Per address: whether its last answer marked it, the scan count when it was asked, whether that
+  // answer said nothing of its kind, and the failure last logged for it, so a repeating failure is
+  // logged once.
   const readings = new Map<
     string,
-    { printerLike: boolean; askedAt: number; lastFailure?: string }
+    { printerLike: boolean; askedAt: number; unclassified?: true; lastFailure?: string }
   >();
+  // One request per address, shared by a scan and a paired report, so an address never has two
+  // answers racing to be its reading.
+  const asking = new Map<string, Promise<void>>();
   let scans = 0;
   const pair = opts.pair ?? pairWithBluetoothctl;
   const listOpts = opts.listTimeoutMs === undefined ? undefined : { timeoutMs: opts.listTimeoutMs };
+  // Undefined when the address is not being asked and every slot is taken.
+  const ask = (
+    mac: string,
+    askedAt: number,
+    runOpts?: BluetoothctlRunOptions,
+  ): Promise<void> | undefined => {
+    const running = asking.get(mac);
+    if (running !== undefined) return running;
+    if (asking.size >= MAX_BLUETOOTH_INFO_DEVICES) return undefined;
+    const request = (
+      runOpts === undefined ? opts.run(["info", mac]) : opts.run(["info", mac], runOpts)
+    )
+      .then(
+        (text) => {
+          const parsed = parseBluetoothctlInfo(text);
+          readings.set(mac, {
+            printerLike: parsed.printerLike === true,
+            askedAt,
+            ...(parsed.unclassified ? { unclassified: true as const } : {}),
+          });
+        },
+        (reason: unknown) => {
+          const failure = infoFailure(reason);
+          const lastFailure = JSON.stringify(failure);
+          if (lastFailure !== readings.get(mac)?.lastFailure) {
+            opts.log?.warn("bluetooth info failed", { address: mac, ...failure });
+          }
+          readings.set(mac, { printerLike: false, askedAt, lastFailure });
+        },
+      )
+      .finally(() => asking.delete(mac));
+    asking.set(mac, request);
+    return request;
+  };
   return {
     async scan(): Promise<DiscoveredDevice[]> {
       const output = await opts.run(["--timeout", String(scanSeconds), "scan", "on"]);
@@ -178,23 +222,14 @@ export function createBluetoothctlHost(opts: {
             a.askedAt - b.askedAt ||
             Number(a.d.name === undefined) - Number(b.d.name === undefined),
         )
-        .slice(0, MAX_BLUETOOTH_INFO_DEVICES)
         .map(({ d }) => d.mac);
-      const answers = await Promise.allSettled(toAsk.map((mac) => opts.run(["info", mac])));
-      toAsk.forEach((mac, i) => {
-        const answer = answers[i]!;
-        if (answer.status === "fulfilled") {
-          const printerLike = parseBluetoothctlInfo(answer.value).printerLike === true;
-          readings.set(mac, { printerLike, askedAt: scan });
-          return;
-        }
-        const failure = infoFailure(answer.reason);
-        const lastFailure = JSON.stringify(failure);
-        if (lastFailure !== readings.get(mac)?.lastFailure) {
-          opts.log?.warn("bluetooth info failed", { address: mac, ...failure });
-        }
-        readings.set(mac, { printerLike: false, askedAt: scan, lastFailure });
-      });
+      const batch: Promise<void>[] = [];
+      for (const mac of toAsk) {
+        if (batch.length === MAX_BLUETOOTH_INFO_DEVICES) break;
+        const request = ask(mac, scan);
+        if (request !== undefined) batch.push(request);
+      }
+      await Promise.all(batch);
       return listed.map((d) => {
         const printerLike = readings.get(d.mac)?.printerLike === true;
         return {
@@ -228,6 +263,31 @@ export function createBluetoothctlHost(opts: {
         if (result.ok || result.error !== REMOVAL_INCOMPLETE) return result;
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
       }
+    },
+    // Runs on every job pull, so it asks only an address with no reading; one whose answer failed
+    // or said nothing of its kind is asked again by a later scan.
+    async printerKinds(macs: string[], waitMs: number): Promise<Map<string, boolean>> {
+      const requests = macs
+        .filter((mac) => !readings.has(mac))
+        .flatMap((mac) => ask(mac, scans, listOpts) ?? []);
+      if (requests.length > 0 && waitMs > 0) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([
+          Promise.all(requests),
+          new Promise((resolve) => {
+            timer = setTimeout(resolve, waitMs);
+          }),
+        ]);
+        clearTimeout(timer);
+      }
+      const kinds = new Map<string, boolean>();
+      for (const mac of macs) {
+        const reading = readings.get(mac);
+        if (reading !== undefined && reading.lastFailure === undefined && !reading.unclassified) {
+          kinds.set(mac, reading.printerLike);
+        }
+      }
+      return kinds;
     },
     async paired(): Promise<BluetoothDevice[]> {
       const args = ["devices", "Paired"];

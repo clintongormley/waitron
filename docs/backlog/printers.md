@@ -288,9 +288,17 @@ not measured on the box.
 It needs the fixed image on the box first: run
 `docker compose exec print-agent bluetoothctl --timeout 6 scan on`, then
 `docker compose exec print-agent bluetoothctl devices`, and record how many devices are listed
-and where the printer falls among them; then open Add a printer repeatedly, record on which scan
-the printer is first marked, and look for `bluetooth info failed` lines in
+and where the printer falls among them; then unpair the printer with Waitron's Unpair, which also
+switches it off, since Add a printer lists a paired Bluetooth device unless its agent's `info`
+reading says it is not a printer, and a switched-on printer's device, whether or not a scan marked
+it (A404); restart the print agent (`docker compose restart print-agent`) and wait a minute, so neither
+the agent nor the server holds an earlier reading of the printer; open Add a printer repeatedly, record on which scan it is first listed
+without Show all devices, and look for `bluetooth info failed` lines in
 `docker compose logs print-agent`.
+
+A404 (2026-11-05) found that each plain report from the agent dropped the printer mark an earlier
+scan had set, which hid a paired printer between scans; that may also explain this entry (not
+checked on the box).
 
 ## Adding a language to the venue also means adding its printer captions, and a language written outside the Latin letters means widening the font table
 
@@ -336,8 +344,6 @@ those letters (not checked).
 ## A404 — adding and calibrating a printer
 
 - **A404 — adding and calibrating a printer (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room):**
-  1. **The Add-a-printer scan shows an empty box while it searches.** Say something like "No
-     printers found yet" while scanning, and something clearer if the scan ends with nothing found.
   2. **Calibration step 1 (paper width and resolution) is laid out out of order.** Rename "Print
      width ruler" (nobody knows what it means — e.g. "Print width test"); the action button goes on
      the right, on its own row; then a row of the two things the person enters (last number fully
@@ -359,24 +365,6 @@ those letters (not checked).
      heading "Does this printer have a cash drawer?", which is not what it is about — give it its
      own heading or a wider one for the step. The same label shows on the printer details
      (A405), and changes there too.
-  5. **The found-printer rows are out of line** (owner, 2026-10-14). In the Add a printer dialog's
-     list, each row's buttons sit at the top of the row while its name, connection and address start
-     lower down. A long name also wraps far short of its column: "HP Color LaserJet MFP M181fw
-     (DE0887)" breaks after "MFP" although the Name column is half the dialog wide. Line the details
-     up with the buttons and let the name use its column.
-  6. **A paired Bluetooth printer comes and goes from the list** (owner, 2026-10-14). The owner's
-     paired "BlueTooth Printer" was missing while a scan ran, listed after it ended, and missing
-     again with no scan running. A printer that is already paired stays listed while the dialog is
-     open. The 45-second limit in the entry "While a discovery window is open, a device not reported
-     within 45 seconds drops off the list" (C102, #953) may be the cause; not checked.
-  7. **The name dialog opens with Name filled in** (owner, 2026-10-14): the name discovery found
-     ("HP Color LaserJet MFP M181fw (DE0887)"), or the address when that is all it found
-     ("192.168.10.81"), ready to overwrite. This applies to Add and to Add as A4 printer. With
-     the field filled, Add can be pressed as soon as the dialog opens.
-  8. **One line about Bluetooth instead of the paragraph** (owner, 2026-10-14). The two sentences
-     under the heading ("To add a Bluetooth printer that is not paired yet, press Pair and add…")
-     show every time, even with no Bluetooth printer in the list. Replace them with one line saying
-     a Bluetooth printer must be in pairing mode before it is added.
 
 ## A405 — printer details and the print queue
 
@@ -607,11 +595,9 @@ only the app keeps from deletion; no trigger protects it either.
 
 ## Seen while looking at every modal at 1024px, not changed
 
-- **Seen while looking at every modal at 1024px, not changed:** the printers screen's list of
-  discovered printers keeps its details column capped (`min(28vw, 24dvh)`), so the details wrap
-  while half the row stands empty; and the till's option picker, 1024px wide on a 1280px screen,
-  puts each price far from its name (which adds to the "prices are not a column" item in the till
-  layout pass, under A4). _2026-10-05 (W70): the picker is now the standard size, 672px wide at 1280._
+- **Seen while looking at every modal at 1024px, not changed:** the till's option picker, 1024px
+  wide on a 1280px screen, puts each price far from its name (which adds to the "prices are not a
+  column" item in the till layout pass, under A4). _2026-10-05 (W70): the picker is now the standard size, 672px wide at 1280._
 
 ## A drawer kick for a USB printer that is not connected waits with no expiry
 
@@ -726,6 +712,18 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   (`packages/layouts/src/theme-configuration.ts`); a receipt is not.
 
 ## Decisions and deliberate limits
+
+- **Add a printer lists a Bluetooth device its agent reports paired unless the agent says it is
+  not a printer; one whose kind it cannot tell is listed (A404, 2026-11-05).** The owner asked that
+  a paired printer stay listed and that a paired non-printer, such as headphones on another
+  computer's agent, not be. The paired listing (`bluetoothctl devices Paired`) carries only an
+  address and a name, so the agent asks `bluetoothctl info` of each paired device it holds no
+  reading for and reads it as a scan does (`parseBluetoothctlInfo` in
+  `apps/print-agent/src/bluetooth.ts`: printer icon, imaging class with the printer bit, or the
+  Serial Port profile). A device whose `info` failed, did not answer within the paired report's
+  deadline, or answered with no icon, class or profile to judge by, or whose agent is older than
+  this change, is listed: a hidden paired printer is the fault the owner reported, while a listed
+  non-printer only adds a row. Show all devices still lists every device.
 
 - **The guest count is `guestCount` (A988, 2026-10-27).** A party's or a receipt's number of
   guests is `guestCount` in every till request and in the `sale_receipt_guests` drizzle
@@ -922,6 +920,9 @@ construct a friendly computer name from a printer label. See the
   failure but still says "Add a printer first.", because the shared query code does not say which
   read failed; and Cancel in that window clears the
   screen's message without putting back a read failure that is still standing (read, not run).
+  Add a printer's discovered list says "No printers found. Check that the printer is on and
+  connected, then scan again." after a failed read, beside the dialog's refresh-failed message
+  (read, not run).
 
 ## Loose ends left by C107 (#974)
 

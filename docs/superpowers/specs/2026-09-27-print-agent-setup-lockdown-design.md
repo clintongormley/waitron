@@ -121,6 +121,10 @@ also offer the Serial Port service. When scanning, the agent asks BlueZ about ea
 (`bluetoothctl info <address>` is the expected source) and reports, beside each device, whether it
 looks like a printer: the printer icon or class, or the Serial Port service.
 
+_2026-11-05 (A404): the agent also asks `bluetoothctl info` of each paired device it holds no reading
+for and says in its paired report whether it is a printer; Add a printer also lists a paired device
+unless that answer says it is not one._
+
 The dashboard lists only the devices that look like printers, with a **Show all devices** link for
 the rest — a printer that describes itself wrongly must still be reachable. How real receipt printers
 describe themselves has not been measured; the plan records what the box reports for the first real

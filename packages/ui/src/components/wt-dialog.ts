@@ -44,6 +44,13 @@ function* tabbables(root: Node, skip: Set<Node>): Generator<HTMLElement> {
   }
 }
 
+/** Open popovers and modal dialogs in `root` and in every open shadow root inside it. */
+function* openSurfaces(root: Document | ShadowRoot): Generator<HTMLElement> {
+  yield* root.querySelectorAll<HTMLElement>(":popover-open, dialog:modal");
+  for (const each of root.querySelectorAll("*"))
+    if (each.shadowRoot) yield* openSurfaces(each.shadowRoot);
+}
+
 @customElement("wt-dialog")
 export class WtDialog extends LitElement {
   static override styles = [
@@ -138,6 +145,53 @@ export class WtDialog extends LitElement {
    * to; one the browser has shut stays until its `open` update runs. */
   private static readonly openDialogs = new Set<WtDialog>();
   private static openings = 0;
+
+  private static readonly onDocumentKeydown = (event: KeyboardEvent): void =>
+    WtDialog.escapeFromPageBody(event);
+
+  /** The document is listened to only while a dialog is open, never on import: the package is
+   * also loaded where there is no document. */
+  private static track(dialog: WtDialog): void {
+    if (WtDialog.openDialogs.size === 0)
+      document.addEventListener("keydown", WtDialog.onDocumentKeydown);
+    WtDialog.openDialogs.add(dialog);
+  }
+
+  private static untrack(dialog: WtDialog): void {
+    if (WtDialog.openDialogs.delete(dialog) && WtDialog.openDialogs.size === 0)
+      document.removeEventListener("keydown", WtDialog.onDocumentKeydown);
+  }
+
+  /** A focused control that is disabled drops focus to the page body, outside every dialog.
+   * Chromium still sends an unguarded dialog's close request from there, but a guarded one hears
+   * Escape only on its own keydown, so the top one is asked from here — unless something above it
+   * takes Escape. A bubbling listener on the document, so a handler on the body has had its say. */
+  private static escapeFromPageBody(event: KeyboardEvent): void {
+    if (event.key !== "Escape" || event.target !== document.body) return;
+    if (event.defaultPrevented || event.isComposing) return;
+    let top: WtDialog | undefined;
+    for (const each of WtDialog.openDialogs) if (!top || each.openedAt > top.openedAt) top = each;
+    if (!top?.beforeClose || WtDialog.surfaceAbove(top)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void top.requestClose("escape");
+  }
+
+  /** Whether a surface that Escape should reach first is open above `top`, the latest wt-dialog
+   * opened: a popover that is not manual or a modal `<dialog>` that is not a wt-dialog's, and does
+   * not hold `top`. Opening a modal closes every such popover outside it, so an open one came later. A plain
+   * modal `<dialog>`'s opening order is not known, so it counts as above. */
+  private static surfaceAbove(top: WtDialog): boolean {
+    for (const surface of openSurfaces(document)) {
+      if (surface instanceof HTMLDialogElement) {
+        const root = surface.getRootNode();
+        if (root instanceof ShadowRoot && root.host instanceof WtDialog) continue;
+      } else if (surface.popover === "manual") continue;
+      if (!composedContains(surface, top)) return true;
+    }
+    return false;
+  }
+
   /** This opening's place among all openings: later is higher. */
   private openedAt = 0;
   /** Where focus last was inside this dialog. The browser has already moved it by
@@ -213,7 +267,7 @@ export class WtDialog extends LitElement {
   }
 
   override disconnectedCallback(): void {
-    WtDialog.openDialogs.delete(this);
+    WtDialog.untrack(this);
     this.bodyResize.disconnect();
     this.messageResize.disconnect();
     this.observedMessage = null;
@@ -298,13 +352,13 @@ export class WtDialog extends LitElement {
         this.returnTarget = focused === document.body ? null : focused;
         this.openedAt = ++WtDialog.openings;
         this.showModalWithOpeningFocus();
-        WtDialog.openDialogs.add(this);
+        WtDialog.track(this);
         this.watchContent();
       }
       // Also when the browser has already closed the dialog itself, as on Escape.
       if (!this.open) {
         this.unwatchContent();
-        WtDialog.openDialogs.delete(this);
+        WtDialog.untrack(this);
         this.lastFocused = null;
       }
       if (!this.open && this.dialog.open) {
@@ -341,7 +395,7 @@ export class WtDialog extends LitElement {
    * over it, in order. */
   private returnToOpeningOrder(): void {
     if (!this.dialog.open) return;
-    WtDialog.openDialogs.add(this);
+    WtDialog.track(this);
     if (this.dialog.matches(":modal")) return;
     const above = [...WtDialog.openDialogs]
       .filter((other) => other.openedAt > this.openedAt)

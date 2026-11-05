@@ -43,6 +43,7 @@ import { holderText } from "../i18n/equipment.js";
 import { printerDeleteCopy } from "../widgets/printer-delete-copy.js";
 import { relativeTime } from "../widgets/relative-time.js";
 import { fill, t } from "../i18n/t.js";
+import { guideHref } from "../help-guide.js";
 import type { StringKey } from "../i18n/strings.js";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -238,7 +239,7 @@ export class PrintersScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
       wt-data-table::part(discovered-details) {
-        max-width: min(28vw, 24dvh);
+        max-width: 28vw;
         overflow-wrap: anywhere;
       }
       wt-data-table::part(discovered-page-printer),
@@ -247,13 +248,13 @@ export class PrintersScreen extends LitElement {
       }
       wt-data-table::part(page-printer-error) {
         display: block;
-        max-width: min(28vw, 24dvh);
+        max-width: 28vw;
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
       }
       wt-data-table::part(page-printer-hint) {
         display: block;
-        max-width: min(28vw, 24dvh);
+        max-width: 28vw;
         font-size: var(--wt-font-size-sm);
       }
       /* Capped like the name beside it, so a button's label or the added note wraps instead of
@@ -571,8 +572,11 @@ export class PrintersScreen extends LitElement {
   /** `#pagePrinterReads` when the live query last delivered, so a one-off read begun earlier is dropped. */
   #pagePrinterLiveAt = 0;
   #pagePrinterReads = 0;
-  @state() private addingPagePrinter: { entry: PagePrinterEntry; description: string } | null =
-    null;
+  @state() private addingPagePrinter: {
+    entry: PagePrinterEntry;
+    description: string;
+    suggestedName: string;
+  } | null = null;
   /** The office rows (`agentId:deviceKey`) whose Enable or Use this agent is being sent. */
   @state() private pagePrinterSending = new Set<string>();
   @state() private pagePrinterRefusals: Record<string, string> = {};
@@ -645,6 +649,19 @@ export class PrintersScreen extends LitElement {
         this.discoveredNames = { ...this.discoveredNames, [key]: value };
       },
     });
+    void this.#selectPrinterName(this.#printerNameOpening);
+  }
+
+  /** Once the dialog has opened and focused its field, so typing replaces the filled-in name. */
+  async #selectPrinterName(opening: number): Promise<void> {
+    await this.updateComplete;
+    await this.renderRoot.querySelector<WtModal>("[data-test=name-printer-modal]")?.updateComplete;
+    if (opening !== this.#printerNameOpening) return;
+    const field = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "[data-test=name-printer-modal] wt-input[name=new-printer-name]",
+    );
+    await field?.updateComplete;
+    field?.select();
   }
 
   #finishPrinterName(opening: number): void {
@@ -1391,7 +1408,11 @@ export class PrintersScreen extends LitElement {
     const parts = [this.#discoveredLabel(device), `${entry.host}:${entry.port}${entry.path}`];
     if (device.agentName)
       parts.push(fill("printers.discovered_seen_on", { agent: device.agentName }));
-    this.addingPagePrinter = { entry, description: parts.join(" · ") };
+    this.addingPagePrinter = {
+      entry,
+      description: parts.join(" · "),
+      suggestedName: this.#discoveredLabel(device),
+    };
   }
 
   /** Enable and Use this agent: the server takes the queue's current report from the agent named. */
@@ -3901,6 +3922,7 @@ export class PrintersScreen extends LitElement {
       .entry=${adding.entry}
       .draftParent=${this.#addressScope?.id}
       description=${adding.description}
+      .suggestedName=${adding.suggestedName}
       @page-printer-added=${(event: CustomEvent<{ name: string }>) => {
         this.addedPrinterName = event.detail.name;
         void this.#refreshPagePrinters();
@@ -3927,7 +3949,11 @@ export class PrintersScreen extends LitElement {
     );
     // A device registered to a switched-on printer is a printer, whatever the scan decoded.
     const shown = (d: DiscoveredPrinter) =>
-      d.transport !== "bluetooth" || d.printerLike === true || pairOnly.has(d);
+      d.transport !== "bluetooth" ||
+      d.printerLike === true ||
+      // A paired device of unknown kind shows: hiding a paired printer is the worse mistake.
+      (d.paired === true && d.printerLike !== false) ||
+      pairOnly.has(d);
     const rows = addable
       .filter(
         (d) =>
@@ -4010,7 +4036,7 @@ export class PrintersScreen extends LitElement {
         },
       },
     ];
-    const bluetooth = addable.some((d) => d.transport === "bluetooth");
+    const bluetooth = rows.some((d) => d.transport === "bluetooth");
     const otherDevices = addable.some((d) => !shown(d));
     const probeChecked = this.probeAttempted ? this.#probeValidate() : {};
     const probeErrors = { ...this.probeRefused, ...probeChecked };
@@ -4032,6 +4058,14 @@ export class PrintersScreen extends LitElement {
     >
       ${this.addedPrinterName ? html`<p role="status" data-test="printer-added">${fill("printers.added", { name: this.addedPrinterName })}</p>` : nothing}
       ${this.#renderRefreshError()}
+      <wt-help-tooltip
+        slot="help"
+        mode="help-mode"
+        aria-label=${fill("help.badge_label", { part: t("printers.add_printer") })}
+        guide-href=${guideHref("printers.add-printer")}
+        guide-label=${t("help.guide_link")}
+        >${t("printers.add_help")}</wt-help-tooltip
+      >
       <p class="hint">${t("printers.discovery_hint")}</p>
       ${bluetooth ? html`<p class="hint" data-test="bluetooth-note">${t("printers.bluetooth_pair_note")}</p>` : nothing}
       <details class="probe-panel" data-test="probe-panel">
@@ -4138,7 +4172,7 @@ export class PrintersScreen extends LitElement {
         .columns=${columns}
         .rows=${[...rows, ...lost]}
         .rowKey=${(d: DiscoveredPrinter) => `${d.agentId}:${this.#deviceKey(d)}`}
-        .emptyMessage=${this.scanning ? "" : t("printers.no_discovered")}
+        .emptyMessage=${t(this.scanning ? "printers.scan_empty" : "printers.no_discovered")}
       ></wt-data-table>
       <wt-form-actions
         slot="footer"

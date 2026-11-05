@@ -20,6 +20,7 @@ export const GUIDE_PAGES = [
   "time-zone",
   "opening-hours",
   "servers",
+  "printers",
 ] as const;
 
 export function guideRoot(): string {

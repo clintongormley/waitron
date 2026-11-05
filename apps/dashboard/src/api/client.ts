@@ -1324,8 +1324,9 @@ export interface DiscoveredPrinter {
   /** `office` is another agent's report for the same queue, not this agent's: it cannot be registered
    * through this agent. */
   officeLent?: true;
-  /** Bluetooth only: the agent's scan decoded the device as a printer. */
-  printerLike?: true;
+  /** Bluetooth only: true when the agent's scan decoded the device as a printer, or the agent's
+   * fresh paired report says so; false only when that report says a paired device is not one. */
+  printerLike?: boolean;
   /** Bluetooth only: the agent reported the device paired within the list's freshness window. */
   paired?: true;
   bluetoothCommand?: BluetoothCommandStatus;

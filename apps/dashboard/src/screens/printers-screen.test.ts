@@ -11,7 +11,8 @@ import {
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
+import { guideHref } from "../help-guide.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
 import type {
   DashboardApi,
@@ -1032,6 +1033,22 @@ describe("printer configuration tabs", () => {
     await flush(el);
     expect(q(el, "[data-test=new-printer-modal]")).not.toBeNull();
     expect(api.startPrinterDiscovery).toHaveBeenCalledOnce();
+  });
+
+  it("explains adding a printer in a help bubble that links to the guide", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    await openDiscovery(el);
+    const tooltip = q(el, "[data-test=new-printer-modal] wt-help-tooltip")!;
+    expect(tooltip.getAttribute("mode")).toBe("help-mode");
+    expect(tooltip.getAttribute("aria-label")).toBe(
+      fill("help.badge_label", { part: t("printers.add_printer") }),
+    );
+    expect(tooltip.textContent!.trim()).toBe(t("printers.add_help"));
+    expect(tooltip.getAttribute("guide-href")).toBe(guideHref("printers.add-printer"));
+    expect(tooltip.getAttribute("guide-label")).toBe(t("help.guide_link"));
   });
 
   it("puts Add agent under the empty agent table's sentence, opening the same pairing", async () => {
@@ -2896,7 +2913,7 @@ describe("printers-screen", () => {
     }
   });
 
-  it("leaves the empty discovered table without a message while Scan's spinner runs", async () => {
+  it("says no printers are found yet while Scan's spinner runs", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -2905,7 +2922,7 @@ describe("printers-screen", () => {
       await openDiscovery(el);
       expect(q(el, "[data-test=scan-printers]")!.hasAttribute("loading")).toBe(true);
       const table = q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable;
-      expect(table.emptyMessage).toBe("");
+      expect(table.emptyMessage).toBe(t("printers.scan_empty", "es-ES"));
       expect(table.shadowRoot!.textContent).not.toContain(t("printers.scan_loading", "es-ES"));
     } finally {
       el.remove();
@@ -6993,6 +7010,19 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(q(el, sel("name-printer-modal"))).toBeNull();
   });
 
+  it("shows the one-line pairing note only while a Bluetooth printer is listed", async () => {
+    const hidden = await mountPairing([headphones]);
+    await openDiscovery(hidden.el);
+    expect(q(hidden.el, sel("bluetooth-note"))).toBeNull();
+    q(hidden.el, sel("show-all-bluetooth"))!.click();
+    await flush(hidden.el);
+    expect(text(hidden.el, sel("bluetooth-note"))).toBe(t("printers.bluetooth_pair_note"));
+    hidden.el.remove();
+    const { el } = await mountPairing([barPrinter]);
+    await openDiscovery(el);
+    expect(text(el, sel("bluetooth-note"))).toBe(t("printers.bluetooth_pair_note"));
+  });
+
   it("says nothing about Bluetooth when no Bluetooth device was found", async () => {
     const { el } = await mountPairing(discovered);
     await openDiscovery(el);
@@ -7478,6 +7508,50 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(text(el, sel("show-all-bluetooth"))).toBe(t("printers.bluetooth_show_all"));
   });
 
+  it("lists a Bluetooth device its agent reports paired without Show all devices", async () => {
+    const device: DiscoveredPrinter = {
+      ...headphones,
+      name: "BlueTooth Printer",
+      paired: true,
+    };
+    const { el } = await mountPairing([device]);
+    await openDiscovery(el);
+    expect(q(el, sel(`discovered-row-${OTHER}`))).not.toBeNull();
+    expect(text(el, sel(`register-${OTHER}`))).toBe(t("action.add"));
+  });
+
+  it("lists a paired device its agent says is a printer, with no scan's mark", async () => {
+    const device: DiscoveredPrinter = {
+      ...headphones,
+      name: "BlueTooth Printer",
+      paired: true,
+      printerLike: true,
+    };
+    const { el } = await mountPairing([device]);
+    await openDiscovery(el);
+    expect(text(el, sel(`register-${OTHER}`))).toBe(t("action.add"));
+  });
+
+  it("hides a paired device its agent says is not a printer until Show all devices", async () => {
+    const device: DiscoveredPrinter = { ...headphones, paired: true, printerLike: false };
+    const { el } = await mountPairing([device]);
+    await openDiscovery(el);
+    expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
+    q(el, sel("show-all-bluetooth"))!.click();
+    await flush(el);
+    expect(text(el, sel(`register-${OTHER}`))).toBe(t("action.add"));
+  });
+
+  it("hides the same Bluetooth device, not paired, until Show all devices", async () => {
+    const device: DiscoveredPrinter = { ...headphones, name: "BlueTooth Printer" };
+    const { el } = await mountPairing([device]);
+    await openDiscovery(el);
+    expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
+    q(el, sel("show-all-bluetooth"))!.click();
+    await flush(el);
+    expect(q(el, sel(`discovered-row-${OTHER}`))).not.toBeNull();
+  });
+
   it("keeps a wrongly-described registered printer reachable in its printer row and through Show all", async () => {
     const stored = btPrinter("p4", OTHER, false);
     const device: DiscoveredPrinter = {
@@ -7494,13 +7568,32 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(q(el, sel("printer-row-p4"))).not.toBeNull();
     expect(q(el, sel("forget-pairing-p4"))).not.toBeNull();
     await openDiscovery(el);
-    expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
-    q(el, sel("show-all-bluetooth"))!.click();
-    await flush(el);
+    expect(q(el, sel(`discovered-row-${OTHER}`))).not.toBeNull();
     expect(text(el, sel(`register-${OTHER}`))).toBe("Habilitar");
     await addDiscovered(el, q(el, sel(`register-${OTHER}`))!);
     await flush(el);
     expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p4", { active: true });
+  });
+
+  it("a registered, switched-off printer, not paired and not marked as a printer, is reachable through Show all with Pair", async () => {
+    const stored = btPrinter("p4", OTHER, false);
+    const device: DiscoveredPrinter = {
+      ...headphones,
+      alreadyRegistered: true,
+      printerId: "p4",
+    };
+    const { el } = await mountPairing([device], {
+      listPrinters: vi.fn().mockResolvedValue([...printers, stored]),
+    });
+    await selectTab(el, "printers");
+    await filterPrinters(el, "all");
+    expect(q(el, sel("printer-row-p4"))).not.toBeNull();
+    await openDiscovery(el);
+    expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
+    q(el, sel("show-all-bluetooth"))!.click();
+    await flush(el);
+    expect(text(el, sel(`pair-${OTHER}`))).toBe(t("printers.bluetooth_pair"));
+    expect(q(el, sel(`register-${OTHER}`))).toBeNull();
   });
 
   it("offers Unpair only on a Bluetooth printer its agent reports paired now, switched on or off", async () => {
@@ -11057,7 +11150,7 @@ describe("office printers in discovery", () => {
     );
   });
 
-  it("names a new A4 printer in a dialog whose Add waits for a name, then adds it from the row's discovery entry", async () => {
+  it("names a new A4 printer in a dialog whose Add is ready with the discovered name, then adds it from the row's discovery entry", async () => {
     const listPagePrinters = vi.fn().mockResolvedValue([]);
     const { el, api } = await mountWith([office()], { listPagePrinters });
     q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")!.click();
@@ -11065,15 +11158,15 @@ describe("office printers in discovery", () => {
     const field = q(el, "[data-test=page-printer-add-modal] wt-input[name=name]") as unknown as {
       required: boolean;
       error: string;
+      value: string;
     };
     expect(field.required).toBe(true);
+    expect(field.value).toBe("HP LaserJet");
     expect(text(el, "[data-test=page-printer-add-modal] p")).toBe(
       `HP LaserJet · 10.0.0.56:631/ipp/print · ${t("printers.discovered_seen_on").replace("{agent}", "Cocina agent")}`,
     );
-    expect(isDisabled(el, "[data-test=confirm-add-page-printer]")).toBe(true);
-    expect(q(el, "[data-test=confirm-add-page-printer]")!.getAttribute("variant")).toBe(
-      "secondary",
-    );
+    expect(isDisabled(el, "[data-test=confirm-add-page-printer]")).toBe(false);
+    expect(q(el, "[data-test=confirm-add-page-printer]")!.getAttribute("variant")).toBe("primary");
     // Whitespace counts as typing, so Add works and then explains the missing name.
     typeField(el, "[data-test=page-printer-add-modal] wt-input[name=name]", "  ");
     await flush(el);
@@ -11505,4 +11598,189 @@ describe("literal translated printer labels", () => {
       });
     });
   }
+});
+
+describe("the Add a printer dialog's discovered rows", () => {
+  const officePrinter: DiscoveredPrinter = {
+    agentId: "a1",
+    agentName: "Cocina agent",
+    transport: "network_tcp",
+    host: "192.168.10.30",
+    port: 631,
+    name: "HP Color LaserJet MFP M181fw",
+    ippOnly: true,
+    serverName: "DE0887",
+    pagePrinter: true,
+    ipp: { port: 631, resourcePath: "/ipp/print" },
+    office: {
+      port: 631,
+      resourcePath: "/ipp/print",
+      printable: true,
+      documentFormat: "application/pdf",
+      media: "iso_a4_210x297mm",
+      resolutionDpi: 600,
+      supportedFormats: ["application/pdf"],
+    },
+    alreadyRegistered: false,
+    printerId: null,
+    lastSeenAt: "2023-11-14T22:13:20.000Z",
+  };
+  const pairedBluetooth: DiscoveredPrinter = {
+    agentId: "a1",
+    agentName: "Cocina agent",
+    transport: "bluetooth",
+    localKey: "00:11:22:33:44:55",
+    name: "BlueTooth Printer",
+    printerLike: true,
+    paired: true,
+    alreadyRegistered: false,
+    printerId: null,
+    lastSeenAt: "2023-11-14T22:13:20.000Z",
+  };
+
+  async function mountRows(): Promise<PrintersScreen> {
+    const api = stubApi({
+      listDiscoveredPrinters: vi.fn().mockResolvedValue([officePrinter, pairedBluetooth]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openDiscovery(el);
+    return el;
+  }
+  const detailRows = (el: PrintersScreen) => [
+    ...q(el, "[data-test=discovered-table]")!.shadowRoot!.querySelectorAll<HTMLElement>(
+      "[data-test^=discovered-row-]",
+    ),
+  ];
+  const middle = (box: DOMRect) => box.top + box.height / 2;
+
+  afterEach(async () => {
+    await page.viewport(1280, 900);
+  });
+
+  it("draws a long discovered name on one line in its column", async () => {
+    await page.viewport(1280, 800);
+    const el = await mountRows();
+    const strong = detailRows(el)
+      .map((row) => row.querySelector("strong")!)
+      .find((name) => name.textContent === "HP Color LaserJet MFP M181fw (DE0887)")!;
+    expect(strong).toBeDefined();
+    expect(strong.getClientRects().length).toBe(1);
+  });
+
+  it("lines each discovered row's details up with its buttons", async () => {
+    await page.viewport(1280, 800);
+    const el = await mountRows();
+    const rows = detailRows(el);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      const strong = row.querySelector("strong")!;
+      const button = row.closest("tr")!.querySelector("wt-button")!;
+      expect(
+        Math.abs(middle(strong.getBoundingClientRect()) - middle(button.getBoundingClientRect())),
+      ).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it("keeps the discovered list inside the dialog at phone width", async () => {
+    await page.viewport(390, 844);
+    const el = await mountRows();
+    const table = q(el, "[data-test=discovered-table]")!;
+    const modal = q(el, "[data-test=new-printer-modal]")!;
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body, [part=body]")!;
+    expect(body).not.toBeNull();
+    expect(table.getBoundingClientRect().right).toBeLessThanOrEqual(
+      body.getBoundingClientRect().right,
+    );
+  });
+});
+
+describe("the name dialogs open with the found name filled in and selected", () => {
+  const network = (overrides: Partial<DiscoveredPrinter>): DiscoveredPrinter => ({
+    agentId: "a1",
+    agentName: "Cocina agent",
+    transport: "network_tcp",
+    host: "192.168.10.30",
+    port: 9100,
+    alreadyRegistered: false,
+    printerId: null,
+    lastSeenAt: "2023-11-14T22:13:20.000Z",
+    ...overrides,
+  });
+  async function mountWith(devices: DiscoveredPrinter[]) {
+    const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(devices) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openDiscovery(el);
+    return { el, api };
+  }
+  const nativeInput = (field: Element) =>
+    (field as HTMLElementTagNameMap["wt-input"]).shadowRoot!.querySelector("input")!;
+  const wholeSelected = (field: Element) => {
+    const input = nativeInput(field);
+    return input.selectionStart === 0 && input.selectionEnd === input.value.length;
+  };
+
+  it("opens the receipt printer's name dialog with the discovered name selected, so typing replaces it", async () => {
+    // Not IPP-only: an IPP-only device is offered as an A4 printer, never a receipt printer.
+    const { el } = await mountWith([network({ name: "HP Color LaserJet MFP M181fw" })]);
+    q(el, "[data-test^=register-]")!.click();
+    await flush(el);
+    const field = q(el, "[data-test=name-printer-modal] wt-input[name=new-printer-name]")!;
+    expect((field as HTMLElementTagNameMap["wt-input"]).value).toBe("HP Color LaserJet MFP M181fw");
+    expect(isDisabled(el, "[data-test=confirm-add-printer]")).toBe(false);
+    await vi.waitFor(() => expect(wholeSelected(field)).toBe(true));
+    await userEvent.keyboard("Bar");
+    await flush(el);
+    expect((field as HTMLElementTagNameMap["wt-input"]).value).toBe("Bar");
+  });
+
+  it("fills the name with the address when discovery found nothing else", async () => {
+    const { el } = await mountWith([network({ host: "192.168.10.81" })]);
+    q(el, "[data-test^=register-]")!.click();
+    await flush(el);
+    const field = q(el, "[data-test=name-printer-modal] wt-input[name=new-printer-name]")!;
+    expect((field as HTMLElementTagNameMap["wt-input"]).value).toBe("192.168.10.81");
+  });
+
+  it("opens the A4 printer's name dialog with the discovered name filled in and Add ready", async () => {
+    const { el, api } = await mountWith([
+      network({
+        host: "192.168.10.30",
+        port: 631,
+        name: "HP Color LaserJet MFP M181fw",
+        ippOnly: true,
+        serverName: "DE0887",
+        pagePrinter: true,
+        ipp: { port: 631, resourcePath: "/ipp/print" },
+        office: {
+          port: 631,
+          resourcePath: "/ipp/print",
+          printable: true,
+          documentFormat: "application/pdf",
+          media: "iso_a4_210x297mm",
+          resolutionDpi: 600,
+          supportedFormats: ["application/pdf"],
+        },
+      }),
+    ]);
+    q(el, "[data-test^=add-page-printer-]")!.click();
+    await flush(el);
+    const field = q(el, "[data-test=page-printer-add-modal] wt-input[name=name]")!;
+    expect((field as HTMLElementTagNameMap["wt-input"]).value).toBe(
+      "HP Color LaserJet MFP M181fw (DE0887)",
+    );
+    await vi.waitFor(() => expect(wholeSelected(field)).toBe(true));
+    expect(isDisabled(el, "[data-test=confirm-add-page-printer]")).toBe(false);
+    q(el, "[data-test=confirm-add-page-printer]")!.click();
+    await vi.waitFor(() =>
+      expect(api.registerPagePrinter).toHaveBeenCalledWith({
+        agentId: "a1",
+        host: "192.168.10.30",
+        port: 631,
+        path: "/ipp/print",
+        name: "HP Color LaserJet MFP M181fw (DE0887)",
+      }),
+    );
+  });
 });

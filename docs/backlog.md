@@ -4037,9 +4037,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   folders work. Printing no longer reads the column. Dropping it rebuilds `printers`, so leave it
   until the venue reset that permits the rebuild.
 
-- **Seen while looking at every modal at 1024px, not changed:** the printers screen's list of
-  discovered printers keeps its details column capped (`min(28vw, 24dvh)`), so the details wrap
-  while half the row stands empty; and the till's option picker puts each price far from its name.
+- **Seen while looking at every modal at 1024px, not changed:** the till's option picker puts each
+  price far from its name.
   [Detail](backlog/printers.md#seen-while-looking-at-every-modal-at-1024px-not-changed)
 
 - **The Printers screen's discovered-device rows' `data-test` names use the device alone** (W74d,

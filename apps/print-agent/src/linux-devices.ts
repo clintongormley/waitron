@@ -29,7 +29,9 @@ export interface LinuxDeviceOptions {
   devRoot?: string;
   bluetooth?: BluetoothHost;
   scanNetwork?: () => Promise<DiscoveredDevice[]>;
-  /** Kills a paired listing BlueZ has not answered; only used with the default `bluetooth`. */
+  /** A paired report's deadline: the wait for its devices' kinds gets only what the listing left of
+   * it. With the default `bluetooth` it also kills a paired listing, and an `info` the report
+   * starts, that BlueZ has not answered. */
   bluetoothListTimeoutMs?: number;
   log?: HostLog;
   now?: () => number;
@@ -65,13 +67,14 @@ export function createLinuxDevices(
   opts: LinuxDeviceOptions = {},
 ): LinuxDevices & BluetoothStatusSource {
   const sysfsRoot = opts.sysfsRoot ?? "/sys";
+  const listTimeoutMs = opts.bluetoothListTimeoutMs ?? LIST_TIMEOUT_MS;
   // `/dev` is a SIBLING of `/sys`: deriving it from sysfsRoot would open `/sys/dev/usb/lp0`.
   const devRoot = opts.devRoot ?? "/dev";
   const bluetooth =
     opts.bluetooth ??
     createBluetoothctlHost({
       run: runBluetoothctl,
-      listTimeoutMs: opts.bluetoothListTimeoutMs ?? LIST_TIMEOUT_MS,
+      listTimeoutMs,
       ...(opts.log !== undefined ? { log: opts.log } : {}),
     });
   const scanNetwork = opts.scanNetwork ?? liveNetworkScan;
@@ -209,10 +212,27 @@ export function createLinuxDevices(
     async pairedBluetooth(): Promise<PairedBluetoothDevice[]> {
       const known = availability;
       if (known?.available === false && !recheckDue()) throw new Error(known.detail);
-      return (await sharedListing()).map((d) => ({
-        localKey: d.mac,
-        ...(d.name !== undefined ? { name: d.name } : {}),
-      }));
+      // Runs before every job pull, so the listing and the kinds together get one deadline.
+      const startedAt = now();
+      const listed = await sharedListing();
+      const elapsed = now() - startedAt;
+      const left = elapsed < 0 ? 0 : Math.max(0, listTimeoutMs - elapsed);
+      const kinds = await bluetooth
+        .printerKinds(listed.map((d) => d.mac).filter(isBluetoothAddress), left)
+        .catch((error: unknown) => {
+          opts.log?.warn("paired bluetooth kinds failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return new Map<string, boolean>();
+        });
+      return listed.map((d) => {
+        const printerLike = kinds.get(d.mac);
+        return {
+          localKey: d.mac,
+          ...(d.name !== undefined ? { name: d.name } : {}),
+          ...(printerLike !== undefined ? { printerLike } : {}),
+        };
+      });
     },
 
     async forgetBluetooth(mac): Promise<BluetoothCommandResult> {

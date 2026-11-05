@@ -101,6 +101,15 @@ describe("the user guides", () => {
     ]);
   });
 
+  it.each(GUIDE_LANGUAGES)("the printers guide in %s registers its sections", (lang) => {
+    expect(GUIDE_PAGES).toContain("printers");
+    const markdown = readGuide(root, lang, "printers");
+    expect(markdown).toBeDefined();
+    expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
+      "add-printer",
+    ]);
+  });
+
   it.each(GUIDE_LANGUAGES)("the appearance guide in %s registers its sections", (lang) => {
     expect(GUIDE_PAGES).toContain("appearance");
     const markdown = readGuide(root, lang, "appearance");
