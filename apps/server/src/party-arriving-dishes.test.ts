@@ -582,13 +582,13 @@ describe("dishes arriving in a party (A96, P16)", () => {
 
   it("puts an open counter order's dishes, sent to the kitchen at the move, in one new fired group", async () => {
     const targetTable = await v.table("Mostrador 1");
-    const originalParty = await seat(v, targetTable);
+    const receivingParty = await seat(v, targetTable);
     const counter = await counterOrder(v, "Caña", "Tarta");
     expect(await firedTicketsOf(counter)).toEqual([]);
 
     await move(counter, { tableId: targetTable });
 
-    const groups = await groupsOf(originalParty.partyId);
+    const groups = await groupsOf(receivingParty.partyId);
     expect(groups).toHaveLength(1);
     expect(groups[0]).toMatchObject({ state: "fired", position: 1 });
     expect((await lineRows(counter)).map((l) => l.groupId)).toEqual([groups[0]!.id, groups[0]!.id]);
@@ -597,7 +597,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
 
   it("gives a placed counter order moved into a party one fired group, leaving it placed and every other line value as it was", async () => {
     const targetTable = await v.table("Factura 1");
-    const originalParty = await seat(v, targetTable);
+    const receivingParty = await seat(v, targetTable);
     const id = randomUUID();
     const deps = { db: v.db, backend: v.backend, clock: v.clock };
     await parkOrder(deps, v.cfg, {
@@ -612,7 +612,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
 
     await move(id, { tableId: targetTable });
 
-    const [group] = await groupsOf(originalParty.partyId);
+    const [group] = await groupsOf(receivingParty.partyId);
     expect(group).toMatchObject({ state: "fired", position: 1 });
     expect((await billRow(v, id)).status).toBe("placed");
     expect(await lineRows(id)).toEqual(before.map((l) => ({ ...l, groupId: group!.id })));
@@ -735,30 +735,30 @@ describe("dishes arriving in a party (A96, P16)", () => {
 
   it("groups a counter order moved onto a seated table as a bill of its own, and leaves the party's first bill's lines as they were", async () => {
     const targetTable = await v.table("Fusion 1");
-    const originalParty = await seat(v, targetTable);
-    await orderForParty(v, originalParty.partyId, ["Burger"]);
-    await order(v, originalParty.tabId, "Vino");
-    const [burger, wineLine] = await lineRows(originalParty.tabId);
-    const [own] = await groupsOf(originalParty.partyId);
+    const receivingParty = await seat(v, targetTable);
+    await orderForParty(v, receivingParty.partyId, ["Burger"]);
+    await order(v, receivingParty.tabId, "Vino");
+    const [burger, wineLine] = await lineRows(receivingParty.tabId);
+    const [own] = await groupsOf(receivingParty.partyId);
     expect([burger!.groupId, wineLine!.groupId]).toEqual([own!.id, null]);
     const counter = await counterOrder(v, "Tarta");
 
     const result = await move(counter, { tableId: targetTable });
 
-    expect(result).toEqual({ partyId: originalParty.partyId, billId: counter });
-    const groups = await groupsOf(originalParty.partyId);
+    expect(result).toEqual({ partyId: receivingParty.partyId, billId: counter });
+    const groups = await groupsOf(receivingParty.partyId);
     expect(groups.map((g) => [g.id === own!.id, g.state, g.position])).toEqual([
       [true, "fired", 1],
       [false, "fired", 2],
     ]);
-    expect((await lineRows(originalParty.tabId)).map((l) => [l.name, l.groupId])).toEqual([
+    expect((await lineRows(receivingParty.tabId)).map((l) => [l.name, l.groupId])).toEqual([
       ["Burger", own!.id],
       ["Vino", null],
     ]);
     expect((await lineRows(counter)).map((l) => [l.name, l.groupId])).toEqual([
       ["Tarta", groups[1]!.id],
     ]);
-    expect((await billRow(v, counter)).partyId).toBe(originalParty.partyId);
+    expect((await billRow(v, counter)).partyId).toBe(receivingParty.partyId);
   });
 
   it("lets a dish's kitchen item decide whether it arrived released, and its sent time decide only for a dish with none", async () => {
