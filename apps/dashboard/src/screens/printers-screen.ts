@@ -493,6 +493,9 @@ export class PrintersScreen extends LitElement {
         margin: 0 0 var(--wt-space-3);
         color: var(--wt-color-text-muted);
       }
+      .switch-field .hint {
+        margin: var(--wt-space-2) 0 0;
+      }
       .origin {
         font-family: var(--wt-font-family-mono, monospace);
         color: var(--wt-color-text);
@@ -3630,17 +3633,19 @@ export class PrintersScreen extends LitElement {
                 `
               : nothing
           }
-          <wt-switch
-            name="printer-portable"
-            label=${t("printers.portable")}
-            description=${t("printers.portable_hint")}
-            .checked=${p.portable}
-            @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
-              e.stopPropagation();
-              this.#editPrinter(p.id, { portable: e.detail.checked });
-            }}
-          ></wt-switch>
-          <p class="hint">${t("printers.portable_hint")}</p>
+          <div class="switch-field">
+            <wt-switch
+              name="printer-portable"
+              label=${t("printers.portable")}
+              description=${t("printers.portable_hint")}
+              .checked=${p.portable}
+              @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
+                e.stopPropagation();
+                this.#editPrinter(p.id, { portable: e.detail.checked });
+              }}
+            ></wt-switch>
+            <p class="hint" aria-hidden="true">${t("printers.portable_hint")}</p>
+          </div>
           <wt-combobox
             name="printer-pickup-roles"
             searchPlaceholder=${t("categories.combobox_search")}

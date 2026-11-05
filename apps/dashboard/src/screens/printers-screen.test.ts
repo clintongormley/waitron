@@ -9751,6 +9751,8 @@ describe("portable printers and their equipment label", () => {
     expect(hint.matches("p.hint")).toBe(true);
     expect(hint.textContent!.trim()).toBe(t("printers.portable_hint"));
     expect(hint.checkVisibility()).toBe(true);
+    expect(hint.getAttribute("aria-hidden")).toBe("true");
+    expect(toggle.parentElement!.children).toHaveLength(2);
   });
 
   it("heads the last step for both the drawer and portable use", async () => {
