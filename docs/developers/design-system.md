@@ -2994,7 +2994,7 @@ and nothing guards it across screens:
   receipts page; the backup screen's turn-on form and settings editor; the bucket copy form; your
   profile's details and its credential dialogs; the edit-person and new-person dialogs; the purchase
   form;
-- batch 3b: the print agent's Edit dialog; the printer details' Edit form (it replaced the printer page's name and connection editors, A405); the
+- batch 3b: the print agent's Edit dialog; the printer details' Edit form; the
   calibration wizard; the Bluetooth printer Pair dialog; the Edit device dialog; the device profile
   editor, new and existing; the card reader's Rename dialog; the bill attestation's Record; the held
   payment's Record;

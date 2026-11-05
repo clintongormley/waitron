@@ -2676,7 +2676,8 @@ export class PrintersScreen extends LitElement {
     const values = this.#detailEditValues();
     const baseline = this.#detailEditBaseline!;
     const saved = this.#savedEditValues(printer);
-    // A field this person left alone is not sent, or it would undo another session's change to it.
+    // The name, or the address and port as a pair, is sent only when this person changed it, so
+    // something they left alone cannot undo another session's change to it.
     const sends = (fields: (keyof DetailEditValues)[]) =>
       fields.some((field) => values[field] !== baseline[field]) &&
       fields.some((field) => values[field] !== saved[field]);
@@ -4404,7 +4405,8 @@ export class PrintersScreen extends LitElement {
   }
 
   override render(): TemplateResult {
-    // Each of these dialogs shows the refusal and the failed read itself.
+    // Each of these dialogs shows the failed read itself, and every action inside them shows its
+    // own refusal.
     const dialogOpen =
       this.addingAgent ||
       this.addingPrinter ||
