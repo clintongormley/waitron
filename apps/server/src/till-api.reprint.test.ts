@@ -29,11 +29,11 @@ import { seedSessionDevice, sessionCookieForTest } from "./testing/session-devic
 // The HTTP shape of the reprint route: the `requireSession` guard, the `requireUuidId` screen, and
 // that `reprintOrderTickets` re-enqueues through the SAME outbox path the fire uses. The verb's logic
 // is pinned in `kitchen-print.test.ts`.
-const CAFE = "Cafe con leche";
+const COFFEE = "Cafe con leche";
 let cfg: TradingContext;
 let ana: { id: string };
 let stationId: string;
-let cafeOffer: string;
+let coffeeOffer: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -60,16 +60,16 @@ const suite = useVenueDb({
     // One sellable product no routing cell covers, routed to the default station.
     await withTransaction(db, async (tx) => {
       const catalogue = await createCatalogue(tx, { name: "Carta" });
-      const cafe = await createProduct(tx, {
+      const coffee = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: null,
-        name: CAFE,
+        name: COFFEE,
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",
       });
       await assignCatalogueToVenue(tx, catalogue.id);
-      cafeOffer = (await offerProducts(tx, cfg)).offerFor(cafe.id);
+      coffeeOffer = (await offerProducts(tx, cfg)).offerFor(coffee.id);
     });
   },
 });
@@ -152,13 +152,12 @@ beforeAll(async () => {
   tillDeviceCookie = await enrolTillDeviceCookie(suite.db);
 });
 
-/** Park + place an order carrying `CAFE`, which FIRES it (placeOrder → fireLines). Returns the order id. */
 async function placeAndFire(): Promise<string> {
   const id = randomUUID();
   const park = await app.request("/api/working-orders", {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify({ id, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
+    body: JSON.stringify({ id, lines: [{ menuItemId: coffeeOffer, quantity: "1" }] }),
   });
   expect(park.status).toBe(200);
   const place = await app.request(`/api/working-orders/${id}/place`, {
@@ -217,7 +216,7 @@ describe("POST /api/orders/:id/reprint", () => {
 
     const jobs = await printJobsFor(printerId);
     expect(jobs).toHaveLength(1); // reprint re-enqueued the current ticket
-    expect(jobs[0]!.ticket).toContain(CAFE);
+    expect(jobs[0]!.ticket).toContain(COFFEE);
   });
 
   it("404s working_order.not_found on a malformed id, and no-ops (200) an unknown well-formed order", async () => {
