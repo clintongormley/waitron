@@ -68,9 +68,9 @@ function minutesAgo(minutes: number): string {
 let v: PartyVenue;
 /** A counter zone whose orders are invoiced when placed. */
 let ticketThenPayZone: string;
-let entrantes: string;
-let principales: string;
-let postres: string;
+let starterCourseId: string;
+let mainCourseId: string;
+let dessertCourseId: string;
 
 // `resetPerTest: false`: the venue is provisioned once, and each case seats its own tables.
 useVenueDb({
@@ -91,7 +91,7 @@ useVenueDb({
         })
       ).zoneId;
     });
-    [entrantes, principales, postres] = await inTx(v, async (tx) => [
+    [starterCourseId, mainCourseId, dessertCourseId] = await inTx(v, async (tx) => [
       (await createCourse(tx, { name: "Entrantes", displayOrder: 1 })).id,
       (await createCourse(tx, { name: "Principales", displayOrder: 2 })).id,
       (await createCourse(tx, { name: "Postres", displayOrder: 3 })).id,
@@ -198,29 +198,29 @@ async function command(partyId: string) {
 
 /** A table bill of a new party at `label`: Burger for the first course, sent, and Flan for dessert, waiting. */
 async function coursedBill(label: string) {
-  const ana = await seat(v, await v.table(label));
+  const originalParty = await seat(v, await v.table(label));
   await inTx(v, (tx) =>
-    addTabRound(tx, v.cfg, ana.tabId, [
-      { menuItemId: v.item("Burger"), quantity: "1", courseId: entrantes },
-      { menuItemId: v.item("Flan"), quantity: "1", courseId: postres },
+    addTabRound(tx, v.cfg, originalParty.tabId, [
+      { menuItemId: v.item("Burger"), quantity: "1", courseId: starterCourseId },
+      { menuItemId: v.item("Flan"), quantity: "1", courseId: dessertCourseId },
     ]),
   );
-  return ana;
+  return originalParty;
 }
 
 describe("dishes arriving in a party (A96, P16)", () => {
   it("puts a moved bill's sent dishes in one new fired group, after the receiving party's last group", async () => {
-    const [m4, m7] = [await v.table("Mesa 4"), await v.table("Mesa 7")];
-    const ana = await seat(v, m4);
-    const luis = await seat(v, m7);
-    await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
-    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
-    await orderForParty(v, luis.partyId, ["Agua"]);
-    const groupsBefore = await groupsOf(luis.partyId);
+    const [table4, table7] = [await v.table("Mesa 4"), await v.table("Mesa 7")];
+    const originalParty = await seat(v, table4);
+    const receivingParty = await seat(v, table7);
+    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
+    await orderForParty(v, receivingParty.partyId, ["Agua"]);
+    const groupsBefore = await groupsOf(receivingParty.partyId);
 
-    await move(b2, { tableId: m7 });
+    await move(b2, { tableId: table7 });
 
-    const groups = await groupsOf(luis.partyId);
+    const groups = await groupsOf(receivingParty.partyId);
     expect(groups.slice(0, -1)).toEqual(groupsBefore);
     expect(groups.at(-1)).toMatchObject({
       state: "fired",
@@ -233,7 +233,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     expect((await lineRows(b2)).map((l) => l.groupId)).toEqual([made]);
     expect(await eventsOf(made)).toEqual([
       {
-        partyId: luis.partyId,
+        partyId: receivingParty.partyId,
         kind: "lines_moved",
         actorId: OPERATOR,
         detail: { workingOrderId: b2, arrived: true },
@@ -242,20 +242,20 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("dates a moved bill's fired group from its earliest kitchen firing and names whoever fired that dish's group in the party it left", async () => {
-    const [m4, m7] = [await v.table("Hora 4"), await v.table("Hora 7")];
-    const ana = await seat(v, m4);
-    const luis = await seat(v, m7);
-    await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
-    await orderForParty(v, ana.partyId, ["Paella"]);
-    const b2 = await splitOff(ana.partyId, ana.tabId, [2, 3]);
-    const [vino, paella] = await lineRows(b2);
+    const [table4, table7] = [await v.table("Hora 4"), await v.table("Hora 7")];
+    const originalParty = await seat(v, table4);
+    const receivingParty = await seat(v, table7);
+    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    await orderForParty(v, originalParty.partyId, ["Paella"]);
+    const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2, 3]);
+    const [wineLine, riceLine] = await lineRows(b2);
     // The later line fired first, so neither the first line nor the latest firing is the answer;
     // the first line's sent time is earlier still, so a sent time must not outrank a kitchen item.
     const earliest = minutesAgo(25);
     await inTx(v, async (tx) => {
       for (const [line, firedAt, sentAt] of [
-        [vino!, minutesAgo(12), minutesAgo(40)],
-        [paella!, earliest, minutesAgo(5)],
+        [wineLine!, minutesAgo(12), minutesAgo(40)],
+        [riceLine!, earliest, minutesAgo(5)],
       ] as const) {
         await tx
           .update(ticketItems)
@@ -266,19 +266,19 @@ describe("dishes arriving in a party (A96, P16)", () => {
       await tx
         .update(orderGroups)
         .set({ firedBy: FIRER })
-        .where(eq(orderGroups.id, paella!.groupId!));
+        .where(eq(orderGroups.id, riceLine!.groupId!));
     });
 
-    await move(b2, { tableId: m7 }, { operatorId: MOVER });
+    await move(b2, { tableId: table7 }, { operatorId: MOVER });
 
-    const made = (await groupsOf(luis.partyId)).at(-1)!;
+    const made = (await groupsOf(receivingParty.partyId)).at(-1)!;
     expect(made).toMatchObject({
       state: "fired",
       firedAt: earliest,
       firedBy: FIRER,
       submittedBy: MOVER,
     });
-    const current = await inTx(v, (tx) => readCurrentOrders(tx, luis.partyId));
+    const current = await inTx(v, (tx) => readCurrentOrders(tx, receivingParty.partyId));
     expect(current.groups.find((g) => g.id === made.id)).toMatchObject({
       firedAt: earliest,
       sentAt: earliest,
@@ -286,10 +286,10 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("dates an arriving fired group from a dish's sent time where the dish has no kitchen item, and names the mover when that dish records no firer", async () => {
-    const ana = await seat(v, await v.table("Hora 5"));
-    const luis = await seat(v, await v.table("Hora 8"));
-    await order(v, ana.tabId, "Burger");
-    const [burger] = await lineRows(ana.tabId);
+    const originalParty = await seat(v, await v.table("Hora 5"));
+    const receivingParty = await seat(v, await v.table("Hora 8"));
+    await order(v, originalParty.tabId, "Burger");
+    const [burger] = await lineRows(originalParty.tabId);
     const sent = minutesAgo(30);
     await inTx(v, async (tx) => {
       await tx
@@ -306,14 +306,14 @@ describe("dishes arriving in a party (A96, P16)", () => {
       groupArrivingDishes(
         tx,
         v.cfg,
-        luis.partyId,
-        ana.tabId,
+        receivingParty.partyId,
+        originalParty.tabId,
         MOVER,
         new Map([[burger!.id, { personId: FIRER }]]),
       ),
     );
 
-    const [group] = await groupsOf(luis.partyId);
+    const [group] = await groupsOf(receivingParty.partyId);
     expect(group).toMatchObject({
       id: made.fired,
       state: "fired",
@@ -323,167 +323,173 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("lets the pass mark a moved bill's dishes ready through their new group", async () => {
-    const [m4, m7] = [await v.table("Pass 4"), await v.table("Pass 7")];
-    const ana = await seat(v, m4);
-    const luis = await seat(v, m7);
-    await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
-    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
+    const [table4, table7] = [await v.table("Pass 4"), await v.table("Pass 7")];
+    const originalParty = await seat(v, table4);
+    const receivingParty = await seat(v, table7);
+    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
 
-    await move(b2, { tableId: m7 });
+    await move(b2, { tableId: table7 });
 
-    const made = (await groupsOf(luis.partyId)).at(-1)!.id;
+    const made = (await groupsOf(receivingParty.partyId)).at(-1)!.id;
     expect(await passGroupsOf(b2)).toEqual([made]);
-    const ready = await command(luis.partyId);
-    await inTx(v, (tx) => bumpGroupReady(tx, v.cfg, luis.partyId, made, ready));
+    const ready = await command(receivingParty.partyId);
+    await inTx(v, (tx) => bumpGroupReady(tx, v.cfg, receivingParty.partyId, made, ready));
     expect(await firedTicketsOf(b2)).toEqual([{ lineId: expect.any(String), state: "ready" }]);
   });
 
   it("puts sent dishes in a fired group and a dish waiting for its course in a held group, which the waiter then releases", async () => {
-    const ana = await coursedBill("Curso 1");
-    const mesa = await v.table("Curso 2");
-    const luis = await seat(v, mesa);
-    const [burger, flan] = await lineRows(ana.tabId);
-    expect(await firedTicketsOf(ana.tabId)).toEqual([{ lineId: burger!.id, state: "queued" }]);
+    const originalParty = await coursedBill("Curso 1");
+    const targetTable = await v.table("Curso 2");
+    const receivingParty = await seat(v, targetTable);
+    const [burger, custardLine] = await lineRows(originalParty.tabId);
+    expect(await firedTicketsOf(originalParty.tabId)).toEqual([
+      { lineId: burger!.id, state: "queued" },
+    ]);
 
-    await move(ana.tabId, { tableId: mesa });
+    await move(originalParty.tabId, { tableId: targetTable });
 
-    const [fired, held] = await groupsOf(luis.partyId);
+    const [fired, held] = await groupsOf(receivingParty.partyId);
     expect(fired).toMatchObject({ state: "fired", position: 1 });
     expect(held).toMatchObject({ state: "held", position: 2, firedAt: null, firedBy: null });
-    expect((await lineRows(ana.tabId)).map((l) => [l.id, l.groupId])).toEqual([
+    expect((await lineRows(originalParty.tabId)).map((l) => [l.id, l.groupId])).toEqual([
       [burger!.id, fired!.id],
-      [flan!.id, held!.id],
+      [custardLine!.id, held!.id],
     ]);
     expect(await eventsOf(held!.id)).toEqual([
       {
-        partyId: luis.partyId,
+        partyId: receivingParty.partyId,
         kind: "lines_moved",
         actorId: OPERATOR,
-        detail: { workingOrderId: ana.tabId, arrived: true },
+        detail: { workingOrderId: originalParty.tabId, arrived: true },
       },
     ]);
-    expect(await firedTicketsOf(ana.tabId)).toHaveLength(1);
+    expect(await firedTicketsOf(originalParty.tabId)).toHaveLength(1);
 
-    const fire = await command(luis.partyId);
-    await inTx(v, (tx) => fireGroup(tx, v.cfg, luis.partyId, held!.id, fire));
+    const fire = await command(receivingParty.partyId);
+    await inTx(v, (tx) => fireGroup(tx, v.cfg, receivingParty.partyId, held!.id, fire));
 
-    expect(await firedTicketsOf(ana.tabId)).toHaveLength(2);
+    expect(await firedTicketsOf(originalParty.tabId)).toHaveLength(2);
   });
 
   it("holds a moved bill's waiting dishes course by course, so firing one held group sends none of a later one", async () => {
-    const ana = await seat(v, await v.table("Cursos 1"));
+    const originalParty = await seat(v, await v.table("Cursos 1"));
     await inTx(v, (tx) =>
-      addTabRound(tx, v.cfg, ana.tabId, [
-        { menuItemId: v.item("Burger"), quantity: "1", courseId: entrantes },
-        { menuItemId: v.item("Flan"), quantity: "1", courseId: postres },
-        { menuItemId: v.item("Tarta"), quantity: "1", courseId: principales },
+      addTabRound(tx, v.cfg, originalParty.tabId, [
+        { menuItemId: v.item("Burger"), quantity: "1", courseId: starterCourseId },
+        { menuItemId: v.item("Flan"), quantity: "1", courseId: dessertCourseId },
+        { menuItemId: v.item("Tarta"), quantity: "1", courseId: mainCourseId },
       ]),
     );
-    const mesa = await v.table("Cursos 2");
-    const luis = await seat(v, mesa);
-    const [burger, flan, tarta] = await lineRows(ana.tabId);
-    expect(await firedTicketsOf(ana.tabId)).toEqual([{ lineId: burger!.id, state: "queued" }]);
+    const targetTable = await v.table("Cursos 2");
+    const receivingParty = await seat(v, targetTable);
+    const [burger, custardLine, cakeLine] = await lineRows(originalParty.tabId);
+    expect(await firedTicketsOf(originalParty.tabId)).toEqual([
+      { lineId: burger!.id, state: "queued" },
+    ]);
 
-    await move(ana.tabId, { tableId: mesa });
+    await move(originalParty.tabId, { tableId: targetTable });
 
-    const groups = await groupsOf(luis.partyId);
+    const groups = await groupsOf(receivingParty.partyId);
     expect(groups.map((g) => [g.state, g.position])).toEqual([
       ["fired", 1],
       ["held", 2],
       ["held", 3],
     ]);
-    const [fired, heldPrincipales, heldPostres] = groups;
-    expect((await lineRows(ana.tabId)).map((l) => [l.id, l.groupId])).toEqual([
+    const [fired, heldMains, heldDesserts] = groups;
+    expect((await lineRows(originalParty.tabId)).map((l) => [l.id, l.groupId])).toEqual([
       [burger!.id, fired!.id],
-      [flan!.id, heldPostres!.id],
-      [tarta!.id, heldPrincipales!.id],
+      [custardLine!.id, heldDesserts!.id],
+      [cakeLine!.id, heldMains!.id],
     ]);
-    for (const held of [heldPrincipales!, heldPostres!]) {
+    for (const held of [heldMains!, heldDesserts!]) {
       expect(await eventsOf(held.id)).toEqual([
         {
-          partyId: luis.partyId,
+          partyId: receivingParty.partyId,
           kind: "lines_moved",
           actorId: OPERATOR,
-          detail: { workingOrderId: ana.tabId, arrived: true },
+          detail: { workingOrderId: originalParty.tabId, arrived: true },
         },
       ]);
     }
 
-    const fireMains = await command(luis.partyId);
-    await inTx(v, (tx) => fireGroup(tx, v.cfg, luis.partyId, heldPrincipales!.id, fireMains));
+    const fireMains = await command(receivingParty.partyId);
+    await inTx(v, (tx) => fireGroup(tx, v.cfg, receivingParty.partyId, heldMains!.id, fireMains));
 
-    expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
-      [burger!.id, tarta!.id].sort(),
+    expect((await firedTicketsOf(originalParty.tabId)).map((t) => t.lineId).sort()).toEqual(
+      [burger!.id, cakeLine!.id].sort(),
     );
   });
 
   it("fires a moved no-course dish while leaving live held courses separate", async () => {
-    const ana = await seat(v, await v.table("Sin curso 1"));
+    const originalParty = await seat(v, await v.table("Sin curso 1"));
     await inTx(v, (tx) =>
-      addTabRound(tx, v.cfg, ana.tabId, [
-        { menuItemId: v.item("Burger"), quantity: "1", courseId: entrantes },
-        { menuItemId: v.item("Flan"), quantity: "1", courseId: postres },
+      addTabRound(tx, v.cfg, originalParty.tabId, [
+        { menuItemId: v.item("Burger"), quantity: "1", courseId: starterCourseId },
+        { menuItemId: v.item("Flan"), quantity: "1", courseId: dessertCourseId },
         { menuItemId: v.item("Burger"), quantity: "1", hold: true },
-        { menuItemId: v.item("Tarta"), quantity: "1", courseId: principales },
+        { menuItemId: v.item("Tarta"), quantity: "1", courseId: mainCourseId },
       ]),
     );
-    const mesa = await v.table("Sin curso 2");
-    const luis = await seat(v, mesa);
-    const [burger, flan, loose, tarta] = await lineRows(ana.tabId);
+    const targetTable = await v.table("Sin curso 2");
+    const receivingParty = await seat(v, targetTable);
+    const [burger, custardLine, loose, cakeLine] = await lineRows(originalParty.tabId);
     expect([loose!.courseId, loose!.sentAt]).toEqual([null, null]);
 
-    await move(ana.tabId, { tableId: mesa });
+    await move(originalParty.tabId, { tableId: targetTable });
 
-    const groups = await groupsOf(luis.partyId);
+    const groups = await groupsOf(receivingParty.partyId);
     expect(groups.map((g) => [g.state, g.position])).toEqual([
       ["fired", 1],
       ["held", 2],
       ["held", 3],
     ]);
-    const [fired, heldPrincipales, heldPostres] = groups;
-    expect((await lineRows(ana.tabId)).map((l) => [l.id, l.groupId])).toEqual([
+    const [fired, heldMains, heldDesserts] = groups;
+    expect((await lineRows(originalParty.tabId)).map((l) => [l.id, l.groupId])).toEqual([
       [burger!.id, fired!.id],
-      [flan!.id, heldPostres!.id],
+      [custardLine!.id, heldDesserts!.id],
       [loose!.id, fired!.id],
-      [tarta!.id, heldPrincipales!.id],
+      [cakeLine!.id, heldMains!.id],
     ]);
 
-    const fireDesserts = await command(luis.partyId);
-    await inTx(v, (tx) => fireGroup(tx, v.cfg, luis.partyId, heldPostres!.id, fireDesserts));
-
-    expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
-      [burger!.id, flan!.id, loose!.id].sort(),
+    const fireDesserts = await command(receivingParty.partyId);
+    await inTx(v, (tx) =>
+      fireGroup(tx, v.cfg, receivingParty.partyId, heldDesserts!.id, fireDesserts),
     );
 
-    const fireMains = await command(luis.partyId);
-    await inTx(v, (tx) => fireGroup(tx, v.cfg, luis.partyId, heldPrincipales!.id, fireMains));
+    expect((await firedTicketsOf(originalParty.tabId)).map((t) => t.lineId).sort()).toEqual(
+      [burger!.id, custardLine!.id, loose!.id].sort(),
+    );
 
-    expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
-      [burger!.id, flan!.id, loose!.id, tarta!.id].sort(),
+    const fireMains = await command(receivingParty.partyId);
+    await inTx(v, (tx) => fireGroup(tx, v.cfg, receivingParty.partyId, heldMains!.id, fireMains));
+
+    expect((await firedTicketsOf(originalParty.tabId)).map((t) => t.lineId).sort()).toEqual(
+      [burger!.id, custardLine!.id, loose!.id, cakeLine!.id].sort(),
     );
   });
 
   it("fires every moved no-course dish when no live held course remains", async () => {
-    const ana = await seat(v, await v.table("Sin curso 3"));
+    const originalParty = await seat(v, await v.table("Sin curso 3"));
     await inTx(v, (tx) =>
-      addTabRound(tx, v.cfg, ana.tabId, [
-        { menuItemId: v.item("Burger"), quantity: "1", courseId: entrantes },
+      addTabRound(tx, v.cfg, originalParty.tabId, [
+        { menuItemId: v.item("Burger"), quantity: "1", courseId: starterCourseId },
         { menuItemId: v.item("Burger"), quantity: "1", hold: true },
         { menuItemId: v.item("Flan"), quantity: "1", hold: true },
       ]),
     );
-    const mesa = await v.table("Sin curso 4");
-    const luis = await seat(v, mesa);
-    const [burger, loose, flan] = await lineRows(ana.tabId);
+    const targetTable = await v.table("Sin curso 4");
+    const receivingParty = await seat(v, targetTable);
+    const [burger, loose, custardLine] = await lineRows(originalParty.tabId);
 
-    await move(ana.tabId, { tableId: mesa });
+    await move(originalParty.tabId, { tableId: targetTable });
 
-    const groups = await groupsOf(luis.partyId);
+    const groups = await groupsOf(receivingParty.partyId);
     expect(groups.map((g) => [g.state, g.position])).toEqual([["fired", 1]]);
-    expect((await lineRows(ana.tabId)).map((l) => [l.id, l.groupId])).toEqual([
+    expect((await lineRows(originalParty.tabId)).map((l) => [l.id, l.groupId])).toEqual([
       [burger!.id, groups[0]!.id],
       [loose!.id, groups[0]!.id],
-      [flan!.id, groups[0]!.id],
+      [custardLine!.id, groups[0]!.id],
     ]);
   });
 
@@ -492,13 +498,13 @@ describe("dishes arriving in a party (A96, P16)", () => {
       v,
       async (tx) => (await createCourse(tx, { name: "Segundos", displayOrder: 2 })).id,
     );
-    const ana = await seat(v, await v.table("Sin curso 5"));
+    const originalParty = await seat(v, await v.table("Sin curso 5"));
     try {
       await inTx(v, (tx) =>
-        addTabRound(tx, v.cfg, ana.tabId, [
-          { menuItemId: v.item("Burger"), quantity: "1", courseId: entrantes },
+        addTabRound(tx, v.cfg, originalParty.tabId, [
+          { menuItemId: v.item("Burger"), quantity: "1", courseId: starterCourseId },
           { menuItemId: v.item("Tarta"), quantity: "1", courseId: retired },
-          { menuItemId: v.item("Flan"), quantity: "1", courseId: postres },
+          { menuItemId: v.item("Flan"), quantity: "1", courseId: dessertCourseId },
           { menuItemId: v.item("Burger"), quantity: "1", hold: true },
         ]),
       );
@@ -506,81 +512,83 @@ describe("dishes arriving in a party (A96, P16)", () => {
       // The venue is shared by the whole file.
       await inTx(v, (tx) => deleteCourse(tx, retired));
     }
-    const mesa = await v.table("Sin curso 6");
-    const luis = await seat(v, mesa);
-    const [burger, tarta, flan, loose] = await lineRows(ana.tabId);
+    const targetTable = await v.table("Sin curso 6");
+    const receivingParty = await seat(v, targetTable);
+    const [burger, cakeLine, custardLine, loose] = await lineRows(originalParty.tabId);
 
-    await move(ana.tabId, { tableId: mesa });
+    await move(originalParty.tabId, { tableId: targetTable });
 
-    const groups = await groupsOf(luis.partyId);
+    const groups = await groupsOf(receivingParty.partyId);
     expect(groups.map((g) => [g.state, g.position])).toEqual([
       ["fired", 1],
       ["held", 2],
     ]);
-    const [fired, heldPostres] = groups;
-    expect((await lineRows(ana.tabId)).map((l) => [l.id, l.groupId])).toEqual([
+    const [fired, heldDesserts] = groups;
+    expect((await lineRows(originalParty.tabId)).map((l) => [l.id, l.groupId])).toEqual([
       [burger!.id, fired!.id],
-      [tarta!.id, fired!.id],
-      [flan!.id, heldPostres!.id],
+      [cakeLine!.id, fired!.id],
+      [custardLine!.id, heldDesserts!.id],
       [loose!.id, fired!.id],
     ]);
 
-    const fireDesserts = await command(luis.partyId);
-    await inTx(v, (tx) => fireGroup(tx, v.cfg, luis.partyId, heldPostres!.id, fireDesserts));
+    const fireDesserts = await command(receivingParty.partyId);
+    await inTx(v, (tx) =>
+      fireGroup(tx, v.cfg, receivingParty.partyId, heldDesserts!.id, fireDesserts),
+    );
 
-    expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
-      [burger!.id, tarta!.id, flan!.id, loose!.id].sort(),
+    expect((await firedTicketsOf(originalParty.tabId)).map((t) => t.lineId).sort()).toEqual(
+      [burger!.id, cakeLine!.id, custardLine!.id, loose!.id].sort(),
     );
   });
 
   it("fires all moved inactive courses and no-course dishes without creating held groups", async () => {
-    const [terceros, cuartos] = await inTx(v, async (tx) => [
+    const [thirdCourseId, fourthCourseId] = await inTx(v, async (tx) => [
       (await createCourse(tx, { name: "Terceros", displayOrder: 2 })).id,
       (await createCourse(tx, { name: "Cuartos", displayOrder: 4 })).id,
     ]);
-    const ana = await seat(v, await v.table("Sin curso 7"));
+    const originalParty = await seat(v, await v.table("Sin curso 7"));
     try {
       await inTx(v, (tx) =>
-        addTabRound(tx, v.cfg, ana.tabId, [
-          { menuItemId: v.item("Burger"), quantity: "1", courseId: entrantes },
-          { menuItemId: v.item("Tarta"), quantity: "1", courseId: terceros },
-          { menuItemId: v.item("Flan"), quantity: "1", courseId: cuartos },
+        addTabRound(tx, v.cfg, originalParty.tabId, [
+          { menuItemId: v.item("Burger"), quantity: "1", courseId: starterCourseId },
+          { menuItemId: v.item("Tarta"), quantity: "1", courseId: thirdCourseId },
+          { menuItemId: v.item("Flan"), quantity: "1", courseId: fourthCourseId },
           { menuItemId: v.item("Burger"), quantity: "1", hold: true },
         ]),
       );
     } finally {
       // The venue is shared by the whole file.
       await inTx(v, async (tx) => {
-        await deleteCourse(tx, terceros);
-        await deleteCourse(tx, cuartos);
+        await deleteCourse(tx, thirdCourseId);
+        await deleteCourse(tx, fourthCourseId);
       });
     }
-    const mesa = await v.table("Sin curso 8");
-    const luis = await seat(v, mesa);
-    const [burger, tarta, flan, loose] = await lineRows(ana.tabId);
+    const targetTable = await v.table("Sin curso 8");
+    const receivingParty = await seat(v, targetTable);
+    const [burger, cakeLine, custardLine, loose] = await lineRows(originalParty.tabId);
 
-    await move(ana.tabId, { tableId: mesa });
+    await move(originalParty.tabId, { tableId: targetTable });
 
-    const groups = await groupsOf(luis.partyId);
+    const groups = await groupsOf(receivingParty.partyId);
     expect(groups.map((g) => [g.state, g.position])).toEqual([["fired", 1]]);
     const [fired] = groups;
-    expect((await lineRows(ana.tabId)).map((l) => [l.id, l.groupId])).toEqual([
+    expect((await lineRows(originalParty.tabId)).map((l) => [l.id, l.groupId])).toEqual([
       [burger!.id, fired!.id],
-      [tarta!.id, fired!.id],
-      [flan!.id, fired!.id],
+      [cakeLine!.id, fired!.id],
+      [custardLine!.id, fired!.id],
       [loose!.id, fired!.id],
     ]);
   });
 
   it("puts an open counter order's dishes, sent to the kitchen at the move, in one new fired group", async () => {
-    const mesa = await v.table("Mostrador 1");
-    const ana = await seat(v, mesa);
+    const targetTable = await v.table("Mostrador 1");
+    const receivingParty = await seat(v, targetTable);
     const counter = await counterOrder(v, "Caña", "Tarta");
     expect(await firedTicketsOf(counter)).toEqual([]);
 
-    await move(counter, { tableId: mesa });
+    await move(counter, { tableId: targetTable });
 
-    const groups = await groupsOf(ana.partyId);
+    const groups = await groupsOf(receivingParty.partyId);
     expect(groups).toHaveLength(1);
     expect(groups[0]).toMatchObject({ state: "fired", position: 1 });
     expect((await lineRows(counter)).map((l) => l.groupId)).toEqual([groups[0]!.id, groups[0]!.id]);
@@ -588,8 +596,8 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("gives a placed counter order moved into a party one fired group, leaving it placed and every other line value as it was", async () => {
-    const mesa = await v.table("Factura 1");
-    const ana = await seat(v, mesa);
+    const targetTable = await v.table("Factura 1");
+    const receivingParty = await seat(v, targetTable);
     const id = randomUUID();
     const deps = { db: v.db, backend: v.backend, clock: v.clock };
     await parkOrder(deps, v.cfg, {
@@ -602,9 +610,9 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const before = await lineRows(id);
     expect(before.every((l) => l.sentAt !== null && l.groupId === null)).toBe(true);
 
-    await move(id, { tableId: mesa });
+    await move(id, { tableId: targetTable });
 
-    const [group] = await groupsOf(ana.partyId);
+    const [group] = await groupsOf(receivingParty.partyId);
     expect(group).toMatchObject({ state: "fired", position: 1 });
     expect((await billRow(v, id)).status).toBe("placed");
     expect(await lineRows(id)).toEqual(before.map((l) => ({ ...l, groupId: group!.id })));
@@ -612,12 +620,12 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("gives a bill moved to a free table its new party's first group", async () => {
-    const ana = await coursedBill("Libre 1");
-    const libre = await v.table("Libre 2");
-    await orderForParty(v, ana.partyId, ["Agua"]);
-    const b2 = await splitOff(ana.partyId, ana.tabId, [1]);
+    const originalParty = await coursedBill("Libre 1");
+    const freeTable = await v.table("Libre 2");
+    await orderForParty(v, originalParty.partyId, ["Agua"]);
+    const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [1]);
 
-    const result = await move(b2, { tableId: libre });
+    const result = await move(b2, { tableId: freeTable });
 
     const groups = await groupsOf(result.partyId!);
     expect(groups.map((g) => [g.state, g.position])).toEqual([["fired", 1]]);
@@ -625,16 +633,16 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("names whoever fired a dish's group in the party it left, not the mover, when its bill moves to a free table", async () => {
-    const ana = await seat(v, await v.table("Libre 3"));
-    const libre = await v.table("Libre 4");
-    await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
-    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
-    const [vino] = await lineRows(b2);
+    const originalParty = await seat(v, await v.table("Libre 3"));
+    const freeTable = await v.table("Libre 4");
+    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
+    const [wineLine] = await lineRows(b2);
     await inTx(v, (tx) =>
-      tx.update(orderGroups).set({ firedBy: FIRER }).where(eq(orderGroups.id, vino!.groupId!)),
+      tx.update(orderGroups).set({ firedBy: FIRER }).where(eq(orderGroups.id, wineLine!.groupId!)),
     );
 
-    const result = await move(b2, { tableId: libre }, { operatorId: MOVER });
+    const result = await move(b2, { tableId: freeTable }, { operatorId: MOVER });
 
     expect(await groupsOf(result.partyId!)).toEqual([
       expect.objectContaining({ state: "fired", firedBy: FIRER, submittedBy: MOVER }),
@@ -642,21 +650,21 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("names the kitchen display that fired a dish's group in the party it left, not the mover, when its bill moves", async () => {
-    const ana = await seat(v, await v.table("Libre 5"));
-    const libre = await v.table("Libre 6");
-    await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
-    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
-    const [vino] = await lineRows(b2);
+    const originalParty = await seat(v, await v.table("Libre 5"));
+    const freeTable = await v.table("Libre 6");
+    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
+    const [wineLine] = await lineRows(b2);
     const display = await seedSessionDevice(v.db);
     await inTx(v, async (tx) => {
       await tx.update(devices).set({ label: "Kitchen screen" }).where(eq(devices.id, display));
       await tx
         .update(orderGroups)
         .set({ firedBy: null, firedByDeviceId: display })
-        .where(eq(orderGroups.id, vino!.groupId!));
+        .where(eq(orderGroups.id, wineLine!.groupId!));
     });
 
-    const result = await move(b2, { tableId: libre }, { operatorId: MOVER });
+    const result = await move(b2, { tableId: freeTable }, { operatorId: MOVER });
 
     const [made] = await inTx(v, (tx) =>
       tx
@@ -674,24 +682,26 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("names the kitchen display that fired a dish's group when Split a table takes its bill", async () => {
-    const [m4, m5] = [await v.table("Separar 6"), await v.table("Separar 7")];
-    const ana = await seat(v, m4);
+    const [table4, table5] = [await v.table("Separar 6"), await v.table("Separar 7")];
+    const originalParty = await seat(v, table4);
     await nextMillisecond();
-    const joining = { ...(await commandFor(v, ana.partyId)) };
-    await inTx(v, (tx) => joinTables(tx, v.cfg, ana.partyId, m5, joining));
-    await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
-    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
-    const [vino] = await lineRows(b2);
+    const joining = { ...(await commandFor(v, originalParty.partyId)) };
+    await inTx(v, (tx) => joinTables(tx, v.cfg, originalParty.partyId, table5, joining));
+    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
+    const [wineLine] = await lineRows(b2);
     const display = await seedSessionDevice(v.db);
     await inTx(v, (tx) =>
       tx
         .update(orderGroups)
         .set({ firedBy: null, firedByDeviceId: display })
-        .where(eq(orderGroups.id, vino!.groupId!)),
+        .where(eq(orderGroups.id, wineLine!.groupId!)),
     );
 
-    const splitting = { ...(await commandFor(v, ana.partyId)), operatorId: MOVER };
-    const result = await inTx(v, (tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
+    const splitting = { ...(await commandFor(v, originalParty.partyId)), operatorId: MOVER };
+    const result = await inTx(v, (tx) =>
+      splitTable(tx, v.cfg, originalParty.partyId, table5, b2, splitting),
+    );
 
     const [made] = await inTx(v, (tx) =>
       tx
@@ -703,16 +713,18 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("puts the chosen bill's sent dishes in ONE fired group at position 1 of the party Split a table starts, fired by whoever fired their group", async () => {
-    const [m4, m5] = [await v.table("Separar 4"), await v.table("Separar 5")];
-    const ana = await seat(v, m4);
+    const [table4, table5] = [await v.table("Separar 4"), await v.table("Separar 5")];
+    const originalParty = await seat(v, table4);
     await nextMillisecond();
-    const joining = { ...(await commandFor(v, ana.partyId)) };
-    await inTx(v, (tx) => joinTables(tx, v.cfg, ana.partyId, m5, joining));
-    await orderForParty(v, ana.partyId, ["Burger", "Vino", "Flan"]);
-    const b2 = await splitOff(ana.partyId, ana.tabId, [2, 3]);
+    const joining = { ...(await commandFor(v, originalParty.partyId)) };
+    await inTx(v, (tx) => joinTables(tx, v.cfg, originalParty.partyId, table5, joining));
+    await orderForParty(v, originalParty.partyId, ["Burger", "Vino", "Flan"]);
+    const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2, 3]);
 
-    const splitting = { ...(await commandFor(v, ana.partyId)), operatorId: MOVER };
-    const result = await inTx(v, (tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
+    const splitting = { ...(await commandFor(v, originalParty.partyId)), operatorId: MOVER };
+    const result = await inTx(v, (tx) =>
+      splitTable(tx, v.cfg, originalParty.partyId, table5, b2, splitting),
+    );
 
     const groups = await groupsOf(result.partyId);
     expect(groups.map((g) => [g.state, g.position, g.firedBy, g.submittedBy])).toEqual([
@@ -722,46 +734,46 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("groups a counter order moved onto a seated table as a bill of its own, and leaves the party's first bill's lines as they were", async () => {
-    const mesa = await v.table("Fusion 1");
-    const ana = await seat(v, mesa);
-    await orderForParty(v, ana.partyId, ["Burger"]);
-    await order(v, ana.tabId, "Vino");
-    const [burger, vino] = await lineRows(ana.tabId);
-    const [own] = await groupsOf(ana.partyId);
-    expect([burger!.groupId, vino!.groupId]).toEqual([own!.id, null]);
+    const targetTable = await v.table("Fusion 1");
+    const receivingParty = await seat(v, targetTable);
+    await orderForParty(v, receivingParty.partyId, ["Burger"]);
+    await order(v, receivingParty.tabId, "Vino");
+    const [burger, wineLine] = await lineRows(receivingParty.tabId);
+    const [own] = await groupsOf(receivingParty.partyId);
+    expect([burger!.groupId, wineLine!.groupId]).toEqual([own!.id, null]);
     const counter = await counterOrder(v, "Tarta");
 
-    const result = await move(counter, { tableId: mesa });
+    const result = await move(counter, { tableId: targetTable });
 
-    expect(result).toEqual({ partyId: ana.partyId, billId: counter });
-    const groups = await groupsOf(ana.partyId);
+    expect(result).toEqual({ partyId: receivingParty.partyId, billId: counter });
+    const groups = await groupsOf(receivingParty.partyId);
     expect(groups.map((g) => [g.id === own!.id, g.state, g.position])).toEqual([
       [true, "fired", 1],
       [false, "fired", 2],
     ]);
-    expect((await lineRows(ana.tabId)).map((l) => [l.name, l.groupId])).toEqual([
+    expect((await lineRows(receivingParty.tabId)).map((l) => [l.name, l.groupId])).toEqual([
       ["Burger", own!.id],
       ["Vino", null],
     ]);
     expect((await lineRows(counter)).map((l) => [l.name, l.groupId])).toEqual([
       ["Tarta", groups[1]!.id],
     ]);
-    expect((await billRow(v, counter)).partyId).toBe(ana.partyId);
+    expect((await billRow(v, counter)).partyId).toBe(receivingParty.partyId);
   });
 
   it("lets a dish's kitchen item decide whether it arrived released, and its sent time decide only for a dish with none", async () => {
-    const ana = await seat(v, await v.table("Enviado 1"));
-    const mesa = await v.table("Enviado 2");
-    const luis = await seat(v, mesa);
-    await order(v, ana.tabId, "Burger");
-    const [burger] = await lineRows(ana.tabId);
+    const originalParty = await seat(v, await v.table("Enviado 1"));
+    const targetTable = await v.table("Enviado 2");
+    const receivingParty = await seat(v, targetTable);
+    await order(v, originalParty.tabId, "Burger");
+    const [burger] = await lineRows(originalParty.tabId);
     expect(burger!.sentAt).not.toBeNull();
     // The dish's kitchen item held while the dish reads as sent; the other dishes have no kitchen
     // item, one sent, one not, and one not and waiting for dessert.
     await inTx(v, async (tx) => {
       await tx
         .update(workingOrderLines)
-        .set({ courseId: postres })
+        .set({ courseId: dessertCourseId })
         .where(eq(workingOrderLines.id, burger!.id));
       await tx
         .update(ticketItems)
@@ -769,21 +781,28 @@ describe("dishes arriving in a party (A96, P16)", () => {
         .where(eq(ticketItems.workingOrderLineId, burger!.id));
       await tx.insert(workingOrderLines).values([
         { ...burger!, id: randomUUID(), lineNo: 2 },
-        { ...burger!, id: randomUUID(), lineNo: 3, sentAt: null, courseId: postres },
-        { ...burger!, id: randomUUID(), lineNo: 4, sentAt: null, courseId: postres },
+        { ...burger!, id: randomUUID(), lineNo: 3, sentAt: null, courseId: dessertCourseId },
+        { ...burger!, id: randomUUID(), lineNo: 4, sentAt: null, courseId: dessertCourseId },
       ]);
     });
 
     const made = await inTx(v, (tx: Transaction) =>
-      groupArrivingDishes(tx, v.cfg, luis.partyId, ana.tabId, OPERATOR, new Map()),
+      groupArrivingDishes(
+        tx,
+        v.cfg,
+        receivingParty.partyId,
+        originalParty.tabId,
+        OPERATOR,
+        new Map(),
+      ),
     );
 
-    const groups = await groupsOf(luis.partyId);
+    const groups = await groupsOf(receivingParty.partyId);
     expect(groups.map((g) => [g.id, g.state])).toEqual([
       [made.fired, "fired"],
       [made.held[0], "held"],
     ]);
-    expect((await lineRows(ana.tabId)).map((l) => [l.lineNo, l.groupId])).toEqual([
+    expect((await lineRows(originalParty.tabId)).map((l) => [l.lineNo, l.groupId])).toEqual([
       [1, made.held[0]],
       [2, made.fired],
       [3, made.held[0]],
@@ -792,11 +811,11 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("gives an extras line its dish's group", async () => {
-    const ana = await seat(v, await v.table("Extra 1"));
-    const mesa = await v.table("Extra 2");
-    const luis = await seat(v, mesa);
-    await order(v, ana.tabId, "Burger");
-    const [burger] = await lineRows(ana.tabId);
+    const originalParty = await seat(v, await v.table("Extra 1"));
+    const targetTable = await v.table("Extra 2");
+    const receivingParty = await seat(v, targetTable);
+    await order(v, originalParty.tabId, "Burger");
+    const [burger] = await lineRows(originalParty.tabId);
     // An extras line is a line whose `parent_line_id` names its dish. This one reads as unsent while
     // its dish is sent, so read on its own it would be held.
     await inTx(v, (tx) =>
@@ -809,45 +828,52 @@ describe("dishes arriving in a party (A96, P16)", () => {
       }),
     );
 
-    await move(ana.tabId, { tableId: mesa });
+    await move(originalParty.tabId, { tableId: targetTable });
 
-    const groups = await groupsOf(luis.partyId);
+    const groups = await groupsOf(receivingParty.partyId);
     expect(groups.map((g) => g.state)).toEqual(["fired"]);
-    expect((await lineRows(ana.tabId)).map((l) => l.groupId)).toEqual([
+    expect((await lineRows(originalParty.tabId)).map((l) => l.groupId)).toEqual([
       groups[0]!.id,
       groups[0]!.id,
     ]);
   });
 
   it("makes no group, records nothing and leaves the revision for a bill whose every dish already has one", async () => {
-    const ana = await seat(v, await v.table("Nada 1"));
-    await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
-    const groupsBefore = await groupsOf(ana.partyId);
-    const linesBefore = await lineRows(ana.tabId);
-    const revision = await revisionOf(v, ana.partyId);
+    const originalParty = await seat(v, await v.table("Nada 1"));
+    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    const groupsBefore = await groupsOf(originalParty.partyId);
+    const linesBefore = await lineRows(originalParty.tabId);
+    const revision = await revisionOf(v, originalParty.partyId);
     const [{ events }] = v.db.all<{ events: number }>(
-      sql`select count(*) as events from order_group_events where party_id = ${ana.partyId}`,
+      sql`select count(*) as events from order_group_events where party_id = ${originalParty.partyId}`,
     );
 
     const made = await inTx(v, (tx: Transaction) =>
-      groupArrivingDishes(tx, v.cfg, ana.partyId, ana.tabId, OPERATOR, new Map()),
+      groupArrivingDishes(
+        tx,
+        v.cfg,
+        originalParty.partyId,
+        originalParty.tabId,
+        OPERATOR,
+        new Map(),
+      ),
     );
 
     expect(made).toEqual({ fired: null, held: [] });
-    expect(await groupsOf(ana.partyId)).toEqual(groupsBefore);
-    expect(await lineRows(ana.tabId)).toEqual(linesBefore);
-    expect(await revisionOf(v, ana.partyId)).toBe(revision);
+    expect(await groupsOf(originalParty.partyId)).toEqual(groupsBefore);
+    expect(await lineRows(originalParty.tabId)).toEqual(linesBefore);
+    expect(await revisionOf(v, originalParty.partyId)).toBe(revision);
     expect(
       v.db.all<{ events: number }>(
-        sql`select count(*) as events from order_group_events where party_id = ${ana.partyId}`,
+        sql`select count(*) as events from order_group_events where party_id = ${originalParty.partyId}`,
       ),
     ).toEqual([{ events }]);
   });
 
   it("gives a bill leaving for the counter no group", async () => {
-    const ana = await coursedBill("Barra 1");
-    await orderForParty(v, ana.partyId, ["Agua"]);
-    const b2 = await splitOff(ana.partyId, ana.tabId, [1]);
+    const originalParty = await coursedBill("Barra 1");
+    await orderForParty(v, originalParty.partyId, ["Agua"]);
+    const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [1]);
 
     await move(b2, { counter: { zoneId: null } });
 
@@ -937,15 +963,15 @@ describe("an arriving held group's advance HOLD ticket", () => {
 
   it("with Print held groups in advance on, a moved bill's waiting dish prints a HOLD ticket at the move and a FIRE slip when its group is fired", async () => {
     await printHeldWork(true);
-    const ana = await coursedBill("Aviso 1");
-    const mesa = await v.table("Aviso 2");
-    const luis = await seat(v, mesa);
+    const originalParty = await coursedBill("Aviso 1");
+    const targetTable = await v.table("Aviso 2");
+    const receivingParty = await seat(v, targetTable);
     const before = (await jobs()).length;
 
-    await move(ana.tabId, { tableId: mesa });
+    await move(originalParty.tabId, { tableId: targetTable });
 
-    const held = await heldGroupOf(luis.partyId);
-    const header = await head("Aviso 2", ana.tabId);
+    const held = await heldGroupOf(receivingParty.partyId);
+    const header = await head("Aviso 2", originalParty.tabId);
     const atMove = (await jobs()).slice(before);
     expect(
       atMove.filter((job) => job.lines[0] === `*** ${kitchenTicketWords("es").hold} ***`),
@@ -963,8 +989,8 @@ describe("an arriving held group's advance HOLD ticket", () => {
     expect(held.holdPrintedAt).not.toBeNull();
 
     const fired = (await jobs()).length;
-    const fire = await command(luis.partyId);
-    await inTx(v, (tx) => fireGroup(tx, v.cfg, luis.partyId, held.id, fire));
+    const fire = await command(receivingParty.partyId);
+    await inTx(v, (tx) => fireGroup(tx, v.cfg, receivingParty.partyId, held.id, fire));
 
     expect((await jobs()).slice(fired)).toEqual([
       {
@@ -981,14 +1007,14 @@ describe("an arriving held group's advance HOLD ticket", () => {
 
   it("names on the HOLD ticket the moved bill itself, kept apart from the destination's bill", async () => {
     await printHeldWork(true);
-    const ana = await coursedBill("Aviso 7");
-    const mesa = await v.table("Aviso 8");
-    const luis = await seat(v, mesa);
+    const originalParty = await coursedBill("Aviso 7");
+    const targetTable = await v.table("Aviso 8");
+    const receivingParty = await seat(v, targetTable);
     const before = (await jobs()).length;
 
-    const result = await move(ana.tabId, { tableId: mesa });
+    const result = await move(originalParty.tabId, { tableId: targetTable });
 
-    expect(result).toEqual({ partyId: luis.partyId, billId: ana.tabId });
+    expect(result).toEqual({ partyId: receivingParty.partyId, billId: originalParty.tabId });
     const holds = (await jobs())
       .slice(before)
       .filter((job) => job.lines[0] === `*** ${kitchenTicketWords("es").hold} ***`);
@@ -997,7 +1023,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
         kind: "document",
         lines: [
           `*** ${kitchenTicketWords("es").hold} ***`,
-          ...(await head("Aviso 8", ana.tabId)),
+          ...(await head("Aviso 8", originalParty.tabId)),
           `${kitchenTicketWords("es").group} 2 · POSTRES`,
           "1.000 x FLAN",
         ],
@@ -1006,22 +1032,22 @@ describe("an arriving held group's advance HOLD ticket", () => {
   });
 
   it("with Print held groups in advance off, a moved bill's waiting dish prints nothing at the move and an ordinary ticket when its group is fired", async () => {
-    const ana = await coursedBill("Aviso 3");
-    const mesa = await v.table("Aviso 4");
-    const luis = await seat(v, mesa);
+    const originalParty = await coursedBill("Aviso 3");
+    const targetTable = await v.table("Aviso 4");
+    const receivingParty = await seat(v, targetTable);
     const before = (await jobs()).length;
 
-    await move(ana.tabId, { tableId: mesa });
+    await move(originalParty.tabId, { tableId: targetTable });
 
-    const held = await heldGroupOf(luis.partyId);
+    const held = await heldGroupOf(receivingParty.partyId);
     expect(
       (await jobs()).slice(before).filter((job) => job.lines.some((text) => text.includes("FLAN"))),
     ).toEqual([]);
     expect(held.holdPrintedAt).toBeNull();
 
     const fired = (await jobs()).length;
-    const fire = await command(luis.partyId);
-    await inTx(v, (tx) => fireGroup(tx, v.cfg, luis.partyId, held.id, fire));
+    const fire = await command(receivingParty.partyId);
+    await inTx(v, (tx) => fireGroup(tx, v.cfg, receivingParty.partyId, held.id, fire));
 
     const atFire = (await jobs()).slice(fired);
     expect(atFire).toEqual([{ kind: "document", lines: expect.arrayContaining(["1.000 x FLAN"]) }]);
@@ -1030,23 +1056,25 @@ describe("an arriving held group's advance HOLD ticket", () => {
 
   it("with Print held groups in advance on, a waiting dish on the bill Split a table takes prints a HOLD ticket", async () => {
     await printHeldWork(true);
-    const [m4, m5] = [await v.table("Aviso 5"), await v.table("Aviso 6")];
-    const ana = await seat(v, m4);
+    const [table4, table5] = [await v.table("Aviso 5"), await v.table("Aviso 6")];
+    const originalParty = await seat(v, table4);
     await nextMillisecond();
-    const joining = { ...(await commandFor(v, ana.partyId)) };
-    await inTx(v, (tx) => joinTables(tx, v.cfg, ana.partyId, m5, joining));
-    await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
-    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
+    const joining = { ...(await commandFor(v, originalParty.partyId)) };
+    await inTx(v, (tx) => joinTables(tx, v.cfg, originalParty.partyId, table5, joining));
+    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
     await inTx(v, (tx) =>
       addTabRound(tx, v.cfg, b2, [
-        { menuItemId: v.item("Burger"), quantity: "1", courseId: entrantes },
-        { menuItemId: v.item("Flan"), quantity: "1", courseId: postres },
+        { menuItemId: v.item("Burger"), quantity: "1", courseId: starterCourseId },
+        { menuItemId: v.item("Flan"), quantity: "1", courseId: dessertCourseId },
       ]),
     );
     const before = (await jobs()).length;
 
-    const splitting = await commandFor(v, ana.partyId);
-    const result = await inTx(v, (tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
+    const splitting = await commandFor(v, originalParty.partyId);
+    const result = await inTx(v, (tx) =>
+      splitTable(tx, v.cfg, originalParty.partyId, table5, b2, splitting),
+    );
 
     const held = await heldGroupOf(result.partyId);
     expect(
@@ -1119,52 +1147,55 @@ describe("A773 requested lifecycle: arrival", () => {
 
   it("moves a Requested dish alone in a course held until fired into one fired group dated by its request, printing nothing", async () => {
     await everyStationWaiting(async (jobCount) => {
-      const ana = await seat(v, await v.table("Pedido solo 1"));
+      const originalParty = await seat(v, await v.table("Pedido solo 1"));
       await inTx(v, (tx) =>
-        addTabRound(tx, v.cfg, ana.tabId, [
-          { menuItemId: v.item("Flan"), quantity: "1", courseId: postres },
+        addTabRound(tx, v.cfg, originalParty.tabId, [
+          { menuItemId: v.item("Flan"), quantity: "1", courseId: dessertCourseId },
         ]),
       );
-      const [flan] = await lineRows(ana.tabId);
-      const item = await itemOf(flan!.id);
+      const [custardLine] = await lineRows(originalParty.tabId);
+      const item = await itemOf(custardLine!.id);
       expect(item).toMatchObject({
         requestedAt: expect.any(String),
         firedAt: null,
         passControlled: true,
       });
-      const mesa = await v.table("Pedido solo 2");
-      const luis = await seat(v, mesa);
+      const targetTable = await v.table("Pedido solo 2");
+      const receivingParty = await seat(v, targetTable);
       await nextMillisecond();
       const jobsBefore = await jobCount();
 
-      await move(ana.tabId, { tableId: mesa });
+      await move(originalParty.tabId, { tableId: targetTable });
 
       expect(
-        (await groupsOf(luis.partyId)).map((g) => ({ state: g.state, firedAt: g.firedAt })),
+        (await groupsOf(receivingParty.partyId)).map((g) => ({
+          state: g.state,
+          firedAt: g.firedAt,
+        })),
       ).toEqual([{ state: "fired", firedAt: item.requestedAt }]);
-      expect(await itemOf(flan!.id)).toEqual(item);
+      expect(await itemOf(custardLine!.id)).toEqual(item);
       expect(await jobCount()).toBe(jobsBefore);
     });
   });
 
   it("lets Split a table take a Requested dish alone in a course held until fired into one fired group, printing nothing", async () => {
-    const [m4, m5] = [await v.table("Pedido separar 1"), await v.table("Pedido separar 2")];
-    const ana = await seat(v, m4);
+    const [table4, table5] = [await v.table("Pedido separar 1"), await v.table("Pedido separar 2")];
+    const originalParty = await seat(v, table4);
     await nextMillisecond();
-    const joining = await commandFor(v, ana.partyId);
-    await inTx(v, (tx) => joinTables(tx, v.cfg, ana.partyId, m5, joining));
-    await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
-    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
+    const joining = await commandFor(v, originalParty.partyId);
+    await inTx(v, (tx) => joinTables(tx, v.cfg, originalParty.partyId, table5, joining));
+    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
     await everyStationWaiting(async () => {
       await inTx(v, (tx) =>
         addTabRound(tx, v.cfg, b2, [
-          { menuItemId: v.item("Flan"), quantity: "1", courseId: postres },
+          { menuItemId: v.item("Flan"), quantity: "1", courseId: dessertCourseId },
         ]),
       );
-      const flan = (await lineRows(b2)).find(
-        (line) => line.productId !== null && line.courseId === postres,
+      const custardLine = (await lineRows(b2)).find(
+        (line) => line.productId !== null && line.courseId === dessertCourseId,
       )!;
-      const item = await itemOf(flan.id);
+      const item = await itemOf(custardLine.id);
       expect(item).toMatchObject({
         requestedAt: expect.any(String),
         firedAt: null,
@@ -1181,13 +1212,17 @@ describe("A773 requested lifecycle: arrival", () => {
         ).map((job) => printedLines(job.payload));
       const jobsBefore = (await printed()).length;
 
-      const splitting = await commandFor(v, ana.partyId);
-      const result = await inTx(v, (tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
+      const splitting = await commandFor(v, originalParty.partyId);
+      const result = await inTx(v, (tx) =>
+        splitTable(tx, v.cfg, originalParty.partyId, table5, b2, splitting),
+      );
 
       const groups = await groupsOf(result.partyId);
       expect(groups.map((g) => g.state)).toEqual(["fired"]);
-      expect((await lineRows(b2)).find((line) => line.id === flan.id)!.groupId).toBe(groups[0]!.id);
-      expect(await itemOf(flan.id)).toEqual(item);
+      expect((await lineRows(b2)).find((line) => line.id === custardLine.id)!.groupId).toBe(
+        groups[0]!.id,
+      );
+      expect(await itemOf(custardLine.id)).toEqual(item);
       const after = (await printed()).slice(jobsBefore);
       expect(after.flat().filter((text) => text.includes("FLAN"))).toEqual([]);
       expect(after.map((lines) => lines[0])).not.toContain(
@@ -1197,26 +1232,26 @@ describe("A773 requested lifecycle: arrival", () => {
   });
 
   it("moves a Requested dish beside an earlier released one into one fired group dated by the released dish", async () => {
-    const ana = await coursedBill("Pedido junto 1");
-    const [burger, flan] = await lineRows(ana.tabId);
+    const originalParty = await coursedBill("Pedido junto 1");
+    const [burger, custardLine] = await lineRows(originalParty.tabId);
     const burgerItem = await itemOf(burger!.id);
     expect(burgerItem.firedAt).not.toBeNull();
     await nextMillisecond();
     await everyStationWaiting(async () => {
-      await inTx(v, (tx) => fireOrderLines(tx, v.cfg, ana.tabId, [flan!.id]));
-      const flanItem = await itemOf(flan!.id);
-      expect(flanItem).toMatchObject({ firedAt: null, passControlled: true });
-      expect(flanItem.requestedAt! > burgerItem.firedAt!).toBe(true);
-      const mesa = await v.table("Pedido junto 2");
-      const luis = await seat(v, mesa);
+      await inTx(v, (tx) => fireOrderLines(tx, v.cfg, originalParty.tabId, [custardLine!.id]));
+      const custardItem = await itemOf(custardLine!.id);
+      expect(custardItem).toMatchObject({ firedAt: null, passControlled: true });
+      expect(custardItem.requestedAt! > burgerItem.firedAt!).toBe(true);
+      const targetTable = await v.table("Pedido junto 2");
+      const receivingParty = await seat(v, targetTable);
 
-      await move(ana.tabId, { tableId: mesa });
+      await move(originalParty.tabId, { tableId: targetTable });
 
-      const groups = await groupsOf(luis.partyId);
+      const groups = await groupsOf(receivingParty.partyId);
       expect(groups.map((g) => ({ state: g.state, firedAt: g.firedAt }))).toEqual([
         { state: "fired", firedAt: burgerItem.firedAt },
       ]);
-      expect((await lineRows(ana.tabId)).map((l) => l.groupId)).toEqual([
+      expect((await lineRows(originalParty.tabId)).map((l) => l.groupId)).toEqual([
         groups[0]!.id,
         groups[0]!.id,
       ]);

@@ -407,7 +407,8 @@ until A977).
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Other private naming sites remain in the till's boot and counter-payment suites and
-  shared-fixture consumers in the server split-bill and move-bill suites, other order fixtures,
+  shared-fixture consumers in the server split-bill and move-bill suites; party seating,
+  receipt-print, working-order, bill-editing, moved-dish, waiting-course and other order fixtures;
   and shared helper consumers such as `made-here.test.ts`. Accented move-line bindings also remain.
   Fixture strings remain separate from this naming work. The counter, filing and adjustment
   order-portion suites retain Spanish dish samples under A976; counter and adjustment test
@@ -802,7 +803,8 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
 - **A974. Finish the remaining English names in general code.** Remaining names include till boot and
   counter-payment fixtures; shared-fixture consumers in the server split-bill and move-bill suites,
-  other order fixtures, shared helper consumers and file names.
+  party seating, receipt-print, working-order, bill-editing, moved-dish, waiting-course and other
+  order fixtures, shared helper consumers and file names.
   Keep accented search fixtures unchanged. Other fixture text stays with A976, including catalogue
   display names, recipe ingredient names and seasonal venue and zone names, printer-screen display
   labels, counter-screen display text and station-screen display names, plus kitchen-ticket grouping,
@@ -826,10 +828,22 @@ Repeat the controlled substitutions with the two complete suites, or first selec
 The private-name AST replay and types caught reference mistakes that the current value-only
 checks did not.
 
+The arriving-dishes and receipt-guest suites also need distinct-identity observations.
+Driver probes on 5 November 2026 copied each complete suite and changed one reference:
+checking `[heldDesserts!, heldDesserts!]` instead of both held groups left all 29 arriving-dish
+cases passing; passing `table4` instead of `table5` to the guest-count case's `splitTable`
+left all 39 receipt-guest cases passing. A third copy changed the second no-count payment
+check to pay the first bill again and also passed all 39 cases. Add a check of each distinct
+group's event, the split's table membership and each bill's payment, while retaining every
+existing event, guest-count and payment assertion. These are observed assertion gaps, not demonstrated product failures. Other
+reference substitutions from the naming review need triage before treating them as gaps:
+some changes can legitimately preserve the observation a case makes.
+
 ## A976. Finish the server's English test-venue defaults.
 
 - **A976. Finish the server's English test-venue defaults.** Spanish display samples remain in
-  `party-bill-actions.test.ts`, `party-move-bill.test.ts`, `till-api.reprint.test.ts`,
+  `party-bill-actions.test.ts`, `party-move-bill.test.ts`, `party-arriving-dishes.test.ts`,
+  `receipt-guests.test.ts`, `till-api.reprint.test.ts`,
   `order-portions.counter.test.ts`, `order-portions.filing.test.ts`,
   `order-portions.adjustments.test.ts`, `till-api.transfer.test.ts`,
   `till-api.move-bill.test.ts`, `till-api.split-bill.test.ts`, `till-api.groups.test.ts`,

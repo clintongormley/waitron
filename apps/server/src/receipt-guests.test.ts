@@ -142,13 +142,13 @@ describe("the default guests (readReceiptGuests)", () => {
   });
 
   it("prints the sum on joined tables whose bills were merged", async () => {
-    const mesa4 = await v.table("Invitados 6a 4");
-    const mesa5 = await v.table("Invitados 6a 5");
-    const four = await seat(v, mesa4, 2);
-    const five = await seat(v, mesa5, 3);
+    const table4 = await v.table("Invitados 6a 4");
+    const table5 = await v.table("Invitados 6a 5");
+    const four = await seat(v, table4, 2);
+    const five = await seat(v, table5, 3);
     await orderForParty(v, four.partyId, ["Burger"], four.tabId);
     await orderForParty(v, five.partyId, ["Paella"], five.tabId);
-    await joinOther(four.partyId, mesa5, five.partyId, {
+    await joinOther(four.partyId, table5, five.partyId, {
       into: four.tabId,
       from: five.tabId,
     });
@@ -157,13 +157,13 @@ describe("the default guests (readReceiptGuests)", () => {
   });
 
   it("prints nothing on joined tables, each keeping its bill", async () => {
-    const mesa4 = await v.table("Invitados 6b 4");
-    const mesa5 = await v.table("Invitados 6b 5");
-    const four = await seat(v, mesa4, 2);
-    const five = await seat(v, mesa5, 3);
+    const table4 = await v.table("Invitados 6b 4");
+    const table5 = await v.table("Invitados 6b 5");
+    const four = await seat(v, table4, 2);
+    const five = await seat(v, table5, 3);
     await orderForParty(v, four.partyId, ["Burger"], four.tabId);
     await orderForParty(v, five.partyId, ["Paella"], five.tabId);
-    await joinOther(four.partyId, mesa5, five.partyId);
+    await joinOther(four.partyId, table5, five.partyId);
 
     expect(await guestsOnPaying(five.tabId, "20.00")).toBeUndefined();
     expect(await guestsOnPaying(four.tabId, "12.00")).toBeUndefined();
@@ -207,15 +207,15 @@ describe("the default guests (readReceiptGuests)", () => {
   });
 
   it("prints each side's count after Split a table", async () => {
-    const mesa4 = await v.table("Invitados 10 4");
-    const mesa5 = await v.table("Invitados 10 5");
-    const { partyId, tabId } = await seat(v, mesa4, 4);
-    await join(v, partyId, mesa5);
+    const table4 = await v.table("Invitados 10 4");
+    const table5 = await v.table("Invitados 10 5");
+    const { partyId, tabId } = await seat(v, table4, 4);
+    await join(v, partyId, table5);
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
     const second = await split(v, partyId, tabId, [2]);
     const command = await commandFor(v, partyId);
     await inTx(v, (tx) =>
-      splitTable(tx, v.cfg, partyId, mesa5, second, {
+      splitTable(tx, v.cfg, partyId, table5, second, {
         ...command,
         guestCounts: { staying: 3, leaving: 1 },
       }),
