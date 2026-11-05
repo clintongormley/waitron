@@ -180,6 +180,7 @@ and below is already changed. "Ran" means this revision ran it, with the receipt
 - **Question 2:** approved ("Q2 ok"): the two checks may go, and the ten cases move to the panel.
 - **Question 3:** the owner chose (B), as built: a staying dish is told only when no name its paper printed is still one of its places. Both rulings stand.
 - **Who lands it:** the lane, once the review wave and CI pass.
+- **Still to do:** the owner's watcher (04:21, 04:24) keeps the combined-party change subject to re-running all 3,000 random histories on the fixed code, with the new counts in the PR (Task 18). R15's 1 missed slip describes the code before the timing fix.
 
 ## Owner questions
 
@@ -203,7 +204,7 @@ Split a table → T8, ticks Bills 2 and 3 and three dishes of Bill 1.
 | `table.split_dish_from` | `1 dish from {bill}` | `1 plato de {bill}` | The same, for one |
 | `table.split_rest_of` | `the rest of {bill}` | `el resto de {bill}` | A part of `{what}` |
 | `table.split_empty_bill` | `an empty bill` | `una cuenta vacía` | `{what}` when one side has nothing, except where the next row's line takes the staying side's place |
-| `table.split_nothing_to_pay` | `{table} is left with nothing to pay` | `{table} se queda sin nada que pagar` | The whole staying summary line, with no amount, in place of `table.split_keeps`, when the only bills staying are paid (`anywayNote` answers `"paid"`) and no pick is left on a bill paid since: the server adds no empty bill then (D12) |
+| `table.split_nothing_to_pay` | `{table} is left with nothing to pay` | `{table} se queda sin nada que pagar` | The whole staying summary line, with no amount, in place of `table.split_keeps`, when every bill staying, as it would stand after the press, owes nothing and at least one has money received (`leftWithNothingToPay`). That is: only paid bills stay, when the server adds no empty bill (D12); or a pick leaves a part-paid bill holding just what it has received (€30 with €20 received, its unpaid €10 dish picked: `T7 is left with nothing to pay`), which the server then settles. Driver's ruling on review M1 (`~/waitron-campaign-c/item-a803-4c-ledger.md`), reading the owner's 04:24 "only paid bills stay" as the bills after the press. A card in progress is not money received. `table.split_keeps` stands if any staying bill still owes, an empty bill or an untouched bill with unpaid dishes stays, a staying bill has unsent dishes, or a pick is left on a bill paid since |
 | `table.split_new_bill_note` | `Single dishes go on a new bill at {table}.` | `Los platos sueltos van en una cuenta nueva en {table}.` | Under the summary, only while a loose dish is ticked; board 08 |
 | `table.split_guests_at` | `Guests at {table}` | `Comensales en {table}` | Each stepper's label; `seat.guest_count` «Comensales» |
 | `table.split_nothing_stays` | `Nothing would stay at {kept}. Move the guests to {table} instead?` | `No quedaría nada en {kept}. ¿Mover los clientes a {table}?` | Everything ticked; board 10. «Mover clientes» as in `table.action_move_guests` |
@@ -1548,7 +1549,7 @@ Question 2 is approved: this goes ahead.
   - **D21:** another till saves an order on a bill ticked here, whole and with picks: the tick, the take-over row, the sentence at the foot and Split quiet, all seen together at 390 px, and the panel not jumping under the finger when the rows give way; then Take over and Untick, each to Split primary. A ticked bill paid from another tab: its sentence after the first press.
   - Keyboard: Tab order, Space on a tick, Enter from a stepper, focus to the heading on open, focus back to the ⋮ after Back.
   - **Touch:** steppers and ticks at `--wt-tap-min` at 390 px. A1265 (⋮ taller than the room) untouched, but measure and record.
-- [ ] A defect found is fixed test first in its own commit or added to the backlog in Task 18. A wording that does not fit updates Question 1 before landing.
+- [ ] A defect found is fixed test first in its own commit or added to the backlog in Task 18. A wording that does not fit is asked of the owner: Question 1 holds the final words, and no seat changes them.
 
 ## Task 17a: the whole slice (no commit; about 30 calls)
 
@@ -1596,6 +1597,7 @@ Question 2 is approved: this goes ahead.
 - [ ] **Record pass.** Append "## Build record (4c)" to this plan: what was built versus planned, departures with reasons, line numbers that moved, the control table.
 - [ ] PR body in plain English: what the waiter and the kitchen see; no venue reset, no schema change; "Changed test checks" (every row), "Moved till-app cases" and "Deleted checks"; "For the owner": Questions 1 and 2 are answered and the lane lands it; Question 3's answer, naming the two rulings; and, in plain words, that the route now issues an invoice for a bill it leaves fully paid, by the function Move dishes calls, no fiscal function changed, and that **one split can issue more than one invoice in one transaction when loose picks finish several part-paid bills**, naming the two cases that pin it in `split-table.fiscal.test.ts`: "two loose sources left paid make two invoices, in bill-number order, the second chained on the first" and "a refusal at the second invoice leaves no sale and no record, and takes no number". Say also that the bill the old `billId` request names now gets a zone check too, where before only the party did. Say also that a bill someone else's order reaches stays ticked and holds Split (D21), naming Task 12f's title. Then `/finish-branch` with this plan named.
   - "For the owner" also says: a dish of a combined party is told the first time any of that party's tables leaves, so a cook can get a slip for a dish whose table did not change, as the price of no missed slip for a combined party's paper in 3,000 random histories built to combine often, none of them with named groups, today's merges or held dishes.
+  - The new counts from re-running all 3,000 random histories on the fixed code, which the owner's watcher asked for (`questions.md`, 04:21 and 04:24): correct, extra and missed, with the control that shows the harness can report a miss. A miss is a cook left untold, so it reads zero, or the PR says why not. They replace R15's "1 missed slip", which describes the code before the timing fix.
   - "For the owner" also says: an open party's dish whose ticket named one table is not told when that table leaves a group whose name stays, because the read goes by the shown name; D6 already states it.
 - [ ] Ledger `Status: in progress` until landed.
 
