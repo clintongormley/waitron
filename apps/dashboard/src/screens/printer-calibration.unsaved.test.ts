@@ -118,6 +118,9 @@ function field(screen: PrintersScreen, name: string) {
     updateComplete: Promise<unknown>;
   };
 }
+function paperResult(screen: PrintersScreen) {
+  return q(screen, "[data-test=calibration-result-paper]")!.textContent!.trim();
+}
 function change(screen: PrintersScreen, name: string, value: string | boolean) {
   field(screen, name).dispatchEvent(
     new CustomEvent("wt-change", {
@@ -147,12 +150,12 @@ async function lastStep(screen: PrintersScreen) {
 for (const route of ["cancel", "escape"] as const) {
   it(`calibration ${route} retains settings and focus until Discard`, async () => {
     const { app, screen } = await mount();
-    change(screen, "printer-paper-width", "58mm");
+    change(screen, "printer-ruler-number", "360");
     await screen.updateComplete;
-    await field(screen, "printer-paper-width").updateComplete;
+    await field(screen, "printer-ruler-number").updateComplete;
     const control = field(
       screen,
-      "printer-paper-width",
+      "printer-ruler-number",
     ).shadowRoot!.querySelector<HTMLButtonElement>("button")!;
     control.focus();
     let closes = 0;
@@ -164,10 +167,11 @@ for (const route of ["cancel", "escape"] as const) {
     await dismiss();
     await choose(app, "keep");
     expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
-    expect(field(screen, "printer-paper-width").value).toBe("58mm");
+    expect(field(screen, "printer-ruler-number").value).toBe("360");
+    expect(paperResult(screen)).toBe(t("printers.paper_width_58"));
     expect(closes).toBe(0);
     await expect
-      .poll(() => field(screen, "printer-paper-width").shadowRoot!.activeElement)
+      .poll(() => field(screen, "printer-ruler-number").shadowRoot!.activeElement)
       .toBe(control);
     await dismiss();
     await choose(app, "discard");
@@ -176,12 +180,13 @@ for (const route of ["cancel", "escape"] as const) {
     expect(unload()).toBe(false);
     q(screen, "[data-test=calibrate-printer-details]")!.click();
     await screen.updateComplete;
-    expect(field(screen, "printer-paper-width").value).toBe("80mm");
+    expect(field(screen, "printer-ruler-number").value).toBe("");
+    expect(paperResult(screen)).toBe(t("printers.paper_width_80"));
   });
 }
 for (const [name, changed, initial] of [
-  ["printer-paper-width", "58mm", "80mm"],
-  ["printer-resolution", "203dpi", "180dpi"],
+  ["printer-ruler-number", "360", "512"],
+  ["printer-qr-square", "203dpi", "180dpi"],
   ["printer-cash-drawer", true, false],
   ["printer-portable", true, false],
 ] as const) {
@@ -217,7 +222,7 @@ it("ruler-derived paper settings stay dirty across wizard steps", async () => {
   const { app, screen } = await mount();
   change(screen, "printer-ruler-number", "360");
   await screen.updateComplete;
-  expect(field(screen, "printer-paper-width").value).toBe("58mm");
+  expect(paperResult(screen)).toBe(t("printers.paper_width_58"));
   await lastStep(screen);
   expect(unload()).toBe(true);
   q(screen, "[data-test=cancel-edit-printer]")!.click();
@@ -240,8 +245,8 @@ it("calibration success commits before a refused refresh", async () => {
       received = { id, patch };
     },
   });
-  change(screen, "printer-paper-width", "58mm");
-  change(screen, "printer-resolution", "203dpi");
+  change(screen, "printer-ruler-number", "360");
+  change(screen, "printer-qr-square", "203dpi");
   change(screen, "printer-cash-drawer", true);
   await lastStep(screen);
   q(screen, "[data-test=save-printer-p1]")!.click();
@@ -261,7 +266,7 @@ it("a refused calibration save preserves settings and warning", async () => {
       throw { code: "connection.failed" };
     },
   });
-  change(screen, "printer-paper-width", "58mm");
+  change(screen, "printer-ruler-number", "360");
   await lastStep(screen);
   q(screen, "[data-test=save-printer-p1]")!.click();
   await expect
@@ -275,7 +280,7 @@ it("a refused calibration save preserves settings and warning", async () => {
         ).error,
     )
     .toContain(codeMessage("connection.failed"));
-  expect(field(screen, "printer-paper-width").value).toBe("58mm");
+  expect(paperResult(screen)).toBe(t("printers.paper_width_58"));
   expect(unload()).toBe(true);
   q(screen, "[data-test=cancel-edit-printer]")!.click();
   await choose(app, "keep");
@@ -291,20 +296,20 @@ it("a successful captured calibration retains newer input and compares against s
       });
     },
   });
-  change(screen, "printer-paper-width", "58mm");
+  change(screen, "printer-ruler-number", "360");
   await lastStep(screen);
   q(screen, "[data-test=save-printer-p1]")!.click();
   await expect.poll(() => typeof finish).toBe("function");
-  change(screen, "printer-resolution", "203dpi");
+  change(screen, "printer-qr-square", "203dpi");
   finish();
   await expect
     .poll(() => q(screen, "[data-test=save-printer-p1]")?.hasAttribute("loading"))
     .toBe(false);
   expect(received).toEqual({ paperWidth: "58mm" });
   expect(modal(screen)).not.toBeNull();
-  expect(field(screen, "printer-resolution").value).toBe("203dpi");
+  expect(field(screen, "printer-qr-square").value).toBe("203dpi");
   expect(unload()).toBe(true);
-  change(screen, "printer-resolution", "180dpi");
+  change(screen, "printer-qr-square", "180dpi");
   expect(unload()).toBe(false);
   q(screen, "[data-test=cancel-edit-printer]")!.click();
   await expect.poll(() => modal(screen)).toBeNull();
@@ -312,7 +317,7 @@ it("a successful captured calibration retains newer input and compares against s
 });
 it("calibration disconnect cancels the question and unload protection", async () => {
   const { app, screen } = await mount();
-  change(screen, "printer-paper-width", "58mm");
+  change(screen, "printer-ruler-number", "360");
   expect(unload()).toBe(true);
   q(screen, "[data-test=cancel-edit-printer]")!.click();
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
@@ -328,7 +333,7 @@ it("calibration retains direct dismissal during a submitted save", async () => {
         finish = resolve;
       }),
   });
-  change(screen, "printer-paper-width", "58mm");
+  change(screen, "printer-ruler-number", "360");
   await lastStep(screen);
   q(screen, "[data-test=save-printer-p1]")!.click();
   await expect.poll(() => typeof finish).toBe("function");
@@ -346,7 +351,7 @@ it("calibration retains direct dismissal while a ruler command runs", async () =
         finish = resolve;
       }),
   });
-  change(screen, "printer-paper-width", "58mm");
+  change(screen, "printer-ruler-number", "360");
   q(screen, "[data-test=print-ruler-p1]")!.click();
   await expect.poll(() => typeof finish).toBe("function");
   await userEvent.keyboard("{Escape}");
@@ -368,11 +373,11 @@ it("a second calibration save sends only the still-unsaved settings", async () =
         });
     },
   });
-  change(screen, "printer-paper-width", "58mm");
+  change(screen, "printer-ruler-number", "360");
   await lastStep(screen);
   q(screen, "[data-test=save-printer-p1]")!.click();
   await expect.poll(() => typeof finish).toBe("function");
-  change(screen, "printer-resolution", "203dpi");
+  change(screen, "printer-qr-square", "203dpi");
   finish();
   await expect
     .poll(() => q(screen, "[data-test=save-printer-p1]")?.hasAttribute("loading"))
@@ -398,7 +403,7 @@ it("a saved portable setting is not sent again by the next calibration save", as
   change(screen, "printer-portable", true);
   q(screen, "[data-test=save-printer-p1]")!.click();
   await expect.poll(() => typeof finish).toBe("function");
-  change(screen, "printer-resolution", "203dpi");
+  change(screen, "printer-qr-square", "203dpi");
   finish();
   await expect
     .poll(() => q(screen, "[data-test=save-printer-p1]")?.hasAttribute("loading"))
@@ -420,21 +425,21 @@ for (const result of ["success", "refusal"] as const) {
           refuse = reject;
         }),
     });
-    change(screen, "printer-paper-width", "58mm");
+    change(screen, "printer-ruler-number", "360");
     await lastStep(screen);
     q(screen, "[data-test=save-printer-p1]")!.click();
     await expect.poll(() => typeof finish).toBe("function");
     q(screen, "[data-test=cancel-edit-printer]")!.click();
     await expect.poll(() => modal(screen)).toBeNull();
     await open(screen, "p2");
-    change(screen, "printer-resolution", "203dpi");
+    change(screen, "printer-qr-square", "203dpi");
     if (result === "success") finish();
     else refuse({ code: "connection.failed" });
     await screen.updateComplete;
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     expect(modal(screen)).not.toBeNull();
     expect(modal(screen)!.heading).toContain("Bar");
-    expect(field(screen, "printer-resolution").value).toBe("203dpi");
+    expect(field(screen, "printer-qr-square").value).toBe("203dpi");
     expect(
       (
         q(
@@ -444,20 +449,20 @@ for (const result of ["success", "refusal"] as const) {
       ).error,
     ).toBe("");
     expect(unload()).toBe(true);
-    change(screen, "printer-resolution", "180dpi");
+    change(screen, "printer-qr-square", "180dpi");
     expect(unload()).toBe(false);
     expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   });
 }
 it("replacing a calibration cancels its outstanding question", async () => {
   const { app, screen } = await mount();
-  change(screen, "printer-paper-width", "58mm");
+  change(screen, "printer-ruler-number", "360");
   q(screen, "[data-test=cancel-edit-printer]")!.click();
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   q(screen, "[data-test=calibrate-printer-details]")!.click();
   await screen.updateComplete;
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-  expect(field(screen, "printer-paper-width").value).toBe("80mm");
+  expect(paperResult(screen)).toBe(t("printers.paper_width_80"));
   expect(unload()).toBe(false);
   expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
 });
@@ -478,12 +483,12 @@ it("an old native close cannot dismiss reopened calibration", async () => {
   await expect.poll(() => held).toBe(true);
   q(screen, "[data-test=calibrate-printer-details]")!.click();
   await screen.updateComplete;
-  change(screen, "printer-paper-width", "58mm");
+  change(screen, "printer-ruler-number", "360");
   native.dispatchEvent(new Event("close"));
   await screen.updateComplete;
   expect(modal(screen)).not.toBeNull();
   expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
-  expect(field(screen, "printer-paper-width").value).toBe("58mm");
+  expect(paperResult(screen)).toBe(t("printers.paper_width_58"));
   expect(unload()).toBe(true);
 });
 it("a saved calibration finishes without waiting for its native close report", async () => {
@@ -498,19 +503,19 @@ it("a saved calibration finishes without waiting for its native close report", a
     },
     { capture: true, once: true },
   );
-  change(screen, "printer-paper-width", "58mm");
+  change(screen, "printer-ruler-number", "360");
   await lastStep(screen);
   q(screen, "[data-test=save-printer-p1]")!.click();
   await expect.poll(() => held).toBe(true);
   await expect.poll(() => modal(screen)).toBeNull();
   expect(unload()).toBe(false);
   await open(screen, "p2");
-  change(screen, "printer-resolution", "203dpi");
+  change(screen, "printer-qr-square", "203dpi");
   native.dispatchEvent(new Event("close"));
   await screen.updateComplete;
   expect(modal(screen)).not.toBeNull();
   expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
-  expect(field(screen, "printer-resolution").value).toBe("203dpi");
+  expect(field(screen, "printer-qr-square").value).toBe("203dpi");
   expect(unload()).toBe(true);
 });
 it("a completed hardware test refresh leaves calibration edits dirty", async () => {
@@ -521,10 +526,10 @@ it("a completed hardware test refresh leaves calibration edits dirty", async () 
       return [printer, other];
     },
   });
-  change(screen, "printer-paper-width", "58mm");
+  change(screen, "printer-ruler-number", "360");
   q(screen, "[data-test=print-ruler-p1]")!.click();
   await expect.poll(() => reads).toBeGreaterThan(1);
-  expect(field(screen, "printer-paper-width").value).toBe("58mm");
+  expect(paperResult(screen)).toBe(t("printers.paper_width_58"));
   expect(unload()).toBe(true);
   q(screen, "[data-test=cancel-edit-printer]")!.click();
   await choose(app, "keep");
@@ -539,7 +544,7 @@ for (const command of ["sample", "drawer"] as const) {
     const { app, screen } = await mount(
       command === "sample" ? { sampleReceipt: pending } : { testPrinterDrawer: pending },
     );
-    change(screen, "printer-paper-width", "58mm");
+    change(screen, "printer-ruler-number", "360");
     q(screen, "[data-test=calibration-next]")!.click();
     await screen.updateComplete;
     if (command === "drawer") {

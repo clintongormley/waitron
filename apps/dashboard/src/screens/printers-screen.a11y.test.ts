@@ -798,7 +798,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
             expect(field.left).toBeGreaterThanOrEqual(dialog.left);
           }
         };
-        assertInsideDialog(["printer-ruler-number", "printer-paper-width", "printer-resolution"]);
+        assertInsideDialog(["printer-ruler-number", "printer-qr-square"]);
         const dialog = q(el, '[data-test="edit-printer-modal"]')!
           .shadowRoot!.querySelector("dialog")!
           .getBoundingClientRect();
@@ -813,7 +813,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
           expect(box.left).toBeGreaterThanOrEqual(dialog.left);
         }
         if (width === 1280) {
-          const fields = ["printer-ruler-number", "printer-resolution"].map((name) =>
+          const fields = ["printer-ruler-number", "printer-qr-square"].map((name) =>
             q(el, `[name="${name}"]`)!.getBoundingClientRect(),
           );
           expect(new Set(fields.map((rect) => Math.round(rect.bottom))).size).toBe(1);

@@ -438,8 +438,8 @@ async function toggle(el: PrintersScreen, name: string, checked: boolean) {
 
 const checkedOf = (el: PrintersScreen, name: string) =>
   (q(el, `[name="${name}"]`) as HTMLElement & { checked: boolean }).checked;
-const valueOf = (el: PrintersScreen, name: string) =>
-  (q(el, `wt-combobox[name="${name}"]`) as HTMLElement & { value: string }).value;
+const resultText = (el: PrintersScreen, result: "paper" | "resolution") =>
+  q(el, `[data-test=calibration-result-${result}]`)!.textContent!.trim();
 
 function pending() {
   let finish!: () => void;
@@ -497,8 +497,8 @@ describe("the calibration wizard's Save, for a printer already set up", () => {
 
   it("reaches the last step with Save quiet on the stored settings, and a press sends nothing", async () => {
     const { el, api: stub } = await openWizard(api());
-    expect(valueOf(el, "printer-paper-width")).toBe("58mm");
-    expect(valueOf(el, "printer-resolution")).toBe("203dpi");
+    expect(resultText(el, "paper")).toBe(t("printers.paper_width_58"));
+    expect(resultText(el, "resolution")).toBe(t("printers.resolution_203"));
     await go(el, "calibration-next");
     expect(checkedOf(el, "printer-cash-drawer")).toBe(true);
     expect(checkedOf(el, "printer-portable")).toBe(true);
@@ -512,11 +512,11 @@ describe("the calibration wizard's Save, for a printer already set up", () => {
 
   it("a paper width changed on the first step wakes Save on the last, and changing it back quiets it", async () => {
     const { el } = await openWizard(api());
-    await choose(el, "printer-paper-width", "80mm");
+    await choose(el, "printer-ruler-number", "512");
     await go(el, "calibration-next");
     expect(await state(el, "save-printer-p1")).toEqual(ready);
     await go(el, "calibration-back");
-    await choose(el, "printer-paper-width", "58mm");
+    await choose(el, "printer-ruler-number", "360");
     await go(el, "calibration-next");
     expect(await state(el, "save-printer-p1")).toEqual(quiet);
   });
@@ -616,7 +616,7 @@ describe("the calibration wizard's Save, when an add opened it", () => {
   it("re-adding a switched-off printer opens its wizard with Save ready, and an untouched press keeps it on", async () => {
     const { el, api } = await addFromDiscovery(seenAgain);
     expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p3", { active: true });
-    expect(valueOf(el, "printer-paper-width")).toBe("58mm");
+    expect(resultText(el, "paper")).toBe(t("printers.paper_width_58"));
     await go(el, "calibration-next");
     expect(await state(el, "save-printer-p3")).toEqual(ready);
     await press(el, "save-printer-p3");
@@ -669,7 +669,7 @@ describe("the calibration wizard's Save, when an add opened it", () => {
   it("a freshly added printer's wizard opens with Save ready, and an untouched press closes it sending nothing", async () => {
     const { el, api } = await addFromDiscovery(unregistered);
     expect(api.createPrinter).toHaveBeenCalledOnce();
-    expect(valueOf(el, "printer-paper-width")).toBe("80mm");
+    expect(resultText(el, "paper")).toBe(t("printers.paper_width_80"));
     await go(el, "calibration-next");
     expect(await state(el, "save-printer-p5")).toEqual(ready);
     await press(el, "save-printer-p5");

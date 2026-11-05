@@ -3517,7 +3517,7 @@ export class PrintersScreen extends LitElement {
               }}
             ></wt-combobox>
             <wt-combobox
-              name="printer-resolution"
+              name="printer-qr-square"
               label=${t("printers.qr_square")}
               search="auto"
               .options=${[
@@ -3527,22 +3527,6 @@ export class PrintersScreen extends LitElement {
               .value=${p.resolution}
               @wt-change=${(e: CustomEvent<{ value: string }>) =>
                 this.#editPrinter(p.id, { resolution: e.detail.value as PrintResolution })}
-            ></wt-combobox>
-          </div>
-          <div class="field-row">
-            <wt-combobox
-              name="printer-paper-width"
-              label=${t("printers.paper_width")}
-              search="auto"
-              .options=${[
-                { value: "80mm", label: t("printers.paper_width_80") },
-                { value: "58mm", label: t("printers.paper_width_58") },
-              ]}
-              .value=${p.paperWidth}
-              @wt-change=${(e: CustomEvent<{ value: string }>) => {
-                this.rulerNumber = "";
-                this.#editPrinter(p.id, { paperWidth: e.detail.value as PrintPaperWidth });
-              }}
             ></wt-combobox>
           </div>
           <dl class="status-fields calibration-results" data-test="calibration-results">
