@@ -341,13 +341,6 @@ those letters (not checked).
   Whether a future replication drain can carry the audit row to a node without its print job is
   unverified and needs a test when that drain is built.
 
-## A rule between TOTAL and the tax lines on a simplified receipt
-
-- **A rule between TOTAL and the tax lines on a simplified receipt (left open by A404).** The
-  owner's A404 list (2026-10-08) asked for a rule before the tax lines; A663 later put TOTAL
-  straight after the items, then the rates, with no rule between them. Owner to say whether one is
-  wanted; it would change every printed simplified receipt.
-
 ## A405 — printer details and the print queue
 
 - **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room; after A404).** A modal means the printer page is no longer a sub-page, so the owner
@@ -774,6 +767,10 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   `docs/compliance/regional-language-rules.md`); with only the TOTAL enlarged, the rest of the data
   keeps the caption's size. The same call as the till screen's larger TOTAL on 2026-10-01 (C115,
   `docs/compliance/verifactu-findings.md`). The VERI\*FACTU line may be printed in bold for margin.
+
+- **A ruled line between TOTAL and the VAT lines on every simplified receipt (owner, 2026-11-05,
+  A404).** It reverses A663's "TOTAL, then the rates, nothing between them" for that one line; the
+  sample receipt matches (`buildReceiptDocument`, `apps/server/src/receipt-document.ts`).
 
 - **Receipts carry no drink and food subtotals (owner, 2026-10-15).** The owner dropped them from
   A663.

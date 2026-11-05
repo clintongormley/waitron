@@ -897,6 +897,30 @@ describe("the QR comes first on an invoice that carries one", () => {
   });
 });
 
+// Owner, 2026-11-05 (A404): a ruled line separates TOTAL from the VAT lines on a simplified receipt.
+describe("a rule between TOTAL and the VAT lines", () => {
+  it.each([PRINTER_58, PRINTER_80])(
+    "prints it on a simplified receipt on $paperWidth",
+    (printer) => {
+      const lines = printedLines(
+        formatReceipt({
+          result: FILED_SALE,
+          issuer: ISSUER,
+          receipt: TRIM,
+          invoiceLocale: "es-ES",
+          printer,
+        }),
+      );
+      const totalAt = lines.findIndex((line) => line.trim().startsWith("TOTAL"));
+      const taxAt = lines.findIndex((line) => line.startsWith("Base imponible"));
+      expect(totalAt).toBeGreaterThan(0);
+      expect(lines[taxAt - 1]).toBe(rule(printer));
+      expect(lines.slice(totalAt, taxAt - 1).every((line) => /TOTAL|€/.test(line))).toBe(true);
+      expect(taxAt - 1 - totalAt).toBeLessThanOrEqual(2);
+    },
+  );
+});
+
 /** Resolve a line's goods name the way the receipt does — invoice locale, then any description. */
 function lineName(line: TillSaleResult["lines"][number]): string {
   return line.descriptions["es-ES"] ?? Object.values(line.descriptions)[0] ?? "";
@@ -2265,12 +2289,13 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     const lines = printed80(BILL_DISCOUNT);
     const first = lines.indexOf(at80("2  Agua mineral", "4,00"));
     expect(first).toBeGreaterThanOrEqual(0);
-    expect(lines.slice(first, first + 7)).toEqual([
+    expect(lines.slice(first, first + 8)).toEqual([
       at80("2  Agua mineral", "4,00"),
       at80("1  Pan de pueblo", "2,50"),
       at80("Descuento 12,5%", "-0,81"),
       rule(PRINTER_80),
       `TOTAL${" ".repeat(10)}5,69 €`,
+      rule(PRINTER_80),
       at80("Base imponible 10%", "5,17 €"),
       at80("IVA 10%", "0,52 €"),
     ]);

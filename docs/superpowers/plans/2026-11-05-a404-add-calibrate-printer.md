@@ -167,6 +167,8 @@ same `info`.
   settled in A663 (`docs/superpowers/plans/2026-10-15-a663-receipt-layout.md:52`, `:1122-1129`).
   The sample must look like a real receipt, so it is not drawn here; Task 9 records it as a short
   open question in the backlog, and the PR description asks the owner.
+  **2026-11-05:** the owner chose the line, on every simplified receipt and the sample; built in
+  PR 2, and recorded in `docs/backlog/printers.md`'s decisions in place of the open entry.
 
 ## What goes beyond the spec
 

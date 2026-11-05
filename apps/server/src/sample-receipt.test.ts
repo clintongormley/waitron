@@ -119,6 +119,22 @@ describe("formatSampleReceipt", () => {
       ).toBe(true);
   });
 
+  it.each(["58mm", "80mm"] as const)(
+    "rules off TOTAL from the VAT lines on %s paper, as a real simplified receipt does",
+    (paperWidth) => {
+      const lines = printedLines(
+        formatSampleReceipt({ paperWidth, resolution: "203dpi" }, WORDS, "es-ES"),
+      );
+      const totalAt = lines.findIndex((line) => line.trim().startsWith("TOTAL"));
+      const taxAt = lines.findIndex((line) => line.startsWith("Base imponible"));
+      expect(totalAt).toBeGreaterThan(0);
+      expect(lines[taxAt - 1]).toMatch(/^-+$/);
+      expect(lines[taxAt - 1]!.length).toBe(lines[taxAt]!.length);
+      expect(lines.slice(totalAt, taxAt - 1).every((line) => /TOTAL|€/.test(line))).toBe(true);
+      expect(taxAt - 1 - totalAt).toBeLessThanOrEqual(2);
+    },
+  );
+
   it("puts the fiscal backend's words around the sample QR", () => {
     const bytes = formatSampleReceipt({ paperWidth: "80mm", resolution: "203dpi" }, WORDS, "es-ES");
     const drawn = printedCommands(bytes)
