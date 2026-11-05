@@ -572,6 +572,34 @@ PR 1:
   the footer's Calibrate.
 - `apps/dashboard/src/dashboard-app.test.ts` (`:7940-8030`) — leaving a dirty printer through
   `all-printers-link` becomes closing the details window.
+- Nine more in `printers-screen.test.ts`, added in Task 3b by the lane's ruling; each because the
+  spec changes this:
+  - "updates a printer and its recent jobs after a data event while preserving an inline name
+    draft": Status contains "2026" → contains `formatRecentMinute("2026-09-11T12:34:00.000Z")`;
+    times now read "Today 13:09" or a short date.
+  - "shows the saved drawer independently of the profiles offering it, and the delivering agent
+    without discovery": contains "2026-09-26 14:00" → contains
+    `formatRecentMinute("2026-09-26T14:00:00.000Z")`; same reason.
+  - "keeps printer status live without replacing an inline name draft": contains
+    "2026-09-26 16:00" → contains `formatRecentMinute("2026-09-26T16:00:00.000Z")`; same reason.
+  - "saves the printer's Active switch from Status and shows the saved value": Status text contains
+    "Deshabilitada" → the Active switch is unchecked and labelled `printers.status_active`; Active
+    now appears once, as the switch.
+  - "shows the fetched Active value when it differs from the switch just pressed": Status text
+    contains `printers.status_active` → the switch's label is `printers.status_active` (its checked
+    state was already asserted); same reason.
+  - "edits a printer name on its details page without opening the calibration wizard": the details
+    body contains "Kitchen receipt" → the window's heading is "Kitchen receipt"; the page's h1 is
+    gone and the name is the window's heading.
+  - "lists the profiles that offer a printer, following their changes but not a device's": the
+    label found with `closest("div")` then `dt` → the `dt` beside the value in its label/value row;
+    the facts are now one `settingsRows` list, not one `div` per fact.
+  - "at 1280px / at 390px the page's Delete stands apart from the Active switch and the fields
+    above it" (two cases) → renamed "… stands apart from the Active switch, both above the Status
+    facts": the Active switch and Delete now sit under the Status heading above the facts, with no
+    gap from them, so the "at least `--wt-space-4` below the fields" check becomes "both end at or
+    above the facts' top"; the `--wt-space-3` spacing between Delete and the switch is unchanged.
+    Task 4b moves Delete to the footer and replaces both with its footer-order cases.
 
 PR 2:
 - `apps/server/src/print-api.printer-wiring.test.ts` "GET /management-api/printer-profiles lists a

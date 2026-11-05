@@ -152,15 +152,6 @@ async function openDetail(owner: "name" | "connection", api: DashboardApi = stub
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await vi.waitFor(() => expect(q(el, `[data-test=edit-printer-${owner}]`)).not.toBeNull());
-  if (owner === "connection") {
-    const disclosure = q<HTMLElementTagNameMap["wt-disclosure"]>(
-      el,
-      "[data-test=printer-section-connection]",
-    )!;
-    await disclosure.updateComplete;
-    disclosure.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
-    await el.updateComplete;
-  }
   q(el, `[data-test=edit-printer-${owner}]`)!.click();
   await vi.waitFor(() => expect(q(el, `[data-test=save-printer-${owner}]`)).not.toBeNull());
   return { el, api };
@@ -405,13 +396,6 @@ async function openWizard(api: DashboardApi = stubApi()) {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await vi.waitFor(() => expect(q(el, "[data-test=printer-section-calibration]")).not.toBeNull());
-  const disclosure = q<HTMLElementTagNameMap["wt-disclosure"]>(
-    el,
-    "[data-test=printer-section-calibration]",
-  )!;
-  await disclosure.updateComplete;
-  disclosure.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
-  await el.updateComplete;
   q(el, "[data-test=calibrate-printer-details]")!.click();
   await vi.waitFor(() => expect(q(el, "[data-test=calibration-step-1]")).not.toBeNull());
   return { el, api };
@@ -692,13 +676,6 @@ describe("the calibration wizard's Save, when an add opened it", () => {
     expect(api.deactivatePrinter).not.toHaveBeenCalled();
     q(el, "[data-test=printer-row-p1]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=printer-section-calibration]")).not.toBeNull());
-    const disclosure = q<HTMLElementTagNameMap["wt-disclosure"]>(
-      el,
-      "[data-test=printer-section-calibration]",
-    )!;
-    await disclosure.updateComplete;
-    disclosure.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
-    await el.updateComplete;
     q(el, "[data-test=calibrate-printer-details]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=calibration-step-1]")).not.toBeNull());
     await go(el, "calibration-next");
@@ -937,12 +914,6 @@ describe("under the dashboard's leave coordinator", () => {
     await typeInto(el, "[name=printer-detail-name]", "Kitchen 2");
     expect(await state(el, "save-printer-name")).toEqual(ready);
 
-    const disclosure = q<HTMLElementTagNameMap["wt-disclosure"]>(
-      el,
-      "[data-test=printer-section-connection]",
-    )!;
-    disclosure.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
-    await el.updateComplete;
     q(el, "[data-test=edit-printer-connection]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=save-printer-connection]")).not.toBeNull());
     expect(await state(el, "save-printer-connection")).toEqual(quiet);

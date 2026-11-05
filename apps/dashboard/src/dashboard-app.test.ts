@@ -7969,14 +7969,6 @@ describe("printer breadcrumb during a pending save", () => {
           const q = (selector: string) => screen.shadowRoot!.querySelector<HTMLElement>(selector)!;
           await screen.updateComplete;
           expect(q("[data-test=printer-refresh-error]")).toBeNull();
-          if (editor === "connection") {
-            const disclosure = q(
-              "[data-test=printer-section-connection]",
-            ) as import("@waitron/ui").WtDisclosure;
-            disclosure.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
-            await screen.updateComplete;
-            await disclosure.updateComplete;
-          }
           q(`[data-test=edit-printer-${editor}]`).click();
           await screen.updateComplete;
           const input = q(

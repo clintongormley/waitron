@@ -233,9 +233,6 @@ async function openPrinter(el: PrintersScreen, id = "p1"): Promise<void> {
   await flush(el);
 }
 async function openCalibration(el: PrintersScreen): Promise<void> {
-  q(el, "[data-test=printer-section-calibration]")!
-    .shadowRoot!.querySelector<HTMLButtonElement>("button")!
-    .click();
   await flush(el);
   q(el, "[data-test=calibrate-printer-details]")!.click();
   await flush(el);
@@ -410,9 +407,6 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
         .click();
       await flush(el);
       await openPrinter(el, portable.id);
-      q(el, "[data-test=printer-section-calibration]")!
-        .shadowRoot!.querySelector<HTMLButtonElement>("button")!
-        .click();
       await flush(el);
       expect(q(el, "[data-test=printer-holder]")).not.toBeNull();
       await expectNoA11yViolations(host);
@@ -612,9 +606,6 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     q(el, "[data-test=edit-printer-name]")!.click();
     await flush(el);
     await expectNoA11yViolations(host);
-    q(el, "[data-test=printer-section-connection]")!
-      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
-      .click();
     await flush(el);
     q(el, "[data-test=edit-printer-connection]")!.click();
     await flush(el);
@@ -1213,10 +1204,6 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await flush(el);
     await openPrinter(el);
     q(el, "[data-test=edit-printer-name]")!.click();
-    await flush(el);
-    q(el, "[data-test=printer-section-connection]")!
-      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
-      .click();
     await flush(el);
     q(el, "[data-test=edit-printer-connection]")!.click();
     await flush(el);
