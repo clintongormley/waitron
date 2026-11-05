@@ -994,7 +994,7 @@ between the 32 bytes the box keeps and the 64 letters a person reads and types, 
   checked as the unlock gate checks them, and anything else throws `disk_recovery_key.invalid`.
 
 **Built so far (2026-11-05), PR 7.** [PR 7](../superpowers/plans/2026-11-05-b3-7-host-protocol.md)
-(#PR7) adds `scripts/box/host-protocol.mjs`, called by nothing yet: what the server may ask B3's
+(#2474) adds `scripts/box/host-protocol.mjs`, called by nothing yet: what the server may ask B3's
 host service and what the host may answer, as a pure module with no socket, root or
 NetworkManager.
 
