@@ -6571,12 +6571,12 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `recovery_packs`; 111 environment variables become 51, or 55 until A951 lands.
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
 
-- **A1336: qualify the first prepared shared UI release with Cloud.**
-  Waitron's staging utility and independent consumer proof prepare
-  `@waitron-io/ui-core@0.2.0` without changing workspace imports. Return the exact
-  current green main SHA, staged bytes, notice inventory and consumer evidence to
-  Cloud's D579; Cloud still owns reservation, reviewed publication, registry
-  readback and portal/image qualification. [Preparation guide](developers/shared-ui-preparation.md).
+- **Cloud's next shared UI release still needs registry and portal qualification.**
+  Waitron's [preparation guide](developers/shared-ui-preparation.md) covers source staging
+  and the independent package consumer. Cloud's D579 owns reservation, review of the
+  preparation from exact green main, the authorised `0.2.0` upload and readback, and
+  portal/image qualification. Its [approved plan](https://github.com/waitron-io/waitron-cloud/blob/d108bebc39f5d14c8824e34e208c5e00d9d110f1/docs/superpowers/plans/2026-11-05-public-ui-registry.md)
+  owns automatic publication and updating; no Waitron publisher is planned.
 
 - **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
   2026-11-01, high priority; nothing new is built on locations meanwhile). Still open: S18e
