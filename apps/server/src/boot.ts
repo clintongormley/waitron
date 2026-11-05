@@ -211,7 +211,7 @@ import { mountPeerStatusApi } from "./peer-status-api.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { compareFinalCopy } from "./handover-compare.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
-import { mountHandoverActivationApi } from "./handover-activation.js";
+import { mountHandoverActivationApi, postChartToSource } from "./handover-activation.js";
 import { readTakenOverFrom } from "./handover-collection.js";
 import { mountHandoverPreparationApi } from "./handover-preparation.js";
 import { startHandoverDestinationDuty } from "./handover-destination-duty.js";
@@ -2364,6 +2364,8 @@ async function bootServer(
   if (handoverDestinationDuty !== undefined) {
     undoOnFailure.push(() => handoverDestinationDuty.stop());
   }
+  const chartPost = postChartToSource({ db, node: store.node, nodeId: tradingContext.nodeId, log });
+  undoOnFailure.push(() => chartPost.stop());
   mountHandoverDestinationApi(
     app,
     {
@@ -3845,6 +3847,7 @@ async function bootServer(
     demoPrinterLoop,
     clockWatch,
     handoverDestinationDuty,
+    chartPost,
     streamHost,
   });
   const started = makeStartedServer(

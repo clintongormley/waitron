@@ -78,6 +78,7 @@ const STOPPERS = [
   "demoPrinterLoop",
   "clockWatch",
   "handoverDestinationDuty",
+  "chartPost",
   "streamHost",
 ] as const;
 const AT_STEPDOWN = [

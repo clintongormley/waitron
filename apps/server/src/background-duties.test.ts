@@ -41,6 +41,7 @@ const CLOSERS = [
   "demoPrinterLoop",
   "clockWatch",
   "handoverDestinationDuty",
+  "chartPost",
   "streamHost",
 ];
 
@@ -96,6 +97,7 @@ function recordingHandles(
     demoPrinterLoop: stopper("demoPrinterLoop"),
     clockWatch: stopper("clockWatch"),
     handoverDestinationDuty: stopper("handoverDestinationDuty"),
+    chartPost: stopper("chartPost"),
     streamHost: stopper("streamHost"),
     ...overrides,
   };
@@ -138,6 +140,7 @@ describe("background duties", () => {
       "stop demoPrinterLoop",
       "stop clockWatch",
       "stop handoverDestinationDuty",
+      "stop chartPost",
       "stop streamHost",
     ]);
   });

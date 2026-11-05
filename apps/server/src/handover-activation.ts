@@ -9,10 +9,18 @@ import {
   type HandoverState,
   type SignedHandoverEnvelope,
 } from "@waitron/handover";
-import { readHandoverEvent, readHandoverOperation, type HandoverOperation } from "@waitron/node-db";
+import {
+  readHandoverEvent,
+  readHandoverOperation,
+  readMirrorLink,
+  readNodeMode,
+  readOpenHandoverOperation,
+  type HandoverOperation,
+} from "@waitron/node-db";
 import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { oldBoxStillMain } from "./handover-chart.js";
+import { usableBase } from "./handover-destination-duty.js";
 import {
   assertBindingNamesOperation,
   handoverPromotionContext,
@@ -24,6 +32,7 @@ import { advanceHandover } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import { assertHeldDocumentReadable, HELD_DOCUMENT_REFUSALS } from "./membership-trust.js";
+import { boxExchange } from "./mirror-bundle-fetch.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import type { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import type { FenceAttestation, PromotionOperationRunner } from "./promote.js";
@@ -176,4 +185,89 @@ export function mountHandoverActivationApi(
       return c.json(await inTurn(deps.node, operationId, () => activate(deps, operationId, body)));
     }),
   );
+}
+
+// The old box saves one chart and answers.
+const CHART_POST_LIMIT_MS = 30_000;
+
+// The route answers `{ accepted }` or one short error.
+const MAX_CHART_ANSWER_BYTES = 64 * 1024;
+
+export interface ChartPostDeps {
+  db: Database;
+  node: NodeDatabase;
+  nodeId: string;
+  log: Logger;
+  limitMs?: number;
+}
+
+export interface ChartPost {
+  /** Resolves when the post has ended, however it ended; it never rejects. */
+  settled: Promise<void>;
+  /** Ends a post under way, and resolves as `settled` does. */
+  stop(): Promise<void>;
+}
+
+async function sendChartToSource(deps: ChartPostDeps, stopping: AbortSignal): Promise<void> {
+  const { mode } = await readNodeMode(deps.node, deps.nodeId);
+  if (mode === "mirror") return;
+  const operation = await readOpenHandoverOperation(deps.node, deps.nodeId);
+  if (operation?.role !== "destination" || !ALREADY_ACTIVATED.has(operation.state)) return;
+  const { operationId, sourceNodeId } = operation;
+  const chart = await readNodeMembership(deps.db);
+  const source = chart?.body.nodes.find((n) => n.nodeId === sourceNodeId);
+  if (source === undefined) return;
+  const link = await readMirrorLink(deps.node, deps.nodeId);
+  const base = usableBase(source.contactUrl);
+  if (link === null || link.originNodeId !== sourceNodeId || base === undefined) {
+    deps.log("warn", "handover-activation.chart_no_address", { operationId, sourceNodeId });
+    return;
+  }
+  const answer = await boxExchange(
+    new URL(`${base}/api/node/membership`),
+    {
+      method: "POST",
+      trust: { ca: link.boxCaPem, rejectUnauthorized: true },
+      signal: AbortSignal.any([stopping, AbortSignal.timeout(deps.limitMs ?? CHART_POST_LIMIT_MS)]),
+      body: JSON.stringify({ document: chart }),
+    },
+    MAX_CHART_ANSWER_BYTES,
+  );
+  if (answer.status === 200 && (JSON.parse(answer.text) as { accepted?: unknown }).accepted) {
+    deps.log("info", "handover-activation.chart_posted", { operationId, sourceNodeId });
+    return;
+  }
+  // The route gives the same answer to a chart it refused and to one it already holds, which is what
+  // every start after the first finds.
+  deps.log("warn", "handover-activation.chart_not_accepted", {
+    operationId,
+    sourceNodeId,
+    status: answer.status,
+  });
+}
+
+/**
+ * Hands the old box this box's chart, as a till would (`POST /api/node/membership`): one attempt per
+ * start, on a box that is not a mirror and holds an open destination operation at `activated` or
+ * later. Nothing waits for it, and a failure is only logged, so an old box that is switched off or
+ * stalled costs this start nothing.
+ *
+ * Run with two boxes only (`handover-chart-post.test.ts`, `boot.handover-destination.test.ts`). With
+ * a healthy third box in the chart, this box's start waits before it gets here: the chart it minted
+ * carries only its own endorsement and `peerKeyOf` does not read `nodes`, so that box's answer is
+ * `not_verified` (`boot-peer-check.ts:395`).
+ */
+export function postChartToSource(deps: ChartPostDeps): ChartPost {
+  const stopping = new AbortController();
+  const settled = sendChartToSource(deps, stopping.signal).catch((error: unknown) => {
+    if (stopping.signal.aborted) return;
+    deps.log("warn", "handover-activation.chart_post_failed", { error: String(error) });
+  });
+  return {
+    settled,
+    stop: () => {
+      stopping.abort();
+      return settled;
+    },
+  };
 }

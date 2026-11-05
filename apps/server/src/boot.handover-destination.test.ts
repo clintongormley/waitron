@@ -5,7 +5,13 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readTenant, stampDeployment, withNodeTransaction, writeNodeMembership } from "@waitron/db";
+import {
+  readNodeMembership,
+  readTenant,
+  stampDeployment,
+  withNodeTransaction,
+  writeNodeMembership,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
 import {
@@ -26,6 +32,7 @@ import {
 } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
+  advanceHandoverOperationTx,
   appendHandoverEventTx,
   readHandoverEvent,
   readHandoverOperation,
@@ -64,10 +71,16 @@ const suite = useVenueDb({ migrations });
 let server: StartedServer | undefined;
 let mainBox: Server | undefined;
 let scratch: string | undefined;
+/** Each chart the stand-in old box was handed, as sent. */
+let charts: string[] = [];
+let stallChartPost = false;
+let chartPostClosed: Promise<void> | undefined;
 
 afterEach(async () => {
   await server?.close();
   server = undefined;
+  stallChartPost = false;
+  chartPostClosed = undefined;
   await new Promise<void>((resolve) => {
     mainBox?.closeAllConnections();
     if (mainBox === undefined) resolve();
@@ -85,10 +98,19 @@ async function startMainBox(
 ): Promise<{ url: string; asked: string[]; posts: string[] }> {
   const asked: string[] = [];
   const posts: string[] = [];
+  charts = [];
   mainBox = createServer((req, res) => {
     let raw = "";
     req.on("data", (chunk: Buffer) => (raw += chunk.toString()));
     req.on("end", () => {
+      if (req.url === "/api/node/membership") {
+        charts.push(raw);
+        chartPostClosed = new Promise((resolve) => req.socket.once("close", () => resolve()));
+        if (stallChartPost) return;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ accepted: true }));
+        return;
+      }
       if (req.url!.endsWith("/indicator")) {
         res.setHeader("content-type", "application/json");
         res.end(JSON.stringify(signEnvelope("final-state", { not: "an indicator" }, MAIN_BOX)));
@@ -337,5 +359,51 @@ describe("the spare's handover duty in a full start", () => {
     // Failing case: the old box asked about OP, and the operation closed on a selling box.
     expect(asked).toEqual([]);
     expect((await operation(nodeId, OP))?.state).toBe("prepared");
+  }, 120_000);
+
+  const activated = async (id: string) => {
+    await withNodeTransaction(suite.node, (tx) =>
+      advanceHandoverOperationTx(tx, id, OP, "activated", null),
+    );
+  };
+
+  it("a start that is not a mirror, at activated, hands the old box the chart it holds, once", async () => {
+    const { nodeId } = await boot("primary", "abandoned", activated);
+    await vi.waitFor(() => expect(charts).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Failing case, with the call left out of boot: no chart arrives.
+    expect(charts).toEqual([JSON.stringify({ document: await readNodeMembership(suite.db) })]);
+    expect((await operation(nodeId, OP))?.state).toBe("activated");
+  }, 120_000);
+
+  it("a mirror at activated hands over no chart", async () => {
+    await boot("mirror", "abandoned", activated);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(charts).toEqual([]);
+  }, 120_000);
+
+  it("an old box that never answers holds up neither the start nor its answer, and a close ends the post", async () => {
+    stallChartPost = true;
+    await boot("primary", "abandoned", activated);
+    await vi.waitFor(() => expect(charts).toHaveLength(1));
+    // The post is still unanswered, and its limit is 30 seconds away.
+    let postOpen = true;
+    void chartPostClosed!.then(() => (postOpen = false));
+    const answer = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
+    expect(await answer.json()).toMatchObject({ acceptingSales: true });
+    // Failing case, with the start waiting for the post: the post has ended by the time it returns.
+    expect(postOpen).toBe(true);
+    const closing = server!.close();
+    server = undefined;
+    // Failing case, with the duty left out of the table: the close leaves the socket open.
+    await Promise.race([
+      chartPostClosed,
+      closing
+        .then(() => new Promise((resolve) => setTimeout(resolve, 1000)))
+        .then(() => {
+          throw new Error("the close left the post running");
+        }),
+    ]);
+    await closing;
   }, 120_000);
 });

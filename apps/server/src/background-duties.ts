@@ -60,6 +60,7 @@ export interface BackgroundDutyHandles {
   demoPrinterLoop: Stopper | undefined;
   clockWatch: Stopper;
   handoverDestinationDuty: Stopper | undefined;
+  chartPost: Stopper;
   streamHost: Stopper;
 }
 
@@ -204,6 +205,12 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       name: "handoverDestinationDuty",
       close: () => h.handoverDestinationDuty?.stop(),
       atStepdown: true,
+    },
+    {
+      name: "chartPost",
+      close: () => h.chartPost.stop(),
+      reason:
+        "hands the old box a chart it may keep, once, within its own limit; it reaches no box but that one and writes nothing here",
     },
     // Litestream writes venue.db, so its stop is awaited before the store closes.
     {
