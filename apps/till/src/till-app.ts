@@ -21,6 +21,7 @@ import type {
   BillUnsent,
   Draft as PartyDraft,
   LateSend,
+  SplitSelection,
   SplitSources,
   Tender,
 } from "./api/client.js";
@@ -1047,16 +1048,20 @@ interface AskedBill {
   session: number;
 }
 
-interface BillComposition {
+interface PartyComposition {
   api: TillApi;
   session: number;
   visit: number;
   sync: DraftSync | undefined;
   sent: Sent;
   partyId: string;
-  billId: string;
+  billId: string | undefined;
   revisions: BillRevisions;
   expectedEdits: BillEditExpected[];
+}
+
+interface BillComposition extends PartyComposition {
+  billId: string;
 }
 
 interface TableRelocation {
@@ -15672,20 +15677,35 @@ export class TillApp extends LitElement {
     void this.#readSplitSources(panel.partyId);
   }
 
-  async #onSplitTable(event: Event): Promise<void> {
+  async #onSplitTable(event: Event, confirmed?: PartyComposition): Promise<void> {
     const detail = (event as CustomEvent<SplitTableDetail>).detail;
-    if ("selection" in detail) return;
-    const { tableId, billId, guestCounts, prompt } = detail;
+    const { tableId, guestCounts, prompt } = detail;
+    const selection: SplitSelection =
+      "selection" in detail
+        ? detail.selection
+        : { wholeBillIds: detail.billId === null ? [] : [detail.billId], loose: [] };
     const party = this.orderParty;
     if (party === null) return;
+    const looseIds = selection.loose.map((source) => source.billId);
     const asked =
-      prompt === undefined
-        ? this.#billComposition(billId === null ? [] : [billId])
-        : this.#splitTablePrompts.get(prompt);
+      confirmed ??
+      (prompt === undefined
+        ? this.#partyComposition([...selection.wholeBillIds, ...looseIds])
+        : this.#splitTablePrompts.get(prompt));
     if (asked == null) {
       this.errorKey = { code: "draft.out_of_date" };
       return;
     }
+    if (!this.#billCompositionUnchanged(asked)) return;
+    if (
+      confirmed === undefined &&
+      looseIds.length > 0 &&
+      (await this.#askDifferentPeople(
+        () => this.#ownBillsChange(() => this.#onSplitTable(event, asked)),
+        looseIds,
+      ))
+    )
+      return;
     if (!this.#billCompositionUnchanged(asked)) return;
     const live = () => this.#billCompositionCurrent(asked);
     const sent = asked.sent;
@@ -15696,7 +15716,7 @@ export class TillApp extends LitElement {
       await asked.api.splitTable(
         party.id,
         tableId,
-        { wholeBillIds: billId === null ? [] : [billId], loose: [] },
+        selection,
         asked.revisions.expectedPartyRevision!,
         asked.expectedEdits,
         guestCounts,
@@ -15705,11 +15725,11 @@ export class TillApp extends LitElement {
       if (!live()) return;
       const refused = error as { code?: string; field?: string } | undefined;
       const side = refusedSplitSide(refused);
-      if (side !== undefined) {
+      if (side !== undefined && "billId" in detail) {
         if (visit === this.#orderVisit && this.orderParty?.id === party.id)
           this.splitRefusal = {
             tableId,
-            billId,
+            billId: detail.billId,
             staying: guestField(guestCounts.staying),
             leaving: guestField(guestCounts.leaving),
             field: side,
@@ -15730,19 +15750,25 @@ export class TillApp extends LitElement {
     await this.#reloadTables();
     if (!live()) return;
     this.#rememberOrderParty();
-    if (billId !== null && this.activeTabId === billId) {
+    const shown = this.activeTabId;
+    const leftWhole = shown !== undefined && selection.wholeBillIds.includes(shown);
+    if (leftWhole || (shown !== undefined && looseIds.includes(shown))) {
       const known = this.partyBills;
       const { bills: read } = await this.#loadPartyBills(undefined, false);
       if (!live()) return;
-      this.billGone = null;
-      const next = billToShow(
-        undefined,
-        read ?? known.filter((bill) => bill.workingOrderId !== billId),
-      );
-      if (next !== undefined) this.#chooseBill(next);
-      else {
-        this.activeTabId = undefined;
-        if (read === null) this.#billAfterSplit = { partyId: party.id, visit: this.#orderVisit };
+      const remaining = read?.find((bill) => bill.workingOrderId === shown);
+      // A bill just left paid counts as gone: `GET lines` refuses it, so its list would be empty.
+      if (leftWhole || (remaining !== undefined && !owing(remaining))) {
+        this.billGone = null;
+        const next = billToShow(
+          undefined,
+          read ?? known.filter((bill) => !selection.wholeBillIds.includes(bill.workingOrderId)),
+        );
+        if (next !== undefined) this.#chooseBill(next);
+        else {
+          this.activeTabId = undefined;
+          if (read === null) this.#billAfterSplit = { partyId: party.id, visit: this.#orderVisit };
+        }
       }
     }
     await this.#loadLinesAndBills();
@@ -15944,9 +15970,16 @@ export class TillApp extends LitElement {
   }
 
   #billComposition(billIds: string[]): BillComposition | null {
-    const party = this.orderParty;
     const billId = this.activeTabId;
-    if (party === null || billId === undefined) return null;
+    if (billId === undefined) return null;
+    const composition = this.#partyComposition(billIds);
+    return composition === null ? null : { ...composition, billId };
+  }
+
+  /** {@link #billComposition} for a party that may show no bill, which a split still acts on. */
+  #partyComposition(billIds: string[]): PartyComposition | null {
+    const party = this.orderParty;
+    if (party === null) return null;
     const expectedEdits: BillEditExpected[] = [];
     for (const id of [...new Set(billIds)].sort()) {
       const edit = this.#billChoiceEdit(id);
@@ -15960,13 +15993,13 @@ export class TillApp extends LitElement {
       sync: this.#draftSync,
       sent: this.#sentNow(),
       partyId: party.id,
-      billId,
+      billId: this.activeTabId,
       revisions: this.#billRevisions(),
       expectedEdits,
     };
   }
 
-  #billCompositionCurrent(asked: BillComposition): boolean {
+  #billCompositionCurrent(asked: PartyComposition): boolean {
     return (
       this.api === asked.api &&
       this.#operatorSession === asked.session &&
@@ -15977,7 +16010,7 @@ export class TillApp extends LitElement {
     );
   }
 
-  #billCompositionUnchanged(asked: BillComposition): boolean {
+  #billCompositionUnchanged(asked: PartyComposition): boolean {
     if (!this.#billCompositionCurrent(asked) || this.#orderVisit !== asked.visit) return false;
     if (asked.expectedEdits.every((edit) => this.#billChoiceCurrent(edit))) return true;
     this.errorKey = { code: "draft.out_of_date" };
@@ -16006,32 +16039,42 @@ export class TillApp extends LitElement {
     if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
   }
 
-  async #askDifferentPeople(proceed: () => Promise<void>): Promise<boolean> {
+  async #askDifferentPeople(
+    proceed: () => Promise<void>,
+    billIds: readonly (string | undefined)[] = [this.activeTabId],
+  ): Promise<boolean> {
     if (this.differentPeopleConfirmation !== null) return true;
     const limit = this.#simplifiedInvoiceLimit;
     if (limit === null) return false;
-    const billId = this.activeTabId;
-    if (billId === undefined) return true;
-    const bill = this.partyBills.find((row) => row.workingOrderId === billId);
-    let total = bill?.total;
-    if (total === undefined) {
-      try {
-        const balance = await this.api.getBillBalance(billId);
-        if (this.activeTabId !== billId) return true;
-        total = balance.total;
-      } catch {
-        this.errorKey = "table.reread_failed";
-        return true;
+    const shown = this.activeTabId;
+    let over = false;
+    for (const billId of billIds) {
+      if (billId === undefined) return true;
+      const bill = this.partyBills.find((row) => row.workingOrderId === billId);
+      let total = bill?.total;
+      if (total === undefined) {
+        try {
+          const balance = await this.api.getBillBalance(billId);
+          if (this.activeTabId !== shown) return true;
+          total = balance.total;
+        } catch {
+          this.errorKey = "table.reread_failed";
+          return true;
+        }
+      }
+      if (compareDecimal(decimal(total), decimal(limit)) > 0) {
+        over = true;
+        break;
       }
     }
-    if (compareDecimal(decimal(total), decimal(limit)) <= 0) return false;
+    if (!over) return false;
     const partyId = this.orderParty?.id;
     const visit = this.#orderVisit;
     this.differentPeopleConfirmation = {
       limit,
       proceed: async () => {
         if (
-          this.activeTabId === billId &&
+          this.activeTabId === shown &&
           this.orderParty?.id === partyId &&
           this.#orderVisit === visit
         )

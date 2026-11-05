@@ -602,3 +602,385 @@ describe("till-app: the read behind Split a table's panel", () => {
     });
   });
 });
+
+describe("till-app: Split a table sends the selection and follows it", () => {
+  const guests = { staying: 3, leaving: 2 };
+  const noEdit = (billId: string) => ({
+    billId,
+    editorVersion: 0,
+    draftId: null,
+    draftRevision: null,
+  });
+  const threeBills = () => [
+    partyBill("wo-4", 1, "10.00"),
+    partyBill("b2", 2, "20.00"),
+    partyBill("b3", 3, "30.00"),
+  ];
+  const after = (...next: PartyBill[]) => {
+    const staying = party({ revision: 4, tableIds: ["t4"], billCount: next.length });
+    return {
+      tables: [
+        table("t4", "4", staying),
+        table("t5", "5", party({ id: "v-split", revision: 0, tableIds: ["t5"] })),
+        table7,
+      ],
+      bills: next,
+    };
+  };
+
+  async function sending(
+    state: { tables: unknown[]; bills: PartyBill[] },
+    over: Record<string, unknown> = {},
+  ) {
+    server.bills.add("b2");
+    server.bills.add("b3");
+    const el = await mounted("desktop", {
+      getPartyBills: vi.fn().mockResolvedValue(threeBills()),
+      splitTable: vi.fn(async () => {
+        api.getTablesState!.mockResolvedValue(state.tables);
+        api.getPartyBills!.mockResolvedValue(state.bills);
+        return { partyId: "v-split", billIds: ["b9"] };
+      }),
+      ...over,
+    });
+    return el;
+  }
+
+  const split = (
+    el: TillApp,
+    selection: {
+      wholeBillIds: string[];
+      loose: { billId: string; lineIds: string[] }[];
+    },
+    tableId = "t5",
+  ) => emit(tableOrder(el)!, "split-table", { tableId, selection, guestCounts: guests });
+  const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
+  const question = (el: TillApp) =>
+    el.shadowRoot!.querySelector<HTMLElement>("[data-confirm-different-people]");
+
+  describe("send", () => {
+    it("sends the whole bills' and loose sources' states, sorted, the shown party's revision, and what was dispatched", async () => {
+      const el = await sending(after(...threeBills()));
+      const selection = { wholeBillIds: ["b3"], loose: [{ billId: "b2", lineIds: ["steak"] }] };
+
+      split(el, selection);
+      await flush(el, 6);
+
+      expect(api.splitTable).toHaveBeenCalledTimes(1);
+      expect(api.splitTable).toHaveBeenCalledWith(
+        "v1",
+        "t5",
+        selection,
+        3,
+        [noEdit("b2"), noEdit("b3")],
+        guests,
+      );
+    });
+
+    it("sends the bill on screen's state only when the bill on screen is picked from", async () => {
+      const el = await sending(after(...threeBills()));
+      const selection = { wholeBillIds: ["b2"], loose: [{ billId: "wo-4", lineIds: ["soup"] }] };
+
+      split(el, selection);
+      await flush(el, 6);
+
+      expect(api.splitTable).toHaveBeenCalledWith(
+        "v1",
+        "t5",
+        selection,
+        3,
+        [noEdit("b2"), noEdit("wo-4")],
+        guests,
+      );
+    });
+
+    it("sends the old event's bill as a selection of that bill", async () => {
+      const el = await sending(after(...threeBills()));
+
+      emit(tableOrder(el)!, "split-table", { tableId: "t5", billId: "b2", guestCounts: guests });
+      await flush(el, 6);
+
+      expect(api.splitTable).toHaveBeenCalledWith(
+        "v1",
+        "t5",
+        { wholeBillIds: ["b2"], loose: [] },
+        3,
+        [noEdit("b2")],
+        guests,
+      );
+    });
+
+    it("holds off the background bills read while it is out, so nothing says the bill left this table", async () => {
+      fakeTimers();
+      let answer!: (value: { partyId: string; billIds: string[] }) => void;
+      const el = await sending(after(partyBill("b2", 2, "20.00")), {
+        splitTable: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+      });
+      api.getPartyBills!.mockResolvedValue([partyBill("b2", 2, "20.00")]);
+      const reads = api.getPartyBills!.mock.calls.length;
+
+      split(el, { wholeBillIds: ["wo-4"], loose: [] });
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await flush(el, 6);
+
+      expect(api.getPartyBills!.mock.calls.length).toBe(reads);
+      expect(tableOrder(el)!.orderId).toBe("wo-4");
+      expect(tableOrder(el)!.billGone).toBeNull();
+
+      answer({ partyId: "v-split", billIds: ["wo-4"] });
+      await flush(el, 6);
+      expect(tableOrder(el)!.orderId).toBe("b2");
+      expect(tableOrder(el)!.billGone).toBeNull();
+    });
+  });
+
+  describe("follow", () => {
+    it("stays with the staying party at its other table when the table on screen leaves", async () => {
+      const staying = party({ revision: 4, tableIds: ["t5"] });
+      const el = await sending({
+        tables: [
+          table("t4", "4", party({ id: "v-split", revision: 0, tableIds: ["t4"] })),
+          table("t5", "5", staying),
+          table7,
+        ],
+        bills: threeBills(),
+      });
+
+      split(el, { wholeBillIds: ["b2"], loose: [] }, "t4");
+      await flush(el, 6);
+
+      expect(tableOrder(el)!.party?.id).toBe("v1");
+      expect(tableOrder(el)!.party?.revision).toBe(4);
+      expect(tableOrder(el)!.party?.tableIds).toEqual(["t5"]);
+      expect(banner(el)).toBeNull();
+    });
+
+    it("shows the lowest-numbered bill still owing when the bill on screen left whole, with no notice", async () => {
+      const el = await sending(
+        after(partyBill("b3", 3, "30.00"), partyBill("b2", 2, "20.00", { status: "settled" })),
+      );
+
+      split(el, { wholeBillIds: ["wo-4"], loose: [] });
+      await flush(el, 6);
+
+      expect(tableOrder(el)!.orderId).toBe("b3");
+      expect(tableOrder(el)!.billGone).toBeNull();
+      expect(api.getTabLines).toHaveBeenLastCalledWith("b3");
+    });
+
+    it("keeps the bill on screen and reads its lines again when dishes left it and it still owes", async () => {
+      const el = await sending(after(...threeBills()));
+      const lineReads = api.getTabLines!.mock.calls.length;
+
+      split(el, { wholeBillIds: [], loose: [{ billId: "wo-4", lineIds: ["soup"] }] });
+      await flush(el, 6);
+
+      expect(tableOrder(el)!.orderId).toBe("wo-4");
+      expect(api.getTabLines!.mock.calls.length).toBeGreaterThan(lineReads);
+      expect(api.getTabLines).toHaveBeenLastCalledWith("wo-4");
+      expect(tableOrder(el)!.billGone).toBeNull();
+    });
+
+    it("keeps the bill on screen when dishes left it and the bills read after fails", async () => {
+      const el = await sending(after(...threeBills()));
+      api.splitTable!.mockImplementation(async () => {
+        api.getTablesState!.mockResolvedValue(after().tables);
+        api.getPartyBills!.mockRejectedValue(new Error("read failed"));
+        return { partyId: "v-split", billIds: ["b9"] };
+      });
+
+      split(el, { wholeBillIds: [], loose: [{ billId: "wo-4", lineIds: ["soup"] }] });
+      await flush(el, 6);
+
+      expect(tableOrder(el)!.orderId).toBe("wo-4");
+    });
+
+    /** `GET lines` refuses a settled bill, which `#loadTabLines` turns into an empty list. */
+    function linesOfOpenBills() {
+      return vi.fn(async (billId: string) => {
+        if (billId === "wo-4") throw new Error("bill is settled");
+        return { lines: [dish(`dish-of-${billId}`, 1)], revision: 0 };
+      });
+    }
+
+    it("shows the lowest-numbered bill still owing when the last unpaid dishes left the bill on screen, now paid, with no notice", async () => {
+      const el = await sending(
+        after(
+          partyBill("wo-4", 1, "0.00", { status: "settled" }),
+          partyBill("b3", 3, "30.00"),
+          partyBill("b2", 2, "20.00"),
+        ),
+      );
+      api.getTabLines!.mockImplementation(linesOfOpenBills());
+
+      split(el, { wholeBillIds: [], loose: [{ billId: "wo-4", lineIds: ["soup"] }] });
+      await flush(el, 6);
+
+      expect(tableOrder(el)!.lines.map((line) => line.id)).toEqual(["dish-of-b2"]);
+      expect(tableOrder(el)!.orderId).toBe("b2");
+      expect(tableOrder(el)!.billGone).toBeNull();
+      expect(banner(el)).toBeNull();
+    });
+
+    it("shows the paid bill when the last unpaid dishes left the bill on screen and no bill still owes, with no notice", async () => {
+      const el = await sending(after(partyBill("wo-4", 1, "0.00", { status: "settled" })));
+
+      split(el, { wholeBillIds: ["b2", "b3"], loose: [{ billId: "wo-4", lineIds: ["soup"] }] });
+      await flush(el, 6);
+
+      expect(tableOrder(el)!.orderId).toBe("wo-4");
+      expect(tableOrder(el)!.billGone).toBeNull();
+      expect(banner(el)).toBeNull();
+    });
+
+    it("leaves the bill on screen alone when the split took another bill", async () => {
+      const el = await sending(after(partyBill("wo-4", 1, "10.00"), partyBill("b3", 3, "30.00")));
+
+      split(el, { wholeBillIds: ["b2"], loose: [] });
+      await flush(el, 6);
+
+      expect(tableOrder(el)!.orderId).toBe("wo-4");
+      expect(tableOrder(el)!.bills.map((bill) => bill.workingOrderId)).toEqual(["wo-4", "b3"]);
+      expect(tableOrder(el)!.billGone).toBeNull();
+    });
+
+    it("reads the drafts again once the split has gone", async () => {
+      const el = await sending(after(partyBill("wo-4", 1, "10.00"), partyBill("b3", 3, "30.00")));
+      const draftReads = api.listDrafts!.mock.calls.length;
+
+      split(el, { wholeBillIds: ["b2"], loose: [] });
+      await flush(el, 6);
+
+      expect(tableOrder(el)!.orderId).toBe("wo-4");
+      expect(api.listDrafts!.mock.calls.length).toBeGreaterThan(draftReads);
+    });
+  });
+
+  describe("different people", () => {
+    const limited = (limit: string | null) => ({
+      getTill: vi.fn().mockResolvedValue({ ...till("till"), simplifiedInvoiceLimit: limit }),
+    });
+    const fromBill2 = { wholeBillIds: [], loose: [{ billId: "b2", lineIds: ["steak"] }] };
+
+    it("asks once for a loose pick off a bill over the limit, and sends only after confirming", async () => {
+      const el = await sending(after(...threeBills()), limited("15.00"));
+
+      split(el, fromBill2);
+      await flush(el, 6);
+      expect(question(el)).not.toBeNull();
+      expect(api.splitTable).not.toHaveBeenCalled();
+
+      question(el)!.querySelector<HTMLElement>("[data-confirm]")!.click();
+      await flush(el, 6);
+      expect(question(el)).toBeNull();
+      expect(api.splitTable).toHaveBeenCalledTimes(1);
+      expect(api.splitTable!.mock.calls[0]![2]).toEqual(fromBill2);
+    });
+
+    it("sends nothing when the question is cancelled", async () => {
+      const el = await sending(after(...threeBills()), limited("15.00"));
+
+      split(el, fromBill2);
+      await flush(el, 6);
+      question(el)!.querySelector<HTMLElement>("[data-cancel]")!.click();
+      await flush(el, 6);
+
+      expect(question(el)).toBeNull();
+      expect(api.splitTable).not.toHaveBeenCalled();
+    });
+
+    it("asks nothing for a whole bill over the limit", async () => {
+      const el = await sending(after(...threeBills()), limited("15.00"));
+
+      split(el, { wholeBillIds: ["b2"], loose: [] });
+      await flush(el, 6);
+
+      expect(question(el)).toBeNull();
+      expect(api.splitTable).toHaveBeenCalledTimes(1);
+    });
+
+    it("asks nothing for a whole bill over the limit beside a loose source under it", async () => {
+      const el = await sending(after(...threeBills()), {
+        ...limited("25.00"),
+        getPartyBills: vi.fn().mockResolvedValue(threeBills()),
+      });
+
+      split(el, { wholeBillIds: ["b3"], loose: [{ billId: "b2", lineIds: ["steak"] }] });
+      await flush(el, 6);
+
+      expect(question(el)).toBeNull();
+      expect(api.splitTable).toHaveBeenCalledTimes(1);
+    });
+
+    it("asks nothing when the limit is null", async () => {
+      const el = await sending(after(...threeBills()), limited(null));
+
+      split(el, fromBill2);
+      await flush(el, 6);
+
+      expect(question(el)).toBeNull();
+      expect(api.splitTable).toHaveBeenCalledTimes(1);
+    });
+
+    it("asks nothing for a loose source under the limit, the bill on screen over it", async () => {
+      const el = await sending(after(...threeBills()), {
+        ...limited("15.00"),
+        getPartyBills: vi
+          .fn()
+          .mockResolvedValue([partyBill("wo-4", 1, "90.00"), partyBill("b2", 2, "10.00")]),
+      });
+
+      split(el, fromBill2);
+      await flush(el, 6);
+
+      expect(question(el)).toBeNull();
+      expect(api.splitTable).toHaveBeenCalledTimes(1);
+    });
+
+    it("asks for a loose source over the limit, the bill on screen under it", async () => {
+      const el = await sending(after(...threeBills()), limited("15.00"));
+      expect(tableOrder(el)!.orderId).toBe("wo-4");
+
+      split(el, fromBill2);
+      await flush(el, 6);
+
+      expect(question(el)).not.toBeNull();
+    });
+  });
+
+  describe("no bill", () => {
+    const noBill = party({ tableIds: ["t4", "t5"], billCount: 0, openingBillId: null });
+
+    it("sends an empty selection for a party with no bill and stays with it", async () => {
+      const staying = party({ revision: 4, tableIds: ["t4"], billCount: 0, openingBillId: null });
+      const el = await mounted("desktop", {
+        getTablesState: vi
+          .fn()
+          .mockResolvedValue([table("t4", "4", noBill), table("t5", "5", noBill), table7]),
+        getPartyBills: vi.fn().mockResolvedValue([]),
+        getSplitSources: vi.fn().mockResolvedValue({ bills: [] }),
+        splitTable: vi.fn(async () => {
+          api.getTablesState!.mockResolvedValue([
+            table("t4", "4", staying),
+            table("t5", "5", party({ id: "v-split", revision: 0, tableIds: ["t5"] })),
+            table7,
+          ]);
+          return { partyId: "v-split", billIds: ["b9"] };
+        }),
+      });
+      expect(tableOrder(el)!.orderId).toBeUndefined();
+      const selection = { wholeBillIds: [], loose: [] };
+
+      split(el, selection);
+      await flush(el, 6);
+
+      expect(banner(el)).toBeNull();
+      expect(api.splitTable).toHaveBeenCalledTimes(1);
+      expect(api.splitTable).toHaveBeenCalledWith("v1", "t5", selection, 3, [], guests);
+      expect(tableOrder(el)!.party?.revision).toBe(4);
+      expect(tableOrder(el)!.party?.tableIds).toEqual(["t4"]);
+      expect(tableOrder(el)!.orderId).toBeUndefined();
+    });
+  });
+});
