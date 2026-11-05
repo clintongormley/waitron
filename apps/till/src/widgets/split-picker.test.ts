@@ -317,7 +317,7 @@ describe("till-split-picker", () => {
     expect(tick.disabled).toBe(true);
     expect(tick.checked).toBe(false);
     const reason = el.shadowRoot!.getElementById(tick.getAttribute("aria-describedby")!);
-    expect(reason!.textContent).toBe(t("table.split_take_over_first"));
+    expect(reason!.textContent).toBe("Take over the draft to tick this bill.");
     expect(inner(el, "b1")).toBeNull();
     expect(billText(el, "b1")).not.toContain("Beer");
     expect(billText(el, "b1")).not.toContain(t("table.move_dishes_none"));

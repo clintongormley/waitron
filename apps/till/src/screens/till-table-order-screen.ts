@@ -5214,10 +5214,14 @@ export class TillTableOrderScreen extends LitElement {
       ...keeps.rest.map(({ bill }) => fill(t("table.split_rest_of"), { bill: billLabel(bill) })),
     ];
     const anyPaid = this.bills.some((bill) => bill.status === "settled");
-    const nothingKept =
-      anywayNote(sources, this.splitPicks, anyPaid) === "paid"
-        ? t("table.split_nothing_to_pay")
-        : t("table.split_empty_bill");
+    const keepsLine =
+      keepsParts.length === 0 && anywayNote(sources, this.splitPicks, anyPaid) === "paid"
+        ? fill(t("table.split_nothing_to_pay"), { table: kept })
+        : fill(t("table.split_keeps"), {
+            table: kept,
+            what: keepsParts.length > 0 ? list(keepsParts) : t("table.split_empty_bill"),
+            amount: this.#money(keeps.amount),
+          });
     return html`<div class="split-lines">
       <p class="split-summary" data-split-takes>
         ${fill(t("table.split_takes"), {
@@ -5226,13 +5230,7 @@ export class TillTableOrderScreen extends LitElement {
           amount: this.#money(takes.amount),
         })}
       </p>
-      <p class="split-summary" data-split-keeps>
-        ${fill(t("table.split_keeps"), {
-          table: kept,
-          what: keepsParts.length > 0 ? list(keepsParts) : nothingKept,
-          amount: this.#money(keeps.amount),
-        })}
-      </p>
+      <p class="split-summary" data-split-keeps>${keepsLine}</p>
       ${
         takes.loose.length > 0
           ? html`<p class="split-note" data-split-new-bill-note>

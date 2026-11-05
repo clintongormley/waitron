@@ -501,29 +501,88 @@ describe("Split a table's panel", () => {
     expect(textOf(el, "[data-split-keeps]")).toBe("T7 keeps Bill 1, Bill 2 and Bill 3 · €176.00");
   });
 
-  it("with only paid bills staying the staying line says nothing to pay, not an empty bill", async () => {
+  it.each([
+    ["en-GB", "T7 is left with nothing to pay"],
+    ["es-ES", "T7 se queda sin nada que pagar"],
+  ])(
+    "with only paid bills staying the staying line in %s says nothing to pay, with no amount",
+    async (locale, line) => {
+      setLocale(locale);
+      const el = await mountScreen({
+        bills: [partyBill("b1", 1, "0.00", { status: "settled" }), partyBill("b2", 2, "40.00")],
+        splitRead: read({ b2: [dish("wine", 5, "40.00")] }, { b2: "40.00" }),
+      });
+      await toPanel(el);
+
+      await tickBill(el, "b2");
+
+      expect(textOf(el, "[data-split-keeps]")).toBe(line);
+    },
+  );
+
+  it.each([
+    ["en-GB", "T7 keeps Bill 2 · €40.00"],
+    ["es-ES", `T7 se queda con Cuenta 2 · ${formatMoney(decimal("40.00"), "es-ES")}`],
+  ])(
+    "a paid bill beside one with an amount owing leaves the staying line's amount in %s",
+    async (locale, line) => {
+      setLocale(locale);
+      const el = await mountScreen({
+        bills: [
+          partyBill("b1", 1, "0.00", { status: "settled" }),
+          partyBill("b2", 2, "40.00"),
+          partyBill("b3", 3, "9.00"),
+        ],
+        splitRead: read(
+          { b2: [dish("wine", 5, "40.00")], b3: [dish("beer", 6, "9.00")] },
+          { b2: "40.00", b3: "9.00" },
+        ),
+      });
+      await toPanel(el);
+
+      await tickBill(el, "b3");
+
+      expect(textOf(el, "[data-split-keeps]")).toBe(line.replace(/\s+/g, " "));
+    },
+  );
+
+  it("a pick left on a bill that has since been paid still shows the rest of that bill and its amount", async () => {
     const el = await mountScreen({
-      bills: [partyBill("b1", 1, "0.00", { status: "settled" }), partyBill("b2", 2, "40.00")],
-      splitRead: read({ b2: [dish("wine", 5, "40.00")] }, { b2: "40.00" }),
+      bills: [partyBill("b1", 1, "30.00", { status: "settled" }), partyBill("b2", 2, "40.00")],
+      splitRead: read(
+        {
+          b1: [dish("soup", 1, "10.00"), dish("salad", 2, "20.00")],
+          b2: [dish("wine", 5, "40.00")],
+        },
+        { b1: "30.00", b2: "40.00" },
+      ),
     });
     await toPanel(el);
 
     await tickBill(el, "b2");
+    await pickDish(el, "b1", "soup");
 
-    expect(textOf(el, "[data-split-keeps]")).toBe("T7 keeps nothing to pay · €0.00");
+    expect(textOf(el, "[data-split-keeps]")).toBe("T7 keeps the rest of Bill 1 · €20.00");
   });
 
-  it("with no bill staying and none paid the staying line says an empty bill", async () => {
-    const el = await mountScreen({
-      bills: [partyBill("b2", 2, "40.00")],
-      splitRead: read({ b2: [dish("wine", 5, "40.00")] }, { b2: "40.00" }),
-    });
-    await toPanel(el);
+  it.each([
+    ["en-GB", "T7 keeps an empty bill · €0.00"],
+    ["es-ES", `T7 se queda con una cuenta vacía · ${formatMoney(decimal("0.00"), "es-ES")}`],
+  ])(
+    "with no bill staying and none paid the staying line in %s says an empty bill, with its amount",
+    async (locale, line) => {
+      setLocale(locale);
+      const el = await mountScreen({
+        bills: [partyBill("b2", 2, "40.00")],
+        splitRead: read({ b2: [dish("wine", 5, "40.00")] }, { b2: "40.00" }),
+      });
+      await toPanel(el);
 
-    await tickBill(el, "b2");
+      await tickBill(el, "b2");
 
-    expect(textOf(el, "[data-split-keeps]")).toBe("T7 keeps an empty bill · €0.00");
-  });
+      expect(textOf(el, "[data-split-keeps]")).toBe(line.replace(/\s+/g, " "));
+    },
+  );
 
   it("the new-bill note shows only while a loose dish is ticked", async () => {
     const el = await mountScreen();
@@ -534,9 +593,7 @@ describe("Split a table's panel", () => {
     expect(q(el, "[data-split-new-bill-note]")).toBeNull();
 
     await pickDish(el, "b1", "soup");
-    expect(textOf(el, "[data-split-new-bill-note]")).toBe(
-      fill(t("table.split_new_bill_note"), { table: "T8" }),
-    );
+    expect(textOf(el, "[data-split-new-bill-note]")).toBe("Single dishes go on a new bill at T8.");
 
     await pickDish(el, "b1", "soup");
     expect(q(el, "[data-split-new-bill-note]")).toBeNull();
