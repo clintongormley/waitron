@@ -43,6 +43,7 @@ async function artifact(
   name: string,
   limit = 1024 * 1024,
   json = true,
+  fingerprint = true,
 ): Promise<FirstSetupArtifact> {
   let handle;
   try {
@@ -54,6 +55,7 @@ async function artifact(
     );
     const info = await handle.stat();
     if (!info.isFile() || info.size > limit) return { name, status: "unreadable" };
+    if (!fingerprint) return { name, status: "present" };
     const bytes = await handle.readFile();
     if (bytes.length > limit) return { name, status: "unreadable" };
     const value = { name, digest: digest(bytes) };
@@ -120,10 +122,18 @@ export function createFirstSetupResolutionInspection(
   },
 ) {
   const service = {
+    async inspectFirstSetupDatabase(requiredSets: readonly string[] = []) {
+      return inspectDatabase(
+        options,
+        await artifact(options.venueDir, "venue.db", Infinity, false, false),
+        options.migrationsRoot ?? null,
+        [...(options.expectedMigrationSets ?? []), ...requiredSets],
+      );
+    },
     async recheckEmptyDatabase(roots: FirstSetupRoots, requiredSets: readonly string[]) {
       const inspected = await inspectDatabase(
         roots,
-        await artifact(roots.venueDir, "venue.db", 128 * 1024 * 1024, false),
+        await artifact(roots.venueDir, "venue.db", Infinity, false, false),
         options.migrationsRoot ?? null,
         [...(options.expectedMigrationSets ?? []), ...requiredSets],
       );
@@ -252,14 +262,8 @@ export function createFirstSetupResolutionInspection(
       }
       // SQLite can create an empty WAL while inspecting a closed WAL-mode database.
       // Fingerprint the files after that connection closes so its own read does not stale the ID.
-      const { database, emptyDatabase } = await inspectDatabase(
-        options,
-        await artifact(options.venueDir, "venue.db", 128 * 1024 * 1024, false),
-        options.migrationsRoot ?? null,
-        [
-          ...(options.expectedMigrationSets ?? []),
-          ...(repair?.state.frozen.modules.map((entry) => entry.module) ?? []),
-        ],
+      const { database, emptyDatabase } = await service.inspectFirstSetupDatabase(
+        repair?.state.frozen.modules.map((entry) => entry.module),
       );
       const artifacts: FirstSetupArtifact[] = [];
       const physicalSources: (string | null)[] = [];

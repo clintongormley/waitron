@@ -693,6 +693,32 @@ after a reload during the box's wait (read, not run: `#select(true)` in `first-h
   the marker cases titled "beside an A731 journal" to expect `setup.workspace_unsupported`. Left open
   by A1131bc slice 4 (#2461's convention review).
 
+## Recovery operations still buffer whole database files
+
+A1334 separates ordinary first-setup admission from exact recovery snapshots. The remaining
+whole-file reads are separate work:
+
+- `packages/provisioning/src/first-setup-resolution-inspection.ts` fingerprints `venue.db` and its
+  WAL for the repair inspection and captures originals with `readFile`. Each database artifact is
+  capped at 128 MiB. The resolution archive in `first-setup-resolution.ts` also caps total original
+  bytes at 128 MiB. Keep content-change detection and the archive's validation when replacing
+  those buffers. A1159's Start again work remains open.
+- `packages/provisioning/src/first-setup-start-again-deletion.ts` (`sha256`) reads whole files for
+  deletion markers, including `venue.db`, `node.db` and their WALs. `fingerprintAgainst` avoids the
+  read when the size differs; equal-size files are still hashed through a whole buffer. Preserve
+  the same-size replacement refusal when streaming these hashes.
+- `apps/server/src/cloud-snapshot-archive.ts` snapshots `venue.db`, caps the copy at 512 MiB,
+  then reads it whole before packing and encrypting the archive. Cloud recovery downloads also
+  collect an archive of up to 512 MiB in memory (`cloud-recovery.ts`). Setup recovery uploads buffer
+  archives within their 256 MiB upload limit (`setup-api.ts`, `setup-recovery-preparation-api.ts`).
+  These are transfer limits and buffers, not ordinary-start database admission.
+
+Local scheduled backups and local file restoration already pass files and stream database chunks;
+see [the developer convention](../developers/conventions-data.md#local-backup-and-restore-pass-database-files).
+This inventory comes from following source reads, not large-file runtime qualification of these
+remaining paths. Next: exercise each operation above its current buffer budget before replacing
+that operation's reader. Do not remove exact-content checks to make a large file fit.
+
 ## Decisions and deliberate limits
 
 - **A reload between the deletion and Reconnect forgets which button was pressed (A1131bc slice 3,

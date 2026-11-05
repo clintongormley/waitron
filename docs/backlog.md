@@ -479,6 +479,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 ### The setup wizard, onboarding and the demo venue
 
+- **Recovery operations still buffer whole database files.** First-setup repair snapshots retain
+  their 128 MiB budget; Start again's deletion fingerprints and Cloud snapshot creation also read
+  whole database files. Replace these buffers with file-based processing while preserving their
+  exact-content checks. Ordinary first-setup admission no longer uses these snapshots.
+  [Detail](backlog/setup.md#recovery-operations-still-buffer-whole-database-files).
+
 - **A1322. A failed setup always offers Start again; remove "Continue with your setup password" (owner, 2026-11-04).**
   Today, once a setup has saved the settings the box sells with, Start again is refused and Continue is the only choice, so a lost password means reinstalling.
   Remove Continue and its password step, and let Start again delete such a setup, still refusing when the database holds an invoice or another record Waitron never deletes.

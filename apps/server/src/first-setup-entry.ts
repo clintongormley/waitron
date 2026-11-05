@@ -31,20 +31,20 @@ import { START_FREE_SPACE_FLOOR, lowestFreeBytes } from "./start-space.js";
 async function needsResolution(host: ReturnType<typeof createFirstSetupModuleHost>) {
   const pair = await host.store.readResumable();
   if (pair === null) return { claimed: false, unresolved: false };
-  const inspection = await host.resolution.inspectFirstSetupResolution();
-  const unresolved =
-    inspection.pair !== "valid" ||
-    (pair.publicationComplete
-      ? inspection.database !== "occupied"
-      : inspection.database !== "no-venue-rows" ||
-        [
-          "activation-started",
-          "committed",
-          "publication",
-          "complete",
-          "uncertain",
-          "abandoned",
-        ].includes(pair.state.status));
+  const inspection = await host.resolution.inspectFirstSetupDatabase(
+    pair.state.frozen.modules.map((entry) => entry.module),
+  );
+  const unresolved = pair.publicationComplete
+    ? inspection.database !== "occupied"
+    : inspection.database !== "no-venue-rows" ||
+      [
+        "activation-started",
+        "committed",
+        "publication",
+        "complete",
+        "uncertain",
+        "abandoned",
+      ].includes(pair.state.status);
   return { claimed: true, unresolved };
 }
 

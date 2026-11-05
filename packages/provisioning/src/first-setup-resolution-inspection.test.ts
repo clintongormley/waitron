@@ -754,3 +754,14 @@ it("does not repair the marker after evidence changes immediately before its unu
   expect(await readFile(f.markerPath)).toEqual(before);
   expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(state);
 });
+
+it("classifies a valid database above 128 MiB without treating the snapshot budget as unreadability", async () => {
+  const f = await fixture("active");
+  await truncate(join(f.venueDir, "venue.db"), 128 * 1024 * 1024 + 4096);
+  const inspected = await f.service.inspectFirstSetupResolution();
+  expect(inspected.database).toBe("no-venue-rows");
+  expect(inspected.emptyDatabase).toBe(true);
+  await expect(f.service.captureFirstSetupOriginals()).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+});

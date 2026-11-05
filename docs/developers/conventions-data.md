@@ -5783,3 +5783,36 @@ _2026-11-04, A1131bc slice 4: the discarded recovery's emptying, the repair page
   `docs/backlog.md` → _Replication, membership & failover — residuals_. Detail:
   [conventions-data.md](conventions-data.md).
 
+
+
+## First-setup admission reads SQLite facts without a database-sized snapshot
+
+Use `inspectFirstSetupDatabase` for admission. It checks the regular file through a no-follow,
+nonblocking open, then reads the tenant and venue rows through SQLite. The resumable record reader
+checks the matching ownership pair; the start repeats admission while holding the venue lock.
+Recovery inspection still fingerprints artifacts and captures exact originals under its separate
+128 MiB snapshot budget. That budget must not decide whether an existing database is readable.
+
+Measured on 5 November 2026 with `pnpm --filter @waitron/server exec vitest run
+src/first-setup-growth.test.ts`: real HTTPS first setup completed, its records remained complete,
+and a 3,715,072-byte database restarted in trading mode. Inserting 124 synthetic 1 MiB image blobs
+into the existing image table grew it to 134,590,464 bytes; SQLite's quick check returned `ok`.
+Before the fix, the next start served setup status (HTTP 200) where trading mode has no setup
+endpoint (HTTP 404). After the fix, two large-file restarts reach trading mode and health answers
+200. A further small-file restart and both large-file restarts forbid application `readFile` and
+`createReadStream` calls on the database and its WAL. The test substitutes certificate validation,
+AEAT clock/readiness responses and submission, and suppresses the publication's process stop;
+setup, files, SQLite, entry routing and trading boot remain real. It sends no external filing.
+
+A separate four-photo probe ran real `prepareImage` and `uploadImage` writes. Four independent
+1600×1600 random-noise PNGs produced 7,018,348 stored WebP bytes, growing the checkpointed database
+from 3,715,072 to 10,735,616 bytes. That measures 7,020,544 bytes of database growth for those four
+high-detail test photos, not a venue's average photo size or days to failure. The executable probe
+and output stay in Lane F's local A1334 receipts. The committed growth test uses synthetic blobs
+to cross the size boundary quickly; it does not measure photo preparation throughput.
+
+Run `pnpm --filter @waitron/provisioning exec vitest run
+src/first-setup-resolution-inspection.test.ts` for damaged/missing/symlink refusal checks, inspection
+fingerprints and snapshot limits. A large valid database is classified from its SQLite rows even
+when its exact recovery snapshot is over budget. Remaining whole-file recovery reads are tracked
+in [the setup backlog](../backlog/setup.md#recovery-operations-still-buffer-whole-database-files).
