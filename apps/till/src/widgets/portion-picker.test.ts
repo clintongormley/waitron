@@ -110,6 +110,28 @@ describe("till-portion-picker", () => {
     expect(customElements.get("till-portion-picker")).toBe(TillPortionPicker);
   });
 
+  it("a stepper button that reaches its limit hands focus to the other, keeping the keyboard in the picker", async () => {
+    const { el } = await picker(CANAS);
+    await userEvent.click(tick(el, "c1"));
+    await el.updateComplete;
+    const pressStepper = async (button: HTMLElement) => {
+      button.focus();
+      await userEvent.keyboard("{Enter}");
+      await el.updateComplete;
+    };
+    await pressStepper(dec(el, "c1")!);
+    await pressStepper(dec(el, "c1")!);
+    expect(el.shadowRoot!.activeElement).toBe(dec(el, "c1"));
+    await pressStepper(dec(el, "c1")!);
+    expect(disabled(dec(el, "c1"))).toBe(true);
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(inc(el, "c1"));
+    await pressStepper(inc(el, "c1")!);
+    await pressStepper(inc(el, "c1")!);
+    await pressStepper(inc(el, "c1")!);
+    expect(disabled(inc(el, "c1"))).toBe(true);
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(dec(el, "c1"));
+  });
+
   it("A803 picker: ticking a grouped row of four emits all four, bubbling and composed", async () => {
     const { el, emitted, last } = await picker(CANAS);
     expect(el.shadowRoot!.querySelectorAll('input[type="checkbox"]')).toHaveLength(1);

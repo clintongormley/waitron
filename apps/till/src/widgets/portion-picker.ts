@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { baseStyles, formatDecimalInput } from "@waitron/ui";
@@ -138,6 +138,19 @@ export class TillPortionPicker extends LitElement {
   @property({ attribute: false }) nameOf: (line: TabLine) => string = (line) => line.name ?? "";
   @property({ attribute: false }) money: (amount: string) => string = (amount) => amount;
 
+  /** The other stepper button, once this press has moved the picks: the pressed one is disabled at
+   * its limit, which would drop focus to the page. */
+  #stepperFocus?: string;
+
+  override updated(changed: PropertyValues<this>): void {
+    if (!changed.has("picks") || this.#stepperFocus === undefined) return;
+    const button = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      this.#stepperFocus,
+    );
+    this.#stepperFocus = undefined;
+    void button?.updateComplete.then(() => button.focus());
+  }
+
   #emit(next: Picks): void {
     this.dispatchEvent(
       new CustomEvent("portion-picks", {
@@ -230,7 +243,10 @@ export class TillPortionPicker extends LitElement {
         data-pick-dec=${id}
         aria-label=${`${t("basket.decrease")} ${name}`}
         ?disabled=${count <= 1}
-        @click=${() => this.#emit(setCount(row, count - 1, this.picks))}
+        @click=${() => {
+          if (count - 1 <= 1) this.#stepperFocus = `[data-pick-inc="${CSS.escape(id)}"]`;
+          this.#emit(setCount(row, count - 1, this.picks));
+        }}
       >
         <span aria-hidden="true">−</span>
       </wt-button>
@@ -246,7 +262,10 @@ export class TillPortionPicker extends LitElement {
         aria-label=${`${t("basket.increase")} ${name}`}
         aria-description=${count >= row.limit && reason !== "" ? reason : nothing}
         ?disabled=${count >= row.limit}
-        @click=${() => this.#emit(setCount(row, count + 1, this.picks))}
+        @click=${() => {
+          if (count + 1 >= row.limit) this.#stepperFocus = `[data-pick-dec="${CSS.escape(id)}"]`;
+          this.#emit(setCount(row, count + 1, this.picks));
+        }}
       >
         <span aria-hidden="true">+</span>
       </wt-button>
