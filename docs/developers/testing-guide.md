@@ -1538,10 +1538,21 @@ and 2 GiB aim can never be met, so the file passes `spaceFloorBytes` 1 MiB and `
 **A fifth real-disk file checks that a spare's leftover copy does not keep out the next one.**
 `apps/server/src/handover-refetch-full-disk.e2e.test.ts` runs the spare's handover duty with its
 state folder on a small disk that has room for one 4 MiB copy and holds a leftover `accepted.db`:
-the file goes, the copy fits and the operation reaches `copy_accepted`. Its control leaves room for
-half a copy, and the disk refuses with `ENOSPC`. The comparison is a stand-in and the old box's copy
-route a stub; the disk is what it is about. It calls `openSmallDisk("WAITRON_FULL_DISK_DIR_HANDOVER", 32)`,
-and CI mounts a fifth 32 MiB tmpfs at `$RUNNER_TEMP/full-disk-handover` in the same step.
+the file goes, the copy fits, the operation reaches `copy_accepted`, and with no room to place the
+copy it waits on `handover.no_room_to_place` rather than ask the old box to give up filing. Its
+control leaves room for half a copy, and the disk refuses with `ENOSPC`. The comparison is a stand-in
+and the old box's copy route a stub; the disk is what it is about. It calls
+`openSmallDisk("WAITRON_FULL_DISK_DIR_HANDOVER", 32)`, and CI mounts a fifth 32 MiB tmpfs at
+`$RUNNER_TEMP/full-disk-handover` in the same step.
+
+**A sixth real-disk file checks what a spare says when placing runs out of room.**
+`apps/server/src/handover-placement-full-disk.e2e.test.ts` runs production's entry, with a real
+start, over a box whose venue and state folders are on a small disk. A 24 MiB accepted copy, with
+20 MiB free and then with 2 MiB free, ends in `handover.placement_no_room` and its page, and the next
+start with room places. Over 16 MiB free the partial copy's removal leaves too much room for the
+start's own full-disk check to name the failure. It calls
+`openSmallDisk("WAITRON_FULL_DISK_DIR_PLACEMENT", 64)`, and CI mounts a sixth tmpfs, 64 MiB, at
+`$RUNNER_TEMP/full-disk-placement` in the same step.
 
 **A test that runs a backup through the supervisor or boot depends on the machine's free disk.**
 The supervisor passes the run no floor or aim, so the product's defaults apply: below the need plus
@@ -3527,8 +3538,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 - **Full-disk tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
   needs `WAITRON_FULL_DISK_DIR` (and `WAITRON_FULL_DISK_DIR_START_AGAIN`,
-  `WAITRON_FULL_DISK_DIR_FROM_SPARE`, `WAITRON_FULL_DISK_DIR_BACKUP_ROOM` and
-  `WAITRON_FULL_DISK_DIR_HANDOVER` for the second to fifth files: two files filling one filesystem could fail each other, as the server's `maxWorkers: 4` can
+  `WAITRON_FULL_DISK_DIR_FROM_SPARE`, `WAITRON_FULL_DISK_DIR_BACKUP_ROOM`,
+  `WAITRON_FULL_DISK_DIR_HANDOVER` and `WAITRON_FULL_DISK_DIR_PLACEMENT` for the second to sixth files: two files filling one filesystem could fail each other, as the server's `maxWorkers: 4` can
   run them at once), otherwise skips locally and fails CI. Interrupted
   macOS images can remain attached; `pnpm reap` does not detach them. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text.

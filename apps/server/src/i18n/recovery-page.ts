@@ -326,12 +326,24 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": {
       title: "This box could not put the copy of the venue it accepted in place.",
       action:
-        "This is a fault in Waitron or this box's disk. The copy is kept and each start tries again. The old box has given up filing and stays stopped. Press “Retry a normal boot” to try now.",
+        "This is a fault in Waitron or this box's disk. The copy is kept. The old box has given up filing and stays stopped. Press “Retry a normal boot” to try again.",
     },
     "es-ES": {
       title: "Este equipo no pudo poner en su sitio la copia del local que aceptó.",
       action:
-        "Es un fallo de Waitron o del disco de este equipo. La copia se conserva y cada arranque lo vuelve a intentar. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» para intentarlo ahora.",
+        "Es un fallo de Waitron o del disco de este equipo. La copia se conserva. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» para volver a intentarlo.",
+    },
+  },
+  "handover.placement_no_room": {
+    "en-GB": {
+      title: "This box's disk has no room for the copy of the venue it accepted.",
+      action:
+        "It needs room for one more whole copy of the venue, and the details below say how many bytes. Waitron cannot free more space by itself. The copy is kept. The old box has given up filing and stays stopped. Press “Retry a normal boot” to try again.",
+    },
+    "es-ES": {
+      title: "El disco de este equipo no tiene sitio para la copia del local que aceptó.",
+      action:
+        "Necesita sitio para otra copia entera del local, y los detalles de abajo indican cuántos bytes. Waitron no puede liberar más espacio por sí solo. La copia se conserva. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» para volver a intentarlo.",
     },
   },
   "restore.placement_failed": {

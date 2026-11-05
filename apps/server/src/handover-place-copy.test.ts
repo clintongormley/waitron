@@ -14,7 +14,7 @@ import {
 } from "node:fs";
 import { chmod, copyFile, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
@@ -43,9 +43,11 @@ import {
   placeAcceptedCopyAtStart,
   placeAcceptedCopyForStart,
   recordCopyPlaced,
+  removePlacedCopies,
   type PlacementSteps,
 } from "./handover-place-copy.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
+import type { Logger } from "./logger.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const SOURCE = "11111111-1111-4111-8111-111111111111";
@@ -156,7 +158,11 @@ describe("placeAcceptedCopyAtStart", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
   const storeDeps = () => ({ node: suite.node, nodeId: NODE });
 
-  async function recordIndicator(sha256: string, withRevision: boolean): Promise<void> {
+  async function recordIndicator(
+    sha256: string,
+    bytes: number,
+    withRevision: boolean,
+  ): Promise<void> {
     const nodeLocal: NodeLocalItem[] = [
       { item: "backup.env", where: "state", class: "transferred", treatment: "x", sha256: null },
       { item: "modules.json", where: "state", class: "transferred", treatment: "x", sha256: null },
@@ -178,7 +184,7 @@ describe("placeAcceptedCopyAtStart", () => {
     const envelope = signIndicator(
       {
         binding: BINDING,
-        snapshot: { sha256, bytes: 1, schema: [], modules: [] },
+        snapshot: { sha256, bytes, schema: [], modules: [] },
         nodeLocal,
         modulesSummary: {},
         capturedAtMs: 1,
@@ -223,7 +229,7 @@ describe("placeAcceptedCopyAtStart", () => {
 
     const { mode = "mirror", state = "filing_assumed", withRevision = true } = options;
     await beginHandover(storeDeps(), BINDING, "destination");
-    await recordIndicator(sha(accepted), withRevision);
+    await recordIndicator(sha(accepted), statSync(accepted).size, withRevision);
     await advanceHandover(storeDeps(), OP, "copy_accepted", {});
     if (state === "filing_assumed") await advanceHandover(storeDeps(), OP, "filing_assumed", {});
     if (mode !== null) {
@@ -395,15 +401,44 @@ describe("placeAcceptedCopyAtStart", () => {
       expect(existsSync(b.accepted)).toBe(true);
     });
 
-    it("ENOSPC stays itself, so the start's own check names a full disk", async () => {
+    it.each([
+      ["copying", { fs: { copyFile: () => Promise.reject(failing("ENOSPC")) } }],
+      ["merging the selections", { merge: () => Promise.reject(failing("ENOSPC")) }],
+    ])(
+      "ENOSPC while %s refuses with handover.placement_no_room, naming the bytes, whatever the disk reads after",
+      async (_step, change) => {
+        const b = await box();
+
+        const error = await placeAcceptedCopyForStart({ ...b.args, ...change }).catch(
+          (caught: unknown) => caught,
+        );
+
+        expect(error).toMatchObject({
+          code: "handover.placement_no_room",
+          params: { neededBytes: statSync(b.accepted).size },
+        });
+        // Failing case: `unknown` on the second, whose disk has room once the partial copy is gone.
+        expect(classifyStartFailure(error, 1024)).toBe("handover.placement_no_room");
+        expect(classifyStartFailure(error, 20 * 1024 * 1024)).toBe("handover.placement_no_room");
+        expect(b.logged).toContainEqual({
+          level: "error",
+          message: "handover.place_copy.no_room",
+          detail: { neededBytes: statSync(b.accepted).size },
+        });
+        expect(existsSync(b.accepted)).toBe(true);
+      },
+    );
+
+    it("ENOSPC with no copy to make stays itself, for the start's own check of a full disk", async () => {
       const b = await box();
+      copyFileSync(b.accepted, b.live);
 
       const error = await placeAcceptedCopyForStart({
         ...b.args,
-        fs: { copyFile: () => Promise.reject(failing("ENOSPC")) },
+        fs: { reachDisk: () => Promise.reject(failing("ENOSPC")) },
       }).catch((caught: unknown) => caught);
 
-      // Failing case: `handover.placement_failed`, and the entry frees no space.
+      // Failing case, every ENOSPC converted: `handover.placement_no_room`, for no copy at all.
       expect(classifyStartFailure(error, 1024)).toBe("storage.disk_full");
     });
 
@@ -494,6 +529,140 @@ describe("placeAcceptedCopyAtStart", () => {
 
       expect(b.logged.map((line) => line.message)).toEqual(["handover.place_copy.remove_failed"]);
       expect(await readHandoverEvent(suite.node, NODE, OP, COPY_PLACED_EVENT)).not.toBeNull();
+    });
+  });
+
+  describe("what placing leaves behind", () => {
+    const record = (b: Awaited<ReturnType<typeof box>>) =>
+      recordCopyPlaced({
+        node: suite.node,
+        nodeId: NODE,
+        stateDir: b.stateDir,
+        operationId: OP,
+        log: b.args.log,
+      });
+    const sweep = (b: { stateDir: string; args: { log: Logger } }, node = suite.node) =>
+      removePlacedCopies({ node, nodeId: NODE, stateDir: b.stateDir, log: b.args.log });
+    const folderOf = (b: { accepted: string }) => dirname(b.accepted);
+    const recordEventOnly = () =>
+      withNodeTransaction(suite.node, (tx) =>
+        appendHandoverEventTx(tx, {
+          nodeId: NODE,
+          operationId: OP,
+          kind: COPY_PLACED_EVENT,
+          detail: {},
+          envelope: null,
+        }),
+      );
+
+    it("recording removes the operation's folder along with accepted.db", async () => {
+      const b = await box();
+      await record(b);
+      // Failing case, removing the file alone: an empty folder per handover, for ever.
+      expect(existsSync(folderOf(b))).toBe(false);
+      expect(b.logged).toEqual([]);
+    });
+
+    it("a crash after the event leaves a copy the next start removes, folder and all", async () => {
+      const b = await box();
+      await recordEventOnly();
+
+      await sweep(b);
+
+      // Failing case, no sweep: a whole venue's copy on the disk, with nothing to remove it.
+      expect(existsSync(b.accepted)).toBe(false);
+      expect(existsSync(folderOf(b))).toBe(false);
+      expect(b.logged).toEqual([]);
+    });
+
+    it("finds the event at any later state of the operation", async () => {
+      const b = await box();
+      await recordEventOnly();
+      await advanceHandover(storeDeps(), OP, "activated", {});
+
+      await sweep(b);
+
+      expect(existsSync(folderOf(b))).toBe(false);
+    });
+
+    it("an operation not yet placed keeps its copy", async () => {
+      const b = await box();
+
+      await sweep(b);
+
+      // Failing case, not reading the event: the copy a repeat of placing needs is gone.
+      expect(existsSync(b.accepted)).toBe(true);
+      expect(b.logged).toEqual([]);
+    });
+
+    it("a file that is not the copy keeps its folder and is left alone, with nothing logged", async () => {
+      const b = await box();
+      await recordEventOnly();
+      const other = join(folderOf(b), "return-1.json");
+      writeFileSync(other, "{}");
+
+      await sweep(b);
+
+      expect(existsSync(b.accepted)).toBe(false);
+      expect(readFileSync(other, "utf8")).toBe("{}");
+      expect(b.logged).toEqual([]);
+    });
+
+    it("a folder this box's source role keeps, or that no operation names, is left alone", async () => {
+      const stateDir = scratch();
+      const source = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+      await beginHandover(storeDeps(), { ...BINDING, operationId: source }, "source");
+      await withNodeTransaction(suite.node, (tx) =>
+        appendHandoverEventTx(tx, {
+          nodeId: NODE,
+          operationId: source,
+          kind: COPY_PLACED_EVENT,
+          detail: {},
+          envelope: null,
+        }),
+      );
+      const logged: unknown[] = [];
+      const kept = [source, "not-an-operation"].map((name) => join(stateDir, "handover", name));
+      for (const folder of kept) mkdirSync(folder, { recursive: true });
+
+      await sweep({ stateDir, args: { log: (...line) => logged.push(line) } });
+
+      expect(kept.map((folder) => existsSync(folder))).toEqual([true, true]);
+      expect(logged).toEqual([]);
+    });
+
+    it("no handover folder at all is no failure", async () => {
+      const logged: unknown[] = [];
+      await sweep({ stateDir: scratch(), args: { log: (...line) => logged.push(line) } });
+      expect(logged).toEqual([]);
+    });
+
+    it("a removal that fails is logged and does not stop the start", async () => {
+      const b = await box();
+      await recordEventOnly();
+      rmSync(b.accepted);
+      mkdirSync(join(b.accepted, "inside"), { recursive: true });
+
+      await sweep(b);
+
+      expect(b.logged).toEqual([
+        expect.objectContaining({
+          level: "error",
+          message: "handover.place_copy.remove_failed",
+          detail: expect.objectContaining({ operationId: OP }) as unknown,
+        }),
+      ]);
+    });
+
+    it("a node.db that cannot answer is logged and does not stop the start", async () => {
+      const b = await box();
+      const closed = await openVenueDatabase(b.venueDir);
+      await closed.close();
+
+      await sweep(b, closed.node);
+
+      expect(b.logged.map((line) => line.message)).toEqual(["handover.place_copy.sweep_failed"]);
+      expect(existsSync(b.accepted)).toBe(true);
     });
   });
 

@@ -5868,6 +5868,12 @@ Not in any track until the standalone primary is done.
   (`failed` in `apps/server/src/i18n/waiting-page.ts`). A refused disk write lands there too, so
   the wording is a judgement call. Left open by A1018 Slice 3.
 
+- **A spare learns it has no room to place the copy only after the old box has stopped selling.**
+  The duty does not post its acceptance without room for the copy and the start floor, and waits on
+  `handover.no_room_to_place` (`apps/server/src/handover-destination-duty.ts`), but the old box has
+  stepped down by then. Finding it while the old box still sells needs the old box's database size
+  in the offer. Left open by A1018 Slice 5 (Ruling R35).
+
 - **A handover's manifest has no row for the box's other state-folder files.** `recovery.json`,
   `setup-operation.json`, `restore-request.json`, `reset-request.json`, `cloud-replacement.json`,
   `backup-room-note.json`, `spare-space` and `<state>/handover/<operationId>/` are not in

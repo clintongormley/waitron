@@ -1474,8 +1474,16 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El archivo de preparación de módulos de este equipo no se puede leer o está demasiado lleno para añadir las selecciones del equipo antiguo, así que este equipo no ha puesto en su sitio la copia aceptada.",
   },
   "handover.placement_failed": {
-    en: "This box could not put the copy of the venue it accepted in place. The copy is kept and each start tries again.",
-    es: "Este equipo no pudo poner en su sitio la copia del local que aceptó. La copia se conserva y cada arranque lo vuelve a intentar.",
+    en: "This box could not put the copy of the venue it accepted in place. The copy is kept, and Retry tries again.",
+    es: "Este equipo no pudo poner en su sitio la copia del local que aceptó. La copia se conserva, y Reintentar lo vuelve a intentar.",
+  },
+  "handover.placement_no_room": {
+    en: "This box's disk has no room for the copy of the venue it accepted: it needs room for one more whole copy. The copy is kept, and Retry tries again.",
+    es: "El disco de este equipo no tiene sitio para la copia del local que aceptó: necesita sitio para otra copia entera. La copia se conserva, y Reintentar lo vuelve a intentar.",
+  },
+  "handover.no_room_to_place": {
+    en: "This box's disk has no room to put the accepted copy of the venue in place, so it has not asked the old box to give up filing. It asks once there is room. The old box stays stopped.",
+    es: "El disco de este equipo no tiene sitio para poner en su sitio la copia aceptada del local, así que no ha pedido al equipo antiguo que ceda el envío de registros. Lo pedirá cuando haya sitio. El equipo antiguo sigue detenido.",
   },
   "handover.accepted_copy_missing": {
     en: "The copy of the venue this box accepted is no longer on its disk, so this box cannot take over the venue.",

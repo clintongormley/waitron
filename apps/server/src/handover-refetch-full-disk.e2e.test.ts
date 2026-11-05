@@ -191,6 +191,7 @@ async function rig(small: SmallDisk, name: string) {
         ring: RING,
         nodeId: m2,
         stateDir,
+        venueDir: dirname(stateDir),
         log,
         restart: () => {},
         tickMs: 20,
@@ -222,6 +223,11 @@ it("a file left by a crash does not keep out the copy when the disk has room for
     "copy_accepted",
   );
   expect((await readFile(r.accepted)).equals(COPY)).toBe(true);
+  // With no room for the second copy that placing writes, it does not ask the old box to give up filing.
+  await vi.waitFor(
+    async () => expect((await r.row()).waitingReason).toBe("handover.no_room_to_place"),
+    { timeout: 15_000 },
+  );
 }, 60_000);
 
 it("control: a copy the disk has no room for is refused by the disk", async (ctx) => {

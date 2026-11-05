@@ -1,11 +1,11 @@
 import { createReadStream, existsSync } from "node:fs";
-import { chmod, copyFile, open, rename, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { chmod, copyFile, open, readdir, rename, rm, rmdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { lockVenueDatabase, withNodeTransaction, type NodeDatabase } from "@waitron/db";
 import { parseIndicator, type RetainedRevision } from "@waitron/handover";
 import { mergeModulePreparationRevisions } from "@waitron/provisioning";
-import { appendHandoverEventTx } from "@waitron/node-db";
+import { appendHandoverEventTx, readHandoverEvent, readHandoverOperation } from "@waitron/node-db";
 import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
 import { NODE_FILE, SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
@@ -161,6 +161,8 @@ export async function placeAcceptedCopyAtStart(args: {
   /** Tests inject failures here; production passes nothing. */
   fs?: Partial<PlacementSteps>;
   merge?: typeof mergeModulePreparationRevisions;
+  /** Told how many bytes the copy needs, once the steps that write begin. */
+  onWriting?: (neededBytes: number) => void;
 }): Promise<PlacementAtStart> {
   const { venueDir, stateDir, nodeId, log, fs, merge = mergeModulePreparationRevisions } = args;
   const steps: PlacementSteps = { copyFile, chmod, rm, rename, reachDisk, ...fs };
@@ -193,6 +195,7 @@ export async function placeAcceptedCopyAtStart(args: {
     // given up filing, so what is placed now is what this box files from.
     if (held !== sha256) throw new AppError("handover.copy_mismatch", {});
 
+    args.onWriting?.(indicator.snapshot.bytes);
     await mergeSelections(
       merge,
       stateDir,
@@ -213,28 +216,80 @@ export async function placeAcceptedCopyAtStart(args: {
 }
 
 /**
- * {@link placeAcceptedCopyAtStart} as a start runs it: a file step that failed becomes
- * `handover.placement_failed`, whose page says the copy is kept and each start tries again. ENOSPC
- * stays itself so the start's own check can name a full disk and free space, and a failure reading
- * `node.db` stays itself because the copy was never reached.
+ * {@link placeAcceptedCopyAtStart} as a start runs it. A disk out of room while it writes becomes
+ * `handover.placement_no_room`: free space read after the failure cannot name it, as the partial
+ * copy is gone by then. Any other file step that failed becomes `handover.placement_failed`. An
+ * ENOSPC with no copy to make, and a failure reading `node.db`, stay themselves.
  */
 export async function placeAcceptedCopyForStart(
   args: Parameters<typeof placeAcceptedCopyAtStart>[0],
 ): Promise<PlacementAtStart> {
+  let neededBytes: number | undefined;
   try {
-    return await placeAcceptedCopyAtStart(args);
+    return await placeAcceptedCopyAtStart({
+      ...args,
+      onWriting: (bytes) => {
+        neededBytes = bytes;
+      },
+    });
   } catch (error) {
     const errno = errnoOf(error);
+    if (errno === "ENOSPC" && neededBytes !== undefined) {
+      args.log("error", "handover.place_copy.no_room", { neededBytes });
+      throw new AppError("handover.placement_no_room", { neededBytes });
+    }
     if (errno === undefined || errno === "ENOSPC" || sqliteFailureOf(error) !== null) throw error;
     args.log("error", "handover.place_copy.failed", { errno });
     throw new AppError("handover.placement_failed", { errno });
   }
 }
 
+/** A failure is logged: it must not stop a box that holds its copy from starting. */
+async function removeAcceptedCopy(
+  stateDir: string,
+  operationId: string,
+  log: Logger,
+): Promise<void> {
+  const accepted = acceptedCopyPath(stateDir, operationId);
+  try {
+    await rm(accepted, { force: true });
+    // The folder may hold this operation's other files, which are not this step's to remove.
+    await rmdir(dirname(accepted)).catch((error: unknown) => {
+      if (errnoOf(error) !== "ENOTEMPTY") throw error;
+    });
+  } catch (error) {
+    log("error", "handover.place_copy.remove_failed", { operationId, errno: errnoOf(error) });
+  }
+}
+
 /**
- * The event goes first: a crash before the removal leaves a spare file nothing reads, and the other
- * order would leave a repeat of placing with nothing to place from. A failed removal must not stop
- * a box that holds its copy from starting, so it is logged and the start goes on.
+ * For a start with no copy to place: a crash between recording `copy_placed` and the removal, or a
+ * removal that failed, leaves a whole venue's copy nothing reads. Judged by the event, so this holds
+ * at whichever state the operation has reached since.
+ */
+export async function removePlacedCopies(args: {
+  node: NodeDatabase;
+  nodeId: string;
+  stateDir: string;
+  log: Logger;
+}): Promise<void> {
+  const { node, nodeId, stateDir, log } = args;
+  try {
+    const names = await readdir(join(stateDir, "handover")).catch(() => []);
+    for (const name of names) {
+      const row = await readHandoverOperation(node, nodeId, name);
+      if (row?.role !== "destination") continue;
+      const placed = await readHandoverEvent(node, nodeId, name, COPY_PLACED_EVENT);
+      if (placed !== null) await removeAcceptedCopy(stateDir, name, log);
+    }
+  } catch (error) {
+    log("error", "handover.place_copy.sweep_failed", { error: String(error) });
+  }
+}
+
+/**
+ * The event goes first: a crash before the removal leaves a file {@link removePlacedCopies} removes,
+ * and the other order would leave a repeat of placing with nothing to place from.
  */
 export async function recordCopyPlaced(args: {
   node: NodeDatabase;
@@ -253,7 +308,5 @@ export async function recordCopyPlaced(args: {
       envelope: null,
     }),
   );
-  await rm(acceptedCopyPath(stateDir, operationId), { force: true }).catch((error: unknown) =>
-    log("error", "handover.place_copy.remove_failed", { operationId, errno: errnoOf(error) }),
-  );
+  await removeAcceptedCopy(stateDir, operationId, log);
 }

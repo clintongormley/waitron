@@ -1,4 +1,4 @@
-import { access, mkdir, readdir, rm } from "node:fs/promises";
+import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -6,6 +6,7 @@ import type { KeyRing } from "@waitron/credentials";
 import { readNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
 import type { CanonicalValue, RoutableServer } from "@waitron/membership";
 import {
+  readHandoverEvent,
   readHandoverOperation,
   readMirrorLink,
   readNodeMode,
@@ -21,12 +22,15 @@ import {
   verifiedRelinquishment,
 } from "./handover-acceptance.js";
 import type { CompareOptions, CompareOutcome, CopyFileChecks } from "./handover-compare.js";
+import type { Statfs } from "./free-bytes.js";
+import { COPY_PLACED_EVENT } from "./handover-place-copy.js";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { advanceHandover, waitHandover } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { boxDownload, boxExchange } from "./mirror-bundle-fetch.js";
 import type { PeerQueryPurpose, PeerStatusBody } from "./peer-status-api.js";
 import { isLoopbackHost } from "./primary-url.js";
+import { lowestFreeBytes, START_FREE_SPACE_FLOOR } from "./start-space.js";
 import "./errors.js";
 
 const TICK_MS = 5000;
@@ -80,9 +84,12 @@ export interface DestinationDutyDeps {
   ring: KeyRing;
   nodeId: string;
   stateDir: string;
+  venueDir: string;
   log: Logger;
   /** The start that follows `filing_assumed` is what places the accepted copy. */
   restart: () => void;
+  /** For the check of room to place the copy; a real read unless named. */
+  statfs?: Statfs;
   tickMs?: number;
   /** How long a download may go without a byte before it is given up on. */
   silenceLimitMs?: number;
@@ -179,8 +186,9 @@ function refusalReason(
  * The spare's one duty for a handover it was offered: it reads the old box's signed status, closes
  * when that box reports the operation abandoned, and otherwise fetches the indicator and the final
  * copy, one attempt at a time, until it holds them. Once a copy is accepted it posts the stored
- * acceptance until the old box's relinquishment passes its checks. Started only on a mirror:
- * anywhere else `undefined`.
+ * acceptance, once the disk has room to place the copy, until the old box's relinquishment passes
+ * its checks, and then asks for the restart that places it until that start has run. Started only on
+ * a mirror: anywhere else `undefined`.
  */
 export async function startHandoverDestinationDuty(
   deps: DestinationDutyDeps,
@@ -412,11 +420,18 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
   async function postAcceptance(operation: HandoverOperation): Promise<void> {
     const { operationId } = operation;
     // Told to give up filing, the old box would stop for good with this box unable to take over.
-    const fileThere = await access(acceptedCopyPath(deps.stateDir, operationId)).then(
-      () => true,
-      () => false,
+    const copyBytes = await stat(acceptedCopyPath(deps.stateDir, operationId)).then(
+      (found) => found.size,
+      () => null,
     );
-    if (!fileThere) return waitOn(operation, "handover.accepted_copy_missing");
+    if (copyBytes === null) return waitOn(operation, "handover.accepted_copy_missing");
+    // Placing keeps the old database and the accepted copy while it writes a third file. A disk that
+    // cannot say how much it has free is not taken as having room: this is the step with no way back.
+    const neededBytes = copyBytes + START_FREE_SPACE_FLOOR;
+    const availableBytes = await lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs);
+    if (availableBytes === null || availableBytes < neededBytes) {
+      return waitOn(operation, "handover.no_room_to_place", { neededBytes, availableBytes });
+    }
     const address = await sourceAddress(operation);
     if (address === undefined) {
       return waitOn(operation, "handover.source_unreachable");
@@ -511,8 +526,37 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     return true;
   }
 
+  /** Whether the old box has given up filing to this box and the start that places the copy has not run. */
+  async function placingStartOwed(): Promise<string | null> {
+    const { mode } = await readNodeMode(deps.node, deps.nodeId);
+    if (mode !== "mirror") return null;
+    const operation = await readOpenHandoverOperation(deps.node, deps.nodeId);
+    if (
+      operation?.role !== "destination" ||
+      operation.scenario !== "controlled" ||
+      operation.state !== "filing_assumed"
+    ) {
+      return null;
+    }
+    const placed = await readHandoverEvent(
+      deps.node,
+      deps.nodeId,
+      operation.operationId,
+      COPY_PLACED_EVENT,
+    );
+    return placed === null ? operation.operationId : null;
+  }
+
   async function pass(): Promise<boolean> {
     await removeClosedFolders();
+    // A start that places records the event before this duty runs, so this cannot loop; a restart
+    // sent before the shutdown handlers are in, on a box where Node is process 1, does nothing.
+    const owed = await placingStartOwed();
+    if (owed !== null) {
+      deps.log("warn", "handover-destination.restart_asked_again", { operationId: owed });
+      deps.restart();
+      return true;
+    }
     const operation = await workToDo();
     if (operation === null) return false;
     if (operation.state === "copy_accepted") {

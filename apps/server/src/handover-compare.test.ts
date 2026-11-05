@@ -10,7 +10,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type RequestListener, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -55,6 +55,7 @@ import {
 import { imageMigrationHashes, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
 import {
+  appendHandoverEventTx,
   readHandoverEvent,
   readHandoverOperation,
   readHandoverRestriction,
@@ -76,6 +77,7 @@ import {
   startHandoverDestinationDuty,
   type DestinationDutyDeps,
 } from "./handover-destination-duty.js";
+import { COPY_PLACED_EVENT } from "./handover-place-copy.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { advanceHandover, beginHandover, beginHandoverFromOffer } from "./handover-store.js";
 import type { Logger } from "./logger.js";
@@ -83,6 +85,7 @@ import { boxDownload } from "./mirror-bundle-fetch.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
+import { START_FREE_SPACE_FLOOR } from "./start-space.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 
 const integrityThreads = vi.hoisted(() => ({ paths: [] as string[] }));
@@ -1176,6 +1179,7 @@ describe("the spare's duty runs the real comparison", () => {
         ring: RING,
         nodeId: r.m2.nodeId,
         stateDir: r.m2State,
+        venueDir: dirname(r.m2State),
         log,
         restart: () => {},
         tickMs: 20,
@@ -1183,7 +1187,7 @@ describe("the spare's duty runs the real comparison", () => {
           compareFinalCopy(r.deps, operation, indicator, path, options),
         ...overrides,
       });
-      closers.push(() => duty!.stop());
+      closers.push(() => duty?.stop() ?? Promise.resolve());
       return duty;
     };
     /** As boot starts it, past accepting. The plain `start` stops short, for the checks before it. */
@@ -1568,6 +1572,171 @@ describe("the spare's duty runs the real comparison", () => {
       expect(r.posted.every((post) => post.fileThere)).toBe(true);
       expect((await r.row()).waitingReason).toBeNull();
     }, 60_000);
+
+    describe("room to place the copy, before the old box is told to give up filing", () => {
+      /** Free space that always reads `free()`, on every folder unless `at` says otherwise. */
+      const reading = (free: () => number, at: (path: string) => boolean = () => true) => ({
+        statfs: (path: string) =>
+          at(path)
+            ? Promise.resolve({ bavail: free(), frsize: 1 })
+            : Promise.resolve({ bavail: Number.MAX_SAFE_INTEGER, frsize: 1 }),
+      });
+      const needed = (r: { m2State: string }) =>
+        statSync(acceptedCopyPath(r.m2State, OP)).size + START_FREE_SPACE_FLOOR;
+
+      it("one byte short nothing is posted; a pass goes on to post once room appears", async () => {
+        const r = await dutyRig();
+        r.seam.answer = (text) => r.answerWith(r.relinquishment(text));
+        let short = 1;
+        const waits: unknown[] = [];
+        await r.startAccepting({
+          ...reading(() => needed(r) - short),
+          log: (_level, event, detail) => {
+            if (event === "handover-destination.waiting") waits.push(detail);
+          },
+        });
+
+        await vi.waitFor(
+          async () => expect((await r.row()).waitingReason).toBe("handover.no_room_to_place"),
+          { timeout: 15_000 },
+        );
+        // Failing case, posting regardless: posts here, and M1 gives up filing for a box that cannot place.
+        expect(r.posted).toEqual([]);
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        expect(r.posted).toEqual([]);
+        expect((await r.row()).state).toBe("copy_accepted");
+        // Written once though many passes checked.
+        expect(waits).toEqual([
+          expect.objectContaining({
+            reason: "handover.no_room_to_place",
+            neededBytes: needed(r),
+            availableBytes: needed(r) - 1,
+          }),
+        ]);
+
+        short = 0;
+        await vi.waitFor(async () => expect((await r.row()).state).toBe("filing_assumed"), {
+          timeout: 15_000,
+        });
+        expect(r.posted.length).toBeGreaterThan(0);
+        expect((await r.row()).waitingReason).toBeNull();
+      }, 60_000);
+
+      it.each([
+        ["the state folder", (r: { m2State: string }, path: string) => path === r.m2State],
+        ["the venue folder", (r: { m2State: string }, path: string) => path !== r.m2State],
+      ])(
+        "%s short of room is enough to wait",
+        async (_name, lowFolder) => {
+          const r = await dutyRig();
+          r.seam.answer = (text) => r.answerWith(r.relinquishment(text));
+          await r.startAccepting(
+            reading(
+              () => 0,
+              (path) => lowFolder(r, path),
+            ),
+          );
+
+          await vi.waitFor(
+            async () => expect((await r.row()).waitingReason).toBe("handover.no_room_to_place"),
+            { timeout: 15_000 },
+          );
+          expect(r.posted).toEqual([]);
+        },
+        60_000,
+      );
+
+      it("a disk that cannot say how much is free is not told to the old box as room", async () => {
+        const r = await dutyRig();
+        r.seam.answer = (text) => r.answerWith(r.relinquishment(text));
+        await r.startAccepting({ statfs: () => Promise.reject(new Error("cannot say")) });
+
+        await vi.waitFor(
+          async () => expect((await r.row()).waitingReason).toBe("handover.no_room_to_place"),
+          { timeout: 15_000 },
+        );
+        expect(r.posted).toEqual([]);
+      }, 60_000);
+
+      it("a missing file is named as missing, not as no room", async () => {
+        const r = await dutyRig();
+        const first = (await r.startAccepting(reading(() => 0)))!;
+        await vi.waitFor(
+          async () => expect((await r.row()).waitingReason).toBe("handover.no_room_to_place"),
+          { timeout: 15_000 },
+        );
+        await first.stop();
+        await rm(acceptedCopyPath(r.m2State, OP));
+
+        await r.startAccepting(reading(() => 0));
+        await vi.waitFor(
+          async () => expect((await r.row()).waitingReason).toBe("handover.accepted_copy_missing"),
+          { timeout: 15_000 },
+        );
+      }, 60_000);
+    });
+
+    describe("the restart that places the copy", () => {
+      async function assumed(restart: () => void) {
+        const r = await dutyRig();
+        r.seam.answer = (text) => r.answerWith(r.relinquishment(text));
+        const duty = (await r.startAccepting({ restart }))!;
+        await vi.waitFor(async () => expect((await r.row()).state).toBe("filing_assumed"), {
+          timeout: 15_000,
+        });
+        return { r, duty };
+      }
+
+      it("a restart that does nothing, as a lost signal does, is asked for again on later passes", async () => {
+        let asked = 0;
+        const { r } = await assumed(() => (asked += 1));
+
+        // Failing case, asking only at the transition: `asked` stays at 1 and the box stays on its old file.
+        await vi.waitFor(() => expect(asked).toBeGreaterThanOrEqual(3), { timeout: 15_000 });
+        expect((await r.row()).state).toBe("filing_assumed");
+        expect(await readHandoverEvent(suite.node, r.m2.nodeId, OP, COPY_PLACED_EVENT)).toBeNull();
+      }, 60_000);
+
+      it("does not ask once copy_placed is recorded", async () => {
+        let asked = 0;
+        const { r, duty } = await assumed(() => (asked += 1));
+        await withNodeTransaction(suite.node, (tx) =>
+          appendHandoverEventTx(tx, {
+            nodeId: r.m2.nodeId,
+            operationId: OP,
+            kind: COPY_PLACED_EVENT,
+            detail: {},
+            envelope: null,
+          }),
+        );
+        duty.wake();
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        const settled = asked;
+
+        duty.wake();
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        // Failing case, ignoring the event: this box would restart for ever.
+        expect(asked).toBe(settled);
+      }, 60_000);
+
+      it("a box left alone off mirror does not ask, on a running duty or a new one (R6)", async () => {
+        let asked = 0;
+        const { r, duty } = await assumed(() => (asked += 1));
+        await setNodeMode({ venue: r.db, node: suite.node }, r.m2.nodeId, "primary");
+        duty.wake();
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        const settled = asked;
+
+        duty.wake();
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        // Failing case, no mode check: asks every pass, and a selling box restarts in a loop.
+        expect(asked).toBe(settled);
+
+        expect(await r.startAccepting({ restart: () => (asked += 1) })).toBeUndefined();
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        expect(asked).toBe(settled);
+      }, 60_000);
+    });
 
     it("at filing_assumed it posts nothing more, however often it is started", async () => {
       const r = await dutyRig();

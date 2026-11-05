@@ -148,6 +148,7 @@ import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
 import { createVerbosityController } from "./verbosity.js";
 import { buildHeaderMiddleware } from "./build-header.js";
 import { requestIdMiddleware } from "./request-id.js";
+import { restartProcess } from "./run-server.js";
 import { createOriginAllowlist } from "./allowed-origins.js";
 import { corsForVenue } from "./cors.js";
 import { mountDiagnosticsApi } from "./diagnostics-api.js";
@@ -211,7 +212,11 @@ import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { compareFinalCopy } from "./handover-compare.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
 import { startHandoverDestinationDuty } from "./handover-destination-duty.js";
-import { placeAcceptedCopyForStart, recordCopyPlaced } from "./handover-place-copy.js";
+import {
+  placeAcceptedCopyForStart,
+  recordCopyPlaced,
+  removePlacedCopies,
+} from "./handover-place-copy.js";
 import { mountHandoverSourceStartApi } from "./handover-source-start-api.js";
 import { mountHandoverStatusApi } from "./handover-status-api.js";
 import { mountNodeMembershipApi } from "./node-membership-api.js";
@@ -948,11 +953,6 @@ function makeStartedServer(
   };
 }
 
-/** Docker restarts the box once it exits (`deploy/compose.yml`). */
-function restartProcess(): void {
-  process.kill(process.pid, "SIGTERM");
-}
-
 /** Test seams; production leaves them unset. */
 export interface StartServerSeams {
   stream?: Pick<StreamHostDeps, "walLimitBytes" | "spawn" | "store">;
@@ -1140,9 +1140,10 @@ async function bootServer(
   // `recovery-surface.test.ts` → "the caught error's own words on the page". That is `redactSecrets`
   // alone: the personal-data mask runs in `createLogger`, before the split, so it applies to both.
   const log = createLogger(tee(stdoutSink, fileSink), now, () => verbosity.current());
-  // Placing is here and not in entry so that it follows entry's ahead check, whose close drains the
-  // old file's -wal before placing removes it (pinned in `boot.place-copy.test.ts`). A box with no
-  // identity has no node id to read an operation by, and nothing is placed.
+  // Here and not in entry so that `startServer`-based starts and the dev entry place too. It follows
+  // entry's ahead check, whose close drains the old file's -wal before placing removes it (pinned in
+  // `boot.place-copy.test.ts`). A box with no identity has no node id to read an operation by, and
+  // nothing is placed.
   const placement =
     config.node === undefined
       ? null
@@ -1163,6 +1164,13 @@ async function bootServer(
         nodeId: config.node!.nodeId,
         stateDir: config.stateDir,
         operationId: placement.operationId,
+        log,
+      });
+    } else if (config.node !== undefined) {
+      await removePlacedCopies({
+        node: stampProbe.node,
+        nodeId: config.node.nodeId,
+        stateDir: config.stateDir,
         log,
       });
     }
@@ -2323,8 +2331,10 @@ async function bootServer(
     ring,
     nodeId: tradingContext.nodeId,
     stateDir: config.stateDir,
+    venueDir: config.venueDir,
     log,
     restart: seams.stepdown?.restart ?? restartProcess,
+    statfs: seams.freeSpaceWatch?.statfs,
     compare: (operation, indicator, copyPath, options) =>
       compareFinalCopy(
         {

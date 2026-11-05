@@ -266,9 +266,19 @@ declare module "@waitron/shared" {
     "handover.preparation_state_unusable": Record<string, never>;
     /**
      * At the start that places the accepted copy, a file step failed with `errno`. The copy is kept
-     * and each start tries again.
+     * and pressing Retry on the recovery page tries again.
      */
     "handover.placement_failed": { errno: string };
+    /**
+     * At the start that places the accepted copy, the disk ran out of room with the copy needing
+     * `neededBytes`. The copy is kept and pressing Retry on the recovery page tries again.
+     */
+    "handover.placement_no_room": { neededBytes: number };
+    /**
+     * The spare has too little room to place the copy it accepted, so it has not asked the old box to
+     * give up filing. It asks once there is room.
+     */
+    "handover.no_room_to_place": Record<string, never>;
     /** `module`'s summary, worked out from the received copy, is not the one the old box signed. */
     "handover.summary_mismatch": { module: string };
     /** The spare could not work out `module`'s summary from the copy it received. */

@@ -1177,6 +1177,7 @@ jobs:
             --exclude src/start-from-spare.e2e.test.ts \
             --exclude src/backup-room.e2e.test.ts \
             --exclude src/handover-refetch-full-disk.e2e.test.ts \
+            --exclude src/handover-placement-full-disk.e2e.test.ts \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
@@ -1301,6 +1302,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/full-disk-handover"
           sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk-handover"
           sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk-handover"
+          mkdir -p "$RUNNER_TEMP/full-disk-placement"
+          sudo mount -t tmpfs -o size=64m tmpfs "$RUNNER_TEMP/full-disk-placement"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk-placement"
 
       # Not named "Run the … shard": scripts/ci-workflow.test.mjs would count @waitron/server twice.
       # TMPDIR in memory: in a probe reproducing a main failure, a stall on the runner's disk held one
@@ -1314,6 +1318,7 @@ jobs:
           WAITRON_FULL_DISK_DIR_FROM_SPARE: ${{ runner.temp }}/full-disk-from-spare
           WAITRON_FULL_DISK_DIR_BACKUP_ROOM: ${{ runner.temp }}/full-disk-backup-room
           WAITRON_FULL_DISK_DIR_HANDOVER: ${{ runner.temp }}/full-disk-handover
+          WAITRON_FULL_DISK_DIR_PLACEMENT: ${{ runner.temp }}/full-disk-placement
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/server" test:shard \
@@ -1328,6 +1333,7 @@ jobs:
             src/start-from-spare.e2e.test.ts \
             src/backup-room.e2e.test.ts \
             src/handover-refetch-full-disk.e2e.test.ts \
+            src/handover-placement-full-disk.e2e.test.ts \
             --outputFile=.vitest-reports/blob-stream.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
