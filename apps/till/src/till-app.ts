@@ -15589,15 +15589,16 @@ export class TillApp extends LitElement {
   readonly #splitTablePrompts = new WeakMap<object, BillComposition | null>();
 
   #onSplitTableOpen(event: Event): void {
-    const { billId, prompt } = (
-      event as CustomEvent<Pick<SplitTableDetail, "billId"> & { prompt: object }>
-    ).detail;
+    const { billId, prompt } = (event as CustomEvent<{ billId?: string | null; prompt: object }>)
+      .detail;
+    if (billId === undefined) return;
     this.#splitTablePrompts.set(prompt, this.#billComposition(billId === null ? [] : [billId]));
   }
 
   async #onSplitTable(event: Event): Promise<void> {
-    const { tableId, billId, guestCounts, prompt } = (event as CustomEvent<SplitTableDetail>)
-      .detail;
+    const detail = (event as CustomEvent<SplitTableDetail>).detail;
+    if ("selection" in detail) return;
+    const { tableId, billId, guestCounts, prompt } = detail;
     const party = this.orderParty;
     if (party === null) return;
     const asked =

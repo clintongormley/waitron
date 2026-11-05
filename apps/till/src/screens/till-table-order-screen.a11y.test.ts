@@ -942,12 +942,62 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in Split a table's choice of bill", async () => {
+    it("has no violations in Split a table's panel, with a part-paid bill, a held bill and a whole bill", async () => {
       const { el, host } = await toAction("split-table");
+      const billOf = (billId: string, received: string) => ({
+        billId,
+        lines: [{ ...lines[0]!, id: `dish-${billId}`, lineNo: 1 }],
+        balance: {
+          workingOrderId: billId,
+          status: "open" as const,
+          total: "5.00",
+          received,
+          reserved: "0.00",
+          outstanding: "5.00",
+          tips: "0.00",
+          payments: [],
+          paidLines: [],
+        },
+      });
+      el.personId = "me";
+      el.splitPanelLive = true;
+      el.bills = ["wo-1", "wo-2", "wo-3"].map((workingOrderId, index) => ({
+        ...partyBills[0]!,
+        workingOrderId,
+        billNumber: index + 1,
+        total: "5.00",
+        outstanding: "5.00",
+        status: "open",
+      }));
+      el.splitRead = {
+        bills: [billOf("wo-1", "2.00"), billOf("wo-2", "0.00"), billOf("wo-3", "0.00")],
+      };
+      el.partyDrafts = [
+        {
+          id: "draft",
+          partyId: ana.id,
+          billId: "wo-2",
+          ownerId: "alex",
+          ownerName: "Alex",
+          revision: 1,
+          lines: [],
+          takenOverFrom: null,
+        },
+      ];
+      await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>('[data-target="t5"]')!.click();
       await el.updateComplete;
-      if (el.shadowRoot!.querySelector('[data-target="none"]') === null)
-        throw new Error("the scan must include the bills to choose from");
+      const picker = el.shadowRoot!.querySelector("till-split-picker")!;
+      await picker.updateComplete;
+      picker.shadowRoot!.querySelector<HTMLElement>('[data-split-tick="wo-3"]')!.click();
+      await el.updateComplete;
+      await picker.updateComplete;
+      if (picker.shadowRoot!.querySelector("[data-split-paid]") === null)
+        throw new Error("the scan must include a part-paid bill");
+      if (picker.shadowRoot!.querySelector("[data-split-take-over]") === null)
+        throw new Error("the scan must include a take-over row");
+      if (!picker.shadowRoot!.querySelector<HTMLInputElement>('[data-split-tick="wo-3"]')!.checked)
+        throw new Error("the scan must include a whole bill");
       await expectNoA11yViolations(host);
     });
   });

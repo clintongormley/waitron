@@ -39,7 +39,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "../widgets/fired-ago.js";
 import "../widgets/sent-orders.js";
 import type { SentLineInfo, SentReorderDetail } from "../widgets/sent-orders.js";
@@ -135,6 +135,8 @@ import type {
   TillProduct,
   TillZoneMenu,
   PartyBill,
+  Draft as PartyDraft,
+  SplitSources,
 } from "../api/client.js";
 import type { ConfirmPaymentDetail, RetainedTender } from "../widgets/tender-pay.js";
 import { heldGroupIds, inHeldGroup } from "../state/held-groups.js";
@@ -172,6 +174,17 @@ import {
   type Picks,
 } from "../state/portion-selection.js";
 import "../widgets/portion-picker.js";
+import "../widgets/split-picker.js";
+import {
+  anywayNote,
+  splitSourcesFrom,
+  splitSummary,
+  toSelection,
+  type SplitPicks,
+  type SplitSelection,
+  type SplitSource,
+} from "../state/split-selection.js";
+import { guestsStepper, guestsStepperStyles, parseGuestCount } from "../widgets/guest-count.js";
 import { billControlStyles, billSwitcher, tableMenu } from "./table-bill-controls.js";
 
 /** The screen's own width, in CSS pixels, from which browsing and the draft show side by side.
@@ -260,12 +273,11 @@ export interface TableRelocationOpenDetail {
   ready: () => void;
 }
 
-export interface SplitTableDetail {
+export type SplitTableDetail = {
   tableId: string;
-  billId: string | null;
   guestCounts: SplitGuestsDetail;
   prompt?: object;
-}
+} & ({ billId: string | null } | { selection: SplitSelection });
 
 /** The app's answer to a split whose count for one side the server refused: what was sent, and
  * why, shown under that side's field. */
@@ -290,6 +302,29 @@ interface DraftMoveOpening {
 function samePicks(a: Picks, b: Picks): boolean {
   return a.size === b.size && [...a].every((id) => b.has(id));
 }
+
+/** What Split a table's rows are made from. */
+interface SplitInputs {
+  read: SplitSources;
+  bills: readonly PartyBill[];
+  drafts: readonly PartyDraft[];
+  personId: string;
+  allergy: PartyAllergyRead["snapshot"] | null;
+  recalled: ReadonlySet<string>;
+}
+
+function sameSplitInputs(a: SplitInputs, b: SplitInputs): boolean {
+  return (
+    a.read === b.read &&
+    a.bills === b.bills &&
+    a.drafts === b.drafts &&
+    a.personId === b.personId &&
+    a.allergy === b.allergy &&
+    samePicks(a.recalled, b.recalled)
+  );
+}
+
+const NO_SPLIT_PICKS: SplitPicks = { whole: new Set(), picks: new Map() };
 
 /** What the list of the bill's dishes and Move dishes…' rows are grouped from. */
 interface DishSources {
@@ -441,7 +476,8 @@ class TabPayStore extends WorkingOrderStore {
   }
 }
 
-type ActionStep = "closed" | "pick" | "move-dishes" | "split-table" | "split-table-bill";
+type ActionStep =
+  "closed" | "pick" | "move-dishes" | "split-table" | "split-table-bill" | "split-table-pick";
 
 @customElement("till-table-order-screen")
 export class TillTableOrderScreen extends LitElement {
@@ -499,7 +535,25 @@ export class TillTableOrderScreen extends LitElement {
   static override styles = [
     priceWasStyles,
     billControlStyles,
+    guestsStepperStyles,
     css`
+      .split-summary,
+      .split-note {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .split-summary {
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .split-note {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      .split-guests {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-3);
+      }
       .allergy-heading {
         display: flex;
         align-items: center;
@@ -1167,6 +1221,14 @@ export class TillTableOrderScreen extends LitElement {
   /** The app's answer to a guest count the server refused: the count sent, and why. */
   @property({ attribute: false }) guestsRefusal: { value: string; message: string } | null = null;
   @property({ attribute: false }) splitRefusal: SplitRefusal | null = null;
+  /** Draws Split a table's panel in place of its bill step, until the panel replaces that step. */
+  @property({ type: Boolean }) splitPanelLive = false;
+  /** The party's bills for the panel: null until the read answers, "failed" when it could not. */
+  @property({ attribute: false }) splitRead: SplitSources | "failed" | null = null;
+  /** The last drafts read's drafts, of every bill of the party. */
+  @property({ attribute: false }) partyDrafts: readonly PartyDraft[] = [];
+  /** Who is signed in, which tells their own drafts from someone else's. */
+  @property() personId = "";
   /** A handheld form factor, whose menu browser shows the menu's handheld display and whose pay
    * section opens the pay sheet. */
   @property({ type: Boolean }) handheld = false;
@@ -1300,6 +1362,15 @@ export class TillTableOrderScreen extends LitElement {
     refusal: { field: "staying" | "leaving"; message: string } | null;
     prompt?: object;
   } | null = null;
+  @state() private splitPicks: SplitPicks = NO_SPLIT_PICKS;
+  @state() private splitStaying = "";
+  @state() private splitLeaving = "";
+  /** Split was pressed, so the panel's counts are checked from now on. */
+  @state() private splitAttempted = false;
+  #splitPrompt?: object;
+  /** The last read this panel saw answer: a later failed read keeps its rows. */
+  #splitAnswered?: SplitSources;
+  #splitRows?: { inputs: SplitInputs; sources: SplitSource[] };
   @state() private moveDishesPicks: Picks = new Set();
   /** Where Move dishes… sends the picks: a bill's id, null for a new bill, undefined while none is
    * chosen. */
@@ -1338,7 +1409,8 @@ export class TillTableOrderScreen extends LitElement {
     if (
       this.actionVerb !== "move-dishes" &&
       this.actionStep !== "split-table" &&
-      this.actionStep !== "split-table-bill"
+      this.actionStep !== "split-table-bill" &&
+      this.actionStep !== "split-table-pick"
     ) {
       this.#retireActions();
       return;
@@ -4787,6 +4859,7 @@ export class TillTableOrderScreen extends LitElement {
     this.actionStep = "closed";
     this.actionVerb = null;
     this.splitTableId = null;
+    this.#resetSplitPick();
     this.moveDishesPicks = new Set();
     this.moveDishesTo = undefined;
   }
@@ -4985,7 +5058,8 @@ export class TillTableOrderScreen extends LitElement {
                   name: tableShownName(row),
                   pick: () => {
                     this.splitTableId = id;
-                    this.actionStep = "split-table-bill";
+                    if (this.splitPanelLive) this.#openSplitPick(id);
+                    else this.actionStep = "split-table-bill";
                     this.#actionScope?.changed();
                   },
                 },
@@ -5032,6 +5106,222 @@ export class TillTableOrderScreen extends LitElement {
       refusal: null,
       prompt,
     };
+  }
+
+  #openSplitPick(tableId: string): void {
+    this.#resetSplitPick();
+    this.splitStaying = this.#savedGuests();
+    this.#splitPrompt = {};
+    this.actionStep = "split-table-pick";
+    this.#dispatch("split-table-open", { tableId, prompt: this.#splitPrompt });
+  }
+
+  #resetSplitPick(): void {
+    this.splitPicks = NO_SPLIT_PICKS;
+    this.splitStaying = "";
+    this.splitLeaving = "";
+    this.splitAttempted = false;
+    this.#splitPrompt = undefined;
+    this.#splitAnswered = undefined;
+    this.#splitRows = undefined;
+  }
+
+  /** The panel's rows, or undefined until a read has answered. */
+  #splitSources(): SplitSource[] | undefined {
+    if (this.splitRead !== null && this.splitRead !== "failed")
+      this.#splitAnswered = this.splitRead;
+    const read = this.#splitAnswered;
+    if (read === undefined) return undefined;
+    const inputs: SplitInputs = {
+      read,
+      bills: this.bills,
+      drafts: this.partyDrafts,
+      personId: this.personId,
+      allergy: this.#allergy()?.snapshot ?? null,
+      recalled: this.#recalledLineIds(),
+    };
+    if (this.#splitRows !== undefined && sameSplitInputs(this.#splitRows.inputs, inputs))
+      return this.#splitRows.sources;
+    const sources = splitSourcesFrom(
+      read,
+      this.bills,
+      this.partyDrafts,
+      this.personId,
+      inputs.recalled,
+      (lines, balance) =>
+        fallbackPortionKeys({
+          lines,
+          balance,
+          allergy: inputs.allergy,
+          recalled: inputs.recalled,
+        }),
+    );
+    this.#splitRows = { inputs, sources };
+    return sources;
+  }
+
+  #splitCountError(text: string): string {
+    return this.splitAttempted && parseGuestCount(text) === undefined
+      ? t("seat.guest_count_invalid")
+      : "";
+  }
+
+  #splitGuestsField(name: string, table: string, text: string, set: (value: string) => void) {
+    return guestsStepper({
+      name,
+      label: fill(t("table.split_guests_at"), { table }),
+      text,
+      disabled: false,
+      error: this.#splitCountError(text),
+      onChange: (event) => {
+        event.stopPropagation();
+        if (!this.#actionControlCurrent(event)) return;
+        set((event as CustomEvent<{ value: string }>).detail.value);
+        this.#actionScope?.changed();
+      },
+    });
+  }
+
+  /** The one line for each table, with its bills in number order. */
+  #splitSummaryLines(sources: readonly SplitSource[], leaving: string, kept: string) {
+    const { takes, keeps } = splitSummary(sources, this.splitPicks);
+    const list = (parts: string[]) =>
+      new Intl.ListFormat(currentLocale(), { type: "conjunction" }).format(parts);
+    const takesParts = [
+      ...takes.whole.map(({ bill }) => billLabel(bill)),
+      ...takes.loose.map(({ source: { bill }, count }) =>
+        count === 1
+          ? fill(t("table.split_dish_from"), { bill: billLabel(bill) })
+          : fill(t("table.split_dishes_from"), { count: String(count), bill: billLabel(bill) }),
+      ),
+    ];
+    const keepsParts = [
+      ...keeps.whole.map(({ bill }) => billLabel(bill)),
+      ...keeps.rest.map(({ bill }) => fill(t("table.split_rest_of"), { bill: billLabel(bill) })),
+    ];
+    const anyPaid = this.bills.some((bill) => bill.status === "settled");
+    const nothingKept =
+      anywayNote(sources, this.splitPicks, anyPaid) === "paid"
+        ? t("table.split_nothing_to_pay")
+        : t("table.split_empty_bill");
+    return html`<p class="split-summary" data-split-takes>
+        ${fill(t("table.split_takes"), {
+          table: leaving,
+          what: takesParts.length > 0 ? list(takesParts) : t("table.split_empty_bill"),
+          amount: this.#money(takes.amount),
+        })}
+      </p>
+      <p class="split-summary" data-split-keeps>
+        ${fill(t("table.split_keeps"), {
+          table: kept,
+          what: keepsParts.length > 0 ? list(keepsParts) : nothingKept,
+          amount: this.#money(keeps.amount),
+        })}
+      </p>
+      ${
+        takes.loose.length > 0
+          ? html`<p class="split-note" data-split-new-bill-note>
+              ${fill(t("table.split_new_bill_note"), { table: leaving })}
+            </p>`
+          : nothing
+      }`;
+  }
+
+  #splitPickStep(): TemplateResult {
+    const party = this.party!;
+    const row = this.tables.find((candidate) => candidate.id === this.splitTableId);
+    const leaving = row === undefined ? "" : tableShownName(row);
+    const kept = tablesLabel(
+      party.tableIds.filter((id) => id !== this.splitTableId),
+      this.tables,
+    );
+    const sources = this.#splitSources();
+    const countsBad =
+      parseGuestCount(this.splitStaying) === undefined ||
+      parseGuestCount(this.splitLeaving) === undefined;
+    const readFailed = sources === undefined && this.splitRead === "failed";
+    return html`<section class="actions" data-split-pick>
+      <h2 tabindex="-1">
+        ${fill(t("table.split_pick_heading"), { table: leaving, party: this.#partyScope(party) })}
+      </h2>
+      <p class="split-note" data-split-hint>
+        ${fill(t("table.split_pick_hint"), { table: leaving, kept })}
+      </p>
+      ${
+        sources === undefined
+          ? nothing
+          : html`<till-split-picker
+                .sources=${sources}
+                .split=${this.splitPicks}
+                .nameOf=${(line: TabLine) => this.#nameForLine(line)}
+                .money=${(amount: string) => this.#money(amount)}
+                @split-picks=${(event: CustomEvent<{ split: SplitPicks }>) => {
+                  event.stopPropagation();
+                  if (!this.#actionControlCurrent(event)) return;
+                  this.splitPicks = event.detail.split;
+                  this.#actionScope?.changed();
+                }}
+              ></till-split-picker>
+              ${this.#splitSummaryLines(sources, leaving, kept)}`
+      }
+      <div
+        class="split-guests"
+        @keydown=${(event: KeyboardEvent) =>
+          submitOnEnter(event, this.renderRoot.querySelector<HTMLElement>("[data-split-confirm]"))}
+      >
+        ${this.#splitGuestsField("stayingGuests", kept, this.splitStaying, (value) => {
+          this.splitStaying = value;
+        })}
+        ${this.#splitGuestsField("leavingGuests", leaving, this.splitLeaving, (value) => {
+          this.splitLeaving = value;
+        })}
+      </div>
+      <wt-form-actions
+        .error=${
+          readFailed
+            ? t("table.split_read_failed")
+            : this.splitAttempted && countsBad
+              ? t("form.fix_fields")
+              : ""
+        }
+      >
+        ${this.#backButton("cancel")}
+        <wt-button
+          data-split-confirm
+          variant=${sources === undefined ? "secondary" : "primary"}
+          ?disabled=${sources === undefined || (this.splitAttempted && countsBad)}
+          @click=${(event: Event) => void this.#confirmSplitPick(event)}
+        >
+          ${t("table.split_guests_confirm")}
+        </wt-button>
+      </wt-form-actions>
+    </section>`;
+  }
+
+  async #confirmSplitPick(event: Event): Promise<void> {
+    if (!this.#actionControlCurrent(event)) return;
+    const sources = this.#splitSources();
+    const tableId = this.splitTableId;
+    if (sources === undefined || tableId === null) return;
+    this.splitAttempted = true;
+    const staying = parseGuestCount(this.splitStaying);
+    const leaving = parseGuestCount(this.splitLeaving);
+    if (staying === undefined || leaving === undefined) {
+      await this.updateComplete;
+      const section = this.renderRoot.querySelector("[data-split-pick]");
+      if (section !== null) await focusFirstInvalid(section);
+      return;
+    }
+    const prompt = this.#splitPrompt;
+    const selection = toSelection(sources, this.splitPicks);
+    this.#retireActions();
+    this.#dispatch("split-table", {
+      tableId,
+      selection,
+      guestCounts: { staying: staying.guestCount, leaving: leaving.guestCount },
+      ...(prompt === undefined ? {} : { prompt }),
+    } satisfies SplitTableDetail);
+    this.#closeActions();
   }
 
   #splitGuestsDialog(): TemplateResult | typeof nothing {
@@ -5111,6 +5401,11 @@ export class TillTableOrderScreen extends LitElement {
         this.splitTableId = null;
         this.actionStep = "split-table";
         break;
+      case "split-table-pick":
+        this.splitTableId = null;
+        this.#resetSplitPick();
+        this.actionStep = "split-table";
+        break;
     }
   }
 
@@ -5151,6 +5446,8 @@ export class TillTableOrderScreen extends LitElement {
       case "split-table":
       case "split-table-bill":
         return this.#splitTableStep();
+      case "split-table-pick":
+        return this.#splitPickStep();
     }
   }
 

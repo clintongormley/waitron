@@ -1936,6 +1936,7 @@ export class TillBillPayDialog extends LitElement {
     this.guestsEntry = (event as CustomEvent<{ value: string }>).detail.value;
   }
 
+  /** No draft scope tracks this field (A663 Part 3b plan). */
   #guests(error: string | undefined): TemplateResult {
     return guestsStepper({
       text: this.#guestsText(),

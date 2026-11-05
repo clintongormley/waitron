@@ -583,13 +583,15 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
 
     it("a second step replacing the first takes focus too, and Back from it returns to the first", async () => {
       const el = await mountScreen({ bills: three });
+      el.splitPanelLive = true;
+      el.splitRead = { bills: [] };
       await userEvent.click(menu(el));
       await userEvent.click(item(el, '[data-action="split-table"]')!);
       await el.updateComplete;
       expect(focusOnStep(el)).toBe(true);
       await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-target="t5"]')!);
       await el.updateComplete;
-      expect(el.shadowRoot!.querySelector('[data-target="none"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("till-split-picker")).not.toBeNull();
       expect(focusOnStep(el)).toBe(true);
       await userEvent.keyboard("{Escape}");
       await el.updateComplete;
