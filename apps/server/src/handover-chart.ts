@@ -1,4 +1,4 @@
-import type { SignedMembershipDocument } from "@waitron/membership";
+import { standingOf, type SignedMembershipDocument } from "@waitron/membership";
 import { isReadableChart } from "./membership-trust.js";
 
 /**
@@ -10,9 +10,7 @@ export function oldBoxStillMain(
   held: SignedMembershipDocument | null,
   sourceNodeId: string,
 ): boolean {
-  return (
-    held?.body.nodes.find((node) => node.nodeId === sourceNodeId)?.standing === "serving-primary"
-  );
+  return held !== null && standingOf(held, sourceNodeId) === "serving-primary";
 }
 
 /**
