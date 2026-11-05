@@ -267,6 +267,16 @@ test("reflects the initial value into the native input", async () => {
   expect(input.value).toBe("1.25");
 });
 
+test("select() selects the whole value of the native input", async () => {
+  const el = (await mount(
+    '<wt-input value="Bar printer"></wt-input>',
+  )) as HTMLElementTagNameMap["wt-input"];
+  el.select();
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(input.selectionStart).toBe(0);
+  expect(input.selectionEnd).toBe(11);
+});
+
 test("emits wt-change with the new value", async () => {
   const el = await mount("<wt-input></wt-input>");
   let received: string | undefined;

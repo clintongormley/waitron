@@ -22,6 +22,7 @@ const entry: PagePrinterEntry = {
 class PagePrinterLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   entry: PagePrinterEntry | null = entry;
+  suggestedName = "";
   closed = 0;
   added: string[] = [];
   readonly api = {
@@ -31,6 +32,7 @@ class PagePrinterLeaveApp extends LitElement {
     return html`<dashboard-page-printer-add
         .api=${this.api}
         .entry=${this.entry}
+        .suggestedName=${this.suggestedName}
         description="HP LaserJet · 10.0.0.56:631"
         @page-printer-added=${(event: CustomEvent<{ name: string }>) =>
           this.added.push(event.detail.name)}
@@ -48,8 +50,8 @@ afterEach(cleanupWidgets);
 
 type Dialog = HTMLElementTagNameMap["dashboard-page-printer-add"];
 
-async function mount() {
-  const { el: app } = await mountWidget<PagePrinterLeaveApp>("page-printer-leave-test-app", {});
+async function mount(props: Partial<PagePrinterLeaveApp> = {}) {
+  const { el: app } = await mountWidget<PagePrinterLeaveApp>("page-printer-leave-test-app", props);
   const dialog = app.shadowRoot!.querySelector("dashboard-page-printer-add")!;
   await dialog.updateComplete;
   await dialog.shadowRoot!.querySelector("wt-modal")!.updateComplete;
@@ -166,4 +168,25 @@ it("a press that reaches an untouched Add's handler sends nothing and marks noth
   )!;
   expect(button.variant).toBe("secondary");
   expect(button.disabled).toBe(true);
+});
+
+it("an untouched Add with a suggested name sends the suggestion", async () => {
+  const { app, dialog } = await mount({ suggestedName: "Back office" });
+  expect(nameOf(dialog)).toBe("Back office");
+  await add(dialog);
+  await expect.poll(() => app.closed).toBe(1);
+  expect(app.api.registerPagePrinter).toHaveBeenCalledWith({ ...entry, name: "Back office" });
+  expect((await question(app)).open).toBe(false);
+});
+
+it("closing at once with a suggested name does not ask; typing back to the suggestion is no change, emptying it is", async () => {
+  const { app, dialog } = await mount({ suggestedName: "Back office" });
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  await type(dialog, "");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await type(dialog, "Back office");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  cancel(dialog);
+  await expect.poll(() => app.closed).toBe(1);
+  expect((await question(app)).open).toBe(false);
 });

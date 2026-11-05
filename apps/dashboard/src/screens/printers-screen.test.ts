@@ -11111,7 +11111,7 @@ describe("office printers in discovery", () => {
     );
   });
 
-  it("names a new A4 printer in a dialog whose Add waits for a name, then adds it from the row's discovery entry", async () => {
+  it("names a new A4 printer in a dialog whose Add is ready with the discovered name, then adds it from the row's discovery entry", async () => {
     const listPagePrinters = vi.fn().mockResolvedValue([]);
     const { el, api } = await mountWith([office()], { listPagePrinters });
     q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")!.click();
@@ -11119,15 +11119,15 @@ describe("office printers in discovery", () => {
     const field = q(el, "[data-test=page-printer-add-modal] wt-input[name=name]") as unknown as {
       required: boolean;
       error: string;
+      value: string;
     };
     expect(field.required).toBe(true);
+    expect(field.value).toBe("HP LaserJet");
     expect(text(el, "[data-test=page-printer-add-modal] p")).toBe(
       `HP LaserJet · 10.0.0.56:631/ipp/print · ${t("printers.discovered_seen_on").replace("{agent}", "Cocina agent")}`,
     );
-    expect(isDisabled(el, "[data-test=confirm-add-page-printer]")).toBe(true);
-    expect(q(el, "[data-test=confirm-add-page-printer]")!.getAttribute("variant")).toBe(
-      "secondary",
-    );
+    expect(isDisabled(el, "[data-test=confirm-add-page-printer]")).toBe(false);
+    expect(q(el, "[data-test=confirm-add-page-printer]")!.getAttribute("variant")).toBe("primary");
     // Whitespace counts as typing, so Add works and then explains the missing name.
     typeField(el, "[data-test=page-printer-add-modal] wt-input[name=name]", "  ");
     await flush(el);
@@ -11652,6 +11652,96 @@ describe("the Add a printer dialog's discovered rows", () => {
     expect(body).not.toBeNull();
     expect(table.getBoundingClientRect().right).toBeLessThanOrEqual(
       body.getBoundingClientRect().right,
+    );
+  });
+});
+
+describe("the name dialogs open with the found name filled in and selected", () => {
+  const network = (overrides: Partial<DiscoveredPrinter>): DiscoveredPrinter => ({
+    agentId: "a1",
+    agentName: "Cocina agent",
+    transport: "network_tcp",
+    host: "192.168.10.30",
+    port: 9100,
+    alreadyRegistered: false,
+    printerId: null,
+    lastSeenAt: "2023-11-14T22:13:20.000Z",
+    ...overrides,
+  });
+  async function mountWith(devices: DiscoveredPrinter[]) {
+    const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(devices) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openDiscovery(el);
+    return { el, api };
+  }
+  const nativeInput = (field: Element) =>
+    (field as HTMLElementTagNameMap["wt-input"]).shadowRoot!.querySelector("input")!;
+  const wholeSelected = (field: Element) => {
+    const input = nativeInput(field);
+    return input.selectionStart === 0 && input.selectionEnd === input.value.length;
+  };
+
+  it("opens the receipt printer's name dialog with the discovered name selected, so typing replaces it", async () => {
+    // Not IPP-only: an IPP-only device is offered as an A4 printer, never a receipt printer.
+    const { el } = await mountWith([network({ name: "HP Color LaserJet MFP M181fw" })]);
+    q(el, "[data-test^=register-]")!.click();
+    await flush(el);
+    const field = q(el, "[data-test=name-printer-modal] wt-input[name=new-printer-name]")!;
+    expect((field as HTMLElementTagNameMap["wt-input"]).value).toBe("HP Color LaserJet MFP M181fw");
+    expect(isDisabled(el, "[data-test=confirm-add-printer]")).toBe(false);
+    await vi.waitFor(() => expect(wholeSelected(field)).toBe(true));
+    await userEvent.keyboard("Bar");
+    await flush(el);
+    expect((field as HTMLElementTagNameMap["wt-input"]).value).toBe("Bar");
+  });
+
+  it("fills the name with the address when discovery found nothing else", async () => {
+    const { el } = await mountWith([network({ host: "192.168.10.81" })]);
+    q(el, "[data-test^=register-]")!.click();
+    await flush(el);
+    const field = q(el, "[data-test=name-printer-modal] wt-input[name=new-printer-name]")!;
+    expect((field as HTMLElementTagNameMap["wt-input"]).value).toBe("192.168.10.81");
+  });
+
+  it("opens the A4 printer's name dialog with the discovered name filled in and Add ready", async () => {
+    const { el, api } = await mountWith([
+      network({
+        host: "192.168.10.30",
+        port: 631,
+        name: "HP Color LaserJet MFP M181fw",
+        ippOnly: true,
+        serverName: "DE0887",
+        pagePrinter: true,
+        ipp: { port: 631, resourcePath: "/ipp/print" },
+        office: {
+          port: 631,
+          resourcePath: "/ipp/print",
+          printable: true,
+          documentFormat: "application/pdf",
+          media: "iso_a4_210x297mm",
+          resolutionDpi: 600,
+          supportedFormats: ["application/pdf"],
+        },
+      }),
+    ]);
+    q(el, "[data-test^=add-page-printer-]")!.click();
+    await flush(el);
+    const field = q(el, "[data-test=page-printer-add-modal] wt-input[name=name]")!;
+    expect((field as HTMLElementTagNameMap["wt-input"]).value).toBe(
+      "HP Color LaserJet MFP M181fw (DE0887)",
+    );
+    await vi.waitFor(() => expect(wholeSelected(field)).toBe(true));
+    expect(isDisabled(el, "[data-test=confirm-add-page-printer]")).toBe(false);
+    q(el, "[data-test=confirm-add-page-printer]")!.click();
+    await vi.waitFor(() =>
+      expect(api.registerPagePrinter).toHaveBeenCalledWith({
+        agentId: "a1",
+        host: "192.168.10.30",
+        port: 631,
+        path: "/ipp/print",
+        name: "HP Color LaserJet MFP M181fw (DE0887)",
+      }),
     );
   });
 });

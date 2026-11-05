@@ -571,8 +571,11 @@ export class PrintersScreen extends LitElement {
   /** `#pagePrinterReads` when the live query last delivered, so a one-off read begun earlier is dropped. */
   #pagePrinterLiveAt = 0;
   #pagePrinterReads = 0;
-  @state() private addingPagePrinter: { entry: PagePrinterEntry; description: string } | null =
-    null;
+  @state() private addingPagePrinter: {
+    entry: PagePrinterEntry;
+    description: string;
+    suggestedName: string;
+  } | null = null;
   /** The office rows (`agentId:deviceKey`) whose Enable or Use this agent is being sent. */
   @state() private pagePrinterSending = new Set<string>();
   @state() private pagePrinterRefusals: Record<string, string> = {};
@@ -645,6 +648,19 @@ export class PrintersScreen extends LitElement {
         this.discoveredNames = { ...this.discoveredNames, [key]: value };
       },
     });
+    void this.#selectPrinterName(this.#printerNameOpening);
+  }
+
+  /** Once the dialog has opened and focused its field, so typing replaces the filled-in name. */
+  async #selectPrinterName(opening: number): Promise<void> {
+    await this.updateComplete;
+    await this.renderRoot.querySelector<WtModal>("[data-test=name-printer-modal]")?.updateComplete;
+    if (opening !== this.#printerNameOpening) return;
+    const field = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "[data-test=name-printer-modal] wt-input[name=new-printer-name]",
+    );
+    await field?.updateComplete;
+    field?.select();
   }
 
   #finishPrinterName(opening: number): void {
@@ -1391,7 +1407,11 @@ export class PrintersScreen extends LitElement {
     const parts = [this.#discoveredLabel(device), `${entry.host}:${entry.port}${entry.path}`];
     if (device.agentName)
       parts.push(fill("printers.discovered_seen_on", { agent: device.agentName }));
-    this.addingPagePrinter = { entry, description: parts.join(" · ") };
+    this.addingPagePrinter = {
+      entry,
+      description: parts.join(" · "),
+      suggestedName: this.#discoveredLabel(device),
+    };
   }
 
   /** Enable and Use this agent: the server takes the queue's current report from the agent named. */
@@ -3901,6 +3921,7 @@ export class PrintersScreen extends LitElement {
       .entry=${adding.entry}
       .draftParent=${this.#addressScope?.id}
       description=${adding.description}
+      .suggestedName=${adding.suggestedName}
       @page-printer-added=${(event: CustomEvent<{ name: string }>) => {
         this.addedPrinterName = event.detail.name;
         void this.#refreshPagePrinters();

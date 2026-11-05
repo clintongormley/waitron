@@ -53,6 +53,8 @@ export class PagePrinterAdd extends LitElement {
   @property({ attribute: false }) entry: PagePrinterEntry | null = null;
   /** What the dialog says it is adding: the device's name and address. */
   @property() description = "";
+  /** The name the field opens with, ready to be typed over. Add is ready at once unless it is empty. */
+  @property({ attribute: false }) suggestedName = "";
   @property({ attribute: false }) draftParent?: object;
   @state() private name = "";
   @state() private attempted = false;
@@ -83,8 +85,8 @@ export class PagePrinterAdd extends LitElement {
     if (changes.has("entry") && this.entry !== null) {
       this.#scope?.dispose();
       this.#scope = undefined;
-      this.#baseline = "";
-      this.name = "";
+      this.#baseline = this.suggestedName;
+      this.name = this.suggestedName;
       this.attempted = false;
       this.refusedCode = null;
     }
@@ -109,13 +111,31 @@ export class PagePrinterAdd extends LitElement {
     }
   }
 
+  protected override updated(changes: PropertyValues<this>): void {
+    if (changes.has("entry") && this.entry !== null) void this.#selectName(this.entry);
+  }
+
+  /** Once the dialog has opened and focused its field, so typing replaces the suggested name. */
+  async #selectName(entry: PagePrinterEntry): Promise<void> {
+    await this.shadowRoot!.querySelector<WtModal>("wt-modal")!.updateComplete;
+    if (entry !== this.entry) return;
+    const field =
+      this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!;
+    await field.updateComplete;
+    field.select();
+  }
+
+  #action(): { variant: "primary" | "secondary"; unchanged: boolean } {
+    return saveActionState(this.#scope, { savableAtOpen: this.suggestedName.trim() !== "" });
+  }
+
   #nameError(): string {
     return this.attempted && this.name.trim() === "" ? t("form.name_required") : "";
   }
 
   async #add(): Promise<void> {
     const entry = this.entry;
-    if (entry === null || this.sending || saveActionState(this.#scope).unchanged) return;
+    if (entry === null || this.sending || this.#action().unchanged) return;
     this.attempted = true;
     this.refusedCode = null;
     const name = this.name.trim();
@@ -141,7 +161,7 @@ export class PagePrinterAdd extends LitElement {
 
   override render() {
     const nameError = this.#nameError();
-    const action = saveActionState(this.#scope);
+    const action = this.#action();
     return html`<wt-modal
       size="compact"
       data-test="page-printer-add-modal"
