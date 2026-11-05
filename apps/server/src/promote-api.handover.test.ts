@@ -37,7 +37,7 @@ import {
   setRecoveryKeyTx,
 } from "@waitron/node-db";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
-import { AppError, locationId, nodeId } from "@waitron/shared";
+import { AppError, nodeId } from "@waitron/shared";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
 import { imageMigrationsDigest } from "./handover-manifest.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
@@ -97,7 +97,6 @@ const RING = loadKeyRing({
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const SOURCE = { nodeId: "11111111-1111-4111-8111-111111111111", ...generateNodeKeyPair() };
 const AUTHORISER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
-const LOCATION = "c0000000-0000-4000-8000-000000000001";
 const PASSWORD = "promotePass123";
 const KEY = "paper-key";
 const RESTARTING: PromoteRunResult = { alreadyPrimary: false, restarting: true };
@@ -218,7 +217,7 @@ beforeEach(async () => {
     nodePreparation: createNodeOperationPreparation({
       db: suite.db,
       nodeDb: suite.node,
-      node: { nodeId: nodeId(self), locationId: locationId(LOCATION) },
+      node: { nodeId: nodeId(self) },
       modules,
       credentialKeyRing: TOTP_KEY_RING,
       stateDir: join(stateRoot, "state"),

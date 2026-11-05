@@ -67,7 +67,6 @@ async function run(
         },
         source: {
           nodeId: "source",
-          locationId: "location",
           environment: "preproduction",
           createdAt: "2026-10-20T08:00:00.000Z",
         },

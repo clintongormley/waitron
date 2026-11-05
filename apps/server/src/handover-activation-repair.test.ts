@@ -125,7 +125,6 @@ async function killedActivating(at: ActivationKillPoint) {
     venueDir: spareVenue,
     stateDir: spareState,
     nodeId: standby.nodeId,
-    locationId: standby.locationId,
     operationId: OPERATION,
     at,
     instant: ACTIVATING_AT,

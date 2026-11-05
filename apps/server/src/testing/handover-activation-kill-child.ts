@@ -11,7 +11,6 @@ export interface ActivationKillArgs {
   venueDir: string;
   stateDir: string;
   nodeId: string;
-  locationId: string;
   operationId: string;
   at: ActivationKillPoint;
   instant: string;
@@ -96,7 +95,7 @@ const nodePreparation = createNodeOperationPreparation({
   venueDir: args.venueDir,
   db: store.venue,
   nodeDb: store.node,
-  node: { nodeId: args.nodeId, locationId: args.locationId } as never,
+  node: { nodeId: args.nodeId } as never,
   modules,
   credentialKeyRing: TOTP_KEY_RING,
   coordinator: createFirstSetupCoordinator(),
@@ -125,7 +124,6 @@ mountHandoverActivationApi(app, {
         persistTradingEnv: async () => {
           await writeTradingEnv(args.stateDir, {
             nodeId: args.nodeId,
-            locationId: args.locationId,
             environment: "preproduction",
             accountKey: resolveAccountKey({}, ring).toString("base64"),
           });

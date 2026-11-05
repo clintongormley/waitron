@@ -2950,11 +2950,6 @@ name. The receipts are in the slice's ledger and review files, and the PR.
   rows for Rulings R12, R33 and R41, and for "after the role, before `activated`".
 - The tests of Tasks 5.8, 5.8b and 5.9 live partly in other files (those tasks corrected).
 
-**On rebasing past A1301 S18f:** remove `locationId` from
-`apps/server/src/testing/handover-activation-kill-child.ts` and from the fixture in
-`apps/server/src/handover-controlled.e2e.test.ts`. They pass it because this branch's base requires
-it, and main's `trading-config.ts` no longer names it.
-
 **Rulings kept, each with its cost if wrong.** P rulings are read, not run, unless a probe is named.
 
 - P1, the handover module's real file list: a few extra guard runs.

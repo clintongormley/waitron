@@ -125,7 +125,7 @@ async function joined() {
   });
   await writeFile(join(mainState, "tls", "ca.crt"), authority.caCertPem);
   await writeFile(join(mainState, "tls", "ca.key"), authority.caKeyPem);
-  const designated = { locationId: venue.locationId, nodeId: venue.nodeId };
+  const designated = { nodeId: venue.nodeId };
   const mainId: string = venue.nodeId;
   await establishNodeIdentity({ ownerDb: mainBox.db, node: mainBox.node, ring: RING }, mainId);
   const mainKey = await readNodeIdentityKey(mainBox.node, RING, mainId);
