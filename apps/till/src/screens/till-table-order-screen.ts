@@ -2287,7 +2287,12 @@ export class TillTableOrderScreen extends LitElement {
     const panel = this.renderRoot.querySelector<HTMLElement>("[data-action-panel]");
     if (panel === null) return;
     panel.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
-    void this.#scrollIntoViewOnceDrawn(panel);
+    // A refusal is said at the foot, beside Split, which a tall panel's top leaves below the window.
+    const foot = this.#splitFootDue ? panel.querySelector("wt-form-actions") : null;
+    this.#splitFootDue = false;
+    void this.#scrollIntoViewOnceDrawn(panel).then(() =>
+      foot?.scrollIntoView({ block: "nearest" }),
+    );
   }
 
   /** The step's buttons draw after the screen does, and only then does the panel have its height. */
@@ -2310,6 +2315,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #drawnStep: ActionStep = "closed";
   #stepFocus?: "step" | "menu";
+  #splitFootDue = false;
 
   /** Copies the draft bar's height to `--draft-bar-size` on `.round-bar`, the bar's parent, from
    * which the basket's lines inherit it. Measured at once when the bar is drawn or shown, because
@@ -5303,6 +5309,7 @@ export class TillTableOrderScreen extends LitElement {
     };
     this.#splitObserved = null;
     this.#stepFocus = "step";
+    this.#splitFootDue = true;
   }
 
   /** A panel with no rows drawn yet may be holding a refused selection, so it is compared with the
