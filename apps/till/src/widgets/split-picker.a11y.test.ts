@@ -126,6 +126,21 @@ describe.each(["light", "dark"] as const)("till-split-picker a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it.each(STATES)("%s has no violations with every dish marked", async (_name, one, split) => {
+    const { host } = await mountWidget<TillSplitPicker>(
+      "till-split-picker",
+      {
+        sources: [one],
+        split,
+        nameOf: (dish: TabLine) => dish.name ?? "",
+        money,
+        markOf: () => "Held · Mains",
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("a held bill's disabled tick is the picker's visible box, and says why in words", async () => {
     const { el } = await mountWidget<TillSplitPicker>(
       "till-split-picker",

@@ -217,6 +217,20 @@ describe.each(["light", "dark"] as const)("A803 picker a11y (%s theme)", (theme)
     expect(best).toBeGreaterThanOrEqual(3);
   });
 
+  it("a whole bill's working tick stands out from the page at 3:1", async () => {
+    const { el, host } = await mountWidget<TillPortionPicker>(
+      "till-portion-picker",
+      { rows: rowsOf(CANAS, null, new Set()), whole: true, nameOf, money },
+      theme,
+    );
+    const box = el.shadowRoot!.querySelector<HTMLInputElement>('[data-pick="c1"]')!;
+    expect(box.disabled).toBe(false);
+    expect(box.checked).toBe(true);
+    const page_ = rgb(getComputedStyle(host).backgroundColor);
+    const painted = await paintedIn(host, box.getBoundingClientRect());
+    expect(Math.max(...painted.map((pixel) => contrast(pixel, page_)))).toBeGreaterThanOrEqual(3);
+  });
+
   const PAID_LINES = [line("c1", 1), STEAK];
   const PAID_ROWS = balance("37.00", "32.00", [{ lineId: "s1", lineNo: 5, paidQuantity: "1.000" }]);
 

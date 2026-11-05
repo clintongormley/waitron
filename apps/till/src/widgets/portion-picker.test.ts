@@ -521,6 +521,51 @@ describe("till-portion-picker", () => {
   });
 });
 
+describe("till-portion-picker's mark", () => {
+  const mark = (el: TillPortionPicker, id: string) =>
+    q(el, `[data-pick-mark="${id}"]`)?.textContent?.trim();
+
+  it("draws what markOf says beside the dish's name, inside the tick's label", async () => {
+    const { el } = await picker(CANAS);
+    el.markOf = () => "Held · Mains";
+    await el.updateComplete;
+
+    expect(mark(el, "c1")).toBe("Held · Mains");
+    expect(tick(el, "c1").closest("label")!.textContent).toContain("Held · Mains");
+  });
+
+  it("draws nothing for a dish markOf has no words for, and by default", async () => {
+    const { el } = await picker(CANAS);
+    expect(q(el, "[data-pick-mark]")).toBeNull();
+    el.markOf = () => "";
+    await el.updateComplete;
+    expect(q(el, "[data-pick-mark]")).toBeNull();
+  });
+
+  it("paints from the brand's text token on the lifted surface", async () => {
+    const { el } = await picker(CANAS);
+    el.markOf = () => "Held · Mains";
+    await el.updateComplete;
+
+    const probe = document.createElement("div");
+    probe.style.color = "var(--wt-color-primary-text)";
+    probe.style.background = "var(--wt-color-surface-lifted)";
+    el.shadowRoot!.append(probe);
+    const wanted = getComputedStyle(probe);
+    const drawn = getComputedStyle(q(el, '[data-pick-mark="c1"]')!);
+    expect(drawn.color).toBe(wanted.color);
+    expect(drawn.backgroundColor).toBe(wanted.backgroundColor);
+  });
+
+  it("marks a whole bill's row too", async () => {
+    const { el } = await picker(CANAS);
+    el.whole = true;
+    el.markOf = () => "Held · Mains";
+    await el.updateComplete;
+    expect(mark(el, "c1")).toBe("Held · Mains");
+  });
+});
+
 describe("till-portion-picker whole", () => {
   const WHOLE_LINES = [...CANAS, dish("h1", 5, "Ham", "9.00")];
   const PAID = balance("14.00", "9.00", [{ lineId: "h1", lineNo: 5, paidQuantity: "1.000" }]);

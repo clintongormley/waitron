@@ -4268,7 +4268,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
       describe("the bills read failing while the floor read answers", () => {
         const lostBoth = [
-          ["party.out_of_date", { code: "party.out_of_date" }, "party.changed"],
+          ["party.out_of_date", { code: "party.out_of_date" }, "table.reread_failed"],
           ["a lost reply", lost(), "table.error"],
         ] as const;
 
@@ -4318,7 +4318,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
             expect(tickBox(el, "b2").checked).toBe(true);
             expect(takes(el)).toContain("20.00");
-            expect(said(el)).toContain(t(words).replace("{table}", "4, 5"));
+            expect(said(el)).toBe(t(words));
             expect(splitButton(el).disabled).toBe(false);
 
             await pressSplit(el);
@@ -4350,6 +4350,86 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           await pressSplit(el);
 
           expect(api.splitTable!.mock.calls[1]![3]).toBe(3);
+        });
+
+        it("party.out_of_date, the rows read failing: the floor answering does not make it reloaded", async () => {
+          const el = await panelWith(firstRefused({ code: "party.out_of_date" }));
+          await tick(el, "b2");
+          anotherTillMovesTheSoup();
+          api.getPartyBills!.mockRejectedValueOnce(lost());
+          api.getSplitSources!.mockRejectedValueOnce(lost());
+          await pressSplit(el);
+          await flush(el, 6);
+
+          expect(takes(el)).toContain("20.00");
+          expect(said(el)).toBe(t("table.reread_failed"));
+          expect(said(el)).not.toContain("reloaded");
+        });
+
+        it("party.out_of_date, the rows read failing and then a timed read answering: the rows are reloaded, and the row's own words are true again", async () => {
+          fakeTimers();
+          const el = await panelWith(firstRefused({ code: "party.out_of_date" }));
+          await tick(el, "b2");
+          anotherTillMovesTheSoup();
+          api.getPartyBills!.mockRejectedValueOnce(lost());
+          api.getSplitSources!.mockRejectedValueOnce(lost());
+          await pressSplit(el);
+          await flush(el, 6);
+          expect(said(el)).toBe(t("table.reread_failed"));
+
+          await rereadBills(el, movedList());
+
+          expect(takes(el)).toContain("30.00");
+          expect(said(el)).toContain(t("party.changed").replace("{table}", "4, 5"));
+        });
+
+        it("party.out_of_date, the rows read answering: the row's own words, as they are true", async () => {
+          const el = await panelWith(firstRefused({ code: "party.out_of_date" }));
+          await tick(el, "b2");
+          anotherTillMovesTheSoup();
+          api.getPartyBills!.mockRejectedValueOnce(lost());
+          await pressSplit(el);
+          await flush(el, 6);
+
+          expect(takes(el)).toContain("30.00");
+          expect(said(el)).toContain(t("party.changed").replace("{table}", "4, 5"));
+        });
+
+        it("a later timed read failing after the rows were reloaded leaves the row's own words", async () => {
+          fakeTimers();
+          const el = await panelWith(firstRefused({ code: "party.out_of_date" }));
+          await tick(el, "b2");
+          anotherTillMovesTheSoup();
+          api.getPartyBills!.mockRejectedValueOnce(lost());
+          await pressSplit(el);
+          await flush(el, 6);
+          api.getSplitSources!.mockRejectedValueOnce(lost());
+
+          await rereadBills(el, bills(9));
+
+          expect(said(el)).toContain(t("party.changed").replace("{table}", "4, 5"));
+        });
+
+        it("a refused press after the rows read failed says its own words, not the old failure", async () => {
+          const el = await panelWith({
+            splitTable: vi
+              .fn()
+              .mockRejectedValueOnce({ code: "party.out_of_date" })
+              .mockRejectedValueOnce({ code: "table.not_shared" }),
+          });
+          await tick(el, "b2");
+          anotherTillMovesTheSoup();
+          api.getPartyBills!.mockRejectedValueOnce(lost());
+          api.getSplitSources!.mockRejectedValueOnce(lost());
+          await pressSplit(el);
+          await flush(el, 6);
+          expect(said(el)).toBe(t("table.reread_failed"));
+
+          await pressSplit(el);
+          await flush(el, 6);
+
+          expect(api.splitTable).toHaveBeenCalledTimes(2);
+          expect(said(el)).not.toBe(t("table.reread_failed"));
         });
 
         it("with nothing changed, the reopening still reads the sources, once", async () => {

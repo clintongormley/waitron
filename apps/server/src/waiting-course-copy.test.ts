@@ -37,6 +37,7 @@ import { saveDraft } from "./order-drafts.js";
 import { holderOf, insertPartyBill } from "./parties.js";
 import { readBillEditState } from "./bill-editing.js";
 import { recallToDraft } from "./draft-recall.js";
+import { readBillLines } from "./working-order.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
@@ -249,6 +250,22 @@ const adminId = () =>
   v.db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!.id;
 
 describe("A803 waiting copy: copyHeldGroups", () => {
+  it("A803 waiting mark: the bill's lines, which the split panel reads, give a held dish its course and group and no fired time", async () => {
+    const { billId } = await seatWith([
+      { names: ["Flan"], release: "hold" },
+      { names: ["Agua"], release: "fire", courseId: null },
+    ]);
+    const lines = await inTx(v, (tx) => readBillLines(tx, billId));
+    const flan = lines.find((line) => line.name === "Flan")!;
+    expect(flan.course?.name).toBe("Desserts");
+    expect(flan.groupId).not.toBeNull();
+    expect(flan.firedAt).toBeNull();
+    expect((await groupRow(flan.groupId!)).state).toBe("held");
+    const agua = lines.find((line) => line.name === "Agua")!;
+    expect(agua.course).toBeUndefined();
+    expect((await groupRow(agua.groupId!)).state).toBe("fired");
+  });
+
   it("A803 waiting copy: copyHeldGroups copies a held group shared by a leaving and a staying bill, moving only the leaving dish and its extras", async () => {
     const a = await seatWith([
       { names: ["Burger"], release: "fire" },

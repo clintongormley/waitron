@@ -58,11 +58,17 @@ export class TillSplitPicker extends LitElement {
         display: grid;
         gap: var(--wt-space-2);
       }
+      /* The negative margin keeps this row's tick in line with its dishes' ticks. */
       .header {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-3);
+        margin-inline: calc(-1 * var(--wt-space-2));
+        padding-inline: calc(var(--wt-space-2) - 1px);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-bg);
         font-weight: var(--wt-font-weight-bold);
       }
       label {
@@ -108,6 +114,8 @@ export class TillSplitPicker extends LitElement {
   @property({ attribute: false }) split: SplitPicks = { whole: new Set(), picks: new Map() };
   /** Names a dish or an extra. */
   @property({ attribute: false }) nameOf: (line: TabLine) => string = (line) => line.name ?? "";
+  /** Words to mark a dish with; empty for none. */
+  @property({ attribute: false }) markOf: (line: TabLine) => string = () => "";
   @property({ attribute: false }) money: (amount: string) => string = (amount) => amount;
 
   /** Waits for the row, which replaces the bill's dishes in the draw a read has just asked for. */
@@ -252,6 +260,7 @@ export class TillSplitPicker extends LitElement {
       .picks=${this.split.picks.get(source.bill.workingOrderId) ?? NO_PICKS}
       .whole=${tick === "all"}
       .nameOf=${this.nameOf}
+      .markOf=${this.markOf}
       .money=${this.money}
       @portion-picks=${(event: CustomEvent<{ picks: string[] }>) => {
         event.stopPropagation();

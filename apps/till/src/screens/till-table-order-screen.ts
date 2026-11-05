@@ -146,7 +146,7 @@ import type {
   SplitSources,
 } from "../api/client.js";
 import type { ConfirmPaymentDetail, RetainedTender } from "../widgets/tender-pay.js";
-import { heldGroupIds, inHeldGroup } from "../state/held-groups.js";
+import { heldGroupIds, inHeldGroup, waitsInHeldGroup } from "../state/held-groups.js";
 import { itemCount, type DraftEntry, type DraftGroup } from "../state/draft-groups.js";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import type { Place } from "../state/draft-place.js";
@@ -1304,6 +1304,8 @@ export class TillTableOrderScreen extends LitElement {
   /** The app's answer to a guest count the server refused: the count sent, and why. */
   @property({ attribute: false }) guestsRefusal: { value: string; message: string } | null = null;
   @property({ attribute: false }) splitRefusal: SplitRefusal | null = null;
+  /** The refusal whose sentence says the table was reloaded, when the panel's rows were not. */
+  @property({ attribute: false }) splitRowsUnread: SplitRefusal | null = null;
   /** The party's bills for the panel: null until the read answers, "failed" when it could not. */
   @property({ attribute: false }) splitRead: SplitSources | "failed" | null = null;
   /** The app is bringing a party's first bill in behind the panel, so what Split would act on is
@@ -5465,6 +5467,13 @@ export class TillTableOrderScreen extends LitElement {
     return this.bills.some((bill) => bill.status === "settled");
   }
 
+  /** The word the order screen gives a held dish, and the course it waits for when it has one. */
+  #waitingMark(line: TabLine): string {
+    if (!waitsInHeldGroup(line, this.#heldGroupIds!)) return "";
+    const held = t("table.group_held");
+    return line.course === undefined ? held : `${held} · ${line.course.name}`;
+  }
+
   /** The panel's rows, or undefined until a read has answered and the person is known: with no person,
    * every draft would read as someone else's and hold its bill. */
   #splitSources(): SplitSource[] | undefined {
@@ -5584,7 +5593,12 @@ export class TillTableOrderScreen extends LitElement {
         sources.map((source) => [source.bill.workingOrderId, billLabel(source.bill)]),
       );
     const held = this.#splitHeld(sources);
-    const message = held.length > 0 ? this.#splitTakenSentence(held) : this.splitMessage;
+    const message =
+      held.length > 0
+        ? this.#splitTakenSentence(held)
+        : this.splitRowsUnread !== null && this.splitMessage === this.splitRowsUnread.message
+          ? t("table.reread_failed")
+          : this.splitMessage;
     // A take-over's answer reaches the drafts before its record is replaced; Split waits for both.
     const holding = held.length > 0 || this.takeOverSent !== null || this.splitReloading;
     const countsBad =
@@ -5596,9 +5610,13 @@ export class TillTableOrderScreen extends LitElement {
         <h2 tabindex="-1">
           ${fill(t("table.split_pick_heading"), { table: leaving, party: this.#partyScope(party) })}
         </h2>
-        <p class="split-note" data-split-hint>
-          ${fill(t("table.split_pick_hint"), { table: leaving, kept })}
-        </p>
+        ${
+          sources?.length === 0
+            ? nothing
+            : html`<p class="split-note" data-split-hint>
+                ${fill(t("table.split_pick_hint"), { table: leaving, kept })}
+              </p>`
+        }
       </div>
       ${
         sources === undefined
@@ -5607,6 +5625,7 @@ export class TillTableOrderScreen extends LitElement {
                 .sources=${sources}
                 .split=${this.splitPicks}
                 .nameOf=${(line: TabLine) => this.#nameForLine(line)}
+                .markOf=${(line: TabLine) => this.#waitingMark(line)}
                 .money=${(amount: string) => this.#money(amount)}
                 @split-picks=${(event: CustomEvent<{ split: SplitPicks }>) => {
                   event.stopPropagation();
@@ -6237,6 +6256,7 @@ export class TillTableOrderScreen extends LitElement {
         .rows=${rows}
         .picks=${this.moveDishesPicks}
         .nameOf=${(line: TabLine) => this.#nameForLine(line)}
+        .markOf=${(line: TabLine) => this.#waitingMark(line)}
         .money=${(amount: string) => this.#money(amount)}
         @portion-picks=${(event: CustomEvent<{ picks: string[] }>) => {
           event.stopPropagation();

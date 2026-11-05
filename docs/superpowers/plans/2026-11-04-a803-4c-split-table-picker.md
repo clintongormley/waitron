@@ -777,10 +777,11 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   too, whoever asked for it, because the floor may already have moved the party's revision and no list says whether
   the rows moved with it. So when a refusal's bills read fails, the reopening reads the sources, even if nothing had
   changed; once they answer, the panel shows them and the next press carries the floor's revision. If that sources
-  read fails as well, the old rows stay under the row's own words (for `party.out_of_date`, "so it has been
-  reloaded"; for a lost reply, `table.error`), Split stays enabled, and a press carries the old revision for the
-  server to judge. The next timed read brings the rows without moving that revision, and if the server refuses the
-  press, that refusal's reopening brings both. A reopening takes the revision from before its sources read, not
+  read fails as well, the old rows stay under `table.reread_failed` for `party.out_of_date` (fix round B: "so it has
+  been reloaded" was not true of them) or `table.error` for a lost reply, Split stays enabled, and a press carries the
+  old revision for the server to judge. The next timed read brings the rows without moving that revision, and
+  `party.out_of_date`'s own sentence comes back with them; if the server refuses the press, that refusal's reopening
+  brings both. A reopening takes the revision from before its sources read, not
   after it. `#reloadSplitParty` keeps to the same rule: if a sources read is still out when its reads end, that read
   may have started before its floor read, so it is read again and Split stays disabled until that answers; the press
   then carries the revision from before it, and if it fails, the old revision. A floor read that fails while the panel
@@ -971,6 +972,14 @@ Changing from B to A later removes one call in `splitTable` and changes those th
 | `A803 race replay` with promise barriers | The pattern 4b settled on: `waiting-course-copy.test.ts:1787` (`Promise.allSettled`, the asked-first order pinned) | 4b's Build record: the write lock takes them in turn, and the case that a barrier adds is covered by the order assertion |
 | Refusal closes the panel (4a D9) | Panel reopens with picks | D16 |
 | Board 10 shows a bill someone else holds with no tick | The same, unless it was ticked when that happened: then the tick stays and Split is held | D21 |
+| Board 08 marks a waiting dish `waiting · Mains` | `Held · Mains`, `En espera · Mains`; the word alone with no course | The till's own mark for such a dish, `table.group_held`, exists in both languages, so no new words |
+| Board 08 draws a whole bill's ticks pale | Muted text, as drawn, with the tick in full colour | At `--wt-opacity-disabled` the tick measured 2.07:1 on the light panel and 2.29:1 on the dark (screenshot pixels), under the 3:1 `portion-picker.a11y.test.ts` holds a tick to. Axe passes it either way: it does not read a tick's paint |
+| Board 08 writes `2 × Croquetas` | `Croquettes`, then `2` beside the amount | The picker slice 4a landed (`9a7efbb6b0`); Move dishes draws the same |
+| Board 08 has the stepper inline with its dish | On a row of its own under the dish | The picker slice 4a landed; Move dishes draws the same |
+| Board 10 greys a paid dish and gives it a `paid` chip | Ordinary text, a grey tick and `Paid` under it; pale only when the whole bill is ticked | The picker slice 4a landed; Move dishes draws the same |
+| Boards 08 and 10 draw each bill as a card, with lines between its dishes | The shaded header alone, in the panel's own border | Fix round B's ruling asks for the header alone |
+| Board 10 puts the holder and Take over in the bill's header, and `€20.00 paid` beside its name | The holder's row under the header, `{amount} paid` beside the total | As built in Task 11d; fix round B's ruling did not move it |
+| Board 08 lists each table's guests on its own row, with Cancel | The shared guests field side by side, with Back | `guestsStepper` is the shared field (`widgets/guest-count.ts`); Back is the action panel's own button |
 
 ## Current code map (main `4259a040d2`)
 

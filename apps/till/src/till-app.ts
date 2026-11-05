@@ -3252,6 +3252,7 @@ export class TillApp extends LitElement {
   @state() private revealOtherDrafts = 0;
   @state() private guestsRefusal: { value: string; message: string } | null = null;
   @state() private splitRefusal: SplitRefusal | null = null;
+  @state() private splitRowsUnread: SplitRefusal | null = null;
   /** Null until a panel's first read answers; "failed" only while no read has answered. */
   @state() private splitRead: SplitSources | "failed" | null = null;
   @state() private splitReloading = false;
@@ -15740,6 +15741,8 @@ export class TillApp extends LitElement {
   readonly #splitScreens = new WeakMap<object, TillTableOrderScreen>();
   /** What a refusal handed to the screen said, for the banner should the screen decline it. */
   #splitRefusalSaid?: CounterError;
+  /** A refusal saying the table was reloaded is waiting on the read that brings the panel's rows. */
+  #splitRowsOwed = false;
   #splitRefusalReading = false;
 
   #onSplitTableOpen(event: Event): void {
@@ -15823,7 +15826,10 @@ export class TillApp extends LitElement {
     const partyId = this.orderParty?.id;
     if (refusal !== this.splitRefusal || partyId === undefined) return;
     this.#watchSplitPanel(prompt, partyId, screen);
-    if (this.#splitRowsBehind()) await this.#readRowsAndRevision(prompt, partyId);
+    const said = this.#splitRefusalSaid;
+    const behind = this.#splitRowsBehind();
+    this.#splitRowsOwed = behind && typeof said === "object" && "partyChanged" in said;
+    if (behind) await this.#readRowsAndRevision(prompt, partyId);
   }
 
   #splitRowsBehind(): boolean {
@@ -15873,6 +15879,8 @@ export class TillApp extends LitElement {
       if (generation === this.#splitReadGeneration) {
         this.#splitReadAbort = undefined;
         this.splitRead = read;
+        this.#splitRowsOwed = false;
+        this.splitRowsUnread = null;
         this.#followSplitAnswer(read);
         return true;
       }
@@ -15881,6 +15889,8 @@ export class TillApp extends LitElement {
         this.#splitReadAbort = undefined;
         this.#splitBillsSeen = undefined;
         if (this.splitRead === null) this.splitRead = "failed";
+        if (this.#splitRowsOwed) this.splitRowsUnread = this.splitRefusal;
+        this.#splitRowsOwed = false;
       }
     }
     return false;
@@ -19759,6 +19769,7 @@ export class TillApp extends LitElement {
       .revealOtherDrafts=${this.revealOtherDrafts}
       .guestsRefusal=${this.guestsRefusal}
       .splitRefusal=${this.splitRefusal}
+      .splitRowsUnread=${this.splitRowsUnread}
       .splitRead=${this.splitRead}
       .splitReloading=${this.splitReloading}
       .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
@@ -19907,6 +19918,7 @@ export class TillApp extends LitElement {
           .revealOtherDrafts=${this.revealOtherDrafts}
           .guestsRefusal=${this.guestsRefusal}
           .splitRefusal=${this.splitRefusal}
+          .splitRowsUnread=${this.splitRowsUnread}
           .splitRead=${this.splitRead}
           .splitReloading=${this.splitReloading}
           .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}

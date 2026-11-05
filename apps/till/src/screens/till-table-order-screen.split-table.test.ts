@@ -2214,6 +2214,22 @@ describe("A803 split: a read and a selected bill", () => {
     return { el, sent };
   }
 
+  it("the sentence for rows not read stands in for that refusal's sentence, and not for a stop that replaces it", async () => {
+    const el = await mountScreen();
+    const refusal = reopenedAt({ message: "Reloaded" });
+    await refuse(el, refusal);
+    expect(refusalLine(el)!.textContent!.trim()).toBe("Reloaded");
+
+    el.splitRowsUnread = refusal;
+    await settled(el);
+    expect(refusalLine(el)!.textContent!.trim()).toBe(t("table.reread_failed"));
+
+    el.splitRead = withoutBills("b3");
+    await settled(el);
+    await press(el);
+    expect(refusalLine(el)!.textContent!.trim()).toBe(gone("Bill 3"));
+  });
+
   async function bothHeld() {
     const opened = await selected();
     opened.el.partyDrafts = [draft("b1", "ana", "Ana"), draft("b3", "luis", "Luis")];
@@ -3011,6 +3027,97 @@ describe("A803 split: a read and a selected bill", () => {
 
     await press(el);
     expect(sent).toHaveLength(1);
+  });
+});
+
+describe("Split a table's mark on a dish waiting for its course", () => {
+  const mains = { id: "c-mains", name: "Mains", displayOrder: 2, heldUntilFired: true };
+  const group = (id: string, state: "held" | "fired") => ({
+    id,
+    position: 1,
+    displayNumber: 1,
+    numberPartyId: garcia.id,
+    state,
+    firedAt: null,
+    remindAt: null,
+    lineIds: [],
+    courseIds: [],
+    summary: "",
+  });
+  const waiting = {
+    bills: [partyBill("b1", 1, "20.00")],
+    splitRead: read(
+      {
+        b1: [
+          dish("steak", 1, "10.00", { groupId: "g-held", courseId: mains.id, course: mains }),
+          dish("flan", 2, "4.00", { groupId: "g-held" }),
+          dish("soup", 3, "6.00", {
+            groupId: "g-fired",
+            courseId: mains.id,
+            course: mains,
+            firedAt: "2026-11-05T12:00:00.000Z",
+          }),
+        ],
+      },
+      { b1: "20.00" },
+    ),
+    groups: [group("g-held", "held"), group("g-fired", "fired")],
+  };
+  const marks = (el: TillTableOrderScreen) =>
+    [
+      ...splitPicker(el)!
+        .shadowRoot!.querySelector("till-portion-picker")!
+        .shadowRoot!.querySelectorAll<HTMLElement>("[data-pick-mark]"),
+    ].map((mark) => [mark.dataset.pickMark, mark.textContent!.trim()]);
+
+  it("uses the order screen's own word with the course, nothing for a fired dish, and the word alone with no course", async () => {
+    const el = await mountScreen(waiting);
+    await toPanel(el);
+    expect(marks(el)).toEqual([
+      ["steak", `${t("table.group_held")} · Mains`],
+      ["flan", t("table.group_held")],
+    ]);
+  });
+
+  it("in Spanish, the order screen's Spanish word", async () => {
+    setLocale("es-ES");
+    const el = await mountScreen(waiting);
+    await toPanel(el);
+    expect(marks(el)[0]).toEqual(["steak", "En espera · Mains"]);
+  });
+
+  it("goes when the groups say the course has been fired", async () => {
+    const el = await mountScreen(waiting);
+    await toPanel(el);
+    el.groups = [group("g-held", "fired"), group("g-fired", "fired")];
+    await settled(el);
+    await splitPicker(el)!.updateComplete;
+    await settled(el);
+    expect(marks(el)).toEqual([]);
+  });
+});
+
+describe("Split a table's hint", () => {
+  it("goes when the party has no bill, as there is nothing to tick", async () => {
+    const el = await mountScreen({ bills: [], splitRead: { bills: [] } });
+    await toPanel(el);
+    expect(q(el, "[data-split-hint]")).toBeNull();
+    expect(textOf(el, "[data-split-takes]")).toBe("T8 takes an empty bill · €0.00");
+  });
+
+  it("stays for a bill with no dishes, whose own tick can still be ticked", async () => {
+    const el = await mountScreen({
+      bills: [partyBill("b1", 1, "0.00")],
+      splitRead: read({ b1: [] }, { b1: "0.00" }),
+    });
+    await toPanel(el);
+    expect(q(el, "[data-split-hint]")).not.toBeNull();
+  });
+
+  it("stays while the first read is out", async () => {
+    const el = await mountScreen({ splitRead: null });
+    await toPanel(el);
+    expect(q(el, "[data-split-hint]")).not.toBeNull();
   });
 });
 

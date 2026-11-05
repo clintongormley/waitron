@@ -2666,6 +2666,11 @@ draft and its tick can be cleared; Split comes back once no ticked bill is held,
 or by a read showing the order gone. The hold is the row's state and not a refusal: if the read
 after a refused split fails, no bill shows held and Split stays enabled.
 
+A refused split comes back with the foot brought into view, the sentence and Split together on
+screen, and a refused take-over's line does the same. After `party.out_of_date`, if the read that
+brings the panel's rows fails, the foot says `table.reread_failed` rather than that the table was
+reloaded; once a later read brings the rows, it goes back to the refusal's own sentence.
+
 **(c) A refused take-over has a line of its own** (`data-split-take-over-refusal`), below whatever the foot already says, where the list below says one
 message. While a ticked bill is held that is the held sentence, and each says something the other
 does not: what stands in the way, and that the take-over failed. With no ticked bill held, it sits
@@ -5864,6 +5869,11 @@ is picked. A dish recalled into an unsent order is left out.
   the floor allows; ticking a ticked row clears it. A row of several takes a − / "2 of 4" / +
   stepper once ticked, − stopping at one and + at the row's limit; a weighed or unbound line has
   the tick only.
+- **A dish waiting in a held group** carries a mark beside its name: the order screen's own word,
+  `table.group_held` ("Held", "En espera"), then ` · ` and its course's name when it has one, as the
+  brand's text colour on `--wt-color-surface-lifted`. A dish made here, fired, or wholly cancelled has none
+  (`waitsInHeldGroup`). Once its group is fired elsewhere, the dish's fired time takes the mark away at
+  the panel's next read of the rows. Split a table draws it too.
 - **A blocked row** shows its tick greyed with the reason under the dish, tied to the tick by
   `aria-describedby`: "Paid" for a dish with any quantity paid, and "{amount} is already paid on
   this bill: move fewer dishes" when one more would leave the bill's total below what it has
@@ -5885,14 +5895,16 @@ Split a table draws every open and presented bill of the party, in number order,
 screen hands the selection back and keeps it in its action draft scope. Each bill's dishes are this
 same `till-portion-picker`, with these additions.
 
-- **The whole-bill header** is a native tick labelled with the bill's name, then `{amount} paid` when
+- **The whole-bill header** is a shaded row (`--wt-color-bg`, edged in `--wt-color-border`), set out so
+  that its tick stays in line with its dishes' ticks: a native tick labelled with the bill's name, then `{amount} paid` when
   the bill has received money (money a card in progress has only reserved is not counted), then the
   bill's total. The tick is checked for a whole bill and indeterminate for a bill with picks. Pressing
   it makes an unticked or part-ticked bill whole and clears a whole one; a held bill's tick only clears.
   Picking every dish of a bill
   makes it whole too, unless a dish is paid or the bill holds this person's own unsent dishes, which
   say `table.split_own_unsent` under the header and go only with the whole bill.
-- **A `whole` row** of a whole bill draws ticked with no stepper. A paid dish stays ticked and
+- **A `whole` row** of a whole bill draws ticked with no stepper, in muted text with its tick in full
+  colour, as a paler tick falls under 3:1 on the page (Departures in the A803 4c plan). A paid dish stays ticked and
   disabled, saying why; a row the floor stops is not stopped, because the whole bill keeps its
   payments. Unticking a row turns the bill into picks of every other row, each up to its limit, so a
   part-paid bill's floor can leave some unticked.
@@ -5915,6 +5927,11 @@ same `till-portion-picker`, with these additions.
   moving the party with its guest count), **Split anyway** (secondary, disabled while a count is
   marked invalid) and Back, which goes back to the action row. Changing a tick, a read that gives
   something to stay, and a read that holds a ticked bill each go back to it too.
+
+The hint above the bills goes for a party with no bill, as there is nothing to tick; a bill with no
+dishes keeps it, as its own tick works. When a read takes away a bill holding focus, focus goes to the
+bill now in its place; when none is left the picker sends `split-bills-gone` and the screen focuses the
+panel's heading.
 
 A press of Split checks in turn: a held ticked bill (nothing happens, and the button is disabled
 anyway), an invalid count, then a stop a read left waiting, then Everything ticked.

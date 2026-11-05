@@ -374,6 +374,37 @@ describe("till-split-picker", () => {
       .toBe(q(el, '[data-split-take-over="b1"]'));
   });
 
+  it("hands markOf to each bill's dishes", async () => {
+    const { el } = await picker([source("b1", 1, DISHES)], NOTHING, {
+      markOf: (dish: TabLine) => (dish.id === "h1" ? "Held · Mains" : ""),
+    });
+    await inner(el, "b1")!.updateComplete;
+    const marks = [...inner(el, "b1")!.shadowRoot!.querySelectorAll("[data-pick-mark]")];
+    expect(marks.map((mark) => mark.textContent?.trim())).toEqual(["Held · Mains"]);
+  });
+
+  it("shades the bill's own row from the tokens, and not its dishes", async () => {
+    const { el } = await picker([source("b1", 1, DISHES)]);
+    const probe = document.createElement("div");
+    probe.style.background = "var(--wt-color-bg)";
+    probe.style.border = "1px solid var(--wt-color-border)";
+    el.shadowRoot!.append(probe);
+    const wanted = getComputedStyle(probe);
+    const drawn = getComputedStyle(q<HTMLElement>(el, "[data-split-header]")!);
+    expect(drawn.backgroundColor).toBe(wanted.backgroundColor);
+    expect(drawn.borderTopColor).toBe(wanted.borderTopColor);
+    expect(parseFloat(drawn.borderTopLeftRadius)).toBeGreaterThan(0);
+    expect(getComputedStyle(inner(el, "b1")!).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  });
+
+  it("keeps a bill's tick in line with its dishes' ticks", async () => {
+    const { el } = await picker([source("b1", 1, DISHES)]);
+    await inner(el, "b1")!.updateComplete;
+    expect(header(el, "b1").getBoundingClientRect().left).toBe(
+      rowTick(el, "b1", "h1").getBoundingClientRect().left,
+    );
+  });
+
   describe("a read that takes away the bill holding focus", () => {
     const two = () => [source("b1", 1, DISHES), source("b2", 2, DISHES)];
     const active = (el: TillSplitPicker) => el.shadowRoot!.activeElement;

@@ -84,7 +84,9 @@ export class TillPortionPicker extends LitElement {
         cursor: default;
       }
       /* A tick still works on this row, so its text keeps a readable contrast: at
-         --wt-opacity-disabled it fails axe on the light page. */
+         --wt-opacity-disabled it fails axe on the light page. The tick itself stays in full colour:
+         at that opacity it measures 2.07:1 on the light page and 2.29:1 on the dark, under the 3:1
+         the picker's accessibility suite holds, and axe cannot see it. */
       .quiet label {
         color: var(--wt-color-text-muted);
       }
@@ -96,6 +98,15 @@ export class TillPortionPicker extends LitElement {
       .name {
         flex: 1;
         overflow-wrap: anywhere;
+      }
+      .mark {
+        display: inline-block;
+        margin-inline-start: var(--wt-space-2);
+        padding-inline: var(--wt-space-2);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-surface-lifted);
+        color: var(--wt-color-primary-text);
+        font-size: var(--wt-font-size-sm);
       }
       .extra {
         display: block;
@@ -136,6 +147,8 @@ export class TillPortionPicker extends LitElement {
   @property({ type: Boolean }) whole = false;
   /** Names a dish or an extra. */
   @property({ attribute: false }) nameOf: (line: TabLine) => string = (line) => line.name ?? "";
+  /** Words to mark a dish with, such as what it is waiting for; empty for none. */
+  @property({ attribute: false }) markOf: (line: TabLine) => string = () => "";
   @property({ attribute: false }) money: (amount: string) => string = (amount) => amount;
 
   /** The other stepper button, once this press has moved the picks: the pressed one is disabled at
@@ -205,6 +218,7 @@ export class TillPortionPicker extends LitElement {
     const name = [dish, ...extras].join(", ");
     const reason = this.#reason(row);
     const reasonId = `pick-reason-${id}`;
+    const mark = this.markOf(row.members[0]!);
     const amount = toScale(
       multiplyDecimal(decimal(row.each), decimal(String(count > 0 ? count : row.members.length))),
       MONEY_SCALE,
@@ -221,7 +235,7 @@ export class TillPortionPicker extends LitElement {
           @change=${() => this.#emit(this.#toggled(row))}
         />
         <span class="name"
-          >${dish}${extras.map((extra) => html`<span class="extra">${extra}</span>`)}</span
+          >${dish}${mark === "" ? nothing : html`<span class="mark" data-pick-mark=${id}>${mark}</span>`}${extras.map((extra) => html`<span class="extra">${extra}</span>`)}</span
         >
         ${
           row.counted && !stepped

@@ -1,10 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { OtherDraft, TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { BillBalance, PartyBill, TableParty, TableState, TabLine } from "../api/client.js";
+import type {
+  BillBalance,
+  OrderGroup,
+  PartyBill,
+  TableParty,
+  TableState,
+  TabLine,
+} from "../api/client.js";
 import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 import type { TillPortionPicker } from "../widgets/portion-picker.js";
 import { DraftStore } from "../state/draft-sync.js";
@@ -87,6 +94,7 @@ async function mountScreen(
     lines?: TabLine[];
     draftStore?: DraftStore;
     otherDrafts?: OtherDraft[];
+    groups?: OrderGroup[];
   } = {},
 ) {
   const shownParty = over.party === undefined ? party : over.party;
@@ -95,6 +103,7 @@ async function mountScreen(
     lines: over.lines ?? [...CANAS, HAM],
     ...(over.draftStore === undefined ? {} : { draftStore: over.draftStore }),
     ...(over.otherDrafts === undefined ? {} : { otherDrafts: over.otherDrafts }),
+    ...(over.groups === undefined ? {} : { groups: over.groups }),
     orderId: "wo-2",
     party: shownParty,
     bills: over.bills ?? BILLS,
@@ -180,6 +189,31 @@ afterEach(() => {
 });
 
 describe("A803 move dishes panel", () => {
+  it("a dish in a held group, which the server moves and keeps in its group, carries the same mark as Split a table's", async () => {
+    const mains = { id: "c-mains", name: "Mains", displayOrder: 2, heldUntilFired: true };
+    const el = await mountScreen({
+      lines: [HAM, { ...CANAS[0]!, groupId: "g-held", courseId: mains.id, course: mains }],
+      groups: [
+        {
+          id: "g-held",
+          position: 1,
+          displayNumber: 1,
+          numberPartyId: "p",
+          state: "held",
+          firedAt: null,
+          remindAt: null,
+          lineIds: [],
+          courseIds: [],
+          summary: "",
+        },
+      ],
+    });
+    await openMoveDishes(el);
+    await picker(el).updateComplete;
+    const marks = [...picker(el).shadowRoot!.querySelectorAll("[data-pick-mark]")];
+    expect(marks.map(textOf)).toEqual([`${t("table.group_held")} · Mains`]);
+  });
+
   it("the ⋮ of an open bill of a party lists Move dishes… where Split by item was, before Merge bills", async () => {
     const el = await mountScreen();
     const items = [...menu(el).querySelectorAll<HTMLElement>("[data-action]")].map(
