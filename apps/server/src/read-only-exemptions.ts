@@ -8,7 +8,10 @@ export type ReadOnlyBox = "mirror" | "fenced";
 
 export interface ReadOnlyExemption {
   readonly method: "POST";
-  /** Matched exactly, except that a segment spelled `:operationId` takes any one non-empty segment. */
+  /**
+   * Matched exactly, except that a segment spelled `:operationId` takes any one non-empty segment
+   * holding no `%`.
+   */
   readonly path: string;
   /** The read-only boxes on which the route passes the gate. */
   readonly boxes: readonly ReadOnlyBox[];
@@ -57,16 +60,24 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     authenticates:
       "a `stepdown` envelope signed by a key this box stores for that node or the held chart vouches for (`peerKeyOf`), whose binding names its signer as the source and this box as the destination; a new operation also needs the held chart to name that source `serving-primary`; answers only signed status",
   },
+  {
+    method: "POST",
+    path: "/api/node/handover/:operationId/preparation",
+    boxes: ["mirror"],
+    authenticates:
+      "HTTPS, a stored operation ready to promote, a promote module operation naming that operation, its source and this box, and the sign-in of a person holding `node.promote`, by email (`handover-preparation.ts`)",
+  },
 ];
 
-function pathMatches(rowPath: string, requestPath: string): boolean {
+export function pathMatches(rowPath: string, requestPath: string): boolean {
   const rowSegments = rowPath.split("/");
   const requestSegments = requestPath.split("/");
   return (
     rowSegments.length === requestSegments.length &&
     rowSegments.every((segment, index) =>
       segment === ":operationId"
-        ? requestSegments[index] !== ""
+        ? // The path keeps `%2F` undecoded, so `a%2Fb` is one segment here and `a/b` to the route.
+          requestSegments[index] !== "" && !requestSegments[index]!.includes("%")
         : segment === requestSegments[index],
     )
   );
@@ -75,9 +86,8 @@ function pathMatches(rowPath: string, requestPath: string): boolean {
 export function isReadOnlyExempt(
   request: { readonly method: string; readonly path: string },
   box: { readonly mirror: boolean; readonly fenced: boolean },
-  rows: readonly ReadOnlyExemption[] = READ_ONLY_EXEMPTIONS,
 ): boolean {
-  return rows.some(
+  return READ_ONLY_EXEMPTIONS.some(
     (row) =>
       row.method === request.method &&
       pathMatches(row.path, request.path) &&

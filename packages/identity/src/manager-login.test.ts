@@ -13,7 +13,12 @@ import {
   seedPersonWithPassword,
   TOTP_KEY_RING,
 } from "../test/fixtures.js";
-import { authorizeManager, loginManager, loginManagerById } from "./manager-login.js";
+import {
+  authorizeManager,
+  loginManager,
+  loginManagerById,
+  personIdForLoginEmail,
+} from "./manager-login.js";
 import { verifyPassword } from "./verify-password.js";
 import { encryptTotpSecret } from "./mfa.js";
 import { managementSessions } from "./schema/management-sessions.js";
@@ -34,6 +39,37 @@ const suite = useVenueDb({
 // refuses it.
 const run = <T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> =>
   withTransaction(suite.db, fn);
+
+describe("personIdForLoginEmail", () => {
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+  it("answers an active account's id, however the address is spelled, with no password hash", async () => {
+    const personId = await seedManager(suite.db, { email: "lookup-active@x.com" });
+    vi.mocked(verifyPassword).mockClear();
+    expect(await personIdForLoginEmail(suite.db, "  LOOKUP-Active@x.com ")).toBe(personId);
+    expect(verifyPassword).not.toHaveBeenCalled();
+  });
+
+  it("answers a fresh random id for an unknown address, with no password hash", async () => {
+    vi.mocked(verifyPassword).mockClear();
+    const first = await personIdForLoginEmail(suite.db, "lookup-nobody@x.com");
+    const second = await personIdForLoginEmail(suite.db, "lookup-nobody@x.com");
+    expect(first).toMatch(UUID);
+    expect(second).toMatch(UUID);
+    expect(first).not.toBe(second);
+    expect(verifyPassword).not.toHaveBeenCalled();
+  });
+
+  it("answers a random id for a suspended account, not that account's id", async () => {
+    const personId = await seedManager(suite.db, {
+      email: "lookup-suspended@x.com",
+      status: "suspended",
+    });
+    const answer = await personIdForLoginEmail(suite.db, "lookup-suspended@x.com");
+    expect(answer).toMatch(UUID);
+    expect(answer).not.toBe(personId);
+  });
+});
 
 describe("loginManager", () => {
   it("logs in with a correct email + password (no TOTP enrolled)", async () => {

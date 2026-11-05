@@ -211,6 +211,7 @@ import { mountPeerStatusApi } from "./peer-status-api.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { compareFinalCopy } from "./handover-compare.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
+import { mountHandoverPreparationApi } from "./handover-preparation.js";
 import { startHandoverDestinationDuty } from "./handover-destination-duty.js";
 import {
   placeAcceptedCopyForStart,
@@ -3457,6 +3458,17 @@ async function bootServer(
       run: promoteRun,
       requestFromBox: seams.requestFromBox,
       nodePreparation,
+    },
+    log,
+  );
+  mountHandoverPreparationApi(
+    app,
+    {
+      node: store.node,
+      nodeId: tradingContext.nodeId,
+      appDb: db,
+      nodePreparation,
+      requestFromBox: seams.requestFromBox,
     },
     log,
   );

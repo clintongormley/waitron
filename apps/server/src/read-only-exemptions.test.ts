@@ -43,7 +43,7 @@ import { mintBreakGlassSecret } from "./break-glass.js";
 import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
-import { READ_ONLY_EXEMPTIONS, isReadOnlyExempt } from "./read-only-exemptions.js";
+import { READ_ONLY_EXEMPTIONS, isReadOnlyExempt, pathMatches } from "./read-only-exemptions.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -72,6 +72,7 @@ describe("the read-only exemption list", () => {
       ["POST", "/api/node/peer-status", ["mirror", "fenced"]],
       ["POST", "/api/node/membership", ["mirror", "fenced"]],
       ["POST", "/api/node/handover/offer", ["mirror"]],
+      ["POST", "/api/node/handover/:operationId/preparation", ["mirror"]],
     ]);
     for (const row of READ_ONLY_EXEMPTIONS) expect(row.authenticates.trim()).not.toBe("");
   });
@@ -101,53 +102,52 @@ describe("the read-only exemption list", () => {
 
   describe("a row holding :operationId", () => {
     const mirror = { mirror: true, fenced: false };
-    const ROWS = [
-      {
-        method: "POST",
-        path: "/api/node/handover/:operationId/activate",
-        boxes: ["mirror"],
-        authenticates: "named by this test",
-      },
-    ] as const;
     const exempt = (path: string, method = "POST", box = mirror) =>
-      isReadOnlyExempt({ method, path }, box, ROWS);
+      isReadOnlyExempt({ method, path }, box);
 
     it("passes any one non-empty segment in that place", () => {
-      expect(exempt("/api/node/handover/a/activate")).toBe(true);
-      expect(exempt("/api/node/handover/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/activate")).toBe(true);
+      expect(exempt("/api/node/handover/a/preparation")).toBe(true);
+      expect(exempt("/api/node/handover/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/preparation")).toBe(
+        true,
+      );
     });
 
     it("refuses another number of segments, an empty one and an unlisted suffix", () => {
       for (const path of [
-        "/api/node/handover/a/b/activate",
-        "/api/node/handover/activate",
-        "/api/node/handover//activate",
+        "/api/node/handover/a/b/preparation",
+        "/api/node/handover/preparation",
+        "/api/node/handover//preparation",
         "/api/node/handover/a",
-        "/api/node/handover/a/activate/",
-        "/api/node/handover/a/activate/x",
+        "/api/node/handover/a/preparation/",
+        "/api/node/handover/a/preparation/x",
         "/api/node/handover/a/relinquish",
-        "/api/other/handover/a/activate",
+        "/api/other/handover/a/preparation",
+      ]) {
+        expect([path, exempt(path)]).toEqual([path, false]);
+      }
+    });
+
+    it("refuses a segment still holding an escape, which the router would decode to a slash", () => {
+      for (const path of [
+        "/api/node/handover/a%2Fb/preparation",
+        "/api/node/handover/%2F/preparation",
+        "/api/node/handover/..%2F..%2Fmembership/preparation",
+        "/api/node/handover/a%252Fb/preparation",
       ]) {
         expect([path, exempt(path)]).toEqual([path, false]);
       }
     });
 
     it("still answers to the row's method and boxes", () => {
-      expect(exempt("/api/node/handover/a/activate", "PUT")).toBe(false);
-      expect(exempt("/api/node/handover/a/activate", "POST", { mirror: false, fenced: true })).toBe(
-        false,
-      );
+      expect(exempt("/api/node/handover/a/preparation", "PUT")).toBe(false);
+      expect(
+        exempt("/api/node/handover/a/preparation", "POST", { mirror: false, fenced: true }),
+      ).toBe(false);
     });
 
     it("holds only that one name as a parameter: any other colon segment is literal", () => {
-      const rows = [{ ...ROWS[0], path: "/api/node/:other/activate" }];
-      const box = mirror;
-      expect(isReadOnlyExempt({ method: "POST", path: "/api/node/a/activate" }, box, rows)).toBe(
-        false,
-      );
-      expect(
-        isReadOnlyExempt({ method: "POST", path: "/api/node/:other/activate" }, box, rows),
-      ).toBe(true);
+      expect(pathMatches("/api/node/:other/activate", "/api/node/a/activate")).toBe(false);
+      expect(pathMatches("/api/node/:other/activate", "/api/node/:other/activate")).toBe(true);
     });
   });
 
@@ -360,9 +360,13 @@ async function waitForFirstPass(server: { health: { lastPassAt: unknown } }): Pr
   expect(server.health.lastPassAt).not.toBeNull();
 }
 
-async function post(base: string, path: string): Promise<{ status: number; code: unknown }> {
+async function post(
+  base: string,
+  path: string,
+  method = "POST",
+): Promise<{ status: number; code: unknown }> {
   const response = await fetch(`${base}${path}`, {
-    method: "POST",
+    method,
     headers: { "content-type": "application/json" },
     body: "{}",
   });
@@ -415,6 +419,10 @@ describe("each listed route is reached on a real read-only start, and nothing el
       expect({
         promote: await post(base, "/management-api/promote"),
         preparation: await post(base, "/management-api/promote/preparation"),
+        handoverPreparation: await post(
+          base,
+          `/api/node/handover/${MIRROR_OPERATION_ID}/preparation`,
+        ),
         peerStatus: await post(base, "/api/node/peer-status"),
         membership: await handEmptyChart(base),
         offer: await post(base, "/api/node/handover/offer"),
@@ -427,6 +435,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
       }).toEqual({
         promote: { status: 401, code: "password.invalid" },
         preparation: PREPARATION_REFUSAL,
+        handoverPreparation: PREPARATION_REFUSAL,
         peerStatus: { status: 400, code: "handover.request_invalid" },
         membership: { status: 200, body: { accepted: false } },
         offer: { status: 400, code: "handover.request_invalid" },
@@ -435,6 +444,34 @@ describe("each listed route is reached on a real read-only start, and nothing el
         startHandover: GATED,
         statusRead: { status: 200, signerNodeId: mirror.nodeId, state: "prepared" },
       });
+    } finally {
+      await server.close();
+    }
+  }, 60_000);
+
+  it("near misses of the operation id row answer node.read_only on a mirror", async () => {
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: mirror.dir,
+      WAITRON_NODE_ID: mirror.nodeId,
+      WAITRON_HTTP_PORT: String(await freePort()),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    });
+    const base = `http://127.0.0.1:${httpPort()}`;
+    const id = MIRROR_OPERATION_ID;
+    try {
+      await waitForFirstPass(server);
+      for (const [path, method] of [
+        [`/api/node/handover/${id}/extra/preparation`, "POST"],
+        [`/api/node/handover/${id}/preparation/extra`, "POST"],
+        [`/api/node/handover/${id}/relinquish`, "POST"],
+        [`/api/node/handover/${id}/preparation`, "PUT"],
+        [`/api/node/handover/${id}/preparation`, "DELETE"],
+        ["/api/node/handover/a%2Fb/preparation", "POST"],
+        ["/api/node/handover/..%2F..%2Fmembership/preparation", "POST"],
+      ] as const) {
+        expect([path, method, await post(base, path, method)]).toEqual([path, method, GATED]);
+      }
     } finally {
       await server.close();
     }
@@ -546,6 +583,10 @@ describe("each listed route is reached on a real read-only start, and nothing el
         membership: await handEmptyChart(base),
         // Listed for a mirror only.
         offer: await post(base, "/api/node/handover/offer"),
+        handoverPreparation: await post(
+          base,
+          `/api/node/handover/${MIRROR_OPERATION_ID}/preparation`,
+        ),
         unlisted: await post(base, "/management-api/catalogues"),
         startHandover: await post(base, "/management-api/handover"),
       }).toEqual({
@@ -555,6 +596,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         peerStatus: { status: 400, code: "handover.request_invalid" },
         membership: { status: 200, body: { accepted: false } },
         offer: GATED,
+        handoverPreparation: GATED,
         unlisted: GATED,
         startHandover: GATED,
       });

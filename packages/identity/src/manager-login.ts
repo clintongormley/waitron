@@ -1,4 +1,5 @@
 import "./errors.js";
+import { randomUUID } from "node:crypto";
 import { AppError } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { eq } from "drizzle-orm";
@@ -46,6 +47,15 @@ async function findPersonLogin(
       : eq(persons.id, who.personId),
   );
   return person;
+}
+
+/**
+ * For a route that signs in by email through a seam taking only an id. Hashes nothing, so the one
+ * hash stays the seam's; an id no person holds is refused there as a wrong password is.
+ */
+export async function personIdForLoginEmail(db: Database, email: string): Promise<string> {
+  const person = await findPersonLogin(db, { email });
+  return person?.status === "active" ? person.id : randomUUID();
 }
 
 /**
