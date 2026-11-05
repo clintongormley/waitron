@@ -92,10 +92,8 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
 interface SeededVenue {
   cfg: DeviceRequestConfig;
   available: AvailableProduct[];
-  /** "Café" — each, 1.50 gross, general(21%). */
-  cafe: AvailableProduct;
-  /** "Agua" — each, 2.00 gross, general(21%). Same rate as café, so a two-line basket has one VAT group. */
-  agua: AvailableProduct;
+  coffee: AvailableProduct;
+  water: AvailableProduct;
 }
 
 /**
@@ -137,10 +135,10 @@ async function setupVenue(): Promise<SeededVenue> {
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const available = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
+    const drinksCategory = await createCategory(tx, { name: "Bebidas" });
     await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinksCategory.id,
       name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
@@ -148,7 +146,7 @@ async function setupVenue(): Promise<SeededVenue> {
     });
     await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinksCategory.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
@@ -157,13 +155,13 @@ async function setupVenue(): Promise<SeededVenue> {
     await assignCatalogueToVenue(tx, cat.id);
     return (await listAvailableProducts(tx)).products;
   });
-  const cafe = available.find((p) => p.name === "Café")!;
-  const agua = available.find((p) => p.name === "Agua")!;
+  const coffee = available.find((p) => p.name === "Café")!;
+  const water = available.find((p) => p.name === "Agua")!;
   offersByCfg.set(
     cfg,
     await withTransaction(suite.db, (tx) => offerProducts(tx, cfg, { zone: "tables" })),
   );
-  return { cfg, available, cafe, agua };
+  return { cfg, available, coffee, water };
 }
 
 /** Each venue's offers in its tables zone, keyed by the venue's config so call sites pass only `cfg`. */
@@ -274,10 +272,10 @@ beforeAll(() => {
 
 describe("joinTables → one bill", () => {
   it("a joined tab files ONE sale covering both tables on pay", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const t1 = await seedTable(cfg, "JP1");
     const t2 = await seedTable(cfg, "JP2");
-    const tabId = await openTabOn(cfg, t1, [{ productId: cafe.id, quantity: "1" }]);
+    const tabId = await openTabOn(cfg, t1, [{ productId: coffee.id, quantity: "1" }]);
     const join = await tableAction(tabId);
     await withTransaction(suite.db, async (tx) => {
       await joinTables(tx, cfg, join.partyId, t2, join.options);
@@ -302,11 +300,11 @@ describe("joinTables → one bill", () => {
 
 describe("parties combined, bills merged → one registro (H2)", () => {
   it("a merged-then-paid tab yields exactly ONE registros_facturacion row; the source tab files nothing", async () => {
-    const { cfg, cafe, agua } = await setupVenue();
+    const { cfg, coffee, water } = await setupVenue();
     const tInto = await seedTable(cfg, "MR-into");
     const tFrom = await seedTable(cfg, "MR-from");
-    const intoTab = await openTabOn(cfg, tInto, [{ productId: cafe.id, quantity: "1" }]);
-    const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
+    const intoTab = await openTabOn(cfg, tInto, [{ productId: coffee.id, quantity: "1" }]);
+    const fromTab = await openTabOn(cfg, tFrom, [{ productId: water.id, quantity: "1" }]);
 
     // fromTab's guests move to intoTab's table: their party combines, and staff merge the bills.
     const move = await tableAction(fromTab, intoTab);
@@ -337,7 +335,6 @@ describe("parties combined, bills merged → one registro (H2)", () => {
     expect(await saleCount(intoTab)).toBe(1);
     expect(await registroCount(intoTab)).toBe(1);
     expect(await registroCount(fromTab)).toBe(0);
-    // The FILED sale reflects BOTH lines — café 1.50 (intoTab) + agua 2.00 (moved from fromTab) = 3.50.
     // Every count above would still pass on a merge that moved NOTHING; a dropped line files 1.50.
     expect(await filedSaleTotal(intoTab)).toBe("3.50");
   });
@@ -345,11 +342,11 @@ describe("parties combined, bills merged → one registro (H2)", () => {
 
 describe("tables joined across parties, bills merged → one bill covering both tables", () => {
   it("a join-merged tab files ONE sale covering the combined lines; both tables stay in intoTab's party", async () => {
-    const { cfg, cafe, agua } = await setupVenue();
+    const { cfg, coffee, water } = await setupVenue();
     const tInto = await seedTable(cfg, "JMP-into");
     const tFrom = await seedTable(cfg, "JMP-from");
-    const intoTab = await openTabOn(cfg, tInto, [{ productId: cafe.id, quantity: "1" }]);
-    const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
+    const intoTab = await openTabOn(cfg, tInto, [{ productId: coffee.id, quantity: "1" }]);
+    const fromTab = await openTabOn(cfg, tFrom, [{ productId: water.id, quantity: "1" }]);
 
     const join = await tableAction(intoTab, fromTab);
     await withTransaction(suite.db, async (tx) => {
@@ -378,6 +375,6 @@ describe("tables joined across parties, bills merged → one bill covering both 
     expect(await orderState(fromTab)).toMatchObject({ status: "abandoned" });
     expect(await registroCount(intoTab)).toBe(1);
     expect(await registroCount(fromTab)).toBe(0);
-    expect(await filedSaleTotal(intoTab)).toBe("3.50"); // café 1.50 + agua 2.00
+    expect(await filedSaleTotal(intoTab)).toBe("3.50");
   });
 });
