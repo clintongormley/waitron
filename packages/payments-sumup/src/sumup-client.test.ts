@@ -63,9 +63,6 @@ describe("sumupClient request deadline", () => {
   }, 2_000);
 });
 
-// SumUp's `/v1.0/.../refunds` `amount` is in MINOR units (integer cents), like the checkout
-// `value`, NOT euros: euros (`0.40`) truncate to a silent €0.00 refund that still answers 201
-// (docs/research/2026-09-10-sumup-solo-experiments.md §4b).
 describe("sumupClient refund", () => {
   function capturing(): { fetch: typeof fetch; url(): string; body(): string | undefined } {
     let seenUrl = "";

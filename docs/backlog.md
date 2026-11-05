@@ -4139,10 +4139,18 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   if a move can change what a bill charges (ask the owner first). Read, not run.
   [Detail](backlog/payments.md#a875-check-two-writes-the-bill-payments-design-says-a-pending-card-refund-refuses)
 
-- **The SumUp Solo experiments.** Still open: supplied-reference lookup and deduplication, actual
-  webhook headers, signature-card handling, and fresh full/partial-refund observations. Bring the
-  Solo online with the operator and follow the checklist; A949's 2026-10-22 checkpoint is in detail.
+- **The SumUp Solo experiments.** Still open after the 5 November session: signature-required
+  cards, pending-reference lookup, the statement/fee check, remaining connection
+  probes and a second standalone machine sample. The reported decimal-`0.40` probe refunded the
+  full payment, but its request bytes were not saved and the cause is unknown.
+  No further paid request unattended.
   [Detail](backlog/payments.md#the-sumup-solo-experiments)
+
+- **A949. Explain the temporary SumUp refund refusal.** Fresh refunds returned 409 with
+  “Not enough available balance to perform the operation at the moment”. Waitron drops that
+  reason and shows a generic failed refund with no next step. Preserve a recognised reason,
+  offer a later new attempt, and retain uncertain-outcome protections; proposal only.
+  [Detail](backlog/payments.md#a949-explain-a-temporary-sumup-refund-refusal)
 
 - **The deli's outage card machine.** Buy the standalone machine and
   replace estimated prices with real quotes.
@@ -4158,8 +4166,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   itself, and polling must go through the passive-session controller.
 
 - **The SumUp reconciler** — settlement-report audit and orphan self-heal. A949 also includes
-  durable reversal attempts (W44) and the owner's backup-machine matching contract. Its experiment
-  checkpoint leaves the live reference and refund-unit questions open.
+  durable reversal attempts (W44) and the owner's backup-machine matching contract. The November
+  results inform its design; any table changes wait for A760 under the A1308 hold.
   [Detail](backlog/payments.md#the-sumup-reconciler)
 
 - **A SumUp API drift-detection suite** on a Virtual Solo in a sandbox merchant account — would have

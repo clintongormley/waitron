@@ -222,10 +222,7 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       const r = await call(
         "POST",
         `/v1.0/merchants/${mc}/payments/${encodeURIComponent(p.transactionId)}/refunds`,
-        // `amount` is in MINOR units (integer cents), like the checkout `value` — NOT euros. Euros
-        // truncate to 0 cents and SumUp silently refunds €0.00 with a 201
-        // (docs/research/2026-09-10-sumup-solo-experiments.md §4b). Omitting `amount` (a full
-        // refund) refunds the whole transaction.
+        // Partial refunds use integer cents; see docs/research/2026-09-10-sumup-solo-experiments.md §10.3.
         p.amount === undefined ? {} : { amount: toMinorUnits(p.amount) },
       );
       return { status: r.status >= 400 ? "refused" : "accepted" } as const;
