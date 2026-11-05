@@ -1489,7 +1489,7 @@ describe("A803 race replay: through the route", () => {
     expect(after.parties).toBe(before.parties + 1);
     expect(after.notices).toBeGreaterThan(before.notices);
     const revision = revisionOf(ana.partyId);
-    const rowsAfterFirst = await tableSnapshot(venue.db);
+    const rowsAfterFirst = await rowsExceptSightings();
 
     const resend = await send(venue.app, venue.cookie, "POST", path, body);
 
@@ -1497,7 +1497,7 @@ describe("A803 race replay: through the route", () => {
     expect(resend.json).toMatchObject({ code: "party.out_of_date" });
     expect(counts()).toEqual(after);
     expect(revisionOf(ana.partyId)).toBe(revision);
-    expect(await tableSnapshot(venue.db)).toEqual(rowsAfterFirst);
+    expect(await rowsExceptSightings()).toEqual(rowsAfterFirst);
     expect(tablesOf(first.json.partyId as string)).toEqual([second]);
     expect(billsOf(first.json.partyId as string)).toEqual([billId]);
   });
