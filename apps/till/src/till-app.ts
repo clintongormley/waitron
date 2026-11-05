@@ -526,6 +526,9 @@ const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 /** How long a floor poll's read may stay out before it is cancelled: longer than the floor screen's
  * 15-second re-read, so a slow server's answer still lands, and due before the tick after next. */
 const FLOOR_POLL_LIMIT_MS = 25_000;
+/** A refusal's reads hold a waiter at a closed panel with nothing said, and failing one costs no more
+ * than the last answer kept, so they take a floor poll's limit rather than a request's. */
+const SPLIT_REFUSAL_READ_LIMIT_MS = FLOOR_POLL_LIMIT_MS;
 /** How often an open sale view re-reads a full invoice's delivery while an attempt waits or sends. */
 const DELIVERY_REREAD_MS = 5_000;
 /** How often a handheld's sheet re-reads the bill while its own card payment is still pending. */
@@ -11333,7 +11336,8 @@ export class TillApp extends LitElement {
     const groups = this.#readGroups();
     const orders = this.#readCurrentOrders();
     try {
-      const tab = await this.api.getTabLines(this.activeTabId);
+      const billId = this.activeTabId;
+      const tab = await this.#splitRefusalRead(() => this.api.getTabLines(billId));
       if (read !== this.#tabLinesRead) return;
       this.tabLines = tab.lines;
       this.tabRevision = tab.revision;
@@ -11364,7 +11368,7 @@ export class TillApp extends LitElement {
     const party = this.orderParty;
     if (party === null) return null;
     try {
-      return await this.api.readCurrentOrders(party.id);
+      return await this.#splitRefusalRead(() => this.api.readCurrentOrders(party.id));
     } catch {
       return null;
     }
@@ -11398,7 +11402,9 @@ export class TillApp extends LitElement {
     const party = this.orderParty;
     if (party === null) return { groups: [], printProblems: [] };
     try {
-      const { groups, printProblems } = await this.api.listGroups(party.id);
+      const { groups, printProblems } = await this.#splitRefusalRead(() =>
+        this.api.listGroups(party.id),
+      );
       return { groups, printProblems };
     } catch {
       return { groups: null, printProblems: [] };
@@ -12098,7 +12104,7 @@ export class TillApp extends LitElement {
       return { read, partyId: null, bills: [] };
     }
     try {
-      const bills = await this.api.getPartyBills(party.id);
+      const bills = await this.#splitRefusalRead(() => this.api.getPartyBills(party.id));
       if (background && started !== this.#ownBillsStarted)
         return { read, partyId: party.id, bills: null, setAside: true };
       const answer = { read, partyId: party.id, bills };
@@ -15185,7 +15191,7 @@ export class TillApp extends LitElement {
   async #reloadTables(): Promise<void> {
     const read = this.#startTablesRead();
     try {
-      this.#applyTables(read, await this.api.getTablesState());
+      this.#applyTables(read, await this.#splitRefusalRead(() => this.api.getTablesState()));
     } catch {
       // Split a table's panel names its tables from the floor, as it joins its rows with the bills.
       if (this.#splitPanel === undefined && !this.#splitRefusalReading)
@@ -15743,6 +15749,23 @@ export class TillApp extends LitElement {
   #splitRowsOwed = false;
   #splitRefusalReading = false;
 
+  /** A refusal's sentence waits on its reads. One still out at the limit counts as failed, and what
+   * it answers later goes nowhere. */
+  async #splitRefusalRead<T>(read: () => Promise<T>): Promise<T> {
+    if (!this.#splitRefusalReading) return read();
+    const limit = limited(SPLIT_REFUSAL_READ_LIMIT_MS);
+    try {
+      return await Promise.race([
+        read(),
+        pause(limit.signal).then(() => {
+          throw new DOMException("A refusal's read ended", "AbortError");
+        }),
+      ]);
+    } finally {
+      limit.done();
+    }
+  }
+
   #onSplitTableOpen(event: Event): void {
     const { prompt } = (event as CustomEvent<{ prompt: object }>).detail;
     this.#splitTablePrompts.set(prompt, this.#partyComposition([]));
@@ -15870,7 +15893,9 @@ export class TillApp extends LitElement {
       revision: this.orderParty?.revision,
     };
     try {
-      const read = await this.api.getSplitSources(partyId, { signal: controller.signal });
+      const read = await this.#splitRefusalRead(() =>
+        this.api.getSplitSources(partyId, { signal: controller.signal }),
+      );
       if (generation === this.#splitReadGeneration) {
         this.#splitReadAbort = undefined;
         this.splitRead = read;

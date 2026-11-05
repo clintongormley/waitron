@@ -85,8 +85,8 @@ export class TillPortionPicker extends LitElement {
       }
       /* A tick still works on this row, so its text keeps a readable contrast: at
          --wt-opacity-disabled it fails axe on the light page. The tick itself stays in full colour:
-         at that opacity it measures 2.07:1 on the light page and 2.29:1 on the dark, under the 3:1
-         the picker's accessibility suite holds, and axe cannot see it. */
+         at that opacity it measures under the 3:1 the picker's accessibility suite holds, and axe
+         cannot see it. */
       .quiet label {
         color: var(--wt-color-text-muted);
       }

@@ -2654,7 +2654,7 @@ first read shows `table.split_read_failed` in `wt-form-actions`'s bottom message
 with Split quiet and disabled and no hint above the missing rows, until a read answers. A later read that fails keeps the last rows,
 says nothing and leaves Split as it was. Once rows are drawn no read holds Split: a press sends the party revision
 the rows' read answered with, and if they are stale the server refuses it and the panel comes back with the sentence
-and reads. Its precedents: the Products browser's Move and Delete
+and reads. A read that sentence waits on counts as failed once it has been out for 25 seconds. Its precedents: the Products browser's Move and Delete
 dialog, whose confirm is quiet after the summary failed; `wt-delete-dialog`, whose Delete is quiet
 while `readError` is set; and the period delete dialog, whose bottom says when its impact read
 failed.
@@ -5874,9 +5874,13 @@ is picked. A dish recalled into an unsent order is left out.
   the tick only.
 - **A dish waiting in a held group** carries a mark beside its name: the order screen's own word,
   `table.group_held` ("Held", "En espera"), then ` · ` and its course's name when it has one, as the
-  brand's text colour on `--wt-color-surface-lifted`. A dish made here, fired, or wholly cancelled has none
-  (`waitsInHeldGroup`). Once its group is fired elsewhere, the dish's fired time takes the mark away at
-  the panel's next read of the rows. Split a table draws it too.
+  brand's text colour on `--wt-color-surface-lifted`. A dish made here or wholly cancelled has none, nor
+  has one whose group has fired, whether or not the dish itself has a fired time yet. The rows' own read
+  says which (`waitsInHeldGroup` on a bill's lines), by the rule of the order screen's `released`, and the
+  till's groups read plays no part. Split a table draws it too, and there the mark moves with the panel's
+  rows: firing a group or placing a held one moves its bill's revision, which the panel's timed bills read
+  sees and answers with a new read of the rows. Move dishes takes its rows from the order's read, which the
+  timed reads do not repeat, so its mark stays as that read left it while the panel is open.
 - **A blocked row** shows its tick greyed with the reason under the dish, tied to the tick by
   `aria-describedby`: "Paid" for a dish with any quantity paid, and "{amount} is already paid on
   this bill: move fewer dishes" when one more would leave the bill's total below what it has

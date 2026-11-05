@@ -791,10 +791,18 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   leaves no gap for a dish: an order sent moves the party's revision as well (real-route case, whatever edit state the
   press carries, refused 409).
 
+  **A refusal's own reads have a time limit** (fix round D). The sentence comes from those reads, so each one (floor,
+  bills, lines, groups, kitchen, rows) that is still out after the till's limit on a floor read, 25 seconds, counts as
+  failed: the last floor and bills stay and the panel reopens with what a failed read says. Reads taken in turn each
+  have the limit to themselves, so a bills read and then a rows read that never answer say it at 50 seconds. What such
+  a read answers later goes nowhere (cases: a late floor, bills and rows answer write nothing, start no read, and a
+  press still carries the rows on screen). The drafts read behind `draft.out_of_date` and `draft.taken_over` keeps its
+  own limit, the 150 seconds of `requestLimitMs`.
+
   **What this does not reach.** Before a first answer there is no snapshot, so a first read that never answers leaves
-  a blank panel with Split quiet and no words. A refusal's own floor or bills read that never answers keeps the panel
-  closed and the sentence unsaid until it ends, because the sentence comes from those reads. A reload whose floor or
-  bills read never answers starts no second reload on that panel, while the rows, their reads and Split go on.
+  a blank panel with Split quiet and no words, until Back and the same table read again. A reload whose floor or bills
+  read never answers starts no second reload on that panel, while the rows, their reads and Split go on; Back and the
+  same table make a new panel, whose next timed read reloads.
 
   **Refund on the bill the refusal names.** `bill.received_exceeds_total` names its bill
   (`workingOrderId`, `errors.ts:608`), and a loose source may be any bill. So for a split: `CounterError`'s
@@ -971,14 +979,15 @@ Changing from B to A later removes one call in `splitTable` and changes those th
 | `A803 race replay` with promise barriers | The pattern 4b settled on: `waiting-course-copy.test.ts:1787` (`Promise.allSettled`, the asked-first order pinned) | 4b's Build record: the write lock takes them in turn, and the case that a barrier adds is covered by the order assertion |
 | Refusal closes the panel (4a D9) | Panel reopens with picks | D16 |
 | Board 10 shows a bill someone else holds with no tick | The same, unless it was ticked when that happened: then the tick stays and Split is held | D21 |
-| Board 08 marks a waiting dish `waiting · Mains` | `Held · Mains`, `En espera · Mains`; the word alone with no course | The till's own mark for such a dish, `table.group_held`, exists in both languages, so no new words |
+| Board 08 marks a waiting dish `waiting · Mains` | `Held · Mains`, `En espera · Mains`; the word alone with no course | The till's own mark for such a dish, `table.group_held`, exists in both languages, so no new words. Fix round D: the panel's rows are one read (D14), so the rows' answer carries the mark's fact (`waitsInHeldGroup`, worked out in the rows' transaction) and the till's groups read plays no part |
 | Board 08 draws a whole bill's ticks pale | Muted text, as drawn, with the tick in full colour | At `--wt-opacity-disabled` the tick measured 2.07:1 on the light panel and 2.29:1 on the dark (screenshot pixels), under the 3:1 `portion-picker.a11y.test.ts` holds a tick to. Axe passes it either way: it does not read a tick's paint |
 | Board 08 writes `2 × Croquetas` | `Croquettes`, then `2` beside the amount | The picker slice 4a landed (`9a7efbb6b0`); Move dishes draws the same |
 | Board 08 has the stepper inline with its dish | On a row of its own under the dish | The picker slice 4a landed; Move dishes draws the same |
 | Board 10 greys a paid dish and gives it a `paid` chip | Ordinary text, a grey tick and `Paid` under it; pale only when the whole bill is ticked | The picker slice 4a landed; Move dishes draws the same |
-| Boards 08 and 10 draw each bill as a card, with lines between its dishes | The shaded header alone, in the panel's own border | Fix round B's ruling asks for the header alone |
-| Board 10 puts the holder and Take over in the bill's header, and `€20.00 paid` beside its name | The holder's row under the header, `{amount} paid` beside the total | As built in Task 11d; fix round B's ruling did not move it |
+| Board 10 draws each bill as a card, and both boards draw lines between dishes | The shaded header, with no card or lines | Fix round B's ruling asked for the header and did not ask for these |
+| Board 10 puts the holder and Take over in the bill's header, and `€20.00 paid` beside its name | The holder's row under the header, `{amount} paid` beside the total | As built in Task 9; fix round B's ruling did not move it |
 | Board 09 marks the bill a split makes `new` | Not drawn | It needs a stored fact and new words. The leaving table's bills are read later, and by any till, since the till stays with the staying party (D17), and `PartyBill` says nothing to tell a made bill from one that moved whole; a new column is under the A1308 hold. The till has no such word either: `table.new_bill` is the "+ New bill" button. For the owner's words, if wanted once the hold lifts |
+| Board 08's foot has a rule and a faint shade, with only `T8 takes` and the amount in bold | No rule or shade, and the whole line bold | Fix round B's ruling named the header and the mark and left the foot as built; the words on it are the approved ones, so this is look alone |
 | Board 08 lists each table's guests on its own row, with Cancel | The shared guests field side by side, with Back | `guestsStepper` is the shared field (`widgets/guest-count.ts`); Back is the action panel's own button |
 
 ## Current code map (main `4259a040d2`)

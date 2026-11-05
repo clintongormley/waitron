@@ -1798,6 +1798,58 @@ describe("A803 split: the panel's read", () => {
     });
   });
 
+  it("A803 waiting mark: Split a table's rows and Move dishes' rows both say a held dish waits, and neither once its group is fired", async () => {
+    const ana = await seatedWith(venue);
+    const placed = await post(`/api/parties/${ana.partyId}/groups`, {
+      expectedEdit: await withTransaction(venue.db, (tx) => readBillEditState(tx, ana.tabId)),
+      submissionId: randomUUID(),
+      expectedPartyRevision: revisionOf(ana.partyId),
+      groups: [
+        { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" },
+        { lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }], release: "hold" },
+      ],
+    });
+    expect(placed.status, JSON.stringify(placed.json)).toBe(200);
+    const [tarta] = venue.db.all<{ groupId: string }>(
+      sql`select group_id as groupId from working_order_lines where working_order_id = ${ana.tabId} and name = 'Tarta'`,
+    );
+    const marks = async () => {
+      const sources = await read(ana.partyId);
+      const bill = await send(
+        venue.app,
+        venue.cookie,
+        "GET",
+        `/api/working-orders/${ana.tabId}/lines`,
+      );
+      expect(sources.status, JSON.stringify(sources.json)).toBe(200);
+      expect(bill.status, JSON.stringify(bill.json)).toBe(200);
+      const answered = sources.json as { bills: { lines: Record<string, unknown>[] }[] };
+      const of = (lines: Record<string, unknown>[]) =>
+        lines.map((line) => [line.name, line.waitsInHeldGroup]);
+      return {
+        sources: of(answered.bills[0]!.lines),
+        bill: of((bill.json as { lines: Record<string, unknown>[] }).lines),
+      };
+    };
+    const waiting = [
+      ["Caña", undefined],
+      ["Tarta", true],
+    ];
+    expect(await marks()).toEqual({ sources: waiting, bill: waiting });
+
+    const fired = await post(`/api/parties/${ana.partyId}/groups/${tarta!.groupId}/fire`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: revisionOf(ana.partyId),
+    });
+    expect(fired.status, JSON.stringify(fired.json)).toBe(200);
+
+    const none = [
+      ["Caña", undefined],
+      ["Tarta", undefined],
+    ];
+    expect(await marks()).toEqual({ sources: none, bill: none });
+  });
+
   it("answers no bills for a UUID that names no party, as the drafts read answers empty", async () => {
     const answer = await read(randomUUID());
 

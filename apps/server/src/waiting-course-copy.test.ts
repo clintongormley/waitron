@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  lineServiceCancellations,
   orderDraftLines,
   orderDraftRecalledLines,
   orderDrafts,
@@ -37,7 +38,7 @@ import { saveDraft } from "./order-drafts.js";
 import { holderOf, insertPartyBill } from "./parties.js";
 import { readBillEditState } from "./bill-editing.js";
 import { recallToDraft } from "./draft-recall.js";
-import { readBillLines } from "./working-order.js";
+import { readBillLines, readOrderRevision } from "./working-order.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
@@ -264,6 +265,224 @@ describe("A803 waiting copy: copyHeldGroups", () => {
     const agua = lines.find((line) => line.name === "Agua")!;
     expect(agua.course).toBeUndefined();
     expect((await groupRow(agua.groupId!)).state).toBe("fired");
+  });
+
+  describe("A803 waiting mark: the rows' own read says whether a dish waits, as the order screen's released does", () => {
+    /** One dish's mark as the bill's lines give it, beside the order screen's row for that dish. */
+    async function markOf(partyId: string, billId: string, name: string) {
+      const line = (await inTx(v, (tx) => readBillLines(tx, billId))).find(
+        (each) => each.name === name && each.parentLineNo === null,
+      )!;
+      const orders = await inTx(v, (tx) => readCurrentOrders(tx, partyId));
+      const row = orders.groups.flatMap((group) => group.rows).find((each) => each.name === name)!;
+      return {
+        waits: line.waitsInHeldGroup === true,
+        firedAt: line.firedAt,
+        course: line.course?.name,
+        released: row.released,
+        kitchen: row.kitchen?.phase ?? null,
+      };
+    }
+
+    /** A move here reaches an open panel: its timed bills read sees it and starts a rows read. */
+    const billRevision = (billId: string) => inTx(v, (tx) => readOrderRevision(tx, billId));
+
+    it("a dish at a station that waits for the pass stops waiting when fireGroup fires its group, with no fired time", async () => {
+      const a = await seatWith([{ names: ["Flan"], release: "hold" }]);
+      const flan = await lineOf(a.billId, "Flan");
+      const { stationId } = await kitchenItemOf(flan.id);
+      expect(await markOf(a.partyId, a.billId, "Flan")).toEqual({
+        waits: true,
+        firedAt: null,
+        course: "Desserts",
+        released: false,
+        kitchen: "held",
+      });
+
+      const revision = await billRevision(a.billId);
+      await inTx(v, (tx) => setStationsWaitForPass(tx, true, [stationId]));
+      try {
+        await fire(a.partyId, flan.groupId!);
+      } finally {
+        await inTx(v, (tx) => setStationsWaitForPass(tx, false, [stationId]));
+      }
+
+      expect(await billRevision(a.billId)).toBeGreaterThan(revision);
+      expect(await markOf(a.partyId, a.billId, "Flan")).toEqual({
+        waits: false,
+        firedAt: null,
+        course: "Desserts",
+        released: true,
+        kitchen: "requested",
+      });
+    });
+
+    it("a dish needing no preparation, with no kitchen item, stops waiting when fireGroup fires its group", async () => {
+      await inTx(v, (tx) =>
+        setRoutingCell(
+          tx,
+          { row: { kind: "product", productId: v.productId("Vino") }, zoneId: null },
+          { kind: "no_preparation" },
+        ),
+      );
+      const a = await seatWith([{ names: ["Vino"], release: "hold" }]);
+      const vino = await lineOf(a.billId, "Vino");
+      expect(await markOf(a.partyId, a.billId, "Vino")).toEqual({
+        waits: true,
+        firedAt: null,
+        course: "Desserts",
+        released: false,
+        kitchen: null,
+      });
+
+      const revision = await billRevision(a.billId);
+      await fire(a.partyId, vino.groupId!);
+
+      expect(await billRevision(a.billId)).toBeGreaterThan(revision);
+      expect(await markOf(a.partyId, a.billId, "Vino")).toEqual({
+        waits: false,
+        firedAt: null,
+        course: "Desserts",
+        released: true,
+        kitchen: null,
+      });
+    });
+
+    it("a held dish with no course waits, and has no course to name", async () => {
+      const a = await seatWith([{ names: ["Tarta"], release: "hold", courseId: null }]);
+      expect(await markOf(a.partyId, a.billId, "Tarta")).toEqual({
+        waits: true,
+        firedAt: null,
+        course: undefined,
+        released: false,
+        kitchen: "held",
+      });
+    });
+
+    it("a dish in a fired group, and an extra of a held dish, carry no mark", async () => {
+      const a = await seatWith([
+        { names: ["Burger"], release: "fire" },
+        { names: ["Flan"], release: "hold" },
+      ]);
+      const extra = await addExtra(a.billId, (await lineOf(a.billId, "Flan")).id);
+      const lines = await inTx(v, (tx) => readBillLines(tx, a.billId));
+      expect(lines.map((line) => [line.id === extra, line.name, line.waitsInHeldGroup])).toEqual([
+        [false, "Burger", undefined],
+        [false, "Flan", true],
+        [true, "Flan", undefined],
+      ]);
+    });
+
+    it("a dish made here is released at its send even in a held group, until an extra of it is held", async () => {
+      const a = await seatWith([{ names: ["Flan"], release: "hold" }]);
+      const flan = await lineOf(a.billId, "Flan");
+      const item = await kitchenItemOf(flan.id);
+      const made = "2026-11-05T12:00:00.000Z";
+      await inTx(v, (tx) =>
+        tx
+          .update(ticketItems)
+          .set({ madeHere: true, firedAt: made, state: "ready" })
+          .where(eq(ticketItems.id, item.id)),
+      );
+      expect(await markOf(a.partyId, a.billId, "Flan")).toMatchObject({
+        waits: false,
+        released: true,
+      });
+
+      const extra = await addExtra(a.billId, flan.id);
+      await inTx(v, (tx) =>
+        tx.insert(ticketItems).values({
+          ...item,
+          id: randomUUID(),
+          workingOrderLineId: extra,
+        }),
+      );
+      expect(await markOf(a.partyId, a.billId, "Flan")).toMatchObject({
+        waits: true,
+        released: false,
+      });
+    });
+
+    it("placing a new held group on the bill says its dish waits and moves the bill's revision", async () => {
+      const a = await seatWith([{ names: ["Burger"], release: "fire" }]);
+      const revision = await billRevision(a.billId);
+
+      await inTx(v, (tx) =>
+        placeGroups(tx, v.cfg, a.partyId, {
+          groups: [
+            {
+              release: "hold",
+              lines: [{ menuItemId: v.item("Tarta"), quantity: "1", courseId: desserts }],
+            },
+          ],
+          operatorId: OPERATOR,
+          billId: a.billId,
+        }),
+      );
+
+      expect(await billRevision(a.billId)).toBeGreaterThan(revision);
+      expect(await markOf(a.partyId, a.billId, "Tarta")).toMatchObject({
+        waits: true,
+        course: "Desserts",
+      });
+    });
+
+    it("a dish its fired group left unreleased, as for a held extra, does not wait in a held group", async () => {
+      const a = await seatWith([{ names: ["Burger"], release: "fire" }]);
+      const burger = await lineOf(a.billId, "Burger");
+      const extra = await addExtra(a.billId, burger.id);
+      await inTx(v, async (tx) => {
+        const item = await tx
+          .select()
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderLineId, burger.id))
+          .then((rows) => rows[0]!);
+        await tx.insert(ticketItems).values({
+          ...item,
+          id: randomUUID(),
+          workingOrderLineId: extra,
+          requestedAt: null,
+          firedAt: null,
+          state: "queued",
+        });
+      });
+      expect(await markOf(a.partyId, a.billId, "Burger")).toMatchObject({
+        waits: false,
+        released: false,
+      });
+    });
+
+    it("a dish wholly cancelled has nothing left to wait for; part cancelled, the rest waits", async () => {
+      const a = await seatWith([{ names: ["Flan", "Tarta"], release: "hold" }]);
+      const cancel = (lineId: string, quantity: number) =>
+        inTx(v, (tx) =>
+          tx.insert(lineServiceCancellations).values({
+            lineId,
+            quantity,
+            cancelledAt: "2026-11-05T12:00:00.000Z",
+            wasStarted: false,
+            actorId: OPERATOR,
+          }),
+        );
+      await cancel((await lineOf(a.billId, "Flan")).id, 1000);
+      const tarta = await lineOf(a.billId, "Tarta");
+      await inTx(v, (tx) =>
+        tx
+          .update(workingOrderLines)
+          .set({ quantity: 2000 })
+          .where(eq(workingOrderLines.id, tarta.id)),
+      );
+      await cancel(tarta.id, 1000);
+
+      expect(await markOf(a.partyId, a.billId, "Flan")).toMatchObject({
+        waits: false,
+        released: false,
+      });
+      expect(await markOf(a.partyId, a.billId, "Tarta")).toMatchObject({
+        waits: true,
+        released: false,
+      });
+    });
   });
 
   it("A803 waiting copy: copyHeldGroups copies a held group shared by a leaving and a staying bill, moving only the leaving dish and its extras", async () => {

@@ -146,7 +146,7 @@ import type {
   SplitSources,
 } from "../api/client.js";
 import type { ConfirmPaymentDetail, RetainedTender } from "../widgets/tender-pay.js";
-import { heldGroupIds, inHeldGroup, waitsInHeldGroup } from "../state/held-groups.js";
+import { heldGroupIds, inHeldGroup } from "../state/held-groups.js";
 import { itemCount, type DraftEntry, type DraftGroup } from "../state/draft-groups.js";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import type { Place } from "../state/draft-place.js";
@@ -5512,7 +5512,7 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The word the order screen gives a held dish, and the course it waits for when it has one. */
   #waitingMark(line: TabLine): string {
-    if (!waitsInHeldGroup(line, this.#heldGroupIds!)) return "";
+    if (line.waitsInHeldGroup !== true) return "";
     const held = t("table.group_held");
     return line.course === undefined ? held : `${held} · ${line.course.name}`;
   }

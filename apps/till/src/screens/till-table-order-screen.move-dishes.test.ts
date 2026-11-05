@@ -189,24 +189,32 @@ afterEach(() => {
 });
 
 describe("A803 move dishes panel", () => {
-  it("a dish in a held group, which the server moves and keeps in its group, carries the same mark as Split a table's", async () => {
+  it("a dish in a held group, which the server moves and keeps in its group, carries the same mark as Split a table's, from its row alone", async () => {
     const mains = { id: "c-mains", name: "Mains", displayOrder: 2, heldUntilFired: true };
+    const held = {
+      id: "g-held",
+      position: 1,
+      displayNumber: 1,
+      numberPartyId: "p",
+      state: "held" as const,
+      firedAt: null,
+      remindAt: null,
+      lineIds: [],
+      courseIds: [],
+      summary: "",
+    };
     const el = await mountScreen({
-      lines: [HAM, { ...CANAS[0]!, groupId: "g-held", courseId: mains.id, course: mains }],
-      groups: [
+      lines: [
+        { ...HAM, groupId: "g-held" },
         {
-          id: "g-held",
-          position: 1,
-          displayNumber: 1,
-          numberPartyId: "p",
-          state: "held",
-          firedAt: null,
-          remindAt: null,
-          lineIds: [],
-          courseIds: [],
-          summary: "",
+          ...CANAS[0]!,
+          groupId: "g-new",
+          courseId: mains.id,
+          course: mains,
+          waitsInHeldGroup: true,
         },
       ],
+      groups: [held],
     });
     await openMoveDishes(el);
     await picker(el).updateComplete;

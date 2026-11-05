@@ -3059,8 +3059,13 @@ describe("Split a table's mark on a dish waiting for its course", () => {
     splitRead: read(
       {
         b1: [
-          dish("steak", 1, "10.00", { groupId: "g-held", courseId: mains.id, course: mains }),
-          dish("flan", 2, "4.00", { groupId: "g-held" }),
+          dish("steak", 1, "10.00", {
+            groupId: "g-held",
+            courseId: mains.id,
+            course: mains,
+            waitsInHeldGroup: true,
+          }),
+          dish("flan", 2, "4.00", { groupId: "g-held", waitsInHeldGroup: true }),
           dish("soup", 3, "6.00", {
             groupId: "g-fired",
             courseId: mains.id,
@@ -3096,10 +3101,20 @@ describe("Split a table's mark on a dish waiting for its course", () => {
     expect(marks(el)[0]).toEqual(["steak", "En espera · Mains"]);
   });
 
-  it("goes when the groups say the course has been fired", async () => {
+  it("follows the rows alone: the till's groups saying otherwise neither take it away nor bring it", async () => {
     const el = await mountScreen(waiting);
     await toPanel(el);
     el.groups = [group("g-held", "fired"), group("g-fired", "fired")];
+    await settled(el);
+    await splitPicker(el)!.updateComplete;
+    await settled(el);
+    expect(marks(el).map(([id]) => id)).toEqual(["steak", "flan"]);
+
+    el.groups = [group("g-held", "held"), group("g-fired", "held")];
+    el.splitRead = read(
+      { b1: [dish("steak", 1, "10.00", { groupId: "g-held", courseId: mains.id, course: mains })] },
+      { b1: "20.00" },
+    );
     await settled(el);
     await splitPicker(el)!.updateComplete;
     await settled(el);

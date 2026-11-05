@@ -2425,6 +2425,9 @@ export interface TabLine {
   /** The order group the line is released with; null when it is in none, as on a bill with no party
    * or for a line moved in from another party's bill or from a bill with no party. */
   groupId: string | null;
+  /** On a dish its held group has still to release, by the rule of the order screen's `released`;
+   * absent otherwise. */
+  waitsInHeldGroup?: true;
   note: string | null;
   /** The extras list a CHILD row was picked from, which a prefilled pick goes back to; null on a
    * dish. */

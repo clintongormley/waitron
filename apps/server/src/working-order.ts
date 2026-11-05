@@ -3805,6 +3805,46 @@ export function serviceRequested(
       : line.groupState !== null || line.sentAt !== null;
 }
 
+/** The dishes with an extra the kitchen has not been asked for. */
+export function dishesWithHeldExtra(
+  lines: readonly {
+    parentLineId: string | null;
+    ticketItemId: string | null;
+    ticketRequestedAt: string | null;
+    ticketFiredAt: string | null;
+  }[],
+): Set<string> {
+  return new Set(
+    lines.flatMap((line) =>
+      line.parentLineId !== null &&
+      line.ticketItemId !== null &&
+      initiatedAt({ requestedAt: line.ticketRequestedAt, firedAt: line.ticketFiredAt }) === null
+        ? [line.parentLineId]
+        : [],
+    ),
+  );
+}
+
+type ReleasableDish = Parameters<typeof serviceRequested>[0] & {
+  quantity: number;
+  cancelledQuantity: number;
+};
+
+/** Whether Serve is offered: something of the dish is left, the waiter has asked for it
+ *  ({@link serviceRequested}) and none of its extras is held. */
+export function dishReleased(line: ReleasableDish, extraHeld: boolean): boolean {
+  return line.quantity > line.cancelledQuantity && serviceRequested(line) && !extraHeld;
+}
+
+/** Something of the dish is left and its held group has still to release it. */
+function dishWaitsInHeldGroup(line: ReleasableDish, extraHeld: boolean): boolean {
+  return (
+    line.groupState === "held" &&
+    line.quantity > line.cancelledQuantity &&
+    !dishReleased(line, extraHeld)
+  );
+}
+
 /**
  * The named orders holding a dish the kitchen is not making: one never sent and holding no kitchen
  * item ({@link unsentDishLines}), or one that is not released work ({@link isReleased}) — held in
@@ -4307,6 +4347,9 @@ export interface TabLine {
   /** The order group the line is released with; null when it is in none, as on a bill with no party
    * or for a line moved here from another party's bill. */
   groupId: string | null;
+  /** On a dish its held group has still to release, by the rule of the order screen's `released`;
+   * absent otherwise. */
+  waitsInHeldGroup?: true;
   note: string | null;
   /** The extras list a CHILD row was picked from; null on a dish. */
   listId: string | null;
@@ -4352,12 +4395,15 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
         displayOrder: kitchenCourses.displayOrder,
       },
       sentAt: workingOrderLines.sentAt,
+      ticketItemId: ticketItems.id,
+      requestedAt: ticketItems.requestedAt,
       firedAt: ticketItems.firedAt,
       state: ticketItems.state,
       stationId: ticketItems.stationId,
       changesAfterSending: kitchenStations.changesAfterSending,
       madeHere: ticketItems.madeHere,
       groupId: workingOrderLines.groupId,
+      groupState: orderGroups.state,
       note: workingOrderLines.note,
       listId: workingOrderLines.extraListId,
       productParentId: products.parentId,
@@ -4368,6 +4414,7 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
     .leftJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
+    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(workingLinePortions, eq(workingLinePortions.workingOrderLineId, workingOrderLines.id))
     .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
     .where(eq(workingOrderLines.workingOrderId, tabId))
@@ -4388,8 +4435,31 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
     tx,
     rows.map((row) => row.id),
   );
+  const heldExtras = dishesWithHeldExtra(
+    rows.map((row) => ({
+      parentLineId: row.parentLineId,
+      ticketItemId: row.ticketItemId,
+      ticketRequestedAt: row.requestedAt,
+      ticketFiredAt: row.firedAt,
+    })),
+  );
   return rows.map((row) => {
     const sold = soldProduct(row);
+    const waits =
+      row.parentLineId === null &&
+      dishWaitsInHeldGroup(
+        {
+          groupState: row.groupState,
+          ticketItemId: row.ticketItemId,
+          ticketFiredAt: row.firedAt,
+          ticketRequestedAt: row.requestedAt,
+          ticketMadeHere: row.madeHere,
+          sentAt: row.sentAt,
+          quantity: row.quantity,
+          cancelledQuantity: cancellations.get(row.id) ?? 0,
+        },
+        heldExtras.has(row.id),
+      );
     return {
       id: row.id,
       ...(nutrition.has(row.id) ? { nutrition: nutrition.get(row.id)! } : {}),
@@ -4419,6 +4489,7 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
       movable:
         row.state !== null && stillMovable({ state: row.state, madeHere: row.madeHere! }, row),
       groupId: row.groupId,
+      ...(waits ? { waitsInHeldGroup: true as const } : {}),
       note: row.note,
       listId: row.listId,
       menuItemId: menuItemByLine.get(row.id) ?? null,
