@@ -101,11 +101,15 @@ async function snapshot(db: Database) {
     days: await db.select().from(attendanceDayWork),
   };
 }
-async function restore() {
+async function restore(exactCopy = false) {
   const root = await mkdtemp(join(tmpdir(), "attendance-restore-"));
   dirs.push(root);
   const database = join(root, "source.db");
-  await suite.db.archiveTo(database);
+  if (exactCopy) {
+    expect(await suite.db.checkpointTruncate()).toEqual({ reclaimed: true });
+    const source = suite.db.execute<{ file: string }>(sql`pragma database_list`).rows[0]!.file;
+    await writeFile(database, await readFile(source));
+  } else await suite.db.archiveTo(database);
   const manifest = await buildManifest({
     db: suite.db,
     node: suite.node,
@@ -146,10 +150,11 @@ describe("attendance after restoring database contents", () => {
     const sourceSchema = suite.db.execute<{ schema_version: number }>(sql`pragma schema_version`)
       .rows[0]!.schema_version;
     const before = await snapshot(suite.db);
-    const restored = await restore();
+    const restored = await restore(true);
     try {
-      expect(Number.isSafeInteger(sourceSchema)).toBe(true);
-      await restored.venue.execute(sql.raw(`pragma schema_version = ${sourceSchema}`));
+      expect(
+        restored.venue.execute<{ schema_version: number }>(sql`pragma schema_version`).rows,
+      ).toEqual([{ schema_version: sourceSchema }]);
       await withTransaction(restored.venue, (tx) =>
         beginAttendanceDiscovery(tx, { generation: "replaced-same-schema" }),
       );
