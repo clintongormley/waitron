@@ -543,8 +543,10 @@ describe("Split a table's panel and a count stored elsewhere", () => {
 
     await pressSplit(screen);
 
-    expect(app.commands.at(-1)!.type).toBe("split-table");
-    expect(app.commands.at(-1)!.detail.guestCounts).toEqual({ staying: 6, leaving: null });
+    expect(app.commands.at(-1)).toEqual({
+      type: "split-table",
+      detail: expect.objectContaining({ guestCounts: { staying: 6, leaving: null } }),
+    });
   });
 
   it("a staying count typed before the stored one changes elsewhere stays, unsaved against the new stored count", async () => {
