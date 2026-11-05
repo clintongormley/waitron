@@ -10,6 +10,7 @@ import {
   VERB_PERMISSION,
   formatHostReply,
   formatHostRequest,
+  handleHostRequest,
   parseHostReply,
   parseHostRequest,
 } from "./host-protocol.mjs";
@@ -262,6 +263,7 @@ describe("the verb", () => {
       "VERB_PERMISSION",
       "formatHostReply",
       "formatHostRequest",
+      "handleHostRequest",
       "parseHostReply",
       "parseHostRequest",
     ]);
@@ -1344,6 +1346,425 @@ describe("reading a reply's framing", () => {
   it("reads a 4097-byte text as malformed", () => {
     const text = `{"ok":true}${" ".repeat(4085)}\n`;
     expect(text.length).toBe(4097);
-    expect(parseHostReply("network.join", text)).toEqual({ kind: "malformed" });
+    const parse = vi.spyOn(JSON, "parse");
+    try {
+      expect(parseHostReply("network.join", text)).toEqual({ kind: "malformed" });
+      expect(parse).not.toHaveBeenCalled();
+    } finally {
+      parse.mockRestore();
+    }
+  });
+});
+
+const HOST_FAILED = '{"ok":false,"reason":"host_failed"}\n';
+
+/** The adapter each verb calls, and the fake's normal answer. */
+const ADAPTER_OF = {
+  "network.read": ["networkRead", readReply()],
+  "network.scan": ["networkScan", { ok: true, networks: [] }],
+  "network.join": ["networkJoin", { ok: true }],
+  "network.forget": ["networkForget", { ok: true }],
+  "screen.read": ["screenRead", { ok: true, start: "dashboard" }],
+  "screen.set": ["screenSet", { ok: true, start: "dashboard" }],
+  "tag.write": ["tagWrite", { ok: true, tag: "written" }],
+};
+
+/**
+ * @param {Record<string, (...args: any[]) => unknown>} [overrides]
+ */
+const fakeAdapters = (overrides = {}) => {
+  /** @type {unknown[][]} */
+  const calls = [];
+  /** @type {Record<string, unknown>} */
+  const answers = Object.fromEntries(Object.values(ADAPTER_OF));
+  answers.log = undefined;
+  /** @type {Record<string, import("vitest").Mock>} */
+  const adapters = {};
+  for (const name of Object.keys(answers)) {
+    const behaviour = overrides[name] ?? (() => answers[name]);
+    adapters[name] = vi.fn((...args) => {
+      calls.push([name, ...args]);
+      return behaviour(...args);
+    });
+  }
+  return { adapters, calls };
+};
+
+/** [verb, line, fields or undefined, actor] */
+const DISPATCHED = [
+  ...ACCEPTED_FIELDLESS.map(([verb, actor, text]) => [verb, line(verb, text), undefined, actor]),
+  ...ACCEPTED_WITH_FIELDS.map(([verb, text, fields, actor]) => [
+    verb,
+    line(verb, text),
+    fields,
+    actor,
+  ]),
+];
+
+describe("handleHostRequest answers each request", () => {
+  it.each(DISPATCHED)(
+    "%s: logs, then calls its adapter, and writes its answer",
+    async (verb, text, fields, actor) => {
+      const { adapters, calls } = fakeAdapters();
+      const [name, answer] = ADAPTER_OF[verb];
+      expect(await handleHostRequest(text, adapters)).toBe(formatHostReply(verb, answer));
+      const permission = actor.source === "person" ? "system.manage" : null;
+      expect(calls).toEqual([
+        ["log", { verb, actor, permission }],
+        fields === undefined ? [name] : [name, fields],
+      ]);
+      expect(Object.isFrozen(calls[0][1])).toBe(true);
+      expect(Object.keys(calls[0][1])).toEqual(["verb", "actor", "permission"]);
+    },
+  );
+
+  it.each(DISPATCHED.filter(([, , fields]) => fields === undefined))(
+    "%s: calls its adapter with no argument",
+    async (verb, text) => {
+      const { adapters } = fakeAdapters();
+      await handleHostRequest(text, adapters);
+      expect(adapters[ADAPTER_OF[verb][0]].mock.calls[0].length).toBe(0);
+    },
+  );
+
+  it("hands networkJoin one frozen object of the four fields", async () => {
+    const { adapters } = fakeAdapters();
+    await handleHostRequest(line("network.join", `{${JOIN_FIELDS},"actor":${PERSON}}`), adapters);
+    const args = adapters.networkJoin.mock.calls[0];
+    expect(args.length).toBe(1);
+    expect(args[0]).toEqual({
+      ssidHex: "4361666550657065",
+      keyMgmt: "wpa-psk",
+      psk: "abcdefgh",
+      hidden: false,
+    });
+    expect(Object.keys(args[0])).toEqual(["ssidHex", "keyMgmt", "psk", "hidden"]);
+    expect(Object.isFrozen(args[0])).toBe(true);
+  });
+
+  it("hands tagWrite a null tag", async () => {
+    const { adapters } = fakeAdapters();
+    await handleHostRequest(line("tag.write", `{"tag":null,"actor":${SERVER}}`), adapters);
+    expect(adapters.tagWrite.mock.calls[0]).toEqual([{ tag: null }]);
+  });
+
+  it("hands tagWrite a frozen tag inside a frozen object", async () => {
+    const { adapters } = fakeAdapters();
+    await handleHostRequest(
+      line("tag.write", `{"tag":{"name":"Bar Pepe","live":true},"actor":${SERVER}}`),
+      adapters,
+    );
+    const args = adapters.tagWrite.mock.calls[0];
+    expect(args).toEqual([{ tag: { name: "Bar Pepe", live: true } }]);
+    expect(Object.isFrozen(args[0])).toBe(true);
+    expect(Object.isFrozen(args[0].tag)).toBe(true);
+  });
+
+  it("passes a busy refusal from networkJoin through", async () => {
+    const { adapters } = fakeAdapters({ networkJoin: () => ({ ok: false, reason: "busy" }) });
+    expect(
+      await handleHostRequest(line("network.join", `{${JOIN_FIELDS},"actor":${PERSON}}`), adapters),
+    ).toBe('{"ok":false,"reason":"busy"}\n');
+  });
+
+  it("passes a no_space refusal from tagWrite through", async () => {
+    const { adapters } = fakeAdapters({ tagWrite: () => ({ ok: false, reason: "no_space" }) });
+    expect(
+      await handleHostRequest(line("tag.write", `{"tag":null,"actor":${SERVER}}`), adapters),
+    ).toBe('{"ok":false,"reason":"no_space"}\n');
+  });
+
+  it("writes the answer from its one copy", async () => {
+    const answer = Object.assign(Object.create({ toJSON: () => ({ ok: true, start: "till" }) }), {
+      ok: true,
+      start: "dashboard",
+    });
+    const { adapters } = fakeAdapters({ screenRead: () => answer });
+    expect(await handleHostRequest(line("screen.read", `{"actor":${SERVER}}`), adapters)).toBe(
+      '{"ok":true,"start":"till"}\n',
+    );
+  });
+});
+
+describe("handleHostRequest passes the parser's refusals on", () => {
+  it.each([
+    ["request_invalid", "network.read"],
+    ["request_invalid", `network.read {"actor": ${PERSON}}`],
+    ["unknown_request", `network.readx {"actor":${PERSON}}`],
+    ["unknown_request", "clock.status"],
+    ["unknown_request", 'clock.set 1730073600000 {"source":"admin","person":"p1"}'],
+    ["actor_invalid", `network.join {${JOIN_FIELDS},"actor":${SERVER}}`],
+    ["fields_invalid", `screen.set {"start":"kitchen","actor":${PERSON}}`],
+  ])("answers %s to %s without calling anything", async (reason, text) => {
+    const { adapters, calls } = fakeAdapters();
+    expect(await handleHostRequest(text, adapters)).toBe(`{"ok":false,"reason":"${reason}"}\n`);
+    expect(calls).toEqual([]);
+  });
+});
+
+const READ_LINE = line("network.read", `{"actor":${PERSON}}`);
+const JOIN_LINE = line("network.join", `{${JOIN_FIELDS},"actor":${PERSON}}`);
+
+describe("handleHostRequest answers host_failed for broken adapters", () => {
+  /** @returns {Record<string, unknown>} */
+  const withLog = (log) => {
+    const { adapters } = fakeAdapters();
+    const broken = { ...adapters };
+    delete broken.log;
+    Object.defineProperty(broken, "log", { enumerable: true, get: log });
+    return broken;
+  };
+
+  it.each([
+    ["undefined", () => ({ adapters: undefined, calls: [] })],
+    ["null", () => ({ adapters: null, calls: [] })],
+    [
+      "a missing log",
+      () => {
+        const fake = fakeAdapters();
+        delete fake.adapters.log;
+        return fake;
+      },
+    ],
+    [
+      "an extra key",
+      () => {
+        const fake = fakeAdapters();
+        fake.adapters.clockSet = vi.fn();
+        return fake;
+      },
+    ],
+    [
+      "a networkRead that is not a function",
+      () => {
+        const fake = fakeAdapters();
+        fake.adapters.networkRead = /** @type {any} */ ("x");
+        return fake;
+      },
+    ],
+  ])("answers host_failed for %s and calls nothing", async (_name, make) => {
+    const { adapters, calls } = make();
+    expect(await handleHostRequest(READ_LINE, /** @type {any} */ (adapters))).toBe(HOST_FAILED);
+    expect(calls).toEqual([]);
+  });
+
+  it("answers host_failed when reading log throws", async () => {
+    const broken = withLog(() => {
+      throw new Error("getter");
+    });
+    expect(await handleHostRequest(READ_LINE, /** @type {any} */ (broken))).toBe(HOST_FAILED);
+  });
+
+  it("answers host_failed when listing the adapters' keys throws", async () => {
+    const { adapters } = fakeAdapters();
+    const proxy = new Proxy(adapters, {
+      ownKeys() {
+        throw new Error("keys");
+      },
+    });
+    expect(await handleHostRequest(READ_LINE, /** @type {any} */ (proxy))).toBe(HOST_FAILED);
+  });
+
+  it("answers host_failed, not the parser's refusal, with no adapters", async () => {
+    expect(await handleHostRequest("clock.status", /** @type {any} */ (undefined))).toBe(
+      HOST_FAILED,
+    );
+  });
+});
+
+describe("handleHostRequest answers host_failed when an adapter fails", () => {
+  it.each([
+    [
+      "log throwing",
+      () => {
+        throw new Error("log");
+      },
+    ],
+    ["log rejecting", () => Promise.reject(new Error("log"))],
+  ])("%s: calls no request adapter", async (_name, log) => {
+    const { adapters, calls } = fakeAdapters({ log });
+    expect(await handleHostRequest(JOIN_LINE, adapters)).toBe(HOST_FAILED);
+    expect(adapters.networkJoin).not.toHaveBeenCalled();
+    expect(calls.map(([name]) => name)).toEqual(["log"]);
+  });
+
+  it.each([
+    [
+      "throwing an Error",
+      "network.read",
+      () => {
+        throw new Error("boom");
+      },
+    ],
+    [
+      "throwing a string",
+      "network.read",
+      () => {
+        throw "boom";
+      },
+    ],
+    ["rejecting with undefined", "network.read", () => Promise.reject(undefined)],
+    [
+      "rejecting with an object whose toString throws",
+      "network.read",
+      () =>
+        Promise.reject({
+          toString() {
+            throw new Error("toString");
+          },
+        }),
+    ],
+    ["answering ok with an extra key", "network.join", () => ({ ok: true, extra: 1 })],
+    [
+      "answering a getter that throws",
+      "screen.read",
+      () => ({
+        ok: true,
+        get start() {
+          throw new Error("getter");
+        },
+      }),
+    ],
+    ["answering a BigInt", "screen.read", () => ({ ok: true, start: 1n })],
+    [
+      "answering a toJSON of an invalid shape",
+      "screen.read",
+      () => ({ ok: true, start: "till", toJSON: () => ({ ok: true, start: "kitchen" }) }),
+    ],
+    ["answering undefined", "network.join", () => undefined],
+    ["answering null", "network.join", () => null],
+    ["answering a parser reason", "network.join", () => ({ ok: false, reason: "actor_invalid" })],
+    ["answering host_failed", "network.join", () => ({ ok: false, reason: "host_failed" })],
+    ["answering another verb's reason", "network.join", () => ({ ok: false, reason: "not_saved" })],
+  ])("%s answers host_failed", async (_name, verb, behaviour) => {
+    const [name] = ADAPTER_OF[verb];
+    const { adapters } = fakeAdapters({ [name]: behaviour });
+    const text = DISPATCHED.find(([dispatched]) => dispatched === verb)[1];
+    expect(await handleHostRequest(text, adapters)).toBe(HOST_FAILED);
+    expect(adapters[name]).toHaveBeenCalledTimes(1);
+  });
+});
+
+const ALL_REFUSAL_LINES = new Set(
+  [...PARSER_REASONS, "host_failed", ...OWN_REASONS.flatMap(([, own]) => own)].map(
+    (reason) => `{"ok":false,"reason":"${reason}"}\n`,
+  ),
+);
+
+describe("handleHostRequest never rejects", () => {
+  it("answers 2,000 damaged lines with a refusal or a valid reply", async () => {
+    let seed = 20261105;
+    const next = (limit) => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed % limit;
+    };
+    const bases = [
+      ...DISPATCHED.map(([, text]) => text),
+      ...ACCEPTED_FIELD_VALUES.map(([, text]) => text),
+    ];
+    const characters = `${Array.from({ length: 128 }, (_, code) => String.fromCharCode(code)).join("")}é`;
+    let refused = 0;
+    let answered = 0;
+    for (let index = 0; index < 2000; index += 1) {
+      const base = bases[next(bases.length)];
+      const at = next(base.length + 1);
+      const character = characters[next(characters.length)];
+      const operation = next(3);
+      const text =
+        operation === 0
+          ? base.slice(0, at) + base.slice(at + 1)
+          : operation === 1
+            ? base.slice(0, at) + character + base.slice(at)
+            : base.slice(0, at) + character + base.slice(at + 1);
+      const answer = await handleHostRequest(text, fakeAdapters().adapters);
+      if (ALL_REFUSAL_LINES.has(answer)) {
+        refused += 1;
+      } else {
+        expect(parseHostReply(text.slice(0, text.indexOf(" ")), answer).kind).toBe("ok");
+        answered += 1;
+      }
+    }
+    expect(refused + answered).toBe(2000);
+    expect(refused).toBeGreaterThan(0);
+    expect(answered).toBeGreaterThan(0);
+  });
+});
+
+const CANARY = "Canary-psk-7f3a91";
+const CANARY_FORMS = [
+  CANARY,
+  Buffer.from(CANARY, "utf8").toString("hex"),
+  Buffer.from(CANARY, "utf8").toString("base64"),
+];
+const canaryError = Object.assign(new Error(CANARY), { code: CANARY, reason: CANARY });
+const CANARY_LINE = line(
+  "network.join",
+  `{"ssidHex":"4361666550657065","keyMgmt":"wpa-psk","psk":"${CANARY}","hidden":false,"actor":${PERSON}}`,
+);
+const ADAPTER_NAMES = [...Object.values(ADAPTER_OF).map(([name]) => name), "log"];
+
+const throwCanary = () => {
+  throw canaryError;
+};
+/** @param {string[]} names */
+const throwingEach = (names) => Object.fromEntries(names.map((name) => [name, throwCanary]));
+
+/** @param {string} text @param {string} form */
+const occurrences = (text, form) => text.split(form).length - 1;
+
+/** @param {string} text */
+const expectNoCanary = (text) => {
+  for (const form of CANARY_FORMS) expect(text).not.toContain(form);
+};
+
+describe("the canary password", () => {
+  it.each([
+    ["every adapter throws", throwingEach(ADAPTER_NAMES)],
+    ["log alone throws", throwingEach(["log"])],
+    ["log rejects", { log: () => Promise.reject(canaryError) }],
+  ])("reaches nothing when %s", async (_name, overrides) => {
+    const { adapters, calls } = fakeAdapters(overrides);
+    const answer = await handleHostRequest(CANARY_LINE, adapters);
+    expect(answer).toBe(HOST_FAILED);
+    expectNoCanary(answer);
+    expect(adapters.networkJoin).not.toHaveBeenCalled();
+    expect(calls.map(([name]) => name)).toEqual(["log"]);
+    for (const call of calls) expectNoCanary(JSON.stringify(call));
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["every adapter but log throws", throwingEach(ADAPTER_NAMES.slice(0, -1)), HOST_FAILED],
+    ["networkJoin throws", throwingEach(["networkJoin"]), HOST_FAILED],
+    ["networkJoin rejects", { networkJoin: () => Promise.reject(canaryError) }, HOST_FAILED],
+    [
+      "networkJoin refuses with it",
+      { networkJoin: () => ({ ok: false, reason: CANARY }) },
+      HOST_FAILED,
+    ],
+    ["networkJoin answers it", { networkJoin: () => ({ ok: true, psk: CANARY }) }, HOST_FAILED],
+    ["the adapters answer normally", {}, '{"ok":true}\n'],
+  ])("reaches only networkJoin when %s", async (_name, overrides, expected) => {
+    const { adapters, calls } = fakeAdapters(overrides);
+    const answer = await handleHostRequest(CANARY_LINE, adapters);
+    expect(answer).toBe(expected);
+    expectNoCanary(answer);
+    expect(adapters.networkJoin).toHaveBeenCalledTimes(1);
+    const joinCall = JSON.stringify(adapters.networkJoin.mock.calls[0]);
+    expect(occurrences(joinCall, CANARY)).toBe(1);
+    expect(adapters.networkJoin.mock.calls[0][0].psk).toBe(CANARY);
+    for (const form of CANARY_FORMS.slice(1)) expect(joinCall).not.toContain(form);
+    expect(calls.map(([name]) => name)).toEqual(["log", "networkJoin"]);
+    for (const call of calls.filter(([name]) => name !== "networkJoin")) {
+      expectNoCanary(JSON.stringify(call));
+    }
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("is refused when network.read's snapshot carries it", async () => {
+    const { adapters } = fakeAdapters({ networkRead: () => ({ ...readReply(), psk: CANARY }) });
+    const answer = await handleHostRequest(READ_LINE, adapters);
+    expect(answer).toBe(HOST_FAILED);
+    expectNoCanary(answer);
   });
 });

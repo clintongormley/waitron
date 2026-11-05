@@ -402,3 +402,53 @@ export function parseHostReply(verb, text) {
     return Object.freeze({ kind: "refused", reason: /** @type {string} */ (value.reason) });
   return Object.freeze({ kind: "ok", value: deepFreeze(value) });
 }
+
+/** @type {Readonly<Record<string, string>>} */
+const VERB_ADAPTER = Object.freeze({
+  "network.read": "networkRead",
+  "network.scan": "networkScan",
+  "network.join": "networkJoin",
+  "network.forget": "networkForget",
+  "screen.read": "screenRead",
+  "screen.set": "screenSet",
+  "tag.write": "tagWrite",
+});
+const ADAPTER_NAMES = [...Object.values(VERB_ADAPTER), "log"];
+const HOST_FAILED_LINE = '{"ok":false,"reason":"host_failed"}\n';
+
+/**
+ * @typedef {Record<string, (...args: any[]) => unknown>} HostAdapters  exactly networkRead,
+ *   networkScan, networkJoin, networkForget, screenRead, screenSet, tagWrite and log
+ */
+
+/**
+ * Answers one request line, without its newline, through the adapters. Never rejects; any fault
+ * answers host_failed and keeps nothing from it.
+ * @param {unknown} line @param {HostAdapters} adapters
+ * @returns {Promise<string>} one reply line, newline included
+ */
+export async function handleHostRequest(line, adapters) {
+  try {
+    if (
+      !exactRecord(adapters, ADAPTER_NAMES) ||
+      !ADAPTER_NAMES.every((name) => typeof adapters[name] === "function")
+    ) {
+      return HOST_FAILED_LINE;
+    }
+    const parsed = parseHostRequest(line);
+    if (!parsed.ok) return `${asciiJson(parsed)}\n`;
+    const { verb, fields, actor } = parsed.request;
+    const permission = actor.source === "person" ? VERB_PERMISSION[verb] : null;
+    // Awaited first, so no change happens that the log did not record.
+    await adapters.log(Object.freeze({ verb, actor, permission }));
+    const name = VERB_ADAPTER[verb];
+    const answer = await (FIELD_KEYS[verb].length === 0
+      ? adapters[name]()
+      : adapters[name](fields));
+    const copy = JSON.parse(JSON.stringify(answer));
+    if (copy?.ok === false && !REPLY_REFUSALS[verb].includes(copy.reason)) return HOST_FAILED_LINE;
+    return formatHostReply(verb, copy);
+  } catch {
+    return HOST_FAILED_LINE;
+  }
+}
