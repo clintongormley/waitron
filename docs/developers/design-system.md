@@ -2669,8 +2669,8 @@ after a refused split fails, no bill shows held and Split stays enabled.
 **(c) A refused take-over has a line of its own** (`data-split-take-over-refusal`), below whatever the foot already says, where the list below says one
 message. While a ticked bill is held that is the held sentence, and each says something the other
 does not: what stands in the way, and that the take-over failed. With no ticked bill held, it sits
-beside a no-field refusal or a stopped press's sentence if one is showing; no case pins that pair,
-only the held one. The line goes when the next take-over is pressed, when a press of Split gets past
+beside a no-field refusal or a stopped press's sentence if one is showing; a case pins the no-field
+refusal's pair, and none the stopped press's. The line goes when the next take-over is pressed, when a press of Split gets past
 the hold, and when the panel closes. A marked count's bottom message still follows both.
 
 - mark every required field with `required`; `wt-input` renders the visible asterisk and forwards
@@ -5879,7 +5879,7 @@ decides, and its refusal closes the panel with its words. Guards: `portion-selec
 `till-table-order-screen.move-dishes.test.ts`; nothing checks another screen that might draw its
 own dish list instead of this widget.
 
-Split a table draws every bill of the party, in number order, through `till-split-picker`
+Split a table draws every open and presented bill of the party, in number order, through `till-split-picker`
 (`apps/till/src/widgets/split-picker.ts`), which holds no picks of its own: the selection model
 (`apps/till/src/state/split-selection.ts`) gives each change, the widget emits `split-picks`, and the
 screen hands the selection back and keeps it in its action draft scope. Each bill's dishes are this
@@ -5888,12 +5888,14 @@ same `till-portion-picker`, with these additions.
 - **The whole-bill header** is a native tick labelled with the bill's name, then `{amount} paid` when
   the bill has received money (money a card in progress has only reserved is not counted), then the
   bill's total. The tick is checked for a whole bill and indeterminate for a bill with picks. Pressing
-  it makes an unticked or part-ticked bill whole and clears a whole one. Picking every dish of a bill
+  it makes an unticked or part-ticked bill whole and clears a whole one; a held bill's tick only clears.
+  Picking every dish of a bill
   makes it whole too, unless a dish is paid or the bill holds this person's own unsent dishes, which
   say `table.split_own_unsent` under the header and go only with the whole bill.
 - **A `whole` row** of a whole bill draws ticked with no stepper. A paid dish stays ticked and
   disabled, saying why; a row the floor stops is not stopped, because the whole bill keeps its
-  payments. Unticking a row leaves the bill's other rows picked.
+  payments. Unticking a row turns the bill into picks of every other row, each up to its limit, so a
+  part-paid bill's floor can leave some unticked.
 - **The summary** under the bills says what the leaving table takes and the staying table keeps, each
   with its amount (`table.split_takes`, `table.split_keeps`, `an empty bill` for a side with nothing).
   `table.split_nothing_to_pay` replaces the staying line when what stays owes nothing and holds its
@@ -5904,7 +5906,8 @@ same `till-portion-picker`, with these additions.
   draft, which opens the screen's own take-over dialog. There is no bulk take-over. While such a bill
   is not ticked its tick is disabled, tied to `table.split_take_over_first` by `aria-describedby`.
   Split is quiet and disabled while a take-over is out. On the answer the bill's row goes and it keeps
-  its tick and picks; a refusal goes at the foot ([Forms](#forms)) and the bill stays held.
+  its tick and picks; a refusal goes at the foot ([Forms](#forms)), and the bill stays held unless the
+  read after it shows the order gone.
 - **A presented bill** goes whole or stays: `table.split_presented` under its header, its tick
   working, its rows pale and disabled with that sentence as their `aria-description`, and no picks.
 - **Everything ticked.** When a press finds nothing would stay (`nothingStays`), the action row gives
@@ -5929,11 +5932,14 @@ anyway), an invalid count, then a stop a read left waiting, then Everything tick
 2. **It is gone**: the read no longer lists it. It leaves the selection, and the next press sends
    nothing and says `table.split_bill_gone`, one bill per press. Listed again before that press, it
    has come back unticked, and the stop becomes `table.split_changed`.
-3. **A pick is lost**: a picked dish was paid or removed, or the bill was presented. The pick goes, its
-   row shows why, and the next press sends nothing and says `table.split_changed`.
+3. **A pick is lost**: a picked dish was paid or removed, money received reached the floor, or the bill
+   was presented. The pick goes, a row still there shows why, and the next press sends nothing and says
+   `table.split_changed`.
 4. **Picks become the whole bill**: every dish left is picked. The bill turns whole, the summary names
    it, and the next press sends nothing and says `table.split_changed`. Once whole it follows the
-   whole-bill rule, so a later dish reaching it stops nothing and the summary shows the new total.
+   whole-bill rule, so a read adds no stop of its own and the summary shows the new total. A dish
+   someone sends has moved the bill's edit state, so the comparison below stops one press; a dish moved
+   in with Move dishes stops nothing.
 
 A whole bill presented or part-paid by a read stays whole and stops nothing, and an unticked bill
 gaining an order gets its row and stops nothing. Behind these the app keeps, for each selected bill,
@@ -5942,7 +5948,7 @@ bills: one missing or moved sends no request and reopens the panel with `table.s
 take-over from the panel and the screen's own stop replace that bill's record, so one change stops one
 press.
 
-Guards: `split-selection.test.ts`; `split-picker.test.ts` and `split-picker.a11y.test.ts` (one widget,
+Guards: `split-selection.test.ts` (the model alone, no widget or screen); `split-picker.test.ts` and `split-picker.a11y.test.ts` (one widget,
 both themes, its listed states, not the foot); `till-table-order-screen.split-table.test.ts` and
 `.split-table.unsaved.test.ts` (the screen with reads handed in as properties); and
 `till-app-split-table.test.ts` (the real app against a stubbed API, not a server, which is where the

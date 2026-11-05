@@ -673,7 +673,7 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   rows, says nothing and leaves Split as it was, because a request's failure never disables the action. A
   drafts read that fails while the panel is open says nothing either, and the next timed read tries again. While
   the app brings a party's first bill in behind the panel its sync, its bill on screen and its revision are all
-  moving, so Split is quiet and disabled until `#reloadSplitParty` has replaced the composition (`splitReloading`,
+  moving, so Split is quiet and disabled until `#reloadSplitParty` has finished with the composition (`splitReloading`,
   the Forms contract's "waits for a load"). If that read's floor gives the table on screen to another party, the
   panel closes with the party and the screen opens that party's bill.
   Task 15 writes this into Forms. Enter submits from either stepper (`submitOnEnter`, as the window does). Split is primary
@@ -780,7 +780,10 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   read fails as well, the old rows stay under the row's own words (for `party.out_of_date`, "so it has been
   reloaded"; for a lost reply, `table.error`), Split stays enabled, and a press carries the old revision for the
   server to judge. The next timed read brings the rows without moving that revision, and if the server refuses the
-  press, that refusal's reopening brings both. A floor read that fails while the panel
+  press, that refusal's reopening brings both. A reopening takes the revision from before its sources read, not
+  after it. `#reloadSplitParty` keeps to the same rule: if a sources read is still out when its reads end, that read
+  may have started before its floor read, so it is read again and Split stays disabled until that answers; the press
+  then carries the revision from before it, and if it fails, the old revision. A floor read that fails while the panel
   is open or due to reopen keeps the last floor, as a failed bills read keeps the last list: the panel names its
   tables from the floor, and comparing against an empty floor would say the party has gone from a table it holds.
 
@@ -842,7 +845,7 @@ Changing from B to A later removes one call in `splitTable` and changes those th
     stop at `draft.out_of_date` (run at Task 12a's fix review, N4, and Task 12b's, I1). That does not let a
     ticked bill past: its observation is what stops it, recorded as missing when it has no edit state. A party
     gaining its first bill with the panel open (D14) has its sync, bill on screen and revision all move, so
-    `#reloadSplitParty` replaces the composition under the panel's prompt: the waiter now sees those rows. A panel
+    `#reloadSplitParty` replaces the composition under the panel's prompt once those rows are read (D16): the waiter now sees them. A panel
     closed during those reads, by the floor or by the waiter, does not stop them, because the party still needs its
     bill and sync. Only leaving the table does.
   - One observation per selected bill. The screen dispatches `split-table-observe { prompt, billIds }`
@@ -896,7 +899,7 @@ Changing from B to A later removes one call in `splitTable` and changes those th
     Take over, `takeOverOn` runs, then its read. The bill keeps its tick and picks, its rows return, its record
     is replaced (D20), and once no selected bill is held the sentence goes and Split is primary again. The
     waiter reviews and presses Split, and the request carries the new state. Cancel changes nothing. A refused
-    take-over says so at the foot and the bill stays held.
+    take-over says so at the foot, and the bill stays held unless the read after it shows the order gone.
   - **Unticking the bill** clears it from the selection, picks included: it stays at the staying table and the
     other person's order is untouched. Its tick then cannot be set again until the order is taken over or goes
     (`table.split_take_over_first`). Split comes back the same way. This is the only thing that tick does on a
@@ -1048,7 +1051,7 @@ prints" that slip, and spec §3.7, four days later, ended it.
 `testing/table-action-fixture.ts`'s `splitTable` accepts `billId | null | SplitSelection`. It answers
 `{ partyId, billId: billIds[0] }`, and adds `billIds` only for a selection, because 7 existing cases pin the
 old shape. So the other test files that call it through the fixture (`rg -n 'splitTable\('
-apps/server/src -g '*.test.ts'`) need no edit. `observedTableActionBody` reads `selection` as well. A
+apps/server/src -g '*.test.ts'`) need no edit. `observedTableActionBody` reads `selection`. A
 fixture, not an assertion.
 
 ### Moved till-app cases

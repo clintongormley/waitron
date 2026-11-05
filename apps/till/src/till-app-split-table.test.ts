@@ -4415,7 +4415,10 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         });
         /** A timed read moves the list, its sources name a bill the list does not know, which starts
          * the reload, and another change has moved Bill 2 again before the reload's bills read. */
-        async function reloadOverRowsBehind(el: TillApp, secondRead: () => Promise<SplitSources>) {
+        async function reloadOverRowsBehind(
+          el: TillApp,
+          secondRead: (partyId: string) => Promise<SplitSources>,
+        ) {
           api.getTablesState!.mockResolvedValue(atRevision(9));
           api
             .getPartyBills!.mockReset()
@@ -4789,7 +4792,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     it.each([
       ["draft.not_found", 404, "table.take_over_gone"],
       ["draft.out_of_date", 409, "table.take_over_changed"],
-    ])(
+    ] as const)(
       "take-over: %s with the read after it showing the order gone: the foot says so, the row goes, the tick stays and Split comes back",
       async (code, status, words) => {
         const el = await tickedThenHeld();

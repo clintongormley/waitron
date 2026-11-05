@@ -1002,6 +1002,8 @@ describe("A803 selection:", () => {
 
       expect(sorted(out.split.picks.get("b1"))).toEqual(["x"]);
       expect(out.changed).toEqual(["b1"]);
+      const reasons = rowsOf(funded, out.split).map((row) => row.blocked?.reason ?? null);
+      expect(reasons).toEqual([null, "floor", "floor"]);
     });
 
     it("a re-read where a whole bill is presented stays whole and names nothing", () => {
