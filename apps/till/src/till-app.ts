@@ -4315,6 +4315,7 @@ export class TillApp extends LitElement {
     if (this.#splitReadParty !== undefined && this.#splitReadParty !== this.orderParty?.id) {
       this.#leaveSplitRead();
       this.#splitReadParty = undefined;
+      this.#splitBillsSeen = undefined;
       this.splitRead = null;
     }
     const paying = this.billPaying;
@@ -15771,12 +15772,14 @@ export class TillApp extends LitElement {
   #splitPanel?: {
     prompt: object;
     partyId: string;
-    billsSeen: string;
     screen: TillTableOrderScreen;
     reloading?: boolean;
   };
   /** Whose answer {@link splitRead} may hold, which outlives the panel for a refusal's reopen. */
   #splitReadParty?: string;
+  /** The bills list {@link splitRead}'s rows were read against, or nothing if a read since failed or
+   * was dropped. Outlives the panel: a list read while it is closed must not count as seen. */
+  #splitBillsSeen?: string;
   #splitReadGeneration = 0;
   #splitReadAbort?: AbortController;
 
@@ -15795,7 +15798,7 @@ export class TillApp extends LitElement {
   }
 
   #watchSplitPanel(prompt: object, partyId: string, screen: TillTableOrderScreen): void {
-    this.#splitPanel = { prompt, partyId, billsSeen: billsSeen(this.partyBills), screen };
+    this.#splitPanel = { prompt, partyId, screen };
     this.#splitReadParty = partyId;
     if (this.#draftSync === undefined) this.#scheduleBillDraftRefresh();
   }
@@ -15808,8 +15811,22 @@ export class TillApp extends LitElement {
     if (prompt === undefined || screen === undefined || !("selection" in refusal)) return;
     await screen.updateComplete;
     const partyId = this.orderParty?.id;
-    if (refusal === this.splitRefusal && partyId !== undefined)
-      this.#watchSplitPanel(prompt, partyId, screen);
+    if (refusal !== this.splitRefusal || partyId === undefined) return;
+    this.#watchSplitPanel(prompt, partyId, screen);
+    if (this.#splitRowsBehind()) await this.#readReopenedRows(prompt, partyId);
+  }
+
+  #splitRowsBehind(): boolean {
+    return billsSeen(this.partyBills) !== this.#splitBillsSeen;
+  }
+
+  /** The waiter is looking at the new state only from here, so only here does the composition catch
+   * up: pressed sooner, or after a failed read, Split still sends the old revision for the server to
+   * judge. */
+  async #readReopenedRows(prompt: object, partyId: string): Promise<void> {
+    await this.#readSplitSources(partyId);
+    if (this.#splitPanel?.prompt === prompt && !this.#splitRowsBehind())
+      this.#splitTablePrompts.set(prompt, this.#partyComposition([]));
   }
 
   #onSplitRefusalDeclined(event: Event): void {
@@ -15825,21 +15842,27 @@ export class TillApp extends LitElement {
     this.#splitReadAbort?.abort();
     const controller = (this.#splitReadAbort = new AbortController());
     const generation = ++this.#splitReadGeneration;
+    this.#splitBillsSeen = billsSeen(this.partyBills);
     try {
       const read = await this.api.getSplitSources(partyId, { signal: controller.signal });
       if (generation === this.#splitReadGeneration) {
+        this.#splitReadAbort = undefined;
         this.splitRead = read;
         this.#followSplitAnswer(read);
       }
     } catch {
-      if (generation === this.#splitReadGeneration && this.splitRead === null)
-        this.splitRead = "failed";
+      if (generation === this.#splitReadGeneration) {
+        this.#splitReadAbort = undefined;
+        this.#splitBillsSeen = undefined;
+        if (this.splitRead === null) this.splitRead = "failed";
+      }
     }
   }
 
   #leaveSplitRead(): void {
     this.#splitPanel = undefined;
     this.#splitReadGeneration++;
+    if (this.#splitReadAbort !== undefined) this.#splitBillsSeen = undefined;
     this.#splitReadAbort?.abort();
     this.#splitReadAbort = undefined;
   }
@@ -15847,11 +15870,7 @@ export class TillApp extends LitElement {
   #followSplitBills(bills: readonly PartyBill[]): void {
     const panel = this.#splitPanel;
     if (panel === undefined) return;
-    const seen = billsSeen(bills);
-    if (seen !== panel.billsSeen) {
-      panel.billsSeen = seen;
-      void this.#readSplitSources(panel.partyId);
-    }
+    if (billsSeen(bills) !== this.#splitBillsSeen) void this.#readSplitSources(panel.partyId);
     if (this.activeTabId === undefined && billToShow(undefined, bills) !== undefined)
       void this.#reloadSplitParty();
   }
@@ -16098,8 +16117,10 @@ export class TillApp extends LitElement {
       await this.#onSplitBillChanged(sent, partyId, refused?.billId, code);
       return false;
     }
-    const rereadBills = () =>
-      Promise.all([this.#loadPartyBills(), this.#readSplitSources(partyId)]);
+    const rereadBills = async () => {
+      await this.#loadPartyBills();
+      await this.#readSplitSources(partyId);
+    };
     if (code === "tab.not_open" || code === "tab.line_not_found") {
       const bill = this.partyBills.find((each) => each.workingOrderId === refused?.tabId);
       await rereadBills();
@@ -16142,7 +16163,17 @@ export class TillApp extends LitElement {
       this.errorKey = banner;
       return;
     }
-    if (prompt !== undefined) this.#splitTablePrompts.set(prompt, this.#partyComposition([]));
+    if (prompt !== undefined) {
+      const fresh = this.#partyComposition([]);
+      const kept = this.#splitTablePrompts.get(prompt);
+      this.#splitTablePrompts.set(
+        prompt,
+        fresh !== null && kept != null && this.#splitRowsBehind()
+          ? { ...fresh, revisions: kept.revisions }
+          : fresh,
+      );
+      if (said !== undefined && side === undefined) this.#splitObservations.delete(prompt);
+    }
     this.errorKey = undefined;
     this.#splitRefusalSaid = said;
     const counts = {
@@ -16185,10 +16216,6 @@ export class TillApp extends LitElement {
     this.splitRefusal = null;
     await this.#refreshBillDraft();
     if (visit !== this.#orderVisit || this.orderParty?.id !== partyId) return;
-    if (sent.prompt !== undefined) {
-      this.#splitTablePrompts.set(sent.prompt, this.#partyComposition([]));
-      this.#splitObservations.delete(sent.prompt);
-    }
     if (bill === undefined) this.errorKey = { code };
     else this.#saySplitRefused(sent, { splitChanged: billLabel(bill) }, { code });
   }

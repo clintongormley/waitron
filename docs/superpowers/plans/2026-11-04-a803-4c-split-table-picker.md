@@ -749,8 +749,8 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   | Code | The sentence | What is read again |
   | --- | --- | --- |
   | `management.request_invalid` naming `guestCounts.staying` or `.leaving` | `seat.guest_count_invalid` under that stepper | nothing; the observation (D20) stays |
-  | no `code`: the request failed or its reply was lost | Order and floor are read first. If the party no longer holds the table, the split went through: no message, no panel, and D17 follows it. Otherwise `table.error` | order and floor |
-  | `party.out_of_date` | `#onTableRefusal`'s words | order and floor |
+  | no `code`: the request failed or its reply was lost | Order and floor are read first. If the party no longer holds the table, the split went through: no message, no panel, and D17 follows it. Otherwise `table.error` | order and floor, then the sources on reopening if the bills list moved (below) |
+  | `party.out_of_date` | `#onTableRefusal`'s words | order and floor, then the sources on reopening if the bills list moved (below) |
   | `draft.taken_over` | If the read shows the bill held: D21's state, with its sentence and rows. If that read fails or shows none: `table.split_changed` naming the refusal's `billId`, with Split enabled | drafts |
   | `draft.out_of_date`, and the till's own comparison at Send (D20) | `table.split_changed` naming the bill in its params. If the read shows that bill held, D21's state and sentence instead | drafts |
   | `tab.line_not_found`, `tab.not_open` | `table.split_changed` naming the bill (`tabId` in its params, `errors.ts:755`, `:760`) | bills, sources |
@@ -759,6 +759,13 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   | `tab.split_held_line` | `table.split_held_error` | sources |
   | `sale.total_exceeds_simplified_limit` | Its existing words (in `TABLE_REFUSALS`, `till-app.ts:620`) | nothing |
   | anything else, including another `management.request_invalid` and a refusal carrying `recoveryUrl` | `tableWriteError`, through `errorText(…, "panel")` | nothing |
+
+  **What the rows were read against.** The panel's rows describe the read they came from, so a reopening never
+  hides a change behind them. The app keeps the bills list the sources were last read against (`#splitBillsSeen`)
+  across the closed panel, and a list read while the panel is closed, the different-people question included, does
+  not count as seen. A panel that reopens compares, and reads the sources if the list differs. A row above that
+  reads no sources, with no change to the list, still reads none. A sources read that fails, or that the panel's
+  closing drops, counts as not seen, so the next timed read tries again.
 
   **Refund on the bill the refusal names.** `bill.received_exceeds_total` names its bill
   (`workingOrderId`, `errors.ts:608`), and a loose source may be any bill. So for a split: `CounterError`'s
@@ -828,9 +835,15 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   - At Send the app compares the selected bills only. One missing or moved sends no request and goes through
     D16's `table.split_changed` row, with the panel reopened.
   - A refused count keeps the observation, so a change made while the waiter corrects the count is still
-    refused (`till-app-parties.test.ts:12078`). Every other refusal retakes the composition and clears the
-    observations after its re-read, and the reopened panel's `split-table-observe` records new ones, because
-    the waiter is now looking at the new state and must be able to retry.
+    refused (`till-app-parties.test.ts:12078`). It retakes the composition all the same, as every other
+    reopening does, so the retry after a bill switch is not stopped in silence. A refusal with words that names
+    no count clears the observations after its re-read, and the reopened panel's `split-table-observe` records
+    new ones, so the waiter can retry. Cancelling the different-people question told the waiter nothing, so it
+    keeps them.
+  - The composition's party revision catches up only once the rows have been read after the bills list the
+    reopening found (D16). The waiter is looking at the new state from that moment. Pressed sooner, or after that
+    read failed, Split sends the old revision and the server judges it, because a whole-bill tick has nothing
+    else to stop a split of a dish the rows do not show.
   - A take-over from the panel replaces that bill's record with `expectedEditFor` after the take-over, because the waiter
     has just acted on that state (D18, Task 12e).
   - Worked example: Clint ticks Bill 2 whole while its unsent order is his own. His other device saves more

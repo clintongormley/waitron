@@ -3078,6 +3078,205 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         expect(reads().sources).toBe(before.sources);
       });
     });
+
+    describe("what the rows were read against, across the closed panel", () => {
+      const lost = () => new TypeError("Failed to fetch");
+      const takes = (el: TillApp) => q(el, "[data-split-takes]")?.textContent ?? "";
+      const movedSources = (): SplitSources => ({
+        bills: [
+          { billId: "wo-4", lines: [dish("bread", 1)], balance: balance("wo-4", "10.00") },
+          {
+            billId: "b2",
+            lines: [dish("steak", 1), dish("soup", 2)],
+            balance: balance("b2", "30.00"),
+          },
+        ],
+      });
+      const movedList = () => [
+        partyBill("wo-4", 1, "10.00", { revision: 1 }),
+        partyBill("b2", 2, "30.00", { revision: 1 }),
+      ];
+      const atRevision = (revision: number) => {
+        const later = party({ tableIds: ["t4", "t5"], billCount: 2, revision });
+        return [table("t4", "4", later), table("t5", "5", later), table7];
+      };
+      /** Another till moves soup onto Bill 2, and the party's revision moves to 7. */
+      function anotherTillMovesTheSoup(): void {
+        api.getTablesState!.mockResolvedValue(atRevision(7));
+        api.getPartyBills!.mockResolvedValue(movedList());
+        api.getSplitSources!.mockResolvedValue(movedSources());
+      }
+      const firstRefused = (error: unknown) => ({
+        splitTable: vi
+          .fn()
+          .mockRejectedValueOnce(error)
+          .mockResolvedValue({ partyId: "v-split", billIds: ["b2"] }),
+      });
+
+      it.each([
+        ["party.out_of_date", { code: "party.out_of_date" }],
+        ["a lost reply", lost()],
+      ])(
+        "%s: the rows show the change, and the second press carries what the waiter was shown",
+        async (_name, error) => {
+          const el = await panelWith(firstRefused(error));
+          await tick(el, "b2");
+          expect(takes(el)).toContain("20.00");
+          anotherTillMovesTheSoup();
+
+          await pressSplit(el);
+          await flush(el, 6);
+
+          expect(tickBox(el, "b2").checked).toBe(true);
+          expect(takes(el)).toContain("30.00");
+          expect(api.splitTable).toHaveBeenCalledOnce();
+          expect(api.splitTable!.mock.calls[0]![3]).toBe(3);
+
+          await pressSplit(el);
+
+          expect(api.splitTable).toHaveBeenCalledTimes(2);
+          expect(api.splitTable!.mock.calls[1]![2]).toEqual(whole("b2"));
+          expect(api.splitTable!.mock.calls[1]![3]).toBe(7);
+        },
+      );
+
+      it("party.out_of_date: a bill another till made gets its row", async () => {
+        const el = await panelWith(refused({ code: "party.out_of_date" }));
+        await tick(el, "b2");
+        const made = partyBill("b3", 3, "5.00");
+        api.getPartyBills!.mockResolvedValue([...bills(), made]);
+        api.getSplitSources!.mockResolvedValue({
+          bills: [
+            ...answered().bills,
+            { billId: "b3", lines: [dish("tea", 1)], balance: balance("b3", "5.00") },
+          ],
+        });
+
+        await pressSplit(el);
+        await flush(el, 6);
+
+        expect(tickBox(el, "b3")).not.toBeNull();
+      });
+
+      it("a question open across a timed read, then Cancel: the rows show the change", async () => {
+        fakeTimers();
+        const el = await panelWith({
+          getTill: vi.fn().mockResolvedValue({ ...till("till"), simplifiedInvoiceLimit: "15.00" }),
+          getSplitSources: vi.fn().mockResolvedValue({
+            bills: [
+              { billId: "wo-4", lines: [dish("bread", 1)], balance: balance("wo-4", "10.00") },
+              {
+                billId: "b2",
+                lines: [dish("steak", 1), dish("wine", 2)],
+                balance: balance("b2", "20.00"),
+              },
+            ],
+          }),
+        });
+        await pickDish(el, "b2", "steak");
+        await pressSplit(el);
+        expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).not.toBeNull();
+        api.getSplitSources!.mockResolvedValue(movedSources());
+        const sources = reads().sources;
+        await rereadBills(el, movedList());
+        expect(reads().sources).toBe(sources);
+
+        el.shadowRoot!.querySelector<HTMLElement>(
+          "[data-confirm-different-people] [data-cancel]",
+        )!.click();
+        await flush(el, 6);
+
+        expect(reads().sources).toBe(sources + 1);
+        expect(dishRows(el, "b2").querySelector('[data-pick="soup"]')).not.toBeNull();
+      });
+
+      it.each([
+        ["party.out_of_date", { code: "party.out_of_date" }],
+        ["a lost reply", lost()],
+        ["table.not_shared", { code: "table.not_shared" }],
+      ])("%s with no change to the bills reads no sources", async (_name, error) => {
+        const el = await panelWith(refused(error));
+        await tick(el, "b2");
+        const sources = reads().sources;
+
+        await pressSplit(el);
+        await flush(el, 6);
+
+        expect(tableOrder(el)!.splitRefusal).not.toBeNull();
+        expect(reads().sources).toBe(sources);
+      });
+
+      it("a press while that read is out carries the old revision, so the server decides", async () => {
+        const el = await panelWith(firstRefused({ code: "party.out_of_date" }));
+        await tick(el, "b2");
+        anotherTillMovesTheSoup();
+        const held = heldReads();
+        api.getSplitSources!.mockImplementation(held.read);
+
+        await pressSplit(el);
+        await flush(el, 6);
+        expect(held.calls).toHaveLength(1);
+        expect(takes(el)).toContain("20.00");
+
+        await pressSplit(el);
+
+        expect(api.splitTable).toHaveBeenCalledTimes(2);
+        expect(api.splitTable!.mock.calls[1]![3]).toBe(3);
+      });
+
+      it("once that read answers, the press carries the new revision", async () => {
+        const el = await panelWith(firstRefused({ code: "party.out_of_date" }));
+        await tick(el, "b2");
+        anotherTillMovesTheSoup();
+        const held = heldReads();
+        api.getSplitSources!.mockImplementation(held.read);
+        await pressSplit(el);
+        await flush(el, 6);
+
+        held.calls[0]!.answer(movedSources());
+        await flush(el, 6);
+        expect(takes(el)).toContain("30.00");
+        await pressSplit(el);
+
+        expect(api.splitTable!.mock.calls[1]![3]).toBe(7);
+      });
+
+      it("that read failing keeps the last rows and the old revision, and the next timed read tries again", async () => {
+        fakeTimers();
+        const el = await panelWith(firstRefused({ code: "party.out_of_date" }));
+        await tick(el, "b2");
+        anotherTillMovesTheSoup();
+        api.getSplitSources!.mockRejectedValueOnce(lost());
+
+        await pressSplit(el);
+        await flush(el, 6);
+        expect(takes(el)).toContain("20.00");
+        expect(splitButton(el).disabled).toBe(false);
+
+        await rereadBills(el, movedList());
+
+        expect(takes(el)).toContain("30.00");
+      });
+
+      it("a read out when Split was pressed is dropped, so it does not count as seen", async () => {
+        fakeTimers();
+        const el = await panelWith(refused({ code: "table.not_shared" }));
+        await tick(el, "b2");
+        const held = heldReads();
+        api.getSplitSources!.mockImplementation(held.read);
+        await rereadBills(el, movedList());
+        expect(held.calls).toHaveLength(1);
+
+        await pressSplit(el);
+        await flush(el, 6);
+
+        expect(tableOrder(el)!.splitRefusal).not.toBeNull();
+        expect(held.calls).toHaveLength(2);
+        held.calls[1]!.answer(movedSources());
+        await flush(el, 6);
+        expect(takes(el)).toContain("30.00");
+      });
+    });
   });
 
   describe("take-over rows", () => {
