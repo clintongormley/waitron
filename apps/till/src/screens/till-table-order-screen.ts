@@ -177,7 +177,7 @@ import {
 import "../widgets/portion-picker.js";
 import "../widgets/split-picker.js";
 import {
-  anywayNote,
+  leftWithNothingToPay,
   splitSourcesFrom,
   splitSummary,
   toSelection,
@@ -5276,14 +5276,13 @@ export class TillTableOrderScreen extends LitElement {
       ...keeps.rest.map(({ bill }) => fill(t("table.split_rest_of"), { bill: billLabel(bill) })),
     ];
     const anyPaid = this.bills.some((bill) => bill.status === "settled");
-    const keepsLine =
-      keepsParts.length === 0 && anywayNote(sources, this.splitPicks, anyPaid) === "paid"
-        ? fill(t("table.split_nothing_to_pay"), { table: kept })
-        : fill(t("table.split_keeps"), {
-            table: kept,
-            what: keepsParts.length > 0 ? list(keepsParts) : t("table.split_empty_bill"),
-            amount: this.#money(keeps.amount),
-          });
+    const keepsLine = leftWithNothingToPay(sources, this.splitPicks, anyPaid)
+      ? fill(t("table.split_nothing_to_pay"), { table: kept })
+      : fill(t("table.split_keeps"), {
+          table: kept,
+          what: keepsParts.length > 0 ? list(keepsParts) : t("table.split_empty_bill"),
+          amount: this.#money(keeps.amount),
+        });
     return html`<div class="split-lines">
       <p class="split-summary" data-split-takes>
         ${fill(t("table.split_takes"), {

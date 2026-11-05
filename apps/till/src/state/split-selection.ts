@@ -1,6 +1,7 @@
 import {
   type Decimal,
   MONEY_SCALE,
+  compareDecimal,
   decimal,
   subtractDecimal,
   sumDecimals,
@@ -58,6 +59,8 @@ export interface SplitSummary {
 }
 
 const NO_PICKS: Picks = new Set();
+
+const ZERO = decimal("0");
 
 const idOf = (source: SplitSource) => source.bill.workingOrderId;
 
@@ -176,6 +179,9 @@ export function heldSelected(sources: readonly SplitSource[], split: SplitPicks)
 export const billTotal = (source: SplitSource) =>
   source.groups.floor?.total ?? decimal(source.bill.total);
 
+const pickedFrom = (source: SplitSource, split: SplitPicks) =>
+  pickedTotal(source.groups, picksOn(source, split));
+
 const money = (values: readonly Decimal[]) => toScale(sumDecimals(values), MONEY_SCALE);
 
 export function splitSummary(sources: readonly SplitSource[], split: SplitPicks): SplitSummary {
@@ -188,7 +194,7 @@ export function splitSummary(sources: readonly SplitSource[], split: SplitPicks)
   });
   const rest = loose.map(({ source }) => source);
   const staying = ordered.filter((source) => stays(source, split) && !rest.includes(source));
-  const pickedOf = (source: SplitSource) => pickedTotal(source.groups, picksOn(source, split));
+  const pickedOf = (source: SplitSource) => pickedFrom(source, split);
   return {
     takes: {
       whole,
@@ -204,6 +210,35 @@ export function splitSummary(sources: readonly SplitSource[], split: SplitPicks)
       ]),
     },
   };
+}
+
+/**
+ * Whether the staying table owes nothing once the split is pressed: every bill staying owes nothing
+ * and one has money received, here or on a paid bill (`anyPaid`). Money received is
+ * `floor.received`, so a card in progress does not count. An untouched bill must hold money of its
+ * own, which an empty one does not. A bill with unsent dishes counts as owing, as the server leaves
+ * it open (`issueIfFullyPaid`), and so does a pick left on a bill paid since, which the split does
+ * not finish.
+ */
+export function leftWithNothingToPay(
+  sources: readonly SplitSource[],
+  split: SplitPicks,
+  anyPaid: boolean,
+): boolean {
+  const { whole, rest } = splitSummary(sources, split).keeps;
+  const received = (source: SplitSource) => source.groups.floor?.received ?? ZERO;
+  const holdsMoney = (source: SplitSource) => compareDecimal(received(source), ZERO) > 0;
+  const covers = (source: SplitSource, left: Decimal) =>
+    !source.ownUnsent && source.held === null && compareDecimal(left, received(source)) <= 0;
+  return (
+    (anyPaid || [...whole, ...rest].some(holdsMoney)) &&
+    whole.every((source) => holdsMoney(source) && covers(source, billTotal(source))) &&
+    rest.every(
+      (source) =>
+        owing(source.bill) &&
+        covers(source, subtractDecimal(billTotal(source), pickedFrom(source, split))),
+    )
+  );
 }
 
 /** Which note Everything ticked shows; `anyPaid`: a paid bill stays in the party or its family. */

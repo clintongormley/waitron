@@ -15,6 +15,7 @@ import {
   anywayNote,
   billTick,
   heldSelected,
+  leftWithNothingToPay,
   nothingStays,
   pickOnBill,
   rowsOf,
@@ -69,14 +70,19 @@ const cañas = (from = 1) => [0, 1, 2, 3].map((at) => line(`c${at + 1}`, from + 
 
 function balanceOf(
   lines: readonly TabLine[],
-  over: { received?: string; paid?: string[]; status?: BillBalance["status"] } = {},
+  over: {
+    received?: string;
+    reserved?: string;
+    paid?: string[];
+    status?: BillBalance["status"];
+  } = {},
 ): BillBalance {
   return {
     workingOrderId: "unused",
     status: over.status ?? "open",
     total: billGross(lines),
     received: over.received ?? "0.00",
-    reserved: "0.00",
+    reserved: over.reserved ?? "0.00",
     outstanding: "0.00",
     tips: "0.00",
     payments: [],
@@ -112,6 +118,7 @@ function bill(id: string, number: number | null, over: Partial<PartyBill> = {}):
 
 interface SourceOptions {
   received?: string;
+  reserved?: string;
   paid?: string[];
   status?: PartyBill["status"];
   held?: SplitSource["held"];
@@ -127,6 +134,7 @@ function source(
 ): SplitSource {
   const balance = balanceOf(lines, {
     ...(options.received === undefined ? {} : { received: options.received }),
+    ...(options.reserved === undefined ? {} : { reserved: options.reserved }),
     ...(options.paid === undefined ? {} : { paid: options.paid }),
   });
   return {
@@ -524,6 +532,104 @@ describe("A803 selection:", () => {
 
     it("with no bill staying: empty", () => {
       expect(anywayNote([going], wholeOf("b1"), false)).toBe("empty");
+    });
+  });
+
+  describe("leftWithNothingToPay", () => {
+    const steakAndSoup = [dish("steak", 1, "20.00"), dish("soup", 2, "10.00")];
+    const partPaid = (options: SourceOptions = {}) =>
+      source("b1", 1, steakAndSoup, { received: "20.00", ...options });
+    const soupPicked = looseOf({ b1: ["soup"] });
+    const wine = source("b2", 2, [dish("wine", 5, "40.00")]);
+
+    it("true when the picks leave a bill holding what it has received", () => {
+      expect(leftWithNothingToPay([partPaid()], soupPicked, false)).toBe(true);
+    });
+
+    it("false when the picks leave money owing on it", () => {
+      const owes = source("b1", 1, steakAndSoup, { received: "19.99" });
+      expect(leftWithNothingToPay([owes], soupPicked, false)).toBe(false);
+    });
+
+    it("false for the same bill with nothing picked", () => {
+      expect(leftWithNothingToPay([partPaid()], NOTHING, false)).toBe(false);
+    });
+
+    it("false with a card in progress in place of money received", () => {
+      const reserved = source("b1", 1, steakAndSoup, { reserved: "20.00" });
+      expect(leftWithNothingToPay([reserved], soupPicked, false)).toBe(false);
+    });
+
+    it("false with an untouched bill owing beside it, and true once that bill is ticked", () => {
+      expect(leftWithNothingToPay([partPaid(), wine], soupPicked, false)).toBe(false);
+      expect(
+        leftWithNothingToPay(
+          [partPaid(), wine],
+          { whole: new Set(["b2"]), picks: soupPicked.picks },
+          false,
+        ),
+      ).toBe(true);
+    });
+
+    it("false with an empty bill beside it, even with a paid bill too", () => {
+      expect(leftWithNothingToPay([partPaid(), source("b2", 2, [])], soupPicked, true)).toBe(false);
+    });
+
+    it("false with this person's unsent dishes on it, since the server then leaves it open", () => {
+      expect(leftWithNothingToPay([partPaid({ ownUnsent: true })], soupPicked, false)).toBe(false);
+    });
+
+    it("false while someone else's unsent dishes hold it", () => {
+      expect(leftWithNothingToPay([partPaid({ held: luis })], soupPicked, false)).toBe(false);
+    });
+
+    it("false with no balance read, whatever the listed total", () => {
+      const unread: SplitSource = {
+        bill: bill("b1", 1, { total: "0.00" }),
+        groups: pickGroups([], () => null, null, new Set()),
+        held: null,
+        ownUnsent: false,
+      };
+      expect(leftWithNothingToPay([unread], NOTHING, true)).toBe(false);
+    });
+
+    it("false for a pick left on a bill since paid, whose money covers it", () => {
+      const sincePaid = partPaid({ received: "30.00", status: "settled" });
+      expect(leftWithNothingToPay([sincePaid], soupPicked, true)).toBe(false);
+    });
+
+    it("an untouched bill its money already covers counts, and one with no money does not", () => {
+      const covered = source("b1", 1, steakAndSoup, { received: "30.00" });
+      const free = source("b1", 1, [dish("water", 1, "0.00")]);
+      expect(leftWithNothingToPay([covered], NOTHING, false)).toBe(true);
+      expect(leftWithNothingToPay([free], NOTHING, true)).toBe(false);
+    });
+
+    it("the rest of a bill that owes nothing and holds no money needs a paid bill beside it", () => {
+      const rest = source("b1", 1, [dish("water", 1, "0.00"), dish("soup", 2, "10.00")]);
+      expect(leftWithNothingToPay([rest], soupPicked, false)).toBe(false);
+      expect(leftWithNothingToPay([rest], soupPicked, true)).toBe(true);
+    });
+
+    it("with no bill staying, answers whether a paid bill does", () => {
+      const going = source("b1", 1, steakAndSoup);
+      expect(leftWithNothingToPay([going], wholeOf("b1"), true)).toBe(true);
+      expect(leftWithNothingToPay([going], wholeOf("b1"), false)).toBe(false);
+    });
+
+    it("agrees with Everything ticked's note, which does not show for a bill left fully paid", () => {
+      const going = source("b2", 2, [dish("wine", 5, "40.00")]);
+      const split = { whole: new Set(["b2"]), picks: soupPicked.picks };
+      expect(leftWithNothingToPay([going, partPaid()], split, false)).toBe(true);
+      expect(nothingStays([going, partPaid()], split)).toBe(false);
+
+      expect(anywayNote([going], wholeOf("b2"), true)).toBe("paid");
+      expect(leftWithNothingToPay([going], wholeOf("b2"), true)).toBe(true);
+
+      const empty = source("b3", 3, []);
+      expect(nothingStays([going, empty], wholeOf("b2"))).toBe(true);
+      expect(anywayNote([going, empty], wholeOf("b2"), true)).toBe("empty");
+      expect(leftWithNothingToPay([going, empty], wholeOf("b2"), true)).toBe(false);
     });
   });
 

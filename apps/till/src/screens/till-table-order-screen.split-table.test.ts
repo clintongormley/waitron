@@ -91,12 +91,16 @@ function balanceOf(billId: string, total: string): BillBalance {
   };
 }
 
-const read = (rows: Record<string, readonly TabLine[]>, totals: Record<string, string>) =>
+const read = (
+  rows: Record<string, readonly TabLine[]>,
+  totals: Record<string, string>,
+  money: Record<string, Partial<BillBalance>> = {},
+) =>
   ({
     bills: Object.entries(rows).map(([billId, lines]) => ({
       billId,
       lines: [...lines],
-      balance: balanceOf(billId, totals[billId]!),
+      balance: { ...balanceOf(billId, totals[billId]!), ...money[billId] },
     })),
   }) satisfies SplitSources;
 
@@ -565,6 +569,143 @@ describe("Split a table's panel", () => {
     expect(textOf(el, "[data-split-keeps]")).toBe("T7 keeps the rest of Bill 1 · €20.00");
   });
 
+  describe("a bill the split itself leaves fully paid", () => {
+    const soupAndSteak = [dish("steak", 1, "20.00"), dish("soup", 2, "10.00")];
+    const wine = [dish("wine", 5, "40.00")];
+
+    it.each([
+      ["en-GB", "T7 is left with nothing to pay"],
+      ["es-ES", "T7 se queda sin nada que pagar"],
+    ])("€20 received on €30, its unpaid €10 dish picked, in %s", async (locale, line) => {
+      setLocale(locale);
+      const el = await mountScreen({
+        bills: [partyBill("b1", 1, "10.00", { total: "30.00" })],
+        splitRead: read({ b1: soupAndSteak }, { b1: "30.00" }, { b1: { received: "20.00" } }),
+      });
+      await toPanel(el);
+
+      await pickDish(el, "b1", "soup");
+
+      expect(textOf(el, "[data-split-keeps]")).toBe(line);
+    });
+
+    it("the amount stays while what is picked leaves money owing on the bill", async () => {
+      const el = await mountScreen({
+        bills: [partyBill("b1", 1, "20.00", { total: "30.00" })],
+        splitRead: read({ b1: soupAndSteak }, { b1: "30.00" }, { b1: { received: "10.00" } }),
+      });
+      await toPanel(el);
+
+      await pickDish(el, "b1", "soup");
+
+      expect(textOf(el, "[data-split-keeps]")).toBe("T7 keeps the rest of Bill 1 · €20.00");
+    });
+
+    it("one left fully paid beside one still owing keeps the amount", async () => {
+      const el = await mountScreen({
+        bills: [partyBill("b1", 1, "10.00", { total: "30.00" }), partyBill("b2", 2, "40.00")],
+        splitRead: read(
+          { b1: soupAndSteak, b2: wine },
+          { b1: "30.00", b2: "40.00" },
+          { b1: { received: "20.00" } },
+        ),
+      });
+      await toPanel(el);
+
+      await pickDish(el, "b1", "soup");
+
+      expect(textOf(el, "[data-split-keeps]")).toBe(
+        "T7 keeps Bill 2 and the rest of Bill 1 · €60.00",
+      );
+    });
+
+    it("a bill paid before beside the rest of one still owing keeps the amount", async () => {
+      const el = await mountScreen({
+        bills: [
+          partyBill("b1", 1, "0.00", { status: "settled", total: "9.00" }),
+          partyBill("b2", 2, "30.00", { total: "30.00" }),
+        ],
+        splitRead: read({ b2: soupAndSteak }, { b2: "30.00" }),
+      });
+      await toPanel(el);
+
+      await pickDish(el, "b2", "soup");
+
+      expect(textOf(el, "[data-split-keeps]")).toBe("T7 keeps the rest of Bill 2 · €20.00");
+    });
+
+    it("a bill paid before beside one the split leaves fully paid: nothing to pay", async () => {
+      const el = await mountScreen({
+        bills: [
+          partyBill("b1", 1, "0.00", { status: "settled", total: "9.00" }),
+          partyBill("b2", 2, "10.00", { total: "30.00" }),
+        ],
+        splitRead: read({ b2: soupAndSteak }, { b2: "30.00" }, { b2: { received: "20.00" } }),
+      });
+      await toPanel(el);
+
+      await pickDish(el, "b2", "soup");
+
+      expect(textOf(el, "[data-split-keeps]")).toBe("T7 is left with nothing to pay");
+    });
+
+    it("two bills both left fully paid: nothing to pay", async () => {
+      const el = await mountScreen({
+        bills: [
+          partyBill("b1", 1, "10.00", { total: "30.00" }),
+          partyBill("b2", 2, "5.00", { total: "45.00" }),
+        ],
+        splitRead: read(
+          { b1: soupAndSteak, b2: [...wine, dish("beer", 6, "5.00")] },
+          { b1: "30.00", b2: "45.00" },
+          { b1: { received: "20.00" }, b2: { received: "40.00" } },
+        ),
+      });
+      await toPanel(el);
+
+      await pickDish(el, "b1", "soup");
+      await pickDish(el, "b2", "beer");
+
+      expect(textOf(el, "[data-split-keeps]")).toBe("T7 is left with nothing to pay");
+    });
+
+    it("one left fully paid beside an empty bill keeps the amount", async () => {
+      const el = await mountScreen({
+        bills: [partyBill("b1", 1, "10.00", { total: "30.00" }), partyBill("b2", 2, "0.00")],
+        splitRead: read(
+          { b1: soupAndSteak, b2: [] },
+          { b1: "30.00", b2: "0.00" },
+          { b1: { received: "20.00" } },
+        ),
+      });
+      await toPanel(el);
+
+      await pickDish(el, "b1", "soup");
+
+      expect(textOf(el, "[data-split-keeps]")).toBe(
+        "T7 keeps Bill 2 and the rest of Bill 1 · €20.00",
+      );
+    });
+
+    it.each([
+      ["all of it in progress", { reserved: "20.00" }],
+      ["part of it in progress", { received: "10.00", reserved: "10.00" }],
+    ])(
+      "a card in progress is not money received, so the amount stays: %s",
+      async (_name, money) => {
+        const el = await mountScreen({
+          bills: [partyBill("b1", 1, "30.00", { total: "30.00" })],
+          splitRead: read({ b1: soupAndSteak }, { b1: "30.00" }, { b1: money }),
+        });
+        await toPanel(el);
+
+        await pickDish(el, "b1", "soup");
+
+        expect(textOf(el, "[data-split-keeps]")).toBe("T7 keeps the rest of Bill 1 · €20.00");
+      },
+    );
+  });
+
   it.each([
     ["en-GB", "T7 keeps an empty bill · €0.00"],
     ["es-ES", `T7 se queda con una cuenta vacía · ${formatMoney(decimal("0.00"), "es-ES")}`],
@@ -597,6 +738,18 @@ describe("Split a table's panel", () => {
 
     await pickDish(el, "b1", "soup");
     expect(q(el, "[data-split-new-bill-note]")).toBeNull();
+  });
+
+  it("the new-bill note's Spanish words", async () => {
+    setLocale("es-ES");
+    const el = await mountScreen();
+    await toPanel(el);
+
+    await pickDish(el, "b1", "soup");
+
+    expect(textOf(el, "[data-split-new-bill-note]")).toBe(
+      "Los platos sueltos van en una cuenta nueva en T8.",
+    );
   });
 
   it.each([

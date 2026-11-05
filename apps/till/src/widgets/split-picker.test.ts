@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { decimal, formatMoney } from "@waitron/shared";
 import type { BillBalance, Draft, PartyBill, TabLine } from "../api/client.js";
-import { currentLocale, fill, t } from "../i18n/t.js";
+import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { paidQuantities } from "../state/bill-payment.js";
 import { tabLinePortionKey } from "../state/portion-groups.js";
 import { pickGroups } from "../state/portion-selection.js";
@@ -321,6 +321,20 @@ describe("till-split-picker", () => {
     expect(inner(el, "b1")).toBeNull();
     expect(billText(el, "b1")).not.toContain("Beer");
     expect(billText(el, "b1")).not.toContain(t("table.move_dishes_none"));
+  });
+
+  it("a held bill's reason for its disabled tick, in Spanish", async () => {
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el } = await picker([source("b1", 1, DISHES, { held: luis })]);
+      const reason = el.shadowRoot!.getElementById(
+        header(el, "b1").getAttribute("aria-describedby")!,
+      );
+      expect(reason!.textContent).toBe("Toma el pedido para marcar esta cuenta.");
+    } finally {
+      setLocale(before);
+    }
   });
 
   it.each([
