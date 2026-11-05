@@ -11997,7 +11997,7 @@ export class TillApp extends LitElement {
           : await sync.takeOverOn(billId, draftId, revision);
       if (sync !== this.#draftSync) return;
       if (outcome === "taken" || (typeof outcome === "object" && "taken" in outcome)) {
-        if (billId !== undefined && prompt !== undefined) this.#observeTakenOver(prompt, billId);
+        if (billId !== undefined && prompt !== undefined) this.#observeAnew(prompt, billId);
         return;
       }
       if (outcome === "unsaved") refuse(this.errorKey ?? "table.error");
@@ -15765,8 +15765,9 @@ export class TillApp extends LitElement {
     );
   }
 
-  /** The waiter has just acted on this state, so the next press compares against it. */
-  #observeTakenOver(prompt: object, billId: string): void {
+  /** The waiter has just acted on this state or been stopped to look at it, so the next press
+   * compares against it. */
+  #observeAnew(prompt: object, billId: string): void {
     const observed = this.#splitObservations.get(prompt);
     if (observed?.has(billId) === true) observed.set(billId, this.#billEditIfReady(billId));
   }
@@ -19561,14 +19562,26 @@ export class TillApp extends LitElement {
       return;
     }
     this.errorKey = undefined;
+    const refusalAsked = this.splitRefusal;
     try {
       await this.api.putLocale(code);
       // The preference is saved; a detached till skips only the local repaint.
       if (!this.isConnected) return;
+      this.#dropSplitRefusalForLanguage(refusalAsked);
       setLocale(code);
     } catch {
       this.errorKey = "locale.save_failed";
     }
+  }
+
+  /** A new language draws a new screen, which reopens no panel for a refusal it is handed at birth.
+   * The waiter answered the unsaved-work question for `asked`; one that landed since has only flashed
+   * by, so the banner keeps it. */
+  #dropSplitRefusalForLanguage(asked: SplitRefusal | null): void {
+    const refusal = this.splitRefusal;
+    if (refusal === null || !("selection" in refusal)) return;
+    if (refusal !== asked) this.errorKey = this.#splitRefusalSaid;
+    this.splitRefusal = null;
   }
 
   /** The front-door screens are handled ahead of this in {@link render}, and guarded here too so the
@@ -20273,6 +20286,11 @@ export class TillApp extends LitElement {
         @join-tables=${(event: Event) => void this.#ownBillsChange(() => this.#onJoinTables(event))}
         @split-table-open=${(event: Event) => this.#onSplitTableOpen(event)}
         @split-table-observe=${(event: Event) => this.#onSplitTableObserve(event)}
+        @split-table-stopped=${(event: Event) => {
+          const { prompt, billId } = (event as CustomEvent<{ prompt: object; billId: string }>)
+            .detail;
+          this.#observeAnew(prompt, billId);
+        }}
         @split-table-leave=${() => this.#leaveSplitRead()}
         @split-table=${(event: Event) => void this.#ownBillsChange(() => this.#onSplitTable(event))}
         @split-refusal-declined=${(event: Event) => this.#onSplitRefusalDeclined(event)}

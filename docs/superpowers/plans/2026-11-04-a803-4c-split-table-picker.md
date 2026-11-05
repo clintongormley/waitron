@@ -732,7 +732,7 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   `split-refusal-declined`, with `SplitRefusalDeclinedDetail` (`{ refusal }`, the same object it was handed):
   from `updated`, once. A refusal landing while the screen is out of the page waits until it is put back,
   because a question open elsewhere in the till can only be seen from the page; the screen then decides
-  and, if it declines, tells. A party switch or the app taking the refusal back drops one still waiting. It is silent when it
+  and, if it declines, tells. A party switch or the app taking the refusal back drops one still waiting. A language saved from the order screen draws a new screen, which reopens nothing, so the app takes back the refusal it holds as the save succeeds: said on the banner if it landed after the language was chosen, silently if the waiter was already looking at it when they chose. It is silent when it
   reopens, and for a refusal the party or table rules above already stop, which the app has
   sent to the banner itself. So the app keeps `said` beside the refusal it hands over, and on the event, if
   `refusal === this.splitRefusal`, sets `splitRefusal = null` and `errorKey = said`. It assigns `said` and not
@@ -858,7 +858,7 @@ Changing from B to A later removes one call in `splitTable` and changes those th
     read failed, Split sends the old revision and the server judges it, because a whole-bill tick has nothing
     else to stop a split of a dish the rows do not show.
   - A take-over from the panel replaces that bill's record with `expectedEditFor` after the take-over, because the waiter
-    has just acted on that state (D18, Task 12e).
+    has just acted on that state (D18, Task 12e). The screen's own `table.split_changed` stop does the same for the bill it names, through `split-table-stopped`, or the app's comparison would stop that bill again in the same words where D21 says one press. No other bill's record moves.
   - Worked example: Clint ticks Bill 2 whole while its unsent order is his own. His other device saves more
     dishes to it. The till's next read picks that up; Clint presses Split; the till says "Bill 2 changed
     while you were choosing", with no request sent, and his ticks are still there. He checks the row and

@@ -3213,6 +3213,103 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
       });
     });
 
+    describe("a language change", () => {
+      const noField = { code: "table.not_shared" };
+      const spanish = (el: TillApp) => emit(shell(el), "wt-locale-selected", { code: "es-ES" });
+
+      function heldSave() {
+        let save: { resolve: () => void; reject: (error: unknown) => void };
+        const held = new Promise<void>((resolve, reject) => (save = { resolve, reject }));
+        return { putLocale: vi.fn(() => held), save: () => save };
+      }
+
+      /** A later bills read showing a changed revision is what makes a watched panel read again. */
+      async function sourcesReadByNextBillsRead(el: TillApp): Promise<number> {
+        const before = api.getSplitSources!.mock.calls.length;
+        await rereadBills(el, bills(7));
+        return api.getSplitSources!.mock.calls.length - before;
+      }
+
+      it("A803 split: a refusal landing while the language saves is said on the banner in the new language, and the reads stop", async () => {
+        fakeTimers();
+        const { putLocale, save } = heldSave();
+        const { el, refuse } = await requestOut("b2", { putLocale });
+        spanish(el);
+        await flush(el);
+        expect(putLocale).toHaveBeenCalledOnce();
+        refuse(noField);
+        await flush(el, 6);
+        expect(panelOpen(el)).toBe(true);
+        expect(said(el)).toBe(codeMessage("table.not_shared"));
+
+        save().resolve();
+        await flush(el, 6);
+
+        expect(currentLocale()).toBe("es-ES");
+        expect(panelOpen(el)).toBe(false);
+        expect(banner(el)!.textContent).toContain(codeMessage("table.not_shared", "es-ES"));
+        expect(api.splitTable).toHaveBeenCalledOnce();
+        expect(await sourcesReadByNextBillsRead(el)).toBe(0);
+      });
+
+      it("A803 split: a refusal landing while a language save fails stays on its panel", async () => {
+        const { putLocale, save } = heldSave();
+        const { el, refuse } = await requestOut("b2", { putLocale });
+        const before = currentLocale();
+        spanish(el);
+        await flush(el);
+        refuse(noField);
+        await flush(el, 6);
+
+        save().reject({ code: "locale.unsupported" });
+        await flush(el, 6);
+
+        expect(currentLocale()).toBe(before);
+        expect(panelOpen(el)).toBe(true);
+        expect(said(el)).toBe(codeMessage("table.not_shared"));
+        expect(tickBox(el, "b2").checked).toBe(true);
+        expect(banner(el)!.textContent).toContain(t("locale.save_failed"));
+      });
+
+      it("A803 split: a refused panel discarded for a language says nothing more, and the reads stop", async () => {
+        fakeTimers();
+        const el = await refusedOn("b2", noField, {
+          putLocale: vi.fn().mockResolvedValue(undefined),
+        });
+        expect(said(el)).toBe(codeMessage("table.not_shared"));
+
+        spanish(el);
+        await answer(el, "discard");
+
+        expect(currentLocale()).toBe("es-ES");
+        expect(panelOpen(el)).toBe(false);
+        expect(banner(el)).toBeNull();
+        expect(await sourcesReadByNextBillsRead(el)).toBe(0);
+      });
+
+      it("A803 split: the refused panel's reads carry on while it stays open", async () => {
+        fakeTimers();
+        const el = await refusedOn("b2", noField);
+        expect(await sourcesReadByNextBillsRead(el)).toBe(1);
+      });
+
+      it("A803 split: a request answered after the language changed still reopens its panel", async () => {
+        const { el, refuse } = await requestOut("b2", {
+          putLocale: vi.fn().mockResolvedValue(undefined),
+        });
+        spanish(el);
+        await flush(el, 6);
+        expect(currentLocale()).toBe("es-ES");
+
+        refuse(noField);
+        await flush(el, 6);
+
+        expect(panelOpen(el)).toBe(true);
+        expect(tickBox(el, "b2").checked).toBe(true);
+        expect(banner(el)).toBeNull();
+      });
+    });
+
     describe("a failed re-read after a refusal", () => {
       it("reopens with the last rows and Split enabled", async () => {
         const el = await panelWith(refused({ code: "tab.split_held_line", tabId: "b2" }));
@@ -4753,6 +4850,123 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
         await pressSplit(el);
         expectSentOnce(whole("b3"), [b3Whole]);
+      });
+
+      describe("A803 split: a pick lost as the order goes", () => {
+        const threeDishes = (): SplitSources => ({
+          bills: twoDishes().bills.map((bill) =>
+            bill.billId !== "b2"
+              ? bill
+              : { ...bill, lines: [dish("steak", 1), dish("chips", 2), dish("flan", 3)] },
+          ),
+        });
+        const withDishes = (keep: string[], from: SplitSources): SplitSources => ({
+          bills: from.bills.map((bill) =>
+            bill.billId !== "b2"
+              ? bill
+              : { ...bill, lines: bill.lines.filter(({ id }) => keep.includes(id)) },
+          ),
+        });
+        const revised = () =>
+          threeBills().map((bill) =>
+            bill.workingOrderId === "b2" ? { ...bill, revision: 9 } : bill,
+          );
+
+        async function expectOneStop(el: TillApp, bill = "Bill 2"): Promise<void> {
+          await pressSplit(el);
+          expect(api.splitTable).not.toHaveBeenCalled();
+          expect(refusal(el)!.textContent).toContain(changedWords(bill));
+        }
+
+        it("picks become the whole bill: one stop, then the whole bill", async () => {
+          fakeTimers();
+          const el = await panel({ getSplitSources: vi.fn().mockResolvedValue(twoDishes()) });
+          await pickDish(el, "b2", "steak");
+          await reached(el);
+          api.getSplitSources!.mockResolvedValue(withDishes(["steak"], twoDishes()));
+          await rereadBills(el, revised());
+          reading = (snapshot) => withOrderSent(snapshot, "b2");
+          await refreshDrafts(el);
+          expect(tickBox(el, "b2").checked).toBe(true);
+
+          await expectOneStop(el);
+
+          await pressSplit(el);
+          expectSentOnce(whole("b2"), [noEdit("b2", { editorVersion: 2 })]);
+        });
+
+        it("a pick paid while held: one stop, then what is still picked", async () => {
+          fakeTimers();
+          const el = await panel({ getSplitSources: vi.fn().mockResolvedValue(threeDishes()) });
+          await pickDish(el, "b2", "steak");
+          await pickDish(el, "b2", "chips");
+          await reached(el);
+          api.getSplitSources!.mockResolvedValue(withDishes(["chips", "flan"], threeDishes()));
+          await rereadBills(el, revised());
+          reading = (snapshot) => withOrderSent(snapshot, "b2");
+          await refreshDrafts(el);
+
+          await expectOneStop(el);
+
+          await pressSplit(el);
+          expectSentOnce({ wholeBillIds: [], loose: [{ billId: "b2", lineIds: ["chips"] }] }, [
+            noEdit("b2", { editorVersion: 2 }),
+          ]);
+        });
+
+        it("my own dishes end elsewhere: one stop, then the whole bill", async () => {
+          const steakOnly = withDishes(["steak"], twoDishes());
+          const own: Draft = { ...luisOn("b2"), ownerId: "p1", ownerName: "Ana" };
+          reading = (snapshot) => ({
+            drafts: [...snapshot.drafts, own],
+            billEdits: replacingEdit(snapshot, "b2", {
+              editorId: "p1",
+              editorName: "Ana",
+              editorVersion: 1,
+              draftId: own.id,
+              draftRevision: 0,
+            }),
+          });
+          const el = await panel({ getSplitSources: vi.fn().mockResolvedValue(steakOnly) });
+          await pickDish(el, "b2", "steak");
+          expect(tickBox(el, "b2").indeterminate).toBe(true);
+
+          reading = (snapshot) => withOrderSent(snapshot, "b2");
+          await refreshDrafts(el);
+          expect(tickBox(el, "b2").checked).toBe(true);
+
+          await expectOneStop(el);
+
+          await pressSplit(el);
+          expectSentOnce(whole("b2"), [noEdit("b2", { editorVersion: 2 })]);
+        });
+
+        it("the screen's stop answers for its own bill alone", async () => {
+          fakeTimers();
+          const el = await panel({ getSplitSources: vi.fn().mockResolvedValue(threeDishes()) });
+          await pickDish(el, "b2", "steak");
+          await pickDish(el, "b2", "chips");
+          await tick(el, "b3");
+          await reached(el);
+          api.getSplitSources!.mockResolvedValue(withDishes(["chips", "flan"], threeDishes()));
+          await rereadBills(el, revised());
+          reading = (snapshot) => ({
+            ...withOrderSent(snapshot, "b2"),
+            billEdits: withOrderSent(snapshot, "b2").billEdits.map((edit) =>
+              edit.billId === "b3" ? { ...edit, editorVersion: 1 } : edit,
+            ),
+          });
+          await refreshDrafts(el);
+
+          await expectOneStop(el);
+          await expectOneStop(el, "Bill 3");
+
+          await pressSplit(el);
+          expectSentOnce({ wholeBillIds: ["b3"], loose: [{ billId: "b2", lineIds: ["chips"] }] }, [
+            noEdit("b2", { editorVersion: 2 }),
+            noEdit("b3", { editorVersion: 1 }),
+          ]);
+        });
       });
     });
   });

@@ -5453,6 +5453,8 @@ export class TillTableOrderScreen extends LitElement {
     const [changed] = this.#splitChanged;
     if (changed === undefined) return null;
     this.#splitChanged.delete(changed[0]);
+    if (this.#splitPrompt !== undefined)
+      this.#dispatch("split-table-stopped", { prompt: this.#splitPrompt, billId: changed[0] });
     return this.#saySplitStop(changed[0], changed[1], true);
   }
 

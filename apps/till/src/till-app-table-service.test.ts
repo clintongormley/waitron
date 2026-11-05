@@ -3614,6 +3614,7 @@ describe("A803 action results: the bill on screen after a table action", () => {
         updateLayoutToday,
       });
       const screen = await toTableOrder(el);
+      const readsBefore = vi.mocked(api.getTablesState).mock.calls.length;
       emit(screen, "split-table", {
         tableId: "t3",
         guestCounts: { staying: 2, leaving: 2 },
@@ -3622,7 +3623,7 @@ describe("A803 action results: the bill on screen after a table action", () => {
       await flush(el);
       await flush(el);
       expect(api.splitTable).toHaveBeenCalledOnce();
-      expect(api.getTablesState).toHaveBeenCalled();
+      expect(vi.mocked(api.getTablesState).mock.calls.length).toBeGreaterThan(readsBefore);
       const backToFloor = async () => {
         if (formFactor === tillFormFactor) emit(tableOrder(el)!, "back-to-floor");
         else emit(shell(el), "screen-select", { screen: "floor" });
