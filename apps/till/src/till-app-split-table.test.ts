@@ -1824,7 +1824,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     });
   }
 
-  it("a bill with no edit state when ticked has no change to notice: the press sends what is known by then", async () => {
+  it("keeps a bill with no edit state when ticked from becoming permission after refresh", async () => {
     const state = { missing: true };
     const listDrafts = vi.fn(async (partyId: string) => {
       const snapshot = await server.listDrafts(partyId);
@@ -1844,6 +1844,11 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     await refreshDrafts(el);
     await pressSplit(el);
 
+    expect(api.splitTable).not.toHaveBeenCalled();
+    expect(refusal(el)!.textContent).toContain(changedWords("Bill 2"));
+    expect(banner(el)).toBeNull();
+
+    await pressSplit(el);
     expect(api.splitTable).toHaveBeenCalledExactlyOnceWith(
       "v1",
       "t5",
@@ -1852,8 +1857,6 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
       [noEdit("b2", { editorVersion: 3 })],
       noGuests,
     );
-    expect(refusal(el)).toBeNull();
-    expect(banner(el)).toBeNull();
   });
 
   it.each(["b2", "none"])("allows %s when only an unrelated bill changed", async (billId) => {
@@ -3713,6 +3716,89 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         expect(movePicked(el)).toBe(true);
         expect(banner(el)!.textContent).toContain(codeMessage("table.not_shared"));
         expect(tableOrder(el)!.splitRefusal).toBeNull();
+      });
+    });
+
+    describe("the till taken off the page while a refusal's read is out, and put back", () => {
+      type Read = "listDrafts" | "getTablesState";
+      async function refusedThenOff(binding: Binding, error: unknown, read: Read) {
+        server.bills.add("b2");
+        const el = await mounted(binding, { splitTable: vi.fn().mockRejectedValue(error) });
+        await toPanel(el);
+        await tick(el, "b2");
+        await hungThenOff(el, read, () => pressSplit(el));
+        return el;
+      }
+
+      /** `act` with `read` never answering, then the till off the page and back, the read answering. */
+      async function hungThenOff(el: TillApp, read: Read, act: () => Promise<void>) {
+        const answers = api[read]!.getMockImplementation()!;
+        api[read]!.mockImplementation(() => new Promise(() => {}));
+        await act();
+        expect(refusal(el)).toBeNull();
+        const parent = el.parentNode!;
+        el.remove();
+        await flush(el, 6);
+        api[read]!.mockImplementation(answers as never);
+        parent.appendChild(el);
+        await flush(el, 6);
+      }
+
+      it.each([
+        [
+          "draft.out_of_date",
+          { code: "draft.out_of_date", billId: "b2" },
+          "listDrafts",
+          () => changedWords("Bill 2"),
+        ],
+        [
+          "a lost reply",
+          new TypeError("Failed to fetch"),
+          "getTablesState",
+          () => t("table.error"),
+        ],
+        ["party.out_of_date", { code: "party.out_of_date" }, "getTablesState", null],
+      ] as const)(
+        "%s, on a handheld, which stays on the order: the sentence once it is back",
+        async (_case, error, read, words) => {
+          const el = await refusedThenOff("handheld", error, read);
+
+          expect(refusal(el), "the sentence").not.toBeNull();
+          if (words !== null) expect(refusal(el)!.textContent).toContain(words());
+          expect(tickBox(el, "b2").checked).toBe(true);
+          expect(banner(el)?.textContent?.trim() ?? "").toBe("");
+          expect(api.splitTable).toHaveBeenCalledOnce();
+        },
+      );
+
+      it("the till's own stop at Send, on a handheld: the sentence once it is back, and no request", async () => {
+        server.bills.add("b2");
+        const { moved, listDrafts } = draftsMoving("b2");
+        const el = await mounted("handheld", {
+          listDrafts,
+          splitTable: vi.fn().mockResolvedValue({ partyId: "v-split", billIds: ["b2"] }),
+        });
+        await toPanel(el);
+        await tick(el, "b2");
+        moved.now = true;
+        await refreshDrafts(el);
+        await hungThenOff(el, "listDrafts", () => pressSplit(el));
+
+        expect(refusal(el)!.textContent).toContain(changedWords("Bill 2"));
+        expect(api.splitTable).not.toHaveBeenCalled();
+      });
+
+      it("control: on a desktop, put back on the floor, the order left: nothing said", async () => {
+        const el = await refusedThenOff(
+          "desktop",
+          { code: "draft.out_of_date", billId: "b2" },
+          "listDrafts",
+        );
+
+        expect(tableOrder(el)).toBeNull();
+        expect(banner(el)?.textContent ?? "").not.toContain(changedWords("Bill 2"));
+        expect(banner(el)?.textContent ?? "").not.toContain(codeMessage("draft.out_of_date"));
+        expect(api.splitTable).toHaveBeenCalledOnce();
       });
     });
 

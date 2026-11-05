@@ -475,6 +475,15 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   stays green and unedited). A request sent with an out-of-date state is refused `draft.out_of_date`,
   pinned by "refuses a stale empty bill" (`:329`).
 
+  That refusal hands the till the bill's state with its editor (`params.edit`, with `editorId` and
+  `editorName`), and on a whole bill the server takes a press that names it, whoever the editor is
+  (`requireSplitEditors`, `bill-editing.ts:168`). So the till keeps a told state for its next press only
+  when the refusal names no editor or the person signed in. One naming someone else stops the next press:
+  no request, and the foot says `table.split_taken` with the name the refusal carried, until a drafts read
+  brings a state other than the one the till knew at the refusal and the one it was told (fix round G;
+  real-route case: a whole bill another person's unsent dish holds, pressed with a blank state, refused
+  409 `draft.out_of_date` with `params.edit` naming that person).
+
 - **D5 Arriving dishes, bill by bill.** Each leaving bill gets its own fired group, as if the bills
   moved one after another (`groupArrivingDishes` takes one bill). So two bills with fired dishes make
   groups 1 and 2 at the new table, and a held copy takes the next number after them. Pinned by a case
@@ -792,10 +801,12 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   since the waiter ticked it, so each state is recorded per tick from the drafts read, and the rows carry none. That
   leaves no gap for a dish: an order sent moves the party's revision as well (real-route case, whatever edit state the
   press carries, refused 409). A press never waits for a state that has not arrived. With nothing recorded when the
-  bill was ticked there is no change to notice, so it names what it knows: the state read since, or else the state a
-  refused press was told, or else that of a bill nobody has edited. The server judges that (real-route case: that last
-  is taken on an untouched bill; on an edited one it is refused `draft.out_of_date`, carrying the state, and a press
-  naming that state is taken).
+  bill was ticked and nothing arrived since, it names what it knows: the state a refused press was told, or else that
+  of a bill nobody has edited. The server judges only whether that state is the bill's current one (real-route case:
+  that last is taken on an untouched bill; on an edited one it is refused `draft.out_of_date`, carrying the state, and a
+  press naming that state is taken), not whose it is, so a told state naming someone else is not sent (D4). A state
+  that arrives after the tick is a change, as on main (`till-app-parties.test.ts:11980`): that press sends nothing and
+  says `table.split_changed`, and the next press names the state.
 
   **A refusal's own reads have a time limit** (fix round D, and round E's ruling that this is every read behind a
   refusal). The sentence comes from those reads, so each one (floor, bills, lines, groups, kitchen, rows and drafts, the
@@ -811,7 +822,9 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   next press, or when the till leaves the page or its server is replaced: their timers stop, they start no further read,
   nothing is said, and what a failed read would have emptied (the floor, the bills, the lines, the groups, the kitchen
   read) stays. Another party's or another visit's reads have no refusal's limit, and a failed bills read there empties
-  the list as it always did.
+  the list as it always did. A press's reads that the till leaving the page ended start again once it is back, and
+  say their sentence if the waiter is still on that order (fix round G). On a handheld the order is a tab the address
+  brings back; on a desktop it is a drill that putting the till back closes, which leaves the visit, so nothing is said.
 
   **What this does not reach.** Before a first answer there is no snapshot, so a first read that never answers leaves
   a blank panel with Split quiet and no words, until Back and the same table read again. A reload whose floor or bills
@@ -878,15 +891,16 @@ Changing from B to A later removes one call in `splitTable` and changes those th
     refusal reopens the panel. It does not fire when the panel closes on send, so a refused count finds its
     observation still there. A bill's edit state is recorded as it joins the set, and a bill already recorded
     keeps its record. A bill leaving the set is dropped, so a bill that changed before it was ticked, or an
-    unrelated bill, refuses nothing. A bill with no edit state when ticked is recorded as missing, and has no
-    change to notice: this guard's reason is a change since the tick, so the press sends and the server judges
-    (fix round E's ruling; D16 says what it names). A selected bill someone else's order reaches stays in the set
+    unrelated bill, refuses nothing. A bill with no edit state when ticked is recorded as missing. A state that
+    arrives after that is a change, as on main; one that has not arrived holds nothing, so the press sends and the
+    server judges (fix round E's ruling, narrowed by round G to a state that has not arrived; D16 says what it
+    names). A selected bill someone else's order reaches stays in the set
     (D21), so its record stays.
   - The record reads `sync.expectedEditFor` behind the `#draftReady` and party checks, with no banner. The
     comparison at Send uses `#billChoiceMatches` (`till-app.ts:17251`). Neither uses `#billChoiceEdit` or
     `#billChoiceCurrent`, which set `errorKey` when the state is missing (`:17228-17249`).
-  - At Send the app compares the selected bills it has a record for. One moved sends no request and goes through
-    D16's `table.split_changed` row, with the panel reopened.
+  - At Send the app compares the selected bills it has a record for. One moved, or recorded as missing with a state
+    arrived since, sends no request and goes through D16's `table.split_changed` row, with the panel reopened.
   - A refused count keeps the observation, so a change made while the waiter corrects the count is still
     refused (`till-app-parties.test.ts:12078`). The app watches the reopened panel's prompt as it does every reopening's, so the retry after a bill switch is not stopped in silence. A refusal with words that names
     no count clears the observations after its re-read, and the reopened panel's `split-table-observe` records
@@ -1097,7 +1111,7 @@ until Task 14a removes it.
 | Old case, `till-app-parties.test.ts` | Title in its new home | Pins | Task |
 | --- | --- | --- | --- |
 | `:11943` × 3 "refuses a refreshed owner / draft / revision while the guests prompt stays open" | "refuses a refreshed owner / draft / revision on a ticked bill while the panel stays open" | no request; `table.split_changed` at the bottom; the panel the same element; no save and no take-over. These fixtures change `billEdits` alone, as the old ones do, so no bill shows held. Task 12f's case changes `drafts` as well | 12c |
-| `:11980` "keeps missing metadata at prompt opening from becoming permission after refresh" | "a bill with no edit state when ticked has no change to notice: the press sends what is known by then" | **One request, carrying the state read since; no sentence.** Reversed by fix round E's ruling (I2): the case until then asserted no request and the sentence | 12c |
+| `:11980` "keeps missing metadata at prompt opening from becoming permission after refresh" | "keeps a bill with no edit state when ticked from becoming permission after refresh" | no request; the sentence; then a second press sends once, carrying the state read since | 12c |
 | `:12002` × 2 "allows %s when only an unrelated bill changed" | same title, for a whole bill and for nothing ticked | exactly one request, with exactly the ticked bill's edit | 12c |
 | `:12031` "refuses a guests prompt carried across a bill switch" | "refuses a panel carried across a bill switch" | no request. **Dispatched, not pressed:** a bill switch closes the panel (`till-table-order-screen.ts:1960`), so no control is left. The case captures `prompt` from `split-table-open`, switches bill and dispatches `split-table` with it, the one path that still reaches the guard (R14) | 12c |
 | `:12042` "allows a new prompt after cancelling and refreshing its bill" | "allows a new panel after Back and a refreshed bill" | one request with the new state | 12c |

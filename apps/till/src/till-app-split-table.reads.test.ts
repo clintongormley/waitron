@@ -46,6 +46,7 @@ import {
 } from "../test/allergy-app-fixture.js";
 
 const changed = (bill: string) => fill(t("table.split_changed"), { bill });
+const takeOverFrom = (who: string) => fill(t("table.split_taken"), { who });
 const noEdit = (billId: string, over: Partial<BillEditExpected> = {}): BillEditExpected => ({
   billId,
   editorVersion: 0,
@@ -510,6 +511,37 @@ describe("a refusal's own reads have a time limit", () => {
       expect(billIds(el)).toEqual(["wo-6"]);
     });
 
+    it("the other party's drafts read, slower than the limit with a refusal's bills read still out, keeps its own limit", async () => {
+      const el = await billTwoTicked({
+        getTablesState: vi.fn().mockResolvedValue(withStranger),
+        ...refusedWith({ code: "party.out_of_date" }),
+      });
+      api.getPartyBills!.mockReset().mockImplementation(never);
+      await press(el, "[data-split-confirm]");
+      await vi.advanceTimersByTimeAsync(1_000);
+      emit(tableOrder(el)!, "back-to-floor");
+      await flush(el);
+
+      api.getPartyBills!.mockReset().mockResolvedValue([partyBill("wo-6", 1, "50.00")]);
+      server.bills.add("wo-6");
+      const slow = vi.fn(
+        (partyId: string) =>
+          new Promise((resolve) => setTimeout(() => resolve(server.listDrafts(partyId)), 30_000)),
+      );
+      api.listDrafts!.mockReset().mockImplementation(slow);
+      emit(floor(el)!, "open-table", { tableId: "t6", seated: true });
+      await flush(el);
+      expect(slow.mock.calls.map(([partyId]) => partyId)).toContain("v7");
+      await vi.advanceTimersByTimeAsync(LIMIT + 1_000);
+      await flush(el);
+      expect(noBanner(el), "past the limit").toBe(true);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await flush(el);
+      expect(noBanner(el), "once it answers").toBe(true);
+      expect(tableOrder(el)!.orderId).toBe("wo-6");
+    });
+
     it("a party that took the table while the refusal read: its own reads have no refusal's limit", async () => {
       const el = await billTwoTicked(refusedWith({ code: "party.out_of_date" }));
       const bills = held<PartyBill[]>();
@@ -793,20 +825,17 @@ describe("the sentence when party.out_of_date's table could not be read again (t
     ["es-ES", "Otra persona ha actualizado la mesa. Intenta Separar de nuevo."],
   ] as const;
 
-  it.each(WORDS)(
-    "in %s the foot says the owner's words, and no other refusal does",
-    async (language, words) => {
-      const el = await billTwoTicked({
-        splitTable: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
-      });
-      setLocale(language);
-      api.getTablesState!.mockResolvedValue(atFloor(9));
-      api.getSplitSources!.mockReset().mockRejectedValue(lost());
-      await press(el, "[data-split-confirm]");
-      await flush(el);
-      expect(said(el)).toBe(words);
-    },
-  );
+  it.each(WORDS)("in %s the foot says the owner's words", async (language, words) => {
+    const el = await billTwoTicked({
+      splitTable: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
+    });
+    setLocale(language);
+    api.getTablesState!.mockResolvedValue(atFloor(9));
+    api.getSplitSources!.mockReset().mockRejectedValue(lost());
+    await press(el, "[data-split-confirm]");
+    await flush(el);
+    expect(said(el)).toBe(words);
+  });
 
   it.each(WORDS)(
     "in %s, with the table read again, the foot keeps party.changed's words",
@@ -942,7 +971,7 @@ describe("a party's first bill arriving behind the panel, and a press", () => {
       expect(floors.calls.length).toBeGreaterThanOrEqual(1);
     });
 
-    it("a press after the state has arrived carries that state, once", async () => {
+    it("a press after the state has arrived: no request and the sentence, then the next press carries that state, once", async () => {
       const { el, floors } = await reloadOut({
         listDrafts: vi.fn(async (partyId: string) => {
           const snapshot = await server.listDrafts(partyId);
@@ -961,10 +990,13 @@ describe("a party's first bill arriving behind the panel, and a press", () => {
       expect(tableOrder(el)!.orderId).toBe("b9");
 
       await pressSplit(el);
+      expect(api.splitTable).not.toHaveBeenCalled();
+      expect(said(el)).toBe(changed("Bill 1"));
+      expect(el.shadowRoot!.querySelector(".error")).toBeNull();
 
+      await pressSplit(el);
       expect(api.splitTable).toHaveBeenCalledOnce();
       expect(api.splitTable!.mock.calls[0]![4]).toEqual([noEdit("b9", { editorVersion: 4 })]);
-      expect(said(el)).toBeNull();
     });
 
     it("the server refusing what the press could name: its sentence once, and the next press carries the server's state, with the reload still out", async () => {
@@ -987,6 +1019,58 @@ describe("a party's first bill arriving behind the panel, and a press", () => {
       expect(api.splitTable).toHaveBeenCalledTimes(2);
       expect(api.splitTable!.mock.calls[1]![4]).toEqual([state]);
     });
+
+    it("the server's state naming this person: the next press carries it", async () => {
+      const state = noEdit("b9", { editorVersion: 4, draftId: "d-ana", draftRevision: 2 });
+      const { el } = await reloadOut({
+        splitTable: vi
+          .fn()
+          .mockRejectedValueOnce({
+            code: "draft.out_of_date",
+            billId: "b9",
+            edit: { ...state, editorId: "p1", editorName: "Ana" },
+          })
+          .mockResolvedValue({ partyId: "v-split", billIds: ["b9"] }),
+      });
+      await tick(el, "b9");
+      await pressSplit(el);
+      expect(said(el)).toBe(changed("Bill 1"));
+
+      await pressSplit(el);
+      expect(api.splitTable).toHaveBeenCalledTimes(2);
+      expect(api.splitTable!.mock.calls[1]![4]).toEqual([state]);
+    });
+
+    it.each([
+      ["Luis", takeOverFrom("Luis")],
+      [null, t("table.split_taken_unnamed")],
+    ] as const)(
+      "the server's state naming someone else (%s), its floor read hung: the next press sends nothing and the foot says to take over",
+      async (editorName, words) => {
+        const state = noEdit("b9", { editorVersion: 1, draftId: "d-luis", draftRevision: 1 });
+        const { el } = await reloadOut({
+          splitTable: vi
+            .fn()
+            .mockRejectedValueOnce({
+              code: "draft.out_of_date",
+              billId: "b9",
+              edit: { ...state, editorId: "p-luis", editorName },
+            })
+            .mockResolvedValue({ partyId: "v-split", billIds: ["b9"] }),
+        });
+        await tick(el, "b9");
+        await pressSplit(el);
+        expect(api.splitTable).toHaveBeenCalledOnce();
+        expect(said(el)).toBe(changed("Bill 1"));
+
+        await pressSplit(el);
+        expect(api.splitTable).toHaveBeenCalledOnce();
+        expect(panelOpen(el)).toBe(true);
+        expect(said(el)).toBe(words);
+        expect(tickBox(el, "b9")!.checked).toBe(true);
+        expect(el.shadowRoot!.querySelector(".error")).toBeNull();
+      },
+    );
 
     it("control: a state that was recorded and has moved still stops the press", async () => {
       const { moved, listDrafts } = draftsMoving();
@@ -1075,5 +1159,96 @@ describe("a press on a panel the app has stopped watching", () => {
 
     expect(api.splitTable).toHaveBeenCalledOnce();
     expect(sent(0)).toBe(5);
+  });
+});
+
+describe("a refusal naming someone else's hold on a bill whose drafts did not answer", () => {
+  const LIMIT = 25_000;
+  const luisHolds = noEdit("b2", { editorVersion: 1, draftId: "d-luis", draftRevision: 1 });
+  const refusedFor = () =>
+    vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "draft.out_of_date",
+        billId: "b2",
+        edit: { ...luisHolds, editorId: "p-luis", editorName: "Luis" },
+      })
+      .mockResolvedValue({ partyId: "v-split", billIds: ["b2"] });
+
+  async function secondPressStops(el: TillApp): Promise<void> {
+    expect(api.splitTable).toHaveBeenCalledOnce();
+    expect(said(el)).toBe(changed("Bill 2"));
+    await press(el, "[data-split-confirm]");
+    await flush(el);
+    expect(api.splitTable).toHaveBeenCalledOnce();
+    expect(panelOpen(el)).toBe(true);
+    expect(said(el)).toBe(takeOverFrom("Luis"));
+    expect(tickBox(el, "b2")!.checked).toBe(true);
+    expect(el.shadowRoot!.querySelector(".error")).toBeNull();
+  }
+
+  it("its drafts reads failing since the table opened: the next press sends nothing and the foot says to take over", async () => {
+    const el = await billTwoTicked({
+      listDrafts: vi.fn().mockRejectedValue(lost()),
+      splitTable: refusedFor(),
+    });
+    await press(el, "[data-split-confirm]");
+    await flush(el);
+    await secondPressStops(el);
+  });
+
+  it("its drafts reads failing since the table opened, and hung from the press: the sentence at the limit, then the next press sends nothing and the foot says to take over", async () => {
+    const el = await billTwoTicked({
+      listDrafts: vi.fn().mockRejectedValue(lost()),
+      splitTable: refusedFor(),
+    });
+    api.listDrafts!.mockReset().mockImplementation(() => new Promise(() => {}));
+    await press(el, "[data-split-confirm]");
+    await vi.advanceTimersByTimeAsync(LIMIT - 1);
+    await flush(el);
+    expect(panelOpen(el), "not before the limit").toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await flush(el);
+    await secondPressStops(el);
+  });
+
+  it("a state recorded at the tick, its drafts reads failing since: the next press sends nothing and the foot says to take over", async () => {
+    const el = await billTwoTicked({ splitTable: refusedFor() });
+    api.listDrafts!.mockReset().mockRejectedValue(lost());
+    await press(el, "[data-split-confirm]");
+    await flush(el);
+    await secondPressStops(el);
+  });
+
+  it("control: a drafts read answering after the refusal with the hold gone: the state it brought is a change, once, and then sent", async () => {
+    const el = await billTwoTicked({
+      listDrafts: vi.fn().mockRejectedValue(lost()),
+      splitTable: refusedFor(),
+    });
+    await press(el, "[data-split-confirm]");
+    await flush(el);
+    expect(said(el)).toBe(changed("Bill 2"));
+
+    const freed = noEdit("b2", { editorVersion: 2 });
+    api.listDrafts!.mockReset().mockImplementation(async (partyId: string) => {
+      const snapshot = await server.listDrafts(partyId);
+      return {
+        ...snapshot,
+        billEdits: snapshot.billEdits.map((edit) =>
+          edit.billId === "b2" ? { ...edit, ...freed } : edit,
+        ),
+      };
+    });
+    await refreshDrafts(el);
+    await flush(el);
+    await press(el, "[data-split-confirm]");
+    await flush(el);
+    expect(api.splitTable).toHaveBeenCalledOnce();
+    expect(said(el)).toBe(changed("Bill 2"));
+    await press(el, "[data-split-confirm]");
+    await flush(el);
+
+    expect(api.splitTable).toHaveBeenCalledTimes(2);
+    expect(api.splitTable!.mock.calls[1]![4]).toEqual([freed]);
   });
 });

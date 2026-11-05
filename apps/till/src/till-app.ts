@@ -18,6 +18,7 @@ import {
 } from "./widgets/party-allergy-dialog.js";
 import type {
   BillEditExpected,
+  BillEditState,
   BillUnsent,
   Draft as PartyDraft,
   LateSend,
@@ -539,6 +540,8 @@ const FLOOR_POLL_LIMIT_MS = 25_000;
 /** A refusal's reads hold a waiter at a closed panel with nothing said, and failing one costs no more
  * than the last answer kept, so they take a floor poll's limit rather than a request's. */
 const SPLIT_REFUSAL_READ_LIMIT_MS = FLOOR_POLL_LIMIT_MS;
+/** Why a refused press's reads ended when the till left the page: they run again once it is back. */
+const SPLIT_READS_OFF_PAGE = "off the page";
 /** How often an open sale view re-reads a full invoice's delivery while an attempt waits or sends. */
 const DELIVERY_REREAD_MS = 5_000;
 /** How often a handheld's sheet re-reads the bill while its own card payment is still pending. */
@@ -1491,6 +1494,8 @@ type CounterError =
   | { excess: string; lineChange?: true; billId?: string; bill?: string }
   /** A ticked bill of Split a table's panel changed: its label. */
   | { splitChanged: string }
+  /** A refusal named someone else's unsent order on a ticked bill: their name, or "" for none. */
+  | { splitTaken: string }
   /** The bill a refusal's Refund named has left the party: its label. */
   | { splitGone: string }
   /** An order past the simplified-invoice limit, `overLimit` being the limit. */
@@ -1606,6 +1611,10 @@ function errorText(
   if ("billChanged" in error)
     return t(error.billChanged.key).replace("{line}", () => error.billChanged.line);
   if ("splitChanged" in error) return fill(t("table.split_changed"), { bill: error.splitChanged });
+  if ("splitTaken" in error)
+    return error.splitTaken === ""
+      ? t("table.split_taken_unnamed")
+      : fill(t("table.split_taken"), { who: error.splitTaken });
   if ("splitGone" in error) return fill(t("table.split_bill_gone"), { bill: error.splitGone });
   if ("excess" in error) {
     const amount = formatMoney(error.excess, currentLocale());
@@ -2438,6 +2447,9 @@ export class TillApp extends LitElement {
     void this.sessionActivity.start();
     this.#syncDepartmentTransfers();
     this.#syncEquipmentNfc();
+    const putBack = this.#splitReadsOnPutBack;
+    this.#splitReadsOnPutBack = undefined;
+    putBack?.();
   }
 
   override disconnectedCallback(): void {
@@ -2475,7 +2487,7 @@ export class TillApp extends LitElement {
     this.#menuPoll.stop();
     this.#equipmentPoll.stop();
     this.#stopFloorPoll();
-    this.#endSplitRefusalReads();
+    this.#endSplitRefusalReads(SPLIT_READS_OFF_PAGE);
     this.#draftSync?.drop();
     this.#abandonListRefreshes();
     this.#contentLanguageGeneration++;
@@ -15775,11 +15787,16 @@ export class TillApp extends LitElement {
   }
 
   readonly #splitTablePrompts = new WeakMap<object, PartyComposition | null>();
-  /** Each selected bill's edit state when it joined the selection, or null if it had none then, when
-   * there is no change for a press to notice and the server judges it. */
+  /** Each selected bill's edit state when it joined the selection, or null if it had none then. */
   readonly #splitObservations = new WeakMap<object, Map<string, BillEditExpected | null>>();
   /** The edit state a refused press was told, for a bill whose drafts have not been read. */
   readonly #splitToldEdits = new WeakMap<object, Map<string, BillEditExpected>>();
+  /** A refusal that named someone else's edit, which a press does not send over (D4), and the
+   * state this till knew when it came. */
+  readonly #splitToldHolders = new WeakMap<
+    object,
+    Map<string, { name: string; edit: BillEditExpected; before: BillEditExpected | null }>
+  >();
   /** Which screen a panel opened on: its send event's path is gone by the time a refusal answers. */
   readonly #splitScreens = new WeakMap<object, TillTableOrderScreen>();
   /** What a refusal handed to the screen said, for the banner should the screen decline it. */
@@ -15798,9 +15815,31 @@ export class TillApp extends LitElement {
       : undefined;
   }
 
-  #endSplitRefusalReads(): void {
-    this.#splitRefusalReads?.ended.abort();
+  #endSplitRefusalReads(reason?: string): void {
+    this.#splitRefusalReads?.ended.abort(reason);
     this.#splitRefusalReads = undefined;
+  }
+
+  /** A refused press's reads that the till leaving the page ended, to run again once it is back. */
+  #splitReadsOnPutBack?: () => void;
+
+  /** A press's refusal reads and what they say. Ended by the till leaving the page, they start again
+   * once it is back, since the waiter may still be looking at that order (Task 12d). */
+  async #pressRefusalReads<T>(
+    partyId: string,
+    reads: (live: () => boolean) => Promise<T>,
+  ): Promise<T | undefined> {
+    let offPage = false;
+    const said = await this.#whileSplitRefusalReads(partyId, async (ended) => {
+      const result = await reads(() => !ended.aborted);
+      offPage = ended.reason === SPLIT_READS_OFF_PAGE;
+      return result;
+    });
+    if (!offPage) return said;
+    if (this.isConnected) return this.#pressRefusalReads(partyId, reads);
+    return new Promise((resolve) => {
+      this.#splitReadsOnPutBack = () => resolve(this.#pressRefusalReads(partyId, reads));
+    });
   }
 
   #splitRefusalReadsFor(partyId: string): SplitRefusalReads {
@@ -15873,11 +15912,13 @@ export class TillApp extends LitElement {
     if (observed?.has(billId) === true) observed.set(billId, this.#billEditIfReady(billId));
   }
 
-  /** The first selected bill whose edit state is not what it was when the waiter ticked it. */
+  /** The first selected bill whose edit state is not what it was when the waiter ticked it. One
+   * with none then has changed once its state arrives, and not while it has not. */
   #splitBillChanged(observed: Map<string, BillEditExpected | null>, ids: string[]) {
     return ids.find((id) => {
       const seen = observed.get(id);
-      return seen != null && !this.#billChoiceMatches(seen);
+      if (seen === null) return this.#billEditIfReady(id) !== null;
+      return seen !== undefined && !this.#billChoiceMatches(seen);
     });
   }
 
@@ -15900,16 +15941,50 @@ export class TillApp extends LitElement {
     );
   }
 
-  #noteSplitToldEdit(prompt: object | undefined, edit: BillEditExpected | undefined): void {
+  #noteSplitToldEdit(prompt: object | undefined, edit: BillEditState | undefined): void {
     if (prompt === undefined || edit === undefined) return;
-    const told = this.#splitToldEdits.get(prompt) ?? new Map<string, BillEditExpected>();
-    told.set(edit.billId, {
+    const expected: BillEditExpected = {
       billId: edit.billId,
       editorVersion: edit.editorVersion,
       draftId: edit.draftId,
       draftRevision: edit.draftRevision,
-    });
+    };
+    const told = this.#splitToldEdits.get(prompt) ?? new Map<string, BillEditExpected>();
+    const holders =
+      this.#splitToldHolders.get(prompt) ??
+      new Map<string, { name: string; edit: BillEditExpected; before: BillEditExpected | null }>();
     this.#splitToldEdits.set(prompt, told);
+    this.#splitToldHolders.set(prompt, holders);
+    if (edit.editorId == null || edit.editorId === this.#sessionPersonId) {
+      told.set(edit.billId, expected);
+      holders.delete(edit.billId);
+    } else {
+      told.delete(edit.billId);
+      holders.set(edit.billId, {
+        name: edit.editorName ?? "",
+        edit: expected,
+        before: this.#billEditIfReady(edit.billId),
+      });
+    }
+  }
+
+  /** The holder a refusal named on a selected bill, until a read brings a state newer than it. */
+  #splitToldHolder(prompt: object, ids: string[]): string | undefined {
+    const holders = this.#splitToldHolders.get(prompt);
+    const same = (a: BillEditExpected | null, b: BillEditExpected | null) =>
+      a === b ||
+      (a !== null &&
+        b !== null &&
+        a.editorVersion === b.editorVersion &&
+        a.draftId === b.draftId &&
+        a.draftRevision === b.draftRevision);
+    for (const id of ids) {
+      const holder = holders?.get(id);
+      const now = this.#billEditIfReady(id);
+      if (holder !== undefined && (same(now, holder.before) || same(now, holder.edit)))
+        return holder.name;
+    }
+    return undefined;
   }
 
   #splitPanel?: {
@@ -16133,18 +16208,24 @@ export class TillApp extends LitElement {
       const changed =
         observed === undefined ? undefined : this.#splitBillChanged(observed, selected);
       if (changed === undefined) return false;
-      await this.#whileSplitRefusalReads(party.id, (ended) =>
+      await this.#pressRefusalReads(party.id, (live) =>
         this.#onSplitBillChanged(
           { tableId, guestCounts, prompt, selection },
           party.id,
           changed,
           "draft.out_of_date",
-          () => !ended.aborted,
+          live,
         ),
       );
       return true;
     };
     if (await stopIfChanged()) return;
+    const holder = prompt === undefined ? undefined : this.#splitToldHolder(prompt, selected);
+    if (holder !== undefined) {
+      const said = { splitTaken: holder };
+      this.#saySplitRefused({ tableId, guestCounts, prompt, selection }, said, said);
+      return;
+    }
     if (
       confirmed === undefined &&
       looseIds.length > 0 &&
@@ -16177,15 +16258,15 @@ export class TillApp extends LitElement {
       const here = () =>
         this.api === asked.api && visit === this.#orderVisit && !this.#hasLeftParty(party.id, sent);
       if (!here()) return;
-      const went = await this.#whileSplitRefusalReads(party.id, (ended) =>
+      const went = await this.#pressRefusalReads(party.id, (live) =>
         this.#onSplitRefused(
           error,
           { tableId, guestCounts, prompt, selection },
           party.id,
-          () => here() && !ended.aborted,
+          () => here() && live(),
         ),
       );
-      if (!went) return;
+      if (went !== true) return;
     }
     await this.#followSplit(asked, party, tableId, selection);
   }
@@ -16263,7 +16344,7 @@ export class TillApp extends LitElement {
           billId?: unknown;
           tabId?: unknown;
           excess?: unknown;
-          edit?: BillEditExpected;
+          edit?: BillEditState;
         }
       | undefined;
     const code = refused?.code;
