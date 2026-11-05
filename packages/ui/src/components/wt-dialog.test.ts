@@ -3,8 +3,11 @@ import { page, userEvent } from "vitest/browser";
 import { html, render } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import { cleanup, formMessageOf, host, mount, mountInShadowRoot } from "../test-helpers.js";
+import { setHelpMode } from "../help-mode.js";
 import { WtDialog } from "./wt-dialog.js";
+import type { WtHelpTooltip } from "./wt-help-tooltip.js";
 import "./wt-button.js";
+import "./wt-help-tooltip.js";
 import "./wt-form-actions.js";
 import "./wt-input.js";
 import "./wt-modal.js";
@@ -2076,6 +2079,44 @@ for (const tag of ["wt-dialog", "wt-modal"] as const) {
     expect(input.matches(":focus")).toBe(true);
   });
 }
+
+test.each([
+  ["wt-dialog", "ltr", "Calibrate printer: Kitchen"],
+  ["wt-modal", "ltr", "Calibrate printer: Kitchen"],
+  ["wt-modal", "ltr", "Calibrate printer: the receipt printer beside the back door of the kitchen"],
+  ["wt-dialog", "rtl", "Calibrate printer: Kitchen"],
+])(
+  "%s (%s): with help on, the heading «%s» ends before its help badge",
+  async (tag, dir, heading) => {
+    onTestFinished(() => setHelpMode(false));
+    const el = (await mount(
+      `<${tag} dir="${dir}" heading="${heading}">` +
+        '<wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Calibrate printer">How calibration works.</wt-help-tooltip>' +
+        `<p>Print the width test.</p></${tag}>`,
+    )) as Openable;
+    el.open = true;
+    await el.updateComplete;
+    const tooltip = el.querySelector<WtHelpTooltip>("wt-help-tooltip")!;
+    setHelpMode(true);
+    await tooltip.updateComplete;
+    await el.updateComplete;
+    const badge = tooltip.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+    expect(badge.width).toBeGreaterThan(0);
+    const text = document.createRange();
+    text.selectNodeContents(el.shadowRoot!.querySelector("h2")!);
+    const lines = [...text.getClientRects()];
+    expect(lines.length).toBeGreaterThan(0);
+    if (dir === "rtl") {
+      const textLeft = Math.min(...lines.map((line) => line.left));
+      expect(textLeft, JSON.stringify({ textLeft, badge })).toBeGreaterThanOrEqual(
+        badge.right - 0.5,
+      );
+    } else {
+      const textRight = Math.max(...lines.map((line) => line.right));
+      expect(textRight, JSON.stringify({ textRight, badge })).toBeLessThanOrEqual(badge.left + 0.5);
+    }
+  },
+);
 
 test("an open dialog put back with help on does not open on the help badge", async () => {
   const el = (await mount(

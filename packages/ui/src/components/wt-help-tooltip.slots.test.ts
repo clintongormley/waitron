@@ -282,11 +282,12 @@ test("wt-dialog: a help-mode badge takes no room, off or on", async () => {
   expectSameBox(boxOf(heading!), without);
 });
 
-test("wt-dialog: with help on the badge hangs over the heading's top trailing corner", async () => {
+test("wt-dialog: with help on the badge hangs over the heading's top edge, starting where the heading ends", async () => {
   const { el, heading, tooltip } = await openDialog(dialogMarkup(badgeMarkup("help-mode")));
   await turnHelp(true, tooltip, el);
   const corner = heading!.getBoundingClientRect();
-  expectCentreAt(badgeButton(tooltip!), corner.right, corner.top);
+  const badge = badgeButton(tooltip!);
+  expectCentreAt(badge, corner.right + badge.getBoundingClientRect().width / 2, corner.top);
 });
 
 test("wt-dialog: the dialog's name is still its heading alone", async () => {
