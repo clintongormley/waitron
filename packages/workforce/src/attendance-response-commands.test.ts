@@ -16,12 +16,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import {
-  deviceOrigin,
-  jobOrigin,
-  locationId as brandLocationId,
-  type Origin,
-} from "@waitron/shared";
+import { deviceOrigin, jobOrigin, type Origin } from "@waitron/shared";
 import { seedLocation } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { WorkforceBackend } from "./clocking.js";
@@ -52,7 +47,7 @@ let personId: string, manager: string, other: string, locationId: string, nodeId
 beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
+  nodeId = await seedNode(suite.db, locationId);
   const rows = await suite.db
     .insert(persons)
     .values([
@@ -117,7 +112,7 @@ it("revision changes for an older event appended on a different node", async () 
   )!.entryId;
   const before = await revision();
   expect(await revision()).toBe(before);
-  const earlierNode = await seedNode(suite.db, brandLocationId(locationId));
+  const earlierNode = await seedNode(suite.db, locationId);
   await run((tx) =>
     backend.requestCorrection(tx, {
       nodeId: earlierNode,
@@ -139,7 +134,7 @@ it("revision ignores another worker's entries and questions", async () => {
 });
 it("revision covers an entry written on another node", async () => {
   const before = await revision();
-  const otherNode = await seedNode(suite.db, brandLocationId(locationId));
+  const otherNode = await seedNode(suite.db, locationId);
   await clock("2026-01-05T09:00:00Z", personId, otherNode);
   expect(await revision()).not.toBe(before);
 });
@@ -822,7 +817,7 @@ it("a till decision on another node keeps the selected manager and device origin
   const value = await command(pair());
   const requested = await send(value, personId, personId, capture);
   const earlierNode = nodeId;
-  const decisionNode = await seedNode(suite.db, brandLocationId(locationId));
+  const decisionNode = await seedNode(suite.db, locationId);
   const result = await send(
     await command({ action: "approve", itemId: value.commandId }),
     personId,

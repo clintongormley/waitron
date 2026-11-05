@@ -21,7 +21,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { resolveDepartmentDays } from "./day-resolver.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import { readRoutingUses, replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
@@ -74,7 +74,7 @@ async function venue() {
     dayCutover: "06:00:00",
   });
   const venueId = await venueLocationId(db);
-  const locationId = brandLocationId(venueId);
+  const locationId = venueId;
   const [station] = await db
     .insert(kitchenStations)
     .values({ locationId, name: "Kitchen", isDefault: true })

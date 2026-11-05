@@ -62,7 +62,6 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { planVenue } from "@waitron/provisioning";
 import {
   decimal,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
@@ -199,7 +198,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

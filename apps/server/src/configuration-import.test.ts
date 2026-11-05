@@ -15,7 +15,6 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { expectedSchemaVersion, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue, type VenueRequest } from "@waitron/provisioning";
-import { locationId } from "@waitron/shared";
 import {
   createDepartment,
   createServiceZone,
@@ -666,7 +665,7 @@ describe("routing cells in a staged import", () => {
         modules: ALL_MODULES,
       });
       const venueId = await venueLocationId(source.db);
-      const cfg = { locationId: locationId(venueId) };
+      const cfg = { locationId: venueId };
       const variant = await withTransaction(source.db, async (tx) => {
         const department = await createDepartment(tx, {
           name: "Dining room",

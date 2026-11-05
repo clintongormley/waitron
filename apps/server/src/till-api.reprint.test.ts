@@ -11,7 +11,7 @@ import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/catalogue";
 import { createPrinter } from "@waitron/printing";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
@@ -46,7 +46,7 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });
-    const locationId = brandLocationId(await venueLocationId(db));
+    const locationId = await venueLocationId(db);
     // The default station serves an item no routing cell covers.
     stationId = await seedKitchenStation(db, { locationId });
     const nodeId = await seedNode(db);
@@ -77,7 +77,7 @@ const suite = useVenueDb({
 function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

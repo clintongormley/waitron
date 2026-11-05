@@ -17,7 +17,6 @@ import { verifySecretAsync } from "@waitron/identity";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack";
-import { locationId } from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
 import { seedTenants, TENANT_A, TENANT_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
@@ -58,7 +57,7 @@ vi.mock("./backup-turns.js", async (importOriginal) => {
 const { startServer, httpPort } = ephemeralServerFixture();
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",

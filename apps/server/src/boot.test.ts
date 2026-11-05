@@ -1,5 +1,4 @@
 import { locations } from "@waitron/db";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { uploadImage } from "@waitron/media";
@@ -351,7 +350,7 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
     const [department] = await db
       .insert(departments)
       .values({
-        locationId: brandLocationId(TILL_LOCATION_ID),
+        locationId: TILL_LOCATION_ID,
         name: "Receipt mount probe",
         tradingName: "Probe",
       })
@@ -2026,7 +2025,7 @@ describe("startServer, against a migrated venue directory", () => {
           {
             ...loadNodeIdentity(TILL_ENV),
             ...loadTillAppSettings(TILL_ENV),
-            locationId: brandLocationId(TILL_LOCATION_ID),
+            locationId: TILL_LOCATION_ID,
             simplifiedInvoiceLimit: null,
           },
           zoneId,
@@ -2057,7 +2056,7 @@ describe("startServer, against a migrated venue directory", () => {
         db
           .insert(bookings)
           .values({
-            locationId: brandLocationId(TILL_LOCATION_ID),
+            locationId: TILL_LOCATION_ID,
             tableId: liveTableId,
             bookingDate: "2099-01-01",
             bookingTime: "20:00",
@@ -2548,7 +2547,7 @@ describe("startServer, against a migrated venue directory", () => {
     const seeded = await seedPendingEnvios(sharedDb, {
       count: 1,
       identity: {
-        locationId: brandLocationId(TILL_LOCATION_ID),
+        locationId: TILL_LOCATION_ID,
         nodeId: TILL_ENV.WAITRON_NODE_ID,
         nif: "90000000K",
       },
@@ -2603,7 +2602,7 @@ describe("startServer, against a migrated venue directory", () => {
     const seeded = await seedPendingEnvios(sharedDb, {
       count: 1,
       identity: {
-        locationId: brandLocationId(TILL_LOCATION_ID),
+        locationId: TILL_LOCATION_ID,
         nodeId: TILL_ENV.WAITRON_NODE_ID,
         nif: "90000000K",
       },
@@ -2781,7 +2780,7 @@ describe("startServer, against a migrated venue directory", () => {
       orderNumber: 990_002,
     });
     const { deviceId } = await seedDevice(sharedDb, {
-      locationId: brandLocationId(TILL_LOCATION_ID),
+      locationId: TILL_LOCATION_ID,
     });
     const [payment] = await sharedDb
       .insert(billPayments)
@@ -2837,7 +2836,7 @@ describe("startServer, against a migrated venue directory", () => {
     const seeded = await seedPendingEnvios(sharedDb, {
       count: 1,
       identity: {
-        locationId: brandLocationId(TILL_LOCATION_ID),
+        locationId: TILL_LOCATION_ID,
         nodeId: TILL_ENV.WAITRON_NODE_ID,
         nif: "90000000K",
       },

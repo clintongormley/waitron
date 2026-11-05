@@ -33,12 +33,7 @@ import { cardReaderHolders, cardReaders, deviceCardReaders } from "@waitron/paym
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { createPrinter } from "@waitron/printing";
 import { planVenue } from "@waitron/provisioning";
-import {
-  AppError,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { AppError, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { CardProviderPool } from "../card-provider-pool.js";
 import type { DiskFullState } from "../disk-full-state.js";
 import { deploymentEnvironment } from "../config.js";
@@ -164,7 +159,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
   const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

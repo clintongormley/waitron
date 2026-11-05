@@ -23,7 +23,7 @@ import {
   setProductVariants,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
+import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
 import { mountTillApi } from "./till-api.js";
@@ -65,7 +65,7 @@ async function seedVenueWithMenuAndTill(db: Database): Promise<Venue> {
     invoiceLocales: ["es-ES"],
     operationDescription: "Retail",
   });
-  const locationId = brandLocationId(await venueLocationId(db));
+  const locationId = await venueLocationId(db);
   await seedKitchenStation(db, { locationId });
   const [person] = await db
     .insert(persons)

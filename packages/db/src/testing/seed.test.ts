@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
-import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { useVenueDb } from "./venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -135,7 +134,7 @@ describe("seedNode", () => {
         operationDescription: "Restaurant",
       })
       .returning({ id: locations.id });
-    const location = brandLocationId(loc!.id);
+    const location = loc!.id;
     const node = await seedNode(db, location);
     const result = await db.execute<{ n: number }>(
       sql`select count(*) as n from nodes where id = ${node} and location_id = ${location}`,
@@ -149,7 +148,7 @@ describe("seedNode", () => {
       .insert(locations)
       .values({ name: "Second", invoiceLocales: ["es"], operationDescription: "Restaurant" })
       .returning({ id: locations.id });
-    const node = await seedNode(db, brandLocationId(second!.id));
+    const node = await seedNode(db, second!.id);
     const [row] = await db
       .select({ locationId: nodes.locationId })
       .from(nodes)
@@ -185,7 +184,7 @@ describe("seedKitchenStation", () => {
         operationDescription: "Restaurant",
       })
       .returning({ id: locations.id });
-    return { location: brandLocationId(loc!.id) };
+    return { location: loc!.id };
   }
 
   it("defaults to a DEFAULT station named 'Cocina' and returns its id", async () => {
@@ -231,7 +230,7 @@ describe("seedDevice", () => {
         operationDescription: "Restaurant",
       })
       .returning({ id: locations.id });
-    return brandLocationId(loc!.id);
+    return loc!.id;
   }
 
   it("seedDevice pairs an active device on a new till profile at the location", async () => {
@@ -341,7 +340,7 @@ describe("the helpers inside a transaction", () => {
       await seedVenue(tx, { name: "In a transaction" });
       const node = await seedNode(tx);
       await seedDevice(tx);
-      await seedKitchenStation(tx, { locationId: brandLocationId(await venueLocationId(tx)) });
+      await seedKitchenStation(tx, { locationId: await venueLocationId(tx) });
       return seedWorkingOrder(tx, { nodeId: node });
     });
     expect((await readVenue(suite.db)).name).toBe("In a transaction");

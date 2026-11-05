@@ -23,7 +23,6 @@ import {
   withPreparedModuleOperations,
   type OperationBinding,
 } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { FISCAL_HOUR_BACKUP_STATE } from "@waitron/fiscal-verifactu";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
@@ -56,7 +55,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 }));
 // One venue file holds both nodes: a mirror's venue.db is M1's whole database, so it is the copy.
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const primary = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
 const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
 const ADMIN = "e1000000-0000-4000-8000-000000000004";
 const PASSWORD = "synthetic-handover-password";

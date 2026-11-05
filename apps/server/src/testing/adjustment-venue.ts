@@ -32,12 +32,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { loginWithPin, persons } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
 import { planVenue } from "@waitron/provisioning";
-import {
-  decimal,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { decimal, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { deploymentEnvironment } from "../config.js";
 import { DEVICE_COOKIE } from "../device-session.js";
 import type { Logger } from "../logger.js";
@@ -356,7 +351,7 @@ export async function provisionAdjustmentVenue(
   const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

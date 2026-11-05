@@ -14,7 +14,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId, type LocationId } from "@waitron/shared";
 import {
   createHolidayStore,
   readHolidayDates as packageReadHolidayDates,
@@ -154,7 +153,7 @@ async function setCountry(tx: Transaction, country: string) {
     .onConflictDoUpdate({ target: tenants.id, set: { country } });
 }
 
-async function venue(address: Address = {}): Promise<{ locationId: LocationId }> {
+async function venue(address: Address = {}): Promise<{ locationId: string }> {
   return withTransaction(db, async (tx) => {
     await setCountry(tx, address.country ?? "ZZ");
     await seedVenue(tx, {
@@ -165,11 +164,11 @@ async function venue(address: Address = {}): Promise<{ locationId: LocationId }>
       city: address.city === undefined ? "Villa Real" : address.city,
     });
     const venueId = await venueLocationId(tx);
-    return { locationId: locationId(venueId) };
+    return { locationId: venueId };
   });
 }
 
-async function moveTo(cfg: { locationId: LocationId }, address: Address) {
+async function moveTo(cfg: { locationId: string }, address: Address) {
   await withTransaction(db, async (tx) => {
     if (address.country !== undefined) await setCountry(tx, address.country);
     const set: { province?: string | null; city?: string | null } = {};
@@ -184,7 +183,7 @@ const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(db, fn);
 
 /** A special day closed all day on `date`, written straight to its tables. */
 async function specialDay(
-  cfg: { locationId: LocationId },
+  cfg: { locationId: string },
   date: string,
   name: string,
   repeatsYearly = false,
@@ -202,7 +201,7 @@ async function specialDay(
 
 async function seedRetainedGeographyWithSpecialDay(
   tx: Transaction,
-  cfg: { locationId: LocationId },
+  cfg: { locationId: string },
   date: string,
   name: string,
 ) {

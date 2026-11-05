@@ -46,7 +46,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   jobOrigin,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   workingOrderId as brandWorkingOrderId,
@@ -163,7 +162,7 @@ async function venue(): Promise<Venue> {
   const venueId = await venueLocationId(suite.db);
   const cfg: WithVenueRowId = {
     nodeId: brandNodeId(result.nodeId),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

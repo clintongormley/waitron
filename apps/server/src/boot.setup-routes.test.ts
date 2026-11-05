@@ -21,7 +21,6 @@ import {
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
@@ -578,7 +577,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         ...loadTillAppSettings(trading),
         simplifiedInvoiceLimit: null,
       };
-      const venueId = brandLocationId(await venueLocationId(venue.store.venue));
+      const venueId = await venueLocationId(venue.store.venue);
       const [profile] = await venue.store.venue
         .select({ id: deviceProfiles.id })
         .from(deviceProfiles)

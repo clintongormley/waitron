@@ -36,7 +36,7 @@ import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue, savePrivacyContact } from "@waitron/provisioning";
 import { WorkforceBackend } from "@waitron/workforce";
-import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import type { AccountEmailSender } from "./account-email.js";
@@ -129,7 +129,7 @@ async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
   const venueId = await venueLocationId(suite.db);
   venueCfg = {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

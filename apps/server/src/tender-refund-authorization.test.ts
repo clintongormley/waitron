@@ -27,7 +27,7 @@ import {
 } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
-import { AppError, deviceOrigin, locationId } from "@waitron/shared";
+import { AppError, deviceOrigin } from "@waitron/shared";
 import {
   departments,
   orderServiceContexts,
@@ -73,7 +73,7 @@ beforeEach(async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Meals",
   });
-  const placeId = locationId(await venueLocationId(db));
+  const placeId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const device = await seedDevice(db, { capabilities: CAPS });
   profileId = device.profileId;

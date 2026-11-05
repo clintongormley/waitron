@@ -2,7 +2,7 @@ import { CORE_MIGRATIONS, captureError, newId, withTransaction } from "@waitron/
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { AppError, deviceOrigin, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { AppError, deviceOrigin, jobOrigin } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
@@ -21,7 +21,7 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     locationId = await seedLocation(db);
-    nodeId = await seedNode(db, brandLocationId(locationId));
+    nodeId = await seedNode(db, locationId);
   },
 });
 
@@ -174,7 +174,7 @@ describe("approveCorrection", () => {
   it("records the request where it was captured and the approval as the dashboard's", async () => {
     const { personId, outEntryId } = await nineToFive("appr-origin");
     const sup = await supervisor("appr-origin-sup");
-    const { deviceId } = await seedDevice(suite.db, { locationId: brandLocationId(locationId) });
+    const { deviceId } = await seedDevice(suite.db, { locationId: locationId });
     const correctionId = await run((tx) =>
       backend.requestCorrection(tx, {
         nodeId,
@@ -282,8 +282,8 @@ describe("cross-node correction precedence (§4.2, reprojection)", () => {
     // would give 540, not 570.
     const { personId, outEntryId } = await nineToFive("xnode-1");
     // Two chains, neither the setup node's: a correction chains under its own recording node.
-    const boxNode = await seedNode(suite.db, brandLocationId(locationId));
-    const cloudNode = await seedNode(suite.db, brandLocationId(locationId));
+    const boxNode = await seedNode(suite.db, locationId);
+    const cloudNode = await seedNode(suite.db, locationId);
     const actor = await supervisor("xnode-1-sup");
     await insertApprovedCorrection({
       node: boxNode, // "the box"

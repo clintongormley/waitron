@@ -34,12 +34,7 @@ import { insertCapturedPayment } from "@waitron/payments";
 import type { PaymentProvider, PaymentResult } from "@waitron/payments";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
-import {
-  decimal,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { decimal, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { ExtraSelection } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
@@ -142,7 +137,7 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
   const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

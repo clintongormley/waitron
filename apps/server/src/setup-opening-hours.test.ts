@@ -4,7 +4,6 @@ import { CORE_MIGRATIONS, catalogues, venueLocationId, withTransaction } from "@
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { locationId } from "@waitron/shared";
 import {
   departmentDayRanges,
   departmentDays,
@@ -31,7 +30,7 @@ async function seed(withMenu = true, receiptLocale = "en-GB") {
     defaultCatalogueId: withMenu ? menu!.id : null,
   });
   const cfg = {
-    locationId: locationId(await venueLocationId(db)),
+    locationId: await venueLocationId(db),
     nodeId: await seedNode(db),
   };
   await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, cfg));

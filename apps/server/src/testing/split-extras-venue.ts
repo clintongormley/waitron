@@ -13,7 +13,7 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig, OriginConfig, TradingContext } from "../trading-context.js";
 import type { WithVenueRowId } from "./venue-row-id.js";
 import { deviceRequestCfg } from "./session-device.js";
@@ -57,7 +57,7 @@ export async function setupVenue(): Promise<Venue> {
   });
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

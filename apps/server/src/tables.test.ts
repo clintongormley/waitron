@@ -28,12 +28,7 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import {
-  AppError,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  jobOrigin,
-} from "@waitron/shared";
+import { AppError, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { listTables, listZones, updateZone } from "./tables.js";
@@ -79,7 +74,7 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<WithVenueRo
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -396,12 +391,12 @@ async function setupTabVenue(): Promise<{
   });
   await seedLegacySellingUnits(db);
   const locationId = await venueLocationId(db);
-  await seedKitchenStation(db, { locationId: brandLocationId(locationId), name: "Kitchen" });
+  await seedKitchenStation(db, { locationId: locationId, name: "Kitchen" });
   const nodeId = await seedNode(db);
   const cfg: WithVenueRowId<OriginConfig> = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

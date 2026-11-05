@@ -34,7 +34,7 @@ import {
   specialDays,
 } from "@waitron/venue-service";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
-import { AppError, locationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { seedVenueWithStaff } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import {
@@ -766,7 +766,7 @@ describe("venue clock", () => {
 async function guideVenue() {
   const v = await venue();
   return inTx(async (tx) => {
-    const cfg = { locationId: locationId(v.cfg.locationId) };
+    const cfg = { locationId: v.cfg.locationId };
     const menuId = (await createCatalogue(tx, { name: randomUUID() })).id;
     const categoryId = (await createCategory(tx, { name: randomUUID() })).id;
     const productId = (

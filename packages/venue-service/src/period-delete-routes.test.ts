@@ -28,7 +28,6 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
@@ -87,7 +86,7 @@ async function routed() {
     dayCutover: "06:00:00",
   });
   const venueId = await venueLocationId(db);
-  const locationId = brandLocationId(venueId);
+  const locationId = venueId;
   const cfg = { locationId };
   const [station] = await db
     .insert(kitchenStations)

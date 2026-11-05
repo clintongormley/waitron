@@ -12,7 +12,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import {
   VENUE_SERVICE_MIGRATIONS,
   departments,
@@ -36,7 +35,7 @@ async function fixture(header: "department" | "null" | "absent" = "department") 
     addressLine1: "Current street",
     city: "Madrid",
   });
-  const cfg = { locationId: locationId(await venueLocationId(suite.db)) };
+  const cfg = { locationId: await venueLocationId(suite.db) };
   const nodeId = await seedNode(suite.db);
   const [department] = await suite.db
     .insert(departments)

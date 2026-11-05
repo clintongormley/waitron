@@ -36,7 +36,6 @@ import { deleteCredential, loadKeyRing, putCredential, type KeyRing } from "@wai
 import {
   AppError,
   decimal,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   workingOrderId as brandWorkingOrderId,
@@ -191,7 +190,7 @@ async function setup(
   const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -274,8 +273,8 @@ async function setup(
     noopLog,
   );
   const devices = [
-    await seedDevice(suite.db, { locationId: brandLocationId(venueId), label: "Barra 1" }),
-    await seedDevice(suite.db, { locationId: brandLocationId(venueId), label: "Barra 2" }),
+    await seedDevice(suite.db, { locationId: venueId, label: "Barra 1" }),
+    await seedDevice(suite.db, { locationId: venueId, label: "Barra 2" }),
   ];
   return {
     cfg,

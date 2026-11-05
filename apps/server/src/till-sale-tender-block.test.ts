@@ -24,7 +24,6 @@ import { associatePaymentWithSale, insertCapturedPayment } from "@waitron/paymen
 import type { CardDetails } from "@waitron/payments";
 import {
   decimal,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
@@ -86,7 +85,7 @@ function nextNif(): string {
 function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

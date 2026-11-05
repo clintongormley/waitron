@@ -19,7 +19,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import * as routing from "./routing.js";
@@ -50,7 +49,7 @@ async function fixture(tx: Transaction) {
     operationDescription: "Hospitality",
   });
   const venueId = await venueLocationId(tx);
-  const cfg = { locationId: locationId(venueId) };
+  const cfg = { locationId: venueId };
   const department = await createDepartment(tx, {
     name: "Dining",
     orderStart: "table",

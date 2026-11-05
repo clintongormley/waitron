@@ -10,12 +10,7 @@ import {
 import { persons, startManagementSession } from "@waitron/identity";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import {
-  jobOrigin,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { jobOrigin, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "../modules.js";
 import type { OriginConfig } from "../trading-context.js";
@@ -48,7 +43,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

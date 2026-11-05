@@ -3,7 +3,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import { AppError, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { AppError, jobOrigin } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
@@ -26,7 +26,7 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     locationId = await seedLocation(db);
-    nodeId = await seedNode(db, brandLocationId(locationId));
+    nodeId = await seedNode(db, locationId);
     const [row] = await db
       .insert(persons)
       .values({ displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" })
@@ -179,7 +179,7 @@ describe("clocking across a backward step of the box's clock", () => {
 
   it("keeps a chain per node", async () => {
     const p = await worker("two nodes");
-    const second = await seedNode(suite.db, brandLocationId(locationId));
+    const second = await seedNode(suite.db, locationId);
     await run((tx) => backend.clockIn(tx, at(p, "09:00")));
     await run((tx) => backend.clockOut(tx, at(p, "12:00")));
     await run((tx) => backend.clockIn(tx, { ...at(p, "13:00"), nodeId: second }));

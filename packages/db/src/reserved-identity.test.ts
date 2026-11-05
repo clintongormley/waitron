@@ -1,7 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { isAppError, locationId as brandLocationId } from "@waitron/shared";
-import type { LocationId } from "@waitron/shared";
+import { isAppError } from "@waitron/shared";
 import type { Endorsement } from "@waitron/membership";
 import {
   CORE_MIGRATIONS,
@@ -36,11 +35,11 @@ describe("reserved-identity accessors", () => {
     resetPerTest: false,
   });
 
-  let locationId: LocationId;
+  let locationId: string;
 
   beforeAll(async () => {
     await seedVenue(suite.db);
-    locationId = brandLocationId(await venueLocationId(suite.db));
+    locationId = await venueLocationId(suite.db);
   });
 
   it("insertReservedNodeTx persists a dormant node with its public key + endorsement", async () => {

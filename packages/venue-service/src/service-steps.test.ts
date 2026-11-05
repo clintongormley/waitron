@@ -15,7 +15,6 @@ import {
 } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment } from "./operations.js";
 import { departments } from "./schema/service.js";
@@ -46,7 +45,7 @@ async function seedVenueCfg(
   name: string,
   invoiceLocales: string[] = ["en-GB"],
   options: { tenant?: boolean; province?: string } = {},
-): Promise<{ locationId: LocationId }> {
+): Promise<{ locationId: string }> {
   const venue = {
     name,
     invoiceLocales,
@@ -55,11 +54,11 @@ async function seedVenueCfg(
   };
   if (options.tenant === true) await seedVenue(db, venue);
   else await db.insert(locations).values(venue);
-  return { locationId: brandLocationId(await venueLocationId(db)) };
+  return { locationId: await venueLocationId(db) };
 }
 
 async function seedCourse(
-  cfg: { locationId: LocationId },
+  cfg: { locationId: string },
   name: string,
   displayOrder: number,
   active = true,

@@ -12,8 +12,7 @@ import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
-import type { LocationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
   configureZone,
@@ -73,10 +72,10 @@ interface Venue {
   profile: string;
 }
 
-async function seedLocation(name: string): Promise<LocationId> {
+async function seedLocation(name: string): Promise<string> {
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
   const venueId = await venueLocationId(db);
-  return brandLocationId(venueId);
+  return venueId;
 }
 
 async function seedProfile(): Promise<string> {

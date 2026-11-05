@@ -18,7 +18,6 @@ import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/t
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
-import { locationId } from "@waitron/shared";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 
@@ -40,7 +39,7 @@ beforeEach(async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Meals",
   });
-  const placeId = locationId(await venueLocationId(db));
+  const placeId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   ({ deviceId } = await seedDevice(db));
   const [series] = await db
@@ -579,7 +578,7 @@ describe("cash refund balance without the optional payments module", () => {
       invoiceLocales: ["en-GB"],
       operationDescription: "Meals",
     });
-    cfg = { ...cfg, locationId: locationId(await venueLocationId(db)) };
+    cfg = { ...cfg, locationId: await venueLocationId(db) };
     const nodeId = await seedNode(db);
     const device = await seedDevice(db);
     const [series] = await db

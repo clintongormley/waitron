@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashSessionToken, persons, sessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { serviceStepCompletions } from "@waitron/venue-service";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
@@ -34,7 +34,7 @@ beforeEach(async () => {
     operationDescription: "Hospitality",
   });
   cfg = {
-    locationId: locationId(await venueLocationId(suite.db)),
+    locationId: await venueLocationId(suite.db),
     nodeId: nodeId(await seedNode(suite.db)),
     locale: "en-GB",
     invoiceLocales: ["en-GB"],

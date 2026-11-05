@@ -24,7 +24,6 @@ import {
   type CategoryTotal,
 } from "@waitron/reporting";
 import {
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   rawCentsToDecimal,
   seriesId as brandSeriesId,
@@ -119,7 +118,7 @@ describe("the category report reconciles with the till's sales", () => {
     const cfg = await deviceRequestCfg(suite.db, {
       nodeId: brandNodeId(venue.nodeId),
       seriesId: brandSeriesId(venue.seriesIds[0]!),
-      locationId: brandLocationId(venueId),
+      locationId: venueId,
       locale: LOCALE,
       invoiceLocales: [LOCALE],
       tipsEnabled: false,

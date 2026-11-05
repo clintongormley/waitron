@@ -16,7 +16,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import type { FloorDeletion } from "@waitron/module";
-import { AppError, locationId, type DeleteImpactRefusal } from "@waitron/shared";
+import { AppError, type DeleteImpactRefusal } from "@waitron/shared";
 import * as serviceDelete from "./index.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
@@ -47,7 +47,7 @@ async function fixture() {
       operationDescription: "Hospitality",
     });
     const venueId = await venueLocationId(tx);
-    const cfg = { locationId: locationId(venueId) };
+    const cfg = { locationId: venueId };
     const ds = await tx
       .insert(departments)
       .values([

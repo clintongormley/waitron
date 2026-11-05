@@ -11,7 +11,6 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locationId } from "@waitron/shared";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -38,7 +37,7 @@ async function fixture(active = true) {
     operationDescription: "Hospitality",
   });
   const cfg = {
-    locationId: locationId(await venueLocationId(suite.db)),
+    locationId: await venueLocationId(suite.db),
     receiptLanguages: ["es-ES", "ca-ES"],
   };
   const [dept] = await suite.db

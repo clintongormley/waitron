@@ -7,7 +7,7 @@ import {
   deviceOrigin,
   jobOrigin,
 } from "@waitron/shared";
-import type { DeviceId, LocationId, NodeId, SaleId, SeriesId } from "@waitron/shared";
+import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
 import {
@@ -30,7 +30,7 @@ import { recordVoid } from "./record-void.js";
 import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
-let locationId: LocationId;
+let locationId: string;
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series seedTenant creates

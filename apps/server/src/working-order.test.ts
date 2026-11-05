@@ -54,12 +54,7 @@ import {
 import * as catalogue from "@waitron/catalogue";
 import type { DietaryLabel } from "@waitron/catalogue";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
-import {
-  centsToDecimal,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { centsToDecimal, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { OrderFlow } from "./till-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
@@ -256,16 +251,12 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       values (${departmentId}, 'counter', ${orderFlow === "ticket_then_pay" ? "ticket_then_pay" : "prepay"})`);
       await tx.execute(sql`
       insert into zone_sale_policies (zone_id) values (${zoneId})`);
-      await offerMenuThroughZone(tx, { locationId: brandLocationId(locationId) }, zoneId, cat.id, {
+      await offerMenuThroughZone(tx, { locationId: locationId }, zoneId, cat.id, {
         makeDefault: true,
       });
-      await offerMenuThroughZone(
-        tx,
-        { locationId: brandLocationId(locationId) },
-        zoneId,
-        premium.id,
-        { displayOrder: 1 },
-      );
+      await offerMenuThroughZone(tx, { locationId: locationId }, zoneId, premium.id, {
+        displayOrder: 1,
+      });
       await publishWorkingMenu(tx, cat.id);
       await publishWorkingMenu(tx, premium.id);
       return {
@@ -282,7 +273,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     nodeId: brandNodeId(nodeId),
     // `parkOrder` reads neither series nor locale/invoiceLocales; fresh values keep the shape whole.
     seriesId: brandSeriesId(randomUUID()),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

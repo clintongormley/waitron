@@ -31,7 +31,7 @@ import {
   createProduct,
 } from "@waitron/catalogue";
 import { generateNodeKeyPair, type Endorsement } from "@waitron/membership";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer, type StartedServer } from "./boot.js";
 import { ALL_MODULES } from "./modules.js";
@@ -267,7 +267,7 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
     });
     await assignCatalogueToVenue(tx, cat.id);
     const offers = await offerProducts(tx, {
-      locationId: brandLocationId(MIRROR_LOCATION_ID),
+      locationId: MIRROR_LOCATION_ID,
     });
     return offers.offerFor(water.id);
   });

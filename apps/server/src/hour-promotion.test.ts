@@ -20,7 +20,6 @@ import {
   withPreparedModuleOperations,
   type OperationBinding,
 } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
@@ -62,7 +61,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
 const spare = useVenueDb({ migrations });
-const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const primary = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
 const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
 const ADMIN = "e1000000-0000-4000-8000-000000000004";
 const PASSWORD = "synthetic-promotion-password";

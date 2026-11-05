@@ -8,7 +8,6 @@ import {
   type OperationBinding,
   type ModuleOperationInput,
 } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
@@ -21,7 +20,7 @@ import { fiscalReservations } from "./schema/reservations.js";
 import { createHourDormantPreparation, readRetainedHourDormant } from "./hour-dormant-standby.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const primary = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
 const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
 const bases = [
   { code: "FF", purpose: "full" },

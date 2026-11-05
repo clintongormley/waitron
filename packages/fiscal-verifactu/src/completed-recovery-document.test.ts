@@ -18,7 +18,6 @@ import { seedFixtureSif } from "../test/sif-fixture.js";
 import { registroSif } from "./schema/sif.js";
 import { cadenas } from "./schema/cadenas.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { locationId } from "@waitron/shared";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(
@@ -26,7 +25,7 @@ const suite = useVenueDb({
     null,
   ),
 });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
 const nodeKey = {
   nodeId: node.nodeId,
   name: "2026-10-18 · TEST",

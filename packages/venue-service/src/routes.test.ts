@@ -30,7 +30,6 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { locationId, type LocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
@@ -65,7 +64,7 @@ const noopLog: Logger = () => {};
 
 interface Fixture {
   app: Hono;
-  locationId: LocationId;
+  locationId: string;
   managerCookie: string;
   staffCookie: string;
   supervisorCookie: string;
@@ -84,7 +83,7 @@ async function fixture(
     .insert(locations)
     .values({ name: "Venue", invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
     .returning({ id: locations.id });
-  const scopedLocationId = locationId(location!.id);
+  const scopedLocationId = location!.id;
   const [zone] = await db
     .insert(floorZones)
     .values({ locationId: scopedLocationId, name: "Terrace" })
@@ -758,7 +757,7 @@ describe("whole service settings saves", () => {
     expect(minutes[other.id]).toBe(10);
   });
 
-  async function seedCourse(fx: { locationId: LocationId }, name: string, active = true) {
+  async function seedCourse(fx: { locationId: string }, name: string, active = true) {
     const [row] = await db
       .insert(kitchenCourses)
       .values({ locationId: fx.locationId, name, displayOrder: 1, active })

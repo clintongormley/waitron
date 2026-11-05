@@ -18,7 +18,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { hashSessionToken, persons, sessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import {
   listDepartments,
   readKitchenNotes,
@@ -53,7 +53,7 @@ beforeEach(async () => {
     operationDescription: "Hospitality",
   });
   cfg = {
-    locationId: locationId(await venueLocationId(suite.db)),
+    locationId: await venueLocationId(suite.db),
     nodeId: nodeId(await seedNode(suite.db)),
     locale: "en-GB",
     invoiceLocales: ["en-GB"],

@@ -10,14 +10,14 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { runRestoreHooks } from "./restore.js";
 import { withAuthenticatedOperation } from "./operation-authentication.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 const target = {
-  locationId: locationId("c0000000-0000-4000-8000-000000000001"),
+  locationId: "c0000000-0000-4000-8000-000000000001",
   nodeId: nodeId("c0000000-0000-4000-8000-000000000002"),
 };
 const ADMIN = "c0000000-0000-4000-8000-000000000003";

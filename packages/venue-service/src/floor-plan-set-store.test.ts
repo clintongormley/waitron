@@ -11,7 +11,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId, type LocationId } from "@waitron/shared";
 import { linkFloorPlanSet, readFloorPlanSets } from "./floor-plan-set-store.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, createServiceZone } from "./operations.js";
@@ -30,13 +29,13 @@ async function venue(tx: Transaction) {
     operationDescription: "Hospitality",
   });
   const placeId = await venueLocationId(tx);
-  const cfg = { locationId: locationId(placeId) };
+  const cfg = { locationId: placeId };
   const restaurant = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
   const bar = await createDepartment(tx, { name: "Bar", orderStart: "table" });
   return { cfg, restaurant: restaurant.id, bar: bar.id };
 }
 
-async function newSet(tx: Transaction, cfg: { locationId: LocationId }): Promise<string> {
+async function newSet(tx: Transaction, cfg: { locationId: string }): Promise<string> {
   const [row] = await tx
     .insert(floorPlanSets)
     .values({ locationId: cfg.locationId })

@@ -32,7 +32,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
   chooseExtraMakerBeside,
@@ -101,7 +100,7 @@ async function fixture(tx: Transaction, suffix = "") {
     operationDescription: "Hospitality",
   });
   const venueId = await venueLocationId(tx);
-  const cfg = { locationId: locationId(venueId) };
+  const cfg = { locationId: venueId };
   const [terrace] = await tx
     .insert(floorZones)
     .values({ ...cfg, name: "Terrace" })
@@ -2019,7 +2018,7 @@ describe("routing previews", () => {
         operationDescription: "Hospitality",
       });
       const venueId = await venueLocationId(tx);
-      const cfg = { locationId: locationId(venueId) };
+      const cfg = { locationId: venueId };
       const zone = async (name: string) => {
         const [row] = await tx
           .insert(floorZones)

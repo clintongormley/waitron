@@ -71,7 +71,6 @@ import {
   basisPointsToDecimal,
   centsToDecimal,
   decimal,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   thousandthsToDecimal,
   deviceOrigin,
@@ -244,7 +243,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   const cfg: WithVenueRowId<OriginConfig> = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(provisioned.nodeId),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

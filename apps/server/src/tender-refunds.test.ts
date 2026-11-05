@@ -35,7 +35,7 @@ import {
 } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
-import { deviceOrigin, locationId } from "@waitron/shared";
+import { deviceOrigin } from "@waitron/shared";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
@@ -79,7 +79,7 @@ beforeEach(async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Meals",
   });
-  const placeId = locationId(await venueLocationId(db));
+  const placeId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const device = await seedDevice(db, {
     capabilities: [

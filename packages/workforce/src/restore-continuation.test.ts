@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, captureError, constraintTarget, isUniqueViolation } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { appendToChain, readChain, type ChainKey, type TimeEntryAppend } from "./chain.js";
@@ -33,7 +33,7 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
+  nodeId = await seedNode(suite.db, locationId);
 });
 
 /** The chain key for this suite's node. */

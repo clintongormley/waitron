@@ -32,7 +32,6 @@ import type { SpecialDaysModel } from "./holiday-types.js";
 import { readCalendarDays } from "./hours.js";
 import { readSpecialDaysModel } from "./named-days.js";
 import { saveSpecialDay } from "./special-days.js";
-import { locationId, type LocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { WEEK_DISPLAY_ORDER } from "./hours-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -64,7 +63,7 @@ const noopLog: Logger = () => {};
 
 interface Fixture {
   app: Hono;
-  cfg: { locationId: LocationId };
+  cfg: { locationId: string };
   restaurant: HoursSubject;
   deli: HoursSubject;
   bar: HoursSubject;
@@ -137,7 +136,7 @@ async function fixture(): Promise<Fixture> {
       0,
     );
     return {
-      cfg: { locationId: locationId(location!.id) },
+      cfg: { locationId: location!.id },
       departmentIds: { restaurant: restaurant!.id, deli: deli!.id },
       restaurant: { kind: "station" as const, id: restaurantStation!.id },
       deli: { kind: "station" as const, id: deliStation!.id },

@@ -1,4 +1,3 @@
-import { locationId as brandLocationId } from "@waitron/shared";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
@@ -130,7 +129,7 @@ async function venue(db: Database): Promise<Venue> {
     ...loadTillAppSettings({
       WAITRON_NODE_ID: allocated.nodeId,
     }),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     simplifiedInvoiceLimit: null,
   });
   const {

@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, catalogues, locations, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locationId } from "@waitron/shared";
 import { replaceMenuWeek, resolveDepartmentService, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { readSpecialDaysModel } from "./named-days.js";
@@ -34,7 +33,7 @@ async function fixture() {
         dayCutover: "06:00:00",
       })
       .returning();
-    const cfg = { locationId: locationId(location!.id) };
+    const cfg = { locationId: location!.id };
     const [department, other] = await tx
       .insert(departments)
       .values([

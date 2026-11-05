@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
@@ -32,7 +31,7 @@ let stationId: string;
 beforeEach(async () => {
   venue = await seedVenueWithSeries(suite.db);
   stationId = await seedKitchenStation(suite.db, {
-    locationId: brandLocationId(venue.locationId),
+    locationId: venue.locationId,
     name: "Kitchen",
   });
 });
@@ -50,7 +49,7 @@ function run(overrides: Partial<OverdueOrdersInput> = {}): Promise<OverdueOrder[
 describe("computeOverdueOrders", () => {
   it("does not age made-here drinks but still reports an old kitchen item", async () => {
     const bar = await seedKitchenStation(suite.db, {
-      locationId: brandLocationId(venue.locationId),
+      locationId: venue.locationId,
       name: "Bar",
       isDefault: false,
     });
@@ -222,7 +221,7 @@ describe("computeOverdueOrders", () => {
     // A second station in the same location — the fixture the tie needs, since the beforeEach station
     // only gives us one. `isDefault: false` avoids colliding with the beforeEach station's own default.
     const barStationId = await seedKitchenStation(suite.db, {
-      locationId: brandLocationId(venue.locationId),
+      locationId: venue.locationId,
       name: "Counter",
       isDefault: false,
     });
@@ -453,7 +452,7 @@ describe("computeOverdueOrders", () => {
   it("scopes to nodeId: another node's overdue order in the same tenant is excluded", async () => {
     const nodeB = await seedNodeAndSeries(suite.db, venue);
     const stationB = await seedKitchenStation(suite.db, {
-      locationId: brandLocationId(venue.locationId),
+      locationId: venue.locationId,
       name: "Counter",
       isDefault: false,
     });

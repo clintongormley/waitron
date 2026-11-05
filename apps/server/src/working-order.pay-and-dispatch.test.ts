@@ -44,13 +44,7 @@ import {
 } from "@waitron/db";
 import type { Transaction, VerifiableAmendment } from "@waitron/db";
 import { listOutstandingSales } from "@waitron/core";
-import {
-  addDecimal,
-  decimal,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  rawCentsToDecimal,
-} from "@waitron/shared";
+import { addDecimal, decimal, nodeId as brandNodeId, rawCentsToDecimal } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
@@ -164,7 +158,7 @@ function nextNif(): string {
 function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

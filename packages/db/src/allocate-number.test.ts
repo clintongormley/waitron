@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { allocateInvoiceNumber } from "./allocate-number.js";
 import type { Database } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
@@ -27,7 +27,7 @@ async function seed(db: Database): Promise<void> {
     invoiceLocales: ["es"],
     operationDescription: "Hostelería",
   });
-  await seedNode(db, brandLocationId(LOCATION_B));
+  await seedNode(db, LOCATION_B);
 }
 
 async function makeSeries(

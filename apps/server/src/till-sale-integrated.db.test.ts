@@ -43,7 +43,6 @@ import {
 import { createPrinter } from "@waitron/printing";
 import {
   decimal,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   PORTIONS_AT_ONCE,
   rawCentsToDecimal,
@@ -156,7 +155,7 @@ function nextNif(): string {
 function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

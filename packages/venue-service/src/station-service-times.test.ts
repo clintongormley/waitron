@@ -21,7 +21,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
@@ -50,7 +49,7 @@ async function fixture(db: Transaction) {
     operationDescription: "Restaurant",
   });
   const venueId = await venueLocationId(db);
-  const cfg = { locationId: locationId(venueId) };
+  const cfg = { locationId: venueId };
   const department = (await createDepartment(db, { name: "Dining", orderStart: "table" })).id;
   const [terrace] = await db
     .insert(floorZones)

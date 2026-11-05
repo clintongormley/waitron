@@ -15,7 +15,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import {
   readServiceDeleteSettings,
   clearServiceDeleteSettings,
@@ -79,7 +78,7 @@ async function fixture(tx: Transaction, suffix = "") {
     operationDescription: "Hospitality",
   });
   const venueId = await venueLocationId(tx);
-  const cfg = { locationId: locationId(venueId) };
+  const cfg = { locationId: venueId };
   const ds = await tx
     .insert(departments)
     .values([

@@ -1,16 +1,11 @@
-import {
-  locationId as brandLocationId,
-  saleId as brandSaleId,
-  seriesId as brandSeriesId,
-  stringToCents,
-} from "@waitron/shared";
-import type { DeviceId, LocationId, NodeId, SaleId, SeriesId } from "@waitron/shared";
+import { saleId as brandSaleId, seriesId as brandSeriesId, stringToCents } from "@waitron/shared";
+import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { invoiceSeries, locations, sales, tenants, venueLocationId } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 
 export interface SeededTenant {
-  locationId: LocationId;
+  locationId: string;
   /** A till device at that location: the origin of the sales a test records. */
   deviceId: DeviceId;
   nodeId: NodeId;
@@ -54,7 +49,7 @@ export async function seedTenant(db: Database): Promise<SeededTenant> {
     .returning({ id: invoiceSeries.id });
   const seriesId = brandSeriesId(series!.id);
 
-  return { locationId: brandLocationId(locationId), deviceId, nodeId, seriesId };
+  return { locationId: locationId, deviceId, nodeId, seriesId };
 }
 
 /**

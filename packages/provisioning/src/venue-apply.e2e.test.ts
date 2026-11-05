@@ -9,12 +9,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { hashPassword, loginManager, loginManagerById, type TotpKeyRing } from "@waitron/identity";
 import type { TrustedClock } from "@waitron/fiscal";
-import {
-  deviceOrigin,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { deviceOrigin, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { applyVenue as applyDirectVenue } from "./venue-apply.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
@@ -134,7 +129,7 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
 
     const standardSeriesId = venue.seriesIds[0]!;
     const { deviceId } = await seedDevice(suite.db, {
-      locationId: brandLocationId(await venueLocationId(suite.db)),
+      locationId: await venueLocationId(suite.db),
     });
 
     const { saleId, fiscal } = await withTransaction(suite.db, async (tx) => {

@@ -30,7 +30,7 @@ import {
   createProduct,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
+import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import { parkOrder } from "./working-order.js";
 import { createStation } from "./kitchen.js";
 import { createTable } from "./testing/live-table.js";
@@ -65,7 +65,7 @@ async function seedVenueWithMenu(db: Database): Promise<Venue> {
     operationDescription: "Retail",
   });
   await seedLegacySellingUnits(db);
-  const locationId = brandLocationId(await venueLocationId(db));
+  const locationId = await venueLocationId(db);
   const kitchen = await seedKitchenStation(db, { locationId });
   const cfg: WithVenueRowId<OriginConfig> = {
     origin: jobOrigin("dashboard"),

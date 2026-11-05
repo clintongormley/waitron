@@ -3,7 +3,7 @@ import type { Database } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend } from "./clocking.js";
@@ -454,7 +454,7 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
   const { manager, marta, colleague } = people;
   await seedTenant(db);
   const locationId = await seedLocation(db);
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  const nodeId = await seedNode(db, locationId);
   const [openEntry, automaticEntry] = await clockInThenAutomaticOut(db, {
     nodeId,
     personId: marta,

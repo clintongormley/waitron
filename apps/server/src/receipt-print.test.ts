@@ -80,7 +80,6 @@ import {
 } from "@waitron/printing";
 import { NetworkTcpTransport, UsbTransport } from "@waitron/print-agent";
 import {
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   deviceOrigin,
@@ -203,7 +202,7 @@ function nextNif(): string {
 function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

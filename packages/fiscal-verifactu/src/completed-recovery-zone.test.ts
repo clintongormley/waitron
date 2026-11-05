@@ -5,7 +5,6 @@ import { eq } from "drizzle-orm";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { locations, withTransaction, stampDeployment } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locationId } from "@waitron/shared";
 import { FISCAL_RECOVERY_PACK_PAGE } from "./completed-recovery-document.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
@@ -13,7 +12,7 @@ import { seedFixtureSif } from "../test/sif-fixture.js";
 import { registroSif } from "./schema/sif.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
 const nodeKey = {
   nodeId: node.nodeId,
   name: "2026-10-18 · TEST",

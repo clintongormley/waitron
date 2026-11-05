@@ -72,13 +72,7 @@ import {
   listAvailableProducts,
   removeMember,
 } from "@waitron/catalogue";
-import {
-  AppError,
-  SUPPORTED_LOCALES,
-  decimal,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-} from "@waitron/shared";
+import { AppError, SUPPORTED_LOCALES, decimal, nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { cardReaders, type PaymentProvider } from "@waitron/payments";
 import type { Logger, LogLevel } from "./logger.js";
@@ -172,7 +166,7 @@ const suite = useVenueDb({
     const venueId = await venueLocationId(db);
     // A default kitchen station so the place route's fire (placeOrder → fireLines) has a fallback.
     const defaultStationId = await seedKitchenStation(db, {
-      locationId: brandLocationId(venueId),
+      locationId: venueId,
     });
     // A node the working-order routes need: `parkOrder`/`payWorkingOrder` write `working_orders.node_id`
     // (its FK `(node_id) → nodes(id)` requires a real row).
@@ -239,7 +233,7 @@ const suite = useVenueDb({
         insert into department_sale_policies (department_id, order_start) values (${department!.id}, 'counter')`);
         await tx.execute(sql`
         insert into zone_sale_policies (zone_id, order_start) values (${zone!.id}, 'counter')`);
-        const venueScope = { locationId: brandLocationId(venueId) };
+        const venueScope = { locationId: venueId };
         await offerMenuThroughZone(tx, venueScope, zone!.id, cat.id, { makeDefault: true });
         const offer = await addProductToMenu(tx, {
           menuId: cat.id,
@@ -296,7 +290,7 @@ function collect(
 function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

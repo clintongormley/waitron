@@ -14,7 +14,7 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { loginWithPin, persons } from "@waitron/identity";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import { planVenue } from "@waitron/provisioning";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import {
   createDepartment,
   departmentReceipts,
@@ -98,7 +98,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
   const venueId = await venueLocationId(db);
   const cfg: WithVenueRowId = {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     locale: SIGNED_IN_TILL_LOCALE,
     invoiceLocales: [SIGNED_IN_TILL_LOCALE],
     tipsEnabled: false,

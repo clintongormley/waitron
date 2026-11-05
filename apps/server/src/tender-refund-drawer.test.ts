@@ -18,7 +18,7 @@ import {
 } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { deviceOrigin, jobOrigin, locationId } from "@waitron/shared";
+import { deviceOrigin, jobOrigin } from "@waitron/shared";
 import { enqueueTenderRefundDrawer } from "./receipt-print.js";
 import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
@@ -36,7 +36,7 @@ let receiptId: string;
 beforeEach(async () => {
   const db = store.db;
   await seedVenue(db, { name: "Returns", invoiceLocales: ["en"], operationDescription: "Meals" });
-  const placeId = locationId(await venueLocationId(db));
+  const placeId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const device = await seedDevice(db, { capabilities: ["take-cash", "open-cash-drawer"] });
   profileId = device.profileId;

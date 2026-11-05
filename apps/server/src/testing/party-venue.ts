@@ -29,7 +29,7 @@ import { planVenue } from "@waitron/provisioning";
 import { serviceSteps } from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import type { VenueResult } from "@waitron/provisioning";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { splitBill } from "./bill-action-fixture.js";
 import { takeBillPayment } from "./bill-payment-fixture.js";
 import { deploymentEnvironment } from "../config.js";
@@ -134,7 +134,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
   const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

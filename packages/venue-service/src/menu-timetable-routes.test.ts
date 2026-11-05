@@ -30,7 +30,6 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { readOpeningHoursModel, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuSlot, OpeningHoursModel } from "./menu-timetable-types.js";
@@ -76,7 +75,7 @@ async function routed() {
     timeZone: "Europe/Madrid",
   });
   const venueId = await venueLocationId(db);
-  const locationId = brandLocationId(venueId);
+  const locationId = venueId;
   const cfg = { locationId };
   await db.insert(kitchenStations).values({ locationId, name: "Kitchen", isDefault: true });
   const zone = async (name: string) =>

@@ -17,7 +17,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId, type LocationId } from "@waitron/shared";
 import { readCalendarDays, type HolidayReader } from "./hours.js";
 import { createHolidayStore, readHolidayFacts as installedReadHolidayFacts } from "./holidays.js";
 import { stationStates } from "./routing-store.js";
@@ -42,7 +41,7 @@ beforeAll(() => {
 const AT = new Date("2026-10-06T10:00:00Z");
 
 interface Fixture {
-  cfg: { locationId: LocationId };
+  cfg: { locationId: string };
   restaurant: HoursSubject;
   deli: HoursSubject;
   bar: HoursSubject;
@@ -60,7 +59,7 @@ async function fixture(): Promise<Fixture> {
       dayCutover: "06:00:00",
     });
     const venueId = await venueLocationId(tx);
-    const cfg = { locationId: locationId(venueId) };
+    const cfg = { locationId: venueId };
     const department = (location: string, name: string, isDefault = false) => ({
       locationId: location,
       name,

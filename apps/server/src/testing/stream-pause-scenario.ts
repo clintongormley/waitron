@@ -39,7 +39,6 @@ import { seedDevice } from "@waitron/db/testing/seed.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
-import { locationId as brandLocationId } from "@waitron/shared";
 import {
   bucketKey,
   createS3ObjectStore,
@@ -378,7 +377,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         });
         await assignCatalogueToVenue(tx, catalogue.id);
         const offers = await offerProducts(tx, {
-          locationId: brandLocationId(venueId),
+          locationId: venueId,
         });
         return offers.offerFor(water.id);
       });

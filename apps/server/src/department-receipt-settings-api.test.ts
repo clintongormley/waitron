@@ -30,7 +30,7 @@ import {
   departmentReceipts,
   departmentSalePolicies,
 } from "@waitron/venue-service";
-import { locationId, nodeId, type DepartmentReceiptWrite } from "@waitron/shared";
+import { nodeId, type DepartmentReceiptWrite } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 import { mountDepartmentReceiptSettingsApi } from "./department-receipt-api.js";
@@ -79,7 +79,7 @@ async function fixture(
   });
   const venueId = await venueLocationId(suite.db);
   const cfg: WithVenueRowId = {
-    locationId: locationId(venueId),
+    locationId: venueId,
     nodeId: nodeId(randomUUID()),
     locale: "es-ES",
     invoiceLocales: ["gl-ES"],

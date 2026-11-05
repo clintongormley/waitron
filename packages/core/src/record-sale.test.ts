@@ -10,7 +10,7 @@ import {
   deviceOrigin,
   jobOrigin,
 } from "@waitron/shared";
-import type { DeviceId, LocationId, NodeId, SeriesId, WorkingOrderId } from "@waitron/shared";
+import type { DeviceId, NodeId, SeriesId, WorkingOrderId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type {
   FiscalBackend,
@@ -43,7 +43,7 @@ import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
 import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
-let locationId: LocationId;
+let locationId: string;
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;

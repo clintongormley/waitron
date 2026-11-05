@@ -21,11 +21,7 @@ import {
 } from "@waitron/catalogue";
 import type { MenuPreview, MenuStatus } from "@waitron/catalogue";
 import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/catalogue";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  type ContentLanguageRules,
-} from "@waitron/shared";
+import { nodeId as brandNodeId, type ContentLanguageRules } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountVenueSettingsApi } from "./venue-settings-api.js";
@@ -619,7 +615,7 @@ beforeEach(async () => {
 function venueCfg(): WithVenueRowId {
   return {
     nodeId: brandNodeId("11111111-1111-4111-8111-111111111111"),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

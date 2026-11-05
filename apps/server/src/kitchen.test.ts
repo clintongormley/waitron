@@ -22,7 +22,6 @@ import {
   DEFAULT_READY_WARNING_AFTER_MINUTES,
   DEFAULT_STATION_THRESHOLDS,
   STATION_COLOURS,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
 } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
@@ -61,7 +60,7 @@ async function setupVenue(): Promise<WithVenueRowId> {
   const nodeId = await seedNode(db);
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

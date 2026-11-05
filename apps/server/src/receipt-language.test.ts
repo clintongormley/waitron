@@ -1,4 +1,3 @@
-import { locationId as brandLocationId } from "@waitron/shared";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -171,7 +170,7 @@ async function venueWith(
       WAITRON_NODE_ID: venue.nodeId,
       ...(envLocale === undefined ? {} : { WAITRON_TILL_LOCALE: envLocale }),
     }),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     simplifiedInvoiceLimit: null,
   });
   const { menuItemId, staffId, profileId, printerId } = await withTransaction(db, async (tx) => {

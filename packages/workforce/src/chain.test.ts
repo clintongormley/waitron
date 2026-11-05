@@ -12,7 +12,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { deviceOrigin, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { deviceOrigin, jobOrigin } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -42,7 +42,7 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
+  nodeId = await seedNode(suite.db, locationId);
 });
 
 function key(node = nodeId): ChainKey {
@@ -65,7 +65,7 @@ function clockEvent(): TimeEntryAppend {
 }
 
 async function seedDeviceAt(location: string): Promise<string> {
-  const { deviceId } = await seedDevice(suite.db, { locationId: brandLocationId(location) });
+  const { deviceId } = await seedDevice(suite.db, { locationId: location });
   return deviceId;
 }
 
@@ -133,7 +133,7 @@ describe("appendToChain", () => {
 
   it("keeps one chain per node; two nodes do not collide", async () => {
     // Two nodes write one venue across a promotion, taking the same sequence_no values.
-    const nodeB = await seedNode(suite.db, brandLocationId(locationId));
+    const nodeB = await seedNode(suite.db, locationId);
     const k1 = key(nodeId);
     const k2 = key(nodeB);
     await suite.db.transaction((tx) => appendToChain(tx, k1, clockEvent()));

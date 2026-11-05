@@ -8,7 +8,7 @@ import {
 import type { KeyRing } from "@waitron/credentials";
 import type { Endorsement } from "@waitron/membership";
 import type { WaitronModule } from "@waitron/module";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { withTransaction } from "@waitron/db";
@@ -28,7 +28,7 @@ export async function establishDormantContract(args: {
   operatorId: string;
   recoveryKey?: boolean;
 }) {
-  const primary = { nodeId: nodeId(args.sourceId), locationId: locationId(args.locationId) };
+  const primary = { nodeId: nodeId(args.sourceId), locationId: args.locationId };
   const bases = [
     { code: "FA", purpose: "standard" },
     { code: "FF", purpose: "full" },

@@ -5,7 +5,7 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 import { WorkforceBackend } from "./clocking.js";
 import { appendToChain, readChain } from "./chain.js";
@@ -28,7 +28,7 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     locationId = await seedLocation(db);
-    nodeId = await seedNode(db, brandLocationId(locationId));
+    nodeId = await seedNode(db, locationId);
     personId = await seedPerson(db, "Worker");
     other = await seedPerson(db, "Other");
     await withTransaction(db, async (tx) => {

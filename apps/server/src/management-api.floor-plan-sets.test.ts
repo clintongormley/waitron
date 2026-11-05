@@ -7,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { createDepartment, createServiceZone, linkFloorPlanSet } from "@waitron/venue-service";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
@@ -76,7 +76,7 @@ async function provisionTenant(): Promise<WithVenueRowId> {
   const venueId = await venueLocationId(suite.db);
   return {
     nodeId: nodeId(venue.nodeId),
-    locationId: locationId(venueId),
+    locationId: venueId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

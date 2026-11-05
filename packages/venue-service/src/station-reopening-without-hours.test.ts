@@ -10,7 +10,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { loadRoutingRules, routingAt, routingModel, stationStates } from "./routing-store.js";
 import { stationDayStates } from "./schema/station-times.js";
@@ -30,7 +29,7 @@ async function fixture(tx: Transaction) {
     dayCutover: "06:00:00",
   });
   const venueId = await venueLocationId(tx);
-  const cfg = { locationId: locationId(venueId) };
+  const cfg = { locationId: venueId };
   const stations = await tx
     .insert(kitchenStations)
     .values([

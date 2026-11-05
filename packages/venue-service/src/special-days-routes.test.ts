@@ -28,7 +28,6 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -67,7 +66,7 @@ async function routed() {
     dayCutover: "06:00",
   });
   const venueId = await venueLocationId(db);
-  const cfg = { locationId: brandLocationId(venueId) };
+  const cfg = { locationId: venueId };
   const [zone] = await db
     .insert(floorZones)
     .values({ locationId: cfg.locationId, name: "Room", displayOrder: 0 })

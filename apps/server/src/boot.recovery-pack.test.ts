@@ -8,7 +8,6 @@ import { invoiceSeries, nodes, stampDeployment, withTransaction } from "@waitron
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { persons, startManagementSession } from "@waitron/identity";
-import { locationId } from "@waitron/shared";
 import { seedTenants, TENANT_A, TENANT_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
@@ -30,7 +29,7 @@ vi.mock("@hono/node-server", async () => {
 const { startServer, httpPort } = ephemeralServerFixture();
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "R", purpose: "rectificative" },

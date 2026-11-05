@@ -2,7 +2,7 @@ import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { AppError, deviceOrigin, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { AppError, deviceOrigin, jobOrigin } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
@@ -29,7 +29,7 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     locationId = await seedLocation(db);
-    nodeId = await seedNode(db, brandLocationId(locationId));
+    nodeId = await seedNode(db, locationId);
   },
 });
 
@@ -128,7 +128,7 @@ describe("clock state machine", () => {
   it("records the device and the recorder when supplied", async () => {
     const p = await freshPerson("attribution");
     const supervisor = await freshPerson("supervisor");
-    const { deviceId } = await seedDevice(suite.db, { locationId: brandLocationId(locationId) });
+    const { deviceId } = await seedDevice(suite.db, { locationId: locationId });
     await run((tx) =>
       backend.clockIn(tx, {
         nodeId,

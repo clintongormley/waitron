@@ -18,7 +18,7 @@ import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/t
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
-import { deviceOrigin, locationId } from "@waitron/shared";
+import { deviceOrigin } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import type { TenderRefundRequest } from "./tender-refund-types.js";
@@ -44,7 +44,7 @@ beforeEach(async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Meals",
   });
-  const placeId = locationId(await venueLocationId(db));
+  const placeId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const { deviceId } = await seedDevice(db);
   const [series] = await db

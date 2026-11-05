@@ -27,7 +27,7 @@ import {
   updateProduct,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { createTable } from "./testing/live-table.js";
@@ -71,7 +71,7 @@ async function setup() {
     operationDescription: "Restaurant",
   });
   const venueId = await venueLocationId(db);
-  const locationId = brandLocationId(venueId);
+  const locationId = venueId;
   const stationId = await seedKitchenStation(db, { locationId });
   const nodeId = await seedNode(db);
   const cfg: WithVenueRowId = {

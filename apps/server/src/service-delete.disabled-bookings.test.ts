@@ -5,7 +5,7 @@ import { diningTables, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import {
   createDepartment,
   createServiceZone,
@@ -35,7 +35,7 @@ it("deletes through the real core seat when the optional bookings table was neve
     operationDescription: "Hospitality",
   });
   const cfg: WithVenueRowId = {
-    locationId: locationId(await venueLocationId(suite.db)),
+    locationId: await venueLocationId(suite.db),
     nodeId: nodeId(randomUUID()),
     locale: "en-GB",
     invoiceLocales: ["en-GB"],

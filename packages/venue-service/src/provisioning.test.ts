@@ -14,7 +14,6 @@ import {
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { readHolidays, readHolidayAreaModel } from "./holidays.js";
 import { readSpecialDaysModel } from "./named-days.js";
 import { saveSpecialDay } from "./special-days.js";
@@ -58,7 +57,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       defaultCatalogueId: menu!.id,
     });
     const venueId = await venueLocationId(db);
-    const locationId = brandLocationId(venueId);
+    const locationId = venueId;
     const node = { nodeId: await seedNode(db) };
     const seed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     const rows = () =>
@@ -102,7 +101,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       defaultCatalogueId: menu!.id,
     });
     const venueId = await venueLocationId(db);
-    const locationId = brandLocationId(venueId);
+    const locationId = venueId;
     const node = { nodeId: await seedNode(db) };
 
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
@@ -136,7 +135,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     async function venue(name: string) {
       await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
       const venueId = await venueLocationId(db);
-      const locationId = brandLocationId(venueId);
+      const locationId = venueId;
       const node = { nodeId: await seedNode(db) };
       return {
         locationId,
@@ -219,7 +218,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       operationDescription: "Hospitality",
     });
     const venueId = await venueLocationId(db);
-    const locationId = brandLocationId(venueId);
+    const locationId = venueId;
     const node = { nodeId: await seedNode(db) };
 
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
@@ -267,7 +266,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       operationDescription: "Hospitality",
     });
     const venueId = await venueLocationId(db);
-    const locationId = brandLocationId(venueId);
+    const locationId = venueId;
     const nodeId = await seedNode(db);
     const node = { nodeId };
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
@@ -314,7 +313,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       defaultCatalogueId: menu!.id,
     });
     const venueId = await venueLocationId(db);
-    const locationId = brandLocationId(venueId);
+    const locationId = venueId;
     const node = { nodeId: await seedNode(db) };
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     const listed = async () =>
@@ -440,7 +439,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         operationDescription: "Bar",
       });
       const venueId = await venueLocationId(db);
-      const locationId = brandLocationId(venueId);
+      const locationId = venueId;
       const node = { nodeId: await seedNode(db) };
       const profile = async (
         formFactor: "till" | "phone-portrait" | "tablet-landscape" | "kds",
@@ -556,7 +555,7 @@ it("seeds a new Counter id while retaining a deleted Counter", async () => {
     operationDescription: "Hospitality",
   });
   const venueId = await venueLocationId(db);
-  const locationId = brandLocationId(venueId);
+  const locationId = venueId;
   const node = { nodeId: await seedNode(db) };
   const [old] = await db
     .insert(floorZones)

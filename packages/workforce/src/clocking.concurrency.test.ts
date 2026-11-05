@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { AppError, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { AppError, jobOrigin } from "@waitron/shared";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
@@ -34,7 +34,7 @@ beforeEach(async () => {
   personId = await seedPerson(suite.db, "Ana");
   otherPersonId = await seedPerson(suite.db, "Ben");
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
+  nodeId = await seedNode(suite.db, locationId);
 });
 
 function event(at: string): ClockEventInput {

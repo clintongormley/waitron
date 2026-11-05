@@ -6,7 +6,7 @@ import { createDeviceProfile } from "@waitron/layouts";
 import type { WaitronModule } from "@waitron/module";
 import { planVenue } from "@waitron/provisioning";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { DEVICE_COOKIE } from "../device-session.js";
 import { ALL_MODULES } from "../modules.js";
 import { SESSION_COOKIE } from "../till-session.js";
@@ -63,7 +63,7 @@ export async function createClockVenue(
   const venueId = await venueLocationId(db);
   const cfg: WithVenueRowId = {
     nodeId: nodeId(venue.nodeId),
-    locationId: locationId(venueId),
+    locationId: venueId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

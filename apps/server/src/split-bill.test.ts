@@ -26,11 +26,7 @@ import {
   EACH_UNIT,
   readContentLanguages,
 } from "@waitron/catalogue";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  thousandthsToDecimal,
-} from "@waitron/shared";
+import { nodeId as brandNodeId, thousandthsToDecimal } from "@waitron/shared";
 import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
@@ -88,7 +84,7 @@ async function setupVenue(): Promise<Seeded> {
   const nodeId = await seedNode(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

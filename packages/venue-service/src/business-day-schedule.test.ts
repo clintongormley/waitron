@@ -26,7 +26,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { locationId, type BusinessDayClock } from "@waitron/shared";
+import { type BusinessDayClock } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 import { menuPeriods } from "./schema/menus.js";
@@ -65,7 +65,7 @@ const at = new Date("2026-11-02T12:00:00Z");
 /** Saves a new special day on `date` painting the fixture's department (period) or zone (closed). */
 const paintDate = (
   v: {
-    cfg: { locationId: ReturnType<typeof locationId> };
+    cfg: { locationId: string };
     departmentId: string;
     periodId: string;
     zoneId?: string;
@@ -116,7 +116,7 @@ async function fixture(
   } = {},
 ) {
   return withTransaction(suite.db, async (tx) => {
-    const loc = locationId(randomUUID());
+    const loc = randomUUID();
     await tx.insert(locations).values({
       id: loc,
       name: "Clock venue",
@@ -245,7 +245,7 @@ async function seasonDay(
 /** Raw special-day rows painting one department, bypassing the special-day writer's checks. */
 async function paintedDay(
   tx: Transaction,
-  v: { cfg: { locationId: ReturnType<typeof locationId> }; departmentId: string },
+  v: { cfg: { locationId: string }; departmentId: string },
   day: {
     name: string;
     date: string;
@@ -1320,7 +1320,7 @@ describe("inForceClock", () => {
 
 describe("undated hours are checked against the start in force", () => {
   /** 05:00, then 03:00 from 2026-10-21, then 05:00 again from 2026-10-28. */
-  async function hoursBack(v: { cfg: { locationId: ReturnType<typeof locationId> } }) {
+  async function hoursBack(v: { cfg: { locationId: string } }) {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .insert(locationBusinessDaySettings)
@@ -1340,7 +1340,7 @@ describe("undated hours are checked against the start in force", () => {
     });
   }
   /** 05:00, then 03:00 from 2026-10-21. */
-  async function startMovedBack(v: { cfg: { locationId: ReturnType<typeof locationId> } }) {
+  async function startMovedBack(v: { cfg: { locationId: string } }) {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .insert(locationBusinessDaySettings)
@@ -2149,7 +2149,7 @@ async function busyCalendar(count: number, run = 0) {
   const fixed = (kind: number, n: number) =>
     `00000000-0000-4${String(run).padStart(3, "0")}-8${String(kind).padStart(3, "0")}-${String(n).padStart(12, "0")}`;
   return withTransaction(suite.db, async (tx) => {
-    const loc = locationId(randomUUID());
+    const loc = randomUUID();
     await tx.insert(locations).values({
       id: loc,
       name: "Busy venue",

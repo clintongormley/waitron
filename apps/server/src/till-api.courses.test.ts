@@ -24,7 +24,7 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
@@ -74,7 +74,7 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Retail",
     });
-    const locationId = brandLocationId(await venueLocationId(db));
+    const locationId = await venueLocationId(db);
     await seedKitchenStation(db, { locationId });
     const nodeId = await seedNode(db);
     const [person] = await db
@@ -126,7 +126,7 @@ function collect(
 function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

@@ -13,7 +13,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import { readOperationAuthority, type ModuleOperationInput } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { withRecoveryModuleOperation } from "./recovery-module-operation.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 
@@ -21,7 +21,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, NODE_MIGRATIONS],
 });
 const target = {
-  locationId: locationId("c0000000-0000-4000-8000-000000000001"),
+  locationId: "c0000000-0000-4000-8000-000000000001",
   nodeId: nodeId("c0000000-0000-4000-8000-000000000002"),
 };
 const ADMIN = "c0000000-0000-4000-8000-000000000003";

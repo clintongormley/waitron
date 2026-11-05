@@ -11,7 +11,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId, type LocationId } from "@waitron/shared";
 import {
   clearCourseDeleteSettings as clear,
   courseDeleteSettingsRemoves,
@@ -39,7 +38,7 @@ type Step = [name: string, start: ServiceStepStart, minutes?: number, course?: "
 
 async function venue(name: string) {
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
-  const cfg: { locationId: LocationId } = { locationId: locationId(await venueLocationId(db)) };
+  const cfg: { locationId: string } = { locationId: await venueLocationId(db) };
   const [dessert] = await db
     .insert(kitchenCourses)
     .values({ ...cfg, name: "Dessert", displayOrder: 1 })
@@ -48,7 +47,7 @@ async function venue(name: string) {
 }
 
 async function department(
-  cfg: { locationId: LocationId },
+  cfg: { locationId: string },
   courseId: string,
   name: string,
   steps: Step[],

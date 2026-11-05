@@ -19,7 +19,7 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
@@ -69,7 +69,7 @@ const suite = useVenueDb({
       operationDescription: "Retail",
     });
     const locationId = await venueLocationId(db);
-    await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
+    await seedKitchenStation(db, { locationId: locationId });
     // `openTab`/`addTabRound` create a working_orders row whose `node_id` FK requires a real row.
     const nodeId = await seedNode(db);
     const [person] = await db
@@ -133,7 +133,7 @@ function collect(
 function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,

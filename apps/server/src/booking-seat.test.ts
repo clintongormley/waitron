@@ -15,7 +15,7 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { BOOKINGS_PERMISSIONS, BOOKINGS_ROUTES } from "@waitron/bookings";
-import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import type { ModuleRouteContext } from "@waitron/module";
@@ -70,7 +70,7 @@ async function setupVenue(): Promise<Venue> {
   const nodeId = await seedNode(db);
   const tillCfg: WithVenueRowId = {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

@@ -31,7 +31,7 @@ import {
   resendPrintJob,
   updatePrinter,
 } from "@waitron/printing";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
@@ -110,13 +110,13 @@ async function setupVenue(): Promise<Venue> {
   });
   const locationId = await venueLocationId(db);
   const kitchenStationId = await seedKitchenStation(db, {
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     name: "Kitchen",
   });
   const nodeId = await seedNode(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

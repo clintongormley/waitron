@@ -5,7 +5,6 @@ import { CORE_MIGRATIONS, invoiceSeries, sales, venueLocationId } from "@waitron
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { appendOnlyTablesIn } from "@waitron/sync-enrolment";
 import { VENUE_SERVICE_CLASSIFICATION } from "./classification.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -34,7 +33,7 @@ describe("sale receipt header snapshot", () => {
       operationDescription: "Hospitality",
     });
     const venueId = await venueLocationId(db);
-    const locationId = brandLocationId(venueId);
+    const locationId = venueId;
     const nodeId = await seedNode(db);
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, { nodeId }));
     const [series] = await db

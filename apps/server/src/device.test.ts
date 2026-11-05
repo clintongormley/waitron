@@ -9,7 +9,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { FormFactor } from "@waitron/layouts";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createStation } from "./kitchen.js";
@@ -45,7 +45,7 @@ async function setupVenue(): Promise<SeededVenue> {
   const nodeId = await seedNode(admin);
   const cfg: WithVenueRowId = {
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

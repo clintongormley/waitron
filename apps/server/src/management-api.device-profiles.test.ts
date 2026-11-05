@@ -33,7 +33,7 @@ import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { createStation } from "./kitchen.js";
 import { deletePrinter } from "./printer-delete.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 
 /**
  * The device-profile CRUD routes end to end, over HTTP, with the manager and staff sessions a real
@@ -104,7 +104,7 @@ async function setupTenant(): Promise<void> {
   const venueId = await venueLocationId(suite.db);
   venueCfg = {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: brandLocationId(venueId),
+    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

@@ -13,8 +13,6 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
-import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, createServiceZone } from "./operations.js";
 import { saveServiceSteps } from "./service-steps.js";
@@ -38,15 +36,15 @@ function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, fn);
 }
 
-async function seedLocation(name: string): Promise<LocationId> {
+async function seedLocation(name: string): Promise<string> {
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
   const venueId = await venueLocationId(db);
-  const locationId = brandLocationId(venueId);
+  const locationId = venueId;
   await db.insert(kitchenStations).values({ locationId, name: "Default prep", isDefault: true });
   return locationId;
 }
 
-async function departmentWithTables(cfg: { locationId: LocationId }, name: string, count = 1) {
+async function departmentWithTables(cfg: { locationId: string }, name: string, count = 1) {
   return scoped(async (tx) => {
     const department = await createDepartment(tx, { name, orderStart: "table" });
     const zone = await createServiceZone(tx, { name, departmentId: department.id });

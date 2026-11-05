@@ -2,7 +2,6 @@ import { floorTodayTables } from "@waitron/db";
 import { deleteCourse } from "./course-delete.js";
 import { deleteStation } from "./station-delete.js";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
-import { locationId as brandLocationId } from "@waitron/shared";
 import {
   addMember,
   addShortcut,
@@ -144,7 +143,7 @@ import {
   STARTER_SEASON_NAMES,
   zoneSalePolicies,
 } from "@waitron/venue-service";
-import { decimal, locationId, nodeId, seriesId, deviceOrigin } from "@waitron/shared";
+import { decimal, nodeId, seriesId, deviceOrigin } from "@waitron/shared";
 import { moduleCoreServices } from "./parties.js";
 import { createTable } from "./testing/live-table.js";
 import { saveLayout } from "./floor-plan.js";
@@ -1891,7 +1890,7 @@ it("transfers staff roles, who holds them and a painted season week under new id
     modules: ALL_MODULES,
   });
   const sourceVenueId = await venueLocationId(suite.db);
-  const scope = { locationId: brandLocationId(sourceVenueId) };
+  const scope = { locationId: sourceVenueId };
   const original = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, { name: "Staffed room" });
     const [season] = await tx
@@ -2002,7 +2001,7 @@ it("transfers a station's painted season day and a special day's painted date un
     modules: ALL_MODULES,
   });
   const sourceVenueId = await venueLocationId(suite.db);
-  const scope = { locationId: brandLocationId(sourceVenueId) };
+  const scope = { locationId: sourceVenueId };
   const original = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, { name: "Terrace" });
     const [station] = await tx
@@ -3814,7 +3813,7 @@ async function shortNamedBundle(taxId: string) {
   });
   const venueId = await venueLocationId(suite.db);
   const cfg: WithVenueRowId = {
-    locationId: locationId(venueId),
+    locationId: venueId,
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
@@ -5602,7 +5601,7 @@ it("exports and imports all seven cell classes into another venue, remapping eve
     modules: ALL_MODULES,
   });
   const sourceVenueId = await venueLocationId(suite.db);
-  const scope = { locationId: brandLocationId(sourceVenueId) };
+  const scope = { locationId: sourceVenueId };
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, {
       name: "Routes dining room",
@@ -5731,7 +5730,7 @@ it("carries a cell's period choices with their cell, including a period whose me
     modules: ALL_MODULES,
   });
   const venueId = await venueLocationId(suite.db);
-  const scope = { locationId: brandLocationId(venueId) };
+  const scope = { locationId: venueId };
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, {
       name: "Periods dining room",
@@ -5899,7 +5898,7 @@ describe("special days in a configuration transfer", () => {
   const AT = new Date("2026-10-06T10:00:00Z");
 
   interface Named {
-    cfg: { locationId: ReturnType<typeof locationId> };
+    cfg: { locationId: string };
     departments: Map<string, string>;
     stations: Map<string, string>;
   }
@@ -5910,7 +5909,7 @@ describe("special days in a configuration transfer", () => {
     const stationRows = await db.execute<{ id: string; name: string }>(sql`
       select id, name from kitchen_stations where location_id = ${located.locationId}`);
     return {
-      cfg: { locationId: locationId(located.locationId) },
+      cfg: { locationId: located.locationId },
       departments: new Map(departmentRows.rows.map((row) => [row.name, row.id])),
       stations: new Map(stationRows.rows.map((row) => [row.name, row.id])),
     };
@@ -6172,7 +6171,7 @@ describe("public holidays in a configuration transfer", () => {
   const AT = new Date("2026-10-06T10:00:00Z");
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
   const scope = (located: { locationId: string }) => ({
-    locationId: locationId(located.locationId),
+    locationId: located.locationId,
   });
 
   async function moveTo(
@@ -6568,7 +6567,7 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     modules: ALL_MODULES,
   });
   const sourceVenueId = await venueLocationId(suite.db);
-  const scope = { locationId: brandLocationId(sourceVenueId) };
+  const scope = { locationId: sourceVenueId };
   const original = await withTransaction(suite.db, async (tx) => {
     await tx
       .update(locations)
@@ -7297,7 +7296,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
   });
   const sourceVenueId = await venueLocationId(suite.db);
   const cfg: WithVenueRowId = {
-    locationId: locationId(sourceVenueId),
+    locationId: sourceVenueId,
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
@@ -7432,7 +7431,7 @@ it("carries Long table's parts, naming the imported tables", async () => {
   });
   const venueId = await venueLocationId(suite.db);
   const cfg: WithVenueRowId = {
-    locationId: locationId(venueId),
+    locationId: venueId,
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
@@ -7517,7 +7516,7 @@ it("carries a kept size, naming the imported table", async () => {
   });
   const venueId = await venueLocationId(suite.db);
   const cfg: WithVenueRowId = {
-    locationId: locationId(venueId),
+    locationId: venueId,
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
@@ -7755,7 +7754,7 @@ describe("seasons in a configuration transfer", () => {
       modules: ALL_MODULES,
     });
     const venueId = await venueLocationId(suite.db);
-    const scope = { locationId: brandLocationId(venueId) };
+    const scope = { locationId: venueId };
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(seasons)
@@ -7911,7 +7910,7 @@ describe("special days in a configuration transfer", () => {
       modules: ALL_MODULES,
     });
     const venueId = await venueLocationId(suite.db);
-    const scope = { locationId: brandLocationId(venueId) };
+    const scope = { locationId: venueId };
     await withTransaction(suite.db, async (tx) => {
       const department = await createDepartment(tx, {
         name: "Fiesta restaurant",
@@ -8017,7 +8016,7 @@ describe("special days in a configuration transfer", () => {
     });
     expect(await fiestaRows(targetSuite.db, targetVenueId)).toEqual(exported);
 
-    const targetScope = { locationId: brandLocationId(targetVenueId) };
+    const targetScope = { locationId: targetVenueId };
     const [department] = await targetSuite.db
       .select({ id: departments.id })
       .from(departments)

@@ -21,7 +21,6 @@ import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { bookings } from "./schema/bookings.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 import { fakeCore } from "./testing/fake-core.js";
@@ -39,7 +38,7 @@ import {
 import "./errors.js";
 
 interface VenueCfg {
-  locationId: LocationId;
+  locationId: string;
 }
 
 const suite = useVenueDb({
@@ -85,7 +84,7 @@ async function setupVenue(): Promise<Venue> {
   });
   const locationId = await venueLocationId(db);
   return {
-    cfg: { locationId: brandLocationId(locationId) },
+    cfg: { locationId: locationId },
     createdBy: randomUUID(),
   };
 }
@@ -483,7 +482,7 @@ describe("seatBooking", () => {
     const locationId = await venueLocationId(db);
     const nodeId = await seedNode(db);
     return {
-      cfg: { locationId: brandLocationId(locationId) },
+      cfg: { locationId: locationId },
       core: fakeCore({ locationId, nodeId }),
       createdBy: randomUUID(),
       seatedBy: randomUUID(),

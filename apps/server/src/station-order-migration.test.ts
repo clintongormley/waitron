@@ -21,7 +21,6 @@ import {
   type VenueMigrationOptions,
 } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { shifts } from "@waitron/workforce";
 import { ALL_MODULES } from "./modules.js";
 import { listStations } from "./kitchen.js";
@@ -116,7 +115,7 @@ async function populate(db: Database) {
     invoiceLocales: ["es-ES"],
     operationDescription: "Restaurante",
   });
-  const locationId = brandLocationId(await venueLocationId(db));
+  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   await db.execute(sql`insert into kitchen_timing_defaults (location_id) values (${locationId})`);
   const cfg: TradingContext = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAppError, locationId as brandLocationId } from "@waitron/shared";
+import { isAppError } from "@waitron/shared";
 import {
   captureError,
   CORE_MIGRATIONS,
@@ -118,7 +118,7 @@ describe("the held document's check against the keys this box stores", () => {
       .insert(locations)
       .values({ name: "Terraza", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
       .returning({ id: locations.id });
-    const otherId = await seedNode(db, brandLocationId(loc!.id));
+    const otherId = await seedNode(db, loc!.id);
     const other = generateNodeKeyPair();
     await setNodePublicKey(db, otherId, other.publicKey);
     expect((await readMembershipTrustSet(db))[otherId]).toBe(other.publicKey);
@@ -147,7 +147,7 @@ describe("the held document's check against the keys this box stores", () => {
         .insert(locations)
         .values({ name: "Terraza", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
         .returning({ id: locations.id });
-      const mainId = await seedNode(db, brandLocationId(loc!.id));
+      const mainId = await seedNode(db, loc!.id);
       await pinMainBoxKey(suite.node, nodeId, { nodeId: mainId, publicKey: MAIN.publicKey });
       const signerId = whose === "this box" ? nodeId : mainId;
       const attacker = generateNodeKeyPair();

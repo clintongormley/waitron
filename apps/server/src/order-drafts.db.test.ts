@@ -52,7 +52,7 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { persons } from "@waitron/identity";
-import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
+import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OptionSelection } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
@@ -126,12 +126,12 @@ async function setupVenue(): Promise<Venue> {
     operationDescription: "Restaurante",
   });
   const locationId = await venueLocationId(db);
-  await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
+  await seedKitchenStation(db, { locationId: locationId });
   const nodeId = await seedNode(db);
   const cfg: WithVenueRowId<OriginConfig> = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

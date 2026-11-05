@@ -22,7 +22,7 @@ import {
   deviceProfileAdmissionPersons,
 } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { listDepartments, readPartyAllergy, setProfileServiceAccess } from "@waitron/venue-service";
 import type { PartyAllergyRead } from "@waitron/module";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
@@ -52,7 +52,7 @@ beforeEach(async () => {
     operationDescription: "Hospitality",
   });
   cfg = {
-    locationId: locationId(await venueLocationId(suite.db)),
+    locationId: await venueLocationId(suite.db),
     nodeId: nodeId(await seedNode(suite.db)),
     locale: "en-GB",
     invoiceLocales: ["en-GB"],

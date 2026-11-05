@@ -17,7 +17,7 @@ import {
   departmentReceipts,
   departmentSalePolicies,
 } from "@waitron/venue-service";
-import { locationId, type DepartmentReceiptWrite } from "@waitron/shared";
+import { type DepartmentReceiptWrite } from "@waitron/shared";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { checkedDepartmentReceiptWrite } from "./department-receipt-draft.js";
 import { departmentReceiptLanguages } from "./department-receipt-languages.js";
@@ -52,7 +52,7 @@ async function fixture(
     operationDescription: "Bootstrap",
   });
   const venueId = await venueLocationId(suite.db);
-  const cfg = { locationId: locationId(venueId) };
+  const cfg = { locationId: venueId };
   await suite.db
     .insert(contentLanguages)
     .values({ defaultLanguage: "es", languages: ["es", "ca", "en"] })

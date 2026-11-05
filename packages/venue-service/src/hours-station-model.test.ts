@@ -4,7 +4,6 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, kitchenStations, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import { readSpecialDaysModel } from "./named-days.js";
 import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
@@ -27,7 +26,7 @@ async function fixture() {
       dayCutover: "04:30:00",
     });
     const venueId = await venueLocationId(tx);
-    const cfg = { locationId: locationId(venueId) };
+    const cfg = { locationId: venueId };
     const [department] = await tx
       .insert(departments)
       .values({

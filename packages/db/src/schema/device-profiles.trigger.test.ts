@@ -14,14 +14,13 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { venueLocationId } from "../venue.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
-import type { LocationId } from "@waitron/shared";
 
 const TOKEN_HASH = "scrypt$00$00";
 
 describe("device_profiles form-factor drift guard (locked while an active device uses it)", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let db: Database;
-  let locationId: LocationId;
+  let locationId: string;
   let profileSeq = 0;
 
   beforeAll(async () => {
@@ -31,7 +30,7 @@ describe("device_profiles form-factor drift guard (locked while an active device
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    locationId = (await venueLocationId(db)) as LocationId;
+    locationId = (await venueLocationId(db)) as string;
   });
 
   async function freshKdsProfile(): Promise<string> {

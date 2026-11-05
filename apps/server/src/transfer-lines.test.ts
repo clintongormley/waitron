@@ -16,7 +16,6 @@ import {
 } from "@waitron/catalogue";
 import {
   centsToDecimal,
-  locationId as brandLocationId,
   nodeId as brandNodeId,
   thousandthsToDecimal,
   type ExtraSelection,
@@ -75,7 +74,7 @@ async function setupVenue(): Promise<Seeded> {
   const cfg: WithVenueRowId<OriginConfig> = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    locationId: brandLocationId(locationId),
+    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,

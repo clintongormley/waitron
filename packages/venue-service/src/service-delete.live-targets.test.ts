@@ -12,7 +12,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import * as service from "./index.js";
 
 import { readDepartmentLogoRasters } from "./department-receipts.js";
@@ -36,7 +35,7 @@ async function fixture() {
       timeZone: "Europe/Madrid",
     });
     const venueId = await venueLocationId(tx);
-    const cfg = { locationId: locationId(venueId), receiptLanguages: ["en-GB"] };
+    const cfg = { locationId: venueId, receiptLanguages: ["en-GB"] };
     const live = await service.createDepartment(tx, { name: "Live" });
     const gone = await service.createDepartment(tx, { name: "Gone" });
     const zone = await service.createServiceZone(tx, {
