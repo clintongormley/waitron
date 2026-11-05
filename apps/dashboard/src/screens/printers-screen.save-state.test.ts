@@ -18,7 +18,7 @@ beforeEach(() => {
 
 const agent: PrintAgentRow = {
   id: "a1",
-  name: "Cocina agent",
+  name: "Kitchen agent",
   active: true,
   host: "kitchen-pi",
   nodeId: null,
@@ -31,7 +31,7 @@ const agent: PrintAgentRow = {
 // the port as a number — so a field that rewrites its value on first draw would show as a change.
 const printer: Printer = {
   id: "p1",
-  name: "Cocina",
+  name: "Kitchen",
   transport: "network_tcp",
   host: "10.0.0.9",
   port: 9100,
@@ -170,7 +170,7 @@ describe("the agent editor's Save", () => {
   it("opens on the agent's name with Save quiet, and a press sends nothing", async () => {
     const { el, api } = await openAgent();
     expect(q<HTMLElementTagNameMap["wt-input"]>(el, "[data-test=edit-agent-name]")!.value).toBe(
-      "Cocina agent",
+      "Kitchen agent",
     );
     expect(await state(el, "save-agent")).toEqual(quiet);
     await press(el, "save-agent");
@@ -184,9 +184,9 @@ describe("the agent editor's Save", () => {
     const { el } = await openAgent();
     await typeInto(el, "[data-test=edit-agent-name]", "Kitchen Pi");
     expect(await state(el, "save-agent")).toEqual(ready);
-    await typeInto(el, "[data-test=edit-agent-name]", "Cocina agent");
+    await typeInto(el, "[data-test=edit-agent-name]", "Kitchen agent");
     expect(await state(el, "save-agent")).toEqual(quiet);
-    await typeInto(el, "[data-test=edit-agent-name]", " Cocina agent ");
+    await typeInto(el, "[data-test=edit-agent-name]", " Kitchen agent ");
     expect(await state(el, "save-agent")).toEqual(quiet);
   });
 
@@ -247,7 +247,7 @@ describe("the printer page's name editor Save", () => {
   it("opens on the printer's name with Save quiet, and a press sends nothing", async () => {
     const { el, api } = await openDetail("name");
     expect(q<HTMLElementTagNameMap["wt-input"]>(el, "[name=printer-detail-name]")!.value).toBe(
-      "Cocina",
+      "Kitchen",
     );
     expect(await state(el, "save-printer-name")).toEqual(quiet);
     await press(el, "save-printer-name");
@@ -259,9 +259,9 @@ describe("the printer page's name editor Save", () => {
 
   it("one edit wakes Save, typing the name back quiets it, and an emptied name blocks it", async () => {
     const { el } = await openDetail("name");
-    await typeInto(el, "[name=printer-detail-name]", "Cocina 2");
+    await typeInto(el, "[name=printer-detail-name]", "Kitchen 2");
     expect(await state(el, "save-printer-name")).toEqual(ready);
-    await typeInto(el, "[name=printer-detail-name]", " Cocina ");
+    await typeInto(el, "[name=printer-detail-name]", " Kitchen ");
     expect(await state(el, "save-printer-name")).toEqual(quiet);
     await typeInto(el, "[name=printer-detail-name]", "");
     expect(await state(el, "save-printer-name")).toEqual(blocked);
@@ -278,10 +278,10 @@ describe("the printer page's name editor Save", () => {
 
   it("a press after one edit sends it", async () => {
     const { el, api } = await openDetail("name");
-    await typeInto(el, "[name=printer-detail-name]", "Cocina 2");
+    await typeInto(el, "[name=printer-detail-name]", "Kitchen 2");
     await press(el, "save-printer-name");
     await vi.waitFor(() =>
-      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", { name: "Cocina 2" }),
+      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", { name: "Kitchen 2" }),
     );
   });
 
@@ -296,15 +296,15 @@ describe("the printer page's name editor Save", () => {
       ),
     });
     const { el } = await openDetail("name", api);
-    await typeInto(el, "[name=printer-detail-name]", "Cocina 2");
+    await typeInto(el, "[name=printer-detail-name]", "Kitchen 2");
     await press(el, "save-printer-name");
     await vi.waitFor(() => expect(typeof finish).toBe("function"));
     q(el, "[name=printer-detail-name]")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "Cocina 3" }, bubbles: true }),
+      new CustomEvent("wt-change", { detail: { value: "Kitchen 3" }, bubbles: true }),
     );
     finish();
     await vi.waitFor(async () => expect(await state(el, "save-printer-name")).toEqual(ready));
-    await typeInto(el, "[name=printer-detail-name]", "Cocina 2");
+    await typeInto(el, "[name=printer-detail-name]", "Kitchen 2");
     expect(await state(el, "save-printer-name")).toEqual(quiet);
   });
 });
@@ -563,7 +563,7 @@ describe("the calibration wizard's Save, for a printer already set up", () => {
 describe("the calibration wizard's Save, when an add opened it", () => {
   const unregistered: DiscoveredPrinter = {
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "usb",
     localKey: "SN-1",
     make: "Epson",
@@ -577,7 +577,7 @@ describe("the calibration wizard's Save, when an add opened it", () => {
   const switchedOff: Printer = {
     ...calibrated,
     id: "p3",
-    name: "Barra USB",
+    name: "Bar USB",
     transport: "usb",
     host: null,
     port: null,
@@ -708,7 +708,7 @@ describe("the calibration wizard's Save, when an add opened it", () => {
 
 const bluetoothDevice: DiscoveredPrinter = {
   agentId: "a1",
-  agentName: "Cocina agent",
+  agentName: "Kitchen agent",
   transport: "bluetooth",
   localKey: "00:11:22:33:44:55",
   name: "Bar printer",
@@ -738,7 +738,7 @@ async function openAddPrinter(devices: DiscoveredPrinter[], api: DashboardApi) {
 describe("the name dialog's Add, which opening it already asks for", () => {
   const unregistered: DiscoveredPrinter = {
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "usb",
     localKey: "SN-1",
     make: "Epson",
@@ -751,7 +751,7 @@ describe("the name dialog's Add, which opening it already asks for", () => {
   const switchedOff: Printer = {
     ...printer,
     id: "p3",
-    name: "Barra USB",
+    name: "Bar USB",
     transport: "usb",
     host: null,
     port: null,
@@ -780,7 +780,7 @@ describe("the name dialog's Add, which opening it already asks for", () => {
     const field = `[data-test=discovered-name-${unregistered.localKey}]`;
     expect(q<HTMLElementTagNameMap["wt-input"]>(el, field)!.value).toBe("EPSON TM-T20");
     expect(await state(el, "confirm-add-printer")).toEqual(ready);
-    await typeInto(el, field, "Barra");
+    await typeInto(el, field, "Bar");
     expect(await state(el, "confirm-add-printer")).toEqual(ready);
     await typeInto(el, field, "EPSON TM-T20");
     expect(await state(el, "confirm-add-printer")).toEqual(ready);
@@ -793,7 +793,7 @@ describe("the name dialog's Add, which opening it already asks for", () => {
     const { el, api } = await openName(seenAgain);
     expect(
       q<HTMLElementTagNameMap["wt-input"]>(el, "[data-test=discovered-name-SN-2]")!.value,
-    ).toBe("Barra USB");
+    ).toBe("Bar USB");
     expect(action(el, "confirm-add-printer").textContent!.trim()).toBe(t("printers.enable"));
     expect(await state(el, "confirm-add-printer")).toEqual(ready);
     await press(el, "confirm-add-printer");
@@ -934,7 +934,7 @@ describe("under the dashboard's leave coordinator", () => {
     q(el, "[data-test=edit-printer-name]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=save-printer-name]")).not.toBeNull());
     expect(await state(el, "save-printer-name")).toEqual(quiet);
-    await typeInto(el, "[name=printer-detail-name]", "Cocina 2");
+    await typeInto(el, "[name=printer-detail-name]", "Kitchen 2");
     expect(await state(el, "save-printer-name")).toEqual(ready);
 
     const disclosure = q<HTMLElementTagNameMap["wt-disclosure"]>(
@@ -1008,7 +1008,7 @@ describe("under the dashboard's leave coordinator", () => {
 
 describe("the printer delete dialog's Delete", () => {
   const impact = {
-    target: { id: "p1", name: "Cocina" },
+    target: { id: "p1", name: "Kitchen" },
     refusals: [],
     ends: [{ key: "print_jobs", count: 2, targets: [] }],
     removes: [],
