@@ -2,7 +2,18 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtemp, mkdir, cp, readFile, writeFile, rm, realpath } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+  mkdtemp,
+  mkdir,
+  cp,
+  readFile,
+  writeFile,
+  rm,
+  realpath,
+  readdir,
+  symlink,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import process from "node:process";
@@ -312,3 +323,46 @@ async function verifyPackage(variant) {
     }
   }
 }
+
+test(
+  "JavaScript builds have identical bytes in different checkout directories",
+  { timeout: 60000 },
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), "waitron-ui-portable-"));
+    try {
+      const results = [];
+      for (const name of ["first", "second"]) {
+        const checkout = join(directory, name);
+        const destination = join(checkout, "packages/ui-core");
+        await mkdir(join(destination, "scripts"), { recursive: true });
+        for (const file of ["package.json", "tsconfig.json", "scripts/build.mjs"])
+          await cp(join(root, file), join(destination, file));
+        await cp(join(root, "src"), join(destination, "src"), { recursive: true });
+        for (const file of ["tsconfig.base.json", "LICENSE", "LICENSE-GRANTS.md"])
+          await cp(join(root, "../..", file), join(checkout, file));
+        await symlink(join(root, "node_modules"), join(destination, "node_modules"), "dir");
+        await run(process.execPath, ["scripts/build.mjs"], {
+          cwd: destination,
+          timeout: 20000,
+          maxBuffer: 4 * 1024 * 1024,
+        });
+        const files = (await readdir(join(destination, "dist"), { recursive: true }))
+          .filter((file) => file.endsWith(".js"))
+          .sort();
+        const bytes = {};
+        for (const file of files)
+          bytes[file] = createHash("sha512")
+            .update(await readFile(join(destination, "dist", file)))
+            .digest("hex");
+        results.push(bytes);
+      }
+      assert.deepEqual(
+        results[0],
+        results[1],
+        "checkout directory must not affect JavaScript bytes or chunk filenames",
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);

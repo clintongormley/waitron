@@ -26,7 +26,7 @@ The output contains `waitron-io-ui-core-0.2.0.tgz` and `preparation.json`.
 The staged manifest records the original repository, commit and source version
 in `waitronSource`. It retains built JavaScript, declarations, export paths,
 CSS and the Lit peer, removes development and lifecycle metadata, and points at
-Cloud's existing restricted GitHub Packages association. Staged file modes are normalised so the file-creation mask does not change package bytes. Both delivered notices
+Cloud's existing restricted GitHub Packages association. Staged file modes are normalised so the file-creation mask does not change package bytes. CSS source labels use paths within the package; the consumer proof compares JavaScript builds from two different checkout directories. Both delivered notices
 must equal the selected source's `LICENSE` and `LICENSE-GRANTS.md` byte for byte.
 
 The build child receives only an explicit set of path, home, locale, temporary-directory and CI/display environment variables. This does not isolate the home directory or filesystem; Cloud must provide the credential-free build job and isolated configuration required by its plan.

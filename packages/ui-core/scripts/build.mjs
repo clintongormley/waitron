@@ -1,6 +1,6 @@
 import { build } from "esbuild";
 import { cp, mkdir, readFile, rm } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, relative } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
@@ -23,11 +23,11 @@ await build({
       name: "inline-theme-css",
       setup(build) {
         build.onResolve({ filter: /\.css\?(inline|raw)$/ }, ({ path, resolveDir }) => ({
-          path: resolve(resolveDir, path.replace(/\?(inline|raw)$/, "")),
+          path: relative(root, resolve(resolveDir, path.replace(/\?(inline|raw)$/, ""))),
           namespace: "theme-css",
         }));
         build.onLoad({ filter: /\.css$/, namespace: "theme-css" }, async ({ path }) => ({
-          contents: await readFile(path, "utf8"),
+          contents: await readFile(resolve(root, path), "utf8"),
           loader: "text",
         }));
       },
