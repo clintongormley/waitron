@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   mkdtemp,
@@ -753,4 +754,55 @@ it("does not repair the marker after evidence changes immediately before its unu
   expect(changed).toBe(true);
   expect(await readFile(f.markerPath)).toEqual(before);
   expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(state);
+});
+
+it("classifies a valid database above 128 MiB without treating the snapshot budget as unreadability", async () => {
+  const f = await fixture("active");
+  await truncate(join(f.venueDir, "venue.db"), 128 * 1024 * 1024 + 4096);
+  const inspected = await f.service.inspectFirstSetupResolution();
+  expect(inspected.database).toBe("no-venue-rows");
+  expect(inspected.emptyDatabase).toBe(true);
+  expect(inspected.artifacts).toContainEqual({ name: "venue.db", status: "unreadable" });
+  await expect(f.service.captureFirstSetupOriginals()).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+});
+
+it.each(["directory", "fifo"] as const)("rejects a %s before SQLite admission", async (kind) => {
+  const f = await fixture("active");
+  const path = join(f.venueDir, "venue.db");
+  await rm(path);
+  if (kind === "directory") await mkdir(path);
+  else execFileSync("mkfifo", [path], { timeout: 5000 });
+  expect(await f.service.inspectFirstSetupDatabase()).toEqual({
+    database: "unreadable",
+    emptyDatabase: false,
+  });
+});
+
+it("refuses over-budget ownership repair without changing either record or creating an audit", async () => {
+  const f = await fixture("claim");
+  await truncate(join(f.venueDir, "venue.db"), 128 * 1024 * 1024 + 4096);
+  const before = await readFile(join(f.stateDir, "first-setup.json"));
+  const marker = await readFile(f.markerPath);
+  const entries = (await readdir(f.stateDir)).sort();
+  const inspected = await f.service.inspectFirstSetupResolution();
+  expect(inspected).toMatchObject({
+    pair: "repairable",
+    database: "no-venue-rows",
+    emptyDatabase: true,
+    repairEligible: false,
+  });
+  await expect(
+    f.recovering.recoverFirstSetupOwner({
+      inspectionId: inspected.inspectionId,
+      revision: inspected.revision!,
+      ownerGeneration: inspected.ownerGeneration!,
+      clientClaimNonce: randomBytes(32).toString("base64url"),
+      password: PASSWORD,
+    }),
+  ).rejects.toMatchObject({ code: "setup.not_ready" });
+  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+  expect(await readFile(f.markerPath)).toEqual(marker);
+  expect((await readdir(f.stateDir)).sort()).toEqual(entries);
 });
