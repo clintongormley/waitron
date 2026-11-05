@@ -193,10 +193,10 @@ function systemClock(): TrustedClock {
   };
 }
 
-let nifCounter = 0;
-function nextNif(): string {
-  nifCounter += 1;
-  return nifWithControlLetter(60_000_000 + nifCounter);
+let taxIdCounter = 0;
+function nextTaxId(): string {
+  taxIdCounter += 1;
+  return nifWithControlLetter(60_000_000 + taxIdCounter);
 }
 
 function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
@@ -223,7 +223,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
     planVenue(
       {
         country: "ES",
-        taxId: nextNif(),
+        taxId: nextTaxId(),
         legalName: "Deli Recibos SL",
         name: "Sala principal",
         fiscalTerritory: "ES-common",
@@ -408,7 +408,7 @@ async function drawerOpensFor(cfg: DeviceRequestConfig): Promise<
   });
 }
 
-async function registroCount(cfg: DeviceRequestConfig): Promise<number> {
+async function fiscalRecordCount(cfg: DeviceRequestConfig): Promise<number> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx.select().from(registrosFacturacion);
@@ -539,7 +539,7 @@ it.each(["en-GB", "ca-ES"])(
     expect(ticket).toContain(String(orderNumber));
     expect(ticket).not.toContain("INVOICE");
     expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
-    expect(await registroCount(cfg)).toBe(0);
+    expect(await fiscalRecordCount(cfg)).toBe(0);
   },
 );
 
@@ -581,7 +581,7 @@ it("prints one non-fiscal numbered collection ticket when a pay-on-collection or
   expect(ticket).not.toContain("FACTURA");
   expect(ticket).not.toContain("TOTAL");
   expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
-  expect(await registroCount(cfg)).toBe(0);
+  expect(await fiscalRecordCount(cfg)).toBe(0);
   expect(await drawerOpensFor(cfg)).toEqual([]);
   await expect(
     placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR),
@@ -614,7 +614,7 @@ it("a counter order paid at collection records its flow but prints no collection
   ).toEqual([{ service_mode: "ticket_then_pay" }]);
   await placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR);
   expect((await printJobsFor(cfg)).filter((job) => job.printerId === printerId)).toEqual([]);
-  expect(await registroCount(cfg)).toBe(0);
+  expect(await fiscalRecordCount(cfg)).toBe(0);
   expect(await drawerOpensFor(cfg)).toEqual([]);
 });
 
@@ -648,7 +648,7 @@ it("prints a separate numbered collection ticket when a prepaid order is paid", 
   expect(collection).toContain(String(orderNumber));
   expect(collection).not.toContain("FACTURA");
   expect(collection).not.toContain("TOTAL");
-  expect(await registroCount(cfg)).toBe(1);
+  expect(await fiscalRecordCount(cfg)).toBe(1);
   await recordTillSale(
     { ...deps(), admission: testTradingAdmission() },
     cfg,
@@ -860,7 +860,7 @@ describe("receipt grouping after table changes", () => {
         expect(text).toContain("Terrace 6");
         expect(text).not.toContain("Renamed table");
       }
-      expect(await registroCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount(cfg)).toBe(1);
     },
   );
 });
@@ -911,7 +911,7 @@ describe("receipt original and copy tracking", () => {
     expect(repeated.filter((job) => job.receiptCopy === false)).toHaveLength(1);
     expect(repeated.filter((job) => job.receiptCopy === true)).toHaveLength(1);
     expect(repeated.filter((job) => job.kind === "drawer")).toHaveLength(1);
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
   });
 });
 
@@ -1003,7 +1003,7 @@ describe("cash payment drawer separation", () => {
       OPERATOR,
     );
     expect(result.total).toBe("1.50");
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(1);
     expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).toContain("TOTAL");
@@ -1064,7 +1064,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       OPERATOR,
     );
 
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     const documents = (await printJobsFor(cfg)).filter((job) =>
       decodeTicket(new Uint8Array(job.payload)).includes("TOTAL"),
     );
@@ -1129,7 +1129,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
     // Filing is unaffected by the print hook: the chained fiscal record exists.
     expect(result.total).toBe("3.00");
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     // NEVER-BLOCK: the enqueue is an INSERT; delivery is the agent's.
     expect(netSend).not.toHaveBeenCalled();
     expect(usbSend).not.toHaveBeenCalled();
@@ -1229,7 +1229,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       OPERATOR,
     );
 
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(2);
     for (const job of jobs) expect(job.printerId).toBe(printerId);
@@ -1328,7 +1328,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       OPERATOR,
     );
 
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     expect((await printJobsFor(cfg)).map((job) => [...job.payload])).toEqual([[...DRAWER_KICK]]);
     expect(await drawerOpensFor(cfg)).toEqual([
       {
@@ -1357,7 +1357,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       OPERATOR,
     );
 
-    expect(await registroCount(cfg)).toBe(1); // sale still files
+    expect(await fiscalRecordCount(cfg)).toBe(1); // sale still files
     expect((await printJobsFor(cfg)).map((job) => [...job.payload])).toEqual([[...DRAWER_KICK]]);
     expect(await drawerOpensFor(cfg)).toHaveLength(1);
   });
@@ -1378,7 +1378,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       OPERATOR,
     );
 
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     expect((await printJobsFor(cfg)).map((job) => [...job.payload])).toEqual([[...DRAWER_KICK]]);
     expect(await drawerOpensFor(cfg)).toHaveLength(1);
   });
@@ -1397,7 +1397,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       OPERATOR,
     );
 
-    expect(await registroCount(cfg)).toBe(1); // the sale is unaffected by the absent printer
+    expect(await fiscalRecordCount(cfg)).toBe(1); // the sale is unaffected by the absent printer
     expect(await printJobsFor(cfg)).toEqual([]);
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
@@ -1421,7 +1421,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     );
 
     expect(result.total).toBe("1.50"); // the sale files cleanly
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     expect(await printJobsFor(cfg)).toEqual([]); // nothing enqueued to the inactive printer
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
@@ -1438,7 +1438,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       tender: { method: "cash", amount: "1.50" },
     });
 
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(1); // the receipt is still enqueued
     expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false); // no kick
@@ -1464,7 +1464,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       const jobs = await printJobsFor(cfg);
       expect(jobs).toHaveLength(1);
       expect(jobs[0]!.printerId).toBe(printerId);
-      expect(await registroCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount(cfg)).toBe(1);
     },
   );
 
@@ -1509,7 +1509,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       );
 
       // Collection settles the same invoice and emits only the cash-drawer command.
-      expect(await registroCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount(cfg)).toBe(1);
       expect(netSend).not.toHaveBeenCalled();
       expect(usbSend).not.toHaveBeenCalled();
       const jobs = await printJobsFor(cfg);
@@ -1596,7 +1596,7 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
       await sale(cfg, product, method);
       await sale(other, product, method);
 
-      expect(await registroCount(cfg)).toBe(2);
+      expect(await fiscalRecordCount(cfg)).toBe(2);
       expect((await jobKinds(cfg)).filter((job) => job.kick)).toEqual([
         { printerId, kick: true },
         { printerId, kick: true },
@@ -2778,7 +2778,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
 
     const result = await sellOne(cfg, each, zoneId);
     expect(result.total).toBe("1.50");
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     const [payload] = await receiptPayloads(cfg);
     expect(pictures(payload!)).toHaveLength(1);
     expect(topBlock(payload!)).toContain("Calle Mayor 1");
@@ -2797,7 +2797,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
 
     const result = await sellOne(cfg, each, zoneId);
     expect(result.total).toBe("1.50");
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     const [payload] = await receiptPayloads(cfg);
     const taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
     expect(topBlock(payload!)).toEqual(["Deli Recibos SL", `NIF: ${taxId}`]);
@@ -2977,7 +2977,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
         await tx.execute(sql`drop trigger test_staged_delivery_refusal`);
       }
     });
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     expect(await suite.db.select().from(sales)).toHaveLength(1);
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
     expect(await suite.db.select().from(printJobs)).toEqual([]);
@@ -2997,7 +2997,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
         await tx.execute(sql`drop trigger test_receipt_delivery_refusal`);
       }
     });
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     expect(await suite.db.select().from(sales)).toHaveLength(1);
     expect(await suite.db.select().from(saleReceiptHeaders)).toHaveLength(1);
     expect(await suite.db.select().from(printJobs)).toEqual([]);
@@ -3009,7 +3009,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([
       expect.objectContaining({ saleId, medium: "receipt", printJobId: jobs[0]!.id }),
     ]);
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
   });
 
   it.each(["absent", "null"] as const)(
@@ -3047,7 +3047,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
       expect(text).not.toContain("Default department text");
       expect(text).not.toContain("default@example.test");
       expect(text).not.toContain("Inconsistent brand");
-      expect(await registroCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount(cfg)).toBe(1);
     },
   );
 
@@ -3067,7 +3067,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
       const jobs = await suite.db.select().from(printJobs);
       expect(jobs).toHaveLength(1);
       expect(logos(jobs[0]!.payload)).toEqual([[0xf0, 0x0f]]);
-      expect(await registroCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount(cfg)).toBe(1);
     },
   );
 
@@ -3511,7 +3511,7 @@ describe("department receipt presentation on thermal jobs", () => {
       expect(logoBytes).toEqual(
         paperWidth === "58mm" ? [[[255, 255]], []] : [[[255, 255, 255]], []],
       );
-      expect(await registroCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount(cfg)).toBe(1);
     },
   );
 
@@ -3538,7 +3538,7 @@ describe("department receipt presentation on thermal jobs", () => {
       .filter((c) => c.name === "GS v 0" && c.text === undefined)
       .slice(1);
     expect(logos.map((c) => [...c.bytes.subarray(8)])).toEqual([]);
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     expect(await suite.db.select().from(tenders)).toHaveLength(1);
   });
 
@@ -3595,7 +3595,7 @@ describe("department receipt presentation on thermal jobs", () => {
         expect(text).not.toContain("Venue footer");
         expect(text.includes("own@example.test")).toBe(source === "venue");
         expect(text).not.toContain("venue@example.test");
-        expect(await registroCount(cfg)).toBe(1);
+        expect(await fiscalRecordCount(cfg)).toBe(1);
         expect(await suite.db.select().from(tenders)).toHaveLength(1);
         const diagnostic = [
           "receipt.optional_read_failed",
@@ -3632,7 +3632,7 @@ describe("department receipt presentation on thermal jobs", () => {
     try {
       const ticket = await sell();
       expect(ticket.total).toBe("1.50");
-      expect(await registroCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount(cfg)).toBe(1);
       const sold = await suite.db.select().from(sales);
       expect(sold).toHaveLength(1);
       expect(await suite.db.select().from(tenders)).toHaveLength(1);
@@ -3653,7 +3653,7 @@ describe("department receipt presentation on thermal jobs", () => {
         OPERATOR,
       );
       expect(replay.invoiceNumber).toBe(ticket.invoiceNumber);
-      expect(await registroCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount(cfg)).toBe(1);
       expect(await suite.db.select().from(tenders)).toHaveLength(1);
       expect(
         await suite.db
@@ -3711,7 +3711,7 @@ describe("department receipt presentation on thermal jobs", () => {
       venueAddress: first.venueAddress,
       receiptSettings: first.receiptSettings,
     }).toEqual(first);
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     expect({
       drawer: await suite.db.select().from(drawerOpens),
       jobs: await suite.db.select().from(printJobs),
@@ -3780,7 +3780,7 @@ describe("department receipt presentation on thermal jobs", () => {
     expect(text[1]).not.toContain("New mutable brand");
     expect(text[1]).toContain("New current address");
     expect(text[1]).toContain("DUPLICADO");
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
     await suite.db
       .update(departmentReceipts)
       .set({ receipt: { headerSubtitle: { "es-ES": "After edit" }, printAddress: false } })
@@ -3809,7 +3809,7 @@ describe("department receipt presentation on thermal jobs", () => {
       expect(text).toContain("Printed footer");
       expect(text).not.toContain("Current subtitle");
       expect(text).not.toContain("Current footer");
-      expect(await registroCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount(cfg)).toBe(1);
     },
   );
 
@@ -3838,7 +3838,7 @@ describe("department receipt presentation on thermal jobs", () => {
       expect(text).toContain(footer);
       expect(text).not.toContain("venue@example.test");
       expect(text).not.toContain("Spanish subtitle");
-      expect(await registroCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount(cfg)).toBe(1);
     },
   );
 });
@@ -3890,7 +3890,7 @@ describe("the theme's logo on thermal receipts", () => {
       await sell();
       const [job] = await documents();
       expect(logos(job!.payload)).toEqual(paperWidth === "58mm" ? [[0xf0]] : [[0xf0, 0x0f]]);
-      expect(await registroCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount(cfg)).toBe(1);
     },
   );
 
@@ -3904,7 +3904,7 @@ describe("the theme's logo on thermal receipts", () => {
     const [job] = await documents();
     expect(logos(job!.payload)).toEqual([[0xf0, 0x0f]]);
     expect(decodeTicket(job!.payload)).toContain("Retained own text");
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
   });
 
   it("a department's own receipt logo wins", async () => {
@@ -3914,7 +3914,7 @@ describe("the theme's logo on thermal receipts", () => {
     await sell();
     const [job] = await documents();
     expect(logos(job!.payload)).toEqual([[255, 255, 255]]);
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
   });
 
   it("a department naming a logo whose pictures are bad prints nothing, not the theme's", async () => {
@@ -3931,7 +3931,7 @@ describe("the theme's logo on thermal receipts", () => {
     const [job] = await documents();
     expect(logos(job!.payload)).toEqual([]);
     expect(decodeTicket(job!.payload)).toContain("Retained own text");
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
   });
 
   it.each(["58mm", "80mm"] as const)(
@@ -3950,7 +3950,7 @@ describe("the theme's logo on thermal receipts", () => {
       const text = decodeTicket(job!.payload);
       expect(text).toContain("Agua mineral");
       expect(text).toContain("TOTAL");
-      expect(await registroCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount(cfg)).toBe(1);
     },
   );
 
@@ -3993,7 +3993,7 @@ describe("the theme's logo on thermal receipts", () => {
     expect(decodeTicket(job.payload)).toContain("Agua mineral");
     const lines = printedLines(job.payload).map((line) => line.trim().replace(/\s+/g, " "));
     expect(lines.find((line) => line.startsWith("TOTAL"))).toBe("TOTAL 1,50 €");
-    expect(await registroCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
   }
 
   it.each(UNTRUSTED_CASES.map((c) => [c.name, c] as const))(
