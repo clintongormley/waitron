@@ -117,7 +117,12 @@ export interface BillVenue {
 const quiet: Logger = () => {};
 const appDatabases = new WeakMap<Hono, Database>();
 
-export async function provisionBillVenue(db: Database): Promise<BillVenue> {
+export async function provisionBillVenue(
+  db: Database,
+  // Unset, a historical fiscal identity, as existing-sale suites want. A suite whose box must pass a
+  // real selection later hands the first setup it means to run.
+  options: { apply?: typeof applyVenue } = {},
+): Promise<BillVenue> {
   const clock = systemClock();
   const backend = new VerifactuBackend({
     clock,
@@ -126,7 +131,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () => Promise.reject(new Error("a sale never submits inline")),
   });
-  const provisioned = await applyVenue(
+  const provisioned = await (options.apply ?? applyVenue)(
     planVenue(
       {
         country: "ES",

@@ -9,10 +9,21 @@
 // - M2's endorsement in the chart both boxes hold. M1 answers M2's signed query only if the chart M2
 //   hands it after activation still carries it (`adopt.ts:154-159` checks the one a real join gives).
 // - M2's mirror link, naming M1 and pinning M1's certificate authority, and its pin of M1's key.
+// - The same key ring on both boxes (a real spare gets it at joining, `adopt.ts:167`), which the
+//   offer checks by version. M2 has its own authority and no recovery key, where a join writes both
+//   (`adopt.ts:168-186`).
+//
+// What else this file gives the boxes for free:
+// - M1's first setup is the real selection and activation, with its selection kept in M1's state
+//   folder, but on a test clock ten minutes behind, over an empty history, and with no outside
+//   release check or internet clock; it is provisioning's, not the setup page's.
+// - Neither box has backup settings, which the offer compares.
+// - The dashboard session is minted; the password it then signs in with is checked for real.
+// - The test calls `startServer`, so production's entry steps before it never run.
 //
 // What is a stand-in for the outside world, here and later in the run:
-// - AEAT is `createFakeAeat`, reached through the real drain, one record to a batch, and records what
-//   each box sent. AEAT's clock reading answers nothing.
+// - AEAT is `createFakeAeat`, reached through the real drain with no certificate, one record to a
+//   batch, and records what each box sent. AEAT's clock reading answers nothing.
 // - The card provider is `FakePaymentProvider` behind the held Stripe credential, and Stripe's
 //   reconciler finds nothing. A sweep on M1 hears no answer for an open payment; one on M2 captures.
 // - `restart` and a spied `process.kill` stand for the SIGTERM that ends a real process; the test
@@ -20,9 +31,10 @@
 // - `requestFromBox` says no request comes from the box itself: every client here is on loopback.
 //
 // No dormant filing setup is created for M2: it writes its own at the switch-on, which comes after
-// the point this run has reached.
+// the point this run has reached. That step's selection also needs stand-ins this file does not yet
+// have, for `@waitron/fiscal-verifactu/src/hour-release.js` and `hour-clock-internet.js`.
 import { randomUUID } from "node:crypto";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -53,7 +65,11 @@ import {
   type SignedMembershipDocument,
 } from "@waitron/membership";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
+import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
+import { withOperationAuthority } from "@waitron/module";
 import { readHandoverOperation, setNodeMode, writeMirrorLink } from "@waitron/node-db";
+import { applyVenue, mergeModulePreparationRevisions } from "@waitron/provisioning";
 import { captureAttempting, listAttempting, type CollectionOwners } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -65,6 +81,7 @@ import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { provisionBillVenue, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { freePorts } from "./testing/free-ports.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
+import { createHourTestClock, selectPastWaits } from "./testing/hour-test-clock.js";
 import { serverFixture } from "./testing/server-fixture.js";
 
 /** What AEAT was sent, in order, by whichever box sent it. */
@@ -252,7 +269,6 @@ interface Boxes {
   venue: BillVenue;
   adminCookie: string;
   openTabId: string;
-  scratch: string;
 }
 
 function seamsFor(box: Box): StartServerSeams {
@@ -340,12 +356,103 @@ function operationRow(box: Box) {
   )[0];
 }
 
+/** Rejects naming `what` if `promise` has not settled within `ms`. */
+async function within<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} still waiting after ${ms} ms`)), ms);
+  });
+  try {
+    return await Promise.race([promise, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
- * M1 selling and M2 its mirror, each started for real, M2 first so M1's start check gets its answer.
- * The chart, M1's row for M2 and M2's endorsement are in M2's seed because the copy carries them.
+ * M1's first setup through the real minute selection and activation, on the pattern of
+ * `firstSetupOnM1` in `./testing/handover-placed-copy.ts`, with the selection kept in M1's state
+ * folder. Its clock starts in the past because no later name may be ahead of a real clock, and M2's
+ * selection reads a real one.
  */
-async function twoBoxes(): Promise<Boxes> {
-  const scratch = await mkdtemp(join(tmpdir(), "waitron-handover-controlled-"));
+function applyWithFirstSetup(stateDir: string): typeof applyVenue {
+  return async (actions, deps) => {
+    const clock = createHourTestClock(Date.now() - 10 * 60_000);
+    const taxpayer = actions.find((action) => action.kind === "ensure-tenant")!;
+    const initialNodeId = randomUUID();
+    const initialAdministratorId = randomUUID();
+    const binding = {
+      module: "fiscal-verifactu",
+      action: "setup",
+      eventId: randomUUID(),
+      sourceId: randomUUID(),
+      targetNodeId: initialNodeId,
+    } as const;
+    let kept: unknown = null;
+    const preparation = createHourPreparation({
+      monotonicNow: () => clock.monotonic(),
+      withState: async (_binding, run) =>
+        run({
+          get value() {
+            return structuredClone(kept);
+          },
+          history: [],
+          async replace(next) {
+            kept = structuredClone(next);
+          },
+        }),
+      read: async () => ({
+        scope: { taxpayerNif: taxpayer.taxId, environment: "preproduction" },
+        bases: actions
+          .filter((action) => action.kind === "create-series")
+          .map(({ code, purpose }) => ({ code, purpose })),
+        contextKey: "first",
+        history: [{ reference: "empty", complete: true, records: [] }],
+        clock: compareHourClocks(
+          ["box", "browser"].map((source) => ({
+            source: source as "box" | "browser",
+            result: "usable",
+            instantMs: clock.wall(),
+            uncertaintyMs: 0,
+            wallStartedMs: clock.wall(),
+            wallFinishedMs: clock.wall(),
+            monotonicStartedMs: clock.monotonic(),
+            monotonicFinishedMs: clock.monotonic(),
+          })),
+          Date.parse("2026-10-15T00:00:00Z"),
+        ),
+      }),
+    });
+    const held = await selectPastWaits(clock, () =>
+      withOperationAuthority(binding, initialAdministratorId, (authority) =>
+        preparation.select({ binding, authority, comparisonId: "comparison" }),
+      ),
+    );
+    if (held.status !== "selected") throw new Error(`first setup answered ${held.status}`);
+    await stampDeployment(deps.db, "preproduction");
+    const result = await applyVenue(actions, {
+      ...deps,
+      initialNodeId,
+      initialAdministratorId,
+      moduleInputs: new Map([
+        [
+          "fiscal-verifactu",
+          { eventId: binding.eventId, sourceId: binding.sourceId, input: held.input },
+        ],
+      ]),
+      modules: deps.modules.map((module) =>
+        module.name === "fiscal-verifactu" ? { ...module, operations: preparation } : module,
+      ),
+    });
+    await mergeModulePreparationRevisions({ stateDir }, [{ binding, value: kept }]);
+    return result;
+  };
+}
+
+/**
+ * M1 ready to sell and M2 its mirror, neither started. The chart, M1's row for M2 and M2's endorsement are in M2's seed because the copy carries them.
+ */
+async function twoBoxes(scratch: string): Promise<Boxes> {
   const ring: KeyRing = loadKeyRing(KEY_ENV);
   const migrationsRoot = join(scratch, "migrations");
   for (const [index, set] of manifestSets().entries()) {
@@ -354,15 +461,9 @@ async function twoBoxes(): Promise<Boxes> {
     });
   }
 
-  beforeServerStarts();
-  const venue = await provisionBillVenue(m1Files.db);
-  const m1Id: string = venue.cfg.nodeId;
-  const m2Id = randomUUID();
-  await stampDeployment(m1Files.db, "preproduction");
   const [m1Port, m2Port] = await freePorts(2);
   const m1Url = `https://localhost:${m1Port}`;
   const m2Url = `https://localhost:${m2Port}`;
-
   const makeState = async (name: string) => {
     const stateDir = join(scratch, name);
     await mkdir(stateDir, { recursive: true });
@@ -375,6 +476,12 @@ async function twoBoxes(): Promise<Boxes> {
   };
   const m1State = await makeState("m1-state");
   const m2State = await makeState("m2-state");
+
+  beforeServerStarts();
+  const venue = await provisionBillVenue(m1Files.db, { apply: applyWithFirstSetup(m1State) });
+  const m1Id: string = venue.cfg.nodeId;
+  const m2Id = randomUUID();
+  await stampDeployment(m1Files.db, "preproduction");
   const m1Ca = await readFile(join(m1State, "tls/ca.crt"), "utf8");
   const m2Ca = await readFile(join(m2State, "tls/ca.crt"), "utf8");
 
@@ -417,11 +524,6 @@ async function twoBoxes(): Promise<Boxes> {
   };
   await writeNodeMembership(m1Files.db, chart);
 
-  // The fixture adds a standard series of its own; a sale files in the venue's.
-  await m1Files.db.execute(
-    sql`update invoice_series set retired_at = ${new Date().toISOString()}
-        where node_id = ${m1Id} and purpose = 'standard' and id <> ${venue.seriesId}`,
-  );
   await m1Files.db.execute(sql`update card_readers set provider = 'stripe'`);
   await withTransaction(m1Files.db, (tx) =>
     putCredential(tx, ring, {
@@ -501,22 +603,20 @@ async function twoBoxes(): Promise<Boxes> {
     port: m2Port!,
     url: m2Url,
     venueDir: m2Dir,
-    venueFile: join(m2Dir, "venue.db"),
+    // The spelling SQLite reports, which is what a batch records.
+    venueFile: await realpath(join(m2Dir, "venue.db")),
     stateDir: m2State,
     env: envFor(m2State, m2Dir, m2Id, m2Port!),
     sweeps: 0,
     restartAsked: hold(),
     agent: new Agent({ connect: { ca: m2Ca } }),
   };
-  await start(m2);
-  await start(m1);
   return {
     m1,
     m2,
     venue,
     adminCookie: `${MANAGEMENT_COOKIE}=${adminSession.token}`,
     openTabId,
-    scratch,
   };
 }
 
@@ -525,14 +625,13 @@ const filingStateOf = (file: string, recordId: string): string | undefined =>
   readRows<{ estado: string }>(file, "select estado from envios where registro_id = ?", recordId)[0]
     ?.estado;
 
-/** What the run saw up to M1's restricted start. */
+/** What the run saw up to M1's restart after its stepdown. */
 interface StepdownSeen {
   records: { filed: string; inFlight: string; waiting: string };
   attemptingRef: string;
   m1Selling: boolean;
   m2SellingBefore: boolean;
   m2SeedHeld: { tabs: number; records: number; payments: number };
-  offer: { status: number; body: unknown };
   stateAtOffer: { m1: string | undefined; m2: string | undefined };
   whileAeatHeld: { inFlight: string | undefined; restartAsked: boolean };
   submitsAtStepdownAnswer: number;
@@ -543,10 +642,27 @@ interface StepdownSeen {
   inFlightAfterStepdown: string | undefined;
 }
 
+/** What M1 and AEAT show once M2 has placed its copy, or has failed to. */
+interface QuietSeen {
+  batches: [string, string[]][];
+  m1Waiting: string | undefined;
+  m1Sweeps: number;
+  m2Sweeps: number;
+  stopsAsked: number;
+}
+
 /** What the run saw from there to the start of M2 that placed the copy. */
 interface PlacingSeen {
   m2StateBeforePlacing: string | undefined;
-  m2Records: string[];
+  m2OperationAfterPlacing: { state: string; waiting_reason: string | null } | undefined;
+  placedEvents: number;
+  acceptedCopyKept: boolean;
+  copy: {
+    records: string[];
+    filingStates: { filed?: string; inFlight?: string; waiting?: string };
+    openTab: unknown[];
+    payment: unknown[];
+  };
   m2AfterPlacing: { acceptingSales: boolean };
   m1StateAtEnd: string | undefined;
   m1StillAnswers: { acceptingSales: boolean };
@@ -592,6 +708,8 @@ async function sendOutbox(boxes: Boxes): Promise<void> {
  */
 async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
   const { m1, m2 } = boxes;
+  await start(m2);
+  await start(m1);
   const m1Selling = (await nodeProbe(m1)).acceptingSales;
   const m2SellingBefore = (await nodeProbe(m2)).acceptingSales;
 
@@ -601,56 +719,72 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
     timeout: 20_000,
   });
 
+  // Released on any way out of this block, or the drain never ends and neither does the close.
   const aeat = hold();
-  outside.holdSubmit = aeat.wait;
-  const inFlight = await sale(boxes);
-  await sendOutbox(boxes);
-  await vi.waitFor(() => expect(outside.holdSubmit).toBeNull(), { timeout: 20_000 });
-  const waiting = await sale(boxes);
+  let attemptingRef: string;
+  let m2SeedHeld: StepdownSeen["m2SeedHeld"];
+  let m1SweepsBeforeStepdown: number;
+  let submitsAtStepdownAnswer: number;
+  let stateAtOffer: StepdownSeen["stateAtOffer"];
+  let whileAeatHeld: StepdownSeen["whileAeatHeld"];
+  let inFlight: string;
+  let waiting: string;
+  try {
+    outside.holdSubmit = aeat.wait;
+    inFlight = await sale(boxes);
+    // Before the pass below, so it is due in that pass and only the stop keeps the pass from it.
+    waiting = await sale(boxes);
+    await sendOutbox(boxes);
+    await vi.waitFor(() => expect(outside.holdSubmit).toBeNull(), { timeout: 20_000 });
 
-  m1.card!.stallNextCollect();
-  const paying = await ask(m1, "/api/pay", {
-    cookie: boxes.venue.cookie2,
-    body: {
-      id: randomUUID(),
-      zoneId: boxes.venue.zoneId,
-      lines: [{ menuItemId: boxes.venue.offerFor("Caña"), quantity: "1" }],
-    },
-  });
-  const payingText = await paying.text();
-  const [attempting] = readRows<{ payment_ref: string }>(
-    m1.venueFile,
-    "select payment_ref from payments where state = 'attempting'",
-  );
-  expect(attempting, payingText).toBeDefined();
-  await vi.waitFor(() => expect(m1.sweeps).toBeGreaterThan(0), { timeout: 20_000 });
+    m1.card!.stallNextCollect();
+    const paying = await ask(m1, "/api/pay", {
+      cookie: boxes.venue.cookie2,
+      body: {
+        id: randomUUID(),
+        zoneId: boxes.venue.zoneId,
+        lines: [{ menuItemId: boxes.venue.offerFor("Caña"), quantity: "1" }],
+      },
+    });
+    const payingText = await paying.text();
+    const [attempting] = readRows<{ payment_ref: string }>(
+      m1.venueFile,
+      "select payment_ref from payments where state = 'attempting'",
+    );
+    expect(attempting, payingText).toBeDefined();
+    attemptingRef = attempting!.payment_ref;
+    await vi.waitFor(() => expect(m1.sweeps).toBeGreaterThan(0), { timeout: 20_000 });
 
-  const m2SeedHeld = {
-    tabs: readRows(m2.venueFile, "select id from working_orders where id = ?", boxes.openTabId)
-      .length,
-    records: recordIds(m2.venueFile).length,
-    payments: readRows(m2.venueFile, "select payment_ref from payments").length,
-  };
+    m2SeedHeld = {
+      tabs: readRows(m2.venueFile, "select id from working_orders where id = ?", boxes.openTabId)
+        .length,
+      records: recordIds(m2.venueFile).length,
+      payments: readRows(m2.venueFile, "select payment_ref from payments").length,
+    };
 
-  const m1SweepsBeforeStepdown = m1.sweeps;
-  const started = await ask(m1, "/management-api/handover", {
-    cookie: boxes.adminCookie,
-    body: {
-      operationId: OP,
-      destinationNodeId: m2.nodeId,
-      signIn: { method: "password", password: PASSWORD },
-    },
-  });
-  const offer = { status: started.status, body: (await started.json()) as unknown };
-  const submitsAtStepdownAnswer = outside.submits.length;
-  const stateAtOffer = { m1: operationRow(m1)?.state, m2: operationRow(m2)?.state };
+    m1SweepsBeforeStepdown = m1.sweeps;
+    const started = await ask(m1, "/management-api/handover", {
+      cookie: boxes.adminCookie,
+      body: {
+        operationId: OP,
+        destinationNodeId: m2.nodeId,
+        signIn: { method: "password", password: PASSWORD },
+      },
+    });
+    const offerText = await started.text();
+    // Here, before any wait: a refused offer has M1 selling on, and no restart ever comes.
+    expect(started.status, offerText).toBe(200);
+    submitsAtStepdownAnswer = outside.submits.length;
+    stateAtOffer = { m1: operationRow(m1)?.state, m2: operationRow(m2)?.state };
 
-  let restartAsked = false;
-  void m1.restartAsked.wait.then(() => (restartAsked = true));
-  await new Promise((resolve) => setTimeout(resolve, HELD_MS));
-  const whileAeatHeld = { inFlight: filingStateOf(m1.venueFile, inFlight), restartAsked };
-  aeat.release();
-  await m1.restartAsked.wait;
+    let restartAsked = false;
+    void m1.restartAsked.wait.then(() => (restartAsked = true));
+    await new Promise((resolve) => setTimeout(resolve, HELD_MS));
+    whileAeatHeld = { inFlight: filingStateOf(m1.venueFile, inFlight), restartAsked };
+  } finally {
+    aeat.release();
+  }
+  await within(m1.restartAsked.wait, 60_000, "M1's restart after its stepdown");
   await m1.server!.close();
   const m1SweepsAtRestart = m1.sweeps;
 
@@ -664,11 +798,10 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
 
   return {
     records: { filed, inFlight, waiting },
-    attemptingRef: attempting!.payment_ref,
+    attemptingRef,
     m1Selling,
     m2SellingBefore,
     m2SeedHeld,
-    offer,
     stateAtOffer,
     whileAeatHeld,
     submitsAtStepdownAnswer,
@@ -680,23 +813,61 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
   };
 }
 
+/** Read after M2's half however it ended, so nothing later in the run can change the answer. */
+function quietSeen(boxes: Boxes, stepdown: StepdownSeen, stopsAsked: number): QuietSeen {
+  return {
+    batches: outside.submits.map((batch) => [batch.venueFile, batch.recordIds]),
+    m1Waiting: filingStateOf(boxes.m1.venueFile, stepdown.records.waiting),
+    m1Sweeps: boxes.m1.sweeps,
+    m2Sweeps: boxes.m2.sweeps,
+    stopsAsked,
+  };
+}
+
 /**
  * M2's fetch, comparison and acceptance, M1's relinquishment and the start of M2 that places the
  * copy. It stops with M2 a running mirror at `filing_assumed`, where activation takes over.
  */
-async function fetchToPlacing(boxes: Boxes): Promise<PlacingSeen> {
+async function fetchToPlacing(boxes: Boxes, stepdown: StepdownSeen): Promise<PlacingSeen> {
   const { m1, m2 } = boxes;
   await vi.waitFor(() => expect(operationRow(m2)?.state).toBe("filing_assumed"), {
     timeout: 90_000,
     interval: 250,
   });
-  await m2.restartAsked.wait;
+  await within(m2.restartAsked.wait, 30_000, "M2's restart at filing_assumed");
   const m2StateBeforePlacing = operationRow(m2)?.state;
   await m2.server!.close();
   await start(m2);
+  const { filed, inFlight, waiting } = stepdown.records;
+  const copyFile = m2.venueFile;
   return {
     m2StateBeforePlacing,
-    m2Records: recordIds(m2.venueFile).sort(),
+    m2OperationAfterPlacing: operationRow(m2),
+    placedEvents: readRows(
+      join(m2.venueDir, "node.db"),
+      "select kind from node_handover_events where operation_id = ? and kind = ?",
+      OP,
+      COPY_PLACED_EVENT,
+    ).length,
+    acceptedCopyKept: existsSync(acceptedCopyPath(m2.stateDir, OP)),
+    copy: {
+      records: recordIds(copyFile).sort(),
+      filingStates: {
+        filed: filingStateOf(copyFile, filed),
+        inFlight: filingStateOf(copyFile, inFlight),
+        waiting: filingStateOf(copyFile, waiting),
+      },
+      openTab: readRows(
+        copyFile,
+        "select status from working_orders where id = ?",
+        boxes.openTabId,
+      ),
+      payment: readRows(
+        copyFile,
+        "select state, node_id from payments where payment_ref = ?",
+        stepdown.attemptingRef,
+      ),
+    },
     m2AfterPlacing: await nodeProbe(m2),
     m1StateAtEnd: (await readHandoverOperation(m1Files.node, m1.nodeId, OP))?.state,
     m1StillAnswers: await nodeProbe(m1),
@@ -704,36 +875,43 @@ async function fetchToPlacing(boxes: Boxes): Promise<PlacingSeen> {
 }
 
 describe("a controlled handover between two boxes, simulated in one process", () => {
+  let scratch: string | undefined;
   let boxes: Boxes | undefined;
   let stepdown: StepdownSeen | undefined;
+  let quiet: QuietSeen | undefined;
   let placing: PlacingSeen | undefined;
   let placingFailure: unknown;
   const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
 
   beforeAll(async () => {
-    boxes = await twoBoxes();
+    scratch = await mkdtemp(join(tmpdir(), "waitron-handover-controlled-"));
+    boxes = await twoBoxes(scratch);
     stepdown = await offerToStepdown(boxes);
     // Held back, so a run in which M2 never gets there still reports what M1 did meanwhile.
     try {
-      placing = await fetchToPlacing(boxes);
+      placing = await fetchToPlacing(boxes, stepdown);
     } catch (error) {
       placingFailure = error;
     }
+    quiet = quietSeen(boxes, stepdown, kill.mock.calls.length);
   }, 240_000);
 
   afterAll(async () => {
     kill.mockRestore();
-    if (boxes === undefined) return;
-    await boxes.m1.server?.close();
-    await boxes.m2.server?.close();
-    await boxes.m1.agent.close();
-    await boxes.m2.agent.close();
-    await rm(boxes.scratch, { recursive: true, force: true });
+    const closing = [
+      boxes?.m1.server?.close(),
+      boxes?.m2.server?.close(),
+      boxes?.m1.agent?.close(),
+      boxes?.m2.agent?.close(),
+    ];
+    await Promise.allSettled(closing);
+    if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
   }, 60_000);
 
-  const seen = (): { b: Boxes; run: StepdownSeen } => {
-    if (boxes === undefined || stepdown === undefined) throw new Error("no stepdown was observed");
-    return { b: boxes, run: stepdown };
+  const seen = (): { b: Boxes; run: StepdownSeen; later: QuietSeen } => {
+    if (boxes === undefined || stepdown === undefined || quiet === undefined)
+      throw new Error("no stepdown was observed");
+    return { b: boxes, run: stepdown, later: quiet };
   };
   const placed = (): { b: Boxes; run: StepdownSeen; end: PlacingSeen } => {
     if (placing === undefined) throw placingFailure ?? new Error("nothing was placed");
@@ -748,9 +926,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
   });
 
   it("M2 records the offer, and M1 steps down, before M1's request is answered", () => {
-    const { run } = seen();
-    expect(run.offer.status, JSON.stringify(run.offer.body)).toBe(200);
-    expect(run.stateAtOffer).toEqual({ m1: "source_stepped_down", m2: "prepared" });
+    expect(seen().run.stateAtOffer).toEqual({ m1: "source_stepped_down", m2: "prepared" });
   });
 
   it("a batch being sent when the stepdown starts finishes before M1 restarts", () => {
@@ -762,7 +938,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
   // Control, run locally and not committed: the start's early return alone left out, M1 waits on M2
   // at its start check, sells nothing, and only M2's three cases fail. With `checkPeers` also
   // answering proceed, this case and the next two fail, the next with three batches against two.
-  it("M1's restricted start answers acceptingSales false and serves no sale", () => {
+  it("after its restart M1 answers acceptingSales false and serves no sale", () => {
     const { b, run } = seen();
     expect(run.m1Restricted).toMatchObject({ nodeId: b.m1.nodeId, acceptingSales: false });
     // A restricted start mounts no till route at all.
@@ -770,68 +946,58 @@ describe("a controlled handover between two boxes, simulated in one process", ()
   });
 
   // Weaker than its name: with `signalDuties` in `stepDown` left out this still passes, because the
-  // close that follows also stops the drain; `handover-stepdown.real.test.ts` pins that signal.
+  // close that begins moments later also stops the drain; `handover-stepdown.real.test.ts` pins that
+  // signal.
   it("M1 starts no new filing after its stepdown: AEAT heard only the two batches before it", () => {
-    const { b, run } = seen();
-    const { filed, inFlight, waiting } = run.records;
+    const { b, run, later } = seen();
+    const { filed, inFlight } = run.records;
     expect(run.submitsAtStepdownAnswer).toBe(2);
-    expect(outside.submits.map((s) => [s.venueFile, s.recordIds])).toEqual([
+    expect(later.batches).toEqual([
       [b.m1.venueFile, [filed]],
       [b.m1.venueFile, [inFlight]],
     ]);
-    expect(filingStateOf(b.m1.venueFile, waiting)).toBe("pendiente");
+    expect(later.m1Waiting).toBe("pendiente");
   });
 
-  it("M1's card sweep stops at the stepdown and M2's never ran as a mirror", () => {
-    const { b, run } = seen();
+  it("M1 starts no card sweep after its close, and M2 runs none as a mirror", () => {
+    const { run, later } = seen();
     expect(run.m1SweepsBeforeStepdown).toBeGreaterThan(0);
-    expect(b.m1.sweeps).toBe(run.m1SweepsAtRestart);
-    expect(b.m2.sweeps).toBe(0);
+    expect(later.m1Sweeps).toBe(run.m1SweepsAtRestart);
+    expect(later.m2Sweeps).toBe(0);
   });
 
   it("M1 relinquishes filing to M2, which records it and asks for the start that places", () => {
-    const { b, end } = placed();
+    const { end } = placed();
     expect(end.m1StateAtEnd).toBe("filing_relinquished");
     expect(end.m1StillAnswers.acceptingSales).toBe(false);
     expect(end.m2StateBeforePlacing).toBe("filing_assumed");
-    expect(operationRow(b.m2)).toMatchObject({ state: "filing_assumed", waiting_reason: null });
+    expect(end.m2OperationAfterPlacing).toMatchObject({
+      state: "filing_assumed",
+      waiting_reason: null,
+    });
   });
 
-  it("M2's start places the copy once and stays a mirror that sells nothing", () => {
-    const { b, end } = placed();
-    expect(
-      readRows(
-        join(b.m2.venueDir, "node.db"),
-        "select kind from node_handover_events where operation_id = ? and kind = ?",
-        OP,
-        COPY_PLACED_EVENT,
-      ),
-    ).toHaveLength(1);
-    expect(existsSync(acceptedCopyPath(b.m2.stateDir, OP))).toBe(false);
+  it("M2's start places the copy, keeps no accepted file, and stays a mirror that sells nothing", () => {
+    const { end } = placed();
+    expect(end.placedEvents).toBe(1);
+    expect(end.acceptedCopyKept).toBe(false);
     expect(end.m2AfterPlacing.acceptingSales).toBe(false);
   });
 
   it("the copy M2 placed holds M1's final state: every record, the batch's answer, the open table and the card payment", () => {
     const { b, run, end } = placed();
     const { filed, inFlight, waiting } = run.records;
-    const copy = b.m2.venueFile;
-    expect(end.m2Records).toEqual([filed, inFlight, waiting].sort());
-    expect(filingStateOf(copy, filed)).toBe("aceptado");
-    expect(filingStateOf(copy, inFlight)).toBe("aceptado");
-    expect(filingStateOf(copy, waiting)).toBe("pendiente");
-    expect(readRows(copy, "select status from working_orders where id = ?", b.openTabId)).toEqual([
-      { status: "open" },
-    ]);
-    expect(
-      readRows(
-        copy,
-        "select state, node_id from payments where payment_ref = ?",
-        run.attemptingRef,
-      ),
-    ).toEqual([{ state: "attempting", node_id: b.m1.nodeId }]);
+    expect(end.copy.records).toEqual([filed, inFlight, waiting].sort());
+    expect(end.copy.filingStates).toEqual({
+      filed: "aceptado",
+      inFlight: "aceptado",
+      waiting: "pendiente",
+    });
+    expect(end.copy.openTab).toEqual([{ status: "open" }]);
+    expect(end.copy.payment).toEqual([{ state: "attempting", node_id: b.m1.nodeId }]);
   });
 
   it("nothing asked this process to stop", () => {
-    expect(kill).not.toHaveBeenCalled();
+    expect(seen().later.stopsAsked).toBe(0);
   });
 });
