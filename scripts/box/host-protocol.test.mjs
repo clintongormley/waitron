@@ -10,6 +10,21 @@ import {
   parseHostRequest,
 } from "./host-protocol.mjs";
 
+const formattedRecords = vi.hoisted(() => /** @type {Uint8Array[]} */ ([]));
+
+vi.mock("./wifi-record.mjs", async (importOriginal) => {
+  const real = /** @type {typeof import("./wifi-record.mjs")} */ (await importOriginal());
+  return {
+    ...real,
+    /** @param {Parameters<typeof real.formatWifiRecord>[0]} network */
+    formatWifiRecord: (network) => {
+      const bytes = real.formatWifiRecord(network);
+      formattedRecords.push(bytes);
+      return bytes;
+    },
+  };
+});
+
 const person = { source: "person", person: "0b9c4a1e-6f1d-4c55-9a83-2f7d1e5c0a11" };
 const server = { source: "server" };
 
@@ -18,9 +33,6 @@ const SERVER = '{"source":"server"}';
 
 /** @param {string} verb @param {string} objectText */
 const line = (verb, objectText) => `${verb} ${objectText}`;
-
-/** @param {unknown} value */
-const reasonOf = (value) => parseHostRequest(value);
 
 const JOIN_FIELDS =
   '"ssidHex":"4361666550657065","keyMgmt":"wpa-psk","psk":"abcdefgh","hidden":false';
@@ -201,7 +213,7 @@ describe("framing", () => {
     ],
     ["DEL", `network.read {"actor":{"source":"person","person":"p\u007f1"}}`],
   ])("refuses %s as request_invalid", (_name, value) => {
-    expect(reasonOf(value)).toEqual({ ok: false, reason: "request_invalid" });
+    expect(parseHostRequest(value)).toEqual({ ok: false, reason: "request_invalid" });
   });
 
   const atLength = (/** @type {number} */ length) => {
@@ -406,5 +418,368 @@ describe("formatHostRequest", () => {
     expect(JSON.stringify(error)).not.toContain("Canary-7f3a91");
     expect(String(error)).not.toContain("Canary-7f3a91");
     expect(String(error.stack)).not.toContain("Canary-7f3a91");
+  });
+});
+
+const LONG_PERSON = `{"source":"person","person":"${"a".repeat(64)}"}`;
+const PASSWORD_63 = "Abc def-ghi_jkl.mno~pqr!stu@vwx#yz0$123%456^789&ABC*DEF(GHI)JKL";
+const E_ACUTE_128 = "\\u00e9".repeat(128);
+const EMOJI_256 = "\\ud83d\\ude00".repeat(256);
+
+/** [name, line, fields, actor, the Wi-Fi record's length in bytes] */
+const ACCEPTED_JOINS = [
+  [
+    "a wpa-psk password",
+    line("network.join", `{${JOIN_FIELDS},"actor":${PERSON}}`),
+    { ssidHex: "4361666550657065", keyMgmt: "wpa-psk", psk: "abcdefgh", hidden: false },
+    person,
+    95,
+  ],
+  [
+    "a 63-character printable password",
+    line(
+      "network.join",
+      `{"ssidHex":"4361666550657065","keyMgmt":"wpa-psk","psk":"${PASSWORD_63}","hidden":false,"actor":${PERSON}}`,
+    ),
+    { ssidHex: "4361666550657065", keyMgmt: "wpa-psk", psk: PASSWORD_63, hidden: false },
+    person,
+    150,
+  ],
+  [
+    "64 hex characters as the password",
+    line(
+      "network.join",
+      `{"ssidHex":"4361666550657065","keyMgmt":"wpa-psk","psk":"${"0123456789abcdef".repeat(4)}","hidden":false,"actor":${PERSON}}`,
+    ),
+    {
+      ssidHex: "4361666550657065",
+      keyMgmt: "wpa-psk",
+      psk: "0123456789abcdef".repeat(4),
+      hidden: false,
+    },
+    person,
+    151,
+  ],
+  [
+    "a 1-byte sae password",
+    line(
+      "network.join",
+      `{"ssidHex":"4361666550657065","keyMgmt":"sae","psk":"x","hidden":false,"actor":${PERSON}}`,
+    ),
+    { ssidHex: "4361666550657065", keyMgmt: "sae", psk: "x", hidden: false },
+    person,
+    84,
+  ],
+  [
+    "a 256-byte sae password",
+    line(
+      "network.join",
+      `{"ssidHex":"4361666550657065","keyMgmt":"sae","psk":"${E_ACUTE_128}","hidden":false,"actor":${PERSON}}`,
+    ),
+    { ssidHex: "4361666550657065", keyMgmt: "sae", psk: "\u00e9".repeat(128), hidden: false },
+    person,
+    339,
+  ],
+  [
+    "the longest join",
+    line(
+      "network.join",
+      `{"ssidHex":"${"ab".repeat(32)}","keyMgmt":"sae","psk":"${E_ACUTE_128}","hidden":false,"actor":${LONG_PERSON}}`,
+    ),
+    { ssidHex: "ab".repeat(32), keyMgmt: "sae", psk: "\u00e9".repeat(128), hidden: false },
+    { source: "person", person: "a".repeat(64) },
+    387,
+  ],
+  [
+    "a hidden network",
+    line(
+      "network.join",
+      `{"ssidHex":"4361666550657065","keyMgmt":"wpa-psk","psk":"abcdefgh","hidden":true,"actor":${PERSON}}`,
+    ),
+    { ssidHex: "4361666550657065", keyMgmt: "wpa-psk", psk: "abcdefgh", hidden: true },
+    person,
+    94,
+  ],
+];
+
+/** [name, line, fields, actor] */
+const ACCEPTED_FIELD_VALUES = [
+  ...ACCEPTED_JOINS.map(([name, text, fields, actor]) => [
+    `a join with ${name}`,
+    text,
+    fields,
+    actor,
+  ]),
+  [
+    "a forget",
+    line("network.forget", `{"ssidHex":"4361666550657065","actor":${PERSON}}`),
+    { ssidHex: "4361666550657065" },
+    person,
+  ],
+  [
+    "the dashboard start screen",
+    line("screen.set", `{"start":"dashboard","actor":${PERSON}}`),
+    { start: "dashboard" },
+    person,
+  ],
+  [
+    "the till start screen",
+    line("screen.set", `{"start":"till","actor":${PERSON}}`),
+    { start: "till" },
+    person,
+  ],
+  ["no tag", line("tag.write", `{"tag":null,"actor":${SERVER}}`), { tag: null }, server],
+  [
+    "a live tag",
+    line("tag.write", `{"tag":{"name":"Bar Pepe","live":true},"actor":${SERVER}}`),
+    { tag: { name: "Bar Pepe", live: true } },
+    server,
+  ],
+  [
+    "a composed accented name",
+    line(
+      "tag.write",
+      String.raw`{"tag":{"name":"Caf\u00e9","live":false},"actor":{"source":"server"}}`,
+    ),
+    { tag: { name: "Caf\u00e9", live: false } },
+    server,
+  ],
+  [
+    "a 256-emoji name",
+    line("tag.write", `{"tag":{"name":"${EMOJI_256}","live":false},"actor":${SERVER}}`),
+    { tag: { name: "\u{1F600}".repeat(256), live: false } },
+    server,
+  ],
+];
+
+/** @param {string} fieldsText */
+const join = (fieldsText) => line("network.join", `{${fieldsText},"actor":${PERSON}}`);
+/** @param {string} ssidHexText */
+const forget = (ssidHexText) =>
+  line("network.forget", `{"ssidHex":${ssidHexText},"actor":${PERSON}}`);
+/** @param {string} startText */
+const screen = (startText) => line("screen.set", `{"start":${startText},"actor":${PERSON}}`);
+/** @param {string} tagText */
+const tag = (tagText) => line("tag.write", `{"tag":${tagText},"actor":${SERVER}}`);
+
+const REFUSED_FIELD_VALUES = [
+  [
+    "keyMgmt wpa-eap",
+    join('"ssidHex":"4361666550657065","keyMgmt":"wpa-eap","psk":"abcdefgh","hidden":false'),
+  ],
+  [
+    "keyMgmt none",
+    join('"ssidHex":"4361666550657065","keyMgmt":"none","psk":"abcdefgh","hidden":false'),
+  ],
+  [
+    "keyMgmt WPA-PSK",
+    join('"ssidHex":"4361666550657065","keyMgmt":"WPA-PSK","psk":"abcdefgh","hidden":false'),
+  ],
+  [
+    "keyMgmt null",
+    join('"ssidHex":"4361666550657065","keyMgmt":null,"psk":"abcdefgh","hidden":false'),
+  ],
+  [
+    "a 7-character password",
+    join('"ssidHex":"4361666550657065","keyMgmt":"wpa-psk","psk":"abcdefg","hidden":false'),
+  ],
+  [
+    "64 characters not all hex",
+    join(
+      `"ssidHex":"4361666550657065","keyMgmt":"wpa-psk","psk":"${"0123456789abcdef".repeat(3)}0123456789abcdeg","hidden":false`,
+    ),
+  ],
+  [
+    "a wpa-psk password outside printable ASCII",
+    join(
+      String.raw`"ssidHex":"4361666550657065","keyMgmt":"wpa-psk","psk":"caf\u00e9secret","hidden":false`,
+    ),
+  ],
+  [
+    "a null password",
+    join('"ssidHex":"4361666550657065","keyMgmt":"wpa-psk","psk":null,"hidden":false'),
+  ],
+  [
+    "a 257-byte sae password",
+    join(`"ssidHex":"4361666550657065","keyMgmt":"sae","psk":"${E_ACUTE_128}x","hidden":false`),
+  ],
+  [
+    "an sae password with a tab",
+    join(String.raw`"ssidHex":"4361666550657065","keyMgmt":"sae","psk":"a\tb","hidden":false`),
+  ],
+  [
+    "an sae password with a lone surrogate",
+    join(String.raw`"ssidHex":"4361666550657065","keyMgmt":"sae","psk":"a\ud800","hidden":false`),
+  ],
+  [
+    "an empty ssidHex in a join",
+    join('"ssidHex":"","keyMgmt":"wpa-psk","psk":"abcdefgh","hidden":false'),
+  ],
+  [
+    "an upper-case ssidHex in a join",
+    join('"ssidHex":"F0","keyMgmt":"wpa-psk","psk":"abcdefgh","hidden":false'),
+  ],
+  [
+    "half a byte of ssidHex in a join",
+    join('"ssidHex":"f","keyMgmt":"wpa-psk","psk":"abcdefgh","hidden":false'),
+  ],
+  [
+    "33 bytes of ssidHex in a join",
+    join(`"ssidHex":"${"ab".repeat(33)}","keyMgmt":"wpa-psk","psk":"abcdefgh","hidden":false`),
+  ],
+  [
+    "hidden as a string",
+    join('"ssidHex":"4361666550657065","keyMgmt":"wpa-psk","psk":"abcdefgh","hidden":"false"'),
+  ],
+  [
+    "hidden as a number",
+    join('"ssidHex":"4361666550657065","keyMgmt":"wpa-psk","psk":"abcdefgh","hidden":0'),
+  ],
+  ["an empty ssidHex to forget", forget('""')],
+  ["an upper-case ssidHex to forget", forget('"F0"')],
+  ["half a byte of ssidHex to forget", forget('"f"')],
+  ["33 bytes of ssidHex to forget", forget(`"${"ab".repeat(33)}"`)],
+  ["the start screen Panel", screen('"Panel"')],
+  ["the start screen Caja", screen('"Caja"')],
+  ["the start screen setup", screen('"setup"')],
+  ["an empty start screen", screen('""')],
+  ["the start screen DASHBOARD", screen('"DASHBOARD"')],
+  ["a null start screen", screen("null")],
+  ["a decomposed name", tag(String.raw`{"name":"Cafe\u0301","live":true}`)],
+  ["a 257-code-point name", tag(`{"name":"${"a".repeat(257)}","live":true}`)],
+  ["an empty name", tag('{"name":"","live":true}')],
+  ["a name with a tab", tag(String.raw`{"name":"Bar\tPepe","live":true}`)],
+  ["a number as name", tag('{"name":42,"live":true}')],
+  ["live as a string", tag('{"name":"Bar Pepe","live":"true"}')],
+  ["a tag with an extra key", tag('{"name":"Bar Pepe","live":true,"extra":1}')],
+  ["a tag that is a string", tag('"Bar"')],
+  ["a tag that is an array", tag("[]")],
+];
+
+/** The request a line's JSON spells, read by the test rather than the module. @param {string} text */
+const requestSpelledBy = (text) => {
+  const space = text.indexOf(" ");
+  const { actor, ...fields } = JSON.parse(text.slice(space + 1));
+  return { verb: text.slice(0, space), fields, actor };
+};
+
+/** @param {unknown} request */
+const formatError = (request) => {
+  try {
+    formatHostRequest(/** @type {any} */ (request));
+  } catch (error) {
+    return error;
+  }
+  throw new Error("formatHostRequest did not throw");
+};
+
+describe("each request's field values", () => {
+  it.each(ACCEPTED_FIELD_VALUES)("accepts %s", (_name, text, fields, actor) => {
+    const result = parseHostRequest(text);
+    expect(result).toEqual({
+      ok: true,
+      request: { verb: text.slice(0, text.indexOf(" ")), fields, actor },
+    });
+    expect(Object.keys(result.request.fields)).toEqual(Object.keys(fields));
+    expect(Object.isFrozen(result.request.fields)).toBe(true);
+  });
+
+  it.each(ACCEPTED_FIELD_VALUES.filter(([, , fields]) => fields.tag))(
+    "freezes the tag of %s",
+    (_name, text) => {
+      expect(Object.isFrozen(parseHostRequest(text).request.fields.tag)).toBe(true);
+    },
+  );
+
+  it("writes the longest join in 1003 characters", () => {
+    expect(ACCEPTED_JOINS[5][1].length).toBe(1003);
+    expect(parseHostRequest(ACCEPTED_JOINS[5][1]).ok).toBe(true);
+  });
+
+  it("writes the 256-emoji tag in 3142 characters, 3141 when live", () => {
+    const live = tag(`{"name":"${EMOJI_256}","live":true}`);
+    expect(ACCEPTED_FIELD_VALUES.at(-1)[1].length).toBe(3142);
+    expect(live.length).toBe(3141);
+    expect(parseHostRequest(live).ok).toBe(true);
+  });
+
+  it.each(REFUSED_FIELD_VALUES)("refuses %s as fields_invalid", (_name, text) => {
+    expect(parseHostRequest(text)).toEqual({ ok: false, reason: "fields_invalid" });
+  });
+
+  it.each(ACCEPTED_FIELD_VALUES)("writes back %s exactly", (_name, text) => {
+    expect(formatHostRequest(parseHostRequest(text).request)).toBe(text);
+  });
+
+  it.each(REFUSED_FIELD_VALUES)("will not write %s", (_name, text) => {
+    expect(formatError(requestSpelledBy(text))).toMatchObject({ code: "host_request.invalid" });
+  });
+
+  it.each([
+    [
+      "an undefined field value",
+      { verb: "screen.set", fields: { start: undefined }, actor: person },
+    ],
+    [
+      "a BigInt field value",
+      {
+        verb: "network.join",
+        fields: { ssidHex: "4361666550657065", keyMgmt: "wpa-psk", psk: "abcdefgh", hidden: 1n },
+        actor: person,
+      },
+    ],
+  ])("will not write %s", (_name, request) => {
+    expect(formatError(request)).toMatchObject({ code: "host_request.invalid" });
+  });
+
+  it("keeps a refused password out of the error and the refusal", () => {
+    const error = formatError({
+      verb: "network.join",
+      fields: {
+        ssidHex: "4361666550657065",
+        keyMgmt: "wpa-eap",
+        psk: "Canary-7f3a91",
+        hidden: false,
+      },
+      actor: person,
+    });
+    expect(error).toMatchObject({ code: "host_request.invalid" });
+    expect(JSON.stringify(error)).not.toContain("Canary-7f3a91");
+    expect(String(error)).not.toContain("Canary-7f3a91");
+    expect(String(error.stack)).not.toContain("Canary-7f3a91");
+    expect(
+      parseHostRequest(
+        join(
+          '"ssidHex":"4361666550657065","keyMgmt":"wpa-eap","psk":"Canary-7f3a91","hidden":false',
+        ),
+      ),
+    ).toStrictEqual({ ok: false, reason: "fields_invalid" });
+  });
+});
+
+describe("the join check zeroes the record it builds", () => {
+  /** @param {number} length */
+  const expectZeroedRecords = (length) => {
+    expect(formattedRecords.length).toBeGreaterThanOrEqual(1);
+    for (const bytes of formattedRecords) {
+      expect(bytes.length).toBe(length);
+      expect(bytes.every((byte) => byte === 0)).toBe(true);
+    }
+  };
+
+  it.each(ACCEPTED_JOINS)("for %s", (_name, text, _fields, _actor, length) => {
+    formattedRecords.length = 0;
+    expect(parseHostRequest(text).ok).toBe(true);
+    expectZeroedRecords(length);
+  });
+
+  it("for a join whose line is refused after its fields pass", () => {
+    formattedRecords.length = 0;
+    expect(
+      parseHostRequest(
+        join('"ssidHex": "4361666550657065","keyMgmt":"wpa-psk","psk":"abcdefgh","hidden":false'),
+      ),
+    ).toEqual({ ok: false, reason: "request_invalid" });
+    expectZeroedRecords(95);
   });
 });

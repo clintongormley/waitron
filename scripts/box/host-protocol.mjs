@@ -1,4 +1,6 @@
+import { usableVenueName } from "./name-tag.mjs";
 import { exactRecord } from "./upgrades/contracts.mjs";
+import { formatWifiRecord, isSsidHex } from "./wifi-record.mjs";
 
 /**
  * @typedef {{ source: "person", person: string } | { source: "server" }} HostActor  frozen
@@ -51,6 +53,8 @@ const ACTOR_SOURCES = Object.freeze({
   "tag.write": ["server"],
 });
 
+const START_SCREENS = Object.freeze(["dashboard", "till"]);
+
 const PRINTABLE_ASCII = /^[ -~]*$/;
 const NOT_PRINTABLE_ASCII = /[^ -~]/g;
 const PERSON_ID = new RegExp(`^[A-Za-z0-9-]{1,${PERSON_ID_MAX}}$`);
@@ -84,21 +88,61 @@ function checkedActor(verb, actor) {
   return Object.freeze({ source: "person", person: id });
 }
 
-/** @param {string} verb @param {Record<string, unknown>} fields */
-function frozenFields(verb, fields) {
+/** @param {Readonly<Record<string, unknown>>} fields */
+function joinFits({ ssidHex, keyMgmt, psk, hidden }) {
+  /** @type {Uint8Array} */
+  let bytes;
+  try {
+    bytes = formatWifiRecord(/** @type {any} */ ({ ssidHex, keyMgmt, psk, hidden }));
+  } catch {
+    return false;
+  }
+  bytes.fill(0);
+  return true;
+}
+
+/** @param {unknown} tag @returns {Readonly<{ name: string, live: boolean }> | null | undefined} */
+function checkedTag(tag) {
+  if (tag === null) return null;
+  if (!exactRecord(tag, ["name", "live"])) return undefined;
+  const { name, live } = /** @type {Record<string, unknown>} */ (tag);
+  if (typeof live !== "boolean" || typeof name !== "string" || usableVenueName(name) !== name)
+    return undefined;
+  return Object.freeze({ name, live });
+}
+
+/**
+ * Each field is read once into the copy, and the copy is what gets checked and written.
+ * @param {string} verb @param {Record<string, unknown>} fields
+ * @returns {Readonly<Record<string, unknown>> | null}
+ */
+function checkedFields(verb, fields) {
   /** @type {Record<string, unknown>} */
   const copy = {};
   for (const key of FIELD_KEYS[verb]) copy[key] = fields[key];
+  switch (verb) {
+    case "network.join":
+      if (!joinFits(copy)) return null;
+      break;
+    case "network.forget":
+      if (!isSsidHex(copy.ssidHex)) return null;
+      break;
+    case "screen.set":
+      if (!START_SCREENS.includes(/** @type {string} */ (copy.start))) return null;
+      break;
+    case "tag.write": {
+      const tag = checkedTag(copy.tag);
+      if (tag === undefined) return null;
+      copy.tag = tag;
+      break;
+    }
+  }
   return Object.freeze(copy);
 }
 
-/** @param {string} verb @param {Record<string, unknown>} fields @param {HostActor} actor */
+/** @param {string} verb @param {Readonly<Record<string, unknown>>} fields @param {HostActor} actor */
 function canonicalLine(verb, fields, actor) {
-  /** @type {Record<string, unknown>} */
-  const body = {};
-  for (const key of FIELD_KEYS[verb]) body[key] = fields[key];
-  body.actor = actor;
-  const json = JSON.stringify(body).replace(
+  const json = JSON.stringify({ ...fields, actor }).replace(
     NOT_PRINTABLE_ASCII,
     (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
   );
@@ -133,7 +177,8 @@ export function parseHostRequest(line) {
   const actor = checkedActor(verb, record.actor);
   if (actor === null) return refusal("actor_invalid");
 
-  const fields = frozenFields(verb, record);
+  const fields = checkedFields(verb, record);
+  if (fields === null) return refusal("fields_invalid");
   if (canonicalLine(verb, fields, actor) !== line) return refusal("request_invalid");
   return Object.freeze({ ok: true, request: Object.freeze({ verb, fields, actor }) });
 }
@@ -152,5 +197,7 @@ export function formatHostRequest(request) {
   }
   const checked = checkedActor(verb, actor);
   if (checked === null) throw programmingError("host_request.invalid");
-  return canonicalLine(verb, fields, checked);
+  const checkedValues = checkedFields(verb, fields);
+  if (checkedValues === null) throw programmingError("host_request.invalid");
+  return canonicalLine(verb, checkedValues, checked);
 }
