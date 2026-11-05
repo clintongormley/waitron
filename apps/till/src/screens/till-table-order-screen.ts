@@ -315,7 +315,7 @@ export type SplitRefusal = {
 } & (
   | { billId: string | null; field: SplitSide; message: string }
   | { selection: SplitSelection; field: SplitSide; message: string }
-  | { selection: SplitSelection; field?: undefined; message: string | TemplateResult }
+  | { selection: SplitSelection; field?: undefined; message: string | TemplateResult | null }
 );
 
 /** `split-refusal-declined`: the panel did not reopen because the waiter has other work open, so

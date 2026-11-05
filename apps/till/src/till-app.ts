@@ -314,6 +314,7 @@ import type {
   MoveBillDetail,
   TableRelocationOpenDetail,
   SplitRefusal,
+  SplitRefusalDeclinedDetail,
   SplitTableDetail,
 } from "./screens/till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
@@ -697,6 +698,26 @@ const DESTINATION_REFUSALS: ReadonlySet<string> = new Set([
   "bill.presented",
   "bill.paid",
 ]);
+
+/** A split refused for the state of one of its bills, each named when it is not on screen. */
+const SPLIT_BILL_REFUSALS: ReadonlySet<string> = new Set([
+  "bill.line_paid",
+  "bill.received_exceeds_total",
+  "bill.refund_in_progress",
+  "order.payment_in_flight",
+  "working_order.not_open",
+  "bill.presented",
+  "bill.paid",
+]);
+
+function selectedBills(selection: SplitSelection): string[] {
+  return [...selection.wholeBillIds, ...selection.loose.map((source) => source.billId)];
+}
+
+function refusedBillIn(error: unknown): { billId?: string } {
+  const billId = (error as { workingOrderId?: unknown }).workingOrderId;
+  return typeof billId === "string" ? { billId } : {};
+}
 
 /** A table refusal as said: a move that would leave the bill owing less than it has received names
  * by how much, with the offer to give that back first. */
@@ -1444,8 +1465,11 @@ type CounterError =
     }
   | { billPayments: string }
   | { replacedGroups: string }
-  /** `lineChange`: refused for a change to a line, not a move of items. */
-  | { excess: string; lineChange?: true }
+  /** `lineChange`: refused for a change to a line, not a move of items. `billId`: the bill the
+   * Refund acts on, for a refusal that names one; `bill`: its label when it is not on screen. */
+  | { excess: string; lineChange?: true; billId?: string; bill?: string }
+  /** A ticked bill of Split a table's panel changed: its label. */
+  | { splitChanged: string }
   /** An order past the simplified-invoice limit, `overLimit` being the limit. */
   | { overLimit: string }
   | { clockUnusable: { clockAt: string; offsetMinutes: number } }
@@ -1482,6 +1506,14 @@ interface Sent {
   opens: number;
 }
 
+/** What a split asked for, which a refusal hands back to its panel. */
+interface SplitSent {
+  tableId: string;
+  guestCounts: SplitTableDetail["guestCounts"];
+  prompt: object | undefined;
+  selection: SplitSelection;
+}
+
 interface OwnBillsHold {
   take: () => void;
   release: () => void;
@@ -1505,6 +1537,7 @@ function errorText(
   tables: readonly TableState[],
   billLabel?: string,
   checkTime = false,
+  surface: "banner" | "panel" = "banner",
 ): string | TemplateResult {
   if (typeof error === "object" && "unsentBill" in error) return billUnsentText(billLabel);
   if (typeof error === "string") return t(error);
@@ -1512,7 +1545,7 @@ function errorText(
     return t("table.draft_replaced_groups").replace("{groups}", () => error.replacedGroups);
   if ("code" in error) {
     const recovery = recoveryRefusalText(error);
-    if (recovery !== null) return html`${recovery} ${recoveryLink(error, true)}`;
+    if (recovery !== null) return html`${recovery} ${recoveryLink(error, surface === "banner")}`;
     if (error.code === "menu_period.not_running") {
       const menu = menus.find((menu) => menu.id === error.menuId);
       if (menu !== undefined)
@@ -1549,14 +1582,20 @@ function errorText(
   if ("partyChanged" in error) return partyChangeMessage(error.partyChanged);
   if ("billChanged" in error)
     return t(error.billChanged.key).replace("{line}", () => error.billChanged.line);
+  if ("splitChanged" in error) return fill(t("table.split_changed"), { bill: error.splitChanged });
   if ("excess" in error) {
     const amount = formatMoney(error.excess, currentLocale());
+    const words = t(
+      error.lineChange === true
+        ? "bill.received_exceeds_total_line_excess"
+        : "bill.received_exceeds_total_excess",
+    ).replaceAll("{amount}", () => amount);
     return html`<span class="error-part"
-        >${t(
-          error.lineChange === true
-            ? "bill.received_exceeds_total_line_excess"
-            : "bill.received_exceeds_total_excess",
-        ).replaceAll("{amount}", () => amount)}</span
+        >${
+          error.bill === undefined
+            ? words
+            : fill(t("table.refused_on_bill"), { bill: error.bill, message: words })
+        }</span
       ><span class="error-action"
         ><wt-button
           variant="secondary"
@@ -1565,7 +1604,10 @@ function errorText(
           @click=${(event: Event) =>
             event.currentTarget!.dispatchEvent(
               new CustomEvent("refund-excess", {
-                detail: { excess: error.excess },
+                detail: {
+                  excess: error.excess,
+                  ...(error.billId === undefined ? {} : { billId: error.billId }),
+                },
                 bubbles: true,
                 composed: true,
               }),
@@ -3176,6 +3218,7 @@ export class TillApp extends LitElement {
   @state() private differentPeopleConfirmation: {
     limit: string;
     proceed: () => Promise<void>;
+    cancel: () => void;
   } | null = null;
   /** The party of the order on screen as it was read just before that order's lines and bills: what
    * the screen shows of it, and the revision every command on it sends (D19). A floor read on its own
@@ -4235,7 +4278,14 @@ export class TillApp extends LitElement {
 
   override updated(changed: PropertyValues): void {
     // A screen out of the page cannot say it left the panel: its event no longer reaches this app.
-    if (this.#splitPanel?.screen.isConnected === false) this.#leaveSplitRead();
+    // Unless it holds a refusal: that waits for it to be put back, when the panel reopens.
+    if (
+      this.#splitPanel?.screen.isConnected === false &&
+      this.#splitPanel.prompt !== this.splitRefusal?.prompt
+    )
+      this.#leaveSplitRead();
+    if (changed.has("splitRefusal") && this.splitRefusal !== null)
+      void this.#watchReopenedSplit(this.splitRefusal);
     if (this.#moveAllergyOpening && !this.#moveAllergyCurrent()) this.#closeMoveAllergy();
     this.#syncTableAllergy();
     if (this.allergyDialog !== null && !this.allergyDialog.current()) this.#closeAllergyDialog();
@@ -11975,7 +12025,8 @@ export class TillApp extends LitElement {
 
   /** A failed read leaves the list empty rather than showing another party's bills, unless it is a
    * `background` read (a check that the bill on screen is still there, not a read after this
-   * till's own change to the bills), which keeps the last list read. A read overtaken by a later
+   * till's own change to the bills), which keeps the last list read, or Split a table's panel is
+   * open or due to reopen, whose rows join that list. A read overtaken by a later
    * one leaves the list alone, and only its generation, compared with {@link #partyBillsRead},
    * tells a caller so. Unless `follow` is false, a read that no longer shows the bill on screen
    * moves the screen off it ({@link #followBillsRead}); a caller choosing the bill itself passes
@@ -12014,7 +12065,13 @@ export class TillApp extends LitElement {
       }
       return answer;
     } catch {
-      if (read === this.#partyBillsRead && !background) this.partyBills = [];
+      if (
+        read === this.#partyBillsRead &&
+        !background &&
+        this.#splitPanel === undefined &&
+        !this.#splitRefusalReading
+      )
+        this.partyBills = [];
       return { read, partyId: party.id, bills: null };
     }
   }
@@ -12139,7 +12196,13 @@ export class TillApp extends LitElement {
    * read again and the message says what changed; the command is not sent again on its own, because
    * the person has to see the new state and decide. Nothing is said once `live` is false.
    */
-  async #onPartyOutOfDate(error: unknown, live: () => boolean = () => true): Promise<void> {
+  async #onPartyOutOfDate(
+    error: unknown,
+    live: () => boolean = () => true,
+    say: (said: CounterError) => void = (said) => {
+      this.errorKey = said;
+    },
+  ): Promise<void> {
     const named = (error as { partyId?: unknown }).partyId;
     const before = this.tables;
     const shown = this.#tableCatalogueActive() ? this.orderParty : null;
@@ -12150,10 +12213,11 @@ export class TillApp extends LitElement {
     if (this.#tableCatalogueActive()) await this.#reloadOrder();
     else await this.#reloadTables();
     if (!live()) return;
-    this.errorKey =
+    say(
       was === undefined
         ? { code: "party.out_of_date" }
-        : { partyChanged: describePartyChange(was, before, this.tables) };
+        : { partyChanged: describePartyChange(was, before, this.tables) },
+    );
   }
 
   /** Every command on a party's tables or bills ends here when refused. */
@@ -15041,14 +15105,11 @@ export class TillApp extends LitElement {
       data-confirm-different-people
       .open=${true}
       .heading=${t("table.confirm_different_people_title")}
-      @wt-close=${() => (this.differentPeopleConfirmation = null)}
+      @wt-close=${() => this.#cancelDifferentPeople()}
     >
       <p>${differentPeopleText(confirmation.limit)}</p>
       <div slot="footer">
-        <wt-button
-          variant="secondary"
-          data-cancel
-          @click=${() => (this.differentPeopleConfirmation = null)}
+        <wt-button variant="secondary" data-cancel @click=${() => this.#cancelDifferentPeople()}
           >${t("action.cancel")}</wt-button
         >
         <wt-button
@@ -15626,6 +15687,11 @@ export class TillApp extends LitElement {
   /** Each selected bill's edit state when it joined the selection, or null if it had none then: a
    * later read does not turn that into permission. */
   readonly #splitObservations = new WeakMap<object, Map<string, BillEditExpected | null>>();
+  /** Which screen a panel opened on: its send event's path is gone by the time a refusal answers. */
+  readonly #splitScreens = new WeakMap<object, TillTableOrderScreen>();
+  /** What a refusal handed to the screen said, for the banner should the screen decline it. */
+  #splitRefusalSaid?: CounterError;
+  #splitRefusalReading = false;
 
   #onSplitTableOpen(event: Event): void {
     const { billId, prompt } = (event as CustomEvent<{ billId?: string | null; prompt: object }>)
@@ -15682,10 +15748,36 @@ export class TillApp extends LitElement {
     // from an earlier answer would stay on the panel.
     screen.splitRead = null;
     if (party === null) return;
-    this.#splitPanel = { prompt, partyId: party.id, billsSeen: billsSeen(this.partyBills), screen };
-    this.#splitReadParty = party.id;
-    if (this.#draftSync === undefined) this.#scheduleBillDraftRefresh();
+    this.#splitScreens.set(prompt, screen);
+    this.#watchSplitPanel(prompt, party.id, screen);
     void this.#readSplitSources(party.id);
+  }
+
+  #watchSplitPanel(prompt: object, partyId: string, screen: TillTableOrderScreen): void {
+    this.#splitPanel = { prompt, partyId, billsSeen: billsSeen(this.partyBills), screen };
+    this.#splitReadParty = partyId;
+    if (this.#draftSync === undefined) this.#scheduleBillDraftRefresh();
+  }
+
+  /** Sending closed the panel, and with it the watch. Waits for the screen's answer: if it declines,
+   * whatever panel it has open keeps its own watch. */
+  async #watchReopenedSplit(refusal: SplitRefusal): Promise<void> {
+    const prompt = refusal.prompt;
+    const screen = prompt === undefined ? undefined : this.#splitScreens.get(prompt);
+    if (prompt === undefined || screen === undefined || !("selection" in refusal)) return;
+    await screen.updateComplete;
+    const partyId = this.orderParty?.id;
+    if (refusal === this.splitRefusal && partyId !== undefined)
+      this.#watchSplitPanel(prompt, partyId, screen);
+  }
+
+  #onSplitRefusalDeclined(event: Event): void {
+    const { refusal } = (event as CustomEvent<SplitRefusalDeclinedDetail>).detail;
+    if (refusal !== this.splitRefusal) return;
+    this.splitRefusal = null;
+    this.errorKey = this.#splitRefusalSaid;
+    if (refusal.prompt !== undefined && this.#splitPanel?.prompt === refusal.prompt)
+      this.#leaveSplitRead();
   }
 
   async #readSplitSources(partyId: string): Promise<void> {
@@ -15799,6 +15891,10 @@ export class TillApp extends LitElement {
       (await this.#askDifferentPeople(
         () => this.#ownBillsChange(() => this.#onSplitTable(event, asked)),
         looseIds,
+        () => {
+          if ("selection" in detail)
+            this.#saySplitRefused({ tableId, guestCounts, prompt, selection });
+        },
       ))
     )
       return;
@@ -15818,6 +15914,28 @@ export class TillApp extends LitElement {
         guestCounts,
       );
     } catch (error) {
+      if ("selection" in detail) {
+        const here = () =>
+          this.api === asked.api &&
+          asked.session === this.#operatorSession &&
+          visit === this.#orderVisit &&
+          !this.#hasLeftParty(party.id, sent);
+        if (!here()) return;
+        this.#splitRefusalReading = true;
+        try {
+          const went = await this.#onSplitRefused(
+            error,
+            { tableId, guestCounts, prompt, selection },
+            party.id,
+            here,
+          );
+          if (!went) return;
+        } finally {
+          this.#splitRefusalReading = false;
+        }
+        await this.#followSplit(asked, party, tableId, selection);
+        return;
+      }
       if (!live()) return;
       const refused = error as { code?: string; field?: string } | undefined;
       const side = refusedSplitSide(refused);
@@ -15825,7 +15943,7 @@ export class TillApp extends LitElement {
         if (visit === this.#orderVisit && this.orderParty?.id === party.id)
           this.splitRefusal = {
             tableId,
-            ...("billId" in detail ? { billId: detail.billId } : { selection }),
+            billId: detail.billId,
             staying: guestField(guestCounts.staying),
             leaving: guestField(guestCounts.leaving),
             field: side,
@@ -15834,21 +15952,25 @@ export class TillApp extends LitElement {
           };
         return;
       }
-      if (refused?.code === "draft.out_of_date" && "selection" in detail) {
-        const billId = (error as { billId?: unknown }).billId;
-        await this.#onSplitBillChanged(
-          { tableId, guestCounts, prompt, selection },
-          party.id,
-          billId,
-        );
-        return;
-      }
       if (refused?.code === "draft.out_of_date" || refused?.code === "draft.taken_over")
         this.errorKey = { code: refused.code };
       else await this.#onTableRefusal(error, live);
       if (live()) await this.#refreshBillDraft();
       return;
     }
+    await this.#followSplit(asked, party, tableId, selection);
+  }
+
+  /** D17: the till stays with the staying party at its other table. */
+  async #followSplit(
+    asked: PartyComposition,
+    party: TableParty,
+    tableId: string,
+    selection: SplitSelection,
+  ): Promise<void> {
+    const looseIds = selection.loose.map((source) => source.billId);
+    const live = () => this.#billCompositionCurrent(asked);
+    const sent = asked.sent;
     if (!live()) return;
     if (this.activeTableId === tableId)
       this.activeTableId = party.tableIds.find((id) => id !== tableId);
@@ -15896,42 +16018,137 @@ export class TillApp extends LitElement {
       await this.#refreshBillDraft();
   }
 
+  /** D16: works out what to say, runs the row's reads, and only then says it. Answers true when the
+   * reply was lost and the split went through. */
+  async #onSplitRefused(
+    error: unknown,
+    sent: SplitSent,
+    partyId: string,
+    here: () => boolean,
+  ): Promise<boolean> {
+    const refused = error as
+      | { code?: string; field?: string; billId?: unknown; tabId?: unknown; excess?: unknown }
+      | undefined;
+    const code = refused?.code;
+    const say = (said: CounterError, banner = said) => {
+      if (here()) this.#saySplitRefused(sent, said, banner);
+    };
+    const side = refusedSplitSide(refused);
+    if (side !== undefined) {
+      this.#saySplitRefused(sent, "seat.guest_count_invalid", "seat.guest_count_invalid", side);
+      return false;
+    }
+    if (code === undefined) {
+      await this.#reloadTables();
+      if (!here()) return false;
+      const row = this.tables.find((table) => table.id === sent.tableId);
+      if (row !== undefined && row.party?.id !== partyId) return true;
+      this.#rememberOrderParty();
+      await this.#loadLinesAndBills();
+      say("table.error");
+      return false;
+    }
+    if (code === "party.out_of_date") {
+      await this.#onPartyOutOfDate(error, here, (said) => say(said));
+      return false;
+    }
+    if (code === "draft.out_of_date" || code === "draft.taken_over") {
+      await this.#onSplitBillChanged(sent, partyId, refused?.billId, code);
+      return false;
+    }
+    const rereadBills = () =>
+      Promise.all([this.#loadPartyBills(), this.#readSplitSources(partyId)]);
+    if (code === "tab.not_open" || code === "tab.line_not_found") {
+      const bill = this.partyBills.find((each) => each.workingOrderId === refused?.tabId);
+      await rereadBills();
+      const banner = tableWriteError(error);
+      say(bill === undefined ? banner : { splitChanged: billLabel(bill) }, banner);
+      return false;
+    }
+    if (SPLIT_BILL_REFUSALS.has(code)) {
+      const named = this.#refusedBill(error, selectedBills(sent.selection), SPLIT_BILL_REFUSALS);
+      const said = billWriteError(error);
+      await rereadBills();
+      say(
+        typeof said === "object" && "excess" in said
+          ? { ...said, ...refusedBillIn(error), ...(named === undefined ? {} : { bill: named }) }
+          : typeof said === "object" && "code" in said && named !== undefined
+            ? { ...said, bill: named }
+            : said,
+      );
+      return false;
+    }
+    if (code === "tab.split_held_line") {
+      await this.#readSplitSources(partyId);
+      say("table.split_held_error");
+      return false;
+    }
+    say(tableWriteError(error));
+    return false;
+  }
+
+  /** The banner only when no panel can come back: a party on one table is never offered one. */
+  #saySplitRefused(
+    sent: SplitSent,
+    said?: CounterError,
+    banner = said,
+    side?: "staying" | "leaving",
+  ): void {
+    const { tableId, guestCounts, prompt, selection } = sent;
+    const party = this.orderParty;
+    if (party === null || party.tableIds.length < 2 || !party.tableIds.includes(tableId)) {
+      this.errorKey = banner;
+      return;
+    }
+    if (prompt !== undefined) this.#splitTablePrompts.set(prompt, this.#partyComposition([]));
+    this.errorKey = undefined;
+    this.#splitRefusalSaid = said;
+    const counts = {
+      tableId,
+      selection,
+      staying: guestField(guestCounts.staying),
+      leaving: guestField(guestCounts.leaving),
+      ...(prompt === undefined ? {} : { prompt }),
+    };
+    this.splitRefusal =
+      side !== undefined
+        ? { ...counts, field: side, message: t("seat.guest_count_invalid") }
+        : {
+            ...counts,
+            message:
+              said === undefined
+                ? null
+                : errorText(
+                    said,
+                    this.tableMenus,
+                    this.tables,
+                    undefined,
+                    this.checkTimeOffered,
+                    "panel",
+                  ),
+          };
+  }
+
   /** D16: nothing was sent or the server refused, so the drafts are read again and the panel reopens
    * with its ticks. The waiter is now looking at the new state, so a retry compares against that. */
   async #onSplitBillChanged(
-    sent: {
-      tableId: string;
-      guestCounts: SplitTableDetail["guestCounts"];
-      prompt: object | undefined;
-      selection: SplitSelection;
-    },
+    sent: SplitSent,
     partyId: string,
     billId: unknown,
+    code: "draft.out_of_date" | "draft.taken_over" = "draft.out_of_date",
   ): Promise<void> {
-    const { tableId, guestCounts, prompt, selection } = sent;
     const visit = this.#orderVisit;
     const bill = this.partyBills.find((each) => each.workingOrderId === billId);
     this.errorKey = undefined;
     this.splitRefusal = null;
     await this.#refreshBillDraft();
-    const party = this.orderParty;
-    if (visit !== this.#orderVisit || party?.id !== partyId) return;
-    if (prompt !== undefined) {
-      this.#splitTablePrompts.set(prompt, this.#partyComposition([]));
-      this.#splitObservations.delete(prompt);
+    if (visit !== this.#orderVisit || this.orderParty?.id !== partyId) return;
+    if (sent.prompt !== undefined) {
+      this.#splitTablePrompts.set(sent.prompt, this.#partyComposition([]));
+      this.#splitObservations.delete(sent.prompt);
     }
-    if (bill === undefined || party.tableIds.length < 2 || !party.tableIds.includes(tableId)) {
-      this.errorKey = { code: "draft.out_of_date" };
-      return;
-    }
-    this.splitRefusal = {
-      tableId,
-      selection,
-      staying: guestField(guestCounts.staying),
-      leaving: guestField(guestCounts.leaving),
-      message: fill(t("table.split_changed"), { bill: billLabel(bill) }),
-      ...(prompt === undefined ? {} : { prompt }),
-    };
+    if (bill === undefined) this.errorKey = { code };
+    else this.#saySplitRefused(sent, { splitChanged: billLabel(bill) }, { code });
   }
 
   /** A refusal of the name itself goes back to the screen's field, unless the waiter has left the
@@ -16196,6 +16413,7 @@ export class TillApp extends LitElement {
   async #askDifferentPeople(
     proceed: () => Promise<void>,
     billIds: readonly (string | undefined)[] = [this.activeTabId],
+    cancelled?: () => void,
   ): Promise<boolean> {
     if (this.differentPeopleConfirmation !== null) return true;
     const limit = this.#simplifiedInvoiceLimit;
@@ -16234,8 +16452,22 @@ export class TillApp extends LitElement {
         )
           await proceed();
       },
+      cancel: () => {
+        if (
+          this.activeTabId === shown &&
+          this.orderParty?.id === partyId &&
+          this.#orderVisit === visit
+        )
+          cancelled?.();
+      },
     };
     return true;
+  }
+
+  #cancelDifferentPeople(): void {
+    const pending = this.differentPeopleConfirmation;
+    this.differentPeopleConfirmation = null;
+    pending?.cancel();
   }
 
   async #confirmDifferentPeople(): Promise<void> {
@@ -16275,7 +16507,11 @@ export class TillApp extends LitElement {
       const code = (error as { code?: string } | undefined)?.code;
       if (code === "tab.split_held_line") this.errorKey = "table.split_held_error";
       else {
-        const destination = this.#refusedDestination(error, toBillId);
+        const destination = this.#refusedBill(
+          error,
+          toBillId === null ? [] : [toBillId],
+          DESTINATION_REFUSALS,
+        );
         await this.#onBillPairRefusal(error);
         // Set by the await above; the compiler still holds the undefined assigned before the call.
         const said = this.errorKey as CounterError | undefined;
@@ -16295,18 +16531,24 @@ export class TillApp extends LitElement {
     if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
   }
 
-  /** The label of the destination bill when a move is refused for its state: the code's own words
-   * speak of "this order" or "this bill", and the bill on screen is the one the dishes leave. */
-  #refusedDestination(error: unknown, toBillId: string | null): string | undefined {
+  /** The label of the bill among `billIds` a refusal names, when that is not the bill on screen: the
+   * code's own words speak of "this order" or "this bill", and those read as the bill on screen. */
+  #refusedBill(
+    error: unknown,
+    billIds: readonly string[],
+    codes: ReadonlySet<string>,
+  ): string | undefined {
     const refused = error as { code?: unknown; workingOrderId?: unknown } | undefined;
+    const billId = refused?.workingOrderId;
     if (
-      toBillId === null ||
-      refused?.workingOrderId !== toBillId ||
-      typeof refused.code !== "string" ||
-      !DESTINATION_REFUSALS.has(refused.code)
+      typeof billId !== "string" ||
+      !billIds.includes(billId) ||
+      billId === this.activeTabId ||
+      typeof refused?.code !== "string" ||
+      !codes.has(refused.code)
     )
       return undefined;
-    const bill = this.partyBills.find((each) => each.workingOrderId === toBillId);
+    const bill = this.partyBills.find((each) => each.workingOrderId === billId);
     return bill === undefined ? undefined : billLabel(bill);
   }
 
@@ -18107,7 +18349,21 @@ export class TillApp extends LitElement {
   }
 
   async #onRefundExcess(event: Event): Promise<void> {
-    const { excess } = (event as CustomEvent<{ excess: string }>).detail;
+    const { excess, billId } = (event as CustomEvent<{ excess: string; billId?: string }>).detail;
+    if (billId !== undefined && billId !== this.activeTabId) {
+      if (!this.partyBills.some((bill) => bill.workingOrderId === billId)) return;
+      this.#requestLeave(async () => {
+        if (!(await this.#flushBeforeSwitch())) return;
+        this.#showBill(billId);
+        await this.#loadTabLines();
+        if (this.activeTabId === billId) await this.#openRefund(excess);
+      });
+      return;
+    }
+    await this.#openRefund(excess);
+  }
+
+  async #openRefund(excess: string): Promise<void> {
     const open = await this.#openBillPaying("contribution", this.#payLinesOnScreen());
     const now = open === null ? null : this.#billPayingNow(open.id);
     // Only on payments just read: a failed read says so above the dialog's action instead.
@@ -19918,6 +20174,7 @@ export class TillApp extends LitElement {
         @split-table-observe=${(event: Event) => this.#onSplitTableObserve(event)}
         @split-table-leave=${() => this.#leaveSplitRead()}
         @split-table=${(event: Event) => void this.#ownBillsChange(() => this.#onSplitTable(event))}
+        @split-refusal-declined=${(event: Event) => this.#onSplitRefusalDeclined(event)}
         @name-party=${(event: Event) => void this.#onNameParty(event)}
         @name-bill=${(event: Event) => void this.#onNameBill(event)}
         @guests-party=${(event: Event) => void this.#onGuestsParty(event)}

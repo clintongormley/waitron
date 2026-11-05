@@ -1183,6 +1183,15 @@ describe("till-app table ordering: refused and failed table actions", () => {
     ],
     ["send-lines", { lineNos: [1] }, "sendLines"],
     ["move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" }, "moveDishes"],
+    [
+      "split-table",
+      {
+        tableId: "t9",
+        selection: { wholeBillIds: [], loose: [] },
+        guestCounts: { staying: 2, leaving: null },
+      },
+      "splitTable",
+    ],
   ] as const)(
     "a %s refused because a card payment of the order is running says so",
     async (type, detail, method) => {
@@ -1228,6 +1237,15 @@ describe("till-app table ordering: refused and failed table actions", () => {
     ["join-tables", { tableId: "t9" }, "joinTables"],
     ["merge-bills", { fromBillId: "wo-9" }, "mergeBills"],
     ["move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" }, "moveDishes"],
+    [
+      "split-table",
+      {
+        tableId: "t9",
+        selection: { wholeBillIds: [], loose: [] },
+        guestCounts: { staying: 2, leaving: null },
+      },
+      "splitTable",
+    ],
   ] as const)(
     "a refused %s shows table.error and re-reads neither the tab nor the floor",
     async (type, detail, method) => {
@@ -1346,7 +1364,18 @@ describe("till-app table ordering: refused and failed table actions", () => {
     },
   );
 
-  it.each([["move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" }, "moveDishes"]] as const)(
+  it.each([
+    ["move-dishes", { lineIds: ["line-1"], toBillId: "wo-9" }, "moveDishes"],
+    [
+      "split-table",
+      {
+        tableId: "t9",
+        selection: { wholeBillIds: [], loose: [] },
+        guestCounts: { staying: 2, leaving: null },
+      },
+      "splitTable",
+    ],
+  ] as const)(
     "a %s refused because an item is already paid for says so in that code's own words",
     async (type, detail, method) => {
       const { el } = await mountApp({

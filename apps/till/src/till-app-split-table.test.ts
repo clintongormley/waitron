@@ -3,10 +3,12 @@ import { page } from "vitest/browser";
 import type { BillBalance, Draft, PartyBill, SplitSources, TabLine } from "./api/client.js";
 import { codeMessage } from "./i18n/codes.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { formatMoney } from "@waitron/shared";
 import { partyBill } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import type { TillSplitPicker } from "./widgets/split-picker.js";
+import type { TillBillRefundDialog } from "./widgets/bill-refund-dialog.js";
 import {
   api,
   emit,
@@ -1891,6 +1893,1190 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     expect(selection).toEqual({
       wholeBillIds: [],
       loose: [{ billId: "b2", lineIds: ["chips"] }],
+    });
+  });
+
+  describe("refusals", () => {
+    const refused = (error: unknown) => ({ splitTable: vi.fn().mockRejectedValue(error) });
+    const reads = () => ({
+      bills: api.getPartyBills!.mock.calls.length,
+      sources: api.getSplitSources!.mock.calls.length,
+      floor: api.getTablesState!.mock.calls.length,
+      drafts: api.listDrafts!.mock.calls.length,
+    });
+    const said = (el: TillApp) => refusal(el)?.textContent?.replace(/\s+/g, " ").trim();
+    const onBill = (bill: string, code: string) =>
+      t("table.refused_on_bill").replace("{bill}", bill).replace("{message}", codeMessage(code));
+    const panelOpen = (el: TillApp) => q(el, "[data-split-pick]") !== null;
+    const onOneTable = party({ tableIds: ["t4"], billCount: 2, revision: 99 });
+    const oneTableFloor = () => [table("t4", "4", onOneTable), table("t5", "5", null), table7];
+
+    async function refusedOn(billId: string, error: unknown, over: Record<string, unknown> = {}) {
+      const el = await panelWith({ ...refused(error), ...over });
+      await tick(el, billId);
+      await pressSplit(el);
+      return el;
+    }
+
+    /** A request out until `refuse` is called, the panel already closed. */
+    async function requestOut(billId: string, over: Record<string, unknown> = {}) {
+      let refuse: (error: unknown) => void = () => {};
+      const el = await panelWith({
+        getTabLines: vi.fn().mockResolvedValue({ lines: [dish("soup", 1)], revision: 0 }),
+        setPartyName: vi.fn().mockResolvedValue({ revision: 3 }),
+        splitTable: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+        ...over,
+      });
+      await tick(el, billId);
+      await pressSplit(el);
+      expect(panelOpen(el)).toBe(false);
+      return { el, refuse: (error: unknown) => refuse(error) };
+    }
+
+    function holdBills() {
+      let release = () => {};
+      api.getPartyBills!.mockImplementationOnce(
+        () =>
+          new Promise<PartyBill[]>((resolve) => {
+            release = () => resolve(bills());
+          }),
+      );
+      return () => release();
+    }
+
+    async function openMoveDishes(el: TillApp): Promise<void> {
+      await press(el, "[data-move-split]");
+      await press(el, '[data-action="move-dishes"]');
+    }
+
+    async function pickMoveDish(el: TillApp): Promise<void> {
+      q(el, "[data-move-dishes] till-portion-picker")!
+        .shadowRoot!.querySelector<HTMLInputElement>("[data-pick]")!
+        .click();
+      await flush(el);
+    }
+
+    const movePicked = (el: TillApp) =>
+      q(el, "[data-move-dishes] till-portion-picker")!.shadowRoot!.querySelector<HTMLInputElement>(
+        "[data-pick]",
+      )!.checked;
+
+    const unsavedQuestion = (el: TillApp) =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>(
+        "wt-unsaved-changes",
+      )!;
+
+    async function answer(el: TillApp, choice: "keep" | "discard"): Promise<void> {
+      const question = unsavedQuestion(el);
+      await expect.poll(() => question.open).toBe(true);
+      question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${choice}]`)!.click();
+      await expect.poll(() => question.open).toBe(false);
+      await flush(el, 6);
+    }
+
+    describe("what each row says and reads again", () => {
+      it.each([
+        "bill.line_paid",
+        "bill.refund_in_progress",
+        "order.payment_in_flight",
+        "working_order.not_open",
+        "bill.presented",
+        "bill.paid",
+      ])(
+        "%s on a bill not on screen is named in front, and reads bills and sources",
+        async (code) => {
+          const el = await panelWith(refused({ code, workingOrderId: "b2" }));
+          await tick(el, "b2");
+          const before = reads();
+          await pressSplit(el);
+
+          expect(said(el)).toBe(onBill("Bill 2", code));
+          expect(banner(el)).toBeNull();
+          expect(tickBox(el, "b2").checked).toBe(true);
+          expect(api.splitTable).toHaveBeenCalledOnce();
+          const after = reads();
+          expect(after.bills).toBeGreaterThan(before.bills);
+          expect(after.sources).toBeGreaterThan(before.sources);
+          expect(after.floor).toBe(before.floor);
+        },
+      );
+
+      it.each(["bill.line_paid", "bill.paid"])(
+        "%s on the bill on screen is said in its own words",
+        async (code) => {
+          const el = await refusedOn("wo-4", { code, workingOrderId: "wo-4" });
+
+          expect(said(el)).toBe(codeMessage(code));
+          expect(banner(el)).toBeNull();
+        },
+      );
+
+      it("reads the label before the re-read, for a bill the re-read no longer lists", async () => {
+        const el = await panelWith(refused({ code: "bill.line_paid", workingOrderId: "b2" }));
+        await tick(el, "b2");
+        api.getPartyBills!.mockResolvedValue([partyBill("wo-4", 1, "10.00")]);
+        await pressSplit(el);
+
+        expect(said(el)).toBe(onBill("Bill 2", "bill.line_paid"));
+      });
+
+      it("reads the bill's balance again after a money refusal", async () => {
+        const el = await panelWith({
+          ...refused({ code: "bill.line_paid", workingOrderId: "wo-4" }),
+          getPartyBills: vi
+            .fn()
+            .mockResolvedValue([
+              partyBill("wo-4", 1, "10.00", { hasPayments: true }),
+              partyBill("b2", 2, "20.00"),
+            ]),
+        });
+        await tick(el, "wo-4");
+        const balances = api.getBillBalance!.mock.calls.length;
+        await pressSplit(el);
+
+        expect(api.getBillBalance!.mock.calls.length).toBeGreaterThan(balances);
+      });
+
+      it("tab.split_held_line says its own sentence and reads the sources alone", async () => {
+        const el = await panelWith(refused({ code: "tab.split_held_line", tabId: "b2" }));
+        await tick(el, "b2");
+        const before = reads();
+        await pressSplit(el);
+
+        expect(said(el)).toBe(t("table.split_held_error"));
+        expect(banner(el)).toBeNull();
+        const after = reads();
+        expect(after.sources).toBeGreaterThan(before.sources);
+        expect(after.bills).toBe(before.bills);
+      });
+
+      it("sale.total_exceeds_simplified_limit says its words and reads nothing", async () => {
+        const el = await panelWith(refused({ code: "sale.total_exceeds_simplified_limit" }));
+        await tick(el, "b2");
+        const before = reads();
+        await pressSplit(el);
+
+        expect(said(el)).toBe(codeMessage("sale.total_exceeds_simplified_limit"));
+        expect(banner(el)).toBeNull();
+        expect(reads()).toEqual(before);
+      });
+
+      it("says a refusal naming no field at the bottom of the panel", async () => {
+        const el = await panelWith(
+          refused({ code: "management.request_invalid", field: "guestCounts" }),
+        );
+        await tick(el, "b2");
+        const before = reads();
+        await pressSplit(el);
+
+        expect(tableOrder(el)!.splitRefusal).toMatchObject({
+          tableId: "t5",
+          selection: whole("b2"),
+          message: t("table.error"),
+        });
+        expect(panelOpen(el)).toBe(true);
+        expect(said(el)).toBe(t("table.error"));
+        expect(banner(el)).toBeNull();
+        expect(reads()).toEqual(before);
+        expect(splitButton(el).disabled).toBe(false);
+      });
+
+      it("a reopening clears a banner something else raised while the request was out", async () => {
+        const { el, refuse } = await requestOut("b2", {
+          setPartyName: vi.fn().mockRejectedValue({ code: "table.not_found" }),
+        });
+        emit(tableOrder(el)!, "name-party", { name: "Ana" });
+        await flush(el);
+        expect(banner(el)).not.toBeNull();
+
+        refuse({ code: "table.not_shared" });
+        await flush(el, 6);
+
+        expect(said(el)).toBe(codeMessage("table.not_shared"));
+        expect(banner(el)).toBeNull();
+      });
+
+      it.each(["tab.not_open", "tab.line_not_found"])(
+        "%s names the bill and reads bills and sources",
+        async (code) => {
+          const el = await panelWith(refused({ code, tabId: "b2" }));
+          await tick(el, "b2");
+          const before = reads();
+          await pressSplit(el);
+
+          expect(said(el)).toBe(changedWords("Bill 2"));
+          expect(banner(el)).toBeNull();
+          const after = reads();
+          expect(after.bills).toBeGreaterThan(before.bills);
+          expect(after.sources).toBeGreaterThan(before.sources);
+        },
+      );
+
+      it("party.out_of_date goes to the bottom in #onTableRefusal's words, after order and floor", async () => {
+        const el = await panelWith(refused({ code: "party.out_of_date" }));
+        await tick(el, "b2");
+        const before = reads();
+        await pressSplit(el);
+
+        expect(said(el)).toContain(t("party.try_again"));
+        expect(banner(el)).toBeNull();
+        expect(panelOpen(el)).toBe(true);
+        const after = reads();
+        expect(after.floor).toBeGreaterThan(before.floor);
+        expect(after.bills).toBeGreaterThan(before.bills);
+      });
+
+      it("draft.taken_over with the read showing the bill held: D21's state, and no second request", async () => {
+        const el = await panelWith(
+          refused({ code: "draft.taken_over", billId: "b2", ownerId: "p2", ownerName: "Luis" }),
+        );
+        await tick(el, "b2");
+        server.drafts.push(savedDraft("b2", "p2", "Luis"));
+        await pressSplit(el);
+
+        expect(tickBox(el, "b2").checked).toBe(true);
+        expect(said(el)).toBe(t("table.split_taken").replace("{who}", "Luis"));
+        expect(splitButton(el).disabled).toBe(true);
+        expect(banner(el)).toBeNull();
+        splitButton(el).click();
+        await flush(el, 6);
+        expect(api.splitTable).toHaveBeenCalledOnce();
+      });
+
+      it("draft.taken_over with the read failing names the refusal's bill, Split enabled", async () => {
+        const el = await panelWith(
+          refused({ code: "draft.taken_over", billId: "b2", ownerId: "p2", ownerName: "Luis" }),
+        );
+        await tick(el, "b2");
+        api.listDrafts!.mockRejectedValue(new TypeError("Failed to fetch"));
+        await pressSplit(el);
+
+        expect(said(el)).toBe(changedWords("Bill 2"));
+        expect(splitButton(el).disabled).toBe(false);
+        expect(banner(el)).toBeNull();
+      });
+
+      it("pressing Split again takes the refusal back and sends", async () => {
+        const el = await refusedOn("b2", { code: "table.not_shared" });
+        expect(tableOrder(el)!.splitRefusal).not.toBeNull();
+
+        api.splitTable!.mockResolvedValue({ partyId: "v-split", billIds: ["b2"] });
+        await pressSplit(el);
+
+        expect(api.splitTable).toHaveBeenCalledTimes(2);
+        expect(tableOrder(el)!.splitRefusal).toBeNull();
+      });
+    });
+
+    describe("a refused count", () => {
+      async function typeCount(el: TillApp, name: string, value: string): Promise<void> {
+        const input = q(el, `wt-number-stepper[name="${name}"]`)!.shadowRoot!.querySelector(
+          "input",
+        )!;
+        input.value = value;
+        input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        await flush(el);
+      }
+
+      it.each([
+        ["guestCounts.staying", "staying", "stayingGuests", "30", "2"],
+        ["guestCounts.leaving", "leaving", "leavingGuests", "3", ""],
+      ] as const)(
+        "hands %s back to the panel, beside the field, without a banner",
+        async (field, side, stepper, staying, leaving) => {
+          const el = await panelWith(refused({ code: "management.request_invalid", field }));
+          await tick(el, "b2");
+          await typeCount(el, "stayingGuests", staying);
+          await typeCount(el, "leavingGuests", leaving);
+          const before = reads();
+          await pressSplit(el);
+
+          expect(tableOrder(el)!.splitRefusal).toEqual({
+            tableId: "t5",
+            selection: whole("b2"),
+            staying,
+            leaving,
+            field: side,
+            message: t("seat.guest_count_invalid"),
+            prompt: expect.any(Object),
+          });
+          const steppers = (name: string) =>
+            q<HTMLElementTagNameMap["wt-number-stepper"]>(el, `wt-number-stepper[name="${name}"]`)!;
+          expect(String(steppers("stayingGuests").value)).toBe(staying);
+          expect(String(steppers("leavingGuests").value)).toBe(leaving);
+          expect(steppers(stepper).error).toBe(t("seat.guest_count_invalid"));
+          expect(bottom(el).error).toBe(t("form.fix_fields"));
+          expect(banner(el)).toBeNull();
+          expect(reads()).toEqual(before);
+        },
+      );
+
+      it("hands the refusal to the order card on a handheld", async () => {
+        server.bills.add("b2");
+        const el = await mounted(
+          "handheld",
+          refused({ code: "management.request_invalid", field: "guestCounts.leaving" }),
+        );
+        await toPanel(el);
+        await tick(el, "b2");
+        await pressSplit(el);
+
+        expect(
+          q<HTMLElementTagNameMap["wt-number-stepper"]>(
+            el,
+            'wt-number-stepper[name="leavingGuests"]',
+          )!.error,
+        ).toBe(t("seat.guest_count_invalid"));
+      });
+
+      it("a count refused on a party left on one table goes on the banner", async () => {
+        const { el, refuse } = await requestOut("b2");
+        api.getTablesState!.mockResolvedValue(oneTableFloor());
+        emit(tableOrder(el)!, "name-party", { name: "Ana" });
+        await flush(el, 6);
+
+        refuse({ code: "management.request_invalid", field: "guestCounts.leaving" });
+        await flush(el, 6);
+
+        expect(banner(el)!.textContent).toContain(t("seat.guest_count_invalid"));
+        expect(tableOrder(el)!.splitRefusal).toBeNull();
+      });
+    });
+
+    describe("after leaving", () => {
+      const inFlight = (code: string) => ({ code, field: "guestCounts.leaving" });
+
+      it("drops a refusal that arrives after the waiter has opened another party's table", async () => {
+        const { el, refuse } = await requestOut("b2");
+        emit(tableOrder(el)!, "back-to-floor");
+        await flush(el);
+        emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+        await flush(el);
+
+        refuse(inFlight("management.request_invalid"));
+        await flush(el, 6);
+
+        expect(tableOrder(el)!.party?.id).toBe("v7");
+        expect(tableOrder(el)!.splitRefusal).toBeNull();
+        expect(q(el, "[data-split-pick]")).toBeNull();
+        expect(banner(el)).toBeNull();
+      });
+
+      it.each(["table.not_shared", "bill.line_paid", "party.out_of_date", "draft.taken_over"])(
+        "%s arriving after the waiter left for the floor does nothing",
+        async (code) => {
+          const { el, refuse } = await requestOut("b2");
+          emit(tableOrder(el)!, "back-to-floor");
+          await flush(el);
+
+          refuse({ code, billId: "b2", workingOrderId: "b2" });
+          await flush(el, 6);
+
+          expect(banner(el)).toBeNull();
+          emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+          await flush(el, 6);
+          expect(tableOrder(el)!.splitRefusal).toBeNull();
+          expect(banner(el)).toBeNull();
+        },
+      );
+
+      it("does not hand a refused split to the next table opened", async () => {
+        const el = await refusedOn("b2", inFlight("management.request_invalid"));
+        emit(tableOrder(el)!, "back-to-floor");
+        await flush(el);
+        emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+        await flush(el);
+
+        expect(tableOrder(el)!.splitRefusal).toBeNull();
+        expect(q(el, "[data-split-pick]")).toBeNull();
+      });
+
+      it("does not reopen the panel a refusal opened when a handheld comes back to its order card", async () => {
+        server.bills.add("b2");
+        const el = await mounted("handheld", refused(inFlight("management.request_invalid")));
+        await toPanel(el);
+        await tick(el, "b2");
+        await pressSplit(el);
+        expect(panelOpen(el)).toBe(true);
+        await press(el, "[data-action-back]");
+        await answer(el, "discard");
+        expect(panelOpen(el)).toBe(false);
+
+        emit(shell(el), "screen-select", { screen: "floor" });
+        await flush(el);
+        expect(tableOrder(el)).toBeNull();
+        emit(shell(el), "screen-select", { screen: "order" });
+        await flush(el);
+
+        expect(tableOrder(el)).not.toBeNull();
+        expect(panelOpen(el)).toBe(false);
+      });
+    });
+
+    describe("no banner while a read is out", () => {
+      it.each([
+        ["the money row", { code: "bill.line_paid", workingOrderId: "b2" }],
+        ["party.out_of_date", { code: "party.out_of_date" }],
+      ])("%s says nothing until its read answers", async (_name, error) => {
+        const { el, refuse } = await requestOut("b2");
+        const release = holdBills();
+        refuse(error);
+        await flush(el, 6);
+
+        expect(banner(el)).toBeNull();
+        expect(refusal(el)).toBeNull();
+
+        release();
+        await flush(el, 6);
+
+        expect(said(el)).toBeTruthy();
+        expect(banner(el)).toBeNull();
+      });
+    });
+
+    describe("the recovery link", () => {
+      const conflict = {
+        code: "sif.allocation_invalid",
+        recoveryUrl: "/manage/recovery/fiscal-conflict",
+      };
+
+      it.each(["light", "dark"] as const)(
+        "sits in the panel's message in its own colour (%s theme)",
+        async (theme) => {
+          const el = await panelWith(refused(conflict));
+          el.parentElement!.setAttribute("data-theme", theme);
+          await tick(el, "b2");
+          await pressSplit(el);
+
+          const link = refusal(el)!.querySelector<HTMLElement>("[data-recovery]")!;
+          expect(link.getAttribute("style")).toContain("--wt-color-primary-text");
+          const panelBackground = getComputedStyle(q(el, "[data-action-panel]")!).backgroundColor;
+          expect(getComputedStyle(link).color).not.toBe(panelBackground);
+          expect(banner(el)).toBeNull();
+        },
+      );
+
+      it("on a party left on one table sits on the banner in the banner's colour", async () => {
+        const { el, refuse } = await requestOut("b2");
+        api.getTablesState!.mockResolvedValue(oneTableFloor());
+        emit(tableOrder(el)!, "name-party", { name: "Ana" });
+        await flush(el, 6);
+
+        refuse(conflict);
+        await flush(el, 6);
+
+        expect(banner(el)!.querySelector("[data-recovery]")!.getAttribute("style")).toContain(
+          "--wt-color-on-danger",
+        );
+        expect(panelOpen(el)).toBe(false);
+      });
+    });
+
+    it("a recovery refusal naming the one table a party holds sits on the banner in the banner's colour", async () => {
+      const el = await mounted("desktop", {
+        getTablesState: vi.fn().mockResolvedValue(oneTableFloor()),
+        ...refused({
+          code: "sif.allocation_invalid",
+          recoveryUrl: "/manage/recovery/fiscal-conflict",
+        }),
+      });
+      emit(tableOrder(el)!, "split-table", {
+        tableId: "t4",
+        selection: whole("wo-4"),
+        guestCounts: noGuests,
+      });
+      await flush(el, 6);
+
+      expect(banner(el)!.querySelector("[data-recovery]")!.getAttribute("style")).toContain(
+        "--wt-color-on-danger",
+      );
+      expect(tableOrder(el)!.splitRefusal).toBeNull();
+    });
+
+    describe("Two tables, words at the foot", () => {
+      it.each(["table.not_shared", "group.held_leaves_party"])(
+        "%s on a party the till shows at two tables is said at the foot",
+        async (code) => {
+          const el = await refusedOn("b2", { code });
+
+          expect(said(el)).toBe(codeMessage(code));
+          expect(banner(el)).toBeNull();
+          expect(panelOpen(el)).toBe(true);
+        },
+      );
+    });
+
+    describe("a lost reply", () => {
+      const lost = () => new TypeError("Failed to fetch");
+
+      it("the re-read shows the table gone: no message, no panel, and the split is followed", async () => {
+        const { el, refuse } = await requestOut("wo-4");
+        const staying = party({ tableIds: ["t4"], billCount: 1, revision: 4 });
+        const left = party({ id: "v-split", tableIds: ["t5"], billCount: 1 });
+        api.getTablesState!.mockResolvedValue([
+          table("t4", "4", staying),
+          table("t5", "5", left),
+          table7,
+        ]);
+        api.getPartyBills!.mockResolvedValue([partyBill("b2", 2, "20.00")]);
+        refuse(lost());
+        await flush(el, 8);
+
+        expect(banner(el)).toBeNull();
+        expect(refusal(el)).toBeNull();
+        expect(panelOpen(el)).toBe(false);
+        expect(tableOrder(el)!.splitRefusal).toBeNull();
+        expect(tableOrder(el)!.orderId).toBe("b2");
+      });
+
+      it("the re-read shows the table still held: table.error at the bottom, the panel reopened", async () => {
+        const { el, refuse } = await requestOut("b2");
+        const before = reads();
+        refuse(lost());
+        await flush(el, 8);
+
+        expect(said(el)).toBe(t("table.error"));
+        expect(banner(el)).toBeNull();
+        expect(tickBox(el, "b2").checked).toBe(true);
+        expect(reads().floor).toBeGreaterThan(before.floor);
+        expect(reads().bills).toBeGreaterThan(before.bills);
+      });
+
+      it("the re-read failing too says the same, and the next press's party.out_of_date as its row says", async () => {
+        const { el, refuse } = await requestOut("b2");
+        api.getTablesState!.mockRejectedValue(lost());
+        api.getPartyBills!.mockRejectedValue(lost());
+        refuse(lost());
+        await flush(el, 8);
+
+        expect(said(el)).toBe(t("table.error"));
+        expect(banner(el)).toBeNull();
+        expect(tickBox(el, "b2").checked).toBe(true);
+
+        api.getTablesState!.mockResolvedValue(tables);
+        api.getPartyBills!.mockResolvedValue(bills());
+        api.splitTable!.mockRejectedValue({ code: "party.out_of_date" });
+        await pressSplit(el);
+        await flush(el, 6);
+
+        expect(api.splitTable).toHaveBeenCalledTimes(2);
+        expect(said(el)).toBeTruthy();
+        expect(said(el)).not.toBe(t("table.error"));
+        expect(banner(el)).toBeNull();
+      });
+    });
+
+    describe("the table no longer held after a re-read", () => {
+      it("party.out_of_date: the banner, no panel", async () => {
+        const { el, refuse } = await requestOut("b2");
+        api.getTablesState!.mockResolvedValue(oneTableFloor());
+        refuse({ code: "party.out_of_date" });
+        await flush(el, 8);
+
+        expect(banner(el)).not.toBeNull();
+        expect(panelOpen(el)).toBe(false);
+        expect(tableOrder(el)!.splitRefusal).toBeNull();
+      });
+
+      it.each(["draft.out_of_date", "draft.taken_over"])(
+        "%s: the banner in its own words, no panel",
+        async (code) => {
+          const { el, refuse } = await requestOut("b2");
+          let answerDrafts = () => {};
+          const reading = server.listDrafts("v1");
+          api.listDrafts!.mockImplementationOnce(
+            () =>
+              new Promise((resolve) => {
+                answerDrafts = () => void reading.then(resolve);
+              }),
+          );
+          refuse({ code, billId: "b2", ownerId: "p2", ownerName: "Luis" });
+          await flush(el, 6);
+          expect(banner(el)).toBeNull();
+
+          api.getTablesState!.mockResolvedValue(oneTableFloor());
+          emit(tableOrder(el)!, "name-party", { name: "Ana" });
+          await flush(el, 6);
+          answerDrafts();
+          await flush(el, 6);
+
+          expect(banner(el)!.textContent).toContain(codeMessage(code));
+          expect(panelOpen(el)).toBe(false);
+          expect(tableOrder(el)!.splitRefusal).toBeNull();
+        },
+      );
+
+      it("a refusal with a code and a table gone from the party: the banner, no panel", async () => {
+        const { el, refuse } = await requestOut("b2");
+        api.getTablesState!.mockResolvedValue(oneTableFloor());
+        emit(tableOrder(el)!, "name-party", { name: "Ana" });
+        await flush(el, 6);
+
+        refuse({ code: "table.not_shared" });
+        await flush(el, 6);
+
+        expect(banner(el)!.textContent).toContain(codeMessage("table.not_shared"));
+        expect(panelOpen(el)).toBe(false);
+      });
+    });
+
+    describe("Refund on the bill it names", () => {
+      const paid = (workingOrderId: string, id: string): BillBalance => ({
+        ...balance(workingOrderId, "20.00"),
+        received: "20.00",
+        outstanding: "0.00",
+        payments: [
+          {
+            id,
+            submissionId: `sub-${id}`,
+            kind: "contribution",
+            shareOf: null,
+            method: "cash",
+            entry: null,
+            applied: "20.00",
+            tip: "0.00",
+            tendered: "20.00",
+            change: "0.00",
+            state: "received",
+            createdAt: "2026-09-30T20:00:00.000Z",
+            receivedAt: "2026-09-30T20:00:00.000Z",
+            lines: [],
+            refunds: [],
+          },
+        ],
+      });
+      const excess = (workingOrderId: string) => ({
+        code: "bill.received_exceeds_total",
+        workingOrderId,
+        excess: "5.00",
+      });
+      const paidBills = () => [
+        partyBill("wo-4", 1, "20.00", { hasPayments: true }),
+        partyBill("b2", 2, "20.00", { hasPayments: true }),
+      ];
+      const withPayments = (error: unknown) => ({
+        ...refused(error),
+        getPartyBills: vi.fn().mockResolvedValue(paidBills()),
+        getBillBalance: vi.fn(async (id: string) => paid(id, `pay-${id}`)),
+      });
+      const refundButton = (el: TillApp) =>
+        refusal(el)!.querySelector<HTMLElement>("[data-refund-excess]")!;
+      const refundDialog = (el: TillApp) =>
+        el.shadowRoot!.querySelector<TillBillRefundDialog>("till-bill-refund-dialog");
+      const amountOf = (dialog: TillBillRefundDialog) =>
+        dialog.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+          'wt-input[name="amount"]',
+        )!.value;
+
+      it("Refund, bill on screen: the bottom message offers it and the dialog opens on that bill", async () => {
+        const el = await panelWith(withPayments(excess("wo-4")));
+        await tick(el, "wo-4");
+        await pressSplit(el);
+
+        expect(said(el)).toContain(
+          t("bill.refund_excess").replace("{amount}", formatMoney("5.00", currentLocale())),
+        );
+        expect(banner(el)).toBeNull();
+        expect(said(el)).not.toContain("Bill 1:");
+        refundButton(el).click();
+        await flush(el, 6);
+
+        expect(tableOrder(el)!.orderId).toBe("wo-4");
+        expect(refundDialog(el)!.payment.id).toBe("pay-wo-4");
+        expect(amountOf(refundDialog(el)!)).toBe("5.00");
+        expect(panelOpen(el)).toBe(true);
+        expect(tickBox(el, "wo-4").checked).toBe(true);
+      });
+
+      it("Refund, bill not on screen: named in front, Discard switches and the dialog offers that bill's payment", async () => {
+        const el = await panelWith(withPayments(excess("b2")));
+        await tick(el, "b2");
+        await pressSplit(el);
+
+        expect(said(el)!.startsWith("Bill 2: ")).toBe(true);
+        expect(tableOrder(el)!.orderId).toBe("wo-4");
+        refundButton(el).click();
+        await flush(el);
+        expect(refundDialog(el)).toBeNull();
+        await answer(el, "discard");
+
+        expect(tableOrder(el)!.orderId).toBe("b2");
+        expect(refundDialog(el)!.payment.id).toBe("pay-b2");
+        expect(amountOf(refundDialog(el)!)).toBe("5.00");
+      });
+
+      it("Refund, bill not on screen: Keep switches nothing, opens nothing and the ticks stay", async () => {
+        const el = await panelWith(withPayments(excess("b2")));
+        await tick(el, "b2");
+        await pressSplit(el);
+
+        refundButton(el).click();
+        await flush(el);
+        await answer(el, "keep");
+
+        expect(tableOrder(el)!.orderId).toBe("wo-4");
+        expect(refundDialog(el)).toBeNull();
+        expect(tickBox(el, "b2").checked).toBe(true);
+        expect(said(el)!.startsWith("Bill 2: ")).toBe(true);
+      });
+
+      it("refund-excess sends billId: the event names the bill the refusal named, not the bill on screen", async () => {
+        const el = await panelWith(withPayments(excess("b2")));
+        await tick(el, "b2");
+        await pressSplit(el);
+        const heard: unknown[] = [];
+        tableOrder(el)!.addEventListener("refund-excess", (event) =>
+          heard.push((event as CustomEvent).detail),
+        );
+
+        refundButton(el).click();
+        await flush(el);
+        await answer(el, "discard");
+
+        expect(heard).toEqual([{ excess: "5.00", billId: "b2" }]);
+      });
+
+      it("opens nothing when the bill it names has left the party's bills", async () => {
+        const el = await panelWith(withPayments(excess("b2")));
+        await tick(el, "b2");
+        await pressSplit(el);
+        api.getPartyBills!.mockResolvedValue([paidBills()[0]!]);
+        refundButton(el).click();
+        await flush(el);
+        emit(tableOrder(el)!, "refund-excess", { excess: "5.00", billId: "gone" });
+        await flush(el, 6);
+
+        expect(refundDialog(el)).toBeNull();
+      });
+
+      it("an excess refusal from Move dishes, with no billId, behaves as today", async () => {
+        const el = await mounted("desktop", {
+          getPartyBills: vi.fn().mockResolvedValue(paidBills()),
+          getBillBalance: vi.fn(async (id: string) => paid(id, `pay-${id}`)),
+          moveDishes: vi
+            .fn()
+            .mockRejectedValue({ code: "bill.received_exceeds_total", excess: "5.00" }),
+        });
+        emit(tableOrder(el)!, "move-dishes", { lineIds: ["soup"], toBillId: null });
+        await flush(el, 6);
+
+        const button = banner(el)!.querySelector<HTMLElement>("[data-refund-excess]")!;
+        expect(banner(el)!.textContent).not.toContain("Bill");
+        button.click();
+        await flush(el, 6);
+
+        expect(tableOrder(el)!.orderId).toBe("wo-4");
+        expect(refundDialog(el)!.payment.id).toBe("pay-wo-4");
+      });
+
+      it("the banner's Refund for another bill, with Move dishes holding a pick, asks before it switches", async () => {
+        const { el, refuse } = await requestOut("b2", {
+          getPartyBills: vi
+            .fn()
+            .mockResolvedValue([
+              partyBill("wo-4", 1, "10.00"),
+              partyBill("b2", 2, "20.00", { hasPayments: true }),
+            ]),
+          getBillBalance: vi.fn(async (id: string) => paid(id, `pay-${id}`)),
+        });
+        await openMoveDishes(el);
+        await pickMoveDish(el);
+        refuse(excess("b2"));
+        await flush(el, 6);
+
+        banner(el)!.querySelector<HTMLElement>("[data-refund-excess]")!.click();
+        await flush(el);
+        expect(tableOrder(el)!.orderId).toBe("wo-4");
+        await answer(el, "keep");
+
+        expect(tableOrder(el)!.orderId).toBe("wo-4");
+        expect(movePicked(el)).toBe(true);
+        expect(refundDialog(el)).toBeNull();
+      });
+    });
+
+    describe("a refusal while other work is open", () => {
+      const noField = { code: "table.not_shared" };
+
+      it("Move dishes holding a pick stays, and the sentence goes on the banner once the read is done", async () => {
+        const { el, refuse } = await requestOut("b2");
+        await openMoveDishes(el);
+        await pickMoveDish(el);
+        const release = holdBills();
+        refuse({ code: "bill.line_paid", workingOrderId: "b2" });
+        await flush(el, 6);
+        expect(banner(el)).toBeNull();
+
+        release();
+        await flush(el, 6);
+
+        expect(q(el, "[data-move-dishes]")).not.toBeNull();
+        expect(movePicked(el)).toBe(true);
+        expect(panelOpen(el)).toBe(false);
+        expect(refusal(el)).toBeNull();
+        expect(tableOrder(el)!.splitRefusal).toBeNull();
+        expect(banner(el)!.textContent).toContain(onBill("Bill 2", "bill.line_paid"));
+      });
+
+      it("Move dishes' leave question stays open", async () => {
+        const { el, refuse } = await requestOut("b2");
+        await openMoveDishes(el);
+        await pickMoveDish(el);
+        await press(el, "[data-action-back]");
+        await expect.poll(() => unsavedQuestion(el).open).toBe(true);
+
+        refuse(noField);
+        await flush(el, 6);
+
+        expect(unsavedQuestion(el).open).toBe(true);
+        expect(q(el, "[data-move-dishes]")).not.toBeNull();
+        expect(banner(el)!.textContent).toContain(codeMessage("table.not_shared"));
+        expect(tableOrder(el)!.splitRefusal).toBeNull();
+      });
+
+      it("a second Split panel holding a tick stays, and keeps reading", async () => {
+        fakeTimers();
+        const threeTables = party({ tableIds: ["t4", "t5", "t7"], billCount: 2 });
+        const { el, refuse } = await requestOut("b2", {
+          getTablesState: vi
+            .fn()
+            .mockResolvedValue([
+              table("t4", "4", threeTables),
+              table("t5", "5", threeTables),
+              table("t7", "7", threeTables),
+            ]),
+        });
+        await press(el, "[data-move-split]");
+        await press(el, '[data-action="split-table"]');
+        await press(el, '[data-target="t7"]');
+        await tick(el, "wo-4");
+
+        refuse(noField);
+        await flush(el, 6);
+
+        expect(tickBox(el, "wo-4").checked).toBe(true);
+        expect(tickBox(el, "b2").checked).toBe(false);
+        expect(refusal(el)).toBeNull();
+        expect(banner(el)!.textContent).toContain(codeMessage("table.not_shared"));
+
+        const sources = api.getSplitSources!.mock.calls.length;
+        await rereadBills(el, bills(5));
+        expect(api.getSplitSources!.mock.calls.length).toBeGreaterThan(sources);
+      });
+
+      it("a refusal naming a count: seat.guest_count_invalid on the banner", async () => {
+        const { el, refuse } = await requestOut("b2");
+        await openMoveDishes(el);
+        await pickMoveDish(el);
+
+        refuse({ code: "management.request_invalid", field: "guestCounts.leaving" });
+        await flush(el, 6);
+
+        expect(banner(el)!.textContent).toContain(t("seat.guest_count_invalid"));
+        expect(q(el, "[data-move-dishes]")).not.toBeNull();
+      });
+
+      it("draft.taken_over: table.split_changed naming the bill on the banner", async () => {
+        const { el, refuse } = await requestOut("b2");
+        await openMoveDishes(el);
+        await pickMoveDish(el);
+        server.drafts.push(savedDraft("b2", "p2", "Luis"));
+
+        refuse({ code: "draft.taken_over", billId: "b2", ownerId: "p2", ownerName: "Luis" });
+        await flush(el, 6);
+
+        expect(banner(el)!.textContent).toContain(changedWords("Bill 2"));
+        expect(q(el, "[data-move-dishes]")).not.toBeNull();
+      });
+
+      it("a refusal carrying recoveryUrl: the banner's link, in the banner's colour", async () => {
+        const { el, refuse } = await requestOut("b2");
+        await openMoveDishes(el);
+        await pickMoveDish(el);
+
+        refuse({ code: "sif.allocation_invalid", recoveryUrl: "/manage/recovery/fiscal-conflict" });
+        await flush(el, 6);
+
+        expect(banner(el)!.querySelector("[data-recovery]")!.getAttribute("style")).toContain(
+          "--wt-color-on-danger",
+        );
+      });
+
+      it("an untouched open step: the panel reopens, with no banner", async () => {
+        const { el, refuse } = await requestOut("b2");
+        await openMoveDishes(el);
+
+        refuse(noField);
+        await flush(el, 6);
+
+        expect(q(el, "[data-move-dishes]")).toBeNull();
+        expect(tickBox(el, "b2").checked).toBe(true);
+        expect(said(el)).toBe(codeMessage("table.not_shared"));
+        expect(banner(el)).toBeNull();
+      });
+
+      it("a declined refusal that is no longer splitRefusal, because Split was pressed again, says nothing", async () => {
+        const el = await refusedOn("b2", noField);
+        const old = tableOrder(el)!.splitRefusal!;
+        api.splitTable!.mockResolvedValue({ partyId: "v1", billIds: ["b2"] });
+        await pressSplit(el);
+        expect(tableOrder(el)!.splitRefusal).toBeNull();
+
+        emit(tableOrder(el)!, "split-refusal-declined", { refusal: old });
+        await flush(el);
+
+        expect(banner(el)).toBeNull();
+      });
+
+      it("split-refusal-declined leaves nothing of the refusal to reopen later", async () => {
+        const { el, refuse } = await requestOut("b2");
+        await openMoveDishes(el);
+        await pickMoveDish(el);
+        refuse(noField);
+        await flush(el, 6);
+        expect(tableOrder(el)!.splitRefusal).toBeNull();
+
+        await press(el, "[data-action-back]");
+        await answer(el, "discard");
+        await flush(el, 6);
+
+        expect(panelOpen(el)).toBe(false);
+      });
+    });
+
+    describe("a failed re-read after a refusal", () => {
+      it("reopens with the last rows and Split enabled", async () => {
+        const el = await panelWith(refused({ code: "tab.split_held_line", tabId: "b2" }));
+        await tick(el, "b2");
+        api.getSplitSources!.mockRejectedValue(new TypeError("Failed to fetch"));
+        await pressSplit(el);
+
+        expect(picker(el)).not.toBeNull();
+        expect(tickBox(el, "b2").checked).toBe(true);
+        expect(splitButton(el).disabled).toBe(false);
+        expect(said(el)).toBe(t("table.split_held_error"));
+        expect(bottom(el).error).toBe("");
+      });
+    });
+
+    describe("a failed bills read never empties an open panel", () => {
+      const failing = () => api.getPartyBills!.mockRejectedValue(new TypeError("Failed to fetch"));
+
+      it("on a merge's read while the panel is open: rows, ticks and Split as they were, with no words", async () => {
+        const el = await panelWith({ mergeBills: vi.fn().mockResolvedValue({}) });
+        await tick(el, "b2");
+        failing();
+        emit(tableOrder(el)!, "merge-bills", { fromBillId: "b2" });
+        await flush(el, 6);
+
+        expect(tableOrder(el)!.bills.length).toBe(2);
+        expect(tickBox(el, "b2").checked).toBe(true);
+        expect(splitButton(el).disabled).toBe(false);
+        expect(refusal(el)).toBeNull();
+        expect(bottom(el).error).toBe("");
+      });
+
+      it("on a lost reply's re-read: the panel reopens with its rows", async () => {
+        const { el, refuse } = await requestOut("b2");
+        failing();
+        refuse(new TypeError("Failed to fetch"));
+        await flush(el, 8);
+
+        expect(tableOrder(el)!.bills.length).toBe(2);
+        expect(tickBox(el, "b2").checked).toBe(true);
+        expect(said(el)).toBe(t("table.error"));
+      });
+
+      it("still empties the list with no panel open or due", async () => {
+        server.bills.add("b2");
+        const el = await mounted("desktop", { mergeBills: vi.fn().mockResolvedValue({}) });
+        failing();
+        emit(tableOrder(el)!, "merge-bills", { fromBillId: "b2" });
+        await flush(el, 6);
+
+        expect(tableOrder(el)!.bills).toEqual([]);
+      });
+    });
+
+    describe("Cancelling the different-people question", () => {
+      const limited = () => ({
+        getTill: vi.fn().mockResolvedValue({ ...till("till"), simplifiedInvoiceLimit: "15.00" }),
+      });
+      const question = (el: TillApp) =>
+        el.shadowRoot!.querySelector<HTMLElement>("[data-confirm-different-people]");
+
+      it("reopens the panel with its ticks, picks and counts, no words, and sends nothing", async () => {
+        const el = await panelWith({
+          ...limited(),
+          getSplitSources: vi.fn().mockResolvedValue({
+            bills: [
+              { billId: "wo-4", lines: [dish("soup", 1)], balance: balance("wo-4", "10.00") },
+              {
+                billId: "b2",
+                lines: [dish("steak", 1), dish("wine", 2)],
+                balance: balance("b2", "20.00"),
+              },
+            ],
+          }),
+        });
+        await pickDish(el, "b2", "steak");
+        const leaving = q(el, 'wt-number-stepper[name="leavingGuests"]')!.shadowRoot!.querySelector(
+          "input",
+        )!;
+        leaving.value = "2";
+        leaving.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        await pressSplit(el);
+        expect(question(el)).not.toBeNull();
+        expect(panelOpen(el)).toBe(false);
+
+        question(el)!.querySelector<HTMLElement>("[data-cancel]")!.click();
+        await flush(el, 6);
+
+        expect(question(el)).toBeNull();
+        expect(panelOpen(el)).toBe(true);
+        expect(tableOrder(el)!.splitRefusal).toMatchObject({
+          selection: { wholeBillIds: [], loose: [{ billId: "b2", lineIds: ["steak"] }] },
+          leaving: "2",
+        });
+        expect(
+          String(
+            q<HTMLElementTagNameMap["wt-number-stepper"]>(
+              el,
+              'wt-number-stepper[name="leavingGuests"]',
+            )!.value,
+          ),
+        ).toBe("2");
+        expect(refusal(el)).toBeNull();
+        expect(bottom(el).error).toBe("");
+        expect(banner(el)).toBeNull();
+        expect(api.splitTable).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("a refusal arriving while the screen is out of the page", () => {
+      function takeOut(el: TillApp) {
+        const screen = tableOrder(el)!;
+        const parent = screen.parentNode!;
+        const next = screen.nextSibling;
+        screen.remove();
+        return () => parent.insertBefore(screen, next);
+      }
+
+      it("waits for put-back, then the panel reopens with its ticks", async () => {
+        const { el, refuse } = await requestOut("b2");
+        const screen = tableOrder(el)!;
+        const putBack = takeOut(el);
+        refuse({ code: "table.not_shared" });
+        await flush(el, 6);
+        expect(banner(el)).toBeNull();
+        expect(screen.shadowRoot!.querySelector("[data-split-pick]")).toBeNull();
+
+        putBack();
+        await flush(el, 6);
+
+        expect(tickBox(el, "b2").checked).toBe(true);
+        expect(said(el)).toBe(codeMessage("table.not_shared"));
+        expect(banner(el)).toBeNull();
+      });
+
+      it("waits for put-back, then is declined if a step holds work", async () => {
+        const { el, refuse } = await requestOut("b2");
+        await openMoveDishes(el);
+        await pickMoveDish(el);
+        const putBack = takeOut(el);
+        refuse({ code: "table.not_shared" });
+        await flush(el, 6);
+        expect(banner(el)).toBeNull();
+
+        putBack();
+        await flush(el, 6);
+
+        expect(movePicked(el)).toBe(true);
+        expect(banner(el)!.textContent).toContain(codeMessage("table.not_shared"));
+        expect(tableOrder(el)!.splitRefusal).toBeNull();
+      });
+    });
+
+    describe("the read after a refusal", () => {
+      it("a later bills read with a changed revision reads the sources again", async () => {
+        fakeTimers();
+        const el = await refusedOn("b2", { code: "table.not_shared" });
+        const sources = api.getSplitSources!.mock.calls.length;
+
+        await rereadBills(el, bills(5));
+
+        expect(api.getSplitSources!.mock.calls.length).toBeGreaterThan(sources);
+      });
+
+      it("a panel reopened on being put back into the page is watched too", async () => {
+        fakeTimers();
+        const { el, refuse } = await requestOut("b2");
+        const screen = tableOrder(el)!;
+        const parent = screen.parentNode!;
+        const next = screen.nextSibling;
+        screen.remove();
+        refuse({ code: "table.not_shared" });
+        await flush(el, 6);
+        el.requestUpdate();
+        await flush(el);
+        parent.insertBefore(screen, next);
+        await flush(el, 6);
+        expect(said(el)).toBe(codeMessage("table.not_shared"));
+        const sources = api.getSplitSources!.mock.calls.length;
+
+        await rereadBills(el, bills(5));
+
+        expect(api.getSplitSources!.mock.calls.length).toBeGreaterThan(sources);
+      });
+
+      it("a party with no sync gets its 15-second read back", async () => {
+        fakeTimers();
+        const noBill = party({ tableIds: ["t4", "t5"], billCount: 0, openingBillId: null });
+        const el = await mounted("desktop", {
+          getTablesState: vi
+            .fn()
+            .mockResolvedValue([table("t4", "4", noBill), table("t5", "5", noBill), table7]),
+          getPartyBills: vi.fn().mockResolvedValue([]),
+          getSplitSources: vi.fn().mockResolvedValue({ bills: [] }),
+          ...refused({ code: "table.not_shared" }),
+        });
+        await toPanel(el);
+        await pressSplit(el);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el, 6);
+        expect(said(el)).toBe(codeMessage("table.not_shared"));
+
+        const before = api.getPartyBills!.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el, 6);
+
+        expect(api.getPartyBills!.mock.calls.length).toBeGreaterThan(before);
+      });
+
+      it("leaving the reopened panel stops both", async () => {
+        fakeTimers();
+        const noBill = party({ tableIds: ["t4", "t5"], billCount: 0, openingBillId: null });
+        const el = await mounted("desktop", {
+          getTablesState: vi
+            .fn()
+            .mockResolvedValue([table("t4", "4", noBill), table("t5", "5", noBill), table7]),
+          getPartyBills: vi.fn().mockResolvedValue([]),
+          getSplitSources: vi.fn().mockResolvedValue({ bills: [] }),
+          ...refused({ code: "table.not_shared" }),
+        });
+        await toPanel(el);
+        await pressSplit(el);
+        await press(el, "[data-action-back]");
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el, 6);
+        const before = reads();
+
+        await vi.advanceTimersByTimeAsync(30_000);
+        await flush(el, 6);
+
+        expect(reads().bills).toBe(before.bills);
+        expect(reads().sources).toBe(before.sources);
+      });
     });
   });
 
