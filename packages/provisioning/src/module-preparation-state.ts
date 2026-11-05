@@ -1,10 +1,10 @@
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import "./errors.js";
 import { type FirstSetupCoordinator, type FirstSetupHold } from "./first-setup-state.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
-import type { OperationBinding } from "@waitron/module";
+import { isOperationBinding, type OperationBinding } from "@waitron/module";
 
 interface Revision {
   binding: OperationBinding;
@@ -25,21 +25,14 @@ type Options = GrantChecks & {
   authorize(binding: OperationBinding): Promise<void>;
   withVenueExclusion<T>(run: () => Promise<T>): Promise<T>;
 };
+const FILE_NAME = "module-preparation-state.json";
 const LIMIT = 1024 * 1024;
+const MERGE_ROOM_FLOOR = 8 * 1024;
 function invalid(): never {
   throw new AppError("setup.attempt_invalid", {});
 }
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-function validBinding(value: unknown): value is OperationBinding {
-  return (
-    record(value) &&
-    Object.keys(value).length === 5 &&
-    ["module", "action", "eventId", "sourceId", "targetNodeId"].every(
-      (key) => typeof value[key] === "string" && (value[key] as string).trim().length > 0,
-    )
-  );
 }
 function parse(value: unknown): File {
   if (value === null) return { version: 1, revisions: [] };
@@ -57,7 +50,7 @@ function wellFormedRevision(revision: unknown): revision is Revision {
   return (
     record(revision) &&
     Object.keys(revision).length === 2 &&
-    validBinding(revision.binding) &&
+    isOperationBinding(revision.binding) &&
     Object.hasOwn(revision, "value")
   );
 }
@@ -70,16 +63,97 @@ function snapshot(value: unknown): unknown {
     return invalid();
   }
 }
+async function readStateFile(stateDir: string): Promise<File> {
+  try {
+    return parse(await readDurableHostJson(join(stateDir, FILE_NAME), LIMIT));
+  } catch (error) {
+    if (!isAppError(error)) throw error;
+    throw new AppError("setup.attempt_invalid", {}, { reason: `${FILE_NAME} cannot be read` });
+  }
+}
 export async function readModulePreparationHistory(
   options: { stateDir: string; venueDir: string },
   module: string,
 ): Promise<readonly unknown[]> {
-  const file = parse(
-    await readDurableHostJson(join(options.stateDir, "module-preparation-state.json"), LIMIT),
-  );
+  const file = await readStateFile(options.stateDir);
   return file.revisions
     .filter((row) => row.binding.module === module)
     .map((row) => structuredClone(row.value));
+}
+/** Every module's revisions, in the order they were written; none when the file is absent. */
+export async function readModulePreparationRevisions(options: {
+  stateDir: string;
+}): Promise<readonly { binding: OperationBinding; value: unknown }[]> {
+  const file = await readStateFile(options.stateDir);
+  return file.revisions;
+}
+function bindingKey({ module, action, eventId, sourceId, targetNodeId }: OperationBinding): string {
+  return JSON.stringify([module, action, eventId, sourceId, targetNodeId]);
+}
+/**
+ * The revisions of `incoming` that `own` lacks, each once, in `incoming`'s order. Revisions come
+ * off the wire with their keys sorted, so an equal value under an equal binding is the same one.
+ */
+function missingRevisions(own: readonly Revision[], incoming: readonly Revision[]): Revision[] {
+  const seen = new Map<string, unknown[]>();
+  const values = (revision: Revision) => {
+    const key = bindingKey(revision.binding);
+    const held = seen.get(key) ?? [];
+    seen.set(key, held);
+    return held;
+  };
+  for (const revision of own) values(revision).push(revision.value);
+  const missing: Revision[] = [];
+  for (const revision of incoming) {
+    const held = values(revision);
+    if (held.some((value) => isDeepStrictEqual(value, revision.value))) continue;
+    held.push(revision.value);
+    missing.push(revision);
+  }
+  return missing;
+}
+/** What a merge writes: the revisions this box lacks, ahead of its own, so its own latest stays the latest. */
+function mergedFile(own: File, incoming: readonly Revision[]): File {
+  return {
+    version: 1,
+    revisions: [...missingRevisions(own.revisions, incoming), ...own.revisions],
+  };
+}
+function largestRevisionBytes(revisions: readonly Revision[]): number {
+  return revisions.reduce(
+    (largest, revision) => Math.max(largest, Buffer.byteLength(JSON.stringify(revision))),
+    0,
+  );
+}
+/**
+ * Whether this box's file could take `incoming` and keep room, estimated from the file itself, for
+ * three more writes: the dormant setup, the wait and the selection. It catches the likely shapes and
+ * promises nothing: any further write can still fill the file (the backlog's entry on this file's
+ * growth), and a file over its limit makes every later module operation refuse
+ * `setup.attempt_invalid`.
+ */
+export async function modulePreparationMergeFits(
+  options: { stateDir: string },
+  incoming: readonly { binding: OperationBinding; value: unknown }[],
+): Promise<boolean> {
+  const own = await readStateFile(options.stateDir);
+  // Computed because each revision repeats all earlier entries, so the need grows with the file.
+  const room =
+    3 * (largestRevisionBytes(incoming) + largestRevisionBytes(own.revisions)) + MERGE_ROOM_FLOOR;
+  return Buffer.byteLength(JSON.stringify(mergedFile(own, incoming))) <= LIMIT - room;
+}
+/**
+ * Writes nothing when this box lacks none of `incoming`. The caller must hold the venue lock: this
+ * reads the file and then replaces it.
+ */
+export async function mergeModulePreparationRevisions(
+  options: { stateDir: string },
+  incoming: readonly { binding: OperationBinding; value: unknown }[],
+): Promise<void> {
+  const own = await readStateFile(options.stateDir);
+  const merged = mergedFile(own, incoming);
+  if (merged.revisions.length === own.revisions.length) return;
+  await writeDurableHostJson(join(options.stateDir, FILE_NAME), merged, LIMIT);
 }
 export function createModulePreparationState(options: Options) {
   return {
@@ -92,13 +166,13 @@ export function createModulePreparationState(options: Options) {
       }) => Promise<T>,
       hold?: FirstSetupHold,
     ): Promise<T> {
-      if (!validBinding(bindingInput)) return invalid();
+      if (!isOperationBinding(bindingInput)) return invalid();
       const binding = { ...bindingInput };
       const body = () =>
         options.withVenueExclusion(async () => {
           await options.authorize({ ...binding });
-          const path = join(options.stateDir, "module-preparation-state.json");
-          const file = parse(await readDurableHostJson(path, LIMIT));
+          const path = join(options.stateDir, FILE_NAME);
+          const file = await readStateFile(options.stateDir);
           let value: unknown =
             [...file.revisions].reverse().find((row) => row.binding.module === binding.module)
               ?.value ?? null;

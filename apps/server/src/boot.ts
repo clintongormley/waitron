@@ -69,6 +69,7 @@ import {
 import { finishPromotedRole } from "./promoted-role.js";
 import {
   recordSupersededAtStart,
+  closeSupersededOperation,
   repairAtStart,
   runStartPeerCheck,
   type StartPeerCheckOutcome,
@@ -147,6 +148,7 @@ import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
 import { createVerbosityController } from "./verbosity.js";
 import { buildHeaderMiddleware } from "./build-header.js";
 import { requestIdMiddleware } from "./request-id.js";
+import { restartProcess } from "./run-server.js";
 import { createOriginAllowlist } from "./allowed-origins.js";
 import { corsForVenue } from "./cors.js";
 import { mountDiagnosticsApi } from "./diagnostics-api.js";
@@ -207,6 +209,19 @@ import { createHandoverGate } from "./handover-gate.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
+import { compareFinalCopy } from "./handover-compare.js";
+import { mountHandoverDestinationApi } from "./handover-destination-api.js";
+import { mountHandoverActivationApi, postChartToSource } from "./handover-activation.js";
+import { readTakenOverFrom } from "./handover-collection.js";
+import { mountHandoverPreparationApi } from "./handover-preparation.js";
+import { startHandoverDestinationDuty } from "./handover-destination-duty.js";
+import {
+  placeAcceptedCopyForStart,
+  recordCopyPlaced,
+  removePlacedCopies,
+} from "./handover-place-copy.js";
+import { mountHandoverSourceStartApi } from "./handover-source-start-api.js";
+import { mountHandoverStatusApi } from "./handover-status-api.js";
 import { mountNodeMembershipApi } from "./node-membership-api.js";
 import { readPeerNames } from "./waiting-page.js";
 import { startWaiting, WAIT_RECHECK_MS } from "./waiting-start.js";
@@ -422,6 +437,8 @@ export interface StartedServer {
   promoteMirrorToPrimary?: (
     attestation: FenceAttestation,
     withModuleOperations?: PromotionOperationRunner,
+    /** Awaited after the promotion and before the restart is scheduled; a failure still restarts. */
+    beforeRestart?: () => Promise<void>,
   ) => Promise<MirrorPromotionResult>;
   /**
    * Resolves once background work has stopped, the listeners are closed, every password reset the
@@ -534,22 +551,26 @@ export async function buildCardProvider(
   return undefined;
 }
 
-/** The payments this box's card sweep may resolve: its own, and the rows naming no box only while
- * it is the venue's singleton primary. Taking over from another box is not built yet.
+/** The payments this box's card sweep may resolve: its own, those of the boxes it took over from
+ * (`readTakenOverFrom`), and the rows naming no box only while it is the venue's singleton primary.
  *
  * Exported for a direct test (`boot-pending-sweep.test.ts`). */
-export function sweepOwners(nodeId: NodeId, role: SingletonRole): CollectionOwners {
-  return { nodeId, takenOverFrom: [], unowned: role === "primary" };
+export function sweepOwners(
+  nodeId: NodeId,
+  role: SingletonRole,
+  takenOverFrom: readonly NodeId[],
+): CollectionOwners {
+  return { nodeId, takenOverFrom, unowned: role === "primary" };
 }
 
 /** Run each card provider's `resolvePending` sweep on every tick, around (not instead of) the
- * singleton fiscal pass: a sell-only local secondary must sweep its own `attempting` card rows even
- * though it never drains or reconciles. Log-only, NOT a health-tracked `Duty`: every `ALL_DUTIES`
- * member is seeded on every node, so a duty that never runs on a no-card node would read stale and
- * fail `/health`. A stuck sweep surfaces only as `resolve_pending.failed`. The providers are
- * enumerated each pass, so one connected while the host runs is swept without a restart. `owners`
- * is read once per pass and limits every provider to the `attempting` rows this box owns, so a
- * promotion or demotion in this process is seen at the next pass.
+ * singleton fiscal pass: a local secondary its chart does not fence must sweep its own `attempting`
+ * card rows even though it never drains or reconciles. Log-only, NOT a health-tracked `Duty`: every
+ * `ALL_DUTIES` member is seeded on every node, so a duty that never runs on a no-card node would
+ * read stale and fail `/health`. A stuck sweep surfaces only as `resolve_pending.failed`. The
+ * providers are enumerated each pass, so one connected while the host runs is swept without a
+ * restart. `owners` is read once per pass and limits every provider to the `attempting` rows this
+ * box owns, so a change of singleton role in this process is seen at the next pass.
  *
  * Exported for a direct test (`boot-pending-sweep.test.ts`). */
 export function withPendingSweep(
@@ -941,11 +962,6 @@ function makeStartedServer(
   };
 }
 
-/** Docker restarts the box once it exits (`deploy/compose.yml`). */
-function restartProcess(): void {
-  process.kill(process.pid, "SIGTERM");
-}
-
 /** Test seams; production leaves them unset. */
 export interface StartServerSeams {
   stream?: Pick<StreamHostDeps, "walLimitBytes" | "spawn" | "store">;
@@ -1133,10 +1149,40 @@ async function bootServer(
   // `recovery-surface.test.ts` → "the caught error's own words on the page". That is `redactSecrets`
   // alone: the personal-data mask runs in `createLogger`, before the split, so it applies to both.
   const log = createLogger(tee(stdoutSink, fileSink), now, () => verbosity.current());
+  // Here and not in entry so that `startServer`-based starts and the dev entry place too. It follows
+  // entry's ahead check, whose close drains the old file's -wal before placing removes it (pinned in
+  // `boot.place-copy.test.ts`). A box with no identity has no node id to read an operation by, and
+  // nothing is placed.
+  const placement =
+    config.node === undefined
+      ? null
+      : await placeAcceptedCopyForStart({
+          venueDir: config.venueDir,
+          stateDir: config.stateDir,
+          nodeId: config.node.nodeId,
+          log,
+        });
   // Before ANY write, including migrations: a host pointed at another environment's database must
   // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself.
   const stampProbe = await openVenueDatabase(config.venueDir);
   try {
+    // The first moment this start holds a node handle.
+    if (placement?.kind === "copy_placed_owed") {
+      await recordCopyPlaced({
+        node: stampProbe.node,
+        nodeId: config.node!.nodeId,
+        stateDir: config.stateDir,
+        operationId: placement.operationId,
+        log,
+      });
+    } else if (config.node !== undefined) {
+      await removePlacedCopies({
+        node: stampProbe.node,
+        nodeId: config.node.nodeId,
+        stateDir: config.stateDir,
+        log,
+      });
+    }
     // Only once this process holds the venue folder: a second process must not delete the running
     // one's staged copy.
     await clearStagedRecoveries(join(config.stateDir, RESTORE_STAGING_DIR));
@@ -1243,6 +1289,7 @@ async function bootServer(
   let stepDownHere: (request: StepDownRequest) => Promise<StepDownResult> = () =>
     Promise.reject(new Error("stepdown called on a start that has not provided one"));
   seams.stepdown?.mount(app, (request) => stepDownHere(request));
+  const restart = seams.stepdown?.restart ?? restartProcess;
   // Registered before every surface below, so each wraps all of them; `/health`, registered above, is
   // deliberately left out of the request log and names no build.
   app.use("*", requestIdMiddleware(log, now));
@@ -1710,6 +1757,12 @@ async function bootServer(
         (restrictedApp) =>
           mountNodeMembershipApi(restrictedApp, { db, node: store.node, nodeId: node.nodeId }, log),
         (restrictedApp) =>
+          mountHandoverStatusApi(
+            restrictedApp,
+            { db, node: store.node, ring, nodeId: node.nodeId },
+            log,
+          ),
+        (restrictedApp) =>
           mountHandoverSourceApi(
             restrictedApp,
             {
@@ -1750,14 +1803,16 @@ async function bootServer(
       },
     });
   };
-  if ((await readHandoverRestriction(store.node, config.node.nodeId)) !== null)
+  if ((await readHandoverRestriction(store.node, config.node.nodeId)) !== null) {
+    await closeSupersededOperation({ node: store.node, nodeId: config.node.nodeId }, log);
     return restrictedStart();
+  }
   // Both deployment axes from ONE read of the row, so the initial holder pair is never torn: two
   // separate reads could straddle a concurrent promotion and yield an impossible `(mirror, primary)`.
   const initialAxes = await readNodeMode(store.node, config.node.nodeId);
   // A mirror files nothing, so it has nothing to ask its peers before it starts.
   if (initialAxes.mode !== "mirror") {
-    await repairAtStart({ node: store.node, nodeId: config.node.nodeId });
+    await repairAtStart({ db, node: store.node, nodeId: config.node.nodeId });
     const checkPeers = () =>
       seams.peerCheck === undefined
         ? runStartPeerCheck({
@@ -1832,7 +1887,7 @@ async function bootServer(
           };
         },
         closeStore: () => store.close(),
-        restart: seams.stepdown?.restart ?? restartProcess,
+        restart,
         log,
       });
       announceWaiting(waitingStart.server);
@@ -2278,7 +2333,45 @@ async function bootServer(
     },
     log,
   );
-  mountPeerStatusApi(app, { db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
+  const peerDeps = { db, node: store.node, ring, nodeId: tradingContext.nodeId };
+  mountPeerStatusApi(app, peerDeps, log);
+  mountHandoverStatusApi(app, peerDeps, log);
+  const handoverDestinationDuty = await startHandoverDestinationDuty({
+    ...peerDeps,
+    stateDir: config.stateDir,
+    venueDir: config.venueDir,
+    log,
+    restart,
+    statfs: seams.freeSpaceWatch?.statfs,
+    compare: (operation, indicator, copyPath, options) =>
+      compareFinalCopy(
+        {
+          ...peerDeps,
+          stateDir: config.stateDir,
+          modules: setsToMigrate,
+          migrationsRoot: config.migrationsRoot,
+        },
+        operation,
+        indicator,
+        copyPath,
+        options,
+      ),
+  });
+  if (handoverDestinationDuty !== undefined) {
+    undoOnFailure.push(() => handoverDestinationDuty.stop());
+  }
+  const chartPost = postChartToSource({ db, node: store.node, nodeId: tradingContext.nodeId, log });
+  undoOnFailure.push(() => chartPost.stop());
+  mountHandoverDestinationApi(
+    app,
+    {
+      ...peerDeps,
+      stateDir: config.stateDir,
+      migrationsRoot: config.migrationsRoot,
+    },
+    log,
+    () => handoverDestinationDuty?.wake(),
+  );
   mountNodeMembershipApi(
     app,
     {
@@ -3306,6 +3399,7 @@ async function bootServer(
   const promoteMirrorRun = async (
     attestation: FenceAttestation,
     withModuleOperations?: PromotionOperationRunner,
+    beforeRestart?: () => Promise<void>,
   ): Promise<MirrorPromotionResult> => {
     await deleteNoteForPromotion();
     const result = await promoteMirrorToPrimary(
@@ -3334,9 +3428,10 @@ async function bootServer(
         await deleteBackupRoomNote(config.stateDir).catch((error: unknown) =>
           log("error", "backup.room_note_delete_failed", { errno: errnoOf(error) ?? null }),
         );
+        await beforeRestart?.();
       } finally {
         // On the NEXT tick, so the in-process caller's result is returned first.
-        setTimeout(restartProcess, 0);
+        setTimeout(restart, 0);
       }
     }
     return result;
@@ -3347,9 +3442,10 @@ async function bootServer(
   const promoteRun = async (
     attestation: FenceAttestation,
     withModuleOperations?: PromotionOperationRunner,
+    beforeRestart?: () => Promise<void>,
   ): Promise<PromoteRunResult> => {
     if (isMirror) {
-      const result = await promoteMirrorRun(attestation, withModuleOperations);
+      const result = await promoteMirrorRun(attestation, withModuleOperations, beforeRestart);
       return { alreadyPrimary: result.alreadyPrimary, restarting: !result.alreadyPrimary };
     }
     const held = await readNodeMembership(db);
@@ -3368,6 +3464,46 @@ async function bootServer(
       run: promoteRun,
       requestFromBox: seams.requestFromBox,
       nodePreparation,
+    },
+    log,
+  );
+  mountHandoverPreparationApi(
+    app,
+    {
+      node: store.node,
+      nodeId: tradingContext.nodeId,
+      appDb: db,
+      nodePreparation,
+      requestFromBox: seams.requestFromBox,
+    },
+    log,
+  );
+  mountHandoverActivationApi(
+    app,
+    {
+      node: store.node,
+      nodeId: tradingContext.nodeId,
+      appDb: db,
+      nodePreparation,
+      run: promoteRun,
+    },
+    log,
+  );
+  mountHandoverSourceStartApi(
+    app,
+    {
+      ...peerDeps,
+      stateDir: config.stateDir,
+      migrationsRoot: config.migrationsRoot,
+      advertisedOrigin: config.advertisedOrigin,
+      credentialKeyRing: totpKeyRing,
+      rpId: config.managementRpId,
+      origin: config.managementOrigin,
+      venueCanPromote: nodePreparation.hasRecoveryOperation,
+      gate: handoverGate,
+      stepDownAfterOffer: async (c, binding) => {
+        await stepDownHere({ binding, kind: "handed-over", self: c });
+      },
     },
     log,
   );
@@ -3518,18 +3654,25 @@ async function bootServer(
     await loop;
   });
 
+  // Read once: rows naming this box as destination appear only in a promotion, which restarts it.
+  const takenOverFrom = await readTakenOverFrom(db, tradingContext.nodeId);
   const pendingCardController = new AbortController();
   const pendingCardLoop = runPendingCardLoop({
     admission: tradingAdmission,
     pass: pendingCardPass(
       {
-        sweepProviders: connectedCardProviderSweep({
-          db,
-          pool: cardPool,
-          contributions: CARD_PROVIDERS,
-          simulator: cardProvider,
-        }),
-        owners: () => sweepOwners(tradingContext.nodeId, holders.singletonRole.current),
+        // A fenced box or a mirror does not sweep: the box holding the venue's database asks, and
+        // one box asks, because a sweep can cancel a payment at the provider.
+        sweepProviders: fencedOrMirror
+          ? () => Promise.resolve([])
+          : connectedCardProviderSweep({
+              db,
+              pool: cardPool,
+              contributions: CARD_PROVIDERS,
+              simulator: cardProvider,
+            }),
+        owners: () =>
+          sweepOwners(tradingContext.nodeId, holders.singletonRole.current, takenOverFrom),
         recover: () =>
           recoverAutomaticCardPayments({
             db,
@@ -3693,6 +3836,8 @@ async function bootServer(
     backupSupervisor,
     demoPrinterLoop,
     clockWatch,
+    handoverDestinationDuty,
+    chartPost,
     streamHost,
   });
   const started = makeStartedServer(
@@ -3721,7 +3866,7 @@ async function bootServer(
     gate: handoverGate,
     duties,
     close: () => started.close(),
-    restart: seams.stepdown?.restart ?? restartProcess,
+    restart,
     log,
   };
   stepDownHere = (request) => stepDown(stepDownDeps, request);

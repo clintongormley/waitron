@@ -10,7 +10,7 @@ import {
   signEnvelope,
   type HandoverBinding,
 } from "@waitron/handover";
-import { generateNodeKeyPair } from "@waitron/membership";
+import { canonicalize, generateNodeKeyPair, type CanonicalValue } from "@waitron/membership";
 import {
   HANDOVER_CLOSED_STATES,
   NODE_MIGRATIONS,
@@ -18,7 +18,12 @@ import {
   readHandoverOperation,
 } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
-import { advanceHandover, beginHandover, waitHandover } from "./handover-store.js";
+import {
+  advanceHandover,
+  beginHandover,
+  beginHandoverFromOffer,
+  waitHandover,
+} from "./handover-store.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const SOURCE = "11111111-1111-4111-8111-111111111111";
@@ -113,6 +118,43 @@ describe("the server's handover store", () => {
     }
     expect((await readHandoverOperation(suite.node, NODE, OP))?.state).toBe("prepared");
     expect(events()).toEqual([]);
+  });
+
+  describe("beginning from an offer", () => {
+    const offer = signEnvelope(
+      "stepdown",
+      { binding: "named by this test" },
+      { nodeId: SOURCE, privateKey: generateNodeKeyPair().privateKey },
+    );
+
+    it("records the operation and an `offer` event holding the envelope", async () => {
+      expect(await beginHandoverFromOffer(deps(), BINDING, "destination", offer)).toBe("created");
+      expect((await readHandoverOperation(suite.node, NODE, OP))?.state).toBe("prepared");
+      expect(events()).toEqual([
+        { kind: "offer", detail: "{}", envelope: canonicalize(offer as unknown as CanonicalValue) },
+      ]);
+    });
+
+    it("records no second event on a repeat", async () => {
+      await beginHandoverFromOffer(deps(), BINDING, "destination", offer);
+      expect(await beginHandoverFromOffer(deps(), BINDING, "destination", offer)).toBe("replayed");
+      expect(events()).toHaveLength(1);
+    });
+
+    it("the operation and its event commit together or not at all", async () => {
+      suite.node.run(
+        sql`create trigger zz_refuse before insert on node_handover_events
+            begin select raise(abort, 'zz refused'); end`,
+      );
+      try {
+        await expect(beginHandoverFromOffer(deps(), BINDING, "destination", offer)).rejects.toThrow(
+          "zz refused",
+        );
+      } finally {
+        suite.node.run(sql`drop trigger zz_refuse`);
+      }
+      expect(await readHandoverOperation(suite.node, NODE, OP)).toBeNull();
+    });
   });
 
   it("records a waiting reason beside the state, and the next step clears it", async () => {

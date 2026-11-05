@@ -318,6 +318,8 @@ called weaker than its name, the topic file lists what it does not see.
   pending, wrong-secret and till-profile-inadmissible accounts answer `password.invalid` or `pin.invalid`
   after the same hashing work, as one sentence with no field marked. Only missing/malformed
   input marks a field; the real cause is a log-only `reason`. Owner-approved exception: `passkey.not_registered`.
+  An email sign-in through a queue keyed by person id takes its id from `personIdForLoginEmail`,
+  stable per address, or attempts sent at once finish sooner for an unknown address.
   Guards: identity login and route suites, weaker than the set looks: no new sign-in route is covered.
   [Detail](docs/developers/conventions-ui.md#a-logins-refusal-never-says-whether-the-account-exists).
 - **A device's profile and the signed-in person must both allow a till action; profile zones bound
@@ -511,6 +513,11 @@ called weaker than its name, the topic file lists what it does not see.
   Guard: `scripts/backup-staging-touchers.test.ts`, weaker than its name — it reads text and never
   checks that a file takes the turn; the turn is in-process only. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#backup-staging-is-touched-only-inside-the-staging-turn).
+- **An open `FileHandle` ends the process when it is collected, so one a route streams also closes
+  on `c.req.raw.signal`'s abort: nothing reads or cancels the body of a connection already gone.**
+  A test that reads only an `app.request()` status leaks the same way. Guard: "every file the copy
+  route opens is closed" in `apps/server/src/handover-source-api.test.ts`, weaker than the rule: this
+  route only. [Receipt](docs/developers/conventions-data.md#an-open-filehandle-ends-the-process-when-it-is-collected).
 - **A duty `bootServer` starts registers its stop on `undoOnFailure` before the next throwing step.**
   The landing listener, started last, is the exception. Guard: `apps/server/src/boot.failed-start.test.ts`,
   weaker than its name: covers only named duties.
@@ -598,7 +605,7 @@ called weaker than its name, the topic file lists what it does not see.
   entries. Start a drizzle bump with `grep -rn 'dialect.js'`.
 - **`applyMigrations` refuses to report success on a short set**, throwing `migrations.incomplete`
   rather than serving a half-migrated schema.
-- **Only boot and bucket rebuild check for an ahead-of-image database; `waitron.sh install <ref>`
+- **Only boot, a resumed restore and bucket rebuild call `assertNotAhead` (a handover's compare refuses such a copy itself); `waitron.sh install <ref>`
   is a one-way door.** `assertNotAhead` throws `provisioning.database_ahead`; other migrating paths
   do not carry that check. Their list: [conventions-data.md](docs/developers/conventions-data.md).
 - **An empty value is a valid value** — to whatever receives it, so a reader must turn `""` into

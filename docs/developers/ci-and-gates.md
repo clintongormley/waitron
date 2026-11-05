@@ -2131,7 +2131,7 @@ the `mutation-shared` row below records the earlier unsharded job.
 | mutation.yml       | mutation-db (matrix shards)       | 8.8 (since the SQLite switch); 12.2 (run 38241392066) | 25    |
 | mutation.yml       | mutation-db-aggregate             | 0.3                            | 5     |
 | mutation.yml       | mutation-node-db                  | not yet measured in CI; the Stryker run took 8 seconds locally | 10    |
-| mutation.yml       | mutation-handover                 | not yet measured in CI; the Stryker run took 3 seconds locally | 10    |
+| mutation.yml       | mutation-handover                 | 3.4 (run 42075592113)          | 10    |
 | stripe-sandbox.yml | stripe-sandbox                    | 0.7                            | 5     |
 | codeql.yml         | analyze (matrix of four languages) | 24.0 (javascript-typescript)  | 50    |
 
@@ -3139,12 +3139,16 @@ versitygw, `apps/server/src/s3-rehearsal-scenarios.e2e.test.ts` (2026-10-14), an
 rehearsal's send gate and interrupt suites, `apps/server/src/aws-send-gate.e2e.test.ts` and
 `apps/server/src/aws-rehearsal-interrupt.e2e.test.ts`. So do the full-disk start tests,
 `apps/server/src/start-full-disk.e2e.test.ts`, `apps/server/src/start-again-full-disk.e2e.test.ts`
-and `apps/server/src/start-from-spare.e2e.test.ts`, and the backup-room file,
-`apps/server/src/backup-room.e2e.test.ts`,
+and `apps/server/src/start-from-spare.e2e.test.ts`, the backup-room file,
+`apps/server/src/backup-room.e2e.test.ts`, and the handover files,
+`apps/server/src/handover-refetch-full-disk.e2e.test.ts` and
+`apps/server/src/handover-placement-full-disk.e2e.test.ts`,
 which need a small filesystem the job mounts rather than a binary: one tmpfs each, 48 MiB for
-`start-from-spare.e2e.test.ts` and 32 MiB for the others, named in
-`WAITRON_FULL_DISK_DIR`, `WAITRON_FULL_DISK_DIR_START_AGAIN`, `WAITRON_FULL_DISK_DIR_FROM_SPARE`
-and `WAITRON_FULL_DISK_DIR_BACKUP_ROOM`
+`start-from-spare.e2e.test.ts`, 64 MiB for `handover-placement-full-disk.e2e.test.ts` and 32 MiB for
+the others, named in
+`WAITRON_FULL_DISK_DIR`, `WAITRON_FULL_DISK_DIR_START_AGAIN`, `WAITRON_FULL_DISK_DIR_FROM_SPARE`,
+`WAITRON_FULL_DISK_DIR_BACKUP_ROOM`, `WAITRON_FULL_DISK_DIR_HANDOVER` and
+`WAITRON_FULL_DISK_DIR_PLACEMENT`
 ([testing-guide.md](testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem)).
 `test-server-stream` runs
 the same `test:shard` script over those files alone and uploads its blob as `server-blob-stream`,

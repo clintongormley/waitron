@@ -1,12 +1,15 @@
 // `credential` is the primary's by-id login object (`AdoptCredential`), not the dashboard's
 // by-email body: the primary's mirror-bundle route authenticates it with `loginManagerById`.
 import { X509Certificate } from "node:crypto";
-import { request as httpRequest } from "node:http";
+import { open, rename, rm } from "node:fs/promises";
+import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request, type RequestOptions } from "node:https";
+import { dirname } from "node:path";
 import { AppError } from "@waitron/shared";
 import type { AdoptCredential } from "./adopt.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
+import { reachDisk } from "./sync-path.js";
 import "./errors.js";
 // The registry of the code this file relays from the primary.
 import "@waitron/identity";
@@ -125,6 +128,11 @@ export function boxExchange(
   maxBytes?: number,
 ): Promise<{ status: number; text: string }> {
   return new Promise((resolve, reject) => {
+    // An abort event never fires on a signal already aborted, so nothing below would end the request.
+    if (options.signal.aborted) {
+      reject(new Error("no answer in time"));
+      return;
+    }
     const req = (url.protocol === "http:" ? httpRequest : request)(
       url,
       {
@@ -163,6 +171,98 @@ export function boxExchange(
     req.on("error", reject);
     req.end(options.body);
   });
+}
+
+// A refusal is one short JSON error; anything far larger is not one.
+const MAX_REFUSAL_BYTES = 64 * 1024;
+
+// Long, because the sender digests the whole file before it sends the first byte, and silent only:
+// a copy of any size may take as long as it needs while its bytes keep coming.
+const DOWNLOAD_SILENCE_LIMIT_MS = 5 * 60_000;
+
+async function refusalText(res: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of res as AsyncIterable<Buffer>) {
+    size += chunk.length;
+    if (size > MAX_REFUSAL_BYTES) throw new Error("answer too large");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/**
+ * One POST to a box whose 200 answer is a file: written to `<destinationPath>.partial` as it
+ * arrives, and moved to `destinationPath` only once all of it came. Any other status touches no
+ * file and comes back with its text; a text over 64 KiB or cut short throws. The destination's folder
+ * must exist. A connection that carries no byte for `silenceLimitMs` is a failure.
+ *
+ * The file is flushed to disk before the move and the folder after it. A failed folder flush is
+ * thrown with the file already at its final name.
+ *
+ * A declared length is required because Node reports a body with no length and no chunking as
+ * ended whenever the connection closes; with a length it fails a shorter body, so a read that
+ * finishes has the whole file (the "connection lost" and "no length" cases in
+ * `mirror-bundle-fetch.test.ts`).
+ */
+export async function boxDownload(
+  url: URL,
+  options: {
+    trust: Pick<RequestOptions, "ca" | "rejectUnauthorized">;
+    signal: AbortSignal;
+    body: string;
+    silenceLimitMs?: number;
+  },
+  destinationPath: string,
+): Promise<{ status: number; text: string }> {
+  const res = await new Promise<IncomingMessage>((resolve, reject) => {
+    const req = (url.protocol === "http:" ? httpRequest : request)(
+      url,
+      {
+        method: "POST",
+        agent: false,
+        signal: options.signal,
+        timeout: options.silenceLimitMs ?? DOWNLOAD_SILENCE_LIMIT_MS,
+        ...options.trust,
+        headers: {
+          "content-type": "application/json",
+          "content-length": Buffer.byteLength(options.body),
+        },
+      },
+      resolve,
+    );
+    req.on("timeout", () => req.destroy(new Error("no bytes in time")));
+    req.on("error", reject);
+    req.end(options.body);
+  });
+  const status = Number(res.statusCode);
+  if (status !== 200) return { status, text: await refusalText(res) };
+  if (res.headers["content-length"] === undefined) {
+    res.destroy();
+    throw new Error("answer names no length");
+  }
+  const partialPath = `${destinationPath}.partial`;
+  try {
+    // A leftover's permissions would survive: `open` applies the mode only when it creates the file.
+    await rm(partialPath, { force: true });
+    // 0600 because this is the whole venue database.
+    const partial = await open(partialPath, "w", 0o600);
+    try {
+      await partial.writeFile(res);
+      await partial.sync();
+    } finally {
+      await partial.close();
+    }
+    await rename(partialPath, destinationPath);
+  } catch (error) {
+    // Until the signal fires, nothing else closes an answer whose file could not be started.
+    res.destroy();
+    // The write's own failure is the one to report, not a failed tidy-up after it.
+    await rm(partialPath, { force: true }).catch(() => {});
+    throw error;
+  }
+  await reachDisk(dirname(destinationPath));
+  return { status, text: "" };
 }
 
 /**

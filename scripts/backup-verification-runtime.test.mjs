@@ -224,6 +224,7 @@ console.log(JSON.stringify({ first, same: JSON.stringify(first) === JSON.stringi
         "credentials",
         "fiscal-none",
         "fiscal-verifactu",
+        "handover",
         "identity",
         "media",
         "node",

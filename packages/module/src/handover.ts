@@ -42,7 +42,17 @@ export async function checkHandoverCopy(
   for (const m of byName(modules)) {
     const handover = m.handover;
     if (handover?.checkCopy === undefined) continue;
-    if ((await handover.checkCopy(query)) === "broken") return { ok: false, module: m.name };
+    let answer: "ok" | "broken";
+    try {
+      answer = await handover.checkCopy(query);
+    } catch (e) {
+      throw new AppError(
+        "handover.copy_check_failed",
+        { module: m.name },
+        { reason: e instanceof Error ? e.message : String(e) },
+      );
+    }
+    if (answer === "broken") return { ok: false, module: m.name };
   }
   return { ok: true };
 }

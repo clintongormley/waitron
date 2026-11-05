@@ -925,7 +925,7 @@ Real code does write them, legitimately: the setup-mode provision route reaches 
 `nodes` and `deployment`; joining as a spare (`apps/server/src/adopt.ts`) reaches `deployment`,
 `node_mode`, `node_mirror_link`, `node_primary_key`, `node_recovery_key` and `node_signing_key`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
 `node_mode`; first setup and replacing the recovery key reach `node_recovery_key`; first setup and
-`waitron-credentials rotate` reach `node_signing_key`; a handover (`apps/server/src/handover-store.ts`) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
+`waitron-credentials rotate` reach `node_signing_key`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
 (`PUT /management-api/venue-details/legal-name`, owner A494) reaches `tenants` through
 `packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone, and the
 dashboard's privacy contact (`PUT /management-api/venue-privacy`, A980 S1a) reaches it through
@@ -3261,7 +3261,7 @@ lock, not that every writer of the file takes it.
 
 | Caller | Runs | Decision |
 | --- | --- | --- |
-| `apps/server/src/boot.ts` | the server | locks four times in turn: the stamp probe, the pre-migration trigger read (`missingBeforeMigration`, `apps/server/src/append-only-watch.ts`), the migrate, and the long-lived store, which holds it until the server closes or its start fails. Between them the folder is briefly free, unless the container entry (`node-entry.ts`) started the server: its hold covers those gaps |
+| `apps/server/src/boot.ts` | the server | locks up to five times in turn: placing a handover's accepted copy (`placeAcceptedCopyForStart`, `apps/server/src/handover-place-copy.ts`, with a node identity and an existing `node.db`), the stamp probe, the pre-migration trigger read (`missingBeforeMigration`, `apps/server/src/append-only-watch.ts`), the migrate, and the long-lived store, which holds it until the server closes or its start fails. Between them the folder is briefly free, unless the container entry (`node-entry.ts`) started the server: its hold covers those gaps |
 | `apps/server/src/backup-supervisor.ts` (`reload`) | inside the server | shares the server's hold |
 | `apps/server/src/node-entry.ts` (`clearReplacedDatabases`, `assertNotAhead`) and the staged restore and staged reset it runs | the container entrypoint, the same process as the server | the staged restore, then the staged reset, each locks on its own and releases before `runEntry` takes `lockVenueDatabase` and holds it from clearing set-aside folders (`clearReplacedDatabases`) through the ahead check until `startServer` settles or an earlier step throws (on a box that waits for its peers, `startServer` returns as soon as the waiting start is listening, before the wait ends; see the backlog's _The waiting start's loose ends_). The ahead check's opens and the server's opens during its start share that hold |
 | `apps/server/src/restore.ts` (`writeValidated`) | `waitron-restore` (server stopped) and the staged restore | takes the lock before its first change and holds it to the end; its migrate and hook open share it. Refused while another process holds the folder |
@@ -4609,14 +4609,19 @@ this error. `waitron.sh`'s advice on that failure depends on the box: on one tha
 production, it names `waitron.sh --reset install [ref]`, which wipes the database as
 `waitron.sh reset` does and installs again in one run, the clean way back to a working box; on a
 production box the script refuses to suggest that (a reset there would destroy the fiscal chain) and
-says to install a newer ref instead (#314). It has two callers (`grep -rn assertNotAhead` before
-believing otherwise): boot, in `apps/server/src/node-entry.ts`, and the bucket rebuild's
+says to install a newer ref instead (#314). It has three callers (`grep -rn assertNotAhead` before
+believing otherwise): boot, in `apps/server/src/node-entry.ts`, a resumed restore, in
+`apps/server/src/restore.ts`, and the bucket rebuild's
 preparation, `prepareStreamRestore` in `apps/server/src/restore-stream.ts`, which checks the
 downloaded copy before anything is placed (2026-09-25, slice 2 Task 9b). Boot's call runs after
 `runStagedRestore` — the restore that replaces the venue files — and `runStagedReset`, which removes
 them, and BEFORE `startServer`, so it reads a database nothing has migrated yet, because boot owns
 the migration now (`apps/server/src/boot.ts`). The ordering, and the one-direction comparison that
 lets a virgin venue directory pass it, are stated at `runEntry` in `apps/server/src/node-entry.ts`.
+Placing a handover's accepted copy replaces `venue.db` later, in `bootServer`, so on that start
+`assertNotAhead` has already run on the old file; the handover's compare refuses a copy ahead of this
+image with the same code
+(`aheadOfThisImage`, `apps/server/src/handover-compare.ts`).
 
 The GAP, stated so nobody assumes coverage: BOOT and the bucket rebuild are the only migrating paths
 carrying the check, and every other path that migrates runs without one. Re-grepped 2026-09-25
@@ -4756,8 +4761,9 @@ Task 10, #652, recorded the same result on 2026-09-23.)
 So a comparison of two venue databases leaves the two tables out, as the stream loop's
 `tableContents` does (`apps/server/src/testing/stream-loop-scenario.ts`), and a check that lists a live or
 restored database's tables has to leave them out explicitly. The directory goes with the database it
-describes: `wipeVenueDatabases` (`apps/server/src/db-wipe.ts`) and `restoreDatabase`
-(`apps/server/src/restore.ts`) remove it with `venue.db`, and the stream supervisor removes it before
+describes: `wipeVenueDatabases` (`apps/server/src/db-wipe.ts`), `restoreDatabase`
+(`apps/server/src/restore.ts`) and placing a handover's accepted copy (`swapIn`,
+`apps/server/src/handover-place-copy.ts`) remove it with `venue.db`, and the stream supervisor removes it before
 it starts Litestream on a new generation (`packages/stream/src/supervisor.ts`). What Litestream itself
 does with a stale directory beside a replaced `venue.db` was not measured. Nothing finds a new piece
 of code that lists tables or empties the folder and forgets either.
@@ -5097,6 +5103,7 @@ from the reset:
 - promotion (`promoteMirrorRun`, `apps/server/src/boot.ts`): before promoting, where a failed
   deletion refuses the promotion, and again after stopping the backup supervisor and before the
   restart, where a failed deletion is logged and the restart goes ahead;
+- placing a handover's accepted copy (`placeAcceptedCopyAtStart`, `apps/server/src/handover-place-copy.ts`);
 - `waitron.sh reset`, which empties the state folder apart from `tls/` and the Start-again files in
   one removal, taking the note and `venue/` in no set order.
 
@@ -5816,3 +5823,29 @@ src/first-setup-resolution-inspection.test.ts` for damaged/missing/symlink refus
 fingerprints and snapshot limits. A large valid database is classified from its SQLite rows even
 when its exact recovery snapshot is over budget. Remaining whole-file recovery reads are tracked
 in [the setup backlog](../backlog/setup.md#recovery-operations-still-buffer-whole-database-files).
+
+## An open FileHandle ends the process when it is collected
+
+On Node v26.13.0, a real listener answering with `Readable.toWeb(handle.createReadStream())`, with
+the client gone before the answer was written and `--expose-gc` forcing a collection, exited 1 with
+`A FileHandle object was closed during garbage collection` and `code: 'ERR_INVALID_STATE'`. With a
+close on the request's abort it printed `survived` and exited 0; so did a download read to its end.
+The file was 2 MB. A 2 KB file exited 0 unfixed too: with nobody reading, `Readable.toWeb` still read
+a 60,000-byte file to its end and closed it, and left a 70,000-byte one open, so a test with a tiny
+file cannot show this.
+
+The cause is `writeFromReadableStream` in `@hono/node-server` 2.1.5: `else if (writable.destroyed)
+return;`. Run with `handover-compare.test.ts`'s two "while the spare waits on a setting" cases, whose
+last wait ends the moment M1 sees a second download, so the teardown drops a request M1 is still
+answering. At the suite's own 50 ms polling, one of seven runs left a handle open. At a 1 ms polling,
+in a scratch copy, all 7 runs before the fix left one open or, under forced collection, raised the
+error, and none of 8 after did.
+
+`c.req.raw.signal` reports a connection lost before it is first read, not only after: a route that
+first read it after the client left saw `aborted: true`, on 2.1.5 (the listener keeps the reason and
+applies it to a controller made later). A finished answer left it `aborted: false`.
+
+A close that fails has its own trap. Closing the descriptor under a handle makes `handle.close()`
+reject `EBADF`, and a stream made with `autoClose: false` stays tied to the handle after its read, so
+it receives that as an `error` event, and with no listener that exited 1 even though the rejection
+was caught. `openIfMatching` keeps a listener on its digest stream for this.

@@ -1,0 +1,27 @@
+import { standingOf, type SignedMembershipDocument } from "@waitron/membership";
+import { isReadableChart } from "./membership-trust.js";
+
+/**
+ * Whether a held chart still has this operation's source as the main box, the one being replaced.
+ * Any other chart means the venue has moved on since the operation began, and promoting here would
+ * mint a chart over whichever box it names.
+ */
+export function oldBoxStillMain(
+  held: SignedMembershipDocument | null,
+  sourceNodeId: string,
+): boolean {
+  return held !== null && standingOf(held, sourceNodeId) === "serving-primary";
+}
+
+/**
+ * Whether a stored document says the venue has moved on from this source, for the duty deciding
+ * whether placing the accepted copy would stop. No chart, or one too broken to read, says nothing:
+ * the old box has already given up filing.
+ */
+export function movedOnFromSource(document: unknown, sourceNodeId: string): boolean {
+  return (
+    document !== null &&
+    isReadableChart(document) &&
+    !oldBoxStillMain(document as SignedMembershipDocument, sourceNodeId)
+  );
+}

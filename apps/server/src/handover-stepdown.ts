@@ -13,6 +13,7 @@ import type { HandoverGate } from "./handover-gate.js";
 import { advanceHandoverTx } from "./handover-store.js";
 import { SHUTDOWN_DEADLINE_MS } from "./run-server.js";
 import type { Logger } from "./logger.js";
+import "./errors.js";
 
 export const HANDOVER_ADMITTED_WORK_LIMIT_MS = 180_000;
 
@@ -75,6 +76,14 @@ export async function stepDown(
   if (first !== undefined) {
     await first;
     await assertMatchesStored(deps.node, deps.nodeId, request);
+    // A chart that names no main box writes no restriction, so the write above says nothing about
+    // this operation: only its own stepdown leaves a restriction a binding could match.
+    if (
+      request.binding !== undefined &&
+      (await readHandoverRestriction(deps.node, deps.nodeId)) === null
+    ) {
+      throw new AppError("handover.superseded_during_start", {});
+    }
     return { restarting: true, replayed: true };
   }
   // Told to stop before the write: from here no drain claims another batch, though one already

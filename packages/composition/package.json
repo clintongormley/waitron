@@ -22,6 +22,7 @@
     "@waitron/db": "workspace:*",
     "@waitron/fiscal-none": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",
+    "@waitron/handover": "workspace:*",
     "@waitron/identity": "workspace:*",
     "@waitron/layouts": "workspace:*",
     "@waitron/module": "workspace:*",

@@ -68,6 +68,25 @@ const CLOSED: readonly HandoverState[] = [
   "abandoned",
 ];
 
+/** A destination that reached `activated`: this state or one only reachable after it. */
+export const ACTIVATED_OR_LATER: readonly HandoverState[] = [
+  "activated",
+  "return_pending",
+  "return_complete",
+  "return_abandoned",
+];
+
+/** A destination with `activated` still ahead of it. From `activated` on it is the main box. */
+export const BEFORE_ACTIVATION: readonly HandoverState[] = [
+  "prepared",
+  "copy_accepted",
+  "filing_assumed",
+  "emergency_declared",
+];
+
+/** A destination whose next step is `activated`. */
+export const READY_TO_PROMOTE: readonly HandoverState[] = ["filing_assumed", "emergency_declared"];
+
 export function nextState(
   role: HandoverRole,
   scenario: HandoverScenario,

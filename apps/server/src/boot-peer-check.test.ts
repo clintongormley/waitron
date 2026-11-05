@@ -13,6 +13,7 @@ import {
   type TrustSet,
 } from "@waitron/membership";
 import {
+  boxRefusal,
   askPeerStatus,
   checkPeersAtStart,
   persistingAccept,
@@ -825,6 +826,35 @@ describe("checkPeersAtStart — what each peer answered", () => {
   });
 });
 
+describe("boxRefusal", () => {
+  it("reads the code and params of a box's refusal", () => {
+    expect(
+      boxRefusal(JSON.stringify({ error: { code: "handover.modules_differ", params: { a: 1 } } })),
+    ).toEqual({ code: "handover.modules_differ", params: { a: 1 } });
+  });
+
+  it("leaves params undefined when the refusal has none", () => {
+    expect(boxRefusal(JSON.stringify({ error: { code: "handover.modules_differ" } }))).toEqual({
+      code: "handover.modules_differ",
+      params: undefined,
+    });
+  });
+
+  it.each([
+    ["text that is not JSON", "<html>"],
+    ["no characters", ""],
+    ["a JSON null", "null"],
+    ["a JSON list", "[]"],
+    ["an answer with no error", "{}"],
+    ["an error that is not an object", JSON.stringify({ error: "handover.modules_differ" })],
+    ["an error that is a list", JSON.stringify({ error: [] })],
+    ["an error with no code", JSON.stringify({ error: {} })],
+    ["a code that is not text", JSON.stringify({ error: { code: 1 } })],
+  ])("answers null for %s", (_name, text) => {
+    expect(boxRefusal(text)).toBeNull();
+  });
+});
+
 describe("persistingAccept", () => {
   const pair = generateNodeKeyPair();
   const trust: TrustSet = { [SELF]: pair.publicKey };
@@ -1112,6 +1142,21 @@ describe("askPeerStatus", () => {
       purpose: "waitron.handover.query.v1",
       signerNodeId: SELF,
       body: { nonce: NONCE, atMs: 1_000 },
+    });
+  });
+
+  it("a query option goes into the signed body, naming the operation and its purpose", async () => {
+    const { calls, fetchFn } = answerWith((q) => sign(body(q.nonce)));
+    const asked = await realAsk({
+      fetch: fetchFn,
+      nonce: () => NONCE,
+      now: () => 1_000,
+      query: { operationId: "op-1", purpose: "status" },
+    })(PEER);
+    expect(asked).toEqual(body(NONCE));
+    expect(calls[0]!.url).toBe("https://m2.local/api/node/peer-status");
+    expect(calls[0]!.body).toMatchObject({
+      body: { nonce: NONCE, atMs: 1_000, operationId: "op-1", purpose: "status" },
     });
   });
 

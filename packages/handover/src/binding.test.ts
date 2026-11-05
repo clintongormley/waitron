@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { AppError } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
-import { bindingFingerprint, parseBinding } from "./binding.js";
+import { bindingFingerprint, isOperationId, parseBinding, refuseRequest } from "./binding.js";
 import type { HandoverBinding } from "./binding.js";
 
 const binding: HandoverBinding = {
@@ -224,5 +224,31 @@ describe("bindingFingerprint", () => {
       operationId: binding.operationId,
     });
     expect(bindingFingerprint(reordered)).toBe(bindingFingerprint(binding));
+  });
+});
+
+describe("refuseRequest", () => {
+  it("throws the request refusal naming the field", () => {
+    let thrown: unknown;
+    try {
+      refuseRequest("a.field");
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(AppError);
+    expect(thrown).toMatchObject({
+      code: "handover.request_invalid",
+      params: { field: "a.field" },
+    });
+  });
+});
+
+describe("isOperationId", () => {
+  it("accepts what parseBinding accepts and nothing else", () => {
+    expect(isOperationId(binding.operationId)).toBe(true);
+    for (const value of [binding.operationId.toUpperCase(), "../x", "", 7, null, undefined]) {
+      expect(isOperationId(value), String(value)).toBe(false);
+      expect(refusal({ ...binding, operationId: value })).toEqual(invalid("operationId"));
+    }
   });
 });

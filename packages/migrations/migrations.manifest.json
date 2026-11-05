@@ -34,6 +34,12 @@
     "appendOnlyTables": []
   },
   {
+    "name": "handover",
+    "table": "__drizzle_migrations_handover",
+    "from": "../handover/drizzle",
+    "appendOnlyTables": ["handover_activations"]
+  },
+  {
     "name": "catalogue",
     "table": "__drizzle_migrations_catalogue",
     "from": "../catalogue/drizzle",

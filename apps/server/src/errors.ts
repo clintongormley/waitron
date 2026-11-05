@@ -164,8 +164,8 @@ declare module "@waitron/shared" {
      */
     "handover.known_handover": { successorNodeId: string };
     /**
-     * A box's signed query came from a key this box's stored keys and held chart do not vouch for;
-     * on the handover source routes, also a box it vouches for that is not the operation's
+     * A box's signed query or handover offer came from a key this box's stored keys and held chart
+     * do not vouch for; on the handover source routes, also a box it vouches for that is not the operation's
      * destination.
      */
     "handover.peer_unknown": Record<string, never>;
@@ -177,8 +177,8 @@ declare module "@waitron/shared" {
      */
     "handover.not_stepped_down": { operationId: string };
     /**
-     * A box asked for the final copy, or its indicator, of a handover operation this box holds no
-     * record of.
+     * A caller asked for the status, the final copy or the indicator of a handover operation this
+     * box holds no record of.
      */
     "handover.operation_unknown": { operationId: string };
     /**
@@ -187,6 +187,122 @@ declare module "@waitron/shared" {
      * signed.
      */
     "handover.final_copy_changed": { operationId: string };
+    /**
+     * The spare could not reach the box handing over to it, or what that box answered was not
+     * something the spare can act on. The spare asks again by itself.
+     */
+    "handover.source_unreachable": Record<string, never>;
+    /** A handover offer reached a box that is not a mirror, so it has no way to take over. */
+    "handover.not_a_spare": Record<string, never>;
+    /** A handover offer reached a box while an ordinary promotion of it was running. */
+    "handover.promotion_running": Record<string, never>;
+    /**
+     * A handover offer's taxpayer, environment, chart term or chart digest differs from this box's
+     * own, this box holds no chart, or its chart does not name the offer's source `serving-primary`.
+     */
+    "handover.membership_mismatch": { operationId: string };
+    /** A handover was started on a box whose held chart does not name it the serving main box. */
+    "handover.not_main_box": Record<string, never>;
+    /** A handover was started in a venue where no enabled module can prepare a promotion. */
+    "handover.venue_not_supported": Record<string, never>;
+    /**
+     * A handover named a box the held chart does not list as a spare, or a spare answered that the
+     * operation is no longer waiting for the offer.
+     */
+    "handover.destination_not_spare": { destinationNodeId: string };
+    /**
+     * This box's own `nodes` lacks a row for the chosen spare holding the key the chart vouches
+     * for, so the copy it would send could not start that spare.
+     */
+    "handover.destination_not_joined": { destinationNodeId: string };
+    /** A handover named a spare whose chart address is empty or is this box's own. */
+    "handover.destination_unaddressable": { destinationNodeId: string };
+    /** A handover's spare did not answer in time, or gave an answer this box could not verify. */
+    "handover.destination_unreachable": { destinationNodeId: string };
+    /** A start request repeats a handover this box closed at a restart, before it stepped down. */
+    "handover.restarted_before_stepdown": Record<string, never>;
+    /**
+     * A newer chart stepped this box down while a handover was starting, so the handover did not
+     * go ahead. Also the refusal stored when the restricted start closes that handover.
+     */
+    "handover.superseded_during_start": Record<string, never>;
+    /**
+     * A start request repeats a handover whose taxpayer, environment, chart term or chart digest
+     * differ from this box's own now, so this box closed it rather than offer it again.
+     */
+    "handover.membership_changed": Record<string, never>;
+    /** A handover's two boxes hold different values in `backup.env`. */
+    "handover.backup_settings_differ": Record<string, never>;
+    /**
+     * A handover's two boxes switch off different modules in `modules.json`, or run images shipping
+     * different migrations, or the copy's journal stands behind the receiving box's image.
+     */
+    "handover.modules_differ": Record<string, never>;
+    /** The box handing over lists a credentials key version the receiving box does not hold. */
+    "handover.key_ring_mismatch": Record<string, never>;
+    /** The box handing over could not read `file`, one of its own files a handover needs. */
+    "handover.settings_unreadable": { file: string };
+    /** A handover's spare could not read `file`, one of its own files a handover needs. */
+    "handover.destination_settings_unreadable": { file: string };
+    /**
+     * A start request repeats a handover whose settings on this box differ from those its stored
+     * offer signed, so this box closed it rather than offer it again.
+     */
+    "handover.settings_changed": Record<string, never>;
+    /** A final-state indicator's signature is not the handing-over box's own. */
+    "handover.indicator_untrusted": Record<string, never>;
+    /** The copy a spare received is not the file the old box's indicator describes. */
+    "handover.copy_mismatch": Record<string, never>;
+    /** The copy a spare received fails the database's own integrity check. */
+    "handover.copy_damaged": Record<string, never>;
+    /** `module`'s records in the copy a spare received fail that module's own check. */
+    "handover.chain_broken": { module: string };
+    /** The old box's retained selections and the spare's own would leave their file too little room. */
+    "handover.preparation_state_too_large": Record<string, never>;
+    /**
+     * At the start that places the accepted copy, this box's own preparation file could not be read
+     * or could not take the old box's retained selections, so the copy was not placed.
+     */
+    "handover.preparation_state_unusable": Record<string, never>;
+    /**
+     * At the start that places the accepted copy, a file step failed with `errno`. The copy is kept
+     * and pressing Retry on the recovery page tries again.
+     */
+    "handover.placement_failed": { errno: string };
+    /**
+     * At the start that places the accepted copy, the disk ran out of room with the copy needing
+     * `neededBytes`. The copy is kept and pressing Retry on the recovery page tries again.
+     */
+    "handover.placement_no_room": { neededBytes: number };
+    /**
+     * The spare has too little room to place the copy it accepted. It asks the old box to give up
+     * filing once there is room.
+     */
+    "handover.no_room_to_place": Record<string, never>;
+    /** `module`'s summary, worked out from the received copy, is not the one the old box signed. */
+    "handover.summary_mismatch": { module: string };
+    /** The spare could not work out `module`'s summary from the copy it received. */
+    "handover.summary_unreadable": { module: string };
+    /** The copy has no usable record of the spare that would have to start from it. */
+    "handover.copy_lacks_destination": Record<string, never>;
+    /** The person who authorised the handover may not move the venue, according to the copy. */
+    "handover.authoriser_not_permitted": Record<string, never>;
+    /**
+     * The old box answered this box's acceptance with something other than a relinquishment of
+     * exactly what it accepted, so this box has not taken over filing and keeps asking.
+     */
+    "handover.relinquishment_invalid": Record<string, never>;
+    /**
+     * This box's held chart no longer has the operation's source as the main box, so this box asks
+     * the old box for nothing more and does not take over from it. A chart naming the old box again
+     * clears it.
+     */
+    "handover.source_no_longer_main": { operationId: string };
+    /**
+     * The file this box accepted is missing, so it does not ask the old box to give up filing: that
+     * would leave neither box able to go forward.
+     */
+    "handover.accepted_copy_missing": Record<string, never>;
     /**
      * A node booting as primary found, by reconciling with its cloud peer, a higher-term membership
      * document that fences it, so it boots read-only rather than sell beside the promoted primary

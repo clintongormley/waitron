@@ -122,7 +122,13 @@ export type {
   OperationOperator,
   RecoveryKeyOperator,
 } from "./operation-authority.js";
-export { readOperationAuthority, withOperationAuthority } from "./operation-authority.js";
+export {
+  isOperationBinding,
+  isOperationBindingField,
+  OPERATION_BINDING_KEYS,
+  readOperationAuthority,
+  withOperationAuthority,
+} from "./operation-authority.js";
 export type { ModuleOperationInput, ModuleOperations } from "./operation-input.js";
 export { moduleOperationFor, snapshotModuleOperations } from "./operation-input.js";
 export type {

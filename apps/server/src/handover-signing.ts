@@ -14,7 +14,12 @@ import {
   type HandoverScenario,
   type SignedHandoverEnvelope,
 } from "@waitron/handover";
-import { canonicalize, endorsedKeyOf, type CanonicalValue } from "@waitron/membership";
+import {
+  canonicalize,
+  endorsedKeyOf,
+  type CanonicalValue,
+  type SignedMembershipDocument,
+} from "@waitron/membership";
 import { AppError } from "@waitron/shared";
 import { readStoredTrustSet, type StoredTrustDeps } from "./membership-trust.js";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -35,9 +40,10 @@ export async function signAsThisBox<B extends CanonicalValue>(
  */
 export async function peerKeyOf(
   deps: StoredTrustDeps & { db: Database },
+  held?: SignedMembershipDocument | null,
 ): Promise<(nodeId: string) => string | undefined> {
-  const held = await readNodeMembership(deps.db);
-  return endorsedKeyOf(held, await readStoredTrustSet(deps));
+  const chart = held === undefined ? await readNodeMembership(deps.db) : held;
+  return endorsedKeyOf(chart, await readStoredTrustSet(deps));
 }
 
 /** The binding for a new operation: the taxpayer, the environment stamp and the held chart. */

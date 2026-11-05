@@ -1350,16 +1350,164 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El equipo antiguo no ha pasado su trabajo en este cambio de servidor, así que no enviará su copia final del local. No se ha cambiado nada.",
   },
   "handover.operation_unknown": {
-    en: "The old box holds no record of that handover, so it sent nothing. Nothing was changed.",
-    es: "El equipo antiguo no tiene constancia de ese cambio de servidor, así que no ha enviado nada. No se ha cambiado nada.",
+    en: "That box holds no record of that handover, so it sent nothing. Nothing was changed.",
+    es: "Ese equipo no tiene constancia de ese cambio de servidor, así que no ha enviado nada. No se ha cambiado nada.",
   },
   "handover.final_copy_changed": {
     en: "The old box's venue data changed after it made its final copy, so it did not send the copy. Nothing was changed.",
     es: "Los datos del local en el equipo antiguo cambiaron después de hacer la copia final, así que no ha enviado la copia. No se ha cambiado nada.",
   },
+  "handover.source_unreachable": {
+    en: "This box can't get an answer it can use from the old box yet. It keeps asking by itself. Nothing was changed.",
+    es: "Este equipo aún no recibe una respuesta válida del equipo antiguo. Sigue preguntando por sí solo. No se ha cambiado nada.",
+  },
+  "handover.not_a_spare": {
+    en: "This box is not a spare, so it cannot take over the venue. Nothing was changed.",
+    es: "Este equipo no es un equipo de reserva, así que no puede pasar a llevar el local. No se ha cambiado nada.",
+  },
+  "handover.promotion_running": {
+    en: "This box is being made the main box right now, so it did not accept this handover. Nothing was changed. If that does not finish, start the handover again.",
+    es: "Este equipo está pasando a ser el equipo principal en este momento, así que no ha aceptado el traspaso. No se ha cambiado nada. Si eso no termina, vuelve a empezar el traspaso.",
+  },
+  "handover.membership_mismatch": {
+    en: "The box offering this handover is not the main box on this box's list of the venue's boxes, or the two boxes hold different venue details or different lists, so this box did not accept the handover. Nothing was changed.",
+    es: "El equipo que ofrece este traspaso no es el equipo principal en la lista de equipos del local de este equipo, o los dos equipos tienen datos del local o listas distintos, así que este equipo no ha aceptado el traspaso. No se ha cambiado nada.",
+  },
+  "handover.not_main_box": {
+    en: "This box is not the venue's main box, so it cannot hand the venue over. Nothing was changed.",
+    es: "Este equipo no es el equipo principal del local, así que no puede traspasar el local. No se ha cambiado nada.",
+  },
+  "handover.venue_not_supported": {
+    en: "A handover between boxes is not available yet for this venue's way of filing invoices. Nothing was changed and this box keeps selling.",
+    es: "El traspaso entre equipos aún no está disponible para la forma de presentar facturas de este local. No se ha cambiado nada y este equipo sigue vendiendo.",
+  },
+  "handover.destination_not_spare": {
+    en: "The box you chose is not a spare waiting to take over this venue, so the handover did not start. This box keeps selling.",
+    es: "El equipo elegido no es un equipo de reserva a la espera de llevar este local, así que el traspaso no ha empezado. Este equipo sigue vendiendo.",
+  },
+  "handover.destination_not_joined": {
+    en: "This box holds no record of the box you chose having finished joining the venue, so the handover did not start and this box keeps selling.",
+    es: "Este equipo no tiene constancia de que el equipo elegido haya terminado de unirse al local, así que el traspaso no ha empezado y este equipo sigue vendiendo.",
+  },
+  "handover.destination_unaddressable": {
+    en: "The venue's list of boxes holds no address of its own for the box you chose, so this box cannot reach it. The handover did not start and this box keeps selling.",
+    es: "La lista de equipos del local no tiene una dirección propia para el equipo elegido, así que este equipo no puede llegar a él. El traspaso no ha empezado y este equipo sigue vendiendo.",
+  },
+  "handover.destination_unreachable": {
+    en: "The box you chose did not answer, or its answer could not be checked, so the handover did not start. This box keeps selling. Try again with a new handover once that box is running.",
+    es: "El equipo elegido no ha respondido, o no se ha podido comprobar su respuesta, así que el traspaso no ha empezado. Este equipo sigue vendiendo. Inténtalo de nuevo con otro traspaso cuando ese equipo esté en marcha.",
+  },
+  "handover.restarted_before_stepdown": {
+    en: "This box restarted before the handover took effect, so that handover was cancelled and this box keeps selling. Start a new handover to try again.",
+    es: "Este equipo se ha reiniciado antes de que el traspaso surtiera efecto, así que ese traspaso se ha cancelado y este equipo sigue vendiendo. Empieza un traspaso nuevo para volver a intentarlo.",
+  },
+  "handover.superseded_during_start": {
+    en: "This box no longer runs the venue, because another box took over or the venue's list of boxes changed, so this handover did not go ahead. Nothing is needed on this box.",
+    es: "Este equipo ya no lleva el local, porque otro equipo ha pasado a llevarlo o ha cambiado la lista de equipos del local, así que este traspaso no ha seguido adelante. No hace falta hacer nada en este equipo.",
+  },
+  "handover.membership_changed": {
+    en: "The venue's details or its list of boxes changed after this handover was started, so it was cancelled and this box keeps selling. Start a new handover to try again.",
+    es: "Los datos del local o su lista de equipos han cambiado después de empezar este traspaso, así que se ha cancelado y este equipo sigue vendiendo. Empieza un traspaso nuevo para volver a intentarlo.",
+  },
+  "handover.backup_settings_differ": {
+    en: "The two boxes hold different backup settings, so the spare did not accept this handover.",
+    es: "Los dos equipos tienen ajustes de copia de seguridad distintos, así que el equipo de reserva no ha aceptado este traspaso.",
+  },
+  "handover.modules_differ": {
+    en: "The two boxes run different versions of the software or have different modules switched on, so the spare did not accept this handover.",
+    es: "Los dos equipos usan versiones distintas del programa o tienen activados módulos distintos, así que el equipo de reserva no ha aceptado este traspaso.",
+  },
+  "handover.key_ring_mismatch": {
+    en: "The spare does not hold every encryption key this box uses, so it did not accept this handover.",
+    es: "El equipo de reserva no tiene todas las claves de cifrado que usa este equipo, así que no ha aceptado este traspaso.",
+  },
+  "handover.settings_unreadable": {
+    en: "This box could not read one of its own files (backup.env, modules.json or module-preparation-state.json), so this handover did not go ahead and this box keeps selling. Once that file is repaired, start a new handover.",
+    es: "Este equipo no ha podido leer uno de sus archivos (backup.env, modules.json o module-preparation-state.json), así que este traspaso no ha seguido adelante y este equipo sigue vendiendo. Cuando ese archivo esté reparado, empieza un traspaso nuevo.",
+  },
+  "handover.destination_settings_unreadable": {
+    en: "The spare could not read one of its own files (backup.env, modules.json or module-preparation-state.json), so it did not accept this handover. Once that file is repaired, start a new handover.",
+    es: "El equipo de reserva no ha podido leer uno de sus archivos (backup.env, modules.json o module-preparation-state.json), así que no ha aceptado este traspaso. Cuando ese archivo esté reparado, empieza un traspaso nuevo.",
+  },
+  "handover.settings_changed": {
+    en: "This box's settings changed after this handover was started, so it was cancelled and this box keeps selling. Start a new handover to try again.",
+    es: "Los ajustes de este equipo han cambiado después de empezar este traspaso, así que se ha cancelado y este equipo sigue vendiendo. Empieza un traspaso nuevo para volver a intentarlo.",
+  },
+  "handover.indicator_untrusted": {
+    en: "The description of the final copy was not signed by the box handing over, so the spare did not accept it. The old box stays stopped.",
+    es: "La descripción de la copia final no está firmada por el equipo que hace el traspaso, así que el equipo de reserva no la ha aceptado. El equipo antiguo sigue detenido.",
+  },
+  "handover.copy_mismatch": {
+    en: "The copy the spare received is not the one the old box described, so the spare is fetching it again. The old box stays stopped.",
+    es: "La copia que ha recibido el equipo de reserva no es la que describió el equipo antiguo, así que la está pidiendo de nuevo. El equipo antiguo sigue detenido.",
+  },
+  "handover.copy_damaged": {
+    en: "The copy the spare received is damaged, so the spare is fetching it again. The old box stays stopped.",
+    es: "La copia que ha recibido el equipo de reserva está dañada, así que la está pidiendo de nuevo. El equipo antiguo sigue detenido.",
+  },
+  "handover.chain_broken": {
+    en: "The records in the copy the spare received fail their own check, so the spare did not accept it. The old box stays stopped.",
+    es: "Los registros de la copia que ha recibido el equipo de reserva no superan su propia comprobación, así que no la ha aceptado. El equipo antiguo sigue detenido.",
+  },
+  "handover.preparation_state_too_large": {
+    en: "The two boxes' saved preparations would leave their file with too little room to be sure the spare can take over, so the spare did not accept this handover. The old box stays stopped.",
+    es: "Los preparativos guardados de los dos equipos dejarían su archivo con muy poco espacio para asegurar que el equipo de reserva pueda tomar el relevo, así que no ha aceptado este traspaso. El equipo antiguo sigue detenido.",
+  },
+  "handover.summary_mismatch": {
+    en: "The copy the spare received does not hold what the old box said it holds, so the spare did not accept it. The old box stays stopped.",
+    es: "La copia que ha recibido el equipo de reserva no contiene lo que el equipo antiguo dijo que contenía, así que no la ha aceptado. El equipo antiguo sigue detenido.",
+  },
+  "handover.summary_unreadable": {
+    en: "The spare could not read the copy it received to check what it holds, so it did not accept it. The old box stays stopped.",
+    es: "El equipo de reserva no ha podido leer la copia que ha recibido para comprobar su contenido, así que no la ha aceptado. El equipo antiguo sigue detenido.",
+  },
+  "handover.copy_lacks_destination": {
+    en: "The copy the spare received has no usable record of the spare, so the spare could not start from it and did not accept it. The old box stays stopped.",
+    es: "La copia que ha recibido el equipo de reserva no tiene un registro válido de ese equipo, así que no podría arrancar con ella y no la ha aceptado. El equipo antiguo sigue detenido.",
+  },
+  "handover.authoriser_not_permitted": {
+    en: "According to the copy the spare received, the person who authorised this handover may not move the venue to another box, so the spare did not accept it. The old box stays stopped.",
+    es: "Según la copia que ha recibido el equipo de reserva, la persona que autorizó este traspaso no puede pasar el local a otro equipo, así que no la ha aceptado. El equipo antiguo sigue detenido.",
+  },
+  "handover.preparation_state_unusable": {
+    en: "This box's module preparation file is unreadable or too full to take the old box's selections, so this box did not put the accepted copy in place.",
+    es: "El archivo de preparación de módulos de este equipo no se puede leer o está demasiado lleno para añadir las selecciones del equipo antiguo, así que este equipo no ha puesto en su sitio la copia aceptada.",
+  },
+  "handover.placement_failed": {
+    en: "This box could not put the copy of the venue it accepted in place. The copy is kept, and Retry tries again.",
+    es: "Este equipo no pudo poner en su sitio la copia del local que aceptó. La copia se conserva, y Reintentar lo vuelve a intentar.",
+  },
+  "handover.placement_no_room": {
+    en: "This box's disk has no room for the copy of the venue it accepted: it needs room for one more whole copy. The copy is kept, and Retry tries again.",
+    es: "El disco de este equipo no tiene sitio para la copia del local que aceptó: necesita sitio para otra copia entera. La copia se conserva, y Reintentar lo vuelve a intentar.",
+  },
+  "handover.no_room_to_place": {
+    en: "This box's disk has no room to put the accepted copy of the venue in place. It asks the old box to give up filing once there is room. The old box stays stopped.",
+    es: "El disco de este equipo no tiene sitio para poner en su sitio la copia aceptada del local. Pedirá al equipo antiguo que ceda el envío de registros cuando haya sitio. El equipo antiguo sigue detenido.",
+  },
+  "handover.accepted_copy_missing": {
+    en: "The copy of the venue this box accepted is no longer on its disk, so this box cannot take over the venue.",
+    es: "La copia del local que este equipo aceptó ya no está en su disco, así que este equipo no puede pasar a llevar el local.",
+  },
+  "handover.source_no_longer_main": {
+    en: "This box's list of servers no longer has the old box as the main box, so this box has not taken over from it. If a newer list names the old box again, a waiting box carries on by itself, and an activation that was refused has to be sent again.",
+    es: "La lista de servidores de este equipo ya no tiene al equipo antiguo como equipo principal, así que este equipo no ha asumido sus funciones. Si una lista más reciente vuelve a nombrar al equipo antiguo, un equipo en espera sigue por sí solo, y una activación rechazada hay que enviarla de nuevo.",
+  },
+  "handover.relinquishment_invalid": {
+    en: "The old box's answer did not hand filing to this box for the copy it accepted, so this box has not taken over. It keeps asking the old box.",
+    es: "La respuesta del equipo antiguo no le cede a este equipo el envío de registros de la copia que aceptó, así que este equipo no ha asumido el envío. Sigue preguntando al equipo antiguo.",
+  },
   "handover.summary_failed": {
     en: "The old box could not read part of the venue's data from its final copy, so it sent neither the copy nor its description. Its venue data is unchanged. Asking again makes it take a new copy and read that.",
     es: "El equipo antiguo no ha podido leer parte de los datos del local en su copia final, así que no ha enviado ni la copia ni su descripción. Sus datos del local no han cambiado. Si se vuelve a pedir, hará una copia nueva y la leerá.",
+  },
+  "handover.indicator_mismatch": {
+    en: "The description the old box sent of its final copy is not one this box can read or does not belong to this handover, so this box did not accept the copy. Nothing changed on this box.",
+    es: "La descripción que ha enviado el equipo antiguo de su copia final no se puede leer en este equipo o no corresponde a este traspaso, así que este equipo no ha aceptado la copia. No ha cambiado nada en este equipo.",
+  },
+  "handover.copy_check_failed": {
+    en: "This box could not finish checking part of the old box's final copy, so it did not accept the copy. Nothing changed on this box.",
+    es: "Este equipo no ha podido terminar de comprobar parte de la copia final del equipo antiguo, así que no ha aceptado la copia. No ha cambiado nada en este equipo.",
   },
   "alert.not_found": {
     en: "This alert no longer exists. Refresh the list.",

@@ -40,5 +40,7 @@ declare module "@waitron/shared" {
     "module.venue_service_ambiguous": { candidates: readonly string[] };
     /** `module`'s handover summary could not be read from the copy. */
     "handover.summary_failed": { module: string };
+    /** `module`'s check of a received copy could not finish; it did not find the copy broken. */
+    "handover.copy_check_failed": { module: string };
   }
 }

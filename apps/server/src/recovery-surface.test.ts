@@ -702,6 +702,67 @@ describe("a start refused by a holder that stopped", () => {
   });
 });
 
+describe("a spare's start refused while placing the copy it accepted", () => {
+  it.each([
+    [
+      "handover.accepted_copy_missing",
+      "The copy of the venue this box accepted is no longer on its disk.",
+      "La copia del local que este equipo aceptó ya no está en su disco.",
+    ],
+    [
+      "handover.copy_mismatch",
+      "The copy of the venue this box accepted has changed on its disk.",
+      "La copia del local que este equipo aceptó ha cambiado en su disco.",
+    ],
+    [
+      "handover.preparation_state_unusable",
+      "This box cannot record the old box's selections, so it did not take over.",
+      "Este equipo no puede guardar las selecciones del equipo antiguo, así que no se ha hecho cargo.",
+    ],
+    [
+      "handover.placement_failed",
+      "This box could not put the copy of the venue it accepted in place.",
+      "Este equipo no pudo poner en su sitio la copia del local que aceptó.",
+    ],
+    [
+      "handover.placement_no_room",
+      "This box's disk has no room for the copy of the venue it accepted.",
+      "El disco de este equipo no tiene sitio para la copia del local que aceptó.",
+    ],
+  ])("%s says what happened and offers the retry, in both languages", async (code, en, es) => {
+    const english = await pageFor(code);
+    expect(english).toContain(escapeHtml(en));
+    expect(english).toContain(escapeHtml("The old box has given up filing and stays stopped."));
+    expect(english).toContain("Retry a normal boot");
+    const spanish = await pageFor(code, undefined, SPANISH);
+    expect(spanish).toContain(escapeHtml(es));
+    expect(spanish).toContain("Reintentar un arranque normal");
+  });
+});
+
+describe("what brings a refused placing back", () => {
+  it.each(["handover.placement_failed", "handover.placement_no_room"])(
+    "%s says the retry tries again, because a box on this page does not boot by itself",
+    async (code) => {
+      const english = await pageFor(code);
+      expect(english).toContain(escapeHtml("Press “Retry a normal boot” to try again."));
+      expect(english).not.toContain("each start");
+      const spanish = await pageFor(code, undefined, SPANISH);
+      expect(spanish).toContain(
+        escapeHtml("Pulsa «Reintentar un arranque normal» para volver a intentarlo."),
+      );
+      expect(spanish).not.toContain("cada arranque");
+    },
+  );
+
+  it("a disk with no room says what to make room for", async () => {
+    const english = await pageFor("handover.placement_no_room");
+    expect(english).toContain(escapeHtml("one more whole copy of the venue"));
+    const spanish = await pageFor("handover.placement_no_room", undefined, SPANISH);
+    expect(spanish).toContain(escapeHtml("otra copia entera del local"));
+  });
+});
+
 describe("a restore whose database could not be put in place, if it is the last failure", () => {
   it("sends the operator to whoever installed the box, and to the failed start's details on this page", async () => {
     const text = OPERATOR_TEXT["restore.placement_failed"];

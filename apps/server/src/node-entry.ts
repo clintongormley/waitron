@@ -294,7 +294,8 @@ async function releaseSpareToStart(deps: EntryDeps): Promise<void> {
  * 4. The ahead check runs after `runStagedRestore` and `runStagedReset`, which replace or remove
  *    the venue files, and before `startServer`, which migrates and then queries the schema. It
  *    judges a database nothing has migrated yet, which the one-directional comparison in
- *    `assertNotAhead` makes safe.
+ *    `assertNotAhead` makes safe. On the start that places a handover's accepted copy, in
+ *    `bootServer`, this check has already run on the old file; the handover's compare checked the copy.
  * 5. After the staged restore, the start holds the venue folder from clearing set-aside folders
  *    until `startServer` settles or an earlier step throws, so another process's placement cannot
  *    run in between: one that failed with the old database set aside would leave no `venue.db`,

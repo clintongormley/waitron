@@ -21,7 +21,12 @@ export {
 } from "./privacy-contact.js";
 export type { InitialModuleInput, VenueApplyDeps, VenueResult } from "./venue-apply.js";
 export { FISCAL_TERRITORIES, resolveFiscalModules } from "./fiscal-modules.js";
-export { readModulePreparationHistory } from "./module-preparation-state.js";
+export {
+  readModulePreparationHistory,
+  mergeModulePreparationRevisions,
+  modulePreparationMergeFits,
+  readModulePreparationRevisions,
+} from "./module-preparation-state.js";
 export { createRecoveryPreparationHost } from "./recovery-preparation-host.js";
 export type { FiscalModules } from "./fiscal-modules.js";
 export { venueFiscalSelection } from "./venue-fiscal.js";
@@ -34,8 +39,8 @@ export {
   readTenantIdentities,
 } from "./tenant-guard.js";
 export type { TenantIdentity } from "./tenant-guard.js";
-// `findAheadSets` and `unknownHashes` stay internal: the host calls `assertNotAhead` alone.
-export { assertNotAhead } from "./schema-ahead.js";
+// `findAheadSets` stays internal. `unknownHashes` is for a journal read from a file no store opens.
+export { assertNotAhead, unknownHashes } from "./schema-ahead.js";
 export type { AheadSet } from "./schema-ahead.js";
 import "./errors.js";
 export {

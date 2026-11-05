@@ -1,7 +1,12 @@
 import type { Context, Hono } from "hono";
 import type { KeyRing } from "@waitron/credentials";
 import { readNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
-import { verifyEnvelope, type HandoverRole, type HandoverState } from "@waitron/handover";
+import {
+  refuseRequest,
+  verifyEnvelope,
+  type HandoverRole,
+  type HandoverState,
+} from "@waitron/handover";
 import type { CanonicalValue, SignedMembershipDocument } from "@waitron/membership";
 import {
   readHandoverOperation,
@@ -22,10 +27,17 @@ export interface PeerStatusApiDeps {
   nodeId: string;
 }
 
+export type PeerQueryPurpose = "status" | "indicator" | "final-copy";
+
 export interface PeerQueryBody {
   nonce: string;
   atMs: number;
   operationId?: string;
+  /**
+   * The route this query is for, present exactly when `operationId` is, so a query signed for one
+   * route opens no other.
+   */
+  purpose?: PeerQueryPurpose;
 }
 
 export interface PeerOperationStatus {
@@ -55,23 +67,27 @@ const STATUS = {
   "handover.request_invalid": 400,
 } as const;
 
-const QUERY_KEYS = new Set(["nonce", "atMs", "operationId"]);
+const QUERY_KEYS = new Set(["nonce", "atMs", "operationId", "purpose"]);
 
-function invalid(field: string): never {
-  throw new AppError("handover.request_invalid", { field });
+function isPurpose(value: unknown): value is PeerQueryPurpose {
+  return value === "status" || value === "indicator" || value === "final-copy";
 }
 
 function parseQuery(body: unknown): PeerQueryBody {
-  if (body === null || typeof body !== "object" || Array.isArray(body)) invalid("body");
+  if (body === null || typeof body !== "object" || Array.isArray(body)) refuseRequest("body");
   const fields = body as Record<string, unknown>;
-  if (Object.keys(fields).some((key) => !QUERY_KEYS.has(key))) invalid("body");
-  const { nonce, atMs, operationId } = fields;
-  if (typeof nonce !== "string" || nonce.length < 16 || nonce.length > 64) invalid("nonce");
-  if (typeof atMs !== "number" || !Number.isFinite(atMs)) invalid("atMs");
-  if (operationId === undefined) return { nonce, atMs };
+  if (Object.keys(fields).some((key) => !QUERY_KEYS.has(key))) refuseRequest("body");
+  const { nonce, atMs, operationId, purpose } = fields;
+  if (typeof nonce !== "string" || nonce.length < 16 || nonce.length > 64) refuseRequest("nonce");
+  if (typeof atMs !== "number" || !Number.isFinite(atMs)) refuseRequest("atMs");
+  if (operationId === undefined) {
+    if (purpose !== undefined) refuseRequest("purpose");
+    return { nonce, atMs };
+  }
   if (typeof operationId !== "string" || operationId.length === 0 || operationId.length > 64)
-    invalid("operationId");
-  return { nonce, atMs, operationId };
+    refuseRequest("operationId");
+  if (!isPurpose(purpose)) refuseRequest("purpose");
+  return { nonce, atMs, operationId, purpose };
 }
 
 /**
@@ -86,7 +102,8 @@ export async function verifiedPeerQuery(
   const raw = await readRawJsonBody<unknown>(c);
   const verdict = verifyEnvelope<unknown>(raw, "query", await peerKeyOf(deps));
   if (!verdict.valid) {
-    if (verdict.reason === "malformed" || verdict.reason === "wrong_purpose") invalid("envelope");
+    if (verdict.reason === "malformed" || verdict.reason === "wrong_purpose")
+      refuseRequest("envelope");
     throw new AppError("handover.peer_unknown", {});
   }
   return { signerNodeId: verdict.signerNodeId, query: parseQuery(verdict.body) };
@@ -115,6 +132,7 @@ export function mountPeerStatusApi(app: Hono, deps: PeerStatusApiDeps, log: Logg
   app.post("/api/node/peer-status", (c) =>
     run(c, log, async () => {
       const { query } = await verifiedPeerQuery(c, deps);
+      if (query.operationId !== undefined && query.purpose !== "status") refuseRequest("purpose");
       const held = await readNodeMembership(deps.db);
       const restriction = await readHandoverRestriction(deps.node, deps.nodeId);
       const open = await readOpenHandoverOperation(deps.node, deps.nodeId);

@@ -95,7 +95,8 @@ by the answers):
     `credited_to`, `owner_id` and `editor_id` are named in it because the name pattern would miss
     them (S2c decision 2).
   - **Other modules' actor columns**: bookings, menu publication, fiscal operations, payment holds
-    and resolutions, department transfers, allergy answers and service steps, and the adjustments
+    and resolutions, department transfers, allergy answers and service steps, handover activations
+    (`handover_activations.person_id`, and `authorisedBy` inside its signed evidence), and the adjustments
     module's `credited_to`, whose sale the item counted as. The S2c guard reads core's tables only;
     since S2d the adjustments module's columns are held by its own guard,
     `packages/adjustments/src/personal-data.coverage.test.ts`.

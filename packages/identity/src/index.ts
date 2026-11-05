@@ -35,6 +35,7 @@ export {
   loginManager,
   loginManagerById,
   authorizeManager,
+  personIdForLoginEmail,
 } from "./manager-login.js";
 export {
   CHALLENGE_TTL_MS,

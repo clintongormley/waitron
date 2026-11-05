@@ -25,6 +25,7 @@ import {
   type SignedMembershipDocument,
 } from "@waitron/membership";
 import { NODE_MIGRATIONS, recordHandoverRestrictionTx } from "@waitron/node-db";
+import { askPeerStatus } from "./boot-peer-check.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mountPeerStatusApi, type PeerStatusBody } from "./peer-status-api.js";
@@ -165,7 +166,10 @@ describe("POST /api/node/peer-status", () => {
     );
     const response = await ask(
       app,
-      query({ nodeId: peer, privateKey: peerKey }, { nonce: NONCE, atMs: 1, operationId: OP }),
+      query(
+        { nodeId: peer, privateKey: peerKey },
+        { nonce: NONCE, atMs: 1, operationId: OP, purpose: "status" },
+      ),
     );
     expect(response.status).toBe(200);
     const { body } = (await response.json()) as SignedHandoverEnvelope<PeerStatusBody>;
@@ -204,7 +208,10 @@ describe("POST /api/node/peer-status", () => {
     await advanceHandover(deps, OP, "abandoned", {});
     const named = await ask(
       app,
-      query({ nodeId: peer, privateKey: peerKey }, { nonce: NONCE, atMs: 1, operationId: OP }),
+      query(
+        { nodeId: peer, privateKey: peerKey },
+        { nonce: NONCE, atMs: 1, operationId: OP, purpose: "status" },
+      ),
     );
     const { body } = (await named.json()) as SignedHandoverEnvelope<PeerStatusBody>;
     expect(body.openOperation).toBeNull();
@@ -221,7 +228,7 @@ describe("POST /api/node/peer-status", () => {
       app,
       query(
         { nodeId: peer, privateKey: peerKey },
-        { nonce: NONCE, atMs: 1, operationId: OTHER_OP },
+        { nonce: NONCE, atMs: 1, operationId: OTHER_OP, purpose: "status" },
       ),
     );
     expect(
@@ -298,6 +305,53 @@ describe("POST /api/node/peer-status", () => {
       query(signer, { nonce: "x".repeat(64), atMs: 1 }),
     ];
     for (const envelope of edges) expect((await ask(app, envelope)).status).toBe(200);
+  });
+
+  it("a query naming an operation is refused unless its purpose is status, naming the field", async () => {
+    const { app, peer, peerKey } = await boxes();
+    const signer = { nodeId: peer, privateKey: peerKey };
+    const refused: Record<string, string | number>[] = [
+      { nonce: NONCE, atMs: 1, operationId: OP },
+      { nonce: NONCE, atMs: 1, operationId: OP, purpose: "indicator" },
+      { nonce: NONCE, atMs: 1, operationId: OP, purpose: "final-copy" },
+      { nonce: NONCE, atMs: 1, operationId: OP, purpose: "anything-else" },
+      { nonce: NONCE, atMs: 1, operationId: OP, purpose: 7 },
+      { nonce: NONCE, atMs: 1, purpose: "status" },
+    ];
+    for (const body of refused) {
+      const response = await ask(app, query(signer, body));
+      expect({ body, status: response.status, answer: await response.json() }).toEqual({
+        body,
+        status: 400,
+        answer: { error: { code: "handover.request_invalid", params: { field: "purpose" } } },
+      });
+    }
+  });
+
+  it("the status read a box signs with a query option gets the operation it names", async () => {
+    const { app, self, selfKey, peer, peerKey } = await boxes();
+    const deps = { node: suite.node, nodeId: self };
+    await beginHandover(
+      deps,
+      {
+        operationId: OP,
+        scenario: "controlled",
+        venue: { country: "ES", taxId: "B12345678", environment: "preproduction" },
+        sourceNodeId: self,
+        destinationNodeId: peer,
+        membership: { term: 4, digest: "a".repeat(64) },
+      },
+      "source",
+    );
+    await advanceHandover(deps, OP, "abandoned", {});
+    const selfPublic = nodeSigningPublicKey(selfKey);
+    const status = await askPeerStatus({
+      sign: async (body) => signEnvelope("query", body, { nodeId: peer, privateKey: peerKey }),
+      publicKeyOf: (nodeId) => (nodeId === self ? selfPublic : undefined),
+      fetch: async (url, init) => app.request(String(url), init),
+      query: { operationId: OP, purpose: "status" },
+    })({ nodeId: self, url: "https://box-0", standing: "serving-primary" });
+    expect(status?.requestedOperation).toMatchObject({ operationId: OP, state: "abandoned" });
   });
 
   it("refuses a query whose signature does not match its body", async () => {

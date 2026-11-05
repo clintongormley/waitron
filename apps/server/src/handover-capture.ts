@@ -2,9 +2,13 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { and, asc, eq, sql } from "drizzle-orm";
 import type { KeyRing } from "@waitron/credentials";
-import { withNodeTransaction, type Database, type NodeDatabase } from "@waitron/db";
+import {
+  withNodeTransaction,
+  type Database,
+  type NodeDatabase,
+  type NodeTransaction,
+} from "@waitron/db";
 import {
   parseBinding,
   sha256Hex,
@@ -18,19 +22,16 @@ import { canonicalize, type CanonicalValue } from "@waitron/membership";
 import { collectHandoverSummaries, type WaitronModule } from "@waitron/module";
 import {
   appendHandoverEventTx,
-  nodeHandoverEvents,
   readHandoverOperation,
   readHandoverRestriction,
 } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
+import { errnoOf } from "./errno.js";
 import { buildNodeLocalManifest } from "./handover-manifest.js";
-import type { RestrictedStepKind } from "./i18n/restricted-page.js";
+import { findHandoverEnvelope, HANDOVER_EVENT } from "./handover-store.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import "./errors.js";
-
-/** The `node_handover_events.kind` of the one event holding a box's signed final-state indicator. */
-export const FINAL_STATE_EVENT = "final_state" satisfies RestrictedStepKind;
 
 export const CAPTURE_REFUSAL_STATUS = { "handover.not_stepped_down": 409 } as const;
 
@@ -119,7 +120,7 @@ async function captureOnce(deps: CaptureDeps, operationId: string): Promise<Fina
     await appendHandoverEventTx(tx, {
       nodeId: deps.nodeId,
       operationId,
-      kind: FINAL_STATE_EVENT,
+      kind: HANDOVER_EVENT.finalState,
       detail: {},
       envelope: text,
     });
@@ -128,7 +129,7 @@ async function captureOnce(deps: CaptureDeps, operationId: string): Promise<Fina
 }
 
 /** The operation's binding, once this box's restriction shows it handed over for it. */
-async function steppedDownBinding(
+export async function steppedDownBinding(
   deps: CaptureDeps,
   operationId: string,
 ): Promise<HandoverBinding> {
@@ -156,27 +157,17 @@ async function steppedDownBinding(
   return binding;
 }
 
-async function readFinalState(
-  node: Pick<NodeDatabase, "select">,
+export async function readFinalState(
+  node: NodeDatabase | NodeTransaction,
   nodeId: string,
   operationId: string,
 ): Promise<FinalStateEnvelope | null> {
-  const [row] = await node
-    .select({ envelope: nodeHandoverEvents.envelope })
-    .from(nodeHandoverEvents)
-    .where(
-      and(
-        eq(nodeHandoverEvents.nodeId, nodeId),
-        eq(nodeHandoverEvents.operationId, operationId),
-        eq(nodeHandoverEvents.kind, FINAL_STATE_EVENT),
-      ),
-    )
-    .orderBy(asc(sql`rowid`))
-    .limit(1);
-  if (row === undefined) return null;
-  // A fault in Waitron: this file's writer always stores the envelope with the event.
-  if (row.envelope === null) throw new Error(`the final-state event of ${operationId} is empty`);
-  return JSON.parse(row.envelope) as FinalStateEnvelope;
+  const envelope = await findHandoverEnvelope(
+    { node, nodeId },
+    operationId,
+    HANDOVER_EVENT.finalState,
+  );
+  return envelope === null ? null : (JSON.parse(envelope) as FinalStateEnvelope);
 }
 
 async function isDirectory(path: string): Promise<boolean> {
@@ -219,6 +210,18 @@ async function describeCopy(
 
 async function digestFile(path: string): Promise<{ sha256: string; bytes: number }> {
   return digestBytes(createReadStream(path));
+}
+
+/** `digestFile`, where a file that is not there is an answer: `null`. */
+export async function digestFileIfPresent(
+  path: string,
+): Promise<{ sha256: string; bytes: number } | null> {
+  try {
+    return await digestFile(path);
+  } catch (error) {
+    if (errnoOf(error) === "ENOENT") return null;
+    throw error;
+  }
 }
 
 /** The SHA-256, as lowercase hex, and the length of the bytes a stream yields. */

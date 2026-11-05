@@ -1,3 +1,6 @@
+import type { CanonicalValue } from "@waitron/membership";
+import type { OperationBinding } from "@waitron/module";
+
 /**
  * A box's own state — its `node.db` tables, the `local` tables inside `venue.db`, named files in its
  * state folder, and Litestream's folder beside `venue.db` — and what the receiving box (M2) does
@@ -13,10 +16,17 @@ export interface NodeLocalManifestRow {
   readonly treatment: string;
 }
 
+/** One entry of a box's `module-preparation-state.json`. */
+export interface RetainedRevision {
+  readonly binding: OperationBinding;
+  readonly value: CanonicalValue;
+}
+
 /** A manifest row as the final-state indicator reports it, with what the source box holds. */
 export interface NodeLocalItem extends NodeLocalManifestRow {
   readonly sha256?: string | null;
   readonly ringVersions?: number[];
+  readonly revisions?: readonly RetainedRevision[];
 }
 
 const KEEPS_OWN = "M2 keeps its own; M1's never travel";
@@ -128,20 +138,20 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     item: "backup.env",
     where: "state",
     class: "transferred",
-    treatment: "compared: the indicator carries its digest",
+    treatment: "compared: the indicator carries a digest of its values",
   },
   {
     item: "modules.json",
     where: "state",
     class: "transferred",
-    treatment: "compared: the indicator carries its digest",
+    treatment: "compared: the indicator carries a digest of the modules it switches off",
   },
   {
     item: "module-preparation-state.json",
     where: "state",
     class: "transferred",
     treatment:
-      "M1's retained minute selections are not in the copy, and placed as module-evidence the restore way they do not reach promotion, so the spare reuses an abandoned selection's name when its checked clock reads that minute",
+      "the indicator carries M1's retained selections, which are not in the copy; M2 merges them into its own file before the copy is placed, because a minute name M1 selected and never activated still counts as used",
   },
   {
     item: "module-evidence/<module>/<source>.json",

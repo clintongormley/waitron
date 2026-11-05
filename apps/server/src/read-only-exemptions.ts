@@ -8,7 +8,10 @@ export type ReadOnlyBox = "mirror" | "fenced";
 
 export interface ReadOnlyExemption {
   readonly method: "POST";
-  /** Matched exactly. */
+  /**
+   * Matched exactly, except that a segment spelled `:operationId` takes any one non-empty segment
+   * holding no `%`.
+   */
   readonly path: string;
   /** The read-only boxes on which the route passes the gate. */
   readonly boxes: readonly ReadOnlyBox[];
@@ -50,7 +53,42 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     authenticates:
       "none needed from the caller: the body is a signed chart, accepted only through `acceptMembershipDocument` against the stored trust set; the answer is one boolean",
   },
+  {
+    method: "POST",
+    path: "/api/node/handover/offer",
+    boxes: ["mirror"],
+    authenticates:
+      "a `stepdown` envelope signed by a key this box stores for that node or the held chart vouches for (`peerKeyOf`), whose binding names its signer as the source and this box as the destination; a new operation also needs the held chart to name that source `serving-primary`; answers only signed status",
+  },
+  {
+    method: "POST",
+    path: "/api/node/handover/:operationId/preparation",
+    boxes: ["mirror"],
+    authenticates:
+      "HTTPS, a stored operation ready to promote, a promote module operation naming that operation, its source and this box, and the sign-in of a person holding `node.promote`, by email (`handover-preparation.ts`)",
+  },
+  {
+    method: "POST",
+    path: "/api/node/handover/:operationId/activate",
+    boxes: ["mirror"],
+    authenticates:
+      "HTTPS, a stored operation ready to promote, a promote module operation naming that operation, its source and this box, and the sign-in of a person holding `node.promote`, by email (`handover-activation.ts`); an operation already activated answers only that",
+  },
 ];
+
+export function pathMatches(rowPath: string, requestPath: string): boolean {
+  const rowSegments = rowPath.split("/");
+  const requestSegments = requestPath.split("/");
+  return (
+    rowSegments.length === requestSegments.length &&
+    rowSegments.every((segment, index) =>
+      segment === ":operationId"
+        ? // The path keeps `%2F` undecoded, so `a%2Fb` is one segment here and `a/b` to the route.
+          requestSegments[index] !== "" && !requestSegments[index]!.includes("%")
+        : segment === requestSegments[index],
+    )
+  );
+}
 
 export function isReadOnlyExempt(
   request: { readonly method: string; readonly path: string },
@@ -59,7 +97,7 @@ export function isReadOnlyExempt(
   return READ_ONLY_EXEMPTIONS.some(
     (row) =>
       row.method === request.method &&
-      row.path === request.path &&
+      pathMatches(row.path, request.path) &&
       row.boxes.some((kind) => box[kind]),
   );
 }

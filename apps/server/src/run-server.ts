@@ -30,6 +30,8 @@ const DEFAULT_DEPS: ShutdownDeps = {
  */
 export const SHUTDOWN_DEADLINE_MS = 8000;
 
+let shutdownUnderWay = false;
+
 /**
  * Stop the server once on the first SIGTERM/SIGINT, then exit — the routine `bin.ts` and
  * `node-entry.ts` share.
@@ -43,8 +45,10 @@ export const SHUTDOWN_DEADLINE_MS = 8000;
  * explaining the failure. The log carries `codeOf`'s classification rather than the caught value,
  * which could carry a secret.
  *
- * A THIRD signal, of either name, is not caught: both `once` listeners have already removed
- * themselves, so it takes Node's default action and kills the process mid-shutdown. Accepted gap.
+ * A repeat of a signal name already received is not caught: its `once` listener has removed itself,
+ * so it takes Node's default action and kills the process mid-shutdown
+ * (`run-server.signals.test.ts`). Accepted gap for a person's signals; {@link restartProcess} stops
+ * sending its own.
  */
 export function installShutdownHandlers(
   server: { close(): Promise<void> },
@@ -68,6 +72,7 @@ export function installShutdownHandlers(
     deps.on(signal, () => {
       if (shuttingDown) return;
       shuttingDown = true;
+      shutdownUnderWay = true;
       // Left running after a rejection: it is the exit if the failure line's write never completes.
       const deadline = setTimer(SHUTDOWN_DEADLINE_MS, () => {
         if (exited) return;
@@ -88,4 +93,12 @@ export function installShutdownHandlers(
       );
     });
   }
+}
+
+/**
+ * Docker restarts the box once it exits (`deploy/compose.yml`). Safe to call again and again: with a
+ * shutdown under way another SIGTERM would only cut it short.
+ */
+export function restartProcess(): void {
+  if (!shutdownUnderWay) process.kill(process.pid, "SIGTERM");
 }

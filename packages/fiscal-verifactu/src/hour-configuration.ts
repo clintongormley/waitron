@@ -8,7 +8,11 @@ import type {
 import { createHourInitialSetup } from "./initial-hour-setup.js";
 import { FISCAL_INITIAL_SETUP as historicalInitialSetup } from "./initial-setup.js";
 import { hostedHourPreparation } from "./hour-preparation.js";
-import { createHourDormantPreparation, isHourDormantInput } from "./hour-dormant-standby.js";
+import {
+  createHourDormantPreparation,
+  isHourDormantInput,
+  retainedHourDormantSource,
+} from "./hour-dormant-standby.js";
 import { hostedHourRecovery } from "./hosted-hour-recovery.js";
 import { readHourRecoveryHistory, readHourRecoveryState } from "./hour-recovery-state.js";
 import { startAgainHoldings } from "./start-again-holdings.js";
@@ -37,6 +41,10 @@ function configured(host?: ModuleOperationHost): ModuleOperationPreparation {
   };
   return {
     liveRecoveryActions: ["conflict-switch"],
+    dormantSetup: {
+      reserveInput: { kind: "hour-dormant", version: 1 },
+      retained: retainedHourDormantSource,
+    },
     readRecoveryHistory: readHourRecoveryHistory,
     readRecoveryState: readHourRecoveryState,
     async recovery(operation, proposal, client) {

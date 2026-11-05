@@ -80,8 +80,20 @@ export interface OperationClient {
   readonly onBox: boolean;
 }
 
+/** How a box whose module keeps a dormant setup writes it for itself from its own venue copy. */
+export interface ModuleDormantSetup {
+  /** What the module's `provisioning.standby.reserve` takes; opaque to the host. */
+  readonly reserveInput: unknown;
+  /** What this box's preparation history already retains for `binding`'s target. */
+  retained(
+    history: readonly unknown[],
+    binding: OperationBinding,
+  ): "none" | "this_source" | "another_source";
+}
+
 export interface ModuleOperationPreparation {
   readonly liveRecoveryActions?: readonly string[];
+  readonly dormantSetup?: ModuleDormantSetup;
   configure?(host: ModuleOperationHost): ModuleOperationPreparation;
   readRecoveryHistory?(db: Database): Promise<readonly unknown[]>;
   readRecoveryState?(

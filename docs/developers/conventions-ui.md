@@ -873,6 +873,16 @@ as the form's bottom message on the dashboard and the setup wizard's Connect, "W
 the PIN is the only thing typed. A refused sign-in marks no field on any sign-in form, the setup
 wizard's Reset form included (`apps/setup/src/screens/reset-screen.ts`); there a field is marked
 only when its value is missing or malformed (owner, 2026-09-30, A153).
+The same hashing work is not enough when attempts arrive together. `withAuthenticatedOperation`
+(`apps/server/src/operation-authentication.ts`) queues attempts by person id, so a route that signs in
+by email through it takes the id from `personIdForLoginEmail`
+(`packages/identity/src/manager-login.ts`), which gives an address with no active account one id
+for the life of the process, derived from the folded address under a key made once per process.
+With a new random id per attempt, 8 attempts at once through the handover's preparation route took
+about 75 ms for an unknown address against about 300 ms for a real one, with the same answers and
+the same 8 hashes; with one id per address both took about 300 ms (2026-11-05, in-process, no
+network). Guard: "attempts sent at once take turns alike" in
+`apps/server/src/handover-preparation.test.ts`, weaker than the rule: that route only.
 Passkey and Google sign-in keep their own codes: `passkey.verification_failed` for a passkey row that
 still belongs to a person who is not active, a bad signature or a used-up challenge (`packages/identity/src/passkey.ts`),
 `google.invalid` for a Google account linked to nobody or to a person who is not active

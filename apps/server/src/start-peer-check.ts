@@ -9,6 +9,7 @@ import {
   type NodeDatabase,
   type NodeTransaction,
 } from "@waitron/db";
+import { ACTIVATED_OR_LATER } from "@waitron/handover";
 import { servingPrimaryNodeId, type SignedMembershipDocument } from "@waitron/membership";
 import {
   nodeHandoverOperations,
@@ -18,6 +19,7 @@ import {
   recordHandoverRestrictionTx,
   type HandoverOperation,
 } from "@waitron/node-db";
+import { codeOf } from "@waitron/server-kit";
 import {
   askPeerStatus,
   checkPeersAtStart,
@@ -26,48 +28,49 @@ import {
   type SilentReason,
   type StartCheckResult,
 } from "./boot-peer-check.js";
+import { finishInterruptedActivation } from "./handover-activation-repair.js";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
-import { advanceHandover } from "./handover-store.js";
+import { abandonHandover, type HandoverRefusal } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { saveVerifiedMembership } from "./node-membership-api.js";
 
 const START_CHECK_TIMEOUT_MS = 5000;
-
-/** A destination that reached `activated`: this state or one only reachable after it. */
-const ACTIVATED_OR_LATER = [
-  "activated",
-  "return_pending",
-  "return_complete",
-  "return_abandoned",
-] as const;
 
 interface NodeDeps {
   node: NodeDatabase;
   nodeId: string;
 }
 
-/**
- * Filled by Task 5.8b once `handover_activations` exists: a destination operation left at
- * `filing_assumed` or `emergency_declared` on a box that is no longer a mirror is recorded
- * `activated`. Runs before `readActivatedFrom`, so that operation's source is in the set.
- */
-export const finishInterruptedActivation: (deps: NodeDeps) => Promise<void> = () =>
-  Promise.resolve();
+/** Closes a source operation that is still at `prepared` as `abandoned`, storing `code`. */
+async function closePreparedSource(deps: NodeDeps, code: HandoverRefusal["code"]): Promise<void> {
+  const open = await readOpenHandoverOperation(deps.node, deps.nodeId);
+  if (open !== null && open.role === "source" && open.state === "prepared")
+    await abandonHandover(deps, open.operationId, { code, params: {} });
+}
 
 /**
  * The repairs a non-mirror box makes before it asks its peers. A source operation still at
  * `prepared` never stepped down (the stepdown writes the next state and the restriction in one
- * node transaction, `handover-stepdown.ts` `writeRestriction`, and a restriction sends the start to
- * the restricted start before this), so no copy of it can have been accepted: it closes as
- * `abandoned`.
+ * node transaction, `handover-stepdown.ts` `writeRestriction`), so no copy of it can have been
+ * accepted: it closes as `abandoned`. A destination's lost `activated` record is written here, ahead
+ * of `readActivatedFrom`, so that operation's source is in the set.
  */
-export async function repairAtStart(deps: NodeDeps): Promise<void> {
-  const open = await readOpenHandoverOperation(deps.node, deps.nodeId);
-  if (open !== null && open.role === "source" && open.state === "prepared")
-    await advanceHandover(deps, open.operationId, "abandoned", {
-      reason: "restarted_before_stepdown",
-    });
+export async function repairAtStart(deps: NodeDeps & { db: Database }): Promise<void> {
+  await closePreparedSource(deps, "handover.restarted_before_stepdown");
   await finishInterruptedActivation(deps);
+}
+
+/**
+ * The same closing for a box a newer chart has stepped down, whose stored refusal must not say it
+ * keeps selling. It never stops a start: a restricted box still answers its successor, and the
+ * operation stays `prepared` until a later start's write succeeds.
+ */
+export async function closeSupersededOperation(deps: NodeDeps, log: Logger): Promise<void> {
+  try {
+    await closePreparedSource(deps, "handover.superseded_during_start");
+  } catch (error) {
+    log("error", "handover.superseded_close_failed", { errorCode: codeOf(error) });
+  }
 }
 
 /** Whether `open`, this box's open operation, is one in which this box is the source. */

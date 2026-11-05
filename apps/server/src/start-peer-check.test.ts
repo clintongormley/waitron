@@ -1,9 +1,15 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { nodes, readNodeMembership, withNodeTransaction, writeNodeMembership } from "@waitron/db";
+import {
+  nodes,
+  readNodeMembership,
+  withNodeTransaction,
+  withTransaction,
+  writeNodeMembership,
+} from "@waitron/db";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing } from "@waitron/credentials";
-import { signEnvelope, type HandoverState } from "@waitron/handover";
+import { insertHandoverActivationTx, signEnvelope, type HandoverState } from "@waitron/handover";
 import {
   generateNodeKeyPair,
   signDocumentBody,
@@ -18,11 +24,13 @@ import {
   readHandoverOperation,
   readHandoverRestriction,
   recordHandoverRestrictionTx,
+  setNodeModeTx,
   writeMirrorLink,
 } from "@waitron/node-db";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import type { PeerOperationStatus, PeerStatusBody } from "./peer-status-api.js";
 import {
+  closeSupersededOperation,
   readActivatedFrom,
   recordSupersededAtStart,
   repairAtStart,
@@ -145,6 +153,7 @@ async function insertOperation(
     scenario?: "controlled" | "emergency";
     state: HandoverState;
     sourceNodeId?: string;
+    destinationNodeId?: string;
   },
 ): Promise<void> {
   await withNodeTransaction(suite.node, async (tx) => {
@@ -154,7 +163,7 @@ async function insertOperation(
       role: row.role,
       scenario: row.scenario ?? "controlled",
       sourceNodeId: row.sourceNodeId ?? (row.role === "source" ? nodeId : PEER.nodeId),
-      destinationNodeId: row.role === "source" ? PEER.nodeId : nodeId,
+      destinationNodeId: row.destinationNodeId ?? (row.role === "source" ? PEER.nodeId : nodeId),
       binding: {},
       fingerprint: "f".repeat(64),
       state: row.state,
@@ -187,7 +196,7 @@ describe("the repairs before the start check", () => {
   it("a source operation left at prepared is moved to abandoned, and the box proceeds once its counted peer answers =", async () => {
     const b = await box(suite);
     await insertOperation(suite, b.nodeId, { role: "source", state: "prepared" });
-    await repairAtStart({ node: suite.node, nodeId: b.nodeId });
+    await repairAtStart({ db: suite.db, node: suite.node, nodeId: b.nodeId });
     expect((await readHandoverOperation(suite.node, b.nodeId, OP))?.state).toBe("abandoned");
     const events = await suite.node.select().from(nodeHandoverEvents);
     expect(events).toMatchObject([{ nodeId: b.nodeId, operationId: OP, kind: "abandoned" }]);
@@ -199,10 +208,18 @@ describe("the repairs before the start check", () => {
     expect(outcome.result).toBe("proceed");
   });
 
+  it("records the refusal a repeat of the start request answers", async () => {
+    const b = await box(suite);
+    await insertOperation(suite, b.nodeId, { role: "source", state: "prepared" });
+    await repairAtStart({ db: suite.db, node: suite.node, nodeId: b.nodeId });
+    const [event] = await suite.node.select().from(nodeHandoverEvents);
+    expect(event!.detail).toEqual({ code: "handover.restarted_before_stepdown", params: {} });
+  });
+
   it("with that peer silent, the box waits", async () => {
     const b = await box(suite);
     await insertOperation(suite, b.nodeId, { role: "source", state: "prepared" });
-    await repairAtStart({ node: suite.node, nodeId: b.nodeId });
+    await repairAtStart({ db: suite.db, node: suite.node, nodeId: b.nodeId });
     expect((await readHandoverOperation(suite.node, b.nodeId, OP))?.state).toBe("abandoned");
     expect((await check(suite, b, peerFetch("silent"))).result).toBe("wait");
   });
@@ -210,15 +227,286 @@ describe("the repairs before the start check", () => {
   it("leaves a destination operation at prepared alone", async () => {
     const b = await box(suite);
     await insertOperation(suite, b.nodeId, { role: "destination", state: "prepared" });
-    await repairAtStart({ node: suite.node, nodeId: b.nodeId });
+    await repairAtStart({ db: suite.db, node: suite.node, nodeId: b.nodeId });
     expect((await readHandoverOperation(suite.node, b.nodeId, OP))?.state).toBe("prepared");
     expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
   });
 
+  it("the restricted start's repair closes a source left at prepared, under the code for what happened", async () => {
+    const b = await box(suite);
+    await insertOperation(suite, b.nodeId, { role: "source", state: "prepared" });
+    await closeSupersededOperation({ node: suite.node, nodeId: b.nodeId }, () => undefined);
+    expect((await readHandoverOperation(suite.node, b.nodeId, OP))?.state).toBe("abandoned");
+    const [event] = await suite.node.select().from(nodeHandoverEvents);
+    expect(event!.detail).toEqual({ code: "handover.superseded_during_start", params: {} });
+  });
+
+  it("the restricted start's repair leaves a source that stepped down alone", async () => {
+    const b = await box(suite);
+    await insertOperation(suite, b.nodeId, { role: "source", state: "source_stepped_down" });
+    const logged: string[] = [];
+    await closeSupersededOperation({ node: suite.node, nodeId: b.nodeId }, (_level, message) => {
+      logged.push(message);
+    });
+    expect((await readHandoverOperation(suite.node, b.nodeId, OP))?.state).toBe(
+      "source_stepped_down",
+    );
+    expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
+    expect(logged).toEqual([]);
+  });
+
+  it("the restricted start's repair leaves a destination at prepared alone", async () => {
+    const b = await box(suite);
+    await insertOperation(suite, b.nodeId, { role: "destination", state: "prepared" });
+    await closeSupersededOperation({ node: suite.node, nodeId: b.nodeId }, () => undefined);
+    expect((await readHandoverOperation(suite.node, b.nodeId, OP))?.state).toBe("prepared");
+    expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
+  });
+
+  it("the restricted start's repair logs a failed write and carries on, and a later start closes it", async () => {
+    const b = await box(suite);
+    await insertOperation(suite, b.nodeId, { role: "source", state: "prepared" });
+    suite.node.run(
+      sql`create trigger refuse_event before insert on node_handover_events
+          begin select raise(abort, 'the write fails here'); end`,
+    );
+    const logged: [string, string][] = [];
+    try {
+      await closeSupersededOperation({ node: suite.node, nodeId: b.nodeId }, (level, message) => {
+        logged.push([level, message]);
+      });
+    } finally {
+      suite.node.run(sql`drop trigger refuse_event`);
+    }
+    expect(logged).toEqual([["error", "handover.superseded_close_failed"]]);
+    expect((await readHandoverOperation(suite.node, b.nodeId, OP))?.state).toBe("prepared");
+
+    await closeSupersededOperation({ node: suite.node, nodeId: b.nodeId }, () => undefined);
+    expect((await readHandoverOperation(suite.node, b.nodeId, OP))?.state).toBe("abandoned");
+  });
+
+  it("the restricted start's repair logs a failed read and carries on", async () => {
+    const b = await box(suite);
+    suite.node.run(sql`alter table node_handover_operations rename to hidden_operations`);
+    const logged: string[] = [];
+    try {
+      await closeSupersededOperation({ node: suite.node, nodeId: b.nodeId }, (_level, message) => {
+        logged.push(message);
+      });
+    } finally {
+      suite.node.run(sql`alter table hidden_operations rename to node_handover_operations`);
+    }
+    expect(logged).toEqual(["handover.superseded_close_failed"]);
+  });
+
   it("leaves a box with no operation alone", async () => {
     const b = await box(suite);
-    await repairAtStart({ node: suite.node, nodeId: b.nodeId });
+    await repairAtStart({ db: suite.db, node: suite.node, nodeId: b.nodeId });
     expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
+  });
+});
+
+describe("a destination whose activation committed and whose node.db record was lost", () => {
+  const suite = useVenueDb({ migrations });
+
+  async function holdActivationRow(
+    nodeId: string,
+    row: {
+      operationId?: string;
+      scenario?: "controlled" | "emergency";
+      sourceNodeId?: string;
+      destinationNodeId?: string;
+    } = {},
+  ): Promise<void> {
+    const operationId = row.operationId ?? OP;
+    await withTransaction(suite.db, (tx) =>
+      insertHandoverActivationTx(tx, {
+        operationId,
+        scenario: row.scenario ?? "controlled",
+        sourceNodeId: row.sourceNodeId ?? PEER.nodeId,
+        destinationNodeId: row.destinationNodeId ?? nodeId,
+        evidence: signEnvelope("status", {} as never, PEER),
+        personId: operationId,
+        activatedAt: "2026-10-16T12:40:00.000Z",
+      }),
+    );
+  }
+
+  /** A joined box that is neither end of the operation: `handover_activations` keys into `nodes`. */
+  const THIRD_BOX = "00000000-0000-4000-8000-0000000000dd";
+  async function joinThirdBox(nodeId: string): Promise<void> {
+    const [own] = await suite.db
+      .select({ locationId: nodes.locationId })
+      .from(nodes)
+      .where(eq(nodes.id, nodeId));
+    await suite.db.insert(nodes).values({
+      id: THIRD_BOX,
+      locationId: own!.locationId,
+      name: "Third",
+      publicKey: generateNodeKeyPair().publicKey,
+    });
+  }
+
+  async function expectUnrecorded(nodeId: string): Promise<void> {
+    expect(await stateOf(nodeId)).toBe("filing_assumed");
+    expect(await readActivatedFrom(suite.node, nodeId)).toEqual(new Set());
+    expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
+  }
+
+  const repair = (nodeId: string) => repairAtStart({ db: suite.db, node: suite.node, nodeId });
+  const stateOf = async (nodeId: string) =>
+    (await readHandoverOperation(suite.node, nodeId, OP))?.state;
+
+  it.each([
+    ["controlled", "filing_assumed"],
+    ["emergency", "emergency_declared"],
+  ] as const)(
+    "%s, at %s, with its row is recorded activated once, and its source joins the set",
+    async (scenario, state) => {
+      const b = await box(suite);
+      await insertOperation(suite, b.nodeId, { role: "destination", scenario, state });
+      await holdActivationRow(b.nodeId, { scenario });
+
+      await repair(b.nodeId);
+      await repair(b.nodeId);
+
+      expect(await stateOf(b.nodeId)).toBe("activated");
+      expect(await readActivatedFrom(suite.node, b.nodeId)).toEqual(new Set([PEER.nodeId]));
+      expect(await suite.node.select().from(nodeHandoverEvents)).toMatchObject([
+        { nodeId: b.nodeId, operationId: OP, kind: "activated", detail: {}, envelope: null },
+      ]);
+    },
+  );
+
+  it("with no row, a primary box's operation changes nothing", async () => {
+    const b = await box(suite);
+    await insertOperation(suite, b.nodeId, { role: "destination", state: "filing_assumed" });
+    await repair(b.nodeId);
+    expect(await stateOf(b.nodeId)).toBe("filing_assumed");
+    expect(await readActivatedFrom(suite.node, b.nodeId)).toEqual(new Set());
+    expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
+  });
+
+  it("a row for another operation changes nothing", async () => {
+    const b = await box(suite);
+    await insertOperation(suite, b.nodeId, { role: "destination", state: "filing_assumed" });
+    await holdActivationRow(b.nodeId, { operationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" });
+    await repair(b.nodeId);
+    expect(await stateOf(b.nodeId)).toBe("filing_assumed");
+  });
+
+  it("a row naming another destination leaves the operation unrecorded", async () => {
+    const b = await box(suite);
+    await joinThirdBox(b.nodeId);
+    await insertOperation(suite, b.nodeId, { role: "destination", state: "filing_assumed" });
+    await holdActivationRow(b.nodeId, { destinationNodeId: THIRD_BOX });
+    await repair(b.nodeId);
+    await expectUnrecorded(b.nodeId);
+  });
+
+  it("a row naming another source leaves the operation unrecorded", async () => {
+    const b = await box(suite);
+    await joinThirdBox(b.nodeId);
+    await insertOperation(suite, b.nodeId, { role: "destination", state: "filing_assumed" });
+    await holdActivationRow(b.nodeId, { sourceNodeId: THIRD_BOX });
+    await repair(b.nodeId);
+    await expectUnrecorded(b.nodeId);
+  });
+
+  it("a row of the other scenario leaves the operation unrecorded", async () => {
+    const b = await box(suite);
+    await insertOperation(suite, b.nodeId, { role: "destination", state: "filing_assumed" });
+    await holdActivationRow(b.nodeId, { scenario: "emergency" });
+    await repair(b.nodeId);
+    await expectUnrecorded(b.nodeId);
+  });
+
+  it("a row agreeing with an operation that names another destination leaves it unrecorded", async () => {
+    const b = await box(suite);
+    await joinThirdBox(b.nodeId);
+    await insertOperation(suite, b.nodeId, {
+      role: "destination",
+      state: "filing_assumed",
+      destinationNodeId: THIRD_BOX,
+    });
+    await holdActivationRow(b.nodeId, { destinationNodeId: THIRD_BOX });
+    await repair(b.nodeId);
+    await expectUnrecorded(b.nodeId);
+  });
+
+  it("a row naming this box under an operation that names another destination leaves it unrecorded", async () => {
+    const b = await box(suite);
+    await joinThirdBox(b.nodeId);
+    await insertOperation(suite, b.nodeId, {
+      role: "destination",
+      state: "filing_assumed",
+      destinationNodeId: THIRD_BOX,
+    });
+    await holdActivationRow(b.nodeId);
+    await repair(b.nodeId);
+    await expectUnrecorded(b.nodeId);
+  });
+
+  it.each(["prepared", "copy_accepted"] as const)(
+    "an operation at %s is never repaired, even with a row",
+    async (state) => {
+      const b = await box(suite);
+      await insertOperation(suite, b.nodeId, { role: "destination", state });
+      await holdActivationRow(b.nodeId);
+      await repair(b.nodeId);
+      expect(await stateOf(b.nodeId)).toBe(state);
+      expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
+    },
+  );
+
+  it("a source's operation is left alone, even with a row", async () => {
+    const b = await box(suite);
+    await insertOperation(suite, b.nodeId, { role: "source", state: "filing_assumed" });
+    await holdActivationRow(b.nodeId);
+    await repair(b.nodeId);
+    expect(await stateOf(b.nodeId)).toBe("filing_assumed");
+  });
+
+  it("a mirror is left alone, even with a row", async () => {
+    const b = await box(suite);
+    await insertOperation(suite, b.nodeId, { role: "destination", state: "filing_assumed" });
+    await holdActivationRow(b.nodeId);
+    await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, b.nodeId, "mirror"));
+    await repair(b.nodeId);
+    expect(await stateOf(b.nodeId)).toBe("filing_assumed");
+    expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
+  });
+
+  describe("on a chart another box signed, where only the record leaves the silent source uncounted", () => {
+    const onThatChart = async () => {
+      const b = await box(suite, { heldSignedByPeer: true, peerStanding: "sell-only" });
+      await insertOperation(suite, b.nodeId, { role: "destination", state: "filing_assumed" });
+      return b;
+    };
+
+    it("with the row, the repair lets the box proceed", async () => {
+      const b = await onThatChart();
+      await holdActivationRow(b.nodeId);
+      await repair(b.nodeId);
+      expect((await check(suite, b, peerFetch("silent"))).result).toBe("proceed");
+    });
+
+    it.each([
+      ["another destination", { destinationNodeId: THIRD_BOX }],
+      ["another source", { sourceNodeId: THIRD_BOX }],
+    ])("with a row naming %s, the same box waits on that source", async (_name, row) => {
+      const b = await onThatChart();
+      await joinThirdBox(b.nodeId);
+      await holdActivationRow(b.nodeId, row);
+      await repair(b.nodeId);
+      expect((await check(suite, b, peerFetch("silent"))).result).toBe("wait");
+    });
+
+    it("control: with no row the same box waits on that source", async () => {
+      const b = await onThatChart();
+      await repair(b.nodeId);
+      expect((await check(suite, b, peerFetch("silent"))).result).toBe("wait");
+    });
   });
 });
 

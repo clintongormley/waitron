@@ -1,0 +1,117 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "2e50d267-7e63-4b78-b251-2e1cc2c2bfa3",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "handover_activations": {
+      "name": "handover_activations",
+      "columns": {
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scenario": {
+          "name": "scenario",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_node_id": {
+          "name": "source_node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "destination_node_id": {
+          "name": "destination_node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evidence": {
+          "name": "evidence",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "activated_at": {
+          "name": "activated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "handover_activations_destination_idx": {
+          "name": "handover_activations_destination_idx",
+          "columns": [
+            "destination_node_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "handover_activations_source_node_fk": {
+          "name": "handover_activations_source_node_fk",
+          "tableFrom": "handover_activations",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "source_node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "handover_activations_destination_node_fk": {
+          "name": "handover_activations_destination_node_fk",
+          "tableFrom": "handover_activations",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "destination_node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "handover_activations_scenario_ck": {
+          "name": "handover_activations_scenario_ck",
+          "value": "\"handover_activations\".\"scenario\" in ('controlled', 'emergency')"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

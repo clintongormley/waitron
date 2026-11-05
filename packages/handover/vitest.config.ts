@@ -4,6 +4,10 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
+    // `hookTimeout` bounds only hooks with no timeout of their own, so not `useVenueDb`'s setup,
+    // which carries its own (`packages/db/src/testing/venue-db.ts`).
+    testTimeout: 120_000,
+    hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     // One worker: v8 under-merges branch coverage across workers.
     maxWorkers: 1,

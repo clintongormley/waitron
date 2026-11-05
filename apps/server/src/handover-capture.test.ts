@@ -17,6 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
+  parseIndicator,
   sha256Hex,
   verifyEnvelope,
   type FinalStateIndicator,
@@ -34,17 +35,26 @@ import {
 import {
   CAPTURE_REFUSAL_STATUS,
   captureFinalCopy,
-  FINAL_STATE_EVENT,
   journalDigest,
   type CaptureDeps,
 } from "./handover-capture.js";
 import { buildNodeLocalManifest } from "./handover-manifest.js";
-import { advanceHandover, beginHandover } from "./handover-store.js";
+import { advanceHandover, beginHandover, HANDOVER_EVENT } from "./handover-store.js";
+import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity } from "./node-identity.js";
 
+const FINAL_STATE_EVENT = HANDOVER_EVENT.finalState;
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x4).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
+
+/** Holds RING's key as the one being rotated away from, so a box keyed by RING still reads. */
+const ROTATING_RING: KeyRing = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x5).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "2",
+  WAITRON_CREDENTIALS_KEY_PREVIOUS: Buffer.alloc(32, 0x4).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
 });
 
 const DESTINATION = "22222222-2222-4222-8222-222222222222";
@@ -241,6 +251,18 @@ describe("capturing a stepped-down box's final copy", () => {
     expect(envelope.body.snapshot.bytes).toBeGreaterThan(0);
   });
 
+  it("the copy is readable by its owner alone, under a permissive mask", async () => {
+    const self = await steppedDown();
+    // Under this mask a file created with no stated mode comes out 644.
+    const mask = process.umask(0o022);
+    try {
+      await captureFinalCopy(deps(self), OP);
+    } finally {
+      process.umask(mask);
+    }
+    expect((await stat(copyPath())).mode & 0o777).toBe(0o600);
+  });
+
   it("the summaries are read from the captured file", async () => {
     const self = await steppedDown();
     suite.db.run(sql`insert into handover_probe (n) values (1), (2)`);
@@ -370,7 +392,8 @@ describe("capturing a stepped-down box's final copy", () => {
 
   it("carries the own-state manifest read from this box's state folder", async () => {
     const self = await steppedDown();
-    await writeFile(join(stateDir, "modules.json"), '{"enabled":["core"]}');
+    const off = ALL_MODULES.find((m) => m.tier === "toggleable")!.name;
+    await writeFile(join(stateDir, "modules.json"), JSON.stringify({ modules: { [off]: false } }));
     const envelope = await captureFinalCopy(deps(self), OP);
     expect(envelope.body.nodeLocal).toEqual(
       [...(await buildNodeLocalManifest(stateDir, RING))].sort((a, b) =>
@@ -380,7 +403,47 @@ describe("capturing a stepped-down box's final copy", () => {
     const modulesFile = envelope.body.nodeLocal.find(
       (row) => row.where === "state" && row.item === "modules.json",
     );
-    expect(modulesFile?.sha256).toBe(sha256Hex('{"enabled":["core"]}'));
+    expect(modulesFile?.sha256).toBe(sha256Hex(canonicalize({ [off]: false })));
+  });
+
+  it.each([
+    ["no rotation under way", RING, [1]],
+    ["a rotation under way", ROTATING_RING, [1, 2]],
+  ])(
+    "lists every ring version with %s, in a body the parser accepts",
+    async (_name, ring, want) => {
+      const self = await steppedDown();
+      const envelope = await captureFinalCopy(deps(self, { ring }), OP);
+      const row = parseIndicator(envelope.body).nodeLocal.find((r) => r.item === "secrets.env");
+      expect(row?.ringVersions).toEqual(want);
+    },
+  );
+
+  it("signs this box's retained selections inside the indicator, in a body the parser accepts", async () => {
+    const self = await steppedDown();
+    const revisions = [
+      {
+        binding: {
+          module: "fiscal-verifactu",
+          action: "promote",
+          eventId: "e1",
+          sourceId: "s1",
+          targetNodeId: self,
+        },
+        value: { selected: "AAAAA" },
+      },
+    ];
+    await writeFile(
+      join(stateDir, "module-preparation-state.json"),
+      JSON.stringify({ version: 1, revisions }),
+    );
+    const envelope = await captureFinalCopy(deps(self), OP);
+    const parsed = parseIndicator(envelope.body);
+    expect(
+      parsed.nodeLocal.find((row) => row.item === "module-preparation-state.json")?.revisions,
+    ).toEqual(revisions);
+    const stored = await captureFinalCopy(deps(self), OP);
+    expect(parseIndicator(stored.body)).toEqual(parsed);
   });
 
   it("lists a set's journal by when each migration was applied, not by row order", async () => {

@@ -12,7 +12,9 @@ import { readNodeMode, readRecoveryKeyName, readRecoveryKeyVerifier } from "@wai
 import type { TotpKeyRing } from "@waitron/identity";
 import {
   configureModuleOperations,
+  moduleOperationFor,
   readOperationAuthority,
+  withOperationAuthority,
   withPreparedModuleOperations,
   type ModuleOperationHost,
   type ModuleOperations,
@@ -145,6 +147,7 @@ export function createNodeOperationPreparation(options: {
     credentials: unknown,
     context: Context,
     run: (authority: OperationAuthority, commit: Commit) => Promise<T>,
+    afterSignIn?: () => Promise<void>,
   ): Promise<T> => {
     const binding = Object.freeze({ ...supplied });
     const heldContext = Object.freeze({ ...context });
@@ -183,7 +186,10 @@ export function createNodeOperationPreparation(options: {
         { db: options.db, node: options.nodeDb, nodeId: node.nodeId },
         binding,
         heldCredentials.breakGlass,
-        authenticated,
+        async (authority, commit) => {
+          await afterSignIn?.();
+          return authenticated(authority, commit);
+        },
       );
     if (options.credentialKeyRing === undefined) return invalid(binding);
     return withAuthenticatedOperation(
@@ -196,9 +202,97 @@ export function createNodeOperationPreparation(options: {
       },
       heldCredentials,
       (authority) => authenticated(authority, (body) => withTransaction(options.db, body)),
+      afterSignIn,
     );
   };
+  /**
+   * The module's dormant setup, from this box's own copy, under the person `promote` signed in,
+   * the first time only. On the one module with this seat neither step writes a venue row (the
+   * table list in `handover-dormant-setup.test.ts`), and the file write comes last, so nothing a
+   * stopped attempt leaves needs repair: a retry finds the setup or starts again from the copy.
+   */
+  const writeDormantSetup = async (
+    promote: OperationBinding,
+    authority: OperationAuthority,
+  ): Promise<void> => {
+    const contribution = modules.find((module) => module.name === promote.module);
+    const setup = contribution?.operations?.dormantSetup;
+    const standby = contribution?.provisioning?.standby;
+    if (setup === undefined || standby === undefined) return;
+    if ((await readNodeMode(options.nodeDb, node.nodeId)).mode !== "mirror") return;
+    const retained = setup.retained(
+      await readModulePreparationHistory(options, promote.module),
+      promote,
+    );
+    if (retained === "another_source") return invalid(promote);
+    if (retained === "this_source") return;
+    const { operatorId } = readOperationAuthority(authority, promote)!;
+    const step = <T>(
+      action: "reserve" | "establish",
+      input: unknown,
+      body: (tx: Transaction, operation: ReturnType<typeof moduleOperationFor>) => Promise<T>,
+    ): Promise<T> => {
+      const binding = Object.freeze({ ...promote, action });
+      return withOperationAuthority(binding, operatorId, (stepAuthority) =>
+        scopes.run({ binding, authority: stepAuthority, verifier: undefined }, () =>
+          withPreparedModuleOperations(
+            modules,
+            new Map([[promote.module, { binding, authority: stepAuthority, input }]]),
+            node.nodeId,
+            action,
+            (ready) =>
+              withTransaction(options.db, (tx) =>
+                body(tx, moduleOperationFor(ready, promote.module, node.nodeId, action)),
+              ),
+          ),
+        ),
+      );
+    };
+    const source = { ...node, nodeId: promote.sourceId as ProvisionedNode["nodeId"] };
+    const { state } = await step("reserve", setup.reserveInput, (tx, operation) =>
+      standby.reserve(tx, source, node, operation),
+    );
+    await step("establish", state, (tx, operation) =>
+      standby.establish(tx, node, state, operation),
+    );
+  };
+  const prepareStep = async (
+    binding: OperationBinding,
+    authority: OperationAuthority,
+    proposal: unknown,
+    client: OperationClient,
+  ) => {
+    const contribution = modules.find((module) => module.name === binding.module)?.operations;
+    if (contribution?.recovery === undefined) return invalid(binding);
+    return contribution.recovery({ binding: { ...binding }, authority }, proposal, client);
+  };
+  const prepareWith =
+    (before?: (binding: OperationBinding, authority: OperationAuthority) => Promise<void>) =>
+    async (
+      suppliedBinding: OperationBinding,
+      credentials: unknown,
+      context: Context,
+      proposal: unknown,
+      client: OperationClient,
+      afterSignIn?: () => Promise<void>,
+    ): Promise<unknown> => {
+      const binding = Object.freeze({ ...suppliedBinding });
+      if (binding.action !== "promote") return invalid(binding);
+      const held = structuredClone(proposal);
+      return invoke(
+        binding,
+        credentials,
+        context,
+        async (authority) => {
+          await before?.(binding, authority);
+          return prepareStep(binding, authority, held, client);
+        },
+        afterSignIn,
+      );
+    };
   return {
+    // Read from the configured modules: a module's `recovery` can exist only once configured.
+    hasRecoveryOperation: modules.some((module) => module.operations?.recovery !== undefined),
     async withLiveRecovery<T>(
       supplied: OperationBinding,
       key: unknown,
@@ -239,22 +333,9 @@ export function createNodeOperationPreparation(options: {
         actions,
       );
     },
-    async prepare(
-      suppliedBinding: OperationBinding,
-      credentials: unknown,
-      context: Context,
-      proposal: unknown,
-      client: OperationClient,
-    ): Promise<unknown> {
-      const binding = Object.freeze({ ...suppliedBinding });
-      if (!["promote"].includes(binding.action)) return invalid(binding);
-      const held = structuredClone(proposal);
-      return invoke(binding, credentials, context, async (authority) => {
-        const contribution = modules.find((module) => module.name === binding.module)?.operations;
-        if (contribution?.recovery === undefined) return invalid(binding);
-        return contribution.recovery({ binding: { ...binding }, authority }, held, client);
-      });
-    },
+    prepare: prepareWith(),
+    /** `prepare`, after making sure the setup a promotion reads exists, on the one sign-in. */
+    prepareWithDormantSetup: prepareWith(writeDormantSetup),
     async withOperation<T>(
       operation: RecoveryOperationInput,
       credentials: unknown,
@@ -276,21 +357,27 @@ export function createNodeOperationPreparation(options: {
       credentials: unknown,
       context: Context,
       run: (modules: readonly WaitronModule[], runner: PromotionOperationRunner) => Promise<T>,
+      afterSignIn?: () => Promise<void>,
     ): Promise<T> {
       const binding = Object.freeze({ ...operation.binding });
       const input = structuredClone(operation.input);
       if (binding.action !== "promote") return invalid(binding);
-      return invoke(binding, credentials, context, (authority, commit) =>
-        run(modules, async (current, consume) => {
-          if (current.db !== options.db || !equal(current.node, node)) return invalid(binding);
-          return withPreparedModuleOperations(
-            modules,
-            new Map([[binding.module, { binding, authority, input }]]),
-            node.nodeId,
-            "promote",
-            (ready) => commit((tx) => consume(tx, ready)),
-          );
-        }),
+      return invoke(
+        binding,
+        credentials,
+        context,
+        (authority, commit) =>
+          run(modules, async (current, consume) => {
+            if (current.db !== options.db || !equal(current.node, node)) return invalid(binding);
+            return withPreparedModuleOperations(
+              modules,
+              new Map([[binding.module, { binding, authority, input }]]),
+              node.nodeId,
+              "promote",
+              (ready) => commit((tx) => consume(tx, ready)),
+            );
+          }),
+        afterSignIn,
       );
     },
   };

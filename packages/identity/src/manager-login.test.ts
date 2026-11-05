@@ -1,6 +1,7 @@
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { isUuid } from "@waitron/shared";
 import { generateSecret, generateSync } from "otplib";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -13,10 +14,16 @@ import {
   seedPersonWithPassword,
   TOTP_KEY_RING,
 } from "../test/fixtures.js";
-import { authorizeManager, loginManager, loginManagerById } from "./manager-login.js";
+import {
+  authorizeManager,
+  loginManager,
+  loginManagerById,
+  personIdForLoginEmail,
+} from "./manager-login.js";
 import { verifyPassword } from "./verify-password.js";
 import { encryptTotpSecret } from "./mfa.js";
 import { managementSessions } from "./schema/management-sessions.js";
+import { persons } from "./schema/persons.js";
 import { hashSessionToken } from "./session-token.js";
 
 // Spy on verifyPassword while delegating to the real KDF, so the timing-equalization KDF runs are
@@ -34,6 +41,91 @@ const suite = useVenueDb({
 // refuses it.
 const run = <T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> =>
   withTransaction(suite.db, fn);
+
+describe("personIdForLoginEmail", () => {
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+  it("answers an active account's id, however the address is spelled, with no password hash", async () => {
+    const personId = await seedManager(suite.db, { email: "lookup-active@x.com" });
+    vi.mocked(verifyPassword).mockClear();
+    expect(await personIdForLoginEmail(suite.db, "  LOOKUP-Active@x.com ")).toBe(personId);
+    expect(verifyPassword).not.toHaveBeenCalled();
+  });
+
+  it("answers one id for an unknown address, with no password hash", async () => {
+    vi.mocked(verifyPassword).mockClear();
+    const first = await personIdForLoginEmail(suite.db, "lookup-nobody@x.com");
+    const second = await personIdForLoginEmail(suite.db, "lookup-nobody@x.com");
+    expect(first).toMatch(UUID);
+    expect(isUuid(first)).toBe(true);
+    expect(second).toBe(first);
+    expect(verifyPassword).not.toHaveBeenCalled();
+  });
+
+  it("answers two ids for two unknown addresses, including two a case fold keeps apart", async () => {
+    const answers = await Promise.all(
+      ["lookup-nobody-a@x.com", "lookup-nobody-b@x.com", "lopez@x.com", "l\u00f3pez@x.com"].map(
+        (email) => personIdForLoginEmail(suite.db, email),
+      ),
+    );
+    expect(new Set(answers).size).toBe(answers.length);
+  });
+
+  it("treats the spellings the account lookup treats as one address as one unknown address", async () => {
+    const spellings = (local: string) => [
+      `${local}-\u00e9@x.com`,
+      `${local}-\u00c9@X.COM`,
+      `${local}-e\u0301@x.com`,
+      `  ${local.toUpperCase()}-\u00e9@x.com\t`,
+    ];
+    const personId = await seedManager(suite.db, { email: "lookup-spelled-\u00e9@x.com" });
+    for (const spelling of spellings("lookup-spelled")) {
+      expect(await personIdForLoginEmail(suite.db, spelling), spelling).toBe(personId);
+    }
+    const [first, ...rest] = spellings("lookup-unknown-spelled");
+    const id = await personIdForLoginEmail(suite.db, first as string);
+    for (const spelling of rest) {
+      expect(await personIdForLoginEmail(suite.db, spelling), spelling).toBe(id);
+    }
+  });
+
+  it("answers an id no person holds, which signs nobody in", async () => {
+    const id = await personIdForLoginEmail(suite.db, "lookup-nobody-signs-in@x.com");
+    expect(await suite.db.select().from(persons).where(eq(persons.id, id))).toEqual([]);
+    expect(
+      await refusalOf(() =>
+        run((tx) =>
+          loginManagerById(tx, {
+            personId: id,
+            password: "correct horse",
+            totpKeyRing: TOTP_KEY_RING,
+          }),
+        ),
+      ),
+    ).toEqual({ code: "password.invalid", params: {}, reason: "unknown_account" });
+  });
+
+  it("derives an unknown address's id under a key of this process, so another process answers another id", async () => {
+    const here = await personIdForLoginEmail(suite.db, "lookup-other-process@x.com");
+    vi.resetModules();
+    const another = await import("./manager-login.js");
+    expect(another.personIdForLoginEmail).not.toBe(personIdForLoginEmail);
+    const there = await another.personIdForLoginEmail(suite.db, "lookup-other-process@x.com");
+    expect(there).toMatch(UUID);
+    expect(there).not.toBe(here);
+  });
+
+  it("answers a suspended account as it answers an unknown address, never that account's id", async () => {
+    const personId = await seedManager(suite.db, {
+      email: "lookup-suspended@x.com",
+      status: "suspended",
+    });
+    const answer = await personIdForLoginEmail(suite.db, "lookup-suspended@x.com");
+    expect(answer).toMatch(UUID);
+    expect(answer).not.toBe(personId);
+    expect(await personIdForLoginEmail(suite.db, "LOOKUP-suspended@x.com")).toBe(answer);
+  });
+});
 
 describe("loginManager", () => {
   it("logs in with a correct email + password (no TOTP enrolled)", async () => {

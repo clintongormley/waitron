@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
+import type { StatementTarget } from "./append-only.js";
 import { archiveTo } from "./archive.js";
 import { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
 import { connectionPair } from "./connections.js";
@@ -149,5 +150,40 @@ describe("archiveTo", () => {
       { id: 1, total: 250 },
       { id: 2, total: 400 },
     ]);
+  });
+
+  // Under a mask of 022 a file the engine creates for itself comes out 644.
+  it("a copy under a permissive mask is readable by its owner alone", async () => {
+    const { directory, db } = open();
+    const path = join(directory, "archive.db");
+    const mask = process.umask(0o022);
+    try {
+      await archiveTo(db, path);
+    } finally {
+      process.umask(mask);
+    }
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(readBack(path).all(sql`select id from sales`)).toEqual([]);
+  });
+
+  it("the working file is already owner-only when the engine starts to write", async () => {
+    const { directory, db } = open();
+    const path = join(directory, "archive.db");
+    let working: number | "no file" | undefined;
+    const watching = {
+      run: (query: Parameters<StatementTarget["run"]>[0]) => {
+        const name = `${path}.partial`;
+        working = existsSync(name) ? statSync(name).mode & 0o777 : "no file";
+        return db.run(query);
+      },
+    } as StatementTarget;
+    const mask = process.umask(0o022);
+    try {
+      await archiveTo(watching, path);
+    } finally {
+      process.umask(mask);
+    }
+    // Failing case, a chmod after the copy: "no file", with a window at 644 while it is written.
+    expect(working).toBe(0o600);
   });
 });
