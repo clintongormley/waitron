@@ -1008,6 +1008,7 @@ Test helpers:
     So the server's test helpers return `TradingContext & { readonly locationId: string }`, under
     one named type in `apps/server/src/testing/`. A one-line comment at the type says: "the venue
     row's id, for filling `location_id` columns until the schema slices".
+    (2026-11-05: the type is `WithVenueRowId`, in `apps/server/src/testing/venue-row-id.ts`.)
   - That type is an **exception** to the parent plan's global constraint "No new `location_id`,
     `locationId`, … fixture". It renames what tests already read, and adds no new use. The PR
     states this. If the owner refuses the exception, the helpers return the id from
@@ -1043,6 +1044,13 @@ Test helpers:
   only as strings, so it compiles unchanged; S28 deletes it.
 - [ ] **Step 4:** `pnpm -r typecheck` (every package, since the brand was everywhere). Run the
   focused suites of the files changed outside tests, the fiscal pair and the code guards. Commit.
+
+**Note, 2026-11-05.** Step 3 was not done: the fiscal pair's
+`packages/fiscal-verifactu/src/write-path.e2e.test.ts` imports the brand (`:32`) and calls it
+(`:555`), and that file is never edited. So `LocationId` and `locationId` stay in
+`packages/shared/src/ids.ts` with a one-line note (owner asked; the default was to keep them).
+Step 2's retype to `string` also covered `apps/server/src/testing/venue-row-id.ts`
+(`WithVenueRowId`).
 
 ### Task S18f-4: The whole-tree done-check, the backlog, the parent plan
 

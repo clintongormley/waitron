@@ -433,6 +433,8 @@ function no longer reads the scope. It fails before the change. It is marked
   - S19 and the schema plan wait for more of S18. Under the default schedule that includes S18e,
     so they wait for the design's approval. Under the cheaper schedule the S18 plan asks the owner
     about, only S28 does.
+- **2026-11-05:** S18a–S18d and S18f have landed (#2443, #2447, #2450, #2451, #2453, and S18f
+  (#TBD)). S18e is held by A1308, because it adds a table.
 
 ## Notes for the S13–S15 plans
 
@@ -4464,6 +4466,16 @@ landed.
 | **Area: test-Cloud integration (lane D, `feat/test-cloud-integration`, not merged; lane D reported it as D79)** | | | | |
 | `deploy/test-cloud/test-fixtures/integration-venue.mjs:32,35`; `integration-control.mjs:48`; `integration-stream.mjs:41,70,76` | import the pinned `cloud-integration-fixture.ts` and use `ready.localVenueId`, including as the stream pointer's key (`readPointer(…, ready.localVenueId)`) | At `ec91a9e34d` the fixture copies `localVenueId` from `env.WAITRON_TILL_LOCATION_ID` (`git show ec91a9e34d:apps/server/scripts/cloud-integration-fixture.ts`, `:126,143,152`). Since **#2198** it reads `nodes.location_id` (main `:136-142`). Then **S18** and **S25**, and **gap 1** | None while pinned. After #2198 the `ready.json` key is unchanged. Past S25, follow gap 1 | Gap 1's decision, before the pin passes S25 |
 | `deploy/test-cloud/test-fixtures/integration-recovery-authority.mjs:18`; `integration-authorised-recovery.test.ts:118,121`; `integration-continuous-recovery.test.ts:126,129` | read `saved.WAITRON_TILL_LOCATION_ID` / `trading.WAITRON_TILL_LOCATION_ID` from the venue's `trading.env` (and `WAITRON_TILL_NODE_ID`) | **Not A1301: #2198** removed both settings. The restored `trading.env` now holds only `WAITRON_NODE_ID` | Take `localVenueId` from `ready.json` or Cloud's status, and the node from `WAITRON_NODE_ID` | Any move of the pin past `b1b0f10952`, now, ahead of A1301 |
+
+**Added 2026-11-05 (A1301 S18f-4), from Cloud-repo paths lane J reported; not checked here.**
+- The `initial.location` that `waitron-adapter.mjs` reads (row above) comes from
+  `scripts/cloud-cost/fixtures/stack-conformance.test.mjs:26` (lane J, D391). It runs at the
+  pinned historical release, so it is not urgent.
+- `scripts/cloud-cost/isolated-replay.mjs:92,110,175` validates and forwards `locationId`, and
+  `scripts/cloud-cost/fixtures/isolated-replay-conformance.test.mjs:22,59,62` creates the location
+  fixture and selects its id (lane J, D152). The `private-replay.mjs` row above already names the
+  forwarding (as `:91,109,174`) and the conformance tests' `locationId` arguments, but not the
+  validation or the fixture that creates the location; they change with that row.
 
 **Excluded: Cloud's own uses of the word "location", which do not refer to a Waitron location.**
 - Cloud's `backup_locations` table and S3 storage-location objects `{endpoint,bucket,region}`:
