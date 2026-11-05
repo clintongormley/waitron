@@ -528,7 +528,7 @@ it("says why a receipt language cannot be changed, in both languages", () => {
     "La región del local fija el idioma del recibo, así que no se puede elegir otro.",
   );
   expect(codeMessage("receipt.language_orders_open", "en")).toBe(
-    "Some orders at this location are still in progress in the current receipt language, so it cannot be changed yet.",
+    "Some orders at this venue are still in progress in the current receipt language, so it cannot be changed yet.",
   );
   expect(codeMessage("receipt.language_orders_open", "es")).toBe(
     "Algunos pedidos de este local siguen en curso en el idioma actual del recibo, así que todavía no se puede cambiar.",
