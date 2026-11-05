@@ -1,3 +1,33 @@
+# Current addendum: returned Debian box, 5 November 2026
+
+The owner/watchers' 11:55 and 12:15 direction chooses Debian 13 on the reinstalled
+shared test box, with no EC2 work. The watcher now reports its return and this
+inventory: Debian 13.7, kernel 6.12, x86_64, systemd, AppArmor, Docker 29.9.3,
+WireGuard and nftables installed. This is relayed watcher inventory, not a
+measurement or qualification performed by the Debian-profile documentation task.
+
+The [Debian successor](../superpowers/specs/2026-11-05-a951-debian13-host-profile.md)
+is E's proposal only. Matching G acceptance, populated exact pins and the inherited
+host matrix remain open. The older Docker-date and wait-for-reinstall statements
+below are superseded; all historical bodies and measurement limits remain intact.
+Ubuntu and Mac fixture receipts cannot qualify the new Debian profile.
+
+Use the shared test-box helper, one lane at a time, for isolated work within
+existing authority and applicable gates. Leave the owner's `/opt/waitron`,
+containers and networks untouched. Windows shares the disk; make no partition
+changes. Host configuration, sleep and reboot experiments must be safe for owner
+Waitron. Configuration changes require separate explicit approval. This addendum
+does not authorize host reconfiguration or establish that sleep requirements pass.
+
+Retain every inherited matrix row, including valid positive, negative, failing
+deletion/bypass control and restored positive. Unsafe or unrun rows remain
+unverified. Host changes invalidate relevant receipts; both engineering ledgers
+need matching successor acceptance and exact consumer pins before affected
+integration. Existing isolated acceptances remain scoped. Accepted host digest,
+both executable consumers and qualified runtime pair remain NONE; admission CLOSED.
+
+---
+
 # A951 preliminary host evidence, 5 November 2026
 
 ## Routing intake updated on 5 November 2026

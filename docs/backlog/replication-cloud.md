@@ -618,25 +618,25 @@ and cloud operations. See [documentation ownership](../cloud-ownership.md).
 
 ## A951. The box's lasting tunnel and public-certificate client
 
-Build approved;
-exact D560 G1 mapping accepted for isolated planning only.
-Full appliance/host acceptance, approval/provisioning/PP consumers, signed corpus
-remain open. E now matches D136's complete routing requirements solely for isolated
-T4 fixtures with injected synthetic contexts and policy; shared-parser implementation
-and qualification remain open. Docker is available. The
-[5 November host evidence](../operations/a951-host-evidence.md) records preliminary
-socket/confinement probes and the actual test-box profile. B3's approved shipped
-image is Debian 13; the owner chose that system on the reinstalled test box.
-Hold native runs until it returns; write a Debian-profile successor. The matching
-D136 routing intake is complete.
-Admission CLOSED; other scoped gates remain.
+All five [plan](../superpowers/plans/2026-10-22-a951-connection.md) cuts have owner
+build approval. D560's exact G1 mapping acceptance remains isolated planning only;
+D136's complete routing requirements remain accepted solely for isolated T4
+fixtures with injected synthetic contexts and policy. Full appliance acceptance,
+approval/provisioning/PP consumers, complete signed corpus and parser implementation
+remain open.
 
-All five cuts of the [plan](../superpowers/plans/2026-10-22-a951-connection.md)
-have owner build approval. Use its newest dated amendment and the
-[intake](../developers/cloud-connection.md#a951-build-intake) for exact pins,
-digests and scope. E/G accept D560's documented G1 host/custody mapping solely
-for isolated planning. Full appliance and host-amendment acceptance, executable
-consumers and a qualified runtime pair remain NONE.
+E proposes the [Debian host successor](../superpowers/specs/2026-11-05-a951-debian13-host-profile.md),
+`proposal-2026-11-05.1`, incorporating the entire immutable predecessor and H.
+It changes only the host target to native x86_64 Debian 13 with distinct profile
+`a951-debian13-systemd-docker-v1`; matching G acceptance is absent. Use the newest
+plan amendment and [intake](../developers/cloud-connection.md#a951-build-intake)
+for exact publication digests and acceptance scopes.
+
+The watcher reports the shared Debian box has returned. Its reported inventory is
+unqualified; the [operations addendum](../operations/a951-host-evidence.md) preserves
+earlier Ubuntu/Mac fixture evidence and its limits. Accepted host digest, both
+executable consumers and qualified runtime pair remain NONE. Admission CLOSED;
+all remaining affected-path gates retain their scope.
 
 Keep the remaining work separate:
 
@@ -650,16 +650,18 @@ Keep the remaining work separate:
   separate from helper replay and observation/custody progress. Stops win over
   prepared commits and late opens. Intact reboot, damaged-state recovery and
   reconnect after a local stop keep their separate authenticated requirements.
-- **G7 real host, E:** the Docker availability wait has ended. Mac Docker Desktop
-  is an isolated fixture, outside the proposed native host profile. The existing
-  x86_64/systemd/AppArmor test box runs Ubuntu 26.04, whereas the immutable proposal
-  names 24.04 and B3 ships Debian 13. The owner chose Debian 13 on the reinstalled
-  test box; hold native runs until it returns and write the Debian-profile successor.
-  Change no box configuration. Reconcile the contract and obtain populated exact
-  host/build/image/profile/unit/mount pins, GUARD16's complete bounded inventory,
-  protected-store/participant evidence and network/listener-custody measurements.
-  Qualify full-budget closure, crash/stop races and suspension separately.
-  Proposed native entries and scheduled experiments supply no runtime proof.
+- **G7 real host, E:** obtain matching E/G acceptance of the exact Debian successor
+  and record consumer pins in both ledgers before affected integration. Populate
+  `qualification-unpopulated-2026-11-05.1` under the inherited exact-pin grammar.
+  Preserve the complete GUARD16 inventory, four protected stores and shared
+  journal/reserve budgets. Qualify every inherited positive/negative/deletion/
+  restored matrix row, including full-budget closure, crash/stop races, network
+  expiry and elapsed listener custody. Old Ubuntu/Mac receipts cannot qualify
+  Debian. Use the returned shared box through its helper, one lane at a time;
+  leave owner `/opt/waitron`, containers/networks and Windows-shared partitions
+  untouched. Host configuration/sleep/reboot experiments must be safe for owner
+  Waitron; configuration changes require separate explicit approval. Sleep
+  evidence remains open. Changed host bytes invalidate relevant receipts.
 - **G2:** obtain the actual A947 current-authority/freshness/withdrawal consumer
   and accepted source-floor mapping, reconciled with the approved A1018 direction
   and D88. Endpoint identity, a role boolean, lease or tunnel supplies no authority.

@@ -360,6 +360,33 @@ abort signal so deliberate shutdown does not record a service outage.
 
 ## A951 build intake
 
+### Debian host-profile proposal: 5 November 2026
+
+E publishes the [Debian successor](../superpowers/specs/2026-11-05-a951-debian13-host-profile.md),
+`waitron-a951-host-custody-v1` / `proposal-2026-11-05.1`, full-file SHA-256
+`616725294c22f06abc86d340b7206609c528b39f3ef93e38c0c0486c551dde90`, including final LF. Matching G acceptance is absent.
+It incorporates the complete immutable predecessor and H by exact digest,
+changing the target to native x86_64 Debian 13 and profile
+`a951-debian13-systemd-docker-v1`. Pinset revision
+`qualification-unpopulated-2026-11-05.1` has no accepted runtime entries.
+All inherited custody, bounds, four-store/GUARD16 accounting, pin grammar and
+positive/negative/deletion/restored matrix requirements remain unchanged.
+
+The watcher reports the shared Debian box has returned. This supersedes the
+Docker-date and wait-for-return wording below; preserve every historical byte.
+Reported inventory is not qualification, and old Ubuntu/Mac receipts cannot
+qualify this target. Use the shared helper one lane at a time. Leave owner
+`/opt/waitron`, containers/networks and disk partitions untouched. Host
+configuration/sleep/reboot tests must be safe for owner Waitron; configuration
+changes need separate explicit approval. Sleep evidence remains missing.
+
+Both this intake and Cloud's canonical ledger must record matching engineering
+acceptance of the exact successor, scope and full executable consumer pins before
+affected integration. Changed host bytes invalidate relevant receipts. Existing
+isolated acceptances retain their exact scopes; G1–G7 retain their remaining gates.
+Accepted host digest, both executable consumers and qualified runtime pair remain
+NONE. Admission CLOSED, production manifests empty, `.local` independent.
+
 ### Routing acceptance: 5 November 2026 (D136)
 
 Lane E matches Cloud D136's acceptance of the complete routing engineering
