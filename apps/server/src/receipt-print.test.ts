@@ -254,10 +254,10 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
+    const drinksCategory = await createCategory(tx, { name: "Bebidas" });
     await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinksCategory.id,
       name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
