@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
@@ -12,10 +12,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { clearTimeout, setTimeout } from "node:timers";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
-// The real script runs under bash; only `npm` is faked, by a stub first on PATH whose behaviour the
-// case picks through STUB_NPM_MODE.
+// PATH stubs keep network installs and deliberately slow Node reads out of the real environment.
 
 const root = join(import.meta.dirname, "..");
 const script = join(import.meta.dirname, "ci-setup-pnpm.sh");
@@ -65,6 +65,7 @@ printed="$spec"
 before=""
 after=""
 case "$STUB_NPM_MODE" in
+  live-hang) echo installer-entered; exec sleep 300 ;;
   hang) exec sleep 300 ;;
   ignore-term) trap '' TERM; sleep 300; exit 0 ;;
   fail-then-ok) if [ "$attempt" -eq 1 ]; then exit 1; fi ;;
@@ -79,6 +80,17 @@ chmod +x "$prefix/bin/pnpm"
 `,
 );
 chmodSync(join(STUB_BIN, "npm"), 0o755);
+
+writeFileSync(
+  join(STUB_BIN, "node"),
+  `#!/bin/sh
+case "$STUB_NODE_MODE" in
+  slow) sleep 2 ;;
+esac
+exec "${process.execPath}" "$@"
+`,
+);
+chmodSync(join(STUB_BIN, "node"), 0o755);
 
 const BASH = spawnSync("bash", ["-c", "command -v bash"], { encoding: "utf8" }).stdout.trim();
 
@@ -120,7 +132,141 @@ function run(mode, env = {}, scriptPath = script) {
 const failureLines = (stderr) =>
   stderr.split("\n").filter((line) => /^attempt \d of 3 failed/.test(line));
 
+// Removing the start line must fail while npm is still waiting, before any exit report exists.
+async function observeInstallStart() {
+  const state = temporaryDirectory("ci-setup-pnpm-live-");
+  const githubPath = join(state, "github-path");
+  writeFileSync(githubPath, "");
+  const child = spawn(BASH, [script], {
+    detached: true,
+    env: {
+      ...process.env,
+      PATH: `${STUB_BIN}:${process.env.PATH}`,
+      STUB_STATE: state,
+      STUB_NPM_MODE: "live-hang",
+      RUNNER_TEMP: state,
+      GITHUB_PATH: githubPath,
+      PNPM_SETUP_ATTEMPT_SECONDS: "5",
+      PNPM_SETUP_KILL_SECONDS: "1",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let output = "";
+  let atStart;
+  const observe = (chunk) => {
+    output += chunk;
+    if (
+      atStart === undefined &&
+      output.includes("attempt 1/3 install: start") &&
+      output.includes("installer-entered")
+    ) {
+      atStart = { output, running: child.exitCode === null };
+      process.kill(-child.pid, "SIGKILL");
+    }
+  };
+  child.stdout.on("data", observe);
+  child.stderr.on("data", observe);
+  const deadline = setTimeout(() => process.kill(-child.pid, "SIGKILL"), 12_000);
+  try {
+    await new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", resolve);
+    });
+    return { atStart, output };
+  } finally {
+    clearTimeout(deadline);
+  }
+}
+
 describe("ci-setup-pnpm.sh", () => {
+  it("bounds a silent packageManager read before an install attempt can start", () => {
+    const result = run("ok", { STUB_NODE_MODE: "slow", PNPM_SETUP_READ_SECONDS: "1" });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toContain("packageManager read: start");
+    expect(result.stderr).toMatch(/packageManager read: end status=124 elapsed=[0-9]+s/);
+    expect(result.npmArgs).toBe("");
+    expect(result.githubPath).toBe("");
+    expect(result.elapsedMs).toBeLessThan(10_000);
+  });
+
+  it("allows a slow packageManager read to finish inside its own allowance", () => {
+    const result = run("ok", { STUB_NODE_MODE: "slow", PNPM_SETUP_READ_SECONDS: "10" });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stderr).toContain("packageManager read: end status=0");
+    expect(result.githubPath).toBe(`${join(result.runnerTemp, "pnpm-setup", "bin")}\n`);
+  });
+
+  it.each(["0", "1.5", "invalid"])(
+    "refuses invalid read timeout %s before calling npm",
+    (value) => {
+      const result = run("ok", { PNPM_SETUP_READ_SECONDS: value });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("PNPM_SETUP_READ_SECONDS");
+      expect(result.npmArgs).toBe("");
+    },
+  );
+
+  it("uses the default read timeout when its override is empty", () => {
+    const result = run("ok", { PNPM_SETUP_READ_SECONDS: "" });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stderr).toContain("packageManager read: start limit=10s");
+  });
+
+  it("reports the install command while a silent installer is still running", async () => {
+    const result = await observeInstallStart();
+    expect(result.atStart, result.output).toBeDefined();
+    expect(result.atStart.running).toBe(true);
+    expect(result.atStart.output).toContain("npm install");
+    expect(result.atStart.output).not.toContain("install: end");
+  });
+
+  it.each([
+    ["hang", "install", "124"],
+    ["version-then-hangs", "version", "124"],
+    ["version-then-fails", "version", "1"],
+  ])(
+    "identifies each %s failure with its phase, status and elapsed time",
+    (mode, phase, status) => {
+      const result = run(mode, {
+        PNPM_SETUP_ATTEMPT_SECONDS: "1",
+        PNPM_SETUP_VERSION_SECONDS: "1",
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(1);
+      for (const attempt of [1, 2, 3]) {
+        expect(result.stderr).toMatch(
+          new RegExp(`attempt ${attempt}/3 ${phase}: end status=${status} elapsed=[0-9]+s`),
+        );
+      }
+      if (phase === "install") expect(result.stderr).not.toContain("version: start");
+      else expect(result.stderr).toContain("install: end status=0");
+      expect(result.githubPath).toBe("");
+    },
+  );
+
+  it("reports both successful commands with the checked version and elapsed time", () => {
+    const result = run("slow-first-version");
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stderr).toContain(`pnpm@${VERSION}`);
+    expect(result.stderr).toContain("attempt 1/3 install: end status=0");
+    expect(result.stderr).toContain("attempt 1/3 version: start");
+    expect(result.stderr).toContain("--version");
+    const versionEnd = /attempt 1\/3 version: end status=0 elapsed=([0-9]+)s/.exec(result.stderr);
+    expect(versionEnd, result.stderr).not.toBeNull();
+    expect(Number(versionEnd[1])).toBeGreaterThanOrEqual(2);
+    expect(result.stderr).not.toContain("attempt 2/3");
+    expect(result.githubPath).toBe(`${join(result.runnerTemp, "pnpm-setup", "bin")}\n`);
+  });
+
+  it("reports a version mismatch separately from the version command exit status", () => {
+    const result = run("wrong-version");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("version: end status=0");
+    expect(result.stderr).toContain(`version mismatch: expected ${VERSION}, got 0.0.1`);
+    expect(result.githubPath).toBe("");
+  });
+
   it("finds a timeout command, which the script needs", () => {
     // Fails rather than skips: without one every bound below is untested.
     expect(hasTimeout, "none of gnutimeout, gtimeout or timeout is on PATH").toBe(true);
@@ -186,7 +332,7 @@ describe("ci-setup-pnpm.sh", () => {
     const result = run("ok", { PATH: `${gnuBin}:${STUB_BIN}:${process.env.PATH}` });
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout, result.stderr).toContain(`pnpm ${VERSION} installed on attempt 1 of 3`);
-    expect(result.gnutimeoutCalls).toBe("called\ncalled\n");
+    expect(result.gnutimeoutCalls).toBe("called\ncalled\ncalled\n");
   });
 
   it("succeeds on a later attempt after a failed one", () => {
