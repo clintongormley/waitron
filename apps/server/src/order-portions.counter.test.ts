@@ -46,7 +46,7 @@ afterEach(() => yieldTurn());
 
 let venue: BillVenue;
 let counter: ZoneOffers;
-let ids: { croqueta: string; burger: string; cheese: string; toppings: string };
+let ids: { croquette: string; burger: string; cheese: string; toppings: string };
 
 useVenueDb({
   resetPerTest: false,
@@ -72,7 +72,7 @@ useVenueDb({
             vatClass: "reduced",
           })
         ).id;
-      const croqueta = await product("Croqueta", "3.33");
+      const croquette = await product("Croqueta", "3.33");
       const burger = await product("Burger", "3.33");
       const cheese = await product("Cheese", "0.35");
       const toppings = (
@@ -92,13 +92,13 @@ useVenueDb({
       ).id;
       await writeProductModifiers(tx, burger, [{ kind: "extras", id: toppings }]);
       counter = await offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" });
-      return { croqueta, burger, cheese, toppings };
+      return { croquette, burger, cheese, toppings };
     });
   },
 });
 
-const croquetas = (quantity: string): TabRoundLine[] =>
-  counter.toOfferLines([{ productId: ids.croqueta, quantity }]);
+const croquettes = (quantity: string): TabRoundLine[] =>
+  counter.toOfferLines([{ productId: ids.croquette, quantity }]);
 
 const burgersWithCheese = (quantity: string): TabRoundLine[] =>
   counter.toOfferLines([
@@ -286,7 +286,7 @@ describe("A1208 counter orders are written as portions", () => {
   });
 
   it("A1208 the same dish on two request lines files two rows, as today", async () => {
-    const id = await walkUp([...croquetas("1"), ...croquetas("1")], "6.66");
+    const id = await walkUp([...croquettes("1"), ...croquettes("1")], "6.66");
 
     const lines = linesOf(id);
     expect(lines.map(({ name, quantity, ordinal }) => [name, quantity, ordinal])).toEqual([
@@ -317,7 +317,7 @@ describe("A1208 counter orders are written as portions", () => {
     const out = await payWorkingOrderIntegratedOrchestration(
       cardDeps(true),
       venue.cfg,
-      { id, expectedEdit: null, lines: croquetas("2"), zoneId: counter.zoneId },
+      { id, expectedEdit: null, lines: croquettes("2"), zoneId: counter.zoneId },
       venue.operatorId,
     );
 
@@ -344,7 +344,7 @@ describe("A1208 counter orders are written as portions", () => {
       payWorkingOrderIntegratedOrchestration(
         cardDeps(false),
         venue.cfg,
-        { id, expectedEdit: null, lines: croquetas("100"), zoneId: counter.zoneId },
+        { id, expectedEdit: null, lines: croquettes("100"), zoneId: counter.zoneId },
         venue.operatorId,
       ),
     ).rejects.toMatchObject({ code: "tab.portions_too_many", params: { limit: 99 } });
@@ -352,7 +352,7 @@ describe("A1208 counter orders are written as portions", () => {
   });
 
   it("A1208 a parked order's two portions pay as one row", async () => {
-    const { id } = await park(croquetas("2"));
+    const { id } = await park(croquettes("2"));
     const lines = linesOf(id);
     expect(lines.map(({ quantity, ordinal }) => [quantity, ordinal])).toEqual([
       [1000, 1],
@@ -373,8 +373,8 @@ describe("A1208 counter orders are written as portions", () => {
   });
 
   it("A1208 a new line saved onto a parked order is portions", async () => {
-    const { id } = await park(croquetas("1"));
-    const [croqueta] = linesOf(id);
+    const { id } = await park(croquettes("1"));
+    const [croquette] = linesOf(id);
     const [revision, expectedEdit] = await inTx(venue, async (tx) => [
       await readOrderRevision(tx, id),
       await readBillEditState(tx, id),
@@ -385,7 +385,7 @@ describe("A1208 counter orders are written as portions", () => {
       expectedEdit,
       revision,
       lines: [
-        { workingOrderLineId: croqueta!.id, ...croquetas("1")[0]! },
+        { workingOrderLineId: croquette!.id, ...croquettes("1")[0]! },
         ...burgersWithCheese("3"),
       ],
     });
@@ -397,12 +397,12 @@ describe("A1208 counter orders are written as portions", () => {
       [1000, 3],
     ]);
     expect(new Set(burgers.map((line) => line.cohortId)).size).toBe(1);
-    expect(burgers[0]!.cohortId).not.toBe(croqueta!.cohortId);
+    expect(burgers[0]!.cohortId).not.toBe(croquette!.cohortId);
     expect(linesOf(id).filter((line) => line.name === "Cheese")).toHaveLength(3);
   });
 
   it("A1208 100 of one dish in one walk-up line is refused before anything is written", async () => {
-    const before = await park(croquetas("1"));
+    const before = await park(croquettes("1"));
     const id = randomUUID();
 
     await expect(
@@ -412,7 +412,7 @@ describe("A1208 counter orders are written as portions", () => {
         {
           id,
           expectedEdit: null,
-          lines: croquetas("100"),
+          lines: croquettes("100"),
           zoneId: counter.zoneId,
           tender: { method: "cash", amount: "333.00" },
         },
@@ -421,7 +421,7 @@ describe("A1208 counter orders are written as portions", () => {
     ).rejects.toMatchObject({ code: "tab.portions_too_many", params: { limit: 99 } });
 
     expect(await venue.db.select().from(workingOrders).where(eq(workingOrders.id, id))).toEqual([]);
-    expect((await park(croquetas("1"))).orderNumber).toBe(before.orderNumber + 1);
+    expect((await park(croquettes("1"))).orderNumber).toBe(before.orderNumber + 1);
   });
 
   it("A1208 the ceiling refusal still comes first", async () => {
@@ -432,7 +432,7 @@ describe("A1208 counter orders are written as portions", () => {
           tx,
           { ...venue.cfg, simplifiedInvoiceLimit: decimal("3000.00") },
           id,
-          croquetas("1000"),
+          croquettes("1000"),
           null,
           { zoneId: counter.zoneId },
         ),
@@ -490,8 +490,8 @@ describe("A1208 a counter order of more portions than one statement can bind", (
   });
 
   it("A1208 a parked order saved with 2,001 more croquetas stores each as its own portion", async () => {
-    const { id } = await park(croquetas("1"));
-    const [croqueta] = linesOf(id);
+    const { id } = await park(croquettes("1"));
+    const [croquette] = linesOf(id);
     const [revision, expectedEdit] = await inTx(venue, async (tx) => [
       await readOrderRevision(tx, id),
       await readBillEditState(tx, id),
@@ -502,8 +502,8 @@ describe("A1208 a counter order of more portions than one statement can bind", (
       expectedEdit,
       revision,
       lines: [
-        { workingOrderLineId: croqueta!.id, ...croquetas("1")[0]! },
-        ...linesOfAtMost99(2001, croquetas),
+        { workingOrderLineId: croquette!.id, ...croquettes("1")[0]! },
+        ...linesOfAtMost99(2001, croquettes),
       ],
     });
 
@@ -514,7 +514,7 @@ describe("A1208 a counter order of more portions than one statement can bind", (
   });
 
   it("A1208 a parked order of 17 croquetas each raised to 99 copies every sale context", async () => {
-    const { id } = await park(croquetas("17"));
+    const { id } = await park(croquettes("17"));
     const stored = linesOf(id);
     const [revision, expectedEdit] = await inTx(venue, async (tx) => [
       await readOrderRevision(tx, id),
@@ -525,7 +525,7 @@ describe("A1208 a counter order of more portions than one statement can bind", (
       operatorId: venue.operatorId,
       expectedEdit,
       revision,
-      lines: stored.map((line) => ({ workingOrderLineId: line.id, ...croquetas("99")[0]! })),
+      lines: stored.map((line) => ({ workingOrderLineId: line.id, ...croquettes("99")[0]! })),
     });
 
     const lines = linesOf(id);
@@ -540,7 +540,7 @@ describe("A1208 a counter order of more portions than one statement can bind", (
   });
 
   it("A1208 a parked order of 4,700 croquetas saved down to one records a cancellation for each other", async () => {
-    const { id } = await park(linesOfAtMost99(4700, croquetas));
+    const { id } = await park(linesOfAtMost99(4700, croquettes));
     const [kept, ...removed] = linesOf(id);
     const [revision, expectedEdit] = await inTx(venue, async (tx) => [
       await readOrderRevision(tx, id),
@@ -551,7 +551,7 @@ describe("A1208 a counter order of more portions than one statement can bind", (
       operatorId: venue.operatorId,
       expectedEdit,
       revision,
-      lines: [{ workingOrderLineId: kept!.id, ...croquetas("1")[0]! }],
+      lines: [{ workingOrderLineId: kept!.id, ...croquettes("1")[0]! }],
     });
 
     expect(linesOf(id).map((line) => line.id)).toEqual([kept!.id]);
@@ -648,9 +648,9 @@ describe("A1208 a counter order of more portions than one statement can bind", (
   });
 
   it("A1208 carryLineReductions gives each of 6,554 copies the reduction its line carries", async () => {
-    const { id } = await park(croquetas("1"));
-    const [croqueta] = linesOf(id);
-    const copies = Array.from({ length: 6554 }, () => ({ from: croqueta!.id, to: randomUUID() }));
+    const { id } = await park(croquettes("1"));
+    const [croquette] = linesOf(id);
+    const copies = Array.from({ length: 6554 }, () => ({ from: croquette!.id, to: randomUUID() }));
 
     const adjustmentId = await inTx(venue, async (tx) => {
       const [adjustment] = await tx
@@ -679,7 +679,7 @@ describe("A1208 a counter order of more portions than one statement can bind", (
         .returning({ id: adjustments.id });
       await tx.insert(adjustmentLines).values({
         adjustmentId: adjustment!.id,
-        lineId: croqueta!.id,
+        lineId: croquette!.id,
         reduction: 33,
         quantity: 1000,
       });
@@ -697,7 +697,7 @@ describe("A1208 a counter order of more portions than one statement can bind", (
       .where(eq(adjustmentLines.adjustmentId, adjustmentId));
     expect(carried).toHaveLength(6555);
     expect(new Set(carried.map((row) => row.lineId))).toEqual(
-      new Set([croqueta!.id, ...copies.map((copy) => copy.to)]),
+      new Set([croquette!.id, ...copies.map((copy) => copy.to)]),
     );
     expect(carried.every((row) => row.reduction === 33 && row.quantity === 1000)).toBe(true);
   });

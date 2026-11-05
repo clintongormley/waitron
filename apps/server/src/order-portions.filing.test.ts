@@ -68,7 +68,7 @@ let venue: BillVenue;
 let offers: ZoneOffers;
 let ids: {
   sweet: string;
-  croqueta: string;
+  croquette: string;
   burger: string;
   cheese: string;
   bacon: string;
@@ -101,7 +101,7 @@ useVenueDb({
           })
         ).id;
       const sweet = await product("Sweet", "0.05");
-      const croqueta = await product("Croqueta", "3.33");
+      const croquette = await product("Croqueta", "3.33");
       const burger = await product("Burger", "3.33");
       const cheese = await product("Cheese", "0.35");
       const bacon = await product("Bacon", "0.50");
@@ -141,7 +141,7 @@ useVenueDb({
           noteRequired: false,
         })
       ).id;
-      return { sweet, croqueta, burger, cheese, bacon, toppings, reasonId };
+      return { sweet, croquette, burger, cheese, bacon, toppings, reasonId };
     });
   },
 });
@@ -149,8 +149,8 @@ useVenueDb({
 const sweets = (quantity: string): TabRoundLine[] =>
   offers.toOfferLines([{ productId: ids.sweet, quantity }]);
 
-const croquetas = (quantity: string): TabRoundLine[] =>
-  offers.toOfferLines([{ productId: ids.croqueta, quantity }]);
+const croquettes = (quantity: string): TabRoundLine[] =>
+  offers.toOfferLines([{ productId: ids.croquette, quantity }]);
 
 const burgersWithCheese = (quantity: string): TabRoundLine[] =>
   offers.toOfferLines([
@@ -438,7 +438,7 @@ describe("A803 portions: filing a bill of portions", () => {
       });
       const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: table.id });
       for (let round = 0; round < 2; round++) {
-        const priced = await priceTabRound(tx, venue.cfg, tabId, croquetas("1"), "checked");
+        const priced = await priceTabRound(tx, venue.cfg, tabId, croquettes("1"), "checked");
         await insertTabRound(tx, venue.cfg, priced, priced.rows);
       }
       return tabId;
@@ -453,9 +453,9 @@ describe("A803 portions: filing a bill of portions", () => {
   });
 
   it("A803 portions: a bound round and an unbound line of the same dish stay apart", async () => {
-    const { billId, portions } = await seed(croquetas("2"));
+    const { billId, portions } = await seed(croquettes("2"));
     await inTx(venue, async (tx) => {
-      const priced = await priceTabRound(tx, venue.cfg, billId, croquetas("1"), "checked");
+      const priced = await priceTabRound(tx, venue.cfg, billId, croquettes("1"), "checked");
       await insertTabRound(tx, venue.cfg, priced, priced.rows);
     });
 
@@ -569,15 +569,15 @@ describe("A803 portions: filing a bill of portions", () => {
         tx,
         venue.cfg,
         tabId,
-        [...burgersWithCheese("1"), ...croquetas("1")],
+        [...burgersWithCheese("1"), ...croquettes("1")],
         "checked",
       );
-      // The cheese numbered after the croqueta, as an extra added to a sent dish is.
-      const [burger, cheese, croqueta] = priced.rows;
+      // The cheese numbered after the croquette, as an extra added to a sent dish is.
+      const [burger, cheese, croquette] = priced.rows;
       await insertTabRound(tx, venue.cfg, priced, [
         burger!,
-        { ...croqueta!, lineNo: cheese!.lineNo },
-        { ...cheese!, lineNo: croqueta!.lineNo },
+        { ...croquette!, lineNo: cheese!.lineNo },
+        { ...cheese!, lineNo: croquette!.lineNo },
       ]);
       return tabId;
     });
@@ -670,7 +670,7 @@ describe("A803 portions: a cancel's refund value on a paid bill", () => {
   });
 
   it("A803 portions: a bound line whose portion no filed row stands for has no refund value", async () => {
-    const { billId } = await seed(croquetas("1"));
+    const { billId } = await seed(croquettes("1"));
     const unbound = await inTx(venue, async (tx) => {
       const priced = await priceTabRound(tx, venue.cfg, billId, sweets("1"), "checked");
       await insertTabRound(tx, venue.cfg, priced, priced.rows);
@@ -695,7 +695,7 @@ describe("A803 portions: a cancel's refund value on a paid bill", () => {
         zoneId: venue.zoneId,
       });
       const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: table.id });
-      const priced = await priceTabRound(tx, venue.cfg, tabId, croquetas("3"), "checked");
+      const priced = await priceTabRound(tx, venue.cfg, tabId, croquettes("3"), "checked");
       await insertTabRound(tx, venue.cfg, priced, priced.rows);
       const [measured] = await tx
         .insert(orderPortions)
@@ -717,7 +717,7 @@ describe("A803 portions: a cancel's refund value on a paid bill", () => {
   });
 
   it("A803 portions: after a whole-bill discount each portion is worth the price its own filed row gives it", async () => {
-    const { billId, portions } = await seed(croquetas("3"));
+    const { billId, portions } = await seed(croquettes("3"));
     await inTx(venue, async (tx) => {
       const [order] = await tx
         .select({ revision: workingOrders.revision })
@@ -824,7 +824,7 @@ describe("A803 portions: a cancel's refund value on a paid bill", () => {
 
   it("A803 portions: a comped row of 2 linked to a third portion has no refund value, though its €0.00 splits evenly", async () => {
     const { billId, portions } = await seed(sweets("2"));
-    await inTx(venue, (tx) => addPortionRound(tx, venue.cfg, billId, croquetas("1")));
+    await inTx(venue, (tx) => addPortionRound(tx, venue.cfg, billId, croquettes("1")));
     for (const portion of portions)
       await inTx(venue, async (tx) => {
         const [order] = await tx
@@ -926,7 +926,7 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
   });
 
   it("A803 portion grouping: a discounted portion stays apart, and two discounted alike show one row, apart from one discounted otherwise", async () => {
-    const { billId, portions } = await seed(croquetas("4"));
+    const { billId, portions } = await seed(croquettes("4"));
     for (const [portion, amount] of [
       [portions[1]!, "0.10"],
       [portions[2]!, "0.10"],
@@ -976,7 +976,7 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
     const { billId } = await seed(
       offers.toOfferLines([
         { productId: ids.burger, quantity: "1" },
-        { productId: ids.croqueta, quantity: "1" },
+        { productId: ids.croquette, quantity: "1" },
       ]),
     );
 
@@ -1012,7 +1012,7 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
     ["serving", { servedAt: "2026-10-28T08:00:00.000Z" }],
     ["part served", { servedQuantity: 500 }],
   ])("A803 portion grouping: a portion whose %s differs stays apart", async (_, change) => {
-    const { billId, portions } = await seed(croquetas("2"));
+    const { billId, portions } = await seed(croquettes("2"));
     await inTx(venue, (tx) =>
       tx.update(workingOrderLines).set(change).where(eq(workingOrderLines.id, portions[1]!.lineId)),
     );
@@ -1024,7 +1024,7 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
   });
 
   it("A803 portion grouping: the same answers in another order, keys in another order, still show one row", async () => {
-    const { billId, portions } = await seed(croquetas("2"));
+    const { billId, portions } = await seed(croquettes("2"));
     await inTx(venue, async (tx) => {
       await tx
         .update(workingOrderLines)
@@ -1082,7 +1082,7 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
   });
 
   it("A803 portion grouping: a portion in another course stays apart", async () => {
-    const { billId, portions } = await seed(croquetas("2"));
+    const { billId, portions } = await seed(croquettes("2"));
     await inTx(venue, async (tx) => {
       const course = await createCourse(tx, { name: "Starters", displayOrder: 90 });
       await tx
@@ -1098,7 +1098,7 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
   });
 
   it("A803 portion grouping: measured portions stay apart", async () => {
-    const { billId, portions } = await seed(croquetas("2"));
+    const { billId, portions } = await seed(croquettes("2"));
     await inTx(venue, async (tx) => {
       const cohortId = randomUUID();
       for (const [at, portion] of portions.entries()) {
@@ -1127,7 +1127,7 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
       });
       const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: table.id });
       for (let round = 0; round < 2; round++) {
-        const priced = await priceTabRound(tx, venue.cfg, tabId, croquetas("1"), "checked");
+        const priced = await priceTabRound(tx, venue.cfg, tabId, croquettes("1"), "checked");
         await insertTabRound(tx, venue.cfg, priced, priced.rows);
       }
       return tabId;
@@ -1480,7 +1480,7 @@ describe("A803 portions: raising a dish", () => {
   });
 
   it("A803 portions: a measured bound line rises in place and stays one portion", async () => {
-    const bound = await billOf(croquetas("1"), { bound: true });
+    const bound = await billOf(croquettes("1"), { bound: true });
     await inTx(venue, async (tx) => {
       const [measured] = await tx
         .insert(orderPortions)
@@ -1604,18 +1604,18 @@ describe("A803 portions: raising a dish", () => {
       }));
 
   it("A803 portions: a new 2 × burger on a party bill is written as two portions", async () => {
-    const bill = await billOf(croquetas("1"), { bound: true });
-    const [croqueta] = bill.portions;
+    const bill = await billOf(croquettes("1"), { bound: true });
+    const [croquette] = bill.portions;
 
     await saveLines(bill.billId, [
-      { workingOrderLineId: croqueta!.lineId, ...croquetas("1")[0]! },
+      { workingOrderLineId: croquette!.lineId, ...croquettes("1")[0]! },
       ...burgersWithCheese("2"),
     ]);
 
     const written = burgerLines(bill.billId);
     const cohort = written[0]!.cohortId;
     expect(cohort).not.toBeNull();
-    expect(cohort).not.toBe(croqueta!.pricingCohortId);
+    expect(cohort).not.toBe(croquette!.pricingCohortId);
     expect(written).toEqual([
       {
         name: "Burger",
@@ -1646,11 +1646,11 @@ describe("A803 portions: raising a dish", () => {
   });
 
   it("A803 portions: each portion of a new line on a sent party bill gets its own kitchen item", async () => {
-    const bill = await billOf(croquetas("1"), { bound: true, fire: true });
-    const [croqueta] = bill.portions;
+    const bill = await billOf(croquettes("1"), { bound: true, fire: true });
+    const [croquette] = bill.portions;
 
     await saveLines(bill.billId, [
-      { workingOrderLineId: croqueta!.lineId, ...croquetas("1")[0]! },
+      { workingOrderLineId: croquette!.lineId, ...croquettes("1")[0]! },
       ...burgersWithCheese("3"),
     ]);
 
@@ -1664,11 +1664,11 @@ describe("A803 portions: raising a dish", () => {
   });
 
   it("A803 portions: a line whose product changed, on a party bill, is written as portions", async () => {
-    const bill = await billOf(croquetas("1"), { bound: true });
-    const [croqueta] = bill.portions;
+    const bill = await billOf(croquettes("1"), { bound: true });
+    const [croquette] = bill.portions;
 
     await saveLines(bill.billId, [
-      { workingOrderLineId: croqueta!.lineId, ...burgersWithCheese("2")[0]! },
+      { workingOrderLineId: croquette!.lineId, ...burgersWithCheese("2")[0]! },
     ]);
 
     const written = linesOf(bill.billId);
@@ -1680,17 +1680,17 @@ describe("A803 portions: raising a dish", () => {
     ]);
     expect(dishes[0]!.cohortId).not.toBeNull();
     expect(dishes[1]!.cohortId).toBe(dishes[0]!.cohortId);
-    expect(dishes[0]!.cohortId).not.toBe(croqueta!.pricingCohortId);
+    expect(dishes[0]!.cohortId).not.toBe(croquette!.pricingCohortId);
   });
 
   it("A803 portions: a new line of 100 burgers on a party bill is refused and writes nothing", async () => {
-    const bill = await billOf(croquetas("1"), { bound: true });
-    const [croqueta] = bill.portions;
+    const bill = await billOf(croquettes("1"), { bound: true });
+    const [croquette] = bill.portions;
     const before = linesOf(bill.billId);
 
     await expect(
       saveLines(bill.billId, [
-        { workingOrderLineId: croqueta!.lineId, ...croquetas("1")[0]! },
+        { workingOrderLineId: croquette!.lineId, ...croquettes("1")[0]! },
         ...burgersWithCheese("100"),
       ]),
     ).rejects.toMatchObject({ code: "tab.portions_too_many", params: { limit: 99 } });
@@ -1698,36 +1698,36 @@ describe("A803 portions: raising a dish", () => {
   });
 
   it("A803 portions: a held-order save raising a sent portion by 100 is refused and writes nothing; by 99 it adds 99 portions", async () => {
-    const bill = await billOf(croquetas("1"), { bound: true, fire: true });
-    const [croqueta] = bill.portions;
+    const bill = await billOf(croquettes("1"), { bound: true, fire: true });
+    const [croquette] = bill.portions;
     const before = linesOf(bill.billId);
 
     await expect(
-      saveLines(bill.billId, [{ workingOrderLineId: croqueta!.lineId, ...croquetas("101")[0]! }]),
+      saveLines(bill.billId, [{ workingOrderLineId: croquette!.lineId, ...croquettes("101")[0]! }]),
     ).rejects.toMatchObject({ code: "tab.portions_too_many", params: { limit: 99 } });
     expect(linesOf(bill.billId)).toEqual(before);
 
     await saveLines(bill.billId, [
-      { workingOrderLineId: croqueta!.lineId, ...croquetas("100")[0]! },
+      { workingOrderLineId: croquette!.lineId, ...croquettes("100")[0]! },
     ]);
     const added = linesOf(bill.billId).filter((line) => line.lineNo !== before[0]!.lineNo);
     expect(added).toHaveLength(99);
     expect(added.every((line) => line.quantity === 1000 && line.cohortId !== null)).toBe(true);
     expect(new Set(added.map((line) => line.cohortId)).size).toBe(1);
-    expect(added[0]!.cohortId).not.toBe(croqueta!.pricingCohortId);
+    expect(added[0]!.cohortId).not.toBe(croquette!.pricingCohortId);
   });
 
   it("A1208 portions: a new line on a counter order is written as portions", async () => {
-    const bill = await billOf(croquetas("1"), { bound: false });
+    const bill = await billOf(croquettes("1"), { bound: false });
     await toCounter(bill.billId, bill.partyId);
-    const [croqueta] = linesOf(bill.billId);
-    const croquetaId = venue.db.all<{ id: string }>(
+    const [croquette] = linesOf(bill.billId);
+    const croquetteId = venue.db.all<{ id: string }>(
       sql`select id from working_order_lines
-          where working_order_id = ${bill.billId} and line_no = ${croqueta!.lineNo}`,
+          where working_order_id = ${bill.billId} and line_no = ${croquette!.lineNo}`,
     )[0]!.id;
 
     await saveLines(bill.billId, [
-      { workingOrderLineId: croquetaId, ...croquetas("1")[0]! },
+      { workingOrderLineId: croquetteId, ...croquettes("1")[0]! },
       ...burgersWithCheese("2"),
     ]);
 
@@ -2045,7 +2045,7 @@ describe("A803 portions: raising a dish", () => {
   });
 
   it("A803 portions: a measured recalled portion rises in place and stays one portion", async () => {
-    const bound = await billOf(croquetas("1"), { bound: true, fire: true });
+    const bound = await billOf(croquettes("1"), { bound: true, fire: true });
     await inTx(venue, async (tx) => {
       const [measured] = await tx
         .insert(orderPortions)
@@ -2138,7 +2138,7 @@ describe("A803 portions: raising a dish", () => {
   });
 
   it("A803 portions: a save leaving out a separately recalled dish is still refused as invalid lines", async () => {
-    const today = await billOf([...burgersWithCheese("1"), ...croquetas("1")], {
+    const today = await billOf([...burgersWithCheese("1"), ...croquettes("1")], {
       bound: false,
       fire: true,
     });
