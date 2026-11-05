@@ -52,7 +52,7 @@ run_bounded() {
 }
 
 if ! manager="$(run_bounded "packageManager read" "$read_bound" 2 \
-  node -p 'require(process.argv[1]).packageManager ?? ""' "$repo/package.json")"; then
+  sed -nE 's/.*"packageManager"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' "$repo/package.json")"; then
   exit 1
 fi
 if [[ ! "$manager" =~ ^pnpm@[0-9]+\.[0-9]+\.[0-9]+(\+.*)?$ ]]; then

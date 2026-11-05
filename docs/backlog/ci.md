@@ -611,24 +611,23 @@ assertion, without changing its check or wait. Next: use that snapshot and
 the existing failure screenshot to distinguish a wide scrolling box, delayed layout and missing
 resize delivery before changing the screen or its test.
 
-## Diagnose the next pnpm setup stall from its named command
+## Explain the two older silent pnpm setup stalls
 
-A1338 adds live phase, command, status and elapsed-time reports, and bounds the initial
-`packageManager` read. Controlled silent Node, install and version-check stubs exercise the
-reporting and limits. They do not identify what ran during the original CI stalls.
+Reproduce the two earlier silent setup failures before assigning their cause. Main run
+[40644939856](https://github.com/clintongormley/waitron/actions/runs/40644939856), job
+`122671628160`, stayed active through cancellation and its final job log was unavailable.
+Run [42034714487](https://github.com/clintongormley/waitron/actions/runs/42034714487), job
+`127269970638`, timed out in setup with no script output and no tests run. Both fresh-runner
+samples passed without diagnosing the first attempt. The later named Node-read timeouts do not
+establish what ran during those silent waits, and removing that initial Node dependency proves
+nothing about their causes.
 
-Retain the next recurrence's last `start` and `end` lines, then reproduce that named operation
-before changing its limits. Prefix cleanup and writing `GITHUB_PATH` remain outside the command
-timeouts; a cleanup start without an end needs evidence from that operation, not an npm retry.
-The earlier main run [40644939856](https://github.com/clintongormley/waitron/actions/runs/40644939856),
-job `122671628160`, stayed active through cancellation and its final job log was unavailable.
-Run [42034714487](https://github.com/clintongormley/waitron/actions/runs/42034714487),
-job `127269970638`, timed out in setup with no script output and no tests run. Both fresh-runner
-samples passed without diagnosing the first attempt. Keep those historical causes unverified.
-The legacy attempt summary still names npm after a version failure; use the preceding named-phase
-status and mismatch reports to identify the failed operation. Changing that retained summary
-needs approval for its existing exact-output checks.
-The controlled reproduction and limits are in
+Retain each recurrence's last `start` and `end` lines and reproduce the named operation before
+changing its limits. Prefix cleanup and writing `GITHUB_PATH` remain outside the command timeouts;
+a cleanup start without an end needs evidence from that operation, not an npm retry. The legacy
+attempt summary still names npm after a version failure; use the preceding named-phase status
+and mismatch reports to identify the failed operation. Changing that retained summary needs
+approval for its existing exact-output checks. The read, install and version limits are in
 [the CI guide](../developers/ci-and-gates.md#every-pnpm-setup-is-bounded).
 
 ## The step-watch guard received an undefined held-thread result
