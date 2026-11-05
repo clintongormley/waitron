@@ -248,13 +248,13 @@ export class PrintersScreen extends LitElement {
       }
       wt-data-table::part(page-printer-error) {
         display: block;
-        max-width: min(28vw, 24dvh);
+        max-width: 28vw;
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
       }
       wt-data-table::part(page-printer-hint) {
         display: block;
-        max-width: min(28vw, 24dvh);
+        max-width: 28vw;
         font-size: var(--wt-font-size-sm);
       }
       /* Capped like the name beside it, so a button's label or the added note wraps instead of
