@@ -621,12 +621,14 @@ and cloud operations. See [documentation ownership](../cloud-ownership.md).
 Build approved;
 exact D560 G1 mapping accepted for isolated planning only.
 Full appliance/host acceptance, approval/provisioning/PP consumers, signed corpus
-and E's matching D136 routing record remain open. Docker is available. The
+remain open. E now matches D136's complete routing requirements solely for isolated
+T4 fixtures with injected synthetic contexts and policy; shared-parser implementation
+and qualification remain open. Docker is available. The
 [5 November host evidence](../operations/a951-host-evidence.md) records preliminary
 socket/confinement probes and the actual test-box profile. B3's approved shipped
 image is Debian 13; the owner chose that system on the reinstalled test box.
-Hold native runs until it returns; write a Debian-profile successor and continue
-E's independent D136 intake.
+Hold native runs until it returns; write a Debian-profile successor. The matching
+D136 routing intake is complete.
 Admission CLOSED; other scoped gates remain.
 
 All five cuts of the [plan](../superpowers/plans/2026-10-22-a951-connection.md)
@@ -664,8 +666,11 @@ Keep the remaining work separate:
 - **G3/G4/G5:** retain unchanged opt-in test-only staff v1 and its client-policy
   gate; separately agree public-upstream identity/issuer/trust/mTLS and
   movement/replacement. Moves and replacement remain refused in this profile.
-- **G6:** record E's matching acceptance of Cloud D136's exact routing revision 2
-  before isolated shared-parser code. Diagnostic/export and flow-scoped A980/D101
+- **G6:** E/G accept the complete routing revision 2 requirements for isolated T4
+  fixtures. Use the newest plan amendment and intake for exact pins/digests and
+  scope. Before connecting consumers, record both resulting full implementation
+  commits, accepted artifacts and allowed path in both repositories, then qualify
+  that pair. Diagnostic/export and flow-scoped A980/D101
   processing, access, destinations and retention remain open, including staff
   metadata. Local receipts grant no export permission.
 

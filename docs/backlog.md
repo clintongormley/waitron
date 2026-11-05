@@ -6023,10 +6023,12 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   integration (2026-09-24; #638, #808).
 
 - **A951. The box's lasting tunnel and public-certificate client.** Build approved;
-  exact D560 G1 mapping accepted for isolated planning only. Docker is available;
+  exact D560 G1 mapping accepted for isolated planning only. E now matches D136's
+  complete routing requirements for isolated T4 fixtures; parser implementation
+  and runtime qualification remain open. Docker is available;
   preliminary socket/confinement probes ran on 5 November. B3 ships Debian 13;
   the owner chose Debian 13 on the reinstalled test box. Hold native runs until
-  it returns; write the Debian host successor and advance E's independent D136 intake.
+  it returns; write the Debian host successor. Matching routing intake is complete.
   G1 consumers and the remaining runtime gates stay open.
   [Host evidence and next steps](operations/a951-host-evidence.md).
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)

@@ -360,6 +360,43 @@ abort signal so deliberate shutdown does not record a service outage.
 
 ## A951 build intake
 
+### Routing acceptance: 5 November 2026 (D136)
+
+Lane E matches Cloud D136's acceptance of the complete routing engineering
+requirements solely for isolated T4 fixtures with injected synthetic local
+contexts and policy. This completes the D136 intake named in the execution update
+below and supersedes older pending-routing wording without rewriting historical
+bodies or immutable artifacts.
+
+| Pinned provenance                                                                                                                                                                                                                         | Exact Cloud words                                         | Intake consequence                                                                                       |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [Cloud D136, `b1a8d7cee1056a0aac14adba53e03f270ac4263c`](https://github.com/waitron-io/waitron-cloud/blob/b1a8d7cee1056a0aac14adba53e03f270ac4263c/docs/waitron-integration-contract.md#a951-routing-revision-2-response-2026-10-23-d136) | “Cloud accepts the complete routing engineering artifact” | E matches requirements acceptance at the exact edition/digest, without executable or runtime acceptance. |
+
+Accepted source: [Waitron
+`4fbb76eafd7d426905d7e7561f85e807438fcbdc`](https://github.com/clintongormley/waitron/blob/4fbb76eafd7d426905d7e7561f85e807438fcbdc/docs/superpowers/specs/2026-10-23-a951-routing-v1-revision2.md),
+`waitron-a951-routing-v1` / `proposal-2026-10-23.2`, full-document SHA-256
+`974c4e98eb7d583d82ad1c573f9dcec01c63b2cc4f6630d38aeda22775d198d0`.
+The [dated plan amendment](../superpowers/plans/2026-10-22-a951-connection.md#routing-acceptance-amendment-5-november-2026-d136)
+incorporates the entire immutable artifact, including all boot-bound suspend-aware
+contexts/deadlines, dispatch rechecks, grammar/adverse vectors and exact
+read-split/suffix/fresh-forwarding expectations. These are future test expectations.
+
+The production manifest remains revision `proposal-2026-10-23.1`, exactly 83 ASCII
+bytes without final LF, SHA-256
+`271fefd892b2c0f10ffab42f8e4a832a163b244733285f08d5a0ea1dfab1b012`.
+Helper isolated-T3 and D560 mapping acceptance are unchanged. Accepted executable
+Waitron consumer: **NONE**; accepted executable Cloud consumer: **NONE**; qualified
+runtime pair: **NONE**. Before connecting consumers, record both resulting full
+implementation commits, accepted artifacts and allowed path in both repositories,
+then qualify that pair. This change implements no parser and adds no appliance,
+host-amendment, G1 or G2 approval.
+
+G2, unchanged opt-in test-only G3/client policy, G4, G5, G6 diagnostics/A980/D101
+processing/access/destinations/retention and G7 retain their affected-path gates.
+Native runs wait for the watcher to report the Debian 13 test box's return;
+isolated T4 contract work does not. Admission **CLOSED**, production routes empty,
+`.local` independent.
+
 ### Execution update: 5 November 2026
 
 Docker is available. The dated 2 November entries below preserve the former

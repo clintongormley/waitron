@@ -1,5 +1,16 @@
 # A951 preliminary host evidence, 5 November 2026
 
+## Routing intake updated on 5 November 2026
+
+E's matching D136 routing intake is complete for isolated T4 fixtures, as recorded
+in the [dated plan amendment](../superpowers/plans/2026-10-22-a951-connection.md#routing-acceptance-amendment-5-november-2026-d136)
+and [intake](../developers/cloud-connection.md#a951-build-intake). This supersedes
+the pending-intake steps in the earlier report below. Both accepted executable
+consumers and the qualified runtime pair remain NONE. Next, write the Debian 13
+host-profile successor and continue the separate G1 implementation assignments.
+Native runs still wait for the watcher to report the reinstalled test box's return.
+The measurements and their limits below are unchanged.
+
 You can resume isolated A951 work: Docker is available. The former “Docker with
 the owner on 3 November” wait no longer applies. These measurements begin G7's
 host evidence; they do not qualify a tunnel, public certificate or native service.
