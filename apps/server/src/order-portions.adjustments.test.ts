@@ -924,11 +924,11 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
         { ...roundOf([{ name: "Croquetas" }])[0]!, note: "no salt" },
       ]),
     );
-    const croquetas = await dishesNamed(billId, "Croquetas");
+    const croquetteLineIds = await dishesNamed(billId, "Croquetas");
 
     await refusedWith(
       billId,
-      { ...tenOff, lineId: croquetas[0]!, lineIds: croquetas },
+      { ...tenOff, lineId: croquetteLineIds[0]!, lineIds: croquetteLineIds },
       "management.request_invalid",
       fieldLineIds,
     );
@@ -942,11 +942,11 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
         { ...roundOf([{ name: "Croquetas" }])[0]!, courseId: course.id },
       ]);
     });
-    const croquetas = await dishesNamed(billId, "Croquetas");
+    const croquetteLineIds = await dishesNamed(billId, "Croquetas");
 
     await refusedWith(
       billId,
-      { ...tenOff, lineId: croquetas[0]!, lineIds: croquetas },
+      { ...tenOff, lineId: croquetteLineIds[0]!, lineIds: croquetteLineIds },
       "management.request_invalid",
       fieldLineIds,
     );
@@ -1282,15 +1282,15 @@ describe("A803 portions: the lines a comp or discount covered", () => {
       { name: "Pizza", quantity: "2", olives: 1 },
       { name: "Burger", quantity: "2" },
     ]);
-    const croquetas = await dishesNamed(billId, "Croquetas");
+    const croquetteLineIds = await dishesNamed(billId, "Croquetas");
     const olives = (await rowsOf(venue, billId))
       .filter((row) => row.name === "Olives")
       .map((row) => row.id);
     const burger = await dishesNamed(billId, "Burger");
-    await adjust(billId, { ...tenOff, ...rowOf(croquetas), quantity: "2" });
+    await adjust(billId, { ...tenOff, ...rowOf(croquetteLineIds), quantity: "2" });
     await adjust(billId, { ...tenOff, ...rowOf(olives) });
     await adjust(billId, { ...tenOff, lineId: burger[0]! });
-    await adjust(billId, { ...tenOff, ...rowOf([croquetas[0]!]) });
+    await adjust(billId, { ...tenOff, ...rowOf([croquetteLineIds[0]!]) });
 
     const records = await recordedOn(billId);
     const rows = await inTx(venue, (tx) => tx.select().from(adjustmentLines));
@@ -1301,10 +1301,10 @@ describe("A803 portions: the lines a comp or discount covered", () => {
         .sort(),
     );
     expect(covered).toEqual([
-      [croquetas[1]!, croquetas[2]!].sort(),
+      [croquetteLineIds[1]!, croquetteLineIds[2]!].sort(),
       [...olives].sort(),
       [burger[0]!],
-      [croquetas[0]!],
+      [croquetteLineIds[0]!],
     ]);
   });
 
@@ -2372,13 +2372,16 @@ describe("A803 portions: the per-dish floor (plan D36)", () => {
   });
 
   it("A803 portions: exactly 50% never asks on rounding: 50% off one €3.33 croqueta (€1.66 left) and 50% off a row of three (€4.99 left) go through, as €1.67 off one does; €1.68 off one asks", async () => {
-    const croquetas = (quantity: string): RoundLine[] => [{ name: "Croquetas", quantity }, bread];
+    const croquetteRound = (quantity: string): RoundLine[] => [
+      { name: "Croquetas", quantity },
+      bread,
+    ];
     const half = async (_: string, dish: Target) => crew(dish);
-    expect(await oneVerdict(croquetas("1"), "Croquetas", half)).toBeNull();
-    expect(await oneVerdict(croquetas("3"), "Croquetas", half)).toBeNull();
+    expect(await oneVerdict(croquetteRound("1"), "Croquetas", half)).toBeNull();
+    expect(await oneVerdict(croquetteRound("3"), "Croquetas", half)).toBeNull();
     const amount = (value: string) => async (_: string, dish: Target) => off(dish, value);
-    expect(await oneVerdict(croquetas("1"), "Croquetas", amount("1.67"))).toBeNull();
-    expect(await oneVerdict(croquetas("1"), "Croquetas", amount("1.68"))).toMatchObject(ASKS);
+    expect(await oneVerdict(croquetteRound("1"), "Croquetas", amount("1.67"))).toBeNull();
+    expect(await oneVerdict(croquetteRound("1"), "Croquetas", amount("1.68"))).toMatchObject(ASKS);
   });
 
   it("A803 portions: each portion of a row is checked: €5.01 off three €3.33 croquetas leaves each at €1.66 and goes through; €5.02 leaves one at €1.65 and asks", async () => {
@@ -3153,7 +3156,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
       { name: "Croquetas", quantity: "2" },
     ]);
     const burgersHere = await dishesNamed(bill.billId, "Burger");
-    const croquetas = await dishesNamed(bill.billId, "Croquetas");
+    const croquetteLineIds = await dishesNamed(bill.billId, "Croquetas");
     const before = await rowsOf(venue, bill.billId);
     for (const outcome of ["remove_charge", "keep_charge"] as const) {
       await expect(
@@ -3161,7 +3164,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
           quantity: "1",
           outcome,
           preparationStarted: true,
-          lineIds: [burgersHere[0]!, croquetas[0]!],
+          lineIds: [burgersHere[0]!, croquetteLineIds[0]!],
         }),
       ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "lineIds" } });
     }
