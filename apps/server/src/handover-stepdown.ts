@@ -13,6 +13,7 @@ import type { HandoverGate } from "./handover-gate.js";
 import { advanceHandoverTx } from "./handover-store.js";
 import { SHUTDOWN_DEADLINE_MS } from "./run-server.js";
 import type { Logger } from "./logger.js";
+import "./errors.js";
 
 export const HANDOVER_ADMITTED_WORK_LIMIT_MS = 180_000;
 
