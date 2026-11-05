@@ -114,6 +114,7 @@ import {
   markServed,
   parkOrder,
   placeOrder,
+  readBillLines,
   readTabLines,
   recallLines,
   sendLines,
@@ -141,6 +142,7 @@ import {
   holderOf,
   markTableCleared,
   memberTables,
+  readBillsOfParties,
   readPartyBills,
   seatTable,
   setPartyName,
@@ -207,7 +209,7 @@ import type { SubmitDraftInput } from "./order-drafts.js";
 import { captureKitchenActivity, type AttendanceRecorder } from "./attendance-capture.js";
 import { invalid } from "./bill-allocation.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
-import { issueIfFullyPaid } from "./bill-payments.js";
+import { issueIfFullyPaid, readBillBalance } from "./bill-payments.js";
 import { asObject, mountBillPaymentsApi, submissionIdOf } from "./bill-payments-api.js";
 import { listPrintProblems, reprintOrderTickets } from "./kitchen-print.js";
 import {
@@ -3649,6 +3651,29 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         const billEdits: BillEditState[] = [];
         for (const bill of bills) billEdits.push(await readBillEditState(tx, bill.id));
         return { drafts, billEdits };
+      });
+      return c.json(answer);
+    }),
+  );
+
+  app.get("/api/parties/:id/split-sources", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { passive: true });
+      const partyId = requireDraftPartyParam(c.req.param("id"));
+      const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, session, [{ partyId }]);
+        const family = (await readBillsOfParties(tx, [partyId], log)).get(partyId)!;
+        const bills = [];
+        for (const bill of family) {
+          if (bill.partyId !== partyId) continue;
+          if (bill.status !== "open" && bill.status !== "placed") continue;
+          bills.push({
+            billId: bill.workingOrderId,
+            lines: await readBillLines(tx, bill.workingOrderId),
+            balance: await readBillBalance(tx, bill.workingOrderId),
+          });
+        }
+        return { bills };
       });
       return c.json(answer);
     }),

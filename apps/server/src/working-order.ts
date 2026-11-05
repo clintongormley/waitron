@@ -4323,6 +4323,11 @@ export interface TabLine {
 /** Read an open tab's lines in line-number order, at their stored prices: no re-price. */
 export async function readTabLines(tx: Transaction, tabId: string): Promise<TabLine[]> {
   await assertTabOpen(tx, tabId);
+  return readBillLines(tx, tabId);
+}
+
+/** A bill's lines whatever its status, in line-number order, at their stored prices. */
+export async function readBillLines(tx: Transaction, tabId: string): Promise<TabLine[]> {
   // `ticket_items` and `working_line_portions` are unique per line, so no join multiplies rows.
   const rows = await tx
     .select({

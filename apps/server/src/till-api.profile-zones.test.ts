@@ -178,6 +178,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | PUT  /api/parties/:id/groups/order                      | party                  | refuses PUT /api/parties/:id/groups/order            |
  * | POST /api/parties/:id/groups/move, /groups/split-line, /groups/fire-line | party                  | refuses POST /api/parties/:id/groups/<move|split-line> |
  * | PUT  /api/parties/:id/drafts                            | party                  | refuses PUT /api/parties/:id/drafts                  |
+ * | GET  /api/parties/:id/split-sources                     | party                  | refuses GET /api/parties/:id/split-sources           |
  * | POST /api/parties/:id/lines/:lineId/recall | party | own refusing row below; allowed: draft-recall.test.ts |
  * | GET /api/parties/:id/lines/:lineId/cancellation; POST /api/parties/:id/lines/:lineId/cancel-item | party, current profile inside the transaction | line-cancel-api.test.ts: "checks the party zone for %s and admits it once allowed" |
  * | POST /api/parties/:id/drafts/:did/discard | party | own refusing row below; allowed: draft-discard.test.ts |
@@ -1108,6 +1109,13 @@ const ROUTES: readonly Row[] = [
     "PUT",
     (x) => `/api/parties/${x.deliParty}/drafts`,
     () => ({ draftId: null, revision: 0, personId }),
+    deliTableZone,
+  ],
+  [
+    "GET /api/parties/:id/split-sources",
+    "GET",
+    (x) => `/api/parties/${x.deliParty}/split-sources`,
+    undefined,
     deliTableZone,
   ],
   ...(["take-over", "submit", "split"] as const).map((verb): Row => [

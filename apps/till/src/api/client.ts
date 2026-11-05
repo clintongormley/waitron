@@ -2360,6 +2360,11 @@ export interface TabLines {
   revision: number;
 }
 
+/** `GET /api/parties/:id/split-sources`: the party's own open and presented bills, in number order. */
+export interface SplitSources {
+  bills: { billId: string; lines: TabLine[]; balance: BillBalance }[];
+}
+
 /**
  * One line of an open tab from `GET /api/working-orders/:id/lines`. A tab does NOT re-price:
  * `unitPriceGross` is the gross unit price LOCKED at add-time.
@@ -3966,6 +3971,11 @@ export class TillApi {
   /** Saved outboxes and every bill's editing state, read together. */
   listDrafts(partyId: string, options: ReadOptions = {}): Promise<PartyDraftSnapshot> {
     return this.#request(`/api/parties/${partyId}/drafts`, "GET", undefined, options.signal);
+  }
+
+  /** Every open and presented bill of this party, with its dishes and balance. */
+  getSplitSources(partyId: string, options: ReadOptions = {}): Promise<SplitSources> {
+    return this.#request(`/api/parties/${partyId}/split-sources`, "GET", undefined, options.signal);
   }
 
   /** Replace this bill's outbox at its observed editing state. */

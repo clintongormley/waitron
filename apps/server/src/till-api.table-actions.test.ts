@@ -3,12 +3,13 @@ import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { withTransaction } from "@waitron/db";
+import { devices, withTransaction, workingOrders } from "@waitron/db";
 import {
+  inTx,
   provisionBillVenue,
   seatedWith,
   send,
@@ -1492,4 +1493,206 @@ describe("A803 race replay: through the route", () => {
       expect(onNewParty).toEqual([{ id: dish }]);
     });
   }
+});
+
+describe("A803 split: the panel's read", () => {
+  async function read(partyId: string) {
+    return send(venue.app, venue.cookie, "GET", `/api/parties/${partyId}/split-sources`);
+  }
+
+  async function splitOff(billId: string, partyId: string, lineNo: number): Promise<string> {
+    const path = `/api/bills/${billId}/split`;
+    const split = await post(
+      path,
+      await observedBillActionBody(venue.db, path, {
+        transfers: [{ lineNo }],
+        expectedPartyRevision: revisionOf(partyId),
+      }),
+    );
+    expect(split.status, JSON.stringify(split.json)).toBe(200);
+    return split.json.billId as string;
+  }
+
+  function payItems(billId: string, lineNo: number, amount: string) {
+    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
+      submissionId: randomUUID(),
+      tip: "0.00",
+      method: "cash",
+      kind: "items",
+      lines: [{ lineNo }],
+      tendered: amount,
+      applied: amount,
+    });
+  }
+
+  async function presentByHand(billId: string) {
+    await inTx(venue, (tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, billId)),
+    );
+  }
+
+  /** Luis at his table and Ana's: Ana's bill stays on her party, combined away into his. */
+  async function luisWithAnaFamilyBill(...dishes: string[]) {
+    const ana = await seatedWith(venue, "Caña");
+    const paid = await payItems(ana.tabId, 1, "3.00");
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const luis = await seatedWith(venue, ...dishes);
+    const joined = await post(`/api/parties/${luis.partyId}/join`, {
+      tableId: ana.tableId,
+      otherPartyId: ana.partyId,
+      expectedOtherPartyRevision: revisionOf(ana.partyId),
+      expectedPartyRevision: revisionOf(luis.partyId),
+    });
+    expect(joined.status, JSON.stringify(joined.json)).toBe(200);
+    return { familyParty: ana.partyId, luis };
+  }
+
+  it("answers the party's open and presented bills in number order, each with the dishes and balance of its own reads", async () => {
+    const { familyParty, luis } = await luisWithAnaFamilyBill(
+      "Tarta",
+      "Caña",
+      "Pulpo",
+      "Caña",
+      "Caña",
+      "Pulpo",
+      "Caña",
+    );
+    const partPaid = luis.tabId;
+    const family = await splitOff(partPaid, luis.partyId, 7);
+    const open = await splitOff(partPaid, luis.partyId, 6);
+    const settled = await splitOff(partPaid, luis.partyId, 5);
+    const abandoned = await splitOff(partPaid, luis.partyId, 4);
+    const presented = await splitOff(partPaid, luis.partyId, 3);
+
+    const mergePath = `/api/bills/${partPaid}/merge`;
+    const merged = await post(
+      mergePath,
+      await observedBillActionBody(venue.db, mergePath, {
+        fromBillId: abandoned,
+        expectedPartyRevision: revisionOf(luis.partyId),
+      }),
+    );
+    expect(merged.status, JSON.stringify(merged.json)).toBe(204);
+    expect(await statusOf(venue, abandoned)).toBe("abandoned");
+
+    const paidAll = await payItems(settled, 1, "3.00");
+    expect(paidAll.status, JSON.stringify(paidAll.json)).toBe(200);
+    expect(await statusOf(venue, settled)).toBe("settled");
+
+    const paidOne = await payItems(partPaid, 1, "18.00");
+    expect(paidOne.status, JSON.stringify(paidOne.json)).toBe(200);
+
+    const linesOf = async (billId: string) => {
+      const answer = await send(
+        venue.app,
+        venue.cookie,
+        "GET",
+        `/api/working-orders/${billId}/lines`,
+      );
+      expect(answer.status).toBe(200);
+      return answer.json.lines;
+    };
+    const presentedLines = await linesOf(presented);
+    expect(presentedLines).toHaveLength(1);
+    await presentByHand(presented);
+    // Ana's own bill is settled, which the status filter alone drops, so an open one is put on her
+    // party by hand for only the party filter to keep out.
+    await inTx(venue, (tx) =>
+      tx.update(workingOrders).set({ partyId: familyParty }).where(eq(workingOrders.id, family)),
+    );
+
+    const balanceOf = async (billId: string) => {
+      const answer = await send(
+        venue.app,
+        venue.cookie,
+        "GET",
+        `/api/working-orders/${billId}/payments`,
+      );
+      expect(answer.status).toBe(200);
+      return answer.json;
+    };
+
+    const inNumberOrder = (await numbersOf(venue, luis.partyId))
+      .map(([id]) => id)
+      .filter((id) => [partPaid, presented, open].includes(id));
+    expect(new Set(inNumberOrder)).toEqual(new Set([partPaid, presented, open]));
+
+    const answer = await read(luis.partyId);
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const expected: Record<string, unknown> = {
+      [partPaid]: {
+        billId: partPaid,
+        lines: await linesOf(partPaid),
+        balance: await balanceOf(partPaid),
+      },
+      [presented]: {
+        billId: presented,
+        lines: presentedLines,
+        balance: await balanceOf(presented),
+      },
+      [open]: { billId: open, lines: await linesOf(open), balance: await balanceOf(open) },
+    };
+    expect(answer.json).toEqual({ bills: inNumberOrder.map((id) => expected[id]) });
+
+    const bills = answer.json.bills as {
+      billId: string;
+      balance: { status: string; paidLines: { lineNo: number; paidQuantity: string }[] };
+    }[];
+    const paidRow = bills.find((bill) => bill.billId === partPaid)!;
+    expect(paidRow.balance.paidLines).toMatchObject([{ lineNo: 1, paidQuantity: "1.000" }]);
+    expect(bills.find((bill) => bill.billId === presented)!.balance.status).toBe("placed");
+
+    expect((await read(luis.partyId.toUpperCase())).json).toEqual(answer.json);
+  });
+
+  it("refuses 409 party.not_open for an id that is no UUID", async () => {
+    const refused = await read("not-a-uuid");
+
+    expect(refused.status).toBe(409);
+    expect(refused.json).toMatchObject({
+      code: "party.not_open",
+      params: { partyId: "not-a-uuid" },
+    });
+  });
+
+  it("answers no bills for a UUID that names no party, as the drafts read answers empty", async () => {
+    const answer = await read(randomUUID());
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toEqual({ bills: [] });
+  });
+
+  it("requires a session", async () => {
+    const { partyId } = await seatedWith(venue, "Caña");
+
+    const answer = await send(venue.app, "", "GET", `/api/parties/${partyId}/split-sources`);
+
+    expect(answer.status).toBe(401);
+    expect(answer.json).toEqual({ code: "session.required", params: {} });
+  });
+
+  it("reading it does not keep a session signed in, where the bills read does", async () => {
+    const { partyId } = await seatedWith(venue, "Caña");
+    const longAgo = "2020-01-01T00:00:00.000Z";
+    await inTx(venue, (tx) =>
+      tx.update(devices).set({ lastSeenAt: longAgo }).where(eq(devices.id, venue.deviceId)),
+    );
+    const lastSeen = async () => {
+      const [device] = await inTx(venue, (tx) =>
+        tx
+          .select({ lastSeenAt: devices.lastSeenAt })
+          .from(devices)
+          .where(eq(devices.id, venue.deviceId)),
+      );
+      return device!.lastSeenAt;
+    };
+
+    expect((await read(partyId)).status).toBe(200);
+    expect(await lastSeen()).toBe(longAgo);
+
+    const notPassive = await send(venue.app, venue.cookie, "GET", `/api/parties/${partyId}/bills`);
+    expect(notPassive.status).toBe(200);
+    expect(await lastSeen()).not.toBe(longAgo);
+  });
 });

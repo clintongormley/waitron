@@ -50,6 +50,7 @@ import {
  * | GET /api/bills, /api/bills/:workingOrderId, /api/transactions, /api/find-bill/options | session only; no profile action | find-bill-api.test.ts: "requires an open session on every list, options and by-ID route"; allowed: "allows admitted staff reads without any ordering, payment or print capability" |
  * | GET /api/tender-refunds/:refundId/receipt | admitted session; original-sale zones | tender-refund-receipt-api.test.ts: "GET needs no payment or print capability while POST requires print-receipt", "checks every original source zone on read and reprint and admits the allowed case" |
  * | POST /api/tender-refunds/:refundId/reprint | print-receipt; original-sale zones | same refusal and allowed cases; document only, never drawer |
+ * | GET /api/parties/:id/split-sources | session only; no profile action; passive | own allowed case below; passive: till-api.table-actions.test.ts: "reading it does not keep a session signed in, where the bills read does" |
  * | GET /api/transactions/:saleId/receipt | session only; no profile action | transaction-receipt-api.test.ts: "GET needs a session but no print action; POST requires print-receipt" |
  * | POST /api/transactions/:saleId/reprint | print-receipt | reprint; transaction-receipt-api.test.ts: "GET needs a session but no print action; POST requires print-receipt" |
  * | GET /api/transactions/:saleId/refundable-tenders; GET /api/tender-refunds/:refundId | admitted session; no payment capability | tender-refund-api.test.ts: "%s reads are passive and require no payment capability"; shared display refused in "does not expose a refund command or its reads on a shared kitchen display" |
@@ -524,6 +525,18 @@ describe("each till route checks the profile action it needs", () => {
       expect({ status: answer.status, error: answer.body.error }).toEqual(expected);
     });
   }
+});
+
+describe("A803 split: the panel's read", () => {
+  it("is served to a session whose profile lacks take-orders", async () => {
+    const answer = await send(
+      sessions.get("take-orders")!,
+      "GET",
+      `/api/parties/${id}/split-sources`,
+    );
+    expect(answer.status).toBe(200);
+    expect(answer.body).toEqual({ bills: [] });
+  });
 });
 
 describe("A803 split: the route", () => {

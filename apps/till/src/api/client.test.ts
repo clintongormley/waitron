@@ -4667,6 +4667,22 @@ describe("TillApi: a party's drafts", () => {
   const edit = { ...observed, editorId: "p-alex", editorName: "Alex" };
   const takeover = { revision: 1, expectedEdit: observed, submissionId: "takeover-1" };
 
+  it("getSplitSources reads the party's route and hands a caller's abort signal to fetch", async () => {
+    const answer = { bills: [] };
+    const fetchStub = vi.fn().mockResolvedValueOnce(jsonResponse(answer));
+    const signal = new AbortController().signal;
+
+    await expect(new TillApi("", fetchStub).getSplitSources("v1", { signal })).resolves.toEqual(
+      answer,
+    );
+
+    expect(fetchStub).toHaveBeenCalledExactlyOnceWith("/api/parties/v1/split-sources", {
+      method: "GET",
+      credentials: "include",
+      signal,
+    });
+  });
+
   it("listDrafts and saveDraft hand a caller's abort signal to fetch", async () => {
     const fetchStub = vi
       .fn()
