@@ -6,7 +6,7 @@ import "./errors.js";
 
 export type HandoverScenario = "controlled" | "emergency";
 
-/** What one operation is about, fixed when it starts. There is no location in it. */
+/** What one operation is about, fixed when it starts. */
 export interface HandoverBinding {
   readonly operationId: string;
   readonly scenario: HandoverScenario;

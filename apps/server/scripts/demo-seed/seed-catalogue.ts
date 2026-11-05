@@ -93,7 +93,7 @@ async function resolveStationIds(
 }
 
 /**
- * The data set's restaurant menu becomes the location's default menu; the others are added beside
+ * The data set's restaurant menu becomes the venue's default menu; the others are added beside
  * it.
  */
 export async function seedCatalogues(
