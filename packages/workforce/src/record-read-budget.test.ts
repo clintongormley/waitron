@@ -17,7 +17,6 @@ const backend = new WorkforceBackend(),
 let personId: string, other: string, locationId: string, nodeId: string, target: string;
 const event = (subject: string, at: string) => ({
   personId: subject,
-  locationId,
   nodeId,
   at,
   offsetMinutes: 0,

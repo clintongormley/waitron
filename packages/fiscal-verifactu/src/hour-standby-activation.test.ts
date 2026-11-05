@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { withHourAdmission, type AllocationContext } from "./allocation-envelope.js";
@@ -19,7 +18,7 @@ import { registroSif } from "./schema/sif.js";
 import { cadenas } from "./schema/cadenas.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const primary = { nodeId: TENANT_A.nodeId };
 const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
 const bases = [
   { code: "A", purpose: "standard" },

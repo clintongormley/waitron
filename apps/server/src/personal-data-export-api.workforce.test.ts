@@ -233,7 +233,6 @@ beforeEach(async () => {
   const clock = async (personId: string, inAt: string, outAt: string) => {
     const event = (at: string) => ({
       nodeId: NODE_ID,
-      locationId,
       personId,
       offsetMinutes: CLOCK_OFFSET_MINUTES,
       origin: jobOrigin("dashboard"),

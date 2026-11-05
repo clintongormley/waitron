@@ -9,7 +9,7 @@ import {
   type ModuleOperationPreparation,
   type OperationAuthority,
 } from "@waitron/module";
-import { locationId, seriesId } from "@waitron/shared";
+import { seriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedVenueNodes, TENANT_A } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
@@ -36,7 +36,7 @@ import { readHourRecoveryState } from "./hour-recovery-state.js";
 import { FISCAL_OPERATIONS } from "./hour-configuration.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },

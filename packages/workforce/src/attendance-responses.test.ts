@@ -33,14 +33,13 @@ beforeEach(async () => {
   [personId, managerId] = rows.map((r) => r.id) as [string, string];
 });
 async function completedDay() {
-  const input = { nodeId, personId, locationId, offsetMinutes: 0, origin };
+  const input = { nodeId, personId, offsetMinutes: 0, origin };
   await run((tx) => backend.clockIn(tx, { ...input, at: "2026-01-05T09:00:00Z" }));
   await run((tx) => backend.clockOut(tx, { ...input, at: "2026-01-05T17:00:00Z" }));
 }
 const missing = (missingEntryKind: "in" | "out", at: string) => ({
   nodeId,
   personId,
-  locationId,
   missingEntryKind,
   at,
   offsetMinutes: 0,

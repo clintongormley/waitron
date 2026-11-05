@@ -252,7 +252,6 @@ describe("authenticated working-time downloads", () => {
     await withTransaction(suite.db, async (tx) => {
       const common = {
         nodeId: fixture.nodeId,
-        locationId: fixture.locationId,
         personId: fixture.managerId,
         offsetMinutes: 0,
         origin: jobOrigin("dashboard"),
@@ -436,7 +435,6 @@ describe("authenticated working-time downloads", () => {
         withTransaction(suite.db, async (tx) => {
           const common = {
             nodeId: fixture.nodeId,
-            locationId: fixture.locationId,
             personId: fixture.personId,
             offsetMinutes: 0,
             origin: jobOrigin("dashboard"),

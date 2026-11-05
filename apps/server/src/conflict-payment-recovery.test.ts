@@ -168,7 +168,7 @@ it("finalises an already captured bill once after the actual administrator switc
   const records = suite.db.all(sql`select * from registros_facturacion`);
   const cases = suite.db.all(sql`select * from filing_cases`);
   const orders = suite.db.all(sql`select * from working_orders`);
-  const node = { nodeId: venue.cfg.nodeId, locationId: venue.cfg.locationId };
+  const node = { nodeId: venue.cfg.nodeId };
   const key = "synthetic-conflict-current-key";
   await stampDeployment(suite.db, "preproduction");
   await withNodeTransaction(suite.node, (tx) =>

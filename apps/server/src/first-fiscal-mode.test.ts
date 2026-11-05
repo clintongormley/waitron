@@ -18,7 +18,7 @@ it.each(["activation-started", "committed", "publication"] as const)(
       if (status !== "activation-started")
         state = await f.store.update(f.context.attemptId, state.revision, {
           kind: "committed",
-          result: { venue: { nodeId: f.context.binding.targetNodeId, locationId: LOCATION } },
+          result: { venue: { nodeId: f.context.binding.targetNodeId } },
         });
       if (status === "publication")
         await f.store.update(f.context.attemptId, state.revision, { kind: "publication" });
@@ -49,7 +49,7 @@ it("durably completed ordinary trading needs no fresh outside consultation", asy
       { kind: "activation-started" },
       {
         kind: "committed",
-        result: { venue: { nodeId: f.context.binding.targetNodeId, locationId: LOCATION } },
+        result: { venue: { nodeId: f.context.binding.targetNodeId } },
       },
       { kind: "publication" },
       { kind: "complete" },

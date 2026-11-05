@@ -4,7 +4,7 @@ import { deployment, invoiceSeries, stampDeployment, tenants, withTransaction } 
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { recordSale } from "@waitron/core";
-import { locationId, seriesId } from "@waitron/shared";
+import { seriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedVenueNodes, TENANT_A } from "../test/fixtures.js";
 import { withHourAdmission } from "./allocation-envelope.js";
@@ -17,7 +17,7 @@ import { VerifactuBackend } from "./backend.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId };
 const binding: OperationBinding = {
   module: "fiscal-verifactu",
   action: "restore",

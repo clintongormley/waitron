@@ -7,7 +7,6 @@ import type { RegistroConsultado, VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedVenueNodes, TENANT_A } from "../test/fixtures.js";
 import { withOperationAuthority } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { createHourPreparation } from "./hour-preparation.js";
 import { compareHourClocks } from "./hour-clock.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
@@ -274,7 +273,7 @@ it("observes a freshly allocated identity before its first local invoice", async
   let instant = Date.parse("2026-10-16T11:38:00Z");
   let monotonic = 0;
   let value: unknown = null;
-  const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+  const node = { nodeId: TENANT_A.nodeId };
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(instant);
   try {

@@ -106,7 +106,6 @@ it("confirmation leaves the last captured out as the current state", async () =>
   const backend = new WorkforceBackend();
   const input = {
     nodeId,
-    locationId,
     personId,
     at: "2026-01-05T09:00:00.000Z",
     offsetMinutes: 0,

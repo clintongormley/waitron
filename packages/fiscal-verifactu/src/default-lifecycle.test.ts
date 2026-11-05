@@ -1,7 +1,6 @@
 import { beforeEach, expect, it } from "vitest";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { allocationFixture } from "../test/allocation-fixture.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
@@ -17,7 +16,6 @@ import { registroSif } from "./schema/sif.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const primary = {
   nodeId: TENANT_A.nodeId,
-  locationId: locationId(TENANT_A.locationId),
 };
 const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
 const bases = [

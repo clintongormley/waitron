@@ -24,7 +24,7 @@ const suite = useVenueDb({
 let v: Awaited<ReturnType<typeof zonePaymentVenue>>;
 let token: string;
 let manager: string;
-const scope = () => ({ nodeId: v.cfg.nodeId, locationId: v.cfg.locationId });
+const scope = () => ({ nodeId: v.cfg.nodeId });
 const reading = (offsetMinutes = 0) => ({ instant: new Date(BEHIND), offsetMinutes });
 const inTx = <T>(fn: Parameters<typeof withTransaction<T>>[1]) => withTransaction(suite.db, fn);
 const clockStop = (offsetMinutes = 0) =>

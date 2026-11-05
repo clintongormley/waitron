@@ -3,7 +3,6 @@ import { deployment, invoiceSeries, withTransaction, type Transaction } from "@w
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { managementSessions, persons } from "@waitron/identity";
 import { readOperationAuthority } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { withCollectedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-operation.js";
@@ -17,7 +16,7 @@ import { mintBreakGlassSecret } from "./break-glass.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId };
 const binding = {
   module: "fiscal-verifactu",
   action: "restore",

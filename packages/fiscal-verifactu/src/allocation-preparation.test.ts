@@ -7,7 +7,6 @@ import {
   withPreparedModuleOperations,
   type ModuleOperationInput,
 } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import * as preparation from "./allocation-preparation.js";
@@ -23,7 +22,7 @@ import { fiscalAllocations, type ActivationResult } from "./schema/allocations.j
 import { registroSif } from "./schema/sif.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId };
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();

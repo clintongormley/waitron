@@ -57,7 +57,6 @@ vi.mock("./reserved-identity.js", async (importOriginal) => {
 
 // Adopt never reads these ids back from the database, so a fixed set is enough.
 const DESIGNATED = {
-  locationId: "22222222-2222-4222-8222-222222222222",
   nodeId: "44444444-4444-4444-8444-444444444444",
 } as const;
 

@@ -8,7 +8,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { deployment, invoiceSeries, nodes, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationInput } from "@waitron/module";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
 import * as fiscal from "./index.js";
@@ -24,8 +24,8 @@ import {
 } from "./paper-evidence.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
-const standby = { nodeId: TENANT_A.nodeId2, locationId: primary.locationId };
+const primary = { nodeId: TENANT_A.nodeId };
+const standby = { nodeId: TENANT_A.nodeId2 };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },

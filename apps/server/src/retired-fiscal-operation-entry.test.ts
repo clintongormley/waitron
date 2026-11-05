@@ -10,7 +10,6 @@ import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.j
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { fiscalAllocations, registroSif } from "@waitron/fiscal-verifactu";
-import { locationId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { writeAllocationInput } from "./testing/allocation-input.js";
@@ -26,7 +25,7 @@ import { recoveryArchiveSourceId, recoveryStreamSourceId } from "./recovery-sour
 import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },

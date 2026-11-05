@@ -9,7 +9,6 @@ import {
   readMembershipTrustSet,
   readNodeMembership,
   stampDeployment,
-  venueLocationId,
   withTransaction,
   writeNodeMembership,
   type Database,
@@ -37,7 +36,7 @@ import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/tes
 import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
 import { fiscalAllocations, registroSif } from "@waitron/fiscal-verifactu";
 import type { WaitronModule } from "@waitron/module";
-import { locationId, nodeId } from "@waitron/shared";
+import { nodeId } from "@waitron/shared";
 import {
   standbyContract,
   allocatedStandbyModules,
@@ -770,7 +769,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(byCode.get("RF-P000042")).toBe("rectificative");
     const primary = {
       nodeId: nodeId(designated.nodeId),
-      locationId: locationId(await venueLocationId(db)),
     };
     await prepareStandbyDatabase(db, spare.db, primary);
     expect(await takenOverSeries(spare.db, standby.nodeId, fixture, fiscal)).toEqual([
@@ -1476,7 +1474,6 @@ async function allocatedReply(
 ) {
   const primary = {
     nodeId: nodeId(designated.nodeId),
-    locationId: locationId(await venueLocationId(db)),
   };
   const fixture = await standbyContract(
     db,

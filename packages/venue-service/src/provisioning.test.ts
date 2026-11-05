@@ -59,7 +59,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
     const venueId = await venueLocationId(db);
     const locationId = brandLocationId(venueId);
-    const node = { locationId, nodeId: await seedNode(db) };
+    const node = { nodeId: await seedNode(db) };
     const seed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     const rows = () =>
       db.execute(
@@ -103,7 +103,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
     const venueId = await venueLocationId(db);
     const locationId = brandLocationId(venueId);
-    const node = { locationId, nodeId: await seedNode(db) };
+    const node = { nodeId: await seedNode(db) };
 
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
 
@@ -137,7 +137,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
       const venueId = await venueLocationId(db);
       const locationId = brandLocationId(venueId);
-      const node = { locationId, nodeId: await seedNode(db) };
+      const node = { nodeId: await seedNode(db) };
       return {
         locationId,
         seed: () => withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node)),
@@ -199,9 +199,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(db);
-    const locationId = brandLocationId(venueId);
-    const node = { locationId, nodeId: await seedNode(db) };
+    const node = { nodeId: await seedNode(db) };
 
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
 
@@ -222,7 +220,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
     const venueId = await venueLocationId(db);
     const locationId = brandLocationId(venueId);
-    const node = { locationId, nodeId: await seedNode(db) };
+    const node = { nodeId: await seedNode(db) };
 
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
 
@@ -271,7 +269,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const venueId = await venueLocationId(db);
     const locationId = brandLocationId(venueId);
     const nodeId = await seedNode(db);
-    const node = { locationId, nodeId };
+    const node = { nodeId };
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
 
     await expect(runSeed()).resolves.toBe("default department and counter zone ready");
@@ -317,7 +315,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
     const venueId = await venueLocationId(db);
     const locationId = brandLocationId(venueId);
-    const node = { locationId, nodeId: await seedNode(db) };
+    const node = { nodeId: await seedNode(db) };
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     const listed = async () =>
       (
@@ -360,9 +358,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(db);
-    const locationId = brandLocationId(venueId);
-    const node = { locationId, nodeId: await seedNode(db) };
+    const node = { nodeId: await seedNode(db) };
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     expect(
       (
@@ -382,9 +378,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       province: "Sevilla",
       city: "Sevilla",
     });
-    const venueId = await venueLocationId(db);
-    const locationId = brandLocationId(venueId);
-    const node = { locationId, nodeId: await seedNode(db) };
+    const node = { nodeId: await seedNode(db) };
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     const stored = async () =>
       (
@@ -447,7 +441,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       });
       const venueId = await venueLocationId(db);
       const locationId = brandLocationId(venueId);
-      const node = { locationId, nodeId: await seedNode(db) };
+      const node = { nodeId: await seedNode(db) };
       const profile = async (
         formFactor: "till" | "phone-portrait" | "tablet-landscape" | "kds",
         capabilities: string[],
@@ -563,7 +557,7 @@ it("seeds a new Counter id while retaining a deleted Counter", async () => {
   });
   const venueId = await venueLocationId(db);
   const locationId = brandLocationId(venueId);
-  const node = { locationId, nodeId: await seedNode(db) };
+  const node = { nodeId: await seedNode(db) };
   const [old] = await db
     .insert(floorZones)
     .values({ locationId, name: "Counter", active: false })

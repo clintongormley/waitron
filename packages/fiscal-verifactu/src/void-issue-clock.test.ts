@@ -17,7 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { recordSale } from "@waitron/core";
 import { prepareIssueClock, type TrustedClock } from "@waitron/fiscal";
 import { computeHuella } from "@waitron/verifactu";
-import { decimal, locationId, nodeId, seriesId, saleId, type SaleId } from "@waitron/shared";
+import { decimal, nodeId, seriesId, saleId, type SaleId } from "@waitron/shared";
 import * as fiscal from "./index.js";
 import { withOperationAuthority } from "@waitron/module";
 import { createEmergencyAllocationPreparation } from "./emergency-preparation.js";
@@ -219,7 +219,7 @@ it("an active emergency identity uses the caller's issue instant rather than all
     .insert(nodes)
     .values({ locationId: seededNode.locationId, name: "Emergency node" })
     .returning();
-  const node = { nodeId: nodeId(freshNode!.id), locationId: locationId(seededNode.locationId) };
+  const node = { nodeId: nodeId(freshNode!.id) };
   await suite.db.insert(invoiceSeries).values({ nodeId: node.nodeId, code: "A" });
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   const binding = {

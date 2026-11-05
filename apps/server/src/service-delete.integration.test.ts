@@ -1107,7 +1107,6 @@ it.each(["zone", "department"] as const)(
       const workforce = new WorkforceBackend();
       const event = {
         nodeId: venue.cfg.nodeId,
-        locationId: venue.cfg.locationId,
         personId: timekeeper!.id,
         offsetMinutes: 120,
         origin: jobOrigin("dashboard"),

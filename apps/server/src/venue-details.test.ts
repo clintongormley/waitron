@@ -1464,7 +1464,6 @@ describe("workforce facts after venue corrections", () => {
       const event = {
         nodeId: venue.cfg.nodeId,
         personId,
-        locationId: venue.cfg.locationId,
         offsetMinutes: 120,
         origin: jobOrigin("dashboard"),
       };

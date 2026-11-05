@@ -2050,7 +2050,6 @@ describe("Management API — Google sign-in edges, credential checks and staff l
       });
       const event = {
         nodeId: venueCfg!.nodeId,
-        locationId: venueCfg!.locationId,
         personId: staffId,
         offsetMinutes: 120,
         origin: jobOrigin("dashboard"),

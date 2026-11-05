@@ -6,7 +6,6 @@ import {
   type ModuleOperationInput,
   type OperationBinding,
 } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { createHourPreparation } from "./hour-preparation.js";
@@ -24,7 +23,7 @@ import { registroSif } from "./schema/sif.js";
 import { assertFiscalRestoreCommitted } from "./restore-committed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const node = { nodeId: TENANT_A.nodeId };
 const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },

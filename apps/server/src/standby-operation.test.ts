@@ -106,7 +106,7 @@ function bundleDeps() {
     relayUrl: "https://relay.test",
     boxHostname: "waitron.local",
     accountKey: "public-test",
-    designated: { nodeId: PRIMARY, locationId: LOCATION },
+    designated: { nodeId: PRIMARY },
     standby: { nodeId: TARGET, publicKey: generateNodeKeyPair().publicKey },
   };
 }

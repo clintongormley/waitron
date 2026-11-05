@@ -75,7 +75,6 @@ async function amendment(at: string, kind: "order_placed" | "order_cancelled" = 
 }
 const event = (at: string) => ({
   personId: ana,
-  locationId,
   nodeId,
   at,
   offsetMinutes: 0,

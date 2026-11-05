@@ -10,7 +10,6 @@ import {
   type OperationBinding,
   type OperationOperator,
 } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { withHourAdmission } from "./allocation-envelope.js";
@@ -23,7 +22,7 @@ import { fiscalAllocations } from "./schema/allocations.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NOW = Date.parse("2026-10-16T12:00:00.000Z");
-const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
+const primary = { nodeId: TENANT_A.nodeId };
 const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
 const bases = [
   { code: "A", purpose: "standard" },

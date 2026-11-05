@@ -1,7 +1,7 @@
 /** The adjustment reasons seed, against a database every module set has migrated. */
 
 import { describe, expect, it } from "vitest";
-import { venueLocationId, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -10,7 +10,6 @@ import {
   STARTER_REASON_NAMES as expected,
 } from "@waitron/adjustments";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { seedAdjustmentReasons } from "./seed-adjustments.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 
@@ -57,8 +56,7 @@ describe("seedAdjustmentReasons", () => {
         invoiceLocales: [invoiceLocale],
         operationDescription: "Demo",
       });
-      const locationId = brandLocationId(await venueLocationId(suite.db));
-      const node = { locationId, nodeId: await seedNode(suite.db) };
+      const node = { nodeId: await seedNode(suite.db) };
       const reasons = await withTransaction(suite.db, async (tx) => {
         await ADJUSTMENTS_PROVISIONING.seed!.run(tx, node);
         await seedAdjustmentReasons(tx, {
@@ -79,8 +77,7 @@ describe("seedAdjustmentReasons", () => {
       invoiceLocales: ["es-ES"],
       operationDescription: "Demo",
     });
-    const locationId = brandLocationId(await venueLocationId(suite.db));
-    const node = { locationId, nodeId: await seedNode(suite.db) };
+    const node = { nodeId: await seedNode(suite.db) };
     const [before, after] = await withTransaction(suite.db, async (tx) => {
       await ADJUSTMENTS_PROVISIONING.seed!.run(tx, node);
       const provisioned = await listAdjustmentReasons(tx);
@@ -178,8 +175,7 @@ describe("seedAdjustmentReasons", () => {
       invoiceLocales: ["es-ES"],
       operationDescription: "Demo",
     });
-    const locationId = brandLocationId(await venueLocationId(suite.db));
-    const node = { locationId, nodeId: await seedNode(suite.db) };
+    const node = { nodeId: await seedNode(suite.db) };
     const [once, twice] = await withTransaction(suite.db, async (tx) => {
       await ADJUSTMENTS_PROVISIONING.seed!.run(tx, node);
       const seed = () =>

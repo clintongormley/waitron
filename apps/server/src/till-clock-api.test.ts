@@ -234,7 +234,7 @@ describe("signed-in own till clock routes", () => {
     await request("in");
     await request("break-start", { expectedEntryId: (await state()).lastEntryId });
     const before = await state();
-    const key = { nodeId: venue.cfg.nodeId, locationId: venue.cfg.locationId };
+    const key = { nodeId: venue.cfg.nodeId };
     const head = await withTransaction(suite.db, (tx) => readChainHead(tx, key));
     await suite.db.execute(sql`create trigger clock_test_out_refusal before insert on time_entries
       when new.entry_kind = 'out' begin select raise(abort, 'clock test out refusal'); end`);

@@ -41,7 +41,6 @@ export async function seedAttendanceExport(db: Database) {
   const run = <T>(fn: Parameters<typeof withTransaction<T>>[1]) => withTransaction(db, fn);
   const event = (at: string) => ({
     nodeId,
-    locationId,
     personId: worker!.id,
     offsetMinutes: 60,
     origin,

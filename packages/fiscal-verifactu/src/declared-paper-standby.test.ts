@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationInput } from "@waitron/module";
-import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
@@ -16,7 +15,7 @@ import { fiscalReservations } from "./schema/reservations.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { createDeclaredPaperStandbyPreparation } from "./declared-paper-standby.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) },
+const primary = { nodeId: TENANT_A.nodeId },
   target = { ...primary, nodeId: TENANT_A.nodeId2 };
 const bases = [
   { code: "A", purpose: "standard" },
