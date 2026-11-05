@@ -6668,7 +6668,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A974. Finish the remaining English names in general code.**
   Remaining names include till boot and counter-payment fixtures; server till-API, fiscal-sale
   and other order fixtures, including `till-api.reprint.test.ts`, `vat-rate-at-issue.test.ts`,
-  `table-signals.test.ts`, order-portion, party-bill-actions and party-move-bill suites; shared helper consumers and file names. Keep accented search fixtures unchanged. Low priority.
+  `table-signals.test.ts`, order-portion, party-bill-actions, party-move-bill, `move-merge.filing.test.ts`
+  and `kitchen-request.bill-move.test.ts` suites; shared helper consumers and file names. Keep accented search fixtures unchanged. Low priority.
   [Detail](backlog/architecture.md#a974-finish-the-remaining-english-names-in-general-code).
 
 - **Setup's receipt-language selection still reads inherited object properties.** Its

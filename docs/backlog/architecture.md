@@ -408,7 +408,8 @@ until A977).
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Other private naming sites remain in the till's boot and counter-payment suites and
   other server till-API, fiscal-sale and order fixtures, including `till-api.reprint.test.ts`,
-  `vat-rate-at-issue.test.ts`, `table-signals.test.ts`, order-portion, party-bill-actions and party-move-bill suites. These include accented move-line bindings
+  `vat-rate-at-issue.test.ts`, `table-signals.test.ts`, order-portion, party-bill-actions, party-move-bill, `move-merge.filing.test.ts`
+  and `kitchen-request.bill-move.test.ts` suites. These include accented move-line bindings
   and shared helper consumers such as `made-here.test.ts`.
   Fixture strings remain separate from this naming work.
   Keep accented search fixtures unchanged. String-selected product keys stay with their fixture text
@@ -806,7 +807,8 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 - **A974. Finish the remaining English names in general code.** Remaining names include till boot and
   counter-payment fixtures; server till-API, fiscal-sale and other order fixtures, including
   `till-api.reprint.test.ts`, `vat-rate-at-issue.test.ts`, `table-signals.test.ts`, order-portion,
-  party-bill-actions and party-move-bill suites; shared helper consumers and file names.
+  party-bill-actions, party-move-bill, `move-merge.filing.test.ts`
+  and `kitchen-request.bill-move.test.ts` suites; shared helper consumers and file names.
   Keep accented search fixtures unchanged. Other fixture text stays with A976, including catalogue
   display names, recipe ingredient names and seasonal venue and zone names, printer-screen display
   labels, counter-screen display text and station-screen display names, plus kitchen-ticket grouping,
