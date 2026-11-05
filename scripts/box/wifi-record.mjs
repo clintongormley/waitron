@@ -27,7 +27,10 @@ const PRINTABLE_ASCII = /^[ -~]*$/;
 const PSK_HEX = /^[0-9a-fA-F]{64}$/;
 const SAE_MAX_BYTES = 256;
 
-/** @param {unknown} value */
+/**
+ * Pure. Whether value is lower-case hex for 1 to 32 bytes. Never throws.
+ * @param {unknown} value @returns {boolean}
+ */
 export function isSsidHex(value) {
   return typeof value === "string" && SSID_HEX.test(value);
 }

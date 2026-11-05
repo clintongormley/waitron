@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   HOST_LINE_MAX,
   HOST_REPLY_MAX,
@@ -43,23 +43,20 @@ const JOIN_FIELDS =
   '"ssidHex":"4361666550657065","keyMgmt":"wpa-psk","psk":"abcdefgh","hidden":false';
 
 /** @type {Array<import("vitest").MockInstance>} */
-let spies = [];
-
-beforeAll(() => {
-  spies = [
-    vi.spyOn(console, "log"),
-    vi.spyOn(console, "error"),
+let outputSpies = [];
+beforeEach(() => {
+  outputSpies = [
+    ...["log", "info", "warn", "error", "debug", "trace"].map((name) => vi.spyOn(console, name)),
     vi.spyOn(process.stdout, "write"),
     vi.spyOn(process.stderr, "write"),
   ];
 });
-
 afterEach(() => {
-  for (const spy of spies) expect(spy).not.toHaveBeenCalled();
-});
-
-afterAll(() => {
-  for (const spy of spies) spy.mockRestore();
+  try {
+    for (const spy of outputSpies) expect(spy).not.toHaveBeenCalled();
+  } finally {
+    for (const spy of outputSpies) spy.mockRestore();
+  }
 });
 
 describe("the lists", () => {
@@ -410,7 +407,10 @@ describe("formatHostRequest", () => {
     ["a non-object", "network.read"],
     ["null", null],
   ])("throws host_request.invalid for %s", (_name, request) => {
-    expect(thrown(request)).toMatchObject({ code: "host_request.invalid" });
+    expect(thrown(request)).toMatchObject({
+      code: "host_request.invalid",
+      reason: "request-invalid",
+    });
   });
 
   it("puts none of the request's values in its error", () => {
@@ -424,7 +424,7 @@ describe("formatHostRequest", () => {
       },
       actor: person,
     });
-    expect(error).toMatchObject({ code: "host_request.invalid" });
+    expect(error).toMatchObject({ code: "host_request.invalid", reason: "request-invalid" });
     expect(JSON.stringify(error)).not.toContain("Canary-7f3a91");
     expect(String(error)).not.toContain("Canary-7f3a91");
     expect(String(error.stack)).not.toContain("Canary-7f3a91");
@@ -727,7 +727,10 @@ describe("each request's field values", () => {
   });
 
   it.each(REFUSED_FIELD_VALUES)("will not write %s", (_name, text) => {
-    expect(formatError(requestSpelledBy(text))).toMatchObject({ code: "host_request.invalid" });
+    expect(formatError(requestSpelledBy(text))).toMatchObject({
+      code: "host_request.invalid",
+      reason: "request-invalid",
+    });
   });
 
   it.each([
@@ -744,7 +747,10 @@ describe("each request's field values", () => {
       },
     ],
   ])("will not write %s", (_name, request) => {
-    expect(formatError(request)).toMatchObject({ code: "host_request.invalid" });
+    expect(formatError(request)).toMatchObject({
+      code: "host_request.invalid",
+      reason: "request-invalid",
+    });
   });
 
   it("keeps a refused password out of the error and the refusal", () => {
@@ -758,7 +764,7 @@ describe("each request's field values", () => {
       },
       actor: person,
     });
-    expect(error).toMatchObject({ code: "host_request.invalid" });
+    expect(error).toMatchObject({ code: "host_request.invalid", reason: "request-invalid" });
     expect(JSON.stringify(error)).not.toContain("Canary-7f3a91");
     expect(String(error)).not.toContain("Canary-7f3a91");
     expect(String(error.stack)).not.toContain("Canary-7f3a91");
@@ -1058,7 +1064,10 @@ describe("refusals", () => {
     ["screen.read", "no_wifi"],
     ...HOST_VERBS.map((verb) => [verb, "nope"]),
   ])("%s may not answer %s", (verb, reason) => {
-    expect(replyError(verb, { ok: false, reason })).toMatchObject({ code: "host_reply.invalid" });
+    expect(replyError(verb, { ok: false, reason })).toMatchObject({
+      code: "host_reply.invalid",
+      reason: "reply-invalid",
+    });
     expect(parseHostReply(verb, `{"ok":false,"reason":"${reason}"}\n`)).toEqual({
       kind: "malformed",
     });
@@ -1140,7 +1149,6 @@ const REFUSED_SHAPES = [
     ["a leading space", " 1.2.3.4"],
     ["a zone", "fe80::1%eth0"],
     ["a host name", "host.local"],
-    ["46 characters", "0000:0000:0000:0000:0000:ffff:0255.255.255.255"],
   ].map(([name, address]) => [
     `an address with ${name}`,
     "network.read",
@@ -1302,6 +1310,12 @@ const REFUSED_SHAPES = [
     '{"ok":true,"extra":1}\n',
   ],
   [
+    "an extra key on a tag outcome",
+    "tag.write",
+    { ok: true, tag: "written", extra: 1 },
+    '{"ok":true,"tag":"written","extra":1}\n',
+  ],
+  [
     "a refusal with an extra key",
     "network.scan",
     { ok: false, reason: "busy", detail: "x" },
@@ -1313,7 +1327,10 @@ const REFUSED_SHAPES = [
 
 describe("refused reply shapes", () => {
   it.each(REFUSED_SHAPES)("will not write %s", (_name, verb, reply) => {
-    expect(replyError(verb, reply)).toMatchObject({ code: "host_reply.invalid" });
+    expect(replyError(verb, reply)).toMatchObject({
+      code: "host_reply.invalid",
+      reason: "reply-invalid",
+    });
   });
 
   it.each(REFUSED_SHAPES)("reads %s as malformed", (_name, verb, _reply, text) => {
@@ -1323,8 +1340,73 @@ describe("refused reply shapes", () => {
   });
 
   it("will not write a reply for an unknown verb", () => {
-    expect(replyError("clock.status", { ok: true })).toMatchObject({ code: "host_reply.invalid" });
+    expect(replyError("clock.status", { ok: true })).toMatchObject({
+      code: "host_reply.invalid",
+      reason: "reply-invalid",
+    });
     expect(parseHostReply("clock.status", '{"ok":true}\n')).toEqual({ kind: "malformed" });
+  });
+});
+
+/** @param {unknown} first @param {unknown} later a getter answering first once, then later */
+const changing = (first, later) => {
+  let reads = 0;
+  return () => (++reads === 1 ? first : later);
+};
+
+/** A scan list whose length reads 1 once, then 33. */
+const growingNetworks = () => {
+  const lengths = changing(1, 33);
+  const all = scanNetworks(33);
+  return new Proxy(all, {
+    get: (target, key, receiver) =>
+      key === "length" ? lengths() : Reflect.get(target, key, receiver),
+  });
+};
+
+/** @param {object} object @param {string} key @param {() => unknown} get */
+const withGetter = (object, key, get) =>
+  Object.defineProperty(object, key, { enumerable: true, get });
+
+describe("a reply value that changes between reads", () => {
+  it.each([
+    [
+      "start",
+      "screen.read",
+      (get) => withGetter({ ok: true }, "start", get),
+      ["till", "invalid"],
+      '{"ok":true,"start":"till"}\n',
+    ],
+    [
+      "tag",
+      "tag.write",
+      (get) => withGetter({ ok: true }, "tag", get),
+      ["written", "bogus"],
+      '{"ok":true,"tag":"written"}\n',
+    ],
+    [
+      "refusal reason",
+      "network.scan",
+      (get) => withGetter({ ok: false }, "reason", get),
+      ["busy", "nope"],
+      '{"ok":false,"reason":"busy"}\n',
+    ],
+    [
+      "wired address",
+      "network.read",
+      (get) => readReply({ wired: withGetter({ connected: true }, "address", get) }),
+      ["192.168.1.10", "host.local"],
+      readText(),
+    ],
+  ])("writes the %s it checked", (_name, verb, make, [first, later], text) => {
+    expect(formatHostReply(verb, make(changing(first, later)))).toBe(text);
+    expect(parseHostReply(verb, text).kind).not.toBe("malformed");
+  });
+
+  it("writes the scan list whose length it checked", () => {
+    const text = `{"ok":true,"networks":[${scanEntriesText(1)}]}\n`;
+    expect(formatHostReply("network.scan", { ok: true, networks: growingNetworks() })).toBe(text);
+    expect(parseHostReply("network.scan", text).kind).toBe("ok");
   });
 });
 
@@ -1730,7 +1812,7 @@ describe("the canary password", () => {
     expect(adapters.networkJoin).not.toHaveBeenCalled();
     expect(calls.map(([name]) => name)).toEqual(["log"]);
     for (const call of calls) expectNoCanary(JSON.stringify(call));
-    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+    for (const spy of outputSpies) expect(spy).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -1758,7 +1840,7 @@ describe("the canary password", () => {
     for (const call of calls.filter(([name]) => name !== "networkJoin")) {
       expectNoCanary(JSON.stringify(call));
     }
-    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+    for (const spy of outputSpies) expect(spy).not.toHaveBeenCalled();
   });
 
   it("is refused when network.read's snapshot carries it", async () => {

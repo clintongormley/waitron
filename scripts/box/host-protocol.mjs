@@ -69,9 +69,9 @@ function refusal(reason) {
   return Object.freeze({ ok: false, reason });
 }
 
-/** @param {string} code */
-function programmingError(code) {
-  return Object.assign(new Error(code), { code });
+/** @param {string} code @param {string} reason */
+function programmingError(code, reason) {
+  return Object.assign(new Error(code), { code, reason });
 }
 
 /** @param {unknown} verb */
@@ -159,7 +159,7 @@ function canonicalLine(verb, fields, actor) {
 }
 
 /**
- * Reads one request line, without its newline.
+ * Pure. Reads one request line, without its newline. Never throws.
  * @param {unknown} line
  * @returns {Readonly<{ ok: true, request: HostRequest } | { ok: false, reason: string }>}
  */
@@ -193,21 +193,25 @@ export function parseHostRequest(line) {
 }
 
 /**
- * Writes the one line `parseHostRequest` accepts for a request, without its newline.
+ * Pure. Writes the one line `parseHostRequest` accepts for a request, without its newline.
+ * Throws code host_request.invalid, reason request-invalid, unless request is exactly {verb,
+ * fields, actor} with a host verb, that verb's field keys and values, and an actor it allows; a
+ * getter or proxy trap that throws passes its own error on. Keys are judged as exactRecord judges
+ * them: own enumerable string keys only, so a Symbol key is ignored.
  * @param {HostRequest} request
  * @returns {string}
  */
 export function formatHostRequest(request) {
   if (!exactRecord(request, ["verb", "fields", "actor"]))
-    throw programmingError("host_request.invalid");
+    throw programmingError("host_request.invalid", "request-invalid");
   const { verb, fields, actor } = request;
   if (!hostVerb(verb) || !exactRecord(fields, FIELD_KEYS[verb])) {
-    throw programmingError("host_request.invalid");
+    throw programmingError("host_request.invalid", "request-invalid");
   }
   const checked = checkedActor(verb, actor);
-  if (checked === null) throw programmingError("host_request.invalid");
+  if (checked === null) throw programmingError("host_request.invalid", "request-invalid");
   const checkedValues = checkedFields(verb, fields);
-  if (checkedValues === null) throw programmingError("host_request.invalid");
+  if (checkedValues === null) throw programmingError("host_request.invalid", "request-invalid");
   return canonicalLine(verb, checkedValues, checked);
 }
 
@@ -291,8 +295,11 @@ function checkedNetwork(network) {
 
 /** @param {unknown} networks */
 function checkedNetworks(networks) {
-  if (!Array.isArray(networks) || networks.length > NETWORK_SCAN_MAX) return null;
-  const checked = networks.map(checkedNetwork);
+  if (!Array.isArray(networks)) return null;
+  const { length } = networks;
+  if (length > NETWORK_SCAN_MAX) return null;
+  const checked = [];
+  for (let index = 0; index < length; index += 1) checked.push(checkedNetwork(networks[index]));
   if (checked.includes(null)) return null;
   const ssids = new Set(
     /** @type {{ ssidHex: string }[]} */ (checked).map((network) => network.ssidHex),
@@ -302,6 +309,7 @@ function checkedNetworks(networks) {
 
 /**
  * Each verb's successful reply, rebuilt in its one key order from the checked values, or null.
+ * Each value is read once, so a getter cannot change what is written after it was checked.
  * @type {Readonly<Record<string, (reply: Record<string, unknown>) => Record<string, unknown> | null>>}
  */
 const REPLY_RULES = Object.freeze({
@@ -323,38 +331,38 @@ const REPLY_RULES = Object.freeze({
   "network.forget": (reply) => (exactRecord(reply, ["ok"]) ? { ok: true } : null),
   "screen.read": startReply,
   "screen.set": startReply,
-  "tag.write": (reply) =>
-    exactRecord(reply, ["ok", "tag"]) && TAG_OUTCOMES.includes(/** @type {string} */ (reply.tag))
-      ? { ok: true, tag: reply.tag }
-      : null,
+  "tag.write": (reply) => {
+    if (!exactRecord(reply, ["ok", "tag"])) return null;
+    const { tag } = reply;
+    return TAG_OUTCOMES.includes(/** @type {string} */ (tag)) ? { ok: true, tag } : null;
+  },
 });
 
 /** @param {Record<string, unknown>} reply */
 function startReply(reply) {
-  return exactRecord(reply, ["ok", "start"]) &&
-    START_SCREENS.includes(/** @type {string} */ (reply.start))
-    ? { ok: true, start: reply.start }
-    : null;
+  if (!exactRecord(reply, ["ok", "start"])) return null;
+  const { start } = reply;
+  return START_SCREENS.includes(/** @type {string} */ (start)) ? { ok: true, start } : null;
 }
 
 /** @param {unknown} verb @param {unknown} reply @returns {Record<string, unknown>} */
 function canonicalReply(verb, reply) {
   if (!hostVerb(verb) || reply === null || typeof reply !== "object") {
-    throw programmingError("host_reply.invalid");
+    throw programmingError("host_reply.invalid", "reply-invalid");
   }
   const record = /** @type {Record<string, unknown>} */ (reply);
   const name = /** @type {string} */ (verb);
   /** @type {Record<string, unknown> | null} */
   let canonical = null;
-  if (record.ok === true) {
+  const { ok } = record;
+  if (ok === true) {
     canonical = REPLY_RULES[name](record);
-  } else if (record.ok === false && exactRecord(record, ["ok", "reason"])) {
+  } else if (ok === false && exactRecord(record, ["ok", "reason"])) {
+    const { reason } = record;
     const allowed = [...PARSER_REFUSALS, "host_failed", ...REPLY_REFUSALS[name]];
-    if (allowed.includes(/** @type {string} */ (record.reason))) {
-      canonical = { ok: false, reason: record.reason };
-    }
+    if (allowed.includes(/** @type {string} */ (reason))) canonical = { ok: false, reason };
   }
-  if (canonical === null) throw programmingError("host_reply.invalid");
+  if (canonical === null) throw programmingError("host_reply.invalid", "reply-invalid");
   return canonical;
 }
 
@@ -368,7 +376,10 @@ function deepFreeze(value) {
 }
 
 /**
- * Writes a reply's one line, newline included.
+ * Pure. Writes a reply's one line, newline included. Throws code host_reply.invalid, reason
+ * reply-invalid, unless verb is a host verb and reply is exactly one of the replies or refusals it
+ * may answer; a getter or proxy trap that throws passes its own error on. Keys are judged as
+ * exactRecord judges them: own enumerable string keys only, so a Symbol key is ignored.
  * @param {string} verb @param {Record<string, unknown>} reply
  * @returns {string}
  */
@@ -380,7 +391,7 @@ const REPLY_TEXT = /^[ -~]*\n$/;
 const MALFORMED = Object.freeze({ kind: "malformed" });
 
 /**
- * Reads a reply's text, newline included. Never throws.
+ * Pure. Reads a reply's text, newline included. Never throws.
  * @param {string} verb @param {unknown} text
  * @returns {Readonly<{ kind: "ok", value: Readonly<Record<string, unknown>> }
  *   | { kind: "refused", reason: string } | { kind: "malformed" }>}
