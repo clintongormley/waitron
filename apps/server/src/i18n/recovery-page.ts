@@ -284,7 +284,7 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "Pulsa «Reintentar un arranque normal». Si sigue fallando, pide a quien instaló este equipo que lo revise.",
     },
   },
-  // These three name no next step beyond the retry: Waitron's own steps should not produce them.
+  // These four name no next step beyond the retry: Waitron's own steps should not produce them.
   "handover.accepted_copy_missing": {
     "en-GB": {
       title: "The copy of the venue this box accepted is no longer on its disk.",
@@ -320,6 +320,18 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "Este equipo no puede guardar las selecciones del equipo antiguo, así que no se ha hecho cargo.",
       action:
         "Es un fallo de Waitron o del disco de este equipo: su archivo de preparación de módulos no se puede leer o está demasiado lleno. Sin esas selecciones, este equipo podría repetir un nombre que el equipo antiguo ya usó, así que su propia base de datos sigue sin cambios. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» si el archivo se ha reparado.",
+    },
+  },
+  "handover.placement_failed": {
+    "en-GB": {
+      title: "This box could not put the copy of the venue it accepted in place.",
+      action:
+        "This is a fault in Waitron or this box's disk. The copy is kept and each start tries again. The old box has given up filing and stays stopped. Press “Retry a normal boot” to try now.",
+    },
+    "es-ES": {
+      title: "Este equipo no pudo poner en su sitio la copia del local que aceptó.",
+      action:
+        "Es un fallo de Waitron o del disco de este equipo. La copia se conserva y cada arranque lo vuelve a intentar. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» para intentarlo ahora.",
     },
   },
   "restore.placement_failed": {

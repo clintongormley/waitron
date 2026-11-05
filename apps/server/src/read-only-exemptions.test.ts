@@ -12,15 +12,18 @@ import {
   type Database,
   type NodeDatabase,
   type VenueDatabase,
+  withNodeTransaction,
 } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
+  appendHandoverEventTx,
   readHandoverOperation,
   readNodeMode,
   setNodeMode,
   setSingletonRole,
   writeMirrorLink,
 } from "@waitron/node-db";
+import { COPY_PLACED_EVENT } from "./handover-place-copy.js";
 import { sha256Hex, signEnvelope } from "@waitron/handover";
 import {
   canonicalize,
@@ -272,6 +275,15 @@ beforeAll(async () => {
   );
   await advanceHandover(handingStore, MIRROR_OPERATION_ID, "copy_accepted", {});
   await advanceHandover(handingStore, MIRROR_OPERATION_ID, "filing_assumed", {});
+  await withNodeTransaction(hNode, (tx) =>
+    appendHandoverEventTx(tx, {
+      nodeId: hId,
+      operationId: MIRROR_OPERATION_ID,
+      kind: COPY_PLACED_EVENT,
+      detail: {},
+      envelope: null,
+    }),
+  );
   const breakGlass = await mintBreakGlassSecret({ venue: hDb, node: hNode }, hId);
   midHandover = { dir: hDir, nodeId: hId, node: hNode, breakGlass };
 

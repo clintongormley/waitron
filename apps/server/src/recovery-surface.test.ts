@@ -719,6 +719,11 @@ describe("a spare's start refused while placing the copy it accepted", () => {
       "This box cannot record the old box's selections, so it did not take over.",
       "Este equipo no puede guardar las selecciones del equipo antiguo, así que no se ha hecho cargo.",
     ],
+    [
+      "handover.placement_failed",
+      "This box could not put the copy of the venue it accepted in place.",
+      "Este equipo no pudo poner en su sitio la copia del local que aceptó.",
+    ],
   ])("%s says what happened and offers the retry, in both languages", async (code, en, es) => {
     const english = await pageFor(code);
     expect(english).toContain(escapeHtml(en));

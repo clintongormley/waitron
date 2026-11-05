@@ -223,6 +223,7 @@ async function rig({ mode = "mirror" as "mirror" | "primary" } = {}) {
     nodeId: m2,
     stateDir,
     log,
+    restart: () => {},
     tickMs: TICK_MS,
     accept: null,
   };

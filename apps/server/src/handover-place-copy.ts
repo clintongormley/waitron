@@ -2,10 +2,11 @@ import { createReadStream, existsSync } from "node:fs";
 import { chmod, copyFile, open, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { lockVenueDatabase } from "@waitron/db";
+import { lockVenueDatabase, withNodeTransaction, type NodeDatabase } from "@waitron/db";
 import { parseIndicator, type RetainedRevision } from "@waitron/handover";
 import { mergeModulePreparationRevisions } from "@waitron/provisioning";
-import { AppError, isAppError } from "@waitron/shared";
+import { appendHandoverEventTx } from "@waitron/node-db";
+import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
 import { NODE_FILE, SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
@@ -209,4 +210,50 @@ export async function placeAcceptedCopyAtStart(args: {
   } finally {
     hold.release();
   }
+}
+
+/**
+ * {@link placeAcceptedCopyAtStart} as a start runs it: a file step that failed becomes
+ * `handover.placement_failed`, whose page says the copy is kept and each start tries again. ENOSPC
+ * stays itself so the start's own check can name a full disk and free space, and a failure reading
+ * `node.db` stays itself because the copy was never reached.
+ */
+export async function placeAcceptedCopyForStart(
+  args: Parameters<typeof placeAcceptedCopyAtStart>[0],
+): Promise<PlacementAtStart> {
+  try {
+    return await placeAcceptedCopyAtStart(args);
+  } catch (error) {
+    const errno = errnoOf(error);
+    if (errno === undefined || errno === "ENOSPC" || sqliteFailureOf(error) !== null) throw error;
+    args.log("error", "handover.place_copy.failed", { errno });
+    throw new AppError("handover.placement_failed", { errno });
+  }
+}
+
+/**
+ * The event goes first: a crash before the removal leaves a spare file nothing reads, and the other
+ * order would leave a repeat of placing with nothing to place from. A failed removal must not stop
+ * a box that holds its copy from starting, so it is logged and the start goes on.
+ */
+export async function recordCopyPlaced(args: {
+  node: NodeDatabase;
+  nodeId: string;
+  stateDir: string;
+  operationId: string;
+  log: Logger;
+}): Promise<void> {
+  const { node, nodeId, stateDir, operationId, log } = args;
+  await withNodeTransaction(node, (tx) =>
+    appendHandoverEventTx(tx, {
+      nodeId,
+      operationId,
+      kind: COPY_PLACED_EVENT,
+      detail: {},
+      envelope: null,
+    }),
+  );
+  await rm(acceptedCopyPath(stateDir, operationId), { force: true }).catch((error: unknown) =>
+    log("error", "handover.place_copy.remove_failed", { operationId, errno: errnoOf(error) }),
+  );
 }

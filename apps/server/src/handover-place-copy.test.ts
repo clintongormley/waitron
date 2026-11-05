@@ -24,16 +24,25 @@ import {
   lockVenueDatabase,
   openVenueDatabase,
   withNodeTransaction,
+  type NodeDatabase,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { signIndicator, type HandoverBinding, type NodeLocalItem } from "@waitron/handover";
 import { generateNodeKeyPair } from "@waitron/membership";
-import { appendHandoverEventTx, NODE_MIGRATIONS, setNodeModeTx } from "@waitron/node-db";
+import {
+  appendHandoverEventTx,
+  NODE_MIGRATIONS,
+  readHandoverEvent,
+  setNodeModeTx,
+} from "@waitron/node-db";
 import { acceptedCopyPath } from "./handover-acceptance.js";
 import { FINAL_STATE_EVENT } from "./handover-capture.js";
+import { classifyStartFailure } from "./boot-failure.js";
 import {
   COPY_PLACED_EVENT,
   placeAcceptedCopyAtStart,
+  placeAcceptedCopyForStart,
+  recordCopyPlaced,
   type PlacementSteps,
 } from "./handover-place-copy.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
@@ -362,6 +371,129 @@ describe("placeAcceptedCopyAtStart", () => {
 
       expect(sha(b.live)).toBe(old);
       expect(existsSync(b.incoming)).toBe(false);
+    });
+  });
+
+  describe("as a start runs it", () => {
+    const failing = (code: string) => Object.assign(new Error("refused"), { code });
+
+    it("a failed file step becomes handover.placement_failed, naming the failure in the log", async () => {
+      const b = await box();
+
+      await expect(
+        placeAcceptedCopyForStart({
+          ...b.args,
+          fs: { rename: () => Promise.reject(failing("EIO")) },
+        }),
+      ).rejects.toMatchObject({ code: "handover.placement_failed", params: { errno: "EIO" } });
+
+      expect(b.logged).toContainEqual({
+        level: "error",
+        message: "handover.place_copy.failed",
+        detail: { errno: "EIO" },
+      });
+      expect(existsSync(b.accepted)).toBe(true);
+    });
+
+    it("ENOSPC stays itself, so the start's own check names a full disk", async () => {
+      const b = await box();
+
+      const error = await placeAcceptedCopyForStart({
+        ...b.args,
+        fs: { copyFile: () => Promise.reject(failing("ENOSPC")) },
+      }).catch((caught: unknown) => caught);
+
+      // Failing case: `handover.placement_failed`, and the entry frees no space.
+      expect(classifyStartFailure(error, 1024)).toBe("storage.disk_full");
+    });
+
+    it("a node.db that cannot be read stays that failure: no copy was reached", async () => {
+      const b = await box();
+      writeFileSync(b.nodePath, "this is not a database, and is long enough to be read as one");
+
+      const error = await placeAcceptedCopyForStart(b.args).catch((caught: unknown) => caught);
+
+      expect((error as { code?: string }).code).toBe("ERR_SQLITE_ERROR");
+      expect(existsSync(b.accepted)).toBe(true);
+    });
+
+    it("a coded refusal stays itself", async () => {
+      const b = await box();
+      rmSync(b.accepted);
+
+      await expect(placeAcceptedCopyForStart(b.args)).rejects.toMatchObject({
+        code: "handover.accepted_copy_missing",
+      });
+    });
+
+    it("recording writes the event with the writer's own shape, then removes accepted.db", async () => {
+      const b = await box();
+      const answer = await placeAcceptedCopyForStart(b.args);
+      expect(answer).toMatchObject({ kind: "copy_placed_owed" });
+
+      await recordCopyPlaced({
+        node: suite.node,
+        nodeId: NODE,
+        stateDir: b.stateDir,
+        operationId: OP,
+        log: b.args.log,
+      });
+
+      expect(await readHandoverEvent(suite.node, NODE, OP, COPY_PLACED_EVENT)).toMatchObject({
+        detail: {},
+        envelope: null,
+      });
+      expect(existsSync(b.accepted)).toBe(false);
+    });
+
+    it("an event that cannot be written leaves accepted.db, which a repeat places from", async () => {
+      const b = await box();
+
+      await expect(
+        recordCopyPlaced({
+          node: {} as NodeDatabase,
+          nodeId: NODE,
+          stateDir: b.stateDir,
+          operationId: OP,
+          log: b.args.log,
+        }),
+      ).rejects.toThrow();
+
+      expect(existsSync(b.accepted)).toBe(true);
+    });
+
+    it("an accepted.db already gone is no failure", async () => {
+      const b = await box();
+      rmSync(b.accepted);
+
+      await recordCopyPlaced({
+        node: suite.node,
+        nodeId: NODE,
+        stateDir: b.stateDir,
+        operationId: OP,
+        log: b.args.log,
+      });
+
+      expect(b.logged).toEqual([]);
+      expect(await readHandoverEvent(suite.node, NODE, OP, COPY_PLACED_EVENT)).not.toBeNull();
+    });
+
+    it("a removal that fails is logged and the start goes on, with the event recorded", async () => {
+      const b = await box();
+      // A folder with something in it is what `rm` without `recursive` refuses, as root too.
+      rmSync(b.accepted);
+      mkdirSync(join(b.accepted, "inside"), { recursive: true });
+
+      await recordCopyPlaced({
+        node: suite.node,
+        nodeId: NODE,
+        stateDir: b.stateDir,
+        operationId: OP,
+        log: b.args.log,
+      });
+
+      expect(b.logged.map((line) => line.message)).toEqual(["handover.place_copy.remove_failed"]);
+      expect(await readHandoverEvent(suite.node, NODE, OP, COPY_PLACED_EVENT)).not.toBeNull();
     });
   });
 

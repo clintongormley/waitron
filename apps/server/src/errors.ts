@@ -264,6 +264,11 @@ declare module "@waitron/shared" {
      * or could not take the old box's retained selections, so the copy was not placed.
      */
     "handover.preparation_state_unusable": Record<string, never>;
+    /**
+     * At the start that places the accepted copy, a file step failed with `errno`. The copy is kept
+     * and each start tries again.
+     */
+    "handover.placement_failed": { errno: string };
     /** `module`'s summary, worked out from the received copy, is not the one the old box signed. */
     "handover.summary_mismatch": { module: string };
     /** The spare could not work out `module`'s summary from the copy it received. */

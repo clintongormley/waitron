@@ -211,6 +211,7 @@ import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { compareFinalCopy } from "./handover-compare.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
 import { startHandoverDestinationDuty } from "./handover-destination-duty.js";
+import { placeAcceptedCopyForStart, recordCopyPlaced } from "./handover-place-copy.js";
 import { mountHandoverSourceStartApi } from "./handover-source-start-api.js";
 import { mountHandoverStatusApi } from "./handover-status-api.js";
 import { mountNodeMembershipApi } from "./node-membership-api.js";
@@ -1139,10 +1140,32 @@ async function bootServer(
   // `recovery-surface.test.ts` → "the caught error's own words on the page". That is `redactSecrets`
   // alone: the personal-data mask runs in `createLogger`, before the split, so it applies to both.
   const log = createLogger(tee(stdoutSink, fileSink), now, () => verbosity.current());
+  // Placing is here and not in entry so that it follows entry's ahead check, whose close drains the
+  // old file's -wal before placing removes it (pinned in `boot.place-copy.test.ts`). A box with no
+  // identity has no node id to read an operation by, and nothing is placed.
+  const placement =
+    config.node === undefined
+      ? null
+      : await placeAcceptedCopyForStart({
+          venueDir: config.venueDir,
+          stateDir: config.stateDir,
+          nodeId: config.node.nodeId,
+          log,
+        });
   // Before ANY write, including migrations: a host pointed at another environment's database must
   // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself.
   const stampProbe = await openVenueDatabase(config.venueDir);
   try {
+    // The first moment this start holds a node handle.
+    if (placement?.kind === "copy_placed_owed") {
+      await recordCopyPlaced({
+        node: stampProbe.node,
+        nodeId: config.node!.nodeId,
+        stateDir: config.stateDir,
+        operationId: placement.operationId,
+        log,
+      });
+    }
     // Only once this process holds the venue folder: a second process must not delete the running
     // one's staged copy.
     await clearStagedRecoveries(join(config.stateDir, RESTORE_STAGING_DIR));
@@ -2301,6 +2324,7 @@ async function bootServer(
     nodeId: tradingContext.nodeId,
     stateDir: config.stateDir,
     log,
+    restart: seams.stepdown?.restart ?? restartProcess,
     compare: (operation, indicator, copyPath, options) =>
       compareFinalCopy(
         {

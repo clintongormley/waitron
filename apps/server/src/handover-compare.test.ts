@@ -1177,6 +1177,7 @@ describe("the spare's duty runs the real comparison", () => {
         nodeId: r.m2.nodeId,
         stateDir: r.m2State,
         log,
+        restart: () => {},
         tickMs: 20,
         compare: (operation, indicator, path, options) =>
           compareFinalCopy(r.deps, operation, indicator, path, options),

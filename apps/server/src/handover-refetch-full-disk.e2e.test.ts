@@ -192,6 +192,7 @@ async function rig(small: SmallDisk, name: string) {
         nodeId: m2,
         stateDir,
         log,
+        restart: () => {},
         tickMs: 20,
         compare: async () => ({ ok: true }),
       });

@@ -772,6 +772,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
     await boxes.writeSpareChart(`http://127.0.0.1:${mainPort}`);
     spare = await startServer(boxes.spareEnv, boxes.spareEnv, {
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
+      stepdown: { mount: () => {}, restart: () => {} },
     });
 
     await vi.waitFor(

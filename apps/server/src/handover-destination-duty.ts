@@ -81,6 +81,8 @@ export interface DestinationDutyDeps {
   nodeId: string;
   stateDir: string;
   log: Logger;
+  /** The start that follows `filing_assumed` is what places the accepted copy. */
+  restart: () => void;
   tickMs?: number;
   /** How long a download may go without a byte before it is given up on. */
   silenceLimitMs?: number;
@@ -449,6 +451,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     }
     await advanceHandover(deps, operationId, "filing_assumed", {}, relinquishment);
     deps.log("info", "handover-destination.filing_assumed", { operationId });
+    deps.restart();
   }
 
   /** Whether this operation still has work a later tick must do. */

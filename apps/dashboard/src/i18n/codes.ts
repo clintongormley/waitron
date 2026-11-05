@@ -1473,6 +1473,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This box's module preparation file is unreadable or too full to take the old box's selections, so this box did not put the accepted copy in place.",
     es: "El archivo de preparación de módulos de este equipo no se puede leer o está demasiado lleno para añadir las selecciones del equipo antiguo, así que este equipo no ha puesto en su sitio la copia aceptada.",
   },
+  "handover.placement_failed": {
+    en: "This box could not put the copy of the venue it accepted in place. The copy is kept and each start tries again.",
+    es: "Este equipo no pudo poner en su sitio la copia del local que aceptó. La copia se conserva y cada arranque lo vuelve a intentar.",
+  },
   "handover.accepted_copy_missing": {
     en: "The copy of the venue this box accepted is no longer on its disk, so this box cannot take over the venue.",
     es: "La copia del local que este equipo aceptó ya no está en su disco, así que este equipo no puede pasar a llevar el local.",
