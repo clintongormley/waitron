@@ -527,8 +527,9 @@ the same column.
   in-flight payments it owns: its own, those of boxes it has taken over from, followed back through
   each of those boxes' own sources (`readTakenOverFrom`, `apps/server/src/handover-collection.ts`,
   read once at start), and payments naming no box only while it is the venue's singleton primary
-  (`listAttempting`, `packages/payments/src/store.ts:510`; `sweepOwners`, `apps/server/src/boot.ts`). The sweep runs in every node role; only sale recovery and bill
-  completion check for primary. Coordination between two boxes collecting at the same time is not
+  (`listAttempting`, `packages/payments/src/store.ts:510`; `sweepOwners`, `apps/server/src/boot.ts`). The sweep runs on every box except a mirror and a box fenced by the chart it holds, decided at start
+  (`fencedOrMirror`, `apps/server/src/boot.ts`): a fenced box's open payments that never reached the new main
+  box stay open, as they do on a restricted box. Only sale recovery and bill completion check for primary. Coordination between two boxes collecting at the same time is not
   built. A manager's stuck-payment resolution still acts on every box's payments, through both
   dashboard lists (`apps/server/src/payments-api.ts:1032` for whole orders, `:1184` for held bill
   payments) and both resolve routes (`:1073` and `:1226`); it has its own entry under Payments in

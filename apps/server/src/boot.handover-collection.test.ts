@@ -5,11 +5,13 @@ import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
-import { withTransaction } from "@waitron/db";
+import { stampDeployment, withTransaction, writeNodeMembership } from "@waitron/db";
 import { seedDevice, seedNode, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
 import { insertHandoverActivationTx } from "@waitron/handover";
+import type { NodeStanding } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import {
   captureAttempting,
   insertAttempting,
@@ -21,11 +23,32 @@ import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider
 import { decimal, deviceOrigin, type NodeId } from "@waitron/shared";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
   return ephemeralHttpMock();
+});
+
+const loop = vi.hoisted(() => ({ passesFinished: 0 }));
+
+// A sweep that must not happen has no call to wait for, so every case waits for a whole pass of the
+// pending-card loop, which holds the sweep, to finish.
+vi.mock("./pending-card-recovery.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./pending-card-recovery.js")>();
+  return {
+    ...actual,
+    runPendingCardLoop: (...[deps]: Parameters<typeof actual.runPendingCardLoop>) =>
+      actual.runPendingCardLoop({
+        ...deps,
+        pass: async (now) => {
+          const report = await deps.pass(now);
+          loop.passesFinished += 1;
+          return report;
+        },
+      }),
+  };
 });
 
 const { beforeServerStarts, startServer } = ephemeralServerFixture();
@@ -47,12 +70,23 @@ function venueFile(suite: VenueDb): string {
   return suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
 }
 
+type BoxName = "own" | "first" | "second" | "bystander";
+
+interface StartCase {
+  /** Each earlier handover, as `[source, destination]`. */
+  activations: readonly (readonly [BoxName, BoxName])[];
+  /** The chart this box holds, naming `own` and `second`; no chart when absent. */
+  chart?: { own: NodeStanding; second: NodeStanding };
+  mirror?: boolean;
+  localSecondary?: boolean;
+}
+
 /**
  * Registers, in the calling `describe`, one real start of a folder holding an open card payment for
- * this box, for two earlier boxes and for a bystander. The sweep reaches a stand-in provider through
- * the held Stripe credential, and the start runs until the sweep has passed once.
+ * this box, for two earlier boxes and for a bystander. A sweep reaches a stand-in provider through
+ * the held Stripe credential, and the start runs until a pass of the pending-card loop has finished.
  */
-function observeStart(options: { tookOver: boolean }): () => Observed {
+function observeStart(options: StartCase): () => Observed {
   const suite = useVenueDb({ migrations, resetPerTest: false });
   let server: StartedServer | undefined;
   let scratch: string | undefined;
@@ -69,7 +103,7 @@ function observeStart(options: { tookOver: boolean }): () => Observed {
     ];
     const { deviceId } = await seedDevice(suite.db);
     const order = await seedWorkingOrder(suite.db, { source: "device", deviceId });
-    const owners: Record<string, NodeId> = { own: box, first, second, bystander };
+    const owners: Record<BoxName, NodeId> = { own: box, first, second, bystander };
     await withTransaction(suite.db, async (tx) => {
       for (const [paymentRef, nodeId] of Object.entries(owners)) {
         await insertAttempting(tx, {
@@ -81,22 +115,46 @@ function observeStart(options: { tookOver: boolean }): () => Observed {
           amount: decimal("10.00"),
         });
       }
-      if (!options.tookOver) return;
-      for (const [sourceNodeId, destinationNodeId] of [
-        [first, second],
-        [second, box],
-      ] as const) {
+      for (const [source, destination] of options.activations) {
         await insertHandoverActivationTx(tx, {
           operationId: randomUUID(),
           scenario: "controlled",
-          sourceNodeId,
-          destinationNodeId,
+          sourceNodeId: owners[source],
+          destinationNodeId: owners[destination],
           evidence: {} as never,
           personId: randomUUID(),
           activatedAt: new Date().toISOString(),
         });
       }
     });
+    if (options.chart !== undefined) {
+      await writeNodeMembership(
+        suite.db,
+        signedMembershipDoc(1, {
+          signerNodeId: second,
+          nodes: [
+            { nodeId: box, contactUrl: "https://own.example", standing: options.chart.own },
+            {
+              nodeId: second,
+              contactUrl: "https://second.example",
+              standing: options.chart.second,
+            },
+          ],
+        }),
+      );
+    }
+    const nodeHandles = { venue: suite.db, node: suite.node };
+    await stampDeployment(suite.db, "preproduction");
+    if (options.mirror === true) {
+      await setNodeMode(nodeHandles, box, "mirror");
+      await writeMirrorLink(suite.node, box, {
+        relayUrl: "https://127.0.0.1:1/",
+        boxHostname: "box.test",
+        boxCaPem: "unused",
+        originNodeId: first,
+      });
+    }
+    if (options.localSecondary === true) await setSingletonRole(nodeHandles, box, "secondary");
     const ring = loadKeyRing(KEY_ENV);
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
@@ -135,7 +193,7 @@ function observeStart(options: { tookOver: boolean }): () => Observed {
     };
 
     const calls: Record<string, number> = {};
-    let sweeps = 0;
+    loop.passesFinished = 0;
     server = await startServer(env, env, {
       peerCheck: () => Promise.resolve({ result: "proceed", successorNodeId: null }),
       cardPool: ({ db }) => {
@@ -154,13 +212,12 @@ function observeStart(options: { tookOver: boolean }): () => Observed {
               }),
             );
           }
-          sweeps += 1;
           return { nextDueAt: null, forwarded: rows.length, declined: 0, incidentsRaised: 0 };
         }) as typeof card.resolvePending;
         return { get: () => Promise.resolve(card), evict: () => {} };
       },
     });
-    await vi.waitFor(() => expect(sweeps).toBeGreaterThanOrEqual(1), {
+    await vi.waitFor(() => expect(loop.passesFinished).toBeGreaterThanOrEqual(1), {
       timeout: 20_000,
       interval: 100,
     });
@@ -190,7 +247,12 @@ function observeStart(options: { tookOver: boolean }): () => Observed {
 }
 
 describe("a start of a box that took over from a box which took over from another", () => {
-  const observed = observeStart({ tookOver: true });
+  const observed = observeStart({
+    activations: [
+      ["first", "second"],
+      ["second", "own"],
+    ],
+  });
 
   it("sweeps its own and both earlier boxes' open payments, once each, and not a bystander's", () => {
     expect(observed().calls).toEqual({ own: 1, first: 1, second: 1 });
@@ -204,7 +266,7 @@ describe("a start of a box that took over from a box which took over from anothe
 });
 
 describe("control: the same folder with no activation rows", () => {
-  const observed = observeStart({ tookOver: false });
+  const observed = observeStart({ activations: [] });
 
   it("sweeps only its own", () => {
     expect(observed().calls).toEqual({ own: 1 });
@@ -214,5 +276,60 @@ describe("control: the same folder with no activation rows", () => {
       second: "attempting",
       bystander: "attempting",
     });
+  });
+});
+
+const OLD_BOX_HISTORY = [
+  ["first", "own"],
+  ["own", "second"],
+] as const;
+
+describe("an old box fenced by its held chart, with no restriction row", () => {
+  const observed = observeStart({
+    activations: OLD_BOX_HISTORY,
+    chart: { own: "sell-only", second: "serving-primary" },
+  });
+
+  it("asks the provider about nothing, its own payments and earlier boxes' stay open", () => {
+    expect(observed().calls).toEqual({});
+    expect(observed().states).toEqual({
+      own: "attempting",
+      first: "attempting",
+      second: "attempting",
+      bystander: "attempting",
+    });
+  });
+});
+
+describe("control: the same history, with a chart that has this box healthy and primary", () => {
+  const observed = observeStart({
+    activations: OLD_BOX_HISTORY,
+    chart: { own: "serving-primary", second: "serving-secondary" },
+  });
+
+  it("sweeps its own, and the box it took over from", () => {
+    expect(observed().calls).toEqual({ own: 1, first: 1 });
+  });
+});
+
+describe("a mirror before its activation, holding a payment naming itself", () => {
+  const observed = observeStart({ activations: [["first", "second"]], mirror: true });
+
+  it("asks the provider about nothing", () => {
+    expect(observed().calls).toEqual({});
+    expect(observed().states).toEqual({
+      own: "attempting",
+      first: "attempting",
+      second: "attempting",
+      bystander: "attempting",
+    });
+  });
+});
+
+describe("control: a local secondary with no chart fencing it", () => {
+  const observed = observeStart({ activations: [], localSecondary: true });
+
+  it("still sweeps its own", () => {
+    expect(observed().calls).toEqual({ own: 1 });
   });
 });

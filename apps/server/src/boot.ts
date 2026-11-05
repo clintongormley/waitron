@@ -558,19 +558,19 @@ export async function buildCardProvider(
 export function sweepOwners(
   nodeId: NodeId,
   role: SingletonRole,
-  takenOverFrom: readonly NodeId[] = [],
+  takenOverFrom: readonly NodeId[],
 ): CollectionOwners {
   return { nodeId, takenOverFrom, unowned: role === "primary" };
 }
 
 /** Run each card provider's `resolvePending` sweep on every tick, around (not instead of) the
- * singleton fiscal pass: a sell-only local secondary must sweep its own `attempting` card rows even
- * though it never drains or reconciles. Log-only, NOT a health-tracked `Duty`: every `ALL_DUTIES`
- * member is seeded on every node, so a duty that never runs on a no-card node would read stale and
- * fail `/health`. A stuck sweep surfaces only as `resolve_pending.failed`. The providers are
+ * singleton fiscal pass: a local secondary its chart does not fence must sweep its own `attempting`
+ * card rows even though it never drains or reconciles. Log-only, NOT a health-tracked `Duty`: every
+ * `ALL_DUTIES` member is seeded on every node, so a duty that never runs on a no-card node would
+ * read stale and fail `/health`. A stuck sweep surfaces only as `resolve_pending.failed`. The providers are
  * enumerated each pass, so one connected while the host runs is swept without a restart. `owners`
  * is read once per pass and limits every provider to the `attempting` rows this box owns, so a
- * promotion or demotion in this process is seen at the next pass.
+ * change of singleton role in this process is seen at the next pass.
  *
  * Exported for a direct test (`boot-pending-sweep.test.ts`). */
 export function withPendingSweep(
@@ -3669,12 +3669,17 @@ async function bootServer(
     admission: tradingAdmission,
     pass: pendingCardPass(
       {
-        sweepProviders: connectedCardProviderSweep({
-          db,
-          pool: cardPool,
-          contributions: CARD_PROVIDERS,
-          simulator: cardProvider,
-        }),
+        // Only one box may ask a provider about a payment, because a sweep can cancel it there. On
+        // a fenced box or a mirror that box is another one. A promotion lifts this by restarting
+        // (`promoteMirrorRun`).
+        sweepProviders: fencedOrMirror
+          ? () => Promise.resolve([])
+          : connectedCardProviderSweep({
+              db,
+              pool: cardPool,
+              contributions: CARD_PROVIDERS,
+              simulator: cardProvider,
+            }),
         owners: () =>
           sweepOwners(tradingContext.nodeId, holders.singletonRole.current, takenOverFrom),
         recover: () =>

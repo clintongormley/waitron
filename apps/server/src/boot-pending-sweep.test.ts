@@ -161,11 +161,15 @@ describe("sweepOwners", () => {
   const box = nodeId("22222222-2222-4222-8222-222222222222");
 
   it("on the primary: this box, nobody taken over, and the rows naming no box", () => {
-    expect(sweepOwners(box, "primary")).toEqual({ nodeId: box, takenOverFrom: [], unowned: true });
+    expect(sweepOwners(box, "primary", [])).toEqual({
+      nodeId: box,
+      takenOverFrom: [],
+      unowned: true,
+    });
   });
 
   it("on a secondary: this box only, never the rows naming no box", () => {
-    expect(sweepOwners(box, "secondary")).toEqual({
+    expect(sweepOwners(box, "secondary", [])).toEqual({
       nodeId: box,
       takenOverFrom: [],
       unowned: false,
@@ -366,7 +370,7 @@ describe("withPendingSweep", () => {
     const pass = withPendingSweep(
       async () => REPORT,
       async () => [fakeProvider("sumup", resolvePending)],
-      () => sweepOwners(box, role),
+      () => sweepOwners(box, role, []),
       () => {},
     );
     const now = new Date();
@@ -374,8 +378,8 @@ describe("withPendingSweep", () => {
     role = "primary";
     await pass(now);
     expect(resolvePending.mock.calls).toEqual([
-      [now, sweepOwners(box, "secondary"), undefined],
-      [now, sweepOwners(box, "primary"), undefined],
+      [now, sweepOwners(box, "secondary", []), undefined],
+      [now, sweepOwners(box, "primary", []), undefined],
     ]);
   });
 
