@@ -4443,6 +4443,30 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
       return el;
     }
 
+    it("a refused take-over's line comes up on a phone's window, with Split beside it", async () => {
+      await page.viewport(390, 844);
+      const longBill = Array.from({ length: 16 }, (_, index) => dish(`dish-${index}`, index + 1));
+      const el = await tickedThenHeld({
+        takeOverDraft: vi.fn().mockRejectedValue({ code: "draft.out_of_date" }),
+        getSplitSources: vi.fn().mockResolvedValue({
+          bills: [
+            { billId: "b2", lines: [dish("steak", 1)], balance: balance("b2", "20.00") },
+            { billId: "wo-4", lines: longBill, balance: balance("wo-4", "160.00") },
+          ],
+        }),
+      });
+      row(el, "b2")!.scrollIntoView({ block: "nearest" });
+      await taken(el);
+      expect(footRefusal(el)).toBeDefined();
+      const onScreen = (control: HTMLElement) => {
+        const box = control.getBoundingClientRect();
+        return box.top >= 0 && box.bottom <= innerHeight;
+      };
+      await expect
+        .poll(() => onScreen(q(el, "[data-split-take-over-refusal]")!) && onScreen(splitButton(el)))
+        .toBe(true);
+    });
+
     function expectStillHeld(el: TillApp): void {
       expect(row(el, "b2")).not.toBeNull();
       expect(tickBox(el, "b2").checked).toBe(true);

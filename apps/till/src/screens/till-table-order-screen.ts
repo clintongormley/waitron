@@ -3362,6 +3362,11 @@ export class TillTableOrderScreen extends LitElement {
       await this.renderRoot
         .querySelector<TillSplitPicker>("till-split-picker")
         ?.focusBill(taken.billId);
+      // The refused line is at the foot, which the bill's row can leave below the window.
+      if (this.splitTakeOverMessage !== null)
+        this.renderRoot
+          .querySelector("[data-split-pick] wt-form-actions")
+          ?.scrollIntoView({ block: "nearest" });
       return;
     }
     const still = this.otherDrafts.some((other) => other.id === taken.id);
