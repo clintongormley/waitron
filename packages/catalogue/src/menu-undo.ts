@@ -1,4 +1,11 @@
-import type { HomeDevice, HomeDisplay, MenuChange, MenuPreview } from "./menu-document-types.js";
+import type {
+  DocumentMember,
+  HomeDevice,
+  HomeDisplay,
+  MenuChange,
+  MenuDocument,
+  MenuPreview,
+} from "./menu-document-types.js";
 import type { IncludeFolder, MemberRef, MenuHome, SectionInput } from "./section-types.js";
 
 export interface UndoStructureNode {
@@ -56,20 +63,101 @@ export type MenuChangeAction =
 
 /** Every change's action, by change id, worked out once. */
 export function menuChangeActions(input: MenuUndoInput): ReadonlyMap<string, MenuChangeAction> {
-  return new Map(input.preview.changes.map((change) => [change.id, actionFor(change)]));
+  return new Map(input.preview.changes.map((change) => [change.id, actionFor(input, change)]));
 }
 
 const NONE: MenuChangeAction = { kind: "none" };
 
-function actionFor(change: MenuChange): MenuChangeAction {
+function actionFor(input: MenuUndoInput, change: MenuChange): MenuChangeAction {
   switch (change.source) {
     case "shared_product":
       return sharedProductAction(change);
     case "included_menu":
       return includedMenuAction(change);
     case "this_menu":
+      return input.preview.live === null ? NONE : thisMenuAction(input, input.preview.live, change);
+  }
+}
+
+type Live = NonNullable<MenuPreview["live"]>;
+
+function thisMenuAction(input: MenuUndoInput, live: Live, change: MenuChange): MenuChangeAction {
+  const now = input.preview.document;
+  switch (change.kind) {
+    case "menu_renamed":
+      return undo({ method: "renameCatalogue", menuId: now.menuId, name: change.from });
+    case "home_display_changed":
+      return homeDisplayUndo(live.document, now, change.device);
+    case "section_changed":
+      return ownSectionUndo(input.languages, live.document, now, change);
+    default:
       return NONE;
   }
+}
+
+const undo = (command: MenuUndoCommand): MenuChangeAction => ({ kind: "undo", command });
+
+function homeDisplayUndo(
+  live: MenuDocument,
+  now: MenuDocument,
+  device: HomeDevice,
+): MenuChangeAction {
+  const was = live.home[device];
+  const is = now.home[device];
+  const patch = Object.fromEntries(
+    (["columns", "tiles", "order"] as const)
+      .filter((field) => was[field] !== is[field])
+      .map((field) => [field, was[field]]),
+  ) as Partial<HomeDisplay>;
+  if (Object.keys(patch).length === 0) return NONE;
+  return undo({ method: "setHomeDisplay", menuId: now.menuId, device, patch });
+}
+
+type SectionNode = Extract<DocumentMember, { kind: "section" }>;
+
+function findSection(members: readonly DocumentMember[], sectionId: string): SectionNode | null {
+  for (const member of members) {
+    if (member.kind !== "section") continue;
+    if (member.sectionId === sectionId) return member;
+    const found = findSection(member.members, sectionId);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+/** Puts back an own section's names, photo and colour. A switched-off language whose name differs
+ * live and now gets no Undo: the save refuses a switched-off language unless it is unchanged
+ * (`mergeOptionalTranslations`). */
+function ownSectionUndo(
+  languages: readonly string[],
+  live: MenuDocument,
+  now: MenuDocument,
+  change: Extract<MenuChange, { kind: "section_changed" }>,
+): MenuChangeAction {
+  const was = findSection(live.root.members, change.sectionId);
+  const is = findSection(now.root.members, change.sectionId);
+  // An include's presentation is PR 2's; whether a section is an include never changes.
+  if (was === null || is === null || was.includedMenu !== undefined) return NONE;
+  const patch: Partial<SectionInput> = {};
+  for (const field of change.fields)
+    switch (field) {
+      case "names": {
+        const enabled = new Set(languages);
+        const switchedOff = new Set(
+          [...Object.keys(was.names), ...Object.keys(is.names)].filter((l) => !enabled.has(l)),
+        );
+        for (const language of switchedOff)
+          if (was.names[language] !== is.names[language]) return NONE;
+        patch.internalName = was.internalName;
+        patch.names = was.names;
+        break;
+      }
+      case "image":
+      case "color":
+        patch[field] = was[field];
+        break;
+    }
+  return undo({ method: "updateSection", sectionId: change.sectionId, patch, name: change.name });
 }
 
 function sharedProductAction(change: MenuChange): MenuChangeAction {

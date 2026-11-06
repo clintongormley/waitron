@@ -294,8 +294,15 @@ describe("menuChangeActions", () => {
     for (const { id } of thisMenuChanges) expect(actions.get(id), id).toEqual({ kind: "none" });
   });
 
+  it("offers no Undo to rename a menu that has never been published", () => {
+    const rename = thisMenuChanges.filter(({ kind }) => kind === "menu_renamed");
+    expect(actionsFor(rename, { published: false }).get("m-rename")).toEqual({ kind: "none" });
+  });
+
   it("offers no Undo for a change of this menu whose Undo is not built", () => {
-    const actions = actionsFor(thisMenuChanges);
-    for (const { id } of thisMenuChanges) expect(actions.get(id), id).toEqual({ kind: "none" });
+    const built = new Set(["menu_renamed", "home_display_changed", "section_changed"]);
+    const notBuilt = thisMenuChanges.filter(({ kind }) => !built.has(kind));
+    const actions = actionsFor(notBuilt);
+    for (const { id } of notBuilt) expect(actions.get(id), id).toEqual({ kind: "none" });
   });
 });
