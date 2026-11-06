@@ -3561,7 +3561,8 @@ async function bootServer(
   });
   undoOnFailure.push(async () => appendOnlyWatch.stop());
 
-  const staffListener = startStaffListener(config, app, log);
+  // A mirror's ambient administrator session must stay off the staff entrance.
+  const staffListener = isMirror ? undefined : startStaffListener(config, app, log);
   undoOnFailure.push(async () => {
     await staffListener?.close();
   });

@@ -515,6 +515,14 @@ export function loadConfig(
         variable: "WAITRON_STAFF_PORT",
         reason: "port_out_of_range",
       });
+    if (
+      port === httpPort ||
+      port === boundedPort(env, "WAITRON_HTTP_LANDING_PORT", DEFAULT_HTTP_LANDING_PORT)
+    )
+      throw new AppError("server.config_invalid", {
+        variable: "WAITRON_STAFF_PORT",
+        reason: "listener_port_conflict",
+      });
     staff = {
       origin: staffOrigin,
       host: isUnset(env.WAITRON_STAFF_HOST) ? DEFAULT_HTTP_HOST : env.WAITRON_STAFF_HOST,
