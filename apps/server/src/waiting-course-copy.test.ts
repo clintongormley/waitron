@@ -2298,6 +2298,121 @@ describe("A803 waiting copy: kitchen paper", () => {
         ],
       ]);
     });
+
+    /** Joins a new Mesa 8 to the party and splits it off with `selection`; returns the slip mark. */
+    async function splitOff(
+      t: Awaited<ReturnType<typeof paperTable>>,
+      selection: { wholeBillIds: string[]; loose: { billId: string; lineIds: string[] }[] },
+    ) {
+      const table8 = `Mesa 8 (${t.n})`;
+      const tableId = await v.table(table8);
+      const joining = {
+        operatorId: OPERATOR,
+        expectedPartyRevision: await revisionOf(v, t.partyId),
+      };
+      await inTx(v, (tx) => joinTables(tx, v.cfg, t.partyId, tableId, joining));
+      const mark = (await printed(t.grill.printer)).length;
+      const noticesBefore = new Set(
+        (await movedNotices([t.bill1, t.bill2])).map((notice) => notice.id),
+      );
+      const splitting = {
+        operatorId: OPERATOR,
+        expectedPartyRevision: await revisionOf(v, t.partyId),
+        expectedEdits: [await inTx(v, (tx) => readBillEditState(tx, t.bill2))],
+      };
+      const result = await inTx(v, (tx) =>
+        splitTable(tx, v.cfg, t.partyId, tableId, selection, splitting),
+      );
+      return { table8, mark, noticesBefore, ...result };
+    }
+
+    async function newNotices(billIds: string[], before: Set<string>) {
+      return (await movedNotices(billIds)).filter((notice) => !before.has(notice.id));
+    }
+
+    it("A1327: Split a table taking the whole bill lists the waiting tarta under HOLD and its release prints FIRE", async () => {
+      const t = await waitingTable();
+
+      const { table8, mark, noticesBefore, partyId } = await splitOff(t, {
+        wholeBillIds: [t.bill2],
+        loose: [],
+      });
+
+      const orderLine = await orderLineOf(t.bill2);
+      const slips = (await printed(t.grill.printer))
+        .slice(mark)
+        .filter((lines) => lines[0] === `*** ${words.moved} ***` && lines[2] === orderLine);
+      expect(slips).toHaveLength(1);
+      expect(slips[0]!.slice(6)).toEqual([
+        "1.000 x BURG",
+        words.hold,
+        `${words.group} 2 · DESSERTS`,
+        "1.000 x TARTA",
+        "",
+      ]);
+      expect(await newNotices([t.bill1, t.bill2], noticesBefore)).toEqual([
+        { id: expect.any(String), lineName: "BURG", stationId: t.grill.id },
+        { id: expect.any(String), lineName: "TARTA", stationId: t.grill.id },
+      ]);
+      await answerNoAllergies(partyId);
+      expect(await releaseTarta(t)).toEqual([
+        fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1.000 x TARTA"),
+      ]);
+    });
+
+    it("A1327: Split a table taking the waiting tarta loose lists it under HOLD and its release prints FIRE", async () => {
+      const t = await waitingTable();
+      const tarta = await lineOf(t.bill2, "Tarta");
+
+      const {
+        table8,
+        mark,
+        noticesBefore,
+        partyId,
+        billId: newBill,
+      } = await splitOff(t, {
+        wholeBillIds: [],
+        loose: [{ billId: t.bill2, lineIds: [tarta.id] }],
+      });
+
+      const fromNumber = await orderNumberOf(t.bill2);
+      const toNumber = await orderNumberOf(newBill);
+      expect((await printed(t.grill.printer)).slice(mark)).toEqual([
+        movedSlip(
+          t.grill.name,
+          `${words.order} ${fromNumber} -> ${toNumber}`,
+          `Mesa 5 (${t.n}), 8 (${t.n})`,
+          table8,
+          [words.hold, `${words.group} 1 · DESSERTS`, "1.000 x TARTA"],
+        ),
+      ]);
+      expect(await newNotices([t.bill2, newBill], noticesBefore)).toEqual([
+        { id: expect.any(String), lineName: "TARTA", stationId: t.grill.id },
+      ]);
+      await answerNoAllergies(partyId);
+      const releaseMark = (await printed(t.grill.printer)).length;
+      await release(t.grill.id, (await lineOf(newBill, "Tarta")).id);
+      expect((await printed(t.grill.printer)).slice(releaseMark)).toEqual([
+        fireTicket(t.grill.name, table8, toNumber, 1, "1.000 x TARTA"),
+      ]);
+    });
+
+    it("A1327: Split a table taking a waiting tarta whose HOLD paper printed only at another station leaves it off the slip and releases it with no FIRE mark", async () => {
+      const t = await waitingTable(false);
+
+      const { mark, partyId } = await splitOff(t, { wholeBillIds: [t.bill2], loose: [] });
+
+      const orderLine = await orderLineOf(t.bill2);
+      const slips = (await printed(t.grill.printer))
+        .slice(mark)
+        .filter((lines) => lines[0] === `*** ${words.moved} ***` && lines[2] === orderLine);
+      expect(slips).toHaveLength(1);
+      expect(slips[0]!.slice(6)).toEqual(["1.000 x BURG", ""]);
+      await answerNoAllergies(partyId);
+      const released = await releaseTarta(t);
+      expect(released).toEqual([expect.arrayContaining(["1.000 x TARTA"])]);
+      expect(released[0]![0]).not.toMatch(/\*\*\*/);
+    });
   });
 });
 
