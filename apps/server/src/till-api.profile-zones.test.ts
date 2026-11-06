@@ -1134,6 +1134,7 @@ const ROUTES: readonly Row[] = [
       revision: 0,
       draftRevision: 0,
       groups: [],
+      personId,
     }),
     deliTableZone,
   ]),

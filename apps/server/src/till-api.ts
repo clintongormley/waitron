@@ -1134,6 +1134,12 @@ function requireDraftParam(draftId: string): string {
   return draftId.toLowerCase();
 }
 
+function requireNamesSessionPerson(body: Record<string, unknown>, sessionPersonId: string): void {
+  const named = requireBodyUuid(body.personId, "personId").toLowerCase();
+  if (named !== sessionPersonId.toLowerCase())
+    throw new AppError("draft.person_not_signed_in", { personId: named });
+}
+
 /** A step route's step, in lower case as ids are stored: an id that is no UUID names none. */
 function requireStepParam(stepId: string): string {
   if (!isUuid(stepId)) throw new AppError("service_step.not_found", { stepId });
@@ -3686,9 +3692,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const body = asObject(await readRawJsonBody<unknown>(c));
       const draftId = requireDraftId(body.draftId);
       const revision = requireRevision(body.revision);
-      const namedPersonId = requireBodyUuid(body.personId, "personId").toLowerCase();
-      if (namedPersonId !== personId.toLowerCase())
-        throw new AppError("draft.person_not_signed_in", { personId: namedPersonId });
+      requireNamesSessionPerson(body, personId);
       const draft = await withIssuanceTransaction(
         deps.db,
         async (tx) => {
@@ -3772,6 +3776,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const draftId = requireDraftParam(c.req.param("did"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const revision = requireRevision(body.revision);
+      requireNamesSessionPerson(body, personId);
       const draft = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, session, [{ partyId }]);
         return takeOverDraft(

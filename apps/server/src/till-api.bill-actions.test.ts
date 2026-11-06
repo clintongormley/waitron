@@ -564,7 +564,12 @@ describe("A803 rename: PUT /api/bills/:id/name", () => {
       venue.cookie,
       "POST",
       `/api/parties/${partyId}/drafts/${draft.id}/take-over`,
-      { revision: draft.revision, expectedEdit: await editOf(second), submissionId: randomUUID() },
+      {
+        revision: draft.revision,
+        expectedEdit: await editOf(second),
+        submissionId: randomUUID(),
+        personId: venue.operatorId,
+      },
     );
     expect(taken.status).toBe(200);
 

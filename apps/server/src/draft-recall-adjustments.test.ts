@@ -218,6 +218,7 @@ describe("adjusting an owned recalled family", () => {
       `/api/parties/${p.partyId}/drafts/${p.draft.id}/take-over`,
       {
         revision: p.draft.revision,
+        personId: venue.managerId,
       },
       venue.cookie.manager,
     );
@@ -348,7 +349,7 @@ describe("adjusting an owned recalled family", () => {
     const taken = await call(
       "POST",
       `/api/parties/${p.partyId}/drafts/${p.draft.id}/take-over`,
-      { revision: p.draft.revision },
+      { revision: p.draft.revision, personId: venue.managerId },
       venue.cookie.manager,
     );
     expect(taken.status, JSON.stringify(taken.json)).toBe(200);
