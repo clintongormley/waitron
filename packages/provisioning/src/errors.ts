@@ -19,7 +19,7 @@ declare module "@waitron/shared" {
     "setup.fiscal_test_required": { module: string };
     "setup.email_required": { field: "email" };
     "setup.already_provisioned": Record<string, never>;
-    /** Start again's cause, log-safe; the repair page words each. */
+    /** Why the box refused, as a fixed log-safe name; the repair page words it only for Start again. */
     "setup.not_ready": { cause?: "may-have-filed" | "unexpected" | "too-large" | "unreadable" };
     "setup.operation_conflict": Record<string, never>;
     "setup.already_provisioning": Record<string, never>;

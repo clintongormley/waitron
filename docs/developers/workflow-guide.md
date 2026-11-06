@@ -394,8 +394,9 @@ allocation, which today is the Veri\*Factu module. A territory whose fiscal slot
 which files nothing, makes no allocation, so there is nothing to refuse; no country the setup route
 accepts today has one: the route takes its country from `getVenueSetupCountryPack`
 (`packages/country-packs/src/registry.ts`), which offers only Spain, and Spain's only supported
-fiscal territory files through Veri\*Factu (`packages/country-es/src/spain.ts`). The setup wizard
-has no text of its own for this refusal yet.
+fiscal territory files through Veri\*Factu (`packages/country-es/src/spain.ts`). Since A1384 the setup
+wizard does not offer Demo or Preparation on a production box, and words this refusal, with
+Reload, if one is requested anyway.
 
 **2026-10-15 A679 candidate:** the refusal below describes an unclaimed request. The claimed
 wizard runs its separate preproduction readiness check before collecting email settings or a

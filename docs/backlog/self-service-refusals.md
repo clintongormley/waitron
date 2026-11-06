@@ -701,8 +701,8 @@ damaged recovery-key record.
 
 Left open by A1099. Since A1131bc slice 2 a present `venue.db` the box finds damaged (SQLite code 11
 or 26, or a table a reader expects missing) is deleted after the page says "The previous setup
-process was unsuccessful.". These still refuse `setup.not_ready`, which the page draws as "cannot
-confirm that deleting this setup is safe" (plan, N1):
+process was unsuccessful.". These still refuse `setup.not_ready` (plan, N1); since A1384 (2026-11-06) the page words the
+cause the box gives with it:
 
 - a `venue.db` the box may not open, or one over 128 MiB;
 - a damaged read while a `-journal` file sits beside the database;
