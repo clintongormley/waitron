@@ -1,7 +1,9 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { type ChildProcess, spawn } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface FakeBoxHost {
   path: string;
@@ -14,6 +16,7 @@ type Reply = (line: string, socket: Socket) => void;
 const servers = new Set<Server>();
 const sockets = new Set<Socket>();
 const dirs = new Set<string>();
+const children = new Set<ChildProcess>();
 
 function tempSocketPath(): string {
   const dir = mkdtempSync(join(tmpdir(), "box-host-"));
@@ -51,6 +54,41 @@ export function answer(text: string): Reply {
   return (_line, socket) => socket.end(text);
 }
 
+const SHELL_HANDLER = fileURLToPath(
+  new URL("../../../../deploy/box/waitron-box.sh", import.meta.url),
+);
+
+/**
+ * Each connection runs the real deploy/box/waitron-box.sh with the connection as its standard
+ * input and output, as systemd's Accept=yes does; the connection closes when the handler exits.
+ * `stderr()` is everything the handlers wrote to their standard error.
+ */
+export async function shellBoxHost(): Promise<{ path: string; stderr(): string }> {
+  const path = tempSocketPath();
+  const stateDir = mkdtempSync(join(tmpdir(), "box-host-state-"));
+  dirs.add(stateDir);
+  const uptime = join(stateDir, "uptime");
+  writeFileSync(uptime, "12345.67 0\n");
+  let stderr = "";
+  const server = createServer({ pauseOnConnect: true }, (socket) => {
+    sockets.add(socket);
+    socket.on("error", () => {});
+    const child = spawn("bash", [SHELL_HANDLER, "test"], {
+      stdio: [socket, socket, "pipe"],
+      env: { ...process.env, WAITRON_BOX_UPTIME: uptime, WAITRON_BOX_STATE_DIR: stateDir },
+    });
+    children.add(child);
+    child.stderr?.on("data", (chunk: Buffer) => (stderr += chunk.toString("utf8")));
+    child.on("exit", () => {
+      children.delete(child);
+      socket.destroy();
+    });
+  });
+  servers.add(server);
+  await new Promise<void>((resolve) => server.listen(path, resolve));
+  return { path, stderr: () => stderr };
+}
+
 /** A socket path in a fresh temp folder where nothing listens. */
 export function noBoxHostPath(): string {
   return tempSocketPath();
@@ -58,6 +96,8 @@ export function noBoxHostPath(): string {
 
 /** Closes every server, connection and temp folder this module made; call in afterEach. */
 export async function closeFakeBoxHosts(): Promise<void> {
+  for (const child of children) child.kill();
+  children.clear();
   for (const socket of sockets) socket.destroy();
   sockets.clear();
   await Promise.all(

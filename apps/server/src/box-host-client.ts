@@ -295,6 +295,8 @@ export interface BoxHostRequests {
 export const DEFAULT_HOST_READ_MS = 5_000;
 /** Longer than the host unit's `RuntimeMaxSec=15` (`deploy/box/waitron-box@.service`). */
 export const DEFAULT_HOST_CHANGE_MS = 20_000;
+/** The longest line `deploy/box/waitron-box.sh` reads before answering `request_invalid`. */
+const SHELL_LINE_MAX = 700;
 
 async function request<Value extends object, Refusal extends string>(
   socketPath: string,
@@ -310,19 +312,28 @@ async function request<Value extends object, Refusal extends string>(
     return { available: false, reason: "invalid" };
   }
   const received = await sendLine(socketPath, line, limitMs, HOST_REPLY_MAX);
-  if (!received.ok) {
+  let text: string;
+  if (received.ok) {
+    text = received.text;
+  } else if (received.reason === "lost" && received.text.endsWith("\n")) {
+    // A handler that left part of a long line unread can reset the connection after its reply.
+    text = received.text;
+  } else {
     if (received.reason === "missing") {
       return { available: false, reason: "missing", detail: received.detail };
     }
     if (received.reason === "oversize") return { available: false, reason: "malformed" };
     return { available: false, reason: received.reason };
   }
-  if (received.text === "") return { available: false, reason: "lost" };
-  const reply = parseHostReply(verb, received.text);
+  if (text === "") return { available: false, reason: "lost" };
+  const reply = parseHostReply(verb, text);
   if (reply.kind === "ok") return { available: true, ...reply.value } as HostAnswer<Value, Refusal>;
   if (reply.kind === "malformed") return { available: false, reason: "malformed" };
   if (reply.reason === "unknown_request") {
     return { available: false, reason: "unsupported", detail: "unknown_request" };
+  }
+  if (reply.reason === "request_invalid" && line.length > SHELL_LINE_MAX) {
+    return { available: false, reason: "unsupported", detail: "request_invalid" };
   }
   return { available: false, reason: "refused", refusal: reply.reason as Refusal };
 }
