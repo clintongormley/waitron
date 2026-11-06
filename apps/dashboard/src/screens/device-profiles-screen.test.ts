@@ -3699,6 +3699,35 @@ describe("a device profile's address", () => {
     expect(el.shadowRoot!.querySelector("[data-test=profile-row-p1]")).toBeTruthy();
   });
 
+  it("keeps a new profile's editor when the address comes back from another page naming no profile", async () => {
+    history.replaceState(null, "", "/manage/device-profiles");
+    const el = await mount();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await el.updateComplete;
+    change(el, "profile-name", "New counter");
+    await el.updateComplete;
+    history.replaceState(null, "", "/manage/profile");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    history.replaceState(null, "", "/manage/device-profiles");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=profile-name]")
+        ?.value,
+    ).toBe("New counter");
+  });
+
+  it("closes an editor opened from the list when Back takes its name out of the address", async () => {
+    history.replaceState(null, "", "/manage/device-profiles");
+    const el = await mount();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
+    history.replaceState(null, "", "/manage/device-profiles");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
+  });
+
   it("opens the profile its address names, once", async () => {
     history.replaceState(null, "", "/manage/device-profiles/profile/p2");
     const push = vi.spyOn(history, "pushState");

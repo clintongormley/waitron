@@ -134,6 +134,15 @@ export class CatalogueScreen extends LitElement {
   /** The category whose menu started the open add, or null for All products; undefined while none is. */
   #addFrom: string | null | undefined = undefined;
   #linkedProduct: string | null = null;
+  /** The `product` word as this screen last read or wrote it. A new product's editor is named by
+   * none, so only the word going away closes an editor. */
+  #addressProduct: string | null = null;
+
+  #writeProductWord(product: string | null, removeQuery: readonly string[] = []): void {
+    void this.#url.write({ product }, true, removeQuery);
+    if (this.#url.read("dashboard") === "catalogue")
+      this.#addressProduct = this.#url.read("product");
+  }
   @state() private editorInitialField = "";
   /** Rebuilt only when a new refusal arrives: a form takes a new `fieldErrors` object as a new
    * refusal and shows again the ones the operator had since dismissed. */
@@ -175,9 +184,11 @@ export class CatalogueScreen extends LitElement {
     () => {
       if (this.#url.read("dashboard") !== "catalogue") return;
       this.categoryId = this.#url.read("category");
-      this.#linkedProduct = this.#url.read("product");
-      if (this.#linkedProduct === null) this.#closeEditor(false);
-      else void this.#openLinkedProduct();
+      const before = this.#addressProduct;
+      this.#linkedProduct = this.#addressProduct = this.#url.read("product");
+      if (this.#linkedProduct === null) {
+        if (before !== null) this.#closeEditor(false);
+      } else void this.#openLinkedProduct();
     },
     dashboardPath,
   );
@@ -345,7 +356,7 @@ export class CatalogueScreen extends LitElement {
       this.editorValue = value;
       this.detailsOpen = !value.active;
       this.editorOpen = value.active;
-      this.#url.write({ product: productId }, true);
+      this.#writeProductWord(productId);
     } catch (error) {
       if (generation === this.#editorGeneration) this.#showReadError(error);
     }
@@ -426,7 +437,7 @@ export class CatalogueScreen extends LitElement {
     this.editorValue = null;
     this.#linkedProduct = null;
     if (writeUrl) {
-      void this.#url.write({ product: null }, true, ["field"]);
+      this.#writeProductWord(null, ["field"]);
     }
   }
 

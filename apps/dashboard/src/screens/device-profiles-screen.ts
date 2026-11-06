@@ -539,14 +539,25 @@ export class DeviceProfilesScreen extends LitElement {
     this,
     () => {
       if (this.#url.read("dashboard") !== "device-profiles") return;
-      this.#linkedProfile = this.#url.read("profile");
+      const before = this.#addressProfile;
+      this.#linkedProfile = this.#addressProfile = this.#url.read("profile");
       if (this.#linkedProfile === null) {
-        if (this.mode === "editor" || this.#openingId !== null) this.#closeEditor(false);
+        if (before !== null && (this.mode === "editor" || this.#openingId !== null))
+          this.#closeEditor(false);
       } else if (this.#profilesRead) this.#openLinkedProfile();
     },
     dashboardPath,
   );
   #linkedProfile: string | null = null;
+  /** The `profile` word as this screen last read or wrote it. A new profile's editor is named by
+   * none, so only the word going away closes an editor. */
+  #addressProfile: string | null = null;
+
+  #writeProfileWord(profile: string | null): void {
+    void this.#url.write({ profile }, true);
+    if (this.#url.read("dashboard") === "device-profiles")
+      this.#addressProfile = this.#url.read("profile");
+  }
   #profilesRead = false;
   /** The profile whose editor is being read, until the read lands. */
   #openingId: string | null = null;
@@ -558,14 +569,13 @@ export class DeviceProfilesScreen extends LitElement {
     this.#linkedProfile = null;
     if (id === this.#openingId || (this.mode === "editor" && id === this.editingId)) return;
     if (this.profiles.some((profile) => profile.id === id)) void this.#openEditor(id);
-    else this.#url.write({ profile: null }, true);
+    else this.#writeProfileWord(null);
   }
 
   #closeEditor(writeUrl = true): void {
     this.#clearDraft();
     this.mode = "list";
-    if (writeUrl && this.#url.read("profile") !== null)
-      void this.#url.write({ profile: null }, true);
+    if (writeUrl && this.#url.read("profile") !== null) this.#writeProfileWord(null);
   }
 
   @state() private profiles: DeviceProfile[] = [];
@@ -1185,12 +1195,12 @@ export class DeviceProfilesScreen extends LitElement {
         this.#ordering() && profile.departmentId !== null && this.#allowedZones().length === 0;
       this.mode = "editor";
       this.#registerDraft();
-      void this.#url.write({ profile: id }, true);
+      this.#writeProfileWord(id);
       void this.#loadReaders(id, this.#opened);
     } catch (error) {
       if (opened === this.#opened) {
         this.#openingId = null;
-        if (this.#url.read("profile") === id) void this.#url.write({ profile: null }, true);
+        if (this.#url.read("profile") === id) this.#writeProfileWord(null);
         this.#showReadError(error);
       }
     }
@@ -1526,7 +1536,7 @@ export class DeviceProfilesScreen extends LitElement {
     if (this.#url.read("dashboard") !== "device-profiles" || this.#url.read("profile") === id)
       return;
     const guard = navigationGuardFor(window);
-    if (guard === undefined) return void this.#url.write({ profile: id }, true);
+    if (guard === undefined) return this.#writeProfileWord(id);
     const url = new URL(guard.href);
     url.pathname = `${dashboardPath.basePath}/device-profiles/profile/${encodePathSegment(id)}`;
     guard.rewrite(url);

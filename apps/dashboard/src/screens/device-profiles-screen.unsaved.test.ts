@@ -628,6 +628,40 @@ it("W69 a create kept open for newer input names the new profile in the address 
   expect(unload()).toBe(true);
 });
 
+it("W69 a create kept open while another page's address showed stays open when the address comes back", async () => {
+  history.replaceState(null, "", "/manage/device-profiles");
+  let finish!: () => void;
+  const { screen } = await mount({
+    createDeviceProfile: async () => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return { ...profile, id: "p2", name: "Submitted phone" };
+    },
+  });
+  q(screen, "profile-cancel")!.click();
+  await expect.poll(() => q(screen, "create")).not.toBeNull();
+  q(screen, "create")!.click();
+  await expect.poll(() => q(screen, "profile-name")).not.toBeNull();
+  change(screen, "profile-name", "Submitted phone");
+  change(screen, "profile-department", "d1");
+  q(screen, "profile-save")!.click();
+  await expect.poll(() => finish).toBeTypeOf("function");
+  history.replaceState(null, "", "/manage/profile");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  change(screen, "profile-name", "Newer phone");
+  finish();
+  await expect.poll(() => (q(screen, "profile-save") as HTMLButtonElement).disabled).toBe(false);
+  expect(location.pathname).toBe("/manage/profile");
+  history.replaceState(null, "", "/manage/device-profiles");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await screen.updateComplete;
+  expect((q(screen, "profile-name") as HTMLElementTagNameMap["wt-input"] | null)?.value).toBe(
+    "Newer phone",
+  );
+  expect(unload()).toBe(true);
+});
+
 const readerRow = (id: string, name: string) => ({
   printsOwnSlipAutomatically: false,
   id,

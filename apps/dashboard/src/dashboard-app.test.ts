@@ -1124,57 +1124,63 @@ describe("dashboard-app", () => {
     await expect.poll(() => new URL(location.href).pathname).toBe("/manage/catalogue");
   });
 
+  const deviceProfile = {
+    id: "dp1",
+    name: "Front counter",
+    capabilities: [],
+    formFactor: "till",
+    inactivityTimeoutSeconds: null,
+    receiptPrinterIds: [],
+    paymentSlipPrinterIds: [],
+    cashDrawerPrinterIds: [],
+    receiptPrinterDefaultId: null,
+    paymentSlipPrinterDefaultId: null,
+    cashDrawerPrinterDefaultId: null,
+    invoicePrinterIds: [],
+    invoicePrinterDefaultId: null,
+    departmentId: null,
+    allowedZoneIds: null,
+    startingZoneId: null,
+    admittedRoles: ["staff", "supervisor", "manager", "admin"],
+    personExceptions: [],
+    startingScreen: null,
+  };
+  async function mountOnDeviceProfiles() {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getProfile: vi.fn().mockResolvedValue(ownProfile),
+        listDeviceProfiles: vi.fn().mockResolvedValue([deviceProfile]),
+        getDeviceProfile: vi.fn().mockResolvedValue(deviceProfile),
+        listPagePrinters: vi.fn().mockResolvedValue([]),
+        listProfileKitchenScreens: vi.fn().mockResolvedValue([]),
+        getProfileScopeChoices: vi.fn().mockResolvedValue({ departments: [], zones: [] }),
+        listReaders: vi.fn().mockResolvedValue([]),
+        getProfileReaders: vi.fn().mockResolvedValue({ readerIds: [], defaultReaderId: null }),
+        liveData: new LiveData(),
+      }),
+    });
+    await flush(el);
+    const screen = el.shadowRoot!.querySelector("dashboard-device-profiles-screen")!;
+    const name = () => screen.shadowRoot!.querySelector<WtInput>("[data-test=profile-name]");
+    const rename = async (value: string) => {
+      name()!.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+      await screen.updateComplete;
+    };
+    return { el, screen, name, rename };
+  }
+  const closeProfileButton = (el: DashboardApp) =>
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
+
   it.each([
-    [
-      "its close button",
-      (el: DashboardApp) =>
-        el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click(),
-    ],
+    ["its close button", closeProfileButton],
     ["Back", () => history.back()],
   ])(
     "closing Your profile with %s keeps the device profile editor it opened over, with its unsaved name",
     async (_how, close) => {
       history.replaceState(null, "", "/manage/device-profiles/profile/dp1");
-      const deviceProfile = {
-        id: "dp1",
-        name: "Front counter",
-        capabilities: [],
-        formFactor: "till",
-        inactivityTimeoutSeconds: null,
-        receiptPrinterIds: [],
-        paymentSlipPrinterIds: [],
-        cashDrawerPrinterIds: [],
-        receiptPrinterDefaultId: null,
-        paymentSlipPrinterDefaultId: null,
-        cashDrawerPrinterDefaultId: null,
-        invoicePrinterIds: [],
-        invoicePrinterDefaultId: null,
-        departmentId: null,
-        allowedZoneIds: null,
-        startingZoneId: null,
-        admittedRoles: ["staff", "supervisor", "manager", "admin"],
-        personExceptions: [],
-        startingScreen: null,
-      };
-      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-        api: stubApi({
-          getProfile: vi.fn().mockResolvedValue(ownProfile),
-          listDeviceProfiles: vi.fn().mockResolvedValue([deviceProfile]),
-          getDeviceProfile: vi.fn().mockResolvedValue(deviceProfile),
-          listPagePrinters: vi.fn().mockResolvedValue([]),
-          listProfileKitchenScreens: vi.fn().mockResolvedValue([]),
-          getProfileScopeChoices: vi.fn().mockResolvedValue({ departments: [], zones: [] }),
-          listReaders: vi.fn().mockResolvedValue([]),
-          getProfileReaders: vi.fn().mockResolvedValue({ readerIds: [], defaultReaderId: null }),
-          liveData: new LiveData(),
-        }),
-      });
-      await flush(el);
-      const screen = el.shadowRoot!.querySelector("dashboard-device-profiles-screen")!;
-      const name = () => screen.shadowRoot!.querySelector<WtInput>("[data-test=profile-name]");
+      const { el, screen, name, rename } = await mountOnDeviceProfiles();
       await expect.poll(() => name()?.value).toBe("Front counter");
-      name()!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Back counter" } }));
-      await screen.updateComplete;
+      await rename("Back counter");
 
       expect(unsavedOnUnload()).toBe(true);
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
@@ -1191,6 +1197,27 @@ describe("dashboard-app", () => {
       expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     },
   );
+
+  it("closing Your profile with its close button keeps a new device profile's editor, with its unsaved name", async () => {
+    history.replaceState(null, "", "/manage/device-profiles");
+    const { el, screen, name, rename } = await mountOnDeviceProfiles();
+    await expect.poll(() => screen.shadowRoot!.querySelector("[data-test=create]")).not.toBeNull();
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await expect.poll(() => name()).not.toBeNull();
+    await rename("New counter");
+
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    expect(location.pathname).toBe("/manage/profile");
+    closeProfileButton(el);
+    await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+    await flush(el);
+    await screen.updateComplete;
+
+    expect(location.pathname).toBe("/manage/device-profiles");
+    expect(name()?.value).toBe("New counter");
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  });
 
   it("closing Your profile keeps the product editor it opened over, with its unsaved price", async () => {
     history.replaceState(null, "", "/manage/catalogue/product/p1");
