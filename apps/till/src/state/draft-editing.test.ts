@@ -540,7 +540,7 @@ describe("bill-scoped saved work and retained local candidates", () => {
     const saving = sync.flush();
     await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalledOnce());
     set(saved("luis", 2));
-    await sync.load();
+    sync.applyBillSnapshot(saved("luis", 2), sync.generation);
     pending.resolve(saved());
     expect(await saving).toBe("failed");
     expect(sync.edit).toEqual(saved("luis", 2).edit);

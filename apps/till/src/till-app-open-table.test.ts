@@ -202,6 +202,9 @@ const table9 = {
   zoneId: "z2",
 };
 
+/** The till's limit on a floor read, `FLOOR_POLL_LIMIT_MS`. */
+const FLOOR_READ_LIMIT_MS = 25_000;
+
 const drillFormFactor: FormFactor = "till";
 
 function till(formFactor: FormFactor) {
@@ -724,6 +727,43 @@ describe("A768 the left draft saves in the background", () => {
     emit(tableOrder(el)!, "open-table", { tableId: "t7", seated: true });
     await flush(el);
   }
+
+  it("moving guests reloads the tables within the floor read's limit while a save has no answer", async () => {
+    // A server answers a party's bills, and the editor state of each, for that party's bills only.
+    const billsOf = (partyId: string) => [partyBillOf(partyId, partyId === "v1" ? "wo-4" : "wo-9")];
+    const { el } = await mountApp({
+      getPartyBills: vi.fn(async (partyId: string) => billsOf(partyId)),
+      listDrafts: vi.fn(async (...args: Parameters<DraftServer["listDrafts"]>) => {
+        const answer = await server.listDrafts(...args);
+        const own = new Set(billsOf(args[0]).map((bill) => bill.workingOrderId));
+        return { ...answer, billEdits: answer.billEdits.filter((edit) => own.has(edit.billId)) };
+      }),
+      moveGuests: vi.fn().mockResolvedValue({ partyId: "v1", billIds: ["wo-4"] }),
+    });
+    await openTable(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const reloads = api.getTablesState.mock.calls.length;
+
+      emit(tableOrder(el)!, "move-guests", { toTableId: "t9" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(api.moveGuests).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(FLOOR_READ_LIMIT_MS - 1);
+      expect(api.getTablesState).toHaveBeenCalledTimes(reloads);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(api.getTablesState).toHaveBeenCalledTimes(reloads + 1);
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(savedLines()).toContain("offer-beer ×1");
+  });
 
   it("a background save that fails is said on the next table", async () => {
     const { el } = await mountApp();
