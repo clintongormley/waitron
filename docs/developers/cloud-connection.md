@@ -360,6 +360,30 @@ abort signal so deliberate shutdown does not record a service outage.
 
 ## A951 build intake
 
+### Provisioning-source requirements agreement: 6 November 2026
+
+Lane E’s 6 November engineering review accepts the complete D provisioning-source proposal at Cloud
+commit `7ba21d208c33ab03df0dde7f9d7f300ef5aa0a48`, path
+`docs/superpowers/plans/2026-11-06-a951-provisioning-sources.md`, complete-file SHA256
+`ddbe01461646c4d7829b06d0f86ad19703ba77384802580423065fb891343477` over the complete blob with no final LF. No
+engineering amendment was found necessary.
+
+Acceptance covers isolated, unmounted source verification, policy composition and synthetic examples
+only. The driver’s independent crypto inspection covers one private example, not product-validator,
+interoperability, native execution, maxima or journal-fit qualification.
+
+Installed source anchors, source-authority custody, physical mapping and durable
+source/revocation/restart currentness remain unqualified. D retains durable Cloud enrollment and
+currentness; E retains local host, key and registry qualification. Preserve all inherited budgets,
+history, trust boundaries and integration gates.
+
+Both ledgers still require both full executable consumers and exact scope/digests; launch requires
+the accepted registry. Consumers/runtime remain NONE and admission CLOSED. Docs-only publication is
+allowed; foundation finishing remains barred.
+
+[Complete agreement and exact
+provenance](../superpowers/plans/2026-10-22-a951-connection.md#provisioning-source-requirements-agreement-6-november-2026).
+
 ### Native publication requirements acceptance: 5 November 2026
 
 E matches D582's acceptance of the exact private native grammar and engineering

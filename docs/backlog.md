@@ -6287,9 +6287,12 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   boundaries. E and D agree the exact [private native protocol](superpowers/specs/2026-11-05-a951-native-publication-protocol.md)
   requirements; both full executable consumer pins in both ledgers and the
   root-provisioned contract-registry check still gate native integration.
-  Receiver/provisioning,
-  one-use ledgers, signed corpus, native custody/durability/race/budget evidence
-  and full connected acceptance remain open. Debian agreement is planning-only;
+  E accepts D’s exact REG/POL source requirements for isolated unmounted
+  verification and synthetic examples. Durable source currentness/enrollment,
+  installed anchors and custody/physical mapping remain unqualified.
+  Receiver/provisioning, one-use ledgers, signed corpus, native custody/durability/
+  race/budget evidence and full connected acceptance remain open. Debian agreement
+  is planning-only;
   qualify exact consumers and all remaining path/privacy/host gates. Runtime pair
   NONE; admission CLOSED. Use the shared helper one lane at a time, preserve owner
   Waitron/partitions and obtain separate approval for host configuration changes.

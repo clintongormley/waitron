@@ -752,6 +752,16 @@ and cloud operations. See [documentation ownership](../cloud-ownership.md).
 
 ## A951. The box's lasting tunnel and public-certificate client
 
+Provisioning-source requirements review is complete: E accepts D’s entire immutable proposal for
+isolated unmounted verification/composition and synthetic examples; no engineering amendment is
+required. D still owes durable Cloud enrollment/currentness. Installed source anchors, source-authority
+custody and physical mapping, aggregate peak accounting, shared executable evidence and matching full
+consumer pins in both ledgers plus launch-registry acceptance remain unqualified. One synthetic crypto
+receipt supplies none of those qualifications. Preserve complete history, budgets, independent C/L,
+all host/privacy/path gates and A1308/A760. Consumers/runtime NONE; admission CLOSED; no partial
+foundation finishing. [Requirements
+agreement](../superpowers/plans/2026-10-22-a951-connection.md#provisioning-source-requirements-agreement-6-november-2026).
+
 D582 accepts the complete [appliance successor](../superpowers/specs/2026-11-05-a951-appliance-v1-successor.md)
 requirements solely for isolated codec/shared signed-corpus work, the policy/proof
 and initially unmounted path shapes, and L as the final local publication boundary.
