@@ -96,8 +96,7 @@ type Step =
   | { kind: "advance"; round: number; to: "preparing" | "ready" }
   | { kind: "served"; round: number }
   | { kind: "pay" }
-  | { kind: "finish" }
-  | { kind: "handOver" };
+  | { kind: "finish" };
 
 interface Event {
   at: number;
@@ -298,11 +297,6 @@ export async function tradeDay(
       if (order?.status !== "settled")
         throw new Error(`bench: bill ${bill.tabId} is ${order?.status} after ${plan.route}`);
       routes[plan.route] += 1;
-    } else if (step.kind === "handOver") {
-      // A table bill's dishes stay on their stations' lists until a till collects the paid order.
-      await call(cookie, "POST", `/api/orders/${bill.tabId}/collect`, {
-        submissionId: randomUUID(),
-      });
     } else {
       const expectedEdits = await withTransaction(venue.db, async (tx) => {
         const edits = [];
@@ -605,8 +599,8 @@ function eventsOf(plan: PlannedBill): Event[] {
   const end = 3 + plan.rounds.length * 18;
   if (plan.invoice) at(end + 5, { kind: "invoice" });
   at(end + 6, { kind: "pay" });
+  // Finishing the table hands its paid bills over, clearing their dishes from station lists.
   at(end + 8, { kind: "finish" });
-  at(end + 9, { kind: "handOver" });
   return events;
 }
 
