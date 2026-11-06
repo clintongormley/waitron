@@ -3,6 +3,23 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
+## Floor-plan test labels can collide across zones
+
+Main CI [42164850258](https://github.com/clintongormley/waitron/actions/runs/42164850258),
+server shard 3, failed the `floor-today-reset-table.test.ts` partial-reset case with
+`table.label_taken`. The retained blob report records `Counter 3 ea3a14`.
+`plannedZone` in `apps/server/src/testing/floor-today-venue.ts` keeps only six UUID characters
+in each label; the floor-plan save checks labels in the other zones too. That suite retains
+its database between cases.
+
+A temporary two-case probe on 6 November 2026 gave distinct full UUIDs the same six-character
+prefix: the second zone was refused with that exact code and label. Different prefixes admitted
+both zones. The original 58-case floor-reset suite passed once locally; that is no repair.
+The probe demonstrates a collision mechanism, not the unseen rows from the failed CI database.
+Replace the fixture's truncated suffix with labels that cannot repeat within its database and
+retain a controlled collision regression plus an accepting control. Do not relax the production
+label check or its existing assertions. No CI rerun was made for this occurrence.
+
 ## Three adjustment-portion refusal checks also pass with shortened ID lists
 
 A974's 5 November 2026 naming review observed that three cases in

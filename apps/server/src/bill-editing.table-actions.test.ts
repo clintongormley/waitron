@@ -958,7 +958,7 @@ describe("A803 race replay: Split a table against another command, from one read
     it(`A803 race replay: a split and a Move dishes of the same dish: one commits (${order[0]} asked first)`, async () => {
       const ana = await seatedWith(venue, "Tarta", "Caña");
       const table = await joinFree(ana.partyId);
-      const caña = lineNamed(ana.tabId, "Caña").id;
+      const beerLine = lineNamed(ana.tabId, "Caña").id;
       const moving = {
         partyId: ana.partyId,
         operatorId: venue.operatorId,
@@ -968,9 +968,10 @@ describe("A803 race replay: Split a table against another command, from one read
       const commands = {
         split: await splitOf(ana.partyId, table, {
           wholeBillIds: [],
-          loose: [{ billId: ana.tabId, lineIds: [caña] }],
+          loose: [{ billId: ana.tabId, lineIds: [beerLine] }],
         }),
-        move: () => inTx(venue, (tx) => moveDishes(tx, venue.cfg, ana.tabId, null, [caña], moving)),
+        move: () =>
+          inTx(venue, (tx) => moveDishes(tx, venue.cfg, ana.tabId, null, [beerLine], moving)),
       };
 
       const raced = await race({ [order[0]]: commands[order[0]], [order[1]]: commands[order[1]] });
@@ -1016,9 +1017,9 @@ describe("A803 race replay: Split a table against another command, from one read
           submissionId: randomUUID(),
         }),
       );
-      const caña = lineNamed(ana.tabId, "Caña");
-      const tarta = lineNamed(ana.tabId, "Tarta");
-      const source = caña.groupId!;
+      const beerLine = lineNamed(ana.tabId, "Caña");
+      const cakeLine = lineNamed(ana.tabId, "Tarta");
+      const source = beerLine.groupId!;
       const firing = {
         operatorId: venue.operatorId,
         expectedPartyRevision: revisionOf(ana.partyId),
@@ -1027,7 +1028,7 @@ describe("A803 race replay: Split a table against another command, from one read
       const commands = {
         split: await splitOf(ana.partyId, table, {
           wholeBillIds: [],
-          loose: [{ billId: ana.tabId, lineIds: [caña.id] }],
+          loose: [{ billId: ana.tabId, lineIds: [beerLine.id] }],
         }),
         fire: () => inTx(venue, (tx) => fireGroup(tx, venue.cfg, ana.partyId, source, firing)),
       };
@@ -1039,8 +1040,8 @@ describe("A803 race replay: Split a table against another command, from one read
         expect(holderOf(table)).toBe(ana.partyId);
         expect(groupStateOf(source)).toEqual({ partyId: ana.partyId, state: "fired" });
         expect(lineNamed(ana.tabId, "Caña").groupId).toBe(source);
-        expect(firedAtOf(caña.id)).toEqual(expect.any(String));
-        expect(firedAtOf(tarta.id)).toEqual(expect.any(String));
+        expect(firedAtOf(beerLine.id)).toEqual(expect.any(String));
+        expect(firedAtOf(cakeLine.id)).toEqual(expect.any(String));
       } else {
         expect(holderOf(table)).toBe(won.partyId);
         expect(groupStateOf(source)).toEqual({ partyId: ana.partyId, state: "held" });
@@ -1050,7 +1051,7 @@ describe("A803 race replay: Split a table against another command, from one read
         expect(moved.groupId).not.toBe(source);
         expect(groupStateOf(moved.groupId!)).toEqual({ partyId: won.partyId, state: "held" });
         expect(firedAtOf(moved.id)).toBeNull();
-        expect(firedAtOf(tarta.id)).toBeNull();
+        expect(firedAtOf(cakeLine.id)).toBeNull();
       }
     });
   }
