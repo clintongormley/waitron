@@ -83,3 +83,10 @@ it("gives no address for a request with no connection, or a socket with none", a
   expect(await addressOf(undefined)).toBeNull();
   expect(await addressOf({ incoming: { socket: {} } })).toBeNull();
 });
+
+it("never counts a request through the remote entrance as the box, even over loopback", async () => {
+  expect(
+    await sourceOf({ remoteStaff: true, incoming: { socket: { remoteAddress: "127.0.0.1" } } }),
+  ).toBe(false);
+  expect(await sourceOf({ remoteStaff: true })).toBe(false);
+});

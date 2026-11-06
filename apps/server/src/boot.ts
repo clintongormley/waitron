@@ -36,7 +36,7 @@ import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
 import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
 import { uploadCloudCaptureFile } from "./cloud-backup-upload.js";
-import { mountCloudPublic } from "./cloud-remote.js";
+import { mountCloudPublic, startStaffListener } from "./cloud-remote.js";
 import { runCloudWorker } from "./cloud-worker.js";
 import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
@@ -3561,6 +3561,11 @@ async function bootServer(
   });
   undoOnFailure.push(async () => appendOnlyWatch.stop());
 
+  const staffListener = startStaffListener(config, app, log);
+  undoOnFailure.push(async () => {
+    await staffListener?.close();
+  });
+
   // After every mount above, so the app is complete before it binds.
   const server = startTradingListener(config, app, now, log);
   undoOnFailure.push(() => closeListener(server));
@@ -3868,7 +3873,13 @@ async function bootServer(
     health,
     log,
     {
-      stopWork: () => stopBackgroundDuties(duties),
+      stopWork: () =>
+        closeAll([
+          async () => {
+            await staffListener?.close();
+          },
+          () => stopBackgroundDuties(duties),
+        ]),
       settleRequests: settleManagementRequests,
       closePools: () => store.close(),
     },

@@ -294,6 +294,24 @@ originated has reached the carrier (`rejoinAsSecondary`, `apps/server/src/rejoin
 wipes without that confirmation, and `--accept-loss` waives nothing: it only records the operator's
 acknowledgement in the log. The wipe is irreversible (CLAUDE.md §5).
 
+## Remote staff entrance
+
+For a manually connected test box, set `WAITRON_STAFF_ORIGIN` to its assigned bare HTTPS origin.
+Set `WAITRON_STAFF_HOST` to the tunnel address and `WAITRON_STAFF_PORT` to the receiving port;
+they default to loopback and 8443. Install the matching `cloud-staff.key` and `cloud-staff.crt`
+under `WAITRON_STATE_DIR` before starting the server. An unset or empty staff origin opens no
+staff listener. This does not configure a tunnel or connect the box to Cloud.
+
+The separate HTTPS listener serves `/manage`, its management API, the dashboard's box and backup
+API groups, theme and content-language reads, and help pages. Other routes return 404, as does a
+request for another origin. Requests through it are remote even when the gateway connects over
+loopback. Use your usual password; enrol passkeys separately for the staff hostname.
+
+A missing certificate or a staff port that will not bind is logged as `server.listen_failed` with
+`listener: staff`; it does not stop the local listener. The staff listener closes with the server.
+Setup, recovery and restricted starts do not open it. Automatic connection, certificate issuance
+and Settings on/off/status remain open in A951-S.
+
 ## Environment variables
 
 | Variable                                   | Required | Default                                    | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |

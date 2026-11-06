@@ -1,3 +1,4 @@
+import { createStaffApp } from "./cloud-remote.js";
 import {
   departments,
   departmentReceipts,
@@ -3087,4 +3088,31 @@ it("preserves a manager changing their own email through staff details", async (
   const expired = await app.request("/management-api/staff", { headers: { cookie } });
   expect(expired.status).toBe(401);
   expect(await expired.json()).toMatchObject({ error: { code: "management_session.required" } });
+});
+
+it("keeps password backoff and ordinary password login through the remote entrance", async () => {
+  await setupTenant();
+  let now = 0;
+  const local = mountApp(
+    undefined,
+    createPasswordThrottle(() => now),
+  );
+  const staff = createStaffApp(local, "https://staff.example.test");
+  const attempt = (password: string) =>
+    staff.request("https://staff.example.test/management-api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: MANAGER_EMAIL, password }),
+    });
+  for (let n = 0; n < 4; n++) expect((await attempt("wrong")).status).toBe(401);
+  const refused = await attempt(PASSWORD);
+  expect(refused.status).toBe(429);
+  expect(await refused.json()).toEqual({
+    error: { code: "password.throttled", params: { retryAfterSeconds: 2 } },
+  });
+  now = 2000;
+  const accepted = await attempt(PASSWORD);
+  expect(accepted.status).toBe(200);
+  expect(accepted.headers.get("set-cookie")).toContain("waitron_management_session=");
+  expect(accepted.headers.get("set-cookie")).toContain("; Secure");
 });

@@ -2096,22 +2096,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **One signed request helper; strict reply readers** (bundle of 2, size M). [Detail](backlog/replication-cloud.md#bundle-one-signed-request-helper-strict-reply-readers)
 
-- **A951. The box's lasting tunnel and public-certificate client.** Build approved;
-  D accepts the complete appliance successor's requirements for isolated codec
-  and shared-corpus work, including independent local L and Cloud C permission
-  boundaries. E and D agree the exact [private native protocol](superpowers/specs/2026-11-05-a951-native-publication-protocol.md)
-  requirements; both full executable consumer pins in both ledgers and the
-  root-provisioned contract-registry check still gate native integration.
-  E accepts D’s exact REG/POL source requirements for isolated unmounted
-  verification and synthetic examples. Durable source currentness/enrollment,
-  installed anchors and custody/physical mapping remain unqualified.
-  Receiver/provisioning, one-use ledgers, signed corpus, native custody/durability/
-  race/budget evidence and full connected acceptance remain open. Debian agreement
-  is planning-only;
-  qualify exact consumers and all remaining path/privacy/host gates. Runtime pair
-  NONE; admission CLOSED. Use the shared helper one lane at a time, preserve owner
-  Waitron/partitions and obtain separate approval for host configuration changes.
-  [Host evidence](operations/a951-host-evidence.md).
+- **A951-S. Reach the box's dashboard through Cloud.** The owner replaced the earlier A951 build
+  on 6 November with a small remote entrance and the existing gateway. The old branch stays parked.
+  Left: one real browser-to-box path, the tunnel container, signed connection details, certificate
+  renewal, Settings on/off/status and retirement of `@waitron/tunnel`. After the browser path works,
+  try Translate all, then address completion, on the test box only.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
 - **Waitron retains:** box-side networking and `@waitron/tunnel`'s retirement; first-contact trust

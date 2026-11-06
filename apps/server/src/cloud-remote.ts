@@ -1,4 +1,10 @@
-import type { Hono } from "hono";
+import { Hono } from "hono";
+import { serve } from "@hono/node-server";
+import { Server as HttpsServer } from "node:https";
+import { buildServeOptions, watchTlsFiles } from "./tls.js";
+import { closeListener } from "./close-listener.js";
+import type { ServerConfig } from "./config.js";
+import type { Logger } from "./logger.js";
 import { generateKeyPairSync, X509Certificate, randomUUID } from "node:crypto";
 import { lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -103,5 +109,66 @@ export async function installStaffCertificate(
     }
   } finally {
     await rm(temporary, { force: true });
+  }
+}
+
+/** The remote listener forwards only the dashboard surface; a header cannot grant a local source. */
+export function createStaffApp(app: Hono, origin: string): Hono {
+  const staff = new Hono();
+  staff.all("*", (c) => {
+    const url = new URL(c.req.url);
+    const path = url.pathname;
+    if (url.origin !== origin || /%2f|%5c|%00/i.test(path)) return c.notFound();
+    const read = c.req.method === "GET" || c.req.method === "HEAD";
+    const allowed =
+      path.startsWith("/management-api/") ||
+      path.startsWith("/api/box/") ||
+      path.startsWith("/api/backup/") ||
+      (read &&
+        (path === "/manage" ||
+          path.startsWith("/manage/") ||
+          path === "/api/theme" ||
+          path === "/api/content-languages" ||
+          path.startsWith("/help/")));
+    if (!allowed) return c.notFound();
+    return app.fetch(c.req.raw, { ...(c.env as object), remoteStaff: true });
+  });
+  return staff;
+}
+
+export function startStaffListener(
+  config: Pick<ServerConfig, "staff" | "stateDir">,
+  app: Hono,
+  log: Logger,
+): { close(): Promise<void> } | undefined {
+  const staff = config.staff;
+  if (staff === undefined) return undefined;
+  const failure = (error: unknown) =>
+    log("warn", "server.listen_failed", {
+      listener: "staff",
+      port: staff.port,
+      code: (error as NodeJS.ErrnoException)?.code ?? "unknown",
+    });
+  try {
+    const tls = {
+      keyFile: join(config.stateDir, "cloud-staff.key"),
+      certFile: join(config.stateDir, "cloud-staff.crt"),
+    };
+    const server = serve(
+      buildServeOptions(
+        { fetch: createStaffApp(app, staff.origin).fetch, hostname: staff.host, port: staff.port },
+        tls,
+      ),
+      (info) => log("info", "server.listening", { listener: "staff", port: info.port }),
+    );
+    server.on("error", failure);
+    if (server instanceof HttpsServer)
+      watchTlsFiles(server, tls, new URL(staff.origin).hostname, () =>
+        log("error", "cloud.certificate_reload_failed"),
+      );
+    return { close: () => closeListener(server) };
+  } catch (error) {
+    failure(error);
+    return undefined;
   }
 }
