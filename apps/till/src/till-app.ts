@@ -3100,8 +3100,8 @@ export class TillApp extends LitElement {
    * it is dropped and a read that ends without an answer drops nothing. */
   #printProblemsRead = 0;
   #printProblemsShown = 0;
-  /** Identifies the latest {@link #rereadAmounts}, so once a newer one has started, an older one
-   * works out no "Still to pay" from its bills and says nothing. */
+  /** Identifies the latest {@link #rereadAmounts} or {@link #readBillsForPaidScreen}, so once a
+   * newer one has started, an older one works out no "Still to pay" from its bills and says nothing. */
   #amountsReread = 0;
   /** The last read of the party's groups failed, so {@link tabGroups} is empty for want of an answer. */
   #groupsUnread = false;
@@ -19674,7 +19674,17 @@ export class TillApp extends LitElement {
     this.paidPayments = paid ? settled : [];
     this.#pushDrill({ kind: paid ? "paid" : "ticket" });
     void this.#refreshReceiptPrint();
-    if (paid) void this.#loadPartyBills(undefined, true, true);
+    if (paid) void this.#readBillsForPaidScreen();
+  }
+
+  /** Stands in for any {@link #rereadAmounts} still out from before the payment. Its success ends a
+   * read's failure said earlier, unless the waiter has left the paid screen, where the message may
+   * be a newer read's. */
+  async #readBillsForPaidScreen(): Promise<void> {
+    this.#amountsReread++;
+    const { bills } = await this.#loadPartyBills(undefined, true, true);
+    if (bills !== null && this.drill?.kind === "paid" && this.errorKey === "table.reread_failed")
+      this.errorKey = undefined;
   }
 
   #paidBill(): PartyBill | undefined {
