@@ -31,6 +31,33 @@ whose author and committer times differ. Image smoke exercises the real Docker b
 cases do not establish Docker's network isolation. The original network stall's cause remains
 unverified; the image no longer invokes the generator's optional source-fetch mode.
 
+## Automatic private UI releases
+
+`publish-ui.yml` runs on main pushes changing `packages/ui-core/**`. It checks
+package types, lint and coverage, prepares the numbered tarball from the event's
+full SHA and runs the independent browser consumer before publishing. Only the
+publish step receives `UI_PACKAGES_WRITE_TOKEN`. A failed upload fails the run;
+the next qualifying merge attempts a new `0.2.<run number>` version.
+
+The publisher uses its own concurrency group with `queue: max` and no cancellation
+of a running publication. This serializes uploads separately from `ci.yml`, whose
+main runs still have distinct groups. GitHub documents a maximum of 100 pending
+runs and ordering by when they begin waiting, so this is not an unlimited queue or
+a guarantee that release numbers execute in increasing order.
+
+The workflow tests read trigger, queue, credential and check wiring as text, then
+execute the publish shell with an npm stand-in to check its arguments and failure
+status. Existing preparation and independent-consumer checks cover the tarball.
+These local checks do not establish hosted Actions behavior or registry authority;
+retain the first real publication result after landing.
+
+External provenance, read 2026-11-06:
+
+| Claim | Source's words | Application here |
+| --- | --- | --- |
+| Uploads can queue without replacing the one pending run | [Actions concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency): “Up to 100 jobs or workflow runs” | `queue: max` permits multiple pending publications in one group. |
+| Packages start private | [GitHub npm registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry): “default visibility is private” | The existing private package keeps its Cloud repository association; publication requests restricted access. |
+
 ## The optional whole-workspace check
 
 Run focused behavior tests during implementation. Use this broader local command when investigating
