@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AppError, compareDecimal, hasCode, jobOrigin } from "@waitron/shared";
+import { AppError, compareDecimal, jobOrigin } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -329,31 +329,22 @@ export class SumUpCloudProvider implements PaymentProvider {
     let incidentsRaised = 0;
     let deferred = false;
     // A listed attempt may already have been resolved when this pass reaches its write.
-    const resolve = async <T>(
-      key: { provider: string; paymentRef: string },
-      action: (tx: Transaction) => Promise<T>,
-    ): Promise<T | undefined> => {
+    const resolve = async <T>(action: () => Promise<T>): Promise<T | undefined> => {
       try {
-        return await this.inTransaction(action);
+        return await action();
       } catch (error) {
-        if (
-          error instanceof AppError &&
-          hasCode(error, "payment.not_found") &&
-          error.params.provider === key.provider &&
-          error.params.paymentRef === key.paymentRef
-        )
-          return undefined;
+        if (error instanceof AppError && error.code === "payment.not_found") return undefined;
         throw error;
       }
     };
-    /** `failAttempting` + (for an unactionable outcome) the incident, in ONE transaction. Returns
-     * whether an incident was raised. */
+    // Keep a refused outcome and its alert in the same transaction.
     const failWith = (
       key: { provider: string; paymentRef: string },
       status: string | null,
     ): Promise<boolean | undefined> =>
-      resolve(key, async (tx) => {
-        await failAttempting(tx, key);
+      this.inTransaction(async (tx) => {
+        const failed = await resolve(() => failAttempting(tx, key));
+        if (failed === undefined) return undefined;
         if (status === null) return false;
         return this.opts.incidents(tx, {
           origin: jobOrigin("payment_check"),
@@ -400,13 +391,15 @@ export class SumUpCloudProvider implements PaymentProvider {
         continue;
       }
       if (outcome.kind === "captured") {
-        const captured = await resolve(key, (tx) =>
-          captureAttempting(tx, {
-            ...key,
-            settledAt: outcome.settledAt,
-            externalRef: outcome.transactionId,
-            card: outcome.card,
-          }),
+        const captured = await this.inTransaction((tx) =>
+          resolve(() =>
+            captureAttempting(tx, {
+              ...key,
+              settledAt: outcome.settledAt,
+              externalRef: outcome.transactionId,
+              card: outcome.card,
+            }),
+          ),
         );
         if (captured !== undefined) forwarded++;
         continue;

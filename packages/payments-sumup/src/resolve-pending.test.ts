@@ -75,6 +75,21 @@ describe("SumUpCloudProvider.resolvePending", () => {
   it.each([
     { label: "ordinary error", failure: new Error("incident storage failed") },
     {
+      label: "the current payment's refusal from incident storage",
+      failure: new AppError("payment.not_found", { provider: "sumup", paymentRef: "unrelated" }),
+    },
+    {
+      label: "another domain refusal",
+      failure: new AppError("management.request_invalid", { field: "incident" }),
+    },
+    {
+      label: "another provider's refusal",
+      failure: new AppError("payment.not_found", {
+        provider: "another-provider",
+        paymentRef: "unrelated",
+      }),
+    },
+    {
       label: "another payment's refusal",
       failure: new AppError("payment.not_found", {
         provider: "sumup",
