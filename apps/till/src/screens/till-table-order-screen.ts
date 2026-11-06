@@ -4454,17 +4454,12 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  /** A handheld pays an open bill, and a presented bill not yet paid in part, through a pay sheet;
-   * a whole payment A773-1 holds keeps the pay card, except on a presented bill, whose sheet shows
-   * it locked. */
+  /** A handheld pays an open or a presented bill through a pay sheet; a whole payment A773-1 holds
+   * keeps the pay card, except on a presented bill, whose sheet shows it locked. */
   #paysOnSheet(shown: PartyBill | undefined): boolean {
     if (!this.handheld) return false;
     if (this.paymentConfirmation !== undefined) return shown?.status === "placed";
-    return (
-      shown === undefined ||
-      shown.status === "open" ||
-      (shown.status === "placed" && !paidInPart(shown))
-    );
+    return shown === undefined || shown.status === "open" || shown.status === "placed";
   }
 
   #paySheetButton(shown: PartyBill | undefined): TemplateResult {
