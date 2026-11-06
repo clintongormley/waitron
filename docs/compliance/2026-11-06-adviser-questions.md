@@ -98,23 +98,62 @@ without Cloud. See [how a venue gives the tax office access](#how-a-venue-gives-
 
 ### Confirmations: clocks
 
+**The situation.** Waitron dates each invoice and its record from the box's clock, and that clock can be
+wrong, for example after a power cut. These items cover what follows once that is found out. How it
+is found out is explained under
+[how a wrong clock is known](#how-a-wrong-clock-is-known-and-what-a-late-filing-is).
+
 - **T1.** When a wrong clock misdates tickets and the customer is unknown, the restaurant makes the
   corrective invoice, keeps it and files its record. It reaches a customer only where the restaurant
   knows who they are, and tickets are not cancelled and reissued. No source covers this.
-- **T5.** A record may carry a time earlier than the previous record's when the new time is the exact
-  one. The chain follows the order the records were made in, and nothing is marked.
-- **T6.** If only the hour was wrong and the date is right, keeping a record of the incident is enough.
-- **T7.** If the date is wrong, the remedy is a corrective invoice: R4 for a full invoice, R5 for a
-  simplified one, with the real operation date and no VAT change (V1665-22, V0902-22). One corrective
-  may cover many invoices. The VAT period follows the day VAT fell due, and a return already filed
-  wrongly is fixed with a complementary return.
-- **T8.** There is no duty or channel to tell AEAT.
+- **T5. A record timed earlier than the one before.** If the clock ran ahead and is then corrected, the
+  next record carries a time earlier than the previous one. We think this is allowed when the new time
+  is the exact one. Article 7.e of Orden HAC/1177/2024 requires «la fecha y hora exactas», and article 3
+  switches off article 7.i.2.º, the one rule against it, for Veri\*Factu systems. AEAT's FAQ says only that
+  these fields «deberían ser coherentes con el orden temporal de generación de los RF». The chain follows
+  the order the records were made in, and the record has no field for marking the step, so nothing is
+  marked.
+- **T6. Only the hour is wrong.** Take a ticket stamped 21:10 for a sale at 20:50 the same day. An invoice
+  must show its date, not its time (RD 1619/2012 articles 6.1.b and 7.1.b), and the developer FAQ says
+  «La hora de expedición e impresión material de la factura no forma parte del RF». So we think no
+  corrective is needed, and the restaurant only keeps a note of the incident. One source points the
+  other way: developer FAQ §17 case 2.b says an error in an internal field needs a correcting record.
+  That record carries its own time, though, so it could not put the original time back.
+- **T7. The date is wrong.** Take a sale on 14 November stamped 15 November.
+  - The remedy is a corrective invoice in its own series, as soon as the error is known and within four
+    years (article 15.3). The DGT says «será necesaria la expedición de una factura rectificativa» (V1665-22,
+    V0902-22, V1924-23, V2611-24). None of these rulings mentions a Veri\*Factu record, so applying them
+    to a filed record is our reading.
+  - It is an R4 on a full invoice and an R5 on a simplified one. It states the real date of the sale and
+    changes no VAT, because the amount has not changed (V0305-24).
+  - One corrective may cover many invoices, if it identifies them all (article 15.4).
+  - The VAT period follows the day VAT fell due, not the ticket's date (LIVA article 75.Uno.2.º). A sale at
+    23:30 on 30 September stays in the third quarter even if its ticket says 1 October.
+  - A return already filed in the wrong period is fixed with a complementary return (LGT article 122),
+    with a late surcharge starting at 1% (article 27.2), and by correcting the later return.
+- **T8. Telling AEAT.** We think there is no duty or channel to report a clock incident. A text search of
+  the Reglamento, the Orden, both FAQs, the validation document and the service description found none.
+  The corrective record reaches AEAT anyway. Article 16.4 asks for justification only of incidents that
+  stop records being sent, and only if AEAT asks. This rests on finding nothing, so it needs your yes.
 
 ### Confirmations: tips (hold, see decision 3)
 
-- **T9.** Suggested tip percentages stay outside VAT if nothing is pre-selected, the guest can choose
-  zero or any amount, and the tip is not on the invoice.
-- **T10.** Card tips are booked as money owed to staff, not as income.
+**The situation.** Waitron can offer a tip when a guest pays, and it keeps tips off the invoice. The card
+provider pays the tip to the restaurant with the rest of the bill, and the restaurant passes it to staff.
+
+- **T9. Suggested tip percentages and VAT.** At payment the guest sees choices such as no tip, 5%, 10%,
+  15% or another amount. We think the tip stays outside VAT if nothing is pre-selected, the guest can
+  choose zero or any amount, and the tip is not on the invoice. No ruling covers a suggested tip. The
+  test in V1895-24, V5110-26 and V2182-23 is that «no se haya establecido una cuantía fija» and the amount
+  is left «a la libre determinación» of the giver. V3298-20 taxed a donation of a fixed €50 or €100 because
+  it was fixed and bought a discount. A list the guest can ignore does neither, since the meal is owed
+  whatever the guest tips. That last step is our reading.
+- **T10. How card tips are booked.** We think card tips passed to staff are not the restaurant's income.
+  They are a debt to staff from the day they are collected, and paying them through payroll clears the
+  debt, so there is no income or expense and they do not count towards turnover. The accounting plan
+  excludes «las cantidades recibidas por cuenta de terceros» from income (PGC valuation rule 14.ª), and
+  ruling 2174-03 calls the business a «mero intermediario». This holds only if staff, not the business,
+  are entitled to the tips. A contract paying wages out of the tips would change it.
 
 ### Confirmations: records and the declaration
 
@@ -216,18 +255,47 @@ here, the owner should say so.
 
 ### Confirmations
 
-- **L3.** When a server is replaced, one joined time record with separate integrity chains per server
-  is enough, provided each person's day is reliably shown.
-- **L4.** One monthly tip amount per person, on its own payslip line.
-- **L5.** Cash handed straight to a waiter: no employer withholding, and the waiter declares it. Cash
-  shared at the close: through payroll with withholding. A pot staff run themselves: like cash handed
-  straight, if the business stays out of it.
-- **L6.** With no agreement or custom, tips are shared among everyone who took part, kitchen and
-  temporary staff included.
-- **L7.** The proposed payroll fields (one row per person per pay item), final settlement data and
-  extra contribution data in the research are right.
-- **L8.** Absences that changed pay are kept with payroll, and the rest as rotas. Rotas are kept only as
-  evidence. The employer's copy keeps name and tax or Social Security number.
+**The situation.** Waitron records when each person starts and finishes, their breaks, rotas, absences
+and tips. The gestoría calculates payroll and contributions and makes the filings, and Waitron only
+hands it the figures. Each server keeps its own tamper-evident chain of working-time records.
+
+- **L3. When a server is replaced.** A person's record then sits in two chains. We propose one export
+  covering both, showing each person's days with no gap or change of identity, and we think that is
+  enough to prove the hours. Staff need not be told which server held which period. No text in force
+  mentions these chains. The tests are that the record is daily, per person and reliable.
+- **L4. Tips on the payslip.** Waitron gives one tip amount per person per month. The gestoría shows it as
+  its own payslip line and it travels in the payroll file. The daily shares stay in Waitron as evidence.
+- **L5. Who withholds on a tip.** Everything turns on who pays the worker. No ruling read addresses cash
+  directly, so these follow from LIRPF article 99.2, RIRPF article 76.1 and ruling 2174-03:
+
+  | How the tip reaches the worker | Who pays | Proposed treatment |
+  | --- | --- | --- |
+  | Cash handed straight to the waiter and kept | The guest | No employer withholding or reporting. The waiter declares it |
+  | Cash in the till, shared out at the close | The employer | Through payroll with withholding. The withholding comes out of other pay |
+  | A jar staff run themselves, with the business taking no part | The guests, then each other | As the first row, if the business truly stays out |
+
+- **L6. Sharing tips when nothing has been agreed.** The Catalan agreement has no word on tips. We think
+  card tips go to everyone who took part in the service, room and kitchen, temporary staff included, in
+  equal shares. May a share follow hours worked instead, where the business has no staff representatives?
+  The authorities are TSJ Madrid (31/05/2023), TSJ País Vasco (18/07/2017) and TS 635/2021. None binds in
+  Catalonia, and no TSJ Catalonia ruling was found.
+- **L7. What Waitron gives the gestoría.** One row per person, per period, per pay item, with a code the
+  gestoría maps, because no common import layout exists. Is anything missing or unwanted?
+  - **Each month:** the person's tax or Social Security number or the gestoría's employee code; pay month;
+    ordinary hours; overtime, split paid or rested and ordinary or emergency; complementary hours, split
+    agreed or voluntary; night hours; public holidays worked; absences by kind and date; tips to pay
+    through payroll; and the person's month summary.
+  - **Extra for contributions:** the emergency and complementary splits above, which have different rates
+    and codes, and holiday days unused at the end of a contract.
+  - **At a final settlement:** the file runs twice, because a proposed settlement goes with the notice
+    (ET article 49.2) and the hours are final only on the last day. It adds hours up to the last day,
+    overtime and holidays owed as rest, holiday taken this year, tips not yet paid, and the notice date.
+    The gestoría works out holiday pay, bonus shares and any end-of-contract payment.
+- **L8. What is kept, and for how long.** No period was found for absences or rotas. We propose that an
+  absence that changed pay is kept with payroll and any other follows rotas, and that rotas are kept only
+  as evidence in a claim, because the inspectorate says a general schedule does not prove the time record.
+  The employer's copy keeps the name and tax or Social Security number, and the representatives' copy
+  the name. Nothing is released while a claim or inspection is open.
 
 ## For the privacy specialist
 
@@ -240,27 +308,70 @@ here, the owner should say so.
 
 ### Confirmations
 
-- **P2.** Allergy notes during the meal rest on GDPR articles 6(1)(b) and 9(2)(a). A guest's spoken
-  request, noted after a short explanation, is explicit consent.
-- **P3.** The table of what to remove early is right. In short: print data soon after printing, the
-  booking phone when the booking ends, and a guest's name reduced to the seat after the meal.
-- **P4.** A backup delay of up to 30 days is acceptable with a list of erasures kept outside the
-  database and replayed before a restore opens. Bucket keys are held by one named person. Today's
-  defaults are 7 days for the bucket and 30 for scheduled backups, and the copies are not inaccessible.
-- **P5.** A single restaurant needs a written risk analysis and a reasoned note on why no DPIA is
-  needed (a DPIA is a formal impact assessment).
-- **P6.** A former employee's email is kept one year on legitimate interest, then blocked. Sign-in details
-  are deleted without blocking.
-- **P7.** Where the law requires data to be kept, it comes off everyday screens and stays for that
-  purpose only. The email an invoice went to is erased on request unless the invoice is disputed.
-- **P8.** Waitron is a controller for fixing its own product and a processor for one venue's support. In
-  the replacement for the remote-access relay it is a processor for transport and a controller for its
-  own security records. Cloud's D101 lawyer question reuses this, so ask once.
-- **P9.** Recording which employee voids, refunds or opens the drawer is a control measure under ET
-  article 20.3 and needs no consent. Staff representatives, where they exist, get to report first. A
-  one-page use rule covers the shared till under LOPDGDD article 87.3. A complete staff notice given
-  first is enough.
-- **P10.** The procedure and short text for collecting a customer's details on an invoice are right.
+**The situation.** The till asks an allergy question for every table before the first order is sent, and
+keeps the answer with a "who" field. It also records which staff member made each sale, void, refund and
+drawer opening, and most of that cannot be changed. Guests' details are held for a booking, or when
+someone asks for a full invoice. No law requires a restaurant to record who is allergic: the food rules require it to
+tell customers which allergens a dish contains.
+
+- **P2. The basis for allergy notes during the meal.** We propose GDPR article 6(1)(b), the contract for a
+  safe meal, with article 9(2)(a), explicit consent. A guest's spoken request, noted after a short
+  explanation, is explicit consent. The EDPB allows spoken consent but warns it «may be difficult to
+  prove», and the till records who entered the answer, not that the guest agreed. A guest speaking for a
+  companion or a child is not that person's consent, so what should staff do then?
+- **P3. What to remove early.** On our reading of GDPR article 5(1)(c) and (e), not an AEPD statement:
+
+  | Data | Proposal | Why |
+  | --- | --- | --- |
+  | Raw print data | Delete soon after printing | Only a copy of what is stored elsewhere |
+  | Booking phone | Delete when the booking ends | No purpose remains |
+  | Guest's name in the "who" field, after the meal | Reduce to the seat | Evidence needs the seat and allergen, unless P1 says otherwise |
+  | Link from the allergy note to a booking name | Cut with the above | Otherwise the seat still identifies the guest |
+  | Staff member who took the note | Keep | It shows who was told |
+  | Staff name on time and fiscal records | Keep | The duty requires it |
+
+- **P4. Deleted data that stays in backups.** A person's data removed from the live database stays in
+  backups until they expire. We think a delay of up to 30 days is acceptable if a list of erasures is kept
+  outside the database and replayed before a restored copy opens, and bucket keys are held by one named
+  person. The EDPB's 2026 report asks for that kind of list and sets no safe number, and half the
+  authorities raised concerns. Today's defaults are 7 days for the bucket and 30 for scheduled backups.
+  The copies are not inaccessible: anyone with the bucket's login or a recovery pack can read them.
+- **P5. What assessment a single restaurant needs.** We think a written risk analysis, plus a short
+  reasoned note on why no DPIA is needed (a DPIA is a formal impact assessment). The AEPD's list asks for
+  one in most cases that meet two or more criteria. One restaurant clearly meets one, health data. A
+  second, systematic monitoring, is arguable for the record of staff actions in P9. The AEPD's exemption for
+  small businesses' staff records stops at customer data, «pero nunca relativos a los datos de los
+  clientes», and a decision not to do one «ha de estar suficientemente fundamentada».
+- **P6. A former employee's details.** Their email is kept one year after they leave, on legitimate
+  interest with a short written balance, to cover the one-year claim period and sending documents. It is
+  then blocked (set aside) rather than cleared. Their PIN, password and passkeys are deleted when they
+  leave, without blocking: they prove nothing, and keeping them is itself a risk. The AEPD's reading covers
+  any erasure and we found no exception, so please confirm that.
+- **P7. Data the law requires us to keep.** No blocking applies while a legal duty runs (Informe 0148/2019).
+  So a former employee's time record stays available to them and their representatives, comes off
+  everyday screens such as rotas and staff lists, and is used only for that purpose. The email address an
+  invoice went to is erased on request once delivered, unless delivery is in dispute. The date, outcome
+  and sender stay. Nothing read requires keeping the address, and RD 1619/2012 requires only the invoice
+  copy.
+- **P8. Waitron's own role.** For bug reports, Waitron is a controller when it uses them to improve the
+  product for every customer, and a processor when it diagnoses one venue's problem on that venue's
+  instruction. The same report can be both, so one must be chosen and written down. A951 replaces the
+  remote-access relay. Staff connections pass through Cloud encrypted, while Cloud can read customers'
+  public requests in memory. Waitron is a processor for both and a controller for its own security and
+  traffic records. Cloud's lawyer question D101 reuses this, so we want to ask it once.
+- **P9. Recording what staff do at the till.** Recording who voided, refunded or opened the drawer is a
+  control measure under ET article 20.3, so it needs no consent. If there are staff representatives, they
+  get to report first (ET article 64.5.f, up to fifteen days), which is a right to report and not a veto. A
+  shared till is a device under LOPDGDD article 87.3, so a one-page rule covers it: work use only, what is
+  recorded, who can see it. A complete staff notice given before the system is used is enough, because
+  the stricter notice wording applies to cameras and location tracking. Whether a till's log counts as a
+  "system" under article 64.5.f is a labour law point we did not research.
+- **P10. Collecting a customer's details for an invoice.** Staff show or say a short notice before taking
+  the details, and the full notice is a sign or a link they can reach at once (LOPDGDD article 11). The
+  email comes too late to be the first notice. Is this wording right?
+
+  > **Protección de datos.** *[Razón social]* usa tu nombre, NIF y domicilio para emitir tu factura.
+  > Derechos y más información: *[dirección de la página]*.
 
 ## How a venue gives the tax office access
 
