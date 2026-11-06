@@ -1,5 +1,5 @@
 import { chmodSync, mkdtempSync, rmSync } from "node:fs";
-import { createServer, type Socket } from "node:net";
+import { createConnection, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
@@ -12,6 +12,30 @@ import {
   type WifiJoin,
 } from "./box-host-client.js";
 import { answer, closeFakeBoxHosts, fakeBoxHost, noBoxHostPath } from "./testing/fake-box-host.js";
+
+vi.mock("node:net", async (original) => {
+  const actual = await original<typeof import("node:net")>();
+  return { ...actual, createConnection: vi.fn(actual.createConnection) };
+});
+const connects = vi.mocked(createConnection);
+
+/** Turns the event loop until the fake host has read `count` lines; timers may be fake. */
+async function untilLines(host: { lines: string[] }, count: number): Promise<void> {
+  for (let turn = 0; turn < 1000 && host.lines.length < count; turn += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  expect(host.lines).toHaveLength(count);
+}
+
+/** Answers whether `promise` has settled, after letting its pending callbacks run. */
+async function settled(promise: Promise<unknown>): Promise<boolean> {
+  let done = false;
+  void promise.then(() => (done = true));
+  for (let turn = 0; turn < 10; turn += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  return done;
+}
 
 const PERSON = { source: "person", person: "0b9c4a1e-6f1d-4c55-9a83-2f7d1e5c0a11" } as const;
 const SERVER = { source: "server" } as const;
@@ -233,12 +257,46 @@ describe("boxHostRequests().networkRead", () => {
     });
   }
 
-  it("waits five seconds by default and asks the box's own socket", async () => {
+  it("waits five seconds by default", async () => {
     expect(DEFAULT_HOST_READ_MS).toBe(5_000);
+    const host = await fakeBoxHost(() => {});
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const pending = boxHostRequests({ socketPath: host.path }).networkRead(SERVER);
+      await untilLines(host, 1);
+      vi.advanceTimersByTime(4_999);
+      expect(await settled(pending)).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(await pending).toEqual({ available: false, reason: "timeout" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("asks the box's own socket when given no path", async () => {
+    connects.mockClear();
     // No machine running this suite has the box's service.
     expect(await boxHostRequests({ readMs: 200 }).networkRead(SERVER)).toMatchObject({
       available: false,
       reason: "missing",
+    });
+    expect(connects.mock.calls).toEqual([["/run/waitron-box/box.sock"]]);
+  });
+
+  it("reads an empty path as no path, and asks the box's own socket", async () => {
+    connects.mockClear();
+    expect(
+      await boxHostRequests({ socketPath: "", readMs: 200 }).networkRead(SERVER),
+    ).toMatchObject({ available: false, reason: "missing" });
+    expect(connects.mock.calls).toEqual([["/run/waitron-box/box.sock"]]);
+  });
+
+  it("answers missing, naming the error, for a path the connection refuses at once", async () => {
+    // Node reads a path of only spaces as a port number and throws before connecting.
+    expect(await boxHostRequests({ socketPath: " " }).networkRead(SERVER)).toEqual({
+      available: false,
+      reason: "missing",
+      detail: "ERR_SOCKET_BAD_PORT",
     });
   });
 });
@@ -483,9 +541,20 @@ describe("boxHostRequests(): the other six requests", () => {
     expect(performance.now() - started).toBeGreaterThanOrEqual(590);
   });
 
-  it("waits twenty seconds by default for a change, past the host's own fifteen", () => {
+  it("waits twenty seconds by default for a change, past the host's own fifteen", async () => {
     expect(DEFAULT_HOST_CHANGE_MS).toBe(20_000);
-    expect(DEFAULT_HOST_CHANGE_MS).toBeGreaterThan(15_000);
+    const host = await fakeBoxHost(() => {});
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const pending = boxHostRequests({ socketPath: host.path }).networkScan(PERSON);
+      await untilLines(host, 1);
+      vi.advanceTimersByTime(19_999);
+      expect(await settled(pending)).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(await pending).toEqual({ available: false, reason: "timeout" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

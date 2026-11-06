@@ -4,6 +4,7 @@ import {
   HOST_REPLY_MAX,
   parseHostReply,
 } from "../../../scripts/box/host-protocol.mjs";
+import { isUnset } from "./env-value.js";
 
 /**
  * The server's side of the box's host service: one request line to the host's socket, one JSON
@@ -14,7 +15,7 @@ import {
  *
  * `missing`: no connection was made (`detail` is the error's code; EACCES is a socket whose group
  * the app is not in). `lost`: the connection broke, or closed with no answer, after the request was
- * sent — a change may have been made, as after a `timeout`.
+ * sent; as after a `timeout`, a request that changes the box may have done so.
  */
 export type Unavailable = "missing" | "lost" | "refused" | "timeout" | "malformed";
 export type ClockServiceStatus =
@@ -68,7 +69,17 @@ function sendLine(
     let bytes = 0;
     let connected = false;
     const chunks: Buffer[] = [];
-    const socket = createConnection(socketPath);
+    let socket: ReturnType<typeof createConnection>;
+    try {
+      socket = createConnection(socketPath);
+    } catch (error) {
+      resolve({
+        ok: false,
+        reason: "missing",
+        detail: String((error as NodeJS.ErrnoException).code),
+      });
+      return;
+    }
     const finish = (result: Received) => {
       clearTimeout(timer);
       socket.destroy();
@@ -132,7 +143,7 @@ const SERVICES: ReadonlySet<unknown> = new Set(["on", "off", "stopped"]);
 export function boxHostClient(
   deps: { socketPath?: string; statusMs?: number; setMs?: number } = {},
 ): BoxHostClient {
-  const socketPath = deps.socketPath ?? DEFAULT_SOCKET_PATH;
+  const socketPath = isUnset(deps.socketPath) ? DEFAULT_SOCKET_PATH : deps.socketPath;
   return {
     async clockStatus() {
       const result = await exchange(socketPath, "clock.status", deps.statusMs ?? DEFAULT_STATUS_MS);
@@ -319,7 +330,7 @@ async function request<Value extends object, Refusal extends string>(
 export function boxHostRequests(
   deps: { socketPath?: string; readMs?: number; changeMs?: number } = {},
 ): BoxHostRequests {
-  const socketPath = deps.socketPath ?? DEFAULT_SOCKET_PATH;
+  const socketPath = isUnset(deps.socketPath) ? DEFAULT_SOCKET_PATH : deps.socketPath;
   const readMs = deps.readMs ?? DEFAULT_HOST_READ_MS;
   const changeMs = deps.changeMs ?? DEFAULT_HOST_CHANGE_MS;
   return {
