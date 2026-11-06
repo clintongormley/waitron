@@ -45,42 +45,12 @@ async function fixture() {
   ];
   return { root, roots, store, input, originals, coordinator };
 }
-it.each(["missing", "committed-exact", "unknown-or-nonempty"] as const)(
-  "unused-assignment authority refuses %s database evidence",
-  async (database) => {
-    const f = await fixture();
-    await expect(
-      f.store.prepare(
-        { ...f.input, authority: "local-empty-unused-assignment", database },
-        f.originals,
-      ),
-    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-  },
-);
-it.each(["marker-repair", "ownership-rebind", "finish-publication"] as const)(
-  "unused-assignment authority cannot authorise %s",
-  async (action) => {
-    const f = await fixture();
-    await expect(
-      f.store.prepare(
-        { ...f.input, authority: "local-empty-unused-assignment", action },
-        f.originals,
-      ),
-    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-  },
-);
-it.each([{}, { kind: "no-current-master", confirmed: true }])(
-  "unused-assignment authority refuses a malformed or contradictory register %j",
-  async (register) => {
-    const f = await fixture();
-    await expect(
-      f.store.prepare(
-        { ...f.input, authority: "local-empty-unused-assignment", register },
-        f.originals,
-      ),
-    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-  },
-);
+it("refuses an empty register object", async () => {
+  const f = await fixture();
+  await expect(f.store.prepare({ ...f.input, register: {} }, f.originals)).rejects.toMatchObject({
+    code: "setup.attempt_invalid",
+  });
+});
 it.each(["Consumed", "Not consumed", "Unknown"] as const)(
   "retains %s separately from the unchanged consumption evidence across restart",
   async (status) => {
@@ -162,41 +132,17 @@ it.each(["../escape", "", "not-a-uuid"])(
     });
   },
 );
-it("rejects unknown fields, private input, incomplete answers and impossible authority", async () => {
+it("rejects unknown fields, private input and incomplete answers", async () => {
   const f = await fixture();
   for (const input of [
     { ...f.input, password: "must-not-persist" },
     { ...f.input, register: { ...f.input.register, reference: "" } },
     { ...f.input, register: { ...f.input.register, consultedAt: "yesterday" } },
-    { ...f.input, authority: "local-empty-no-custodian", register: f.input.register },
-    {
-      ...f.input,
-      database: "missing",
-      authority: "local-empty-no-custodian",
-      register: { kind: "no-current-master", confirmed: true },
-    },
   ])
     await expect(f.store.prepare(input, f.originals)).rejects.toMatchObject({
       code: "setup.attempt_invalid",
     });
 });
-it.each(["marker-repair", "ownership-rebind", "finish-publication"] as const)(
-  "local-empty authority cannot authorise %s",
-  async (action) => {
-    const f = await fixture();
-    await expect(
-      f.store.prepare(
-        {
-          ...f.input,
-          authority: "local-empty-no-custodian",
-          register: { kind: "no-current-master", confirmed: true },
-          action,
-        },
-        f.originals,
-      ),
-    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-  },
-);
 
 it("refuses an evidence directory symlink without writing to its target", async () => {
   const f = await fixture();
@@ -389,18 +335,6 @@ it.each(["finish-publication"] as const)(
     ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
   },
 );
-it.each(["marker-repair", "ownership-rebind"] as const)(
-  "an unconsulted register cannot grant local-empty authority for %s",
-  async (action) => {
-    const f = await fixture();
-    await expect(
-      f.store.prepare(
-        { ...f.input, action, register: null, authority: "local-empty-no-custodian" },
-        f.originals,
-      ),
-    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-  },
-);
 
 it.each([
   ["original-password", "marker-repair", "missing"],
@@ -425,15 +359,15 @@ it.each([
   },
 );
 
-it.each([
-  ["local-empty-unused-assignment", "finish-publication", "committed-exact"],
-  ["original-password", "finish-publication", "empty-preactivation"],
-])("refuses impossible local observations %s/%s/%s", async (authority, action, database) => {
-  const f = await fixture();
-  await expect(
-    f.store.prepare({ ...f.input, authority, action, database, register: null }, f.originals),
-  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-});
+it.each([["original-password", "finish-publication", "empty-preactivation"]])(
+  "refuses impossible local observations %s/%s/%s",
+  async (authority, action, database) => {
+    const f = await fixture();
+    await expect(
+      f.store.prepare({ ...f.input, authority, action, database, register: null }, f.originals),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  },
+);
 it("a shared originals cache reads each archive file once and hands every caller its own list", async () => {
   const f = await fixture();
   const prepared = await f.store.prepare(f.input, f.originals);
@@ -571,3 +505,12 @@ it.each([
     code: "ENOENT",
   });
 });
+it.each(["local-empty-unused-assignment", "local-empty-no-custodian", "made-up-authority"])(
+  "refuses a record with authority %s",
+  async (authority) => {
+    const f = await fixture();
+    await expect(f.store.prepare({ ...f.input, authority }, f.originals)).rejects.toMatchObject({
+      code: "setup.attempt_invalid",
+    });
+  },
+);
