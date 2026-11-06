@@ -1012,17 +1012,17 @@ export function diffEntries(
         from: was.unitPrice,
         to: offer.unitPrice,
         ...(() => {
+          if (was.grossPrice !== offer.grossPrice) return { source: "this_menu" as const };
           const price = combined.get(productId)?.price;
-          return price?.state === "decided" && price.source.kind === "menu"
-            ? {
+          if (price?.state !== "decided" || price.source.kind !== "menu")
+            return { source: "shared_product" as const };
+          let setAt: ValueSource = price.source.from;
+          while (setAt.kind === "menu") setAt = setAt.from;
+          return setAt.kind === "product"
+            ? { source: "shared_product" as const }
+            : {
                 source: "included_menu" as const,
                 includedMenu: { id: price.source.menuId, name: price.source.menuName },
-              }
-            : {
-                source:
-                  was.grossPrice === offer.grossPrice
-                    ? ("shared_product" as const)
-                    : ("this_menu" as const),
               };
         })(),
       });
