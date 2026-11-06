@@ -564,6 +564,12 @@ called weaker than its name, the topic file lists what it does not see.
   `apps/server/src/me-api.test.ts`, `apps/server/src/till-api.test.ts` and the stored-hash case in
   `packages/identity/src/management-session.test.ts`, weaker than the rule: limited credentials,
   only the dashboard hash tried as a token; new login tables unguarded.
+- **A change carrying the dashboard's cookie is checked for its page by
+  `requireManagementChangeFromOwnPage`, ahead of every route on the main and waiting apps; register
+  none ahead of it.** Cost: another port's page changed the start screen (B3 PR 9). Guards: sweeps in
+  `apps/server/src/boot.management-origin.test.ts` and `apps/server/src/waiting-start.test.ts`,
+  weaker than their names: one attack, own app's mounted routes; recovery and first-setup apps
+  unseen. [Receipt](docs/developers/conventions-data.md#a-change-carrying-the-dashboards-sign-in-cookie-is-checked-for-the-page-that-sent-it).
 - **Declare a migration-set dependency in `requires` for SQL references, trigger targets/body
   tables and top-level writes into that set.** Guard: `scripts/module-graph-honesty.test.ts`,
   weaker than its name: text scan recognising fixed SQL shapes.

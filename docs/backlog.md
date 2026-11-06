@@ -5323,8 +5323,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A917 — the owner chooses the server's `.local` name instead of `waitron.local`** — DESIGNED; not scheduled; not built.
   [Detail](backlog/box.md#a917--the-owner-chooses-the-servers-local-name-instead-of-waitronlocal)
 
-- **Management changes do not check which page sent them.** OPEN, a server-wide decision (found by B3 PR 9's review). Several other management POST routes, among them `POST /api/box/free-space` and `POST /management-api/catalogues`, neither check `Origin`/`Sec-Fetch-Site` nor require a JSON body.
-  [Detail](backlog/box.md#management-changes-do-not-check-which-page-sent-them)
+- **Till changes do not check which page sent them.** OPEN (left open by A1371). The till and
+  device cookies are `SameSite=Strict`, which ignores the port, and the server-wide page check
+  judges only changes carrying the dashboard's cookie; a fix needs a till-side list of trusted pages.
+  [Detail](backlog/box.md#till-changes-do-not-check-which-page-sent-them)
 
 - **On a full disk, a box whose kept certificates cannot be used shows the connection set-up page,
   with no word of the full disk.**
