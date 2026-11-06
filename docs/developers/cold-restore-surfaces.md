@@ -5,6 +5,11 @@ reconnect any Cloud services. The restore entry, local certificate repair and fi
 rebinding already exist. The remaining operator work is configuring replacement addresses and
 installing a replacement Cloud tunnel and staff certificate.
 
+**6 November 2026:** A951-S's separate staff entrance adds an automatic certificate worker for
+connected test installations. Follow the [current staff-certificate workflow](cloud-connection.md#local-remote-access-integration)
+for that entrance. The audit below records the manual path exercised on 22 October; it does not
+qualify automatic renewal or a physical reboot on the managed public demo.
+
 ## Steps exercised on 2026-10-22
 
 This audit ran the existing tests at commit `2c46e869bd01d0eafab257abff3c27b54e60a229`, with

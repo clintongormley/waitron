@@ -316,8 +316,9 @@ backoff is shared with LAN sign-in: remote wrong guesses can temporarily block l
 sign-in for that same email address. Register the staff origin's `/management-api/google/callback`
 with Google before using Google sign-in there.
 
-A missing certificate or a staff port that will not bind is logged as `server.listen_failed` with
-`listener: staff`; it does not stop the local listener. The staff listener closes with the server.
+Before the first automatic certificate arrives, the staff entrance waits quietly. A broken TLS
+file or a staff port that will not bind is logged as `server.listen_failed` with `listener: staff`;
+it does not stop the local listener. A later certificate pass retries a failed staff port. The staff listener closes with the server.
 Setup, recovery, restricted starts and mirrors do not open it. Automatic tunnel connection,
 Settings on/off/status and qualification of certificate renewal on the public demo remain open
 in A951-S.
