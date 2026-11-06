@@ -1,3 +1,4 @@
+import { managementOriginFor } from "./request-from-box.js";
 import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
@@ -94,7 +95,7 @@ export function mountContentSuggestionsApi(
     }),
     (c) =>
       run(c, log, async () => {
-        if (c.req.header("origin") !== deps.managementOrigin)
+        if (c.req.header("origin") !== managementOriginFor(c, deps.managementOrigin))
           return c.json({ error: { code: "authorization.not_permitted", params: {} } }, 403);
         const sessionId = requireManagementSession(c);
         const body = await readRawJsonBody<unknown>(c);

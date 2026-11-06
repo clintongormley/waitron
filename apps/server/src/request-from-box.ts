@@ -40,6 +40,10 @@ export function isRemoteStaffRequest(c: Context): boolean {
   return c.env?.remoteStaff === true;
 }
 
+export function managementOriginFor(c: Context, localOrigin: string): string {
+  return isRemoteStaffRequest(c) ? new URL(c.req.url).origin : localOrigin;
+}
+
 export function managementSite(
   c: Context,
   local: { rpId: string; origin: string },
