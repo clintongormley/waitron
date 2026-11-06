@@ -1944,7 +1944,8 @@ export async function readReleaseReminders(
           workingOrderLines.groupId,
           groups.map((group) => group.id),
         ),
-        isNull(workingOrderLines.parentLineId),
+        // The NULL-parent index range includes historical top-level dishes.
+        isNull(sql`+${workingOrderLines.parentLineId}`),
         onShownBill(),
         not(isRecalledDish(tx)),
       ),
@@ -1999,7 +2000,8 @@ export async function readHeldCounts(
         inArray(orderGroups.partyId, [...partyIds]),
         eq(orderGroups.state, "held"),
         eq(parties.state, "open"),
-        isNull(workingOrderLines.parentLineId),
+        // The NULL-parent index range includes historical top-level dishes.
+        isNull(sql`+${workingOrderLines.parentLineId}`),
         onShownBill(),
         not(isRecalledDish(tx)),
       ),

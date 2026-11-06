@@ -6848,6 +6848,22 @@ _Formerly parts of B9 and Track C._ Open work:
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
+- **Index the uncollected, non-abandoned bill lookup in A1308's orders slice (A1370 follow-up).** The station
+  queue now reads tickets by uncollected, non-abandoned bill, but finding those bills still scans
+  `working_orders`. Add the partial index once the table-change hold ends.
+
+- **Measure the remaining top-level-dish reads (A1370 follow-up).** Check `parent_line_id is null`
+  reads across the server and venue-service, including `listOrderGroups`, `working-order`,
+  `move-bill`, `finish-party-service` and `party-allergy`. Measure their plans with history.
+
+- **Decide when a box refreshes SQLite's planner statistics (A1370 follow-up).** Running
+  `ANALYZE` or `PRAGMA optimize` is a separate lifecycle decision; no automatic run is
+  scheduled. Measure it on representative venue data before choosing its timing.
+
+- **Decide how kitchen queues order bills tied on time (A1370 follow-up).** The queue sorts by
+  ticket `queued_at` and line number; different query plans can reorder bills tied on both.
+  Check whether a product path produces those ties before choosing a stable tie-breaker.
+
 - **A1308. Rationalise the tables, background jobs, environment variables and files** (owner,
   2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
   [design](superpowers/specs/2026-11-02-rationalisation/README.md) is written, and the owner has

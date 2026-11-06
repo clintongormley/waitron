@@ -3696,3 +3696,15 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 - **Code every database test runs — `useVenueDb`'s hooks — never checks something already
   guaranteed**: that check's mutants change nothing, so each runs every test that reaches it, up to every database
   test, and on CI's runners some ran to Stryker's per-mutant timeout. Nothing guards it. [Receipt](ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost).
+
+## A query plan's index name does not bound its range
+
+When you check a query's cost, check which rows feed its index lookup. A1370's station-queue
+case kept passing when its bill subquery selected every bill: the plan still used
+`ticket_items_order_idx`, and the outer filter returned the same kitchen work.
+
+`apps/server/src/history-read-plans.test.ts` observes those candidates by wrapping the emitted
+subquery's selected bill id in an identity function on the test connection. It checks the ids
+the real subquery emits, alongside its plan and public result. Replacing the subquery's filter
+with a condition that admits every bill fails that check in the disposable control. Checking
+the index name alone missed the historical candidates being passed to the lookup.

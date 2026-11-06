@@ -112,7 +112,8 @@ export async function readStepFacts(
     .where(
       and(
         inArray(workingOrders.partyId, members),
-        isNull(workingOrderLines.parentLineId),
+        // The NULL-parent index range includes historical top-level dishes.
+        isNull(sql`+${workingOrderLines.parentLineId}`),
         onShownBill(),
         not(isRecalledDish(tx)),
       ),
