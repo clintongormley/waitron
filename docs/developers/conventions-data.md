@@ -5961,3 +5961,49 @@ A close that fails has its own trap. Closing the descriptor under a handle makes
 reject `EBADF`, and a stream made with `autoClose: false` stays tied to the handle after its read, so
 it receives that as an `error` event, and with no listener that exited 1 even though the rejection
 was caught. `openIfMatching` keeps a listener on its digest stream for this.
+
+## Root receipts moved on 2026-11-06
+
+These excerpts retain the root instruction receipts from `CLAUDE.md` at
+`59be31e3b72b2db0bc5e26f47a1ef305ea052d4c`. They are not new measurements.
+
+### Who may confirm or set the clock
+
+- **More than a minute behind the latest fiscal record, write no record and take/refund no new
+  money unless a clock confirmation covers it.** After replay, call `refuseWhileClockBehind` before
+  reader/refund/drawer work; pause both refund recovery loops. Recheck card-refund send/outcome in
+  their dating transaction after provider waits. Still store money already moved.
+  **Clock confirmation lifts the stop for one step back, with no gap limit; once a record is written
+  under it, readings stay within a minute of the latest record written since.** Sources: AEAT, two
+  agreeing devices at different addresses (not while the stop found at start-up lasts), an
+  administrator's own device, or a till's time confirmed on it by an administrator at any time or,
+  during a stop found at start-up once AEAT has not answered or cannot be asked, by a staff member
+  signed in on it (owner, 2026-10-31); never a box device outside development. Guards:
+  clock-behind-stop, payments clock-behind, fiscal chain/restart/confirmation, clock-confirm route
+  and `apps/server/src/clock-watch.start-up.test.ts` suites, weaker than the rule: only named routes/readings/requests; new money routes
+  unguarded. **The box sets its clock only through the host service, from AEAT, a till's time (a
+  staff member's during start-up, an administrator's at any time) or an administrator's own device —
+  never from devices alone and never while it keeps time over the internet — and every step it
+  verifies, or sees move the clock by over a second, is alerted and emailed.** Guards:
+  `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
+  `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`, weaker than the
+  rule: the handler's suite runs stubs, not systemd; the route suites cover the named routes only.
+  [Detail](conventions-data.md#the-box-sets-its-own-clock).
+
+### An installation name's minute: waits, refusals and repeats
+
+- **Restore and promotion start a new chain under a new installation name.**
+  Setup/restore/promotion use five symbols for the box's UTC minute, after another machine's clock
+  agrees within 30 seconds (no confirmation); a minute whose name is already in a history the box
+  reads is not taken (the box waits for the next free one if it starts within 150 seconds, and
+  otherwise refuses with when it can; the setup and restore pages count that down and check again by
+  themselves; owner, 2026-10-30, A1207), and no other name or record
+  refuses or moves it (owner, 2026-10-29, A1207), except that an attempt whose own pick is ahead of
+  the box's clock is refused until the clock reaches it. Start again keeps no record of the names
+  it deletes (owner, 2026-10-29, A1206): a box and the machine confirming its clock, wrong by the
+  same amount, can repeat a name. Setup/restore wait 90–150 seconds; promotion does not.
+  [Detail](conventions-data.md). Only preproduction throwaway skips
+  second-clock/history checks; refuse it outside preproduction. Restore takes one source;
+  working-time chain continues from its head. Guards: hour-selection/hour-clock/minute-selection-
+  unknown-name suites (the last weaker than its name) and
+  `packages/workforce/src/restore-continuation.test.ts`.

@@ -225,3 +225,32 @@ Cost: a `fast-xml-parser` 4 → 5 probe missed a decoding change because its exa
 ### The code is what matters; comments go stale
 
 Cost: about three in ten non-blank lines of non-test code were comment-only on 2026-09-24.
+
+## Root receipts moved on 2026-11-06
+
+These excerpts retain the root instruction receipts from `CLAUDE.md` at
+`59be31e3b72b2db0bc5e26f47a1ef305ea052d4c`. They are not new measurements. In the passage below, "this file" and "here" mean the root `CLAUDE.md`.
+
+### Keeping the root file small
+
+**Do not add:** one-off bugs with no reusable shape, anything the code or types already state plainly,
+or the narrative of what a session did — that belongs in the commit or the PR thread. **A count is a
+receipt that goes stale**, so describe the property, not the number. **If a guard enforces the rule, name the
+guard and stop** — do not also explain what the guard checks, because the failing test says that
+better and never goes stale. **The exception is a guard that is WEAKER than its name suggests**: one
+that reads text rather than running code, or that covers only part of what a reader would assume.
+Say so in the same line, briefly — "weaker than its name: reads text, not code" — and list what it
+misses in the topic file: a hedge is the one thing a failing test can never restore, because the
+case it never checks is the case you needed to know about.
+
+**Prune as well as append.** A superseded rule teaches a session to work around something that no
+longer exists; delete it and say so in the commit. Natural moments: while addressing review findings,
+and when writing a handoff — anything phrased "next time, remember to…" belongs here instead. A
+written rule with standing violations needs a guard, not another paragraph.
+
+**Contained, not capped** (owner decision 2026-10-07). This file has no byte limit and no gate on
+its size, and is never purged because it is a few bytes over a number. Keeping it small is regular
+housekeeping: move a receipt to its topic file and delete a superseded rule whenever you touch an
+entry, and run a pruning sweep when the file has grown noticeably — as a loose guide, past roughly
+the size the 2026-10-07 sweep left it (about 71 KB). Cost: this file is re-read on every step of every session and subagent. The 2026-10-07
+cost estimate is under [Always-loaded instruction cost](#always-loaded-instruction-cost).

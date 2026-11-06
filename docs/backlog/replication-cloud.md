@@ -1207,7 +1207,7 @@ joined (`pinPrimaryKeyTx` has one production caller, `apps/server/src/adopt.ts`)
 only its signer's own endorsement. So in a venue of three or more boxes, after two promotions, a box
 can hold a chart from a main box that no key it trusts vouched for. It then refuses to be promoted
 or to retire (`membership.held_untrusted`, reason `endorsement_invalid`), and the screen shows the
-generic text with no next step, which CLAUDE.md §3 allows only for a state only a bug produces. Two
+generic text with no next step, which the [refusal rule](../developers/conventions-ui.md#refusals-name-a-self-service-next-step) allows only for a state only a bug produces. Two
 sequences:
 
 - (a) Main box M; spares S1 and S2 join under M. M fails and S1 is promoted. Spare D joins under S1,

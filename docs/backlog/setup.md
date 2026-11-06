@@ -694,7 +694,8 @@ that operation's reader. Do not remove exact-content checks to make a large file
   default (`apps/server/src/setup-api.ts` `parseVenue`). So `server_fields.operation_description`
   (`apps/setup/src/i18n/strings/start.ts`, EN and ES), which says to shorten the text or remove
   hidden characters, can now be reached only by a filing module with no default or a faulty one —
-  a fault in Waitron, which a refusal should name as such (root `CLAUDE.md` §3, refusals). The
+  a fault in Waitron, which a refusal should name as such
+  ([conventions-ui.md](../developers/conventions-ui.md#refusals-name-a-self-service-next-step)). The
   mapping stays because `scripts/setup-wizard-fiscal-fields.test.ts` requires setup to word every
   venue field the Veri*Factu module can refuse. Wanted: reword it as a fault in Waitron.
 - **Loose ends left by A680 (#1718).**
