@@ -21,6 +21,7 @@ import {
   partyTables,
   workingOrderLines,
   venueLocationId,
+  readVenueClock,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -604,6 +605,7 @@ async function planKitchenTickets(
   const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
 
   const language = await readKitchenLanguage(tx);
+  const { timeZone } = await readVenueClock(tx);
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds, language);
   const passStations =
     mark === "HOLD"
@@ -759,6 +761,7 @@ async function planKitchenTickets(
             : {}),
         },
         route.printers[0]!,
+        timeZone,
       );
     const bytesByRest = new Map<string, Uint8Array>();
     const lineIds = [...new Set(onRoute.map((fired) => fired.workingOrderLineId))];
@@ -1310,6 +1313,7 @@ async function printCorrectionSlips(
 
   const lineIds = [...new Set(items.map((i) => i.workingOrderLineId))];
   const language = read?.language ?? (await readKitchenLanguage(tx));
+  const { timeZone } = await readVenueClock(tx);
   const unread = lineIds.filter((id) => read?.built.has(id) !== true);
   const itemsByLine: TicketItemsByLine = new Map([
     ...(read?.built ?? []),
@@ -1382,6 +1386,7 @@ async function printCorrectionSlips(
           orderNoteChange: change.orderNoteChange,
         },
         route.printers[0]!,
+        timeZone,
       );
       for (const printer of route.printers) {
         await enqueuePrintJob(tx, printer.printerId, bytes, "document", {
@@ -1451,6 +1456,7 @@ async function printCorrectionSlips(
           item: { ...item, qty: thousandthsToDecimal(thousandths) },
         },
         group[0]!,
+        timeZone,
       );
       for (const printer of group) {
         await enqueuePrintJob(tx, printer.printerId, bytes, "document", {
@@ -1848,6 +1854,7 @@ async function printMovedSlips(
 ): Promise<void> {
   const stationIds = [...new Set(items.map((item) => item.stationId))];
   const at = new Date().toISOString();
+  const { timeZone } = await readVenueClock(tx);
 
   const venue = venueOnce(tx);
   for (const stationId of stationIds) {
@@ -1891,6 +1898,7 @@ async function printMovedSlips(
           locale: language,
         },
         group[0]!,
+        timeZone,
       );
       for (const printer of group) {
         await enqueuePrintJob(tx, printer.printerId, bytes, "document", {

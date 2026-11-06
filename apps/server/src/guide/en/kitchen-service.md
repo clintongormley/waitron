@@ -83,7 +83,8 @@ check the station's outstanding notices separately. Splitting dishes between bil
 copies with the resulting kitchen work; it does not replace the guest's instructions.
 
 A reprint's heading shows when it was reprinted (`*** REPRINT 15:20 ***`). The time under the
-order number stays the time the first of its dishes was sent.
+order number stays the time the first of its dishes was sent. Read both times in your venue's
+time zone.
 
 ## Keep food visible until service ends {#service-lifetime}
 
@@ -311,6 +312,7 @@ only once it is removed.
 
 A dish sent after its period ended earlier the same business day, once the kitchen agreed, carries a mark
 with its period's name. On its kitchen ticket a line above it reads `** AFTER LUNCH — AGREED **`.
+A divider ends that run before the next unmarked dish; a new group or station heading also ends it.
 On the kitchen screen, the card shows **After Lunch — agreed** above it.
 
 Each department sets whether sending such a dish needs a manager, or a manager's PIN, with

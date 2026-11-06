@@ -982,7 +982,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
           `*** ${kitchenTicketWords("es").hold} ***`,
           ...header,
           `${kitchenTicketWords("es").group} 2 · POSTRES`,
-          "1.000 x FLAN",
+          "1 x FLAN",
         ],
       },
     ]);
@@ -999,7 +999,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
           `*** ${kitchenTicketWords("es").fire} ***`,
           ...header,
           `${kitchenTicketWords("es").group} 2 · POSTRES`,
-          "1.000 x FLAN",
+          "1 x FLAN",
         ],
       },
     ]);
@@ -1025,7 +1025,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
           `*** ${kitchenTicketWords("es").hold} ***`,
           ...(await head("Aviso 8", originalParty.tabId)),
           `${kitchenTicketWords("es").group} 2 · POSTRES`,
-          "1.000 x FLAN",
+          "1 x FLAN",
         ],
       },
     ]);
@@ -1050,7 +1050,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
     await inTx(v, (tx) => fireGroup(tx, v.cfg, receivingParty.partyId, held.id, fire));
 
     const atFire = (await jobs()).slice(fired);
-    expect(atFire).toEqual([{ kind: "document", lines: expect.arrayContaining(["1.000 x FLAN"]) }]);
+    expect(atFire).toEqual([{ kind: "document", lines: expect.arrayContaining(["1 x FLAN"]) }]);
     expect(atFire[0]!.lines[0]).not.toMatch(/\*\*\*/);
   });
 
@@ -1088,7 +1088,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
           `*** ${kitchenTicketWords("es").hold} ***`,
           ...(await head("Aviso 6", b2)),
           `${kitchenTicketWords("es").group} 2 · POSTRES`,
-          "1.000 x FLAN",
+          "1 x FLAN",
         ],
       },
     ]);

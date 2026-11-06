@@ -1149,7 +1149,7 @@ describe("sent work moved between a party's bills at two of its tables", () => {
     expect((await linesOf(v, main)).map((l) => l.name)).toEqual(["Burger", "Vino"]);
     expect(await printedBy(printerId)).toEqual([
       ...printed,
-      movedSlip(`${secondNumber} -> ${mainNumber}`, "Mesa 50", ["1.000 x TINTO"]),
+      movedSlip(`${secondNumber} -> ${mainNumber}`, "Mesa 50", ["1 x TINTO"]),
     ]);
     expect(noticesOn([main, second])).toEqual([
       ...notices,
@@ -1180,7 +1180,7 @@ describe("sent work moved between a party's bills at two of its tables", () => {
     ]);
     expect(await printedBy(printerId)).toEqual([
       ...printed,
-      movedSlip(`${mainNumber} -> ${secondNumber}`, "Mesa 51", ["1.000 x BURG"]),
+      movedSlip(`${mainNumber} -> ${secondNumber}`, "Mesa 51", ["1 x BURG"]),
     ]);
     expect(noticesOn([main, second])).toEqual([
       ...notices,

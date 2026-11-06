@@ -2366,7 +2366,7 @@ describe("A803 split", () => {
       printed
         .filter((lines) => lines[0] === `*** ${kitchenTicketWords("es").hold} ***`)
         .map((lines) => lines.at(-1)),
-    ).toEqual(["1.000 x FLAN", "1.000 x TARTA"]);
+    ).toEqual(["1 x FLAN", "1 x TARTA"]);
   });
 
   it("two whole bills with held dishes move each bill's own open draft with its own expected edit", async () => {

@@ -2808,7 +2808,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
     );
 
     expect(today.jobs).toHaveLength(1);
-    expect(today.jobs[0]!.join("\n")).toContain("2.000 x BURG");
+    expect(today.jobs[0]!.join("\n")).toContain("2 x BURG");
     expect(row.jobs).toEqual(today.jobs);
     expect(await dishesNamed(portions.billId, "Burger")).toEqual([members[0]]);
     expect(await cancelRecord(portions.billId, members)).toEqual({
@@ -2867,7 +2867,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
       );
 
       expect(today.jobs).toHaveLength(1);
-      expect(today.jobs[0]!.join("\n")).toContain("2.000 x BURG");
+      expect(today.jobs[0]!.join("\n")).toContain("2 x BURG");
       expect(row.jobs).toEqual(today.jobs);
       expect(await dishesNamed(portions.billId, "Burger")).toEqual([members[0]]);
       const events = await inTx(venue, (tx) =>
@@ -3496,9 +3496,9 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
       [2, 1000],
     ]);
     expect(jobs.flat().filter((printed) => printed.includes("BURG"))).toEqual([
-      "1.000 x BURG",
-      "1.000 x BURG",
-      "1.000 x BURG",
+      "1 x BURG",
+      "1 x BURG",
+      "1 x BURG",
     ]);
   });
 });

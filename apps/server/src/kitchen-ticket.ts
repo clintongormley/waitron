@@ -168,8 +168,12 @@ export function arrangeTicketItems(
   }));
 }
 
+function quantityText(qty: number | string): string {
+  return String(qty).replace(/\.0+$/, "");
+}
+
 function itemLine(item: KitchenTicketItem): string {
-  return `${item.qty}${item.unit ? ` ${item.unit}` : ""} x ${item.name}`;
+  return `${quantityText(item.qty)}${item.unit ? ` ${item.unit}` : ""} x ${item.name}`;
 }
 
 /**
@@ -249,7 +253,7 @@ function emitItem(
   const text = (s: string, indent: number): void => {
     for (const line of wrapText(prepareText(s), columns, indent)) b.line(line);
   };
-  const prefix = `${sign}${item.qty}${item.unit ? ` ${item.unit}` : ""} x `;
+  const prefix = `${sign}${quantityText(item.qty)}${item.unit ? ` ${item.unit}` : ""} x `;
   text(`${sign}${itemLine(item)}`, prepareText(prefix).length);
   for (const modifier of item.modifiers ?? []) text(`  + ${modifier}`, 4);
   for (const ref of item.crossRefs ?? []) text(`  > ${ref}`, 4);
@@ -354,6 +358,8 @@ function emitGrouped(
       mark = undefined;
     }
     current = item;
+    if (lateMarks && mark !== undefined && item.afterPeriod === undefined)
+      b.line("-".repeat(columns));
     if (lateMarks && item.afterPeriod !== undefined && item.afterPeriod !== mark)
       emitLateMark(b, item.afterPeriod, columns, locale);
     mark = item.afterPeriod;
@@ -374,10 +380,13 @@ function emitOrderLine(
   for (const part of wrapText(prepareText(line), columns, indent)) b.line(part);
 }
 
-function hhmm(at: Date): string {
-  const h = String(at.getHours()).padStart(2, "0");
-  const m = String(at.getMinutes()).padStart(2, "0");
-  return `${h}:${m}`;
+function hhmm(at: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(at);
 }
 
 /**
@@ -385,7 +394,11 @@ function hhmm(at: Date): string {
  * items all share one group names it once under the header; one spanning groups heads each group's
  * run of items instead, so callers put group-less items first and the rest in group order.
  */
-export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): Uint8Array {
+export function formatKitchenTicket(
+  ticket: KitchenTicket,
+  layout: EscSetting,
+  timeZone: string,
+): Uint8Array {
   const b = esc(layout).init();
   b.printArea(b.grid.widthDots);
   const { columns } = b.grid;
@@ -401,7 +414,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
   emitAllergyHeading(b, lists.flat(), columns, ticket.locale);
   if (ticket.reprintedAt !== undefined)
     text(
-      `*** ${kitchenTicketWords(ticket.locale).reprint.replace("{time}", () => hhmm(ticket.reprintedAt!))} ***`,
+      `*** ${kitchenTicketWords(ticket.locale).reprint.replace("{time}", () => hhmm(ticket.reprintedAt!, timeZone))} ***`,
     );
   if (ticket.mark !== undefined)
     text(`*** ${kitchenTicketWords(ticket.locale)[ticket.mark === "HOLD" ? "hold" : "fire"]} ***`);
@@ -416,7 +429,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
     const { order } = kitchenTicketWords(ticket.party.locale);
     emitOrderLine(b, `${order} ${ticket.orderNumber}`, ticket.party.name, columns);
   }
-  b.line(hhmm(ticket.firedAt));
+  b.line(hhmm(ticket.firedAt, timeZone));
   if (ticket.from !== undefined)
     text(`${kitchenTicketWords(ticket.from.locale).fromStation} ${ticket.from.stationName}`);
   emitKitchenNote(b, ticket.kitchenNote, columns);
@@ -437,7 +450,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
     const { alsoOnOrder: heading, onHold: held } = kitchenTicketWords(alsoOnOrder.locale);
     text(`-- ${heading} --`);
     for (const item of alsoOnOrder.items) {
-      const prefix = `${item.qty}${item.unit ? ` ${item.unit}` : ""} x `;
+      const prefix = `${quantityText(item.qty)}${item.unit ? ` ${item.unit}` : ""} x `;
       const line = `${prefix}${item.name} — ${item.stationName}${item.held ? ` ${held}` : ""}`;
       for (const part of wrapText(prepareText(line), columns, prepareText(prefix).length)) {
         b.line(part);
@@ -552,7 +565,11 @@ function slipHeader(slip: CorrectionSlip): string {
  * Prints the item through {@link emitItem}, as a ticket does; a HOLD CHANGED slip prefixes it with
  * + or -.
  */
-export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): Uint8Array {
+export function formatCorrectionSlip(
+  slip: CorrectionSlip,
+  layout: EscSetting,
+  timeZone: string,
+): Uint8Array {
   const b = esc(layout).init();
   b.printArea(b.grid.widthDots);
   const { columns } = b.grid;
@@ -564,7 +581,7 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): 
   text(slip.stationName);
   if (slip.tableLabel !== null) text(slip.tableLabel);
   text(slip.orderNumber);
-  b.line(hhmm(new Date(slip.at)));
+  b.line(hhmm(new Date(slip.at), timeZone));
   emitKitchenNote(b, slip.kitchenNote, columns);
   if (slip.item.group !== undefined) emitGroup(b, slip.item, [slip.item], columns, slip.locale);
   const sign = slip.kind !== "HOLD CHANGED" ? "" : slip.direction === "added" ? "+" : "-";
@@ -605,6 +622,7 @@ export interface KitchenNoteChangeSlip {
 export function formatKitchenNoteChangeSlip(
   slip: KitchenNoteChangeSlip,
   layout: EscSetting,
+  timeZone: string,
 ): Uint8Array {
   const b = esc(layout).init();
   b.printArea(b.grid.widthDots);
@@ -619,7 +637,7 @@ export function formatKitchenNoteChangeSlip(
   text(slip.stations.map((station) => station.stationName).join(" · "));
   if (slip.tableLabel !== null) text(slip.tableLabel);
   text(slip.orderNumber);
-  b.line(hhmm(new Date(slip.at)));
+  b.line(hhmm(new Date(slip.at), timeZone));
   emitKitchenNoteChange(b, slip.orderNoteChange, slip.locale, columns);
   if (onlyGroup !== undefined) emitGroup(b, onlyGroup, allItems, columns, slip.locale);
   for (const station of slip.stations) {
@@ -660,7 +678,7 @@ export function movedPlaceText(
   return place.counter ? kitchenTicketWords(locale).counter : partyTablesName(place.names);
 }
 
-export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array {
+export function formatMovedSlip(slip: MovedSlip, layout: EscSetting, timeZone: string): Uint8Array {
   const b = esc(layout).init();
   b.printArea(b.grid.widthDots);
   const { columns } = b.grid;
@@ -684,7 +702,7 @@ export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array
   emitOrderLine(b, `${words.order} ${numbers}`, slip.partyName, columns);
   labelled(words.fromPlace, slip.fromText);
   labelled(words.toPlace, slip.toText);
-  b.line(hhmm(new Date(slip.at)));
+  b.line(hhmm(new Date(slip.at), timeZone));
   emitKitchenNote(b, slip.kitchenNote, columns);
   emitGrouped(b, slip.items, columns, onlyGroupOf(slip.items), slip.locale, false);
   if (slip.held.length > 0) b.line(words.hold);

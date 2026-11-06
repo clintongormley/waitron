@@ -275,8 +275,8 @@ describe("A773 requested lifecycle: alerts and slips", () => {
       const after = await allSlips(tx, venue);
       const head = ["*** HOLD CHANGED ***", "Grill", "Split extras", "1", LATER_CLOCK, "GROUP 1"];
       const pair = [
-        [...head, "-1.000 x BURG", ""].join("\n"),
-        [...head, "+1.000 x BURG", "  * No salt", ""].join("\n"),
+        [...head, "-1 x BURG", ""].join("\n"),
+        [...head, "+1 x BURG", "  * No salt", ""].join("\n"),
       ];
       expect(newSince(before, after, "grill")).toEqual(pair);
       expect(newSince(before, after, "pass")).toEqual(pair);

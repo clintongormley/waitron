@@ -320,7 +320,7 @@ describe("A773 requested lifecycle: station move", () => {
       const added = (await slips(tx, venue.printers.kitchen)).slice(counts.kitchen);
       expect(added).toHaveLength(1);
       expect(added[0]).toContain("From Grill");
-      expect(added[0]).toContain("1.000 x BURG");
+      expect(added[0]).toContain("1 x BURG");
     });
   });
 

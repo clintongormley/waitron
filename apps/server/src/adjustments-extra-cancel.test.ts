@@ -288,7 +288,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
     expect(slip!.printerId).toBe(venue.printerId);
     expect(slip!.kind).toBe("document");
     expect(slip!.lines[0]).toBe(`*** ${kitchenTicketWords("es").changed} ***`);
-    expect(slip!.lines).toContain("1.000 x FULL BURG");
+    expect(slip!.lines).toContain("1 x FULL BURG");
     expect(slip!.lines).toContain("  + Fries");
     expect(slip!.lines).toContain("  + Salad");
     expect(slip!.lines).toContain(`  ${kitchenTicketWords("es").cancel} Gherkins`);
@@ -408,7 +408,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
     });
 
     expect(printed).toHaveLength(1);
-    expect(printed[0]!.lines).toContain("2.000 x FULL BURG");
+    expect(printed[0]!.lines).toContain("2 x FULL BURG");
     expect(printed[0]!.lines).toContain(`  ${kitchenTicketWords("es").cancel} Gherkins x2`);
     expect(recorded).toEqual([
       expect.objectContaining({ quantity: "2.000", cancelledExtra: "Gherkins x2" }),
@@ -431,7 +431,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
     });
 
     expect(printed).toHaveLength(1);
-    expect(printed[0]!.lines).toContain("1.000 x FULL BURG");
+    expect(printed[0]!.lines).toContain("1 x FULL BURG");
     expect(printed[0]!.lines).toContain(`  ${kitchenTicketWords("es").cancel} Gherkins x2`);
     expect(recorded).toEqual([
       expect.objectContaining({ quantity: "1.000", cancelledExtra: "Gherkins x2" }),
@@ -550,8 +550,8 @@ describe("cancelling an extra of a held dish (B11g)", () => {
       const lines = printed[0]!.lines;
       expect(lines[0]).toBe(`*** ${kitchenTicketWords("es").holdChanged} ***`);
       expect(lines).toContain(`${kitchenTicketWords("es").group} 1`);
-      expect(lines.slice(lines.indexOf("1.000 x FULL BURG"))).toEqual([
-        "1.000 x FULL BURG",
+      expect(lines.slice(lines.indexOf("1 x FULL BURG"))).toEqual([
+        "1 x FULL BURG",
         "  + Fries",
         "  + Salad",
         `  ${kitchenTicketWords("es").cancel} Gherkins`,
@@ -674,7 +674,7 @@ describe("cancelling an extra of a held dish (B11g)", () => {
 
       expect(printed.map((job) => job.printerId)).toEqual([venue.printerId]);
       expect(printed[0]!.lines[0]).toBe(`*** ${kitchenTicketWords("es").holdChanged} ***`);
-      expect(printed[0]!.lines).toContain("1.000 x FULL BURG");
+      expect(printed[0]!.lines).toContain("1 x FULL BURG");
       expect(printed.some((job) => job.printerId === barPrinterId)).toBe(false);
       expect(await noticesOf(barId)).toEqual([
         { kind: "changed", lineName: "BARB", cancelledExtra: "Gherkins" },

@@ -16,6 +16,7 @@ import {
   workingOrders,
   workingOrderLines,
   products,
+  locations,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -45,6 +46,64 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 beforeAll(() => useSplitExtrasDb(suite.db));
 afterEach(() => vi.restoreAllMocks());
 const jobs = () => suite.db.select().from(printJobs);
+
+it("uses the saved venue zone for every new paper and keeps already queued bytes", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-07-17T23:30:00Z"));
+  try {
+    const v = await setupSplitExtrasVenue();
+    const id = await withTransaction(suite.db, async (tx) => {
+      await tx.update(locations).set({ timeZone: "Atlantic/Canary" });
+      return fireNewOrder(tx, v.cfg, [{ productId: v.products.burger, quantity: "2" }]);
+    });
+    const original = await jobs();
+    expect(original).toHaveLength(2);
+    for (const job of original) expect(printedLines(job.payload)).toContain("00:30");
+    const [fired] = await suite.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, id));
+    await withTransaction(suite.db, async (tx) => {
+      await tx.update(locations).set({ timeZone: "Europe/Madrid" });
+      await enqueueCorrectionSlips(
+        tx,
+        v.cfg,
+        id,
+        [
+          {
+            workingOrderLineId: fired!.workingOrderLineId,
+            stationId: fired!.stationId!,
+            quantity: 1000,
+            wasStarted: false,
+          },
+        ],
+        "VOID",
+      );
+      await enqueueOrderKitchenNoteChange(tx, v.cfg, [id], { before: "Together", after: null });
+      const sent = (await readSentWork(tx, id))!;
+      await enqueueMovedSlips(
+        tx,
+        v.cfg,
+        { ...sent, places: { ...sent.places, orderNumber: sent.places.orderNumber + 1 } },
+        id,
+      );
+      await reprintOrderTickets(tx, v.cfg, id);
+    });
+    const all = await jobs();
+    const papers = all
+      .filter((job) => !original.some((old) => old.id === job.id))
+      .map((job) => printedLines(job.payload));
+    expect(papers).toHaveLength(8);
+    for (const heading of ["*** VOID ***", "*** KITCHEN NOTE REMOVED ***", "*** MOVED ***"])
+      expect(papers.filter((paper) => paper[0] === heading)).toHaveLength(2);
+    for (const paper of papers) expect(paper).toContain("01:30");
+    expect(papers.filter((paper) => paper[0] === "*** REPRINT 01:30 ***")).toHaveLength(2);
+    for (const old of original)
+      expect(all.find((job) => job.id === old.id)?.payload).toEqual(old.payload);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 describe("A964 venue language", () => {
   it.each(["en", "es"])(
@@ -146,7 +205,7 @@ describe("A964 venue language", () => {
       expect(
         papers.filter((p) => p[0]?.startsWith(`*** ${w.reprint.split("{time}")[0]}`)),
       ).toHaveLength(2);
-      expect(papers.flat()).toContain("1.000 x BURG");
+      expect(papers.flat()).toContain("1 x BURG");
       for (const heading of [w.void, `${w.movedTo} FRYER`, w.moved]) {
         const paper = papers.find((p) => p[0] === `*** ${heading} ***`)!;
         expect(paper).toContain(`${w.forKitchen}Recorded order note`);
@@ -245,7 +304,7 @@ it("A964 language boundaries keep weighted units and all recorded presentation n
   const before = await jobs();
   expect(before).toHaveLength(2);
   for (const j of before) {
-    expect(printedLines(j.payload)).toContain("1.000 DE-unit x Pass roast (Pass size)");
+    expect(printedLines(j.payload)).toContain("1 DE-unit x Pass roast (Pass size)");
     expect(printedLines(j.payload)).toContain("  + Pass list: Pass choice");
   }
   await withTransaction(suite.db, async (tx) => {
@@ -261,7 +320,7 @@ it("A964 language boundaries keep weighted units and all recorded presentation n
   for (const j of added) {
     const lines = printedLines(j.payload);
     expect(lines[0]).toContain(kitchenTicketWords("es").reprint.split("{time}")[0]);
-    expect(lines).toContain("1.000 DE-unit x Pass roast (Pass size)");
+    expect(lines).toContain("1 DE-unit x Pass roast (Pass size)");
     expect(lines).toContain("  + Pass list: Pass choice");
     for (const word of [
       "Staff roast",
@@ -327,7 +386,7 @@ it.each(["en", "es"] as const)(
     expect(papers.filter((p) => p.includes(String(ids.delivered)))).toHaveLength(2);
     for (const paper of papers) {
       expect(paper).toContain("Split extras");
-      expect(paper).toContain("1.000 x BURG");
+      expect(paper).toContain("1 x BURG");
     }
   },
 );
@@ -440,7 +499,7 @@ it.each(["en", "es"] as const)(
     for (const job of added) {
       const paper = printedLines(job.payload);
       expect(paper[0]).toBe(`*** ${kitchenTicketWords(language).void} ***`);
-      expect(paper.filter((line) => line.includes("x BURG"))).toEqual(["2.000 x BURG"]);
+      expect(paper.filter((line) => line.includes("x BURG"))).toEqual(["2 x BURG"]);
       expect(paper).toContain(
         "  > " +
           kitchenTicketWords(language)

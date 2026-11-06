@@ -569,15 +569,15 @@ describe("permanent group numbers on kitchen work", () => {
     const before = (await printed(v)).length;
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, into.tabId));
     const paper = (await printed(v)).slice(before).join("\n");
-    expect(paper).toContain("GROUP 1 · Terrace 4, 9 · MAINS\n1.000 x K-STEAK");
-    expect(paper).toContain("GROUP 1 · Terrace 7 · MAINS\n1.000 x K-STEAK");
-    expect(paper).not.toContain("2.000 x K-STEAK");
+    expect(paper).toContain("GROUP 1 · Terrace 4, 9 · MAINS\n1 x K-STEAK");
+    expect(paper).toContain("GROUP 1 · Terrace 7 · MAINS\n1 x K-STEAK");
+    expect(paper).not.toContain("2 x K-STEAK");
     const beforeMove = (await printed(v)).length;
     await move(v, into.partyId, [{ lineId: b.lineIds[0]!, quantity: "1" }], { groupId: a.id });
     const corrections = (await printed(v)).slice(beforeMove);
     expect(corrections).toHaveLength(2);
-    expect(corrections[0]).toContain("GROUP 1 · Terrace 7 · MAINS\n-1.000 x K-STEAK");
-    expect(corrections[1]).toContain("GROUP 1 · Terrace 4, 9 · MAINS\n+1.000 x K-STEAK");
+    expect(corrections[0]).toContain("GROUP 1 · Terrace 7 · MAINS\n-1 x K-STEAK");
+    expect(corrections[1]).toContain("GROUP 1 · Terrace 4, 9 · MAINS\n+1 x K-STEAK");
     const next = await submit(v, into.partyId, [{ release: "hold", lines: [line(v, "flan")] }]);
     expect(next.groups[0]).toMatchObject({ displayNumber: 2, numberPartyId: into.partyId });
     expect(next.groups[0]).not.toHaveProperty("numberPartyLabel");
@@ -637,7 +637,7 @@ describe("permanent group numbers on kitchen work", () => {
     expect(paper[0]).toContain("HOLD CHANGED");
     expect(paper[0]).toContain("GROUP 5 · DESSERTS\n");
     expect(paper[0]).not.toMatch(/^GROUP 3\b/m);
-    expect(paper[0]).toContain("+1.000 x K-FLAN");
+    expect(paper[0]).toContain("+1 x K-FLAN");
   });
 
   it("reprints permanent numbers in the changed firing order", async () => {
@@ -650,9 +650,9 @@ describe("permanent group numbers on kitchen work", () => {
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, s.tabId));
 
     const paper = (await printed(v)).slice(before).join("\n");
-    expect(paper).toContain("GROUP 5 · DESSERTS\n2.000 x K-FLAN");
-    expect(paper).toContain("GROUP 3 · STARTERS\n4.000 x K-OCTO");
-    expect(paper).toContain("GROUP 4 · MAINS\n2.000 x K-STEAK");
+    expect(paper).toContain("GROUP 5 · DESSERTS\n2 x K-FLAN");
+    expect(paper).toContain("GROUP 3 · STARTERS\n4 x K-OCTO");
+    expect(paper).toContain("GROUP 4 · MAINS\n2 x K-STEAK");
     expect(paper.indexOf("GROUP 5 · DESSERTS\n")).toBeLessThan(
       paper.indexOf("GROUP 3 · STARTERS\n"),
     );
@@ -675,8 +675,8 @@ describe("permanent group numbers on kitchen work", () => {
     const paper = (await printed(v)).slice(before).filter((p) => p.includes("K-FLAN"));
     expect(paper).toHaveLength(1);
     expect(paper[0]).toContain("GROUP 5 · DESSERTS\n");
-    expect(paper[0]).toContain("GROUP 5 · DESSERTS\n2.000 x K-FLAN");
-    expect(paper[0]).toContain("GROUP 3 · STARTERS\n4.000 x K-OCTO");
+    expect(paper[0]).toContain("GROUP 5 · DESSERTS\n2 x K-FLAN");
+    expect(paper[0]).toContain("GROUP 3 · STARTERS\n4 x K-OCTO");
     expect(paper[0]!.indexOf("GROUP 5 · DESSERTS\n")).toBeLessThan(
       paper[0]!.indexOf("GROUP 3 · STARTERS\n"),
     );
@@ -2646,10 +2646,10 @@ describe("a group split across bills of its party", () => {
       [
         ...(await billHead(v, s, s.tabId)),
         "GROUP 4 · MAINS",
-        `1.000 x ${DISHES.steak.kitchen}`,
-        `1.000 x ${DISHES.fish.kitchen}`,
+        `1 x ${DISHES.steak.kitchen}`,
+        `1 x ${DISHES.fish.kitchen}`,
       ],
-      [...(await billHead(v, s, checkId)), "GROUP 4 · MAINS", `1.000 x ${DISHES.steak.kitchen}`],
+      [...(await billHead(v, s, checkId)), "GROUP 4 · MAINS", `1 x ${DISHES.steak.kitchen}`],
     ]);
     const fired = sortedByBill(await dishTickets(s.partyId, v.productId.steak), s.tabId);
     expect(fired).toMatchObject([
@@ -4256,23 +4256,15 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
 
     const first = await seated(v);
     await submit(v, first.partyId, [{ release: "fire", lines: [line(v, "steak", "3")] }]);
-    expect(steaksOn((await printed(v)).at(-1)!)).toEqual([three("3\\.000")]);
+    expect(steaksOn((await printed(v)).at(-1)!)).toEqual([three("3")]);
 
     await inTx((tx) => setStationPrinting(tx, { ticketGrouping: "separate" }));
     const second = await seated(v);
     await submit(v, second.partyId, [{ release: "fire", lines: [line(v, "steak", "3")] }]);
-    expect(steaksOn((await printed(v)).at(-1)!)).toEqual([
-      three("1\\.000"),
-      three("1\\.000"),
-      three("1\\.000"),
-    ]);
+    expect(steaksOn((await printed(v)).at(-1)!)).toEqual([three("1"), three("1"), three("1")]);
 
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, first.tabId));
-    expect(steaksOn((await printed(v)).at(-1)!)).toEqual([
-      three("1\\.000"),
-      three("1\\.000"),
-      three("1\\.000"),
-    ]);
+    expect(steaksOn((await printed(v)).at(-1)!)).toEqual([three("1"), three("1"), three("1")]);
 
     const firstBill = await bill(first.tabId);
     expect(firstBill.map((row) => row.quantity)).toEqual([1000, 1000, 1000]);
@@ -4337,8 +4329,8 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
       },
     ]);
     const combined = (await printed(v)).at(-1)!;
-    expect(ofDish(combined, "K-HAKE")).toEqual(["350.000 g x K-HAKE", "350.000 g x K-HAKE"]);
-    expect(ofDish(combined, "K-STEAK")).toEqual([expect.stringMatching(/^2\.000 .*x K-STEAK$/)]);
+    expect(ofDish(combined, "K-HAKE")).toEqual(["350 g x K-HAKE", "350 g x K-HAKE"]);
+    expect(ofDish(combined, "K-STEAK")).toEqual([expect.stringMatching(/^2 .*x K-STEAK$/)]);
     expect(ofDish(combined, "K-HAM")).toEqual(["0.375 kg x K-HAM"]);
 
     await inTx((tx) => setStationPrinting(tx, { ticketGrouping: "separate" }));
@@ -4347,10 +4339,10 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
       { release: "fire", lines: [hake("350"), line(v, "steak", "2")] },
     ]);
     const separate = (await printed(v)).at(-1)!;
-    expect(ofDish(separate, "K-HAKE")).toEqual(["350.000 g x K-HAKE"]);
+    expect(ofDish(separate, "K-HAKE")).toEqual(["350 g x K-HAKE"]);
     expect(ofDish(separate, "K-STEAK")).toEqual([
-      expect.stringMatching(/^1\.000 .*x K-STEAK$/),
-      expect.stringMatching(/^1\.000 .*x K-STEAK$/),
+      expect.stringMatching(/^1 .*x K-STEAK$/),
+      expect.stringMatching(/^1 .*x K-STEAK$/),
     ]);
   });
 
@@ -4369,7 +4361,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
       expect(steaks.map((row) => row.quantity)).toEqual([1000, 1000, 1000]);
       const ticket = ticketLines((await printed(v)).at(-1)!);
       expect(ticket.filter((text) => text.includes(DISHES.steak.kitchen))).toEqual([
-        expect.stringMatching(/^3\.000 .*x K-STEAK$/),
+        expect.stringMatching(/^3 .*x K-STEAK$/),
       ]);
     },
   );
@@ -4499,8 +4491,8 @@ describe("advance HOLD tickets (Task 6)", () => {
       [
         ...(await head(v, s)),
         "GROUP 4 · MAINS",
-        `1.000 x ${DISHES.steak.kitchen}`,
-        `2.000 x ${DISHES.fish.kitchen}`,
+        `1 x ${DISHES.steak.kitchen}`,
+        `2 x ${DISHES.fish.kitchen}`,
       ],
     ]);
     for (const group of [s.warm, s.mains, s.desserts]) {
@@ -4563,8 +4555,8 @@ describe("advance HOLD tickets (Task 6)", () => {
         "*** HOLD ***",
         ...(await head(v, s)),
         "GROUP 4 · MAINS",
-        `2.000 x ${DISHES.steak.kitchen}`,
-        `1.000 x ${DISHES.fish.kitchen}`,
+        `2 x ${DISHES.steak.kitchen}`,
+        `1 x ${DISHES.fish.kitchen}`,
       ]);
       expect(jobs.map((job) => job[0])).toEqual([
         expect.not.stringContaining("***"),
@@ -4573,7 +4565,7 @@ describe("advance HOLD tickets (Task 6)", () => {
         "*** HOLD ***",
         "*** HOLD ***",
       ]);
-      expect(jobs[4]!.slice(5)).toEqual(["GROUP 5 · DESSERTS", `2.000 x ${DISHES.flan.kitchen}`]);
+      expect(jobs[4]!.slice(5)).toEqual(["GROUP 5 · DESSERTS", `2 x ${DISHES.flan.kitchen}`]);
       expect(await linkedJobs()).toEqual(await jobIds(v));
       expect((await groupRow(s.mains)).holdPrintedAt).not.toBeNull();
       expect((await groupRow(s.drinks)).holdPrintedAt).toBeNull();
@@ -4591,8 +4583,8 @@ describe("advance HOLD tickets (Task 6)", () => {
       await move(v, s.partyId, [{ lineId: steak.id, quantity: "1" }], { groupId: s.desserts });
 
       expect(await printedSince(v, 5)).toEqual([
-        ["*** HOLD CHANGED ***", ...header, "GROUP 4 · MAINS", `-1.000 x ${DISHES.steak.kitchen}`],
-        ["*** HOLD CHANGED ***", ...header, "GROUP 5 · MAINS", `+1.000 x ${DISHES.steak.kitchen}`],
+        ["*** HOLD CHANGED ***", ...header, "GROUP 4 · MAINS", `-1 x ${DISHES.steak.kitchen}`],
+        ["*** HOLD CHANGED ***", ...header, "GROUP 5 · MAINS", `+1 x ${DISHES.steak.kitchen}`],
       ]);
       expect(await noticesAt(v)).toEqual([
         {
@@ -4607,7 +4599,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, fish.lineNo, undefined, MIA));
 
       expect(await printedSince(v, 7)).toEqual([
-        ["*** HOLD CANCELLED ***", ...header, "GROUP 4 · MAINS", `1.000 x ${DISHES.fish.kitchen}`],
+        ["*** HOLD CANCELLED ***", ...header, "GROUP 4 · MAINS", `1 x ${DISHES.fish.kitchen}`],
       ]);
       expect((await noticesAt(v)).at(-1)).toEqual({
         kind: "void",
@@ -4620,7 +4612,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       await fire(v, s.partyId, s.mains);
 
       expect(await printedSince(v, 8)).toEqual([
-        ["*** FIRE ***", ...header, "GROUP 4 · MAINS", `1.000 x ${DISHES.steak.kitchen}`],
+        ["*** FIRE ***", ...header, "GROUP 4 · MAINS", `1 x ${DISHES.steak.kitchen}`],
       ]);
       // The FIRE slip is linked as the fire and HOLD tickets are; the corrections are not.
       expect(await linkedJobs()).toEqual([...linkedBefore, (await jobIds(v)).at(-1)]);
@@ -4639,8 +4631,8 @@ describe("advance HOLD tickets (Task 6)", () => {
           "*** FIRE ***",
           ...(await head(v, s)),
           "GROUP 4 · MAINS",
-          `2.000 x ${DISHES.steak.kitchen}`,
-          `1.000 x ${DISHES.fish.kitchen}`,
+          `2 x ${DISHES.steak.kitchen}`,
+          `1 x ${DISHES.fish.kitchen}`,
         ],
       ]);
     });
@@ -4655,8 +4647,8 @@ describe("advance HOLD tickets (Task 6)", () => {
         "*** HOLD ***",
         ...(await head(v, s)),
         "GROUP 4 · MAINS",
-        `2.000 x ${DISHES.steak.kitchen}`,
-        `1.000 x ${DISHES.fish.kitchen}`,
+        `2 x ${DISHES.steak.kitchen}`,
+        `1 x ${DISHES.fish.kitchen}`,
       ]);
 
       const checkId = await splitToCheck(
@@ -4679,7 +4671,7 @@ describe("advance HOLD tickets (Task 6)", () => {
           at,
           "HOLD",
           "GROUP 4 · MAINS",
-          `1.000 x ${DISHES.steak.kitchen}`,
+          `1 x ${DISHES.steak.kitchen}`,
         ],
       ]);
       expect(await noticesAt(v)).toEqual([
@@ -4693,14 +4685,14 @@ describe("advance HOLD tickets (Task 6)", () => {
           "*** FIRE ***",
           ...(await head(v, s)),
           "GROUP 4 · MAINS",
-          `1.000 x ${DISHES.steak.kitchen}`,
-          `1.000 x ${DISHES.fish.kitchen}`,
+          `1 x ${DISHES.steak.kitchen}`,
+          `1 x ${DISHES.fish.kitchen}`,
         ],
         [
           "*** FIRE ***",
           ...(await billHead(v, s, checkId)),
           "GROUP 4 · MAINS",
-          `1.000 x ${DISHES.steak.kitchen}`,
+          `1 x ${DISHES.steak.kitchen}`,
         ],
       ]);
       const [tabSlip, checkSlip] = (await jobIds(v)).slice(6);
@@ -4731,7 +4723,7 @@ describe("advance HOLD tickets (Task 6)", () => {
           "*** HOLD CHANGED ***",
           ...(await head(v, s)),
           "GROUP 4 · MAINS",
-          `+1.000 x ${DISHES.steak.kitchen}`,
+          `+1 x ${DISHES.steak.kitchen}`,
         ],
       ]);
       expect(await noticesAt(v)).toEqual([
@@ -4751,8 +4743,8 @@ describe("advance HOLD tickets (Task 6)", () => {
       const created = (await groupsOf(s.partyId)).groups.at(-1)!;
       expect(created.position).toBe(6);
       expect(await printedSince(v, 5)).toEqual([
-        ["*** HOLD CHANGED ***", ...header, "GROUP 4 · MAINS", `-1.000 x ${DISHES.steak.kitchen}`],
-        ["*** HOLD ***", ...header, "GROUP 6 · MAINS", `1.000 x ${DISHES.steak.kitchen}`],
+        ["*** HOLD CHANGED ***", ...header, "GROUP 4 · MAINS", `-1 x ${DISHES.steak.kitchen}`],
+        ["*** HOLD ***", ...header, "GROUP 6 · MAINS", `1 x ${DISHES.steak.kitchen}`],
       ]);
       expect((await groupRow(created.id)).holdPrintedAt).not.toBeNull();
       expect((await noticesAt(v)).map((notice) => notice.direction)).toEqual(["removed"]);
@@ -4768,8 +4760,8 @@ describe("advance HOLD tickets (Task 6)", () => {
       await move(v, s.partyId, [{ lineId: fish.id, quantity: "1" }], { groupId: s.warm });
 
       expect(await printedSince(v, 5)).toEqual([
-        ["*** HOLD CHANGED ***", ...header, "GROUP 4 · MAINS", `-1.000 x ${DISHES.fish.kitchen}`],
-        ["*** HOLD CHANGED ***", ...header, "GROUP 3 · MAINS", `+1.000 x ${DISHES.fish.kitchen}`],
+        ["*** HOLD CHANGED ***", ...header, "GROUP 4 · MAINS", `-1 x ${DISHES.fish.kitchen}`],
+        ["*** HOLD CHANGED ***", ...header, "GROUP 3 · MAINS", `+1 x ${DISHES.fish.kitchen}`],
       ]);
     });
 
@@ -4817,14 +4809,14 @@ describe("advance HOLD tickets (Task 6)", () => {
           "*** HOLD CHANGED ***",
           ...header,
           "GROUP 1 · MAINS",
-          `-1.000 x ${DISHES.steak.kitchen}`,
+          `-1 x ${DISHES.steak.kitchen}`,
           "  * rare",
         ],
         [
           "*** HOLD CHANGED ***",
           ...header,
           "GROUP 1 · MAINS",
-          `+1.000 x ${DISHES.steak.kitchen}`,
+          `+1 x ${DISHES.steak.kitchen}`,
           "  * no pepper",
         ],
       ]);
@@ -4847,14 +4839,14 @@ describe("advance HOLD tickets (Task 6)", () => {
           "*** HOLD CHANGED ***",
           ...header,
           "GROUP 1 · MAINS",
-          `-1.000 x ${DISHES.steak.kitchen}`,
+          `-1 x ${DISHES.steak.kitchen}`,
           "  * rare",
         ],
         [
           "*** HOLD CHANGED ***",
           ...header,
           "GROUP 1 · MAINS",
-          `+1.000 x ${DISHES.steak.kitchen}`,
+          `+1 x ${DISHES.steak.kitchen}`,
           "  * well done",
         ],
       ]);
@@ -4876,7 +4868,7 @@ describe("advance HOLD tickets (Task 6)", () => {
         "*** HOLD CHANGED ***",
         ...header,
         "GROUP 1 · MAINS",
-        `+1.000 x ${DISHES.steak.kitchen}`,
+        `+1 x ${DISHES.steak.kitchen}`,
         "  * well done",
       ];
       expect(await printedSince(v, 1)).toEqual([
@@ -4884,7 +4876,7 @@ describe("advance HOLD tickets (Task 6)", () => {
           "*** HOLD CHANGED ***",
           ...header,
           "GROUP 1 · MAINS",
-          `-1.000 x ${DISHES.steak.kitchen}`,
+          `-1 x ${DISHES.steak.kitchen}`,
           "  * rare",
         ],
         given,
@@ -4913,14 +4905,14 @@ describe("advance HOLD tickets (Task 6)", () => {
           "*** HOLD CHANGED ***",
           ...header,
           "GROUP 1 · MAINS",
-          `-1.000 x ${DISHES.steak.kitchen}`,
+          `-1 x ${DISHES.steak.kitchen}`,
           "  * rare",
         ],
         [
           "*** HOLD CHANGED ***",
           ...header,
           "GROUP 1 · MAINS",
-          `+1.000 x ${DISHES.steak.kitchen}`,
+          `+1 x ${DISHES.steak.kitchen}`,
           `  + ${DISHES.sauce.staff}`,
           "  * rare",
         ],
@@ -4950,8 +4942,8 @@ describe("advance HOLD tickets (Task 6)", () => {
       await changeLine(v, s.tabId, dish!.lineNo, { options: [tuna.well] }, MIA);
 
       expect(await printedSince(v, 1)).toEqual([
-        ["*** HOLD CHANGED ***", ...header, "GROUP 1", "-1.000 x K-TUNA", "  + K-DONE: K-RARE"],
-        ["*** HOLD CHANGED ***", ...header, "GROUP 1", "+1.000 x K-TUNA", "  + K-DONE: K-WELL"],
+        ["*** HOLD CHANGED ***", ...header, "GROUP 1", "-1 x K-TUNA", "  + K-DONE: K-RARE"],
+        ["*** HOLD CHANGED ***", ...header, "GROUP 1", "+1 x K-TUNA", "  + K-DONE: K-WELL"],
       ]);
       expect((await noticesWithNotes(v)).map((notice) => notice.direction)).toEqual([
         "removed",
@@ -5004,8 +4996,8 @@ describe("advance HOLD tickets (Task 6)", () => {
       await changeLine(v, s.tabId, steak.lineNo, { quantity: "1" }, MIA);
 
       expect(await printedSince(v, 5)).toEqual([
-        ["*** HOLD CHANGED ***", ...header, "GROUP 4 · MAINS", `+1.000 x ${DISHES.steak.kitchen}`],
-        ["*** HOLD CHANGED ***", ...header, "GROUP 4 · MAINS", `-2.000 x ${DISHES.steak.kitchen}`],
+        ["*** HOLD CHANGED ***", ...header, "GROUP 4 · MAINS", `+1 x ${DISHES.steak.kitchen}`],
+        ["*** HOLD CHANGED ***", ...header, "GROUP 4 · MAINS", `-2 x ${DISHES.steak.kitchen}`],
       ]);
       expect(await noticesAt(v)).toEqual([
         { kind: "changed", lineName: DISHES.steak.kitchen, quantity: "1.000", direction: "added" },
@@ -5036,7 +5028,7 @@ describe("advance HOLD tickets (Task 6)", () => {
           "*** HOLD CANCELLED ***",
           ...(await head(v, s)),
           "GROUP 4 · MAINS",
-          `1.000 x ${DISHES.fish.kitchen}`,
+          `1 x ${DISHES.fish.kitchen}`,
         ],
       ]);
       expect(await noticesAt(v)).toEqual([
@@ -5056,13 +5048,8 @@ describe("advance HOLD tickets (Task 6)", () => {
       await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, flan.lineNo, undefined, MIA));
 
       expect(await printedSince(v, 5)).toEqual([
-        ["*** HOLD CANCELLED ***", ...header, "GROUP 4 · MAINS", `1.000 x ${DISHES.steak.kitchen}`],
-        [
-          "*** HOLD CANCELLED ***",
-          ...header,
-          "GROUP 5 · DESSERTS",
-          `2.000 x ${DISHES.flan.kitchen}`,
-        ],
+        ["*** HOLD CANCELLED ***", ...header, "GROUP 4 · MAINS", `1 x ${DISHES.steak.kitchen}`],
+        ["*** HOLD CANCELLED ***", ...header, "GROUP 5 · DESSERTS", `2 x ${DISHES.flan.kitchen}`],
       ]);
       expect((await groupRow(s.desserts)).state).toBe("removed");
       expect((await noticesAt(v)).map((notice) => notice.kind)).toEqual(["void", "void"]);
@@ -5080,12 +5067,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       const created = (await groupsOf(s.partyId)).groups.at(-1)!;
       expect(created.summary).toBe("1 × Fish");
       expect(await printedSince(v, 1)).toEqual([
-        [
-          "*** HOLD ***",
-          ...(await head(v, s)),
-          "GROUP 2 · MAINS",
-          `1.000 x ${DISHES.fish.kitchen}`,
-        ],
+        ["*** HOLD ***", ...(await head(v, s)), "GROUP 2 · MAINS", `1 x ${DISHES.fish.kitchen}`],
       ]);
       expect((await groupRow(created.id)).holdPrintedAt).not.toBeNull();
     });
@@ -5103,7 +5085,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       await fire(v, s.partyId, held!.id);
 
       expect(await printedSince(v, 0)).toEqual([
-        [...(await head(v, s)), "GROUP 1 · MAINS", `1.000 x ${DISHES.fish.kitchen}`],
+        [...(await head(v, s)), "GROUP 1 · MAINS", `1 x ${DISHES.fish.kitchen}`],
       ]);
     });
   });
@@ -5132,8 +5114,8 @@ describe("advance HOLD tickets (Task 6)", () => {
         [
           ...(await head(v, s)),
           "GROUP 4 · MAINS",
-          `2.000 x ${DISHES.steak.kitchen}`,
-          `2.000 x ${DISHES.fish.kitchen}`,
+          `2 x ${DISHES.steak.kitchen}`,
+          `2 x ${DISHES.fish.kitchen}`,
         ],
       ]);
     });
@@ -5222,12 +5204,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       const { v, s, barPrinter, group } = await twoStations({ kitchenOn: true, barOn: false });
 
       expect(await printedSince(v, 0)).toEqual([
-        [
-          "*** HOLD ***",
-          ...(await head(v, s)),
-          "GROUP 1 · MAINS",
-          `1.000 x ${DISHES.steak.kitchen}`,
-        ],
+        ["*** HOLD ***", ...(await head(v, s)), "GROUP 1 · MAINS", `1 x ${DISHES.steak.kitchen}`],
       ]);
       expect(await paperAt(barPrinter)).toEqual([]);
       expect(await recorded(group)).toEqual([{ groupId: group, stationId: v.stationId }]);
@@ -5251,11 +5228,11 @@ describe("advance HOLD tickets (Task 6)", () => {
       const kitchen = await printedSince(v, 1);
       expect(kitchen).toHaveLength(1);
       expect(kitchen[0]![0]).toBe("*** FIRE ***");
-      expect(kitchen[0]).toContain(`1.000 x ${DISHES.steak.kitchen}`);
+      expect(kitchen[0]).toContain(`1 x ${DISHES.steak.kitchen}`);
       const bar = await paperAt(barPrinter);
       expect(bar).toHaveLength(1);
       expect(bar[0]![0]).toBe("Bar");
-      expect(bar[0]).toContain(`1.000 x ${DISHES.fish.kitchen}`);
+      expect(bar[0]).toContain(`1 x ${DISHES.fish.kitchen}`);
       expect(bar[0]!.join("\n")).not.toContain("***");
     });
 
@@ -5292,13 +5269,13 @@ describe("advance HOLD tickets (Task 6)", () => {
       await inTx(async (tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, await args(s.partyId)));
       const kitchenFire = (await printedSince(v, 1)).filter((job) => job[0] === "*** FIRE ***");
       expect(kitchenFire).toHaveLength(1);
-      expect(kitchenFire[0]).toContain(`1.000 x ${DISHES.steak.kitchen}`);
+      expect(kitchenFire[0]).toContain(`1 x ${DISHES.steak.kitchen}`);
 
       const barBefore = (await paperAt(barPrinter)).length;
       await inTx(async (tx) => fireHeldLine(tx, v.cfg, s.partyId, fish.id, await args(s.partyId)));
       const bar = (await paperAt(barPrinter)).slice(barBefore);
       expect(bar.map((job) => job[0])).not.toContain("*** FIRE ***");
-      const fishTicket = bar.filter((job) => job.includes(`1.000 x ${DISHES.fish.kitchen}`));
+      const fishTicket = bar.filter((job) => job.includes(`1 x ${DISHES.fish.kitchen}`));
       expect(fishTicket).toHaveLength(1);
       expect(fishTicket[0]![0]).toBe("Bar");
     });
@@ -5377,7 +5354,7 @@ describe("advance HOLD tickets (Task 6)", () => {
             "*** HOLD CANCELLED ***",
             ...(await head(v, s)),
             "GROUP 1 · MAINS",
-            `1.000 x ${DISHES.steak.kitchen}`,
+            `1 x ${DISHES.steak.kitchen}`,
           ],
         ]);
         expect(await paperAt(barPrinter)).toEqual([]);
@@ -5405,18 +5382,8 @@ describe("advance HOLD tickets (Task 6)", () => {
 
         const header = await head(v, s);
         expect(await printedSince(v, 2)).toEqual([
-          [
-            "*** HOLD CHANGED ***",
-            ...header,
-            "GROUP 1 · MAINS",
-            `-1.000 x ${DISHES.steak.kitchen}`,
-          ],
-          [
-            "*** HOLD CHANGED ***",
-            ...header,
-            "GROUP 2 · MAINS",
-            `+1.000 x ${DISHES.steak.kitchen}`,
-          ],
+          ["*** HOLD CHANGED ***", ...header, "GROUP 1 · MAINS", `-1 x ${DISHES.steak.kitchen}`],
+          ["*** HOLD CHANGED ***", ...header, "GROUP 2 · MAINS", `+1 x ${DISHES.steak.kitchen}`],
         ]);
         expect(await paperAt(barPrinter)).toEqual([]);
         const removedThenAdded = [
@@ -5455,7 +5422,7 @@ describe("advance HOLD tickets (Task 6)", () => {
           "*** HOLD CHANGED ***",
           ...(await head(v, s)),
           "GROUP 1 · MAINS",
-          `-1.000 x ${DISHES.steak.kitchen}`,
+          `-1 x ${DISHES.steak.kitchen}`,
         ]);
         const bar = await paperAt(barPrinter);
         expect(bar).toHaveLength(1);
@@ -5475,7 +5442,7 @@ describe("advance HOLD tickets (Task 6)", () => {
             "*** HOLD CHANGED ***",
             ...(await head(v, s)),
             "GROUP 1 · MAINS",
-            `+1.000 x ${DISHES.steak.kitchen}`,
+            `+1 x ${DISHES.steak.kitchen}`,
           ],
         ]);
         expect(await paperAt(barPrinter)).toEqual([]);
@@ -5496,7 +5463,7 @@ describe("advance HOLD tickets (Task 6)", () => {
         expect(bar).toHaveLength(1);
         expect(bar[0]![0]).toBe("*** HOLD CHANGED ***");
         expect(bar[0]).toContain("GROUP 2 · MAINS");
-        expect(bar[0]).toContain(`+1.000 x ${DISHES.fish.kitchen}`);
+        expect(bar[0]).toContain(`+1 x ${DISHES.fish.kitchen}`);
         expect((await recorded(second!.id)).map((row) => row.stationId).sort()).toEqual(
           [v.stationId, barId].sort(),
         );
@@ -5514,7 +5481,7 @@ describe("advance HOLD tickets (Task 6)", () => {
             "*** HOLD CHANGED ***",
             ...(await head(v, s)),
             "GROUP 1 · MAINS",
-            `+1.000 x ${DISHES.steak.kitchen}`,
+            `+1 x ${DISHES.steak.kitchen}`,
           ],
         ]);
         expect(await paperAt(barPrinter)).toEqual([]);
@@ -5538,7 +5505,7 @@ describe("advance HOLD tickets (Task 6)", () => {
         expect(bar[0]![0]).toBe("Bar");
         expect(bar[0]!.join("\n")).not.toContain("***");
         expect(bar[0]!.filter((row) => row.endsWith(` x ${DISHES.fish.kitchen}`))).toEqual([
-          `2.000 x ${DISHES.fish.kitchen}`,
+          `2 x ${DISHES.fish.kitchen}`,
         ]);
       });
 
@@ -5551,7 +5518,7 @@ describe("advance HOLD tickets (Task 6)", () => {
         const bar = await paperAt(barPrinter);
         expect(bar).toHaveLength(1);
         expect(bar[0]![0]).toBe("*** HOLD CHANGED ***");
-        expect(bar[0]).toContain(`+1.000 x ${DISHES.fish.kitchen}`);
+        expect(bar[0]).toContain(`+1 x ${DISHES.fish.kitchen}`);
         expect((await recorded(group)).map((row) => row.stationId).sort()).toEqual(
           [v.stationId, barId].sort(),
         );

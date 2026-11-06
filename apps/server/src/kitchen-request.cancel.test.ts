@@ -169,7 +169,7 @@ describe("A773 requested lifecycle: cancel", () => {
       expect(printed.map((job) => job.printerId)).toEqual([venue.printerId]);
       const lines = printedLines(printed[0]!.payload);
       expect(lines).toContain(`*** ${kitchenTicketWords("es").holdCancelled} ***`);
-      expect(lines.join("\n")).toContain("2.000 x PIZZA");
+      expect(lines.join("\n")).toContain("2 x PIZZA");
       const [group] = await inTx(venue, (tx) =>
         tx.select().from(orderGroups).where(eq(orderGroups.id, order.parent.groupId!)),
       );
@@ -247,7 +247,7 @@ describe("A773 requested lifecycle: cancel", () => {
         `*** ${words.holdCancelled} ***`,
         ...header,
         groupLine,
-        "3.000 x PIZZA",
+        "3 x PIZZA",
         "  + Olives x2",
         "",
       ]);
@@ -306,7 +306,7 @@ describe("A773 requested lifecycle: cancel", () => {
     expect(printed.map((job) => job.printerId)).toEqual([venue.printerId]);
     const lines = printedLines(printed[0]!.payload);
     expect(lines).toContain(`*** ${kitchenTicketWords("es").holdCancelled} ***`);
-    expect(lines.join("\n")).toContain("2.000 x PIZZA");
+    expect(lines.join("\n")).toContain("2 x PIZZA");
     expect(await notices(held)).toMatchObject([{ kind: "void", quantity: "2.000" }]);
   });
 });

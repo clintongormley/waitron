@@ -1362,7 +1362,7 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
       const shape = (jobs: string[][]) =>
         jobs.map((job) => [job[0]!.trim(), job.find((line) => line.includes("x BURG"))!.trim()]);
       expect(shape(plainJobs)).toEqual([
-        [`*** ${kitchenTicketWords("es").holdChanged} ***`, "+1.000 x BURG"],
+        [`*** ${kitchenTicketWords("es").holdChanged} ***`, "+1 x BURG"],
       ]);
       expect(shape(compedJobs)).toEqual(shape(plainJobs));
     } finally {
@@ -1533,7 +1533,7 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
       const shape = (jobs: string[][]) =>
         jobs.map((job) => [job[0]!.trim(), job.find((line) => line.includes("x BURG"))!.trim()]);
       expect(shape(plainJobs)).toEqual([
-        [`*** ${kitchenTicketWords("es").holdChanged} ***`, "+2.000 x BURG"],
+        [`*** ${kitchenTicketWords("es").holdChanged} ***`, "+2 x BURG"],
       ]);
       expect(shape(boundJobs)).toEqual(shape(plainJobs));
     } finally {
@@ -3334,7 +3334,7 @@ describe("part of a dish with extras (B11d)", () => {
     ]);
     expect(await printJobCount()).toBe(jobs + 1);
     const slip = await lastKitchenSlip();
-    const dish = slip.indexOf("1.000 x PIZZA");
+    const dish = slip.indexOf("1 x PIZZA");
     expect(slip).toContain(`*** ${kitchenTicketWords("es").void} ***`);
     expect(dish).toBeGreaterThanOrEqual(0);
     expect(slip[dish + 1]).toBe("  + Olives");
@@ -3989,7 +3989,7 @@ describe("a counter order (B11c)", () => {
     ]);
     expect(await printJobCount()).toBe(jobs + 1);
     expect(await lastKitchenSlip()).toEqual(
-      expect.arrayContaining([`*** ${kitchenTicketWords("es").void} ***`, "1.000 x RIBEYE"]),
+      expect.arrayContaining([`*** ${kitchenTicketWords("es").void} ***`, "1 x RIBEYE"]),
     );
     expect(await recordedOn(billId)).toMatchObject([
       {
@@ -4018,7 +4018,7 @@ describe("a counter order (B11c)", () => {
     ]);
     expect(await printJobCount()).toBe(jobs + 1);
     expect(await lastKitchenSlip()).toEqual(
-      expect.arrayContaining([`*** ${kitchenTicketWords("es").void} ***`, "1.000 x RIBEYE"]),
+      expect.arrayContaining([`*** ${kitchenTicketWords("es").void} ***`, "1 x RIBEYE"]),
     );
     expect(await recordedOn(billId)).toMatchObject([
       { action: "cancel", quantity: 1000, reduction: 2500 },

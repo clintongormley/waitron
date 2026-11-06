@@ -226,19 +226,6 @@ save the answer can be `ticket.already_fired` (found by #2044's second Codex rev
 bug). Decide whether "started first" should hold across the whole save
 ([rule](#changes-after-sending-every-part-of-a-dish-decides-and-removal-is-not-gated-a756-pr-8-2026-10-24)).
 
-## A1087. Kitchen tickets print a whole quantity with three decimals
-
-Seen, 2026-10-25, on the
-demo printer in A789 slice 3's look: `2.000 x CROQ JAMON` and `1.000 x GAMBAS AJILLO`. The slice
-did not cause it. The ticket's quantity comes from `thousandthsToDecimal`
-(`apps/server/src/kitchen-ticket.ts:133`, `:153`; `apps/server/src/kitchen-print.ts:87`; the pass
-board's items read it the same way, `readPassRows`, `apps/server/src/working-order.ts:8626`), and
-tests pin it (`apps/server/src/order-groups.test.ts:543`,
-`apps/server/src/line-cancel.test.ts:1148`), so it has been chosen or tolerated since #750
-(2026-09-27). **Next action:** decide with the owner whether a whole-number quantity prints as
-`2 x`. A custom unit's quantity is a neighbour: [A custom-unit extra still shows a dot in
-Spanish](till.md#a-custom-unit-extra-still-shows-a-dot-in-spanish-and-its-kitchen-unit-can-use-the-english-abbreviation).
-
 ## `POST /api/orders/:id/stations/:sid/advance` (`apps/server/src/till-api.ts`) has no till caller
 
 - **`POST /api/orders/:id/stations/:sid/advance` (`apps/server/src/till-api.ts`) has no till caller**
@@ -301,18 +288,12 @@ owner's answer first.
 
 ## Bundle A1378: Fix kitchen paper: Spanish time, whole quantities, then the owner's slip questions
 
-9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+6 owner decisions remain, size M. The venue-zone, whole-quantity and late-send-boundary fixes
+are on the A1378 branch; this bundle remains open until its slip questions are answered.
 
 - **A1065. A printer shared by a station recorded for a held group and one not recorded prints one
   FIRE-marked ticket carrying both stations' dishes** (`apps/server/src/kitchen-print.ts:703-707`);
   ask the owner whether FIRE should mark only the recorded station's part. Left open by A756 PR 6.
-- **Kitchen paper prints its times in the server process's time zone (left open by A808, 2026-10-27).**
-  The time line and the reprint heading go through `hhmm`, which reads `Date#getHours` and
-  `getMinutes` (`apps/server/src/kitchen-ticket.ts`). `deploy/Dockerfile` and `deploy/compose.yml`
-  set no `TZ` (`rg -n '\bTZ\b|localtime|zoneinfo' deploy` finds nothing), and a local probe of the
-  base image printed `UTC` (`docs/developers/testing-guide.md`); an operator's appliance was not
-  measured. The venue's own zone is `locations.time_zone`. A696 covers invoices and receipts only.
-  Decide with the owner whether kitchen paper moves to the venue's zone.
 - **A reprint covering several sends prints the earliest send time (left open by A808,
   2026-10-27).** `planKitchenTickets` (`apps/server/src/kitchen-print.ts`) prints the earliest send
   on each reprinted ticket. Ask the owner whether it should be the latest, or one time per send.
@@ -320,20 +301,13 @@ owner's answer first.
   2026-10-27).** A party with two bills gets two slips per printer and two notices per station
   ([decision](kitchen.md#decisions-and-deliberate-limits)). Ask the owner whether a party
   should get one.
-- **A1086. On a kitchen ticket nothing marks where a run of dishes sent after their period ends.**
-  The late-send mark prints only above the run (`emitGrouped`, `apps/server/src/kitchen-ticket.ts`),
-  so an unmarked dish printed straight after it — a caña after the marked tortilla and entrecot —
-  looks part of the marked group. Seen, 2026-10-25 (A789 slice 3's look).
-- **A1087. Kitchen tickets print a whole quantity with three decimals**, such as `2.000 x CROQ
-  JAMON`, and tests pin it; decide with the owner whether it prints `2 x`.
-  [Detail](kitchen.md#a1087-kitchen-tickets-print-a-whole-quantity-with-three-decimals)
 - **A694 — Correction slips do not print the party's name (2026-10-15; open, owner decision).**
   [Detail](kitchen.md#a694--correction-slips-do-not-print-the-partys-name-2026-10-15-open-owner-decision)
 - **A695 — Naming or renaming a party after its food was sent prints nothing (2026-10-15; open,
   owner decision).**
   [Detail](kitchen.md#a695--naming-or-renaming-a-party-after-its-food-was-sent-prints-nothing)
 - **A1192. MOVED slips print each portion on its own line (left open by A803 slice 1, D16).**
-  Moving three identical croquetas prints three "1.000 x CROQ JAMON" lines, where the other kitchen
+  Moving three identical croquetas prints three "1 x CROQ JAMON" lines, where the other kitchen
   slips print one line for identical portions: `printMovedSlips` (`apps/server/src/kitchen-print.ts`)
   lays out each line alone. Decide whether MOVED slips should group them too.
 

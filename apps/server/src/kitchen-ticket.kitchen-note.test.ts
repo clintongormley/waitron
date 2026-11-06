@@ -10,6 +10,8 @@ import {
 import type { KitchenTicketStation } from "./kitchen-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 
+const TEST_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
 describe.each([
   { paperWidth: "58mm", resolution: "203dpi" },
   { paperWidth: "80mm", resolution: "203dpi" },
@@ -49,6 +51,7 @@ describe.each([
             formatKitchenTicket(
               { ...head, ...body, ...flags, kitchenNote: { text: "Train 14:30", locale } },
               layout,
+              TEST_TIME_ZONE,
             ),
           );
           expect(lines).toContain(heading);
@@ -70,6 +73,7 @@ describe.each([
           kitchenNote: { text: "  Train\u001b\u001d\r\n\u008514:30  ", locale: "en-GB" },
         },
         layout,
+        TEST_TIME_ZONE,
       ),
     );
     expect(lines).toContain("For the kitchen: Train 14:30");
@@ -92,6 +96,7 @@ describe.each([
           kitchenNote,
         },
         layout,
+        TEST_TIME_ZONE,
       ),
     );
     const corrected = printedLines(
@@ -107,6 +112,7 @@ describe.each([
           kitchenNote,
         },
         layout,
+        TEST_TIME_ZONE,
       ),
     );
     for (const lines of [moved, corrected]) {
@@ -149,6 +155,7 @@ describe.each([
               orderNoteChange: { before: "Old time", after },
             },
             layout,
+            TEST_TIME_ZONE,
           ),
         );
         expect(lines.slice(0, 2).join(" ")).toContain(after === null ? removedHeading : changed);
@@ -177,6 +184,7 @@ describe.each([
             orderNoteChange: { before: "Old time", after },
           },
           layout,
+          TEST_TIME_ZONE,
         ),
       );
     const narrow = layout.paperWidth === "58mm";

@@ -1,5 +1,10 @@
 # A807 and A808 — one kitchen-note slip per printer, one notice per station, and the reprint time: build plan
 
+> **2026-11-06, A1378:** kitchen tickets, reprints and correction, note-change and MOVED slips
+> now take the venue's saved time zone explicitly. Whole quantities print without `.000`;
+> fractional quantities retain their stored precision. The clock and quantity examples below
+> describe the earlier implementation.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax. Implementers are
 > dispatched as `subagent_type: "implementer"`.

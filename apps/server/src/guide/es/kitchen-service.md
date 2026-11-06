@@ -93,7 +93,8 @@ conserva las copias con el trabajo de cocina resultante; no sustituye las instru
 persona.
 
 La cabecera de una reimpresión indica cuándo se reimprimió (`*** REPRINT 15:20 ***`). La hora
-bajo el número de pedido sigue siendo la hora a la que se envió el primero de sus platos.
+bajo el número de pedido sigue siendo la hora a la que se envió el primero de sus platos. Lee ambas
+horas en la zona horaria de tu establecimiento.
 
 ## Mantén la comida visible hasta terminar el servicio {#service-lifetime}
 
@@ -345,8 +346,9 @@ puedes cobrar cuando lo has quitado.
 
 Un plato enviado después de que su periodo acabara antes en el mismo día de servicio, una vez que la
 cocina lo ha aceptado, lleva una marca con el nombre de su periodo. En su comanda de cocina, una
-línea encima dice `** TRAS ALMUERZO — ACEPTADO **`. En la pantalla de cocina, la tarjeta muestra
-**Tras Almuerzo — aceptado** encima del plato.
+línea encima dice `** TRAS ALMUERZO — ACEPTADO **`. En el papel, una línea separadora termina ese
+bloque antes del siguiente plato sin marca; un nuevo encabezado de grupo o estación también lo
+termina. En la pantalla de cocina, la tarjeta muestra **Tras Almuerzo — aceptado** encima del plato.
 
 Cada departamento fija si enviar un plato así necesita un encargado, o el PIN de un encargado,
 con **PIN de encargado para enviar tras acabar el periodo** en **Cursos y cocina**, en su pestaña

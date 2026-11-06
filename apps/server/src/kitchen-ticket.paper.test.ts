@@ -1,0 +1,245 @@
+import { describe, expect, it } from "vitest";
+import type { EscSetting } from "@waitron/printing";
+import {
+  formatCorrectionSlip,
+  formatKitchenNoteChangeSlip,
+  formatKitchenTicket,
+  formatMovedSlip,
+} from "./kitchen-ticket.js";
+import { printedLines } from "./testing/decode-ticket.js";
+
+const layout: EscSetting = { paperWidth: "80mm", resolution: "180dpi" };
+const at = "2026-07-17T23:30:00Z";
+const item = { qty: "2.000", name: "Steak" };
+const ticket = {
+  locale: "en",
+  scope: "station" as const,
+  stationName: "Grill",
+  tableLabel: "Table 4",
+  orderNumber: "17",
+  firedAt: new Date(at),
+  items: [item],
+};
+
+describe("kitchen paper in the venue's time zone", () => {
+  it.each([
+    ["Europe/Madrid", "2026-07-17T23:30:00Z", "01:30"],
+    ["Atlantic/Canary", "2026-07-17T23:30:00Z", "00:30"],
+    ["Europe/Madrid", "2026-01-17T23:30:00Z", "00:30"],
+    ["Atlantic/Canary", "2026-01-17T23:30:00Z", "23:30"],
+    ["Europe/Madrid", "2026-10-25T00:30:00Z", "02:30"],
+    ["Europe/Madrid", "2026-10-25T01:30:00Z", "02:30"],
+  ])("prints %s at %s as %s", (timeZone, instant, expected) => {
+    const lines = printedLines(
+      formatKitchenTicket({ ...ticket, firedAt: new Date(instant) }, layout, timeZone),
+    );
+    expect(lines[3]).toBe(expected);
+  });
+
+  it("converts the send and reprint instants separately across the summer-time change", () => {
+    expect(
+      printedLines(
+        formatKitchenTicket(
+          {
+            ...ticket,
+            firedAt: new Date("2026-03-29T00:30:00Z"),
+            reprintedAt: new Date("2026-03-29T01:40:00Z"),
+          },
+          layout,
+          "Europe/Madrid",
+        ),
+      ).slice(0, 5),
+    ).toEqual(["*** REPRINT 03:40 ***", "Grill", "Table 4", "17", "01:30"]);
+  });
+
+  it("dates correction, note-change and MOVED slips in the same venue zone", () => {
+    const common = {
+      locale: "en",
+      stationName: "Grill",
+      tableLabel: "Table 4",
+      orderNumber: "17",
+      at,
+    };
+    const correction = formatCorrectionSlip(
+      { ...common, kind: "VOID", item },
+      layout,
+      "Atlantic/Canary",
+    );
+    const note = formatKitchenNoteChangeSlip(
+      {
+        ...common,
+        stations: [{ stationName: "Grill", items: [item] }],
+        orderNoteChange: { before: "No salt", after: "Less salt" },
+      },
+      layout,
+      "Atlantic/Canary",
+    );
+    const moved = formatMovedSlip(
+      {
+        ...common,
+        fromNumber: "17",
+        fromText: "Table 4",
+        toText: "Table 5",
+        items: [item],
+        held: [],
+      },
+      layout,
+      "Atlantic/Canary",
+    );
+    expect(printedLines(correction)[4]).toBe("00:30");
+    expect(printedLines(note)[4]).toBe("00:30");
+    expect(printedLines(moved)[5]).toBe("00:30");
+  });
+});
+
+describe("whole quantities on kitchen paper", () => {
+  it("shortens whole quantities and keeps fractional amounts and units", () => {
+    const lines = printedLines(
+      formatKitchenTicket(
+        {
+          ...ticket,
+          items: [
+            item,
+            { qty: "0.350", unit: "kg", name: "Fish" },
+            { qty: "350.000", unit: "g", name: "Chips" },
+          ],
+          alsoOnOrder: {
+            locale: "en",
+            items: [
+              { qty: "3.000", name: "Water", stationName: "Bar", held: false },
+              { qty: "1.250", unit: "l", name: "Juice", stationName: "Bar", held: true },
+            ],
+          },
+        },
+        layout,
+        "UTC",
+      ),
+    );
+    expect(lines.slice(4)).toEqual([
+      "2 x Steak",
+      "0.350 kg x Fish",
+      "350 g x Chips",
+      "-- Also on this order --",
+      "3 x Water — Bar",
+      "1.250 l x Juice — Bar (on hold)",
+      "",
+    ]);
+  });
+
+  it("uses the shorter quantity in correction, note-change and MOVED slips too", () => {
+    const common = {
+      locale: "en",
+      stationName: "Grill",
+      tableLabel: "Table 4",
+      orderNumber: "17",
+      at,
+    };
+    const correction = formatCorrectionSlip(
+      { ...common, kind: "HOLD CHANGED", direction: "removed", item },
+      layout,
+      "UTC",
+    );
+    const note = formatKitchenNoteChangeSlip(
+      {
+        ...common,
+        stations: [{ stationName: "Grill", items: [item] }],
+        orderNoteChange: { before: "No salt", after: null },
+      },
+      layout,
+      "UTC",
+    );
+    const moved = formatMovedSlip(
+      {
+        ...common,
+        fromNumber: "17",
+        fromText: "Table 4",
+        toText: "Table 5",
+        items: [item],
+        held: [{ group: 2, items: [item] }],
+      },
+      layout,
+      "UTC",
+    );
+    expect(printedLines(correction)).toContain("-2 x Steak");
+    expect(printedLines(note)).toContain("2 x Steak");
+    expect(printedLines(moved).filter((line) => line === "2 x Steak")).toHaveLength(2);
+  });
+});
+
+describe("the end of a late-send run", () => {
+  it.each(["58mm", "80mm"] as const)(
+    "separates an unmarked dish from the marked run on %s",
+    (paperWidth) => {
+      const lines = printedLines(
+        formatKitchenTicket(
+          {
+            ...ticket,
+            items: [
+              { ...item, afterPeriod: "Lunch" },
+              { qty: 1, name: "Fish", afterPeriod: "Lunch" },
+              { qty: 1, name: "Water" },
+            ],
+          },
+          { ...layout, paperWidth },
+          "UTC",
+        ),
+      );
+      expect(lines.slice(4)).toEqual([
+        "** AFTER LUNCH — AGREED **",
+        "2 x Steak",
+        "1 x Fish",
+        paperWidth === "58mm"
+          ? "------------------------------"
+          : "------------------------------------------",
+        "1 x Water",
+        "",
+      ]);
+    },
+  );
+
+  it("uses the next group or station heading as the boundary", () => {
+    const groups = printedLines(
+      formatKitchenTicket(
+        {
+          ...ticket,
+          items: [
+            { qty: 1, name: "Steak", group: 1, afterPeriod: "Lunch" },
+            { qty: 1, name: "Water", group: 2 },
+          ],
+        },
+        layout,
+        "UTC",
+      ),
+    );
+    expect(groups.slice(4)).toEqual([
+      "GROUP 1",
+      "** AFTER LUNCH — AGREED **",
+      "1 x Steak",
+      "GROUP 2",
+      "1 x Water",
+      "",
+    ]);
+    const stations = printedLines(
+      formatKitchenTicket(
+        {
+          ...ticket,
+          scope: "stations",
+          stations: [
+            { stationName: "Grill", items: [{ ...item, afterPeriod: "Lunch" }] },
+            { stationName: "Bar", items: [{ qty: 1, name: "Water" }] },
+          ],
+        },
+        layout,
+        "UTC",
+      ),
+    );
+    expect(stations.slice(4)).toEqual([
+      "Grill",
+      "** AFTER LUNCH — AGREED **",
+      "2 x Steak",
+      "Bar",
+      "1 x Water",
+      "",
+    ]);
+  });
+});

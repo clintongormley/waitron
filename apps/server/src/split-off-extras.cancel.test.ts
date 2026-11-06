@@ -139,7 +139,7 @@ describe("cancelling and recalling split-off extras", () => {
         cancelLine(tx, venue.cfg, venue.party.tabId, 1, "1").then(() => {}),
       );
       expect(output.fryer).toHaveLength(1);
-      expect(output.fryer[0]).toContain("2.000 x CHIPS");
+      expect(output.fryer[0]).toContain("2 x CHIPS");
       const child = (await lines(tx, venue.party.tabId)).find((line) => line.parentId !== null)!;
       expect(child.quantity).toBe(2000);
       expect(
@@ -245,7 +245,7 @@ describe("cancelling and recalling split-off extras", () => {
       );
       expect(output.grill).toEqual([]);
       expect(output.fryer).toHaveLength(1);
-      expect(output.fryer[0]).toContain("2.000 x CHIPS");
+      expect(output.fryer[0]).toContain("2 x CHIPS");
       expect((await records(tx, venue.party.tabId))[0]?.quantity).toBe(2000);
     });
   });

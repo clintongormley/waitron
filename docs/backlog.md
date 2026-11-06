@@ -730,7 +730,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **What a kitchen card draws** (bundle of 5, 3 important, size S). Holds A1220, A1006, A1202. [Detail](backlog/kitchen.md#bundle-what-a-kitchen-card-draws)
 
-- **A1378. Fix kitchen paper: Spanish time, whole quantities, then the owner's slip questions** (bundle of 9, 2 go-live, 1 important, size M, needs the owner). Holds A1065, A1086, A1087, A694, A695, A1192. [Detail](backlog/kitchen.md#bundle-a1378-fix-kitchen-paper-spanish-time-whole-quantities-then-the-owners-slip-questions)
+- **A1378. Fix kitchen paper: Spanish time, whole quantities, then the owner's slip questions** (six slip decisions remain, size M, needs the owner). Venue-zone, whole-quantity and late-send-boundary fixes are on the A1378 branch. Holds A1065, A694, A695, A1192. [Detail](backlog/kitchen.md#bundle-a1378-fix-kitchen-paper-spanish-time-whole-quantities-then-the-owners-slip-questions)
 
 - **Held paper followups** (bundle of 3, 1 important, size M). Holds A1066, A1369. [Detail](backlog/kitchen.md#bundle-held-paper-followups)
 

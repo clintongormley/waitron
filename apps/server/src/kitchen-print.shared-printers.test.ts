@@ -189,11 +189,11 @@ describe("a printer shared by several stations", () => {
     const shared = onPrinter(jobs, p);
     expect(shared.printed.slice(0, 1)).toEqual(["Grill · Pastry"]);
     const sections = shared.printed.slice(4);
-    expect(sections).toEqual(["Grill", "1.000 x Steak", "Pastry", "1.000 x Tart", ""]);
+    expect(sections).toEqual(["Grill", "1 x Steak", "Pastry", "1 x Tart", ""]);
     expect(shared.stationIds).toEqual([venue.y, venue.z].sort());
     expect(shared.lineCount).toBe(2);
 
-    expect(onPrinter(jobs, venue.px).printed.join("\n")).toContain("1.000 x Salad");
+    expect(onPrinter(jobs, venue.px).printed.join("\n")).toContain("1 x Salad");
     expect(onPrinter(jobs, venue.py).printed[0]).toBe("Grill");
     expect(onPrinter(jobs, venue.py).printed.join("\n")).not.toContain("Tart");
     expect(onPrinter(jobs, venue.pz).printed[0]).toBe("Pastry");
@@ -225,11 +225,11 @@ describe("a printer shared by several stations", () => {
     expect(shared.printed[0]).toBe("Cold · Grill · Pastry");
     expect(shared.printed.slice(4)).toEqual([
       "Cold",
-      "1.000 x Salad",
+      "1 x Salad",
       "Grill",
-      "1.000 x Steak",
+      "1 x Steak",
       "Pastry",
-      "1.000 x Tart",
+      "1 x Tart",
       "",
     ]);
     expect(shared.stationIds).toEqual([venue.x, venue.y, venue.z].sort());
@@ -292,13 +292,7 @@ describe("a printer shared by several stations", () => {
     expect(Buffer.from(wideJob.payload).equals(Buffer.from(narrowJob.payload))).toBe(false);
     for (const job of [wideJob, narrowJob]) {
       expect(job.printed[0]).toBe("Grill · Pastry");
-      expect(job.printed.slice(4)).toEqual([
-        "Grill",
-        "1.000 x Steak",
-        "Pastry",
-        "1.000 x Tart",
-        "",
-      ]);
+      expect(job.printed.slice(4)).toEqual(["Grill", "1 x Steak", "Pastry", "1 x Tart", ""]);
       expect(job.stationIds).toEqual([venue.y, venue.z].sort());
     }
   });
@@ -326,17 +320,17 @@ describe("a printer shared by several stations", () => {
     const shared = onPrinter(jobs, p);
     expect(shared.printed.slice(4)).toEqual([
       "Grill",
-      "1.000 x Steak",
+      "1 x Steak",
       "Pastry",
-      "1.000 x Tart",
+      "1 x Tart",
       "-- Also on this order --",
-      "1.000 x Salad — Cold",
+      "1 x Salad — Cold",
       "",
     ]);
     // Grill's own printer still lists every other station's dish, Pastry's lists none.
     const grillText = onPrinter(jobs, venue.py).printed.join("\n");
-    expect(grillText).toContain("1.000 x Salad — Cold");
-    expect(grillText).toContain("1.000 x Tart — Pastry");
+    expect(grillText).toContain("1 x Salad — Cold");
+    expect(grillText).toContain("1 x Tart — Pastry");
     expect(onPrinter(jobs, venue.pz).printed.join("\n")).not.toContain("Also on this order");
   });
 });
@@ -364,11 +358,11 @@ describe("a printer shared by several stations, on the rest of the order", () =>
 
     expect(onPrinter(jobs, p).printed.slice(4)).toEqual([
       "Grill",
-      "1.000 x Steak",
+      "1 x Steak",
       "Pastry",
-      "1.000 x Tart",
+      "1 x Tart",
       "-- Also on this order --",
-      "1.000 x Salad — Cold",
+      "1 x Salad — Cold",
       "",
     ]);
     expect(onPrinter(jobs, venue.py).printed.join("\n")).not.toContain("Also on this order");
@@ -444,13 +438,7 @@ describe("a reprint on a printer shared by several stations", () => {
       expect.stringMatching(/^\*\*\* REPRINT \d\d:\d\d \*\*\*$/),
       "Grill · Pastry",
     ]);
-    expect(shared.printed.slice(5)).toEqual([
-      "Grill",
-      "1.000 x Steak",
-      "Pastry",
-      "1.000 x Tart",
-      "",
-    ]);
+    expect(shared.printed.slice(5)).toEqual(["Grill", "1 x Steak", "Pastry", "1 x Tart", ""]);
     expect(shared.stationIds).toEqual([venue.y, venue.z].sort());
     expect(shared.lineCount).toBe(2);
   });
@@ -497,15 +485,15 @@ describe("a reprint on a printer shared by several stations", () => {
       const names = { steak: "Grill", tart: "Pastry" } as const;
       const kitchenName = { steak: "Steak", tart: "Tart" } as const;
       expect(firedPart[1]).toBe(fired.map((dish) => names[dish]).join(" · "));
-      expect(firedPart.filter((text) => text.startsWith("1.000 x "))).toEqual(
-        fired.map((dish) => `1.000 x ${kitchenName[dish]}`),
+      expect(firedPart.filter((text) => text.startsWith("1 x "))).toEqual(
+        fired.map((dish) => `1 x ${kitchenName[dish]}`),
       );
       expect(heldPart.slice(1, 3)).toEqual([
         "*** HOLD ***",
         held.map((dish) => names[dish]).join(" · "),
       ]);
-      expect(heldPart.filter((text) => text.startsWith("1.000 x "))).toEqual(
-        held.map((dish) => `1.000 x ${kitchenName[dish]}`),
+      expect(heldPart.filter((text) => text.startsWith("1 x "))).toEqual(
+        held.map((dish) => `1 x ${kitchenName[dish]}`),
       );
       expect(shared.stationIds).toEqual([venue.y, venue.z].sort());
       expect(shared.lineCount).toBe(fired.length + held.length);
@@ -596,7 +584,7 @@ describe("the rest of the order on a reprint that joins fired and held work on o
       const { printed, payload } = onPrinter(reprints, p);
       expect(printed.filter((text) => text.startsWith("-- Also on this order"))).toHaveLength(1);
       expect(commandNames(payload).filter((name) => name === "GS V")).toHaveLength(1);
-      expect(printed.filter((text) => text.includes(" — "))).toEqual(["1.000 x Salad — Cold"]);
+      expect(printed.filter((text) => text.includes(" — "))).toEqual(["1 x Salad — Cold"]);
     },
   );
 });
@@ -633,7 +621,7 @@ describe("a printer shared by several stations, and dishes made at the till", ()
     );
     for (const printerId of [venuePrinters.grill, venuePrinters.pass]) {
       const lines = printedLines(result.jobs.find((job) => job.printerId === printerId)!.payload);
-      expect(lines).toContain("1.000 x BURG");
+      expect(lines).toContain("1 x BURG");
       expect(lines.filter((line) => line.includes("x CHIPS"))).toEqual([]);
     }
   });
@@ -687,7 +675,7 @@ it("fires and reprints through a replaced station printer set with no drawer pul
   expect(result.reprinted.map((job) => job.printerId)).toEqual([result.shared]);
   for (const job of [...result.fired, ...result.reprinted]) {
     expect(job.kind).toBe("document");
-    expect(printedLines(job.payload)).toContain("1.000 x Kitchen stew");
+    expect(printedLines(job.payload)).toContain("1 x Kitchen stew");
     expect(opensDrawer(job.payload)).toBe(false);
   }
 });

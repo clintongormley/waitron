@@ -321,7 +321,7 @@ describe("finishing a table by sending the food still to come to the counter", (
       (lines) => lines[0] === `*** ${kitchenTicketWords("es").fire} ***`,
     );
     expect(fired).toHaveLength(1);
-    expect(fired[0]!.join("\n")).toContain("2.000 x BURG");
+    expect(fired[0]!.join("\n")).toContain("2 x BURG");
     const after = await snapshot(t);
     expect(after.bills[0]!.partyId).toBeNull();
     expect(after.tickets.length).toBeGreaterThan(0);

@@ -227,7 +227,7 @@ describe("paper for a move to another station", () => {
           held ? "*** HOLD CANCELLED ***" : `*** ${kitchenTicketWords("en").movedTo} GRILL ***`,
         );
         if (held) expect(lines).toContain("GROUP 2");
-        expect(lines).toContain("1.000 x Steak");
+        expect(lines).toContain("1 x Steak");
       }
     },
   );
@@ -405,7 +405,7 @@ describe("show the rest of the order", () => {
     const firstAt = (id: string) =>
       printedLines(result.first.find((job) => job.printerId === id)!.payload);
     expect(firstAt(result.grillPrinter).join(" ")).toContain(kitchenTicketWords("en").alsoOnOrder);
-    expect(firstAt(result.grillPrinter)).toContain(`${thousandthsToDecimal(1000)} x Chips — Fryer`);
+    expect(firstAt(result.grillPrinter)).toContain(`1 x Chips — Fryer`);
     expect(firstAt(result.fryerPrinter).join(" ")).not.toContain(
       kitchenTicketWords("en").alsoOnOrder,
     );
@@ -416,11 +416,9 @@ describe("show the rest of the order", () => {
     const grillReprint = printedLines(
       result.reprinted.find((job) => job.printerId === result.grillPrinter)!.payload,
     );
-    expect(grillReprint).toContain(`${thousandthsToDecimal(1000)} x Chips — Fryer`);
-    expect(grillReprint).toContain(`${thousandthsToDecimal(1000)} x Salad — Cold`);
-    expect(grillReprint).toContain(
-      `${thousandthsToDecimal(1000)} x Dessert — Pastry ${kitchenTicketWords("en").onHold}`,
-    );
+    expect(grillReprint).toContain(`1 x Chips — Fryer`);
+    expect(grillReprint).toContain(`1 x Salad — Cold`);
+    expect(grillReprint).toContain(`1 x Dessert — Pastry ${kitchenTicketWords("en").onHold}`);
     expect(grillReprint.join(" ").match(/Also on this order/g)).toHaveLength(1);
     expect(grillReprint.filter((entry) => entry.includes("Chips — Fryer"))).toHaveLength(1);
     expect(grillReprint.join(" ")).not.toContain("Water");
@@ -1100,7 +1098,7 @@ describe("every correction reaches the station as a notice, printer or not", () 
 
     expect(slips).toHaveLength(1);
     const slip = decodeTicket(slips[0]!.payload);
-    expect(slip).toContain(`${thousandthsToDecimal(2000)} x Ribeye`);
+    expect(slip).toContain(`2 x Ribeye`);
   });
 });
 
@@ -1186,13 +1184,13 @@ describe("a dish sold by the piece prints no unit", () => {
 
     expect(jobs).toHaveLength(1);
     const lines = printedLines(jobs[0]!.payload);
-    expect(lines).toContain(`${thousandthsToDecimal(2000)} x Croquette`);
-    expect(lines).toContain(`${thousandthsToDecimal(3000)} x Meatball`);
+    expect(lines).toContain(`2 x Croquette`);
+    expect(lines).toContain(`3 x Meatball`);
     expect(lines).toContain(`${thousandthsToDecimal(500)} kg x Octopus`);
-    expect(lines).toContain(`${thousandthsToDecimal(200_000)} g x Almonds`);
+    expect(lines).toContain(`200 g x Almonds`);
     // Spelled like Each, but a unit of the venue's own: its abbreviation still prints, in the
     // default content language the line stored it in.
-    expect(lines).toContain(`${thousandthsToDecimal(1000)} ud x Bread`);
+    expect(lines).toContain(`1 ud x Bread`);
   });
 
   it("a correction slip also leaves out the Each unit", async () => {
@@ -1229,42 +1227,41 @@ describe("a dish sold by the piece prints no unit", () => {
 
     expect(slips).toHaveLength(2);
     const printed = slips.flatMap((slip) => printedLines(slip.payload));
-    expect(printed).toContain(`${thousandthsToDecimal(2000)} x Croquette`);
+    expect(printed).toContain(`2 x Croquette`);
     expect(printed).toContain(`${thousandthsToDecimal(500)} kg x Octopus`);
   });
 
   // Fails if merging and splitting go by the unit's spelling while the unit's printing goes by its
   // identity: Bread's unit is spelled like Each but is the venue's own, and Meatball's is Each renamed.
   // `["2"]` is one stored line of two, as a counter order written before portions holds it.
-  const at = (thousandths: number, rest: string) => `${thousandthsToDecimal(thousandths)} ${rest}`;
   it.each([
     {
       grouping: "combined",
       dish: "bread",
       name: "Bread",
       sold: ["1", "1"],
-      printed: [at(1000, "ud x Bread"), at(1000, "ud x Bread")],
+      printed: ["1 ud x Bread", "1 ud x Bread"],
     },
     {
       grouping: "separate",
       dish: "bread",
       name: "Bread",
       sold: ["2"],
-      printed: [at(2000, "ud x Bread")],
+      printed: ["2 ud x Bread"],
     },
     {
       grouping: "combined",
       dish: "meatball",
       name: "Meatball",
       sold: ["1", "1"],
-      printed: [at(2000, "x Meatball")],
+      printed: ["2 x Meatball"],
     },
     {
       grouping: "separate",
       dish: "meatball",
       name: "Meatball",
       sold: ["2"],
-      printed: [at(1000, "x Meatball"), at(1000, "x Meatball")],
+      printed: ["1 x Meatball", "1 x Meatball"],
     },
   ] as const)(
     "merges or splits an entry only when its unit does not print ($dish, $grouping)",
@@ -1331,7 +1328,7 @@ describe("a dish sold by the piece prints no unit", () => {
         expect(jobs).toHaveLength(1);
         return printedLines(jobs[0]!.payload).filter((text) => text.endsWith(" x Bread"));
       };
-      expect(breads(counter)).toEqual([at(1000, "ud x Bread"), at(1000, "ud x Bread")]);
+      expect(breads(counter)).toEqual(["1 ud x Bread", "1 ud x Bread"]);
       expect(breads(table)).toEqual(breads(counter));
     },
   );
@@ -1356,11 +1353,11 @@ describe("a dish sold by the piece prints no unit", () => {
     expect(jobs).toHaveLength(1);
     const lines = printedLines(jobs[0]!.payload);
     expect(lines.filter((text) => text.endsWith(" x Burger"))).toEqual([
-      at(1000, "x Burger"),
-      at(1000, "x Burger"),
-      at(1000, "x Burger"),
+      "1 x Burger",
+      "1 x Burger",
+      "1 x Burger",
     ]);
-    expect(lines.filter((text) => text.endsWith(" x Salad"))).toEqual([at(2000, "x Salad")]);
+    expect(lines.filter((text) => text.endsWith(" x Salad"))).toEqual(["2 x Salad"]);
   });
 });
 
@@ -1632,11 +1629,11 @@ describe("dish extras on kitchen tickets", () => {
     expect(jobs.map((job) => job.printerId)).toEqual(
       expect.arrayContaining([printers.grill, printers.fryer, printers.pass]),
     );
-    expect(paper(printers.grill)).toContain("1.000 x BURG");
+    expect(paper(printers.grill)).toContain("1 x BURG");
     expect(paper(printers.grill)).toContain("+ Cheese");
     expect(paper(printers.grill)).toContain("> with CHIPS from Fryer");
     expect(paper(printers.grill)).not.toContain("+ Chips");
-    expect(paper(printers.fryer)).toContain("1.000 x CHIPS");
+    expect(paper(printers.fryer)).toContain("1 x CHIPS");
     expect(
       printedLines(jobs.find((job) => job.printerId === printers.fryer)!.payload).filter((line) =>
         line.includes("x CHIPS"),
@@ -1742,7 +1739,7 @@ describe("dish extras on kitchen tickets", () => {
         line.includes("x BURG"),
       ),
     ).toHaveLength(2);
-    expect(grill).not.toContain("2.000 x BURG");
+    expect(grill).not.toContain("2 x BURG");
   });
 
   it("keeps both references on the burger and chips VOID slips", async () => {
@@ -2134,11 +2131,11 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
     });
 
     expect(released).toHaveLength(1);
-    expect(decodeTicket(released[0]!.payload)).toContain(`${thousandthsToDecimal(2000)} x Ribeye`);
+    expect(decodeTicket(released[0]!.payload)).toContain(`2 x Ribeye`);
     expect(reprinted).toHaveLength(1);
     const reprint = decodeTicket(reprinted[0]!.payload);
-    expect(reprint).toContain(`${thousandthsToDecimal(3000)} x Soup`);
-    expect(reprint).toContain(`${thousandthsToDecimal(2000)} x Ribeye`);
+    expect(reprint).toContain(`3 x Soup`);
+    expect(reprint).toContain(`2 x Ribeye`);
   });
 
   it("a reprint prints the HOLD part only for a station recorded for the group", async () => {
@@ -2182,7 +2179,7 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
       ),
     );
     expect(reprinted[0]![1]).toBe(`*** ${kitchenTicketWords("es").hold} ***`);
-    expect(reprinted[0]).toContain("1.000 x BURG");
+    expect(reprinted[0]).toContain("1 x BURG");
     expect(await jobsAt(bar.printerId!)).toEqual([]);
     expect(
       await db
@@ -2831,8 +2828,8 @@ describe("A803 portion grouping", () => {
       expect(jobs).toHaveLength(1);
       return printedLines(jobs[0]!.payload);
     };
-    const two = `${thousandthsToDecimal(2000)} x Burger`;
-    const one = `${thousandthsToDecimal(1000)} x Burger`;
+    const two = `2 x Burger`;
+    const one = `1 x Burger`;
     expect(count(linesOf(printed.portions), two)).toBe(1);
     expect(count(linesOf(printed.portions), one)).toBe(0);
     expect(count(linesOf(printed.grouped), two)).toBe(1);
@@ -2863,8 +2860,8 @@ describe("A803 portion grouping", () => {
 
     expect(jobs).toHaveLength(1);
     const lines = printedLines(jobs[0]!.payload);
-    const two = `${thousandthsToDecimal(2000)} x Burger`;
-    const one = `${thousandthsToDecimal(1000)} x Burger`;
+    const two = `2 x Burger`;
+    const one = `1 x Burger`;
     expect(count(lines, two)).toBe(1);
     expect(count(lines, one)).toBe(3);
     expect(lines[lines.indexOf(two) + 1]).toMatch(/^\s*\+ Cheese x2$/u);
@@ -2922,7 +2919,7 @@ describe("A803 portion grouping", () => {
       };
     });
 
-    const octopus = `${thousandthsToDecimal(1000)} kg x Octopus`;
+    const octopus = `1 kg x Octopus`;
     expect(printed.ticket).toHaveLength(1);
     expect(count(printedLines(printed.ticket[0]!.payload), octopus)).toBe(2);
     expect(printed.rest).toHaveLength(1);
@@ -2952,8 +2949,8 @@ describe("A803 portion grouping", () => {
 
     expect(kitchenTicket).toHaveLength(1);
     const lines = printedLines(kitchenTicket[0]!.payload);
-    expect(count(lines, `${thousandthsToDecimal(2000)} x Chips — Fryer`)).toBe(1);
-    expect(count(lines, `${thousandthsToDecimal(1000)} x Chips — Fryer`)).toBe(0);
+    expect(count(lines, `2 x Chips — Fryer`)).toBe(1);
+    expect(count(lines, `1 x Chips — Fryer`)).toBe(0);
   });
 
   it("A803 portion grouping: Also on order keeps identical unbound lines apart, as today", async () => {
@@ -2973,7 +2970,7 @@ describe("A803 portion grouping", () => {
 
     expect(kitchenTicket).toHaveLength(1);
     const lines = printedLines(kitchenTicket[0]!.payload);
-    expect(count(lines, `${thousandthsToDecimal(1000)} x Chips — Fryer`)).toBe(2);
+    expect(count(lines, `1 x Chips — Fryer`)).toBe(2);
   });
 
   it("A803 portion grouping: Also on order keeps a held portion apart from a fired one, and a portion with a printed unit on its own row", async () => {
@@ -3026,11 +3023,11 @@ describe("A803 portion grouping", () => {
 
     expect(kitchenTicket).toHaveLength(1);
     const lines = printedLines(kitchenTicket[0]!.payload);
-    const oneChips = `${thousandthsToDecimal(1000)} x Chips — Fryer`;
+    const oneChips = `1 x Chips — Fryer`;
     expect(count(lines, oneChips)).toBe(1);
     expect(lines.filter((line) => line.startsWith(oneChips) && line !== oneChips)).toHaveLength(1);
     expect(lines.filter((line) => line.includes(" x Chips"))).toHaveLength(2);
-    expect(count(lines, `${thousandthsToDecimal(1000)} pc x Bread — Fryer`)).toBe(2);
+    expect(count(lines, `1 pc x Bread — Fryer`)).toBe(2);
   });
 
   it("A803 portion grouping: identical portions corrected at two stations print a slip at each", async () => {
@@ -3058,8 +3055,7 @@ describe("A803 portion grouping", () => {
     });
 
     expect(slips.map((slip) => slip.printerId).sort()).toEqual([...printers].sort());
-    for (const slip of slips)
-      expect(count(printedLines(slip.payload), `${thousandthsToDecimal(1000)} x Burger`)).toBe(1);
+    for (const slip of slips) expect(count(printedLines(slip.payload), `1 x Burger`)).toBe(1);
   });
 
   it.each(["VOID", "RECALLED"] as const)(
@@ -3261,9 +3257,7 @@ describe("A803 portion grouping", () => {
       for (const slips of [printed.changed, printed.cancelled]) {
         expect(slips).toHaveLength(1);
         const lines = printedLines(slips[0]!.payload);
-        expect(
-          lines.filter((line) => line.endsWith(`${thousandthsToDecimal(12_000)} x Oysters`)),
-        ).toHaveLength(1);
+        expect(lines.filter((line) => line.endsWith(`12 x Oysters`))).toHaveLength(1);
       }
     },
   );
@@ -3307,9 +3301,7 @@ describe("A803 portion grouping", () => {
     });
 
     expect(printed.same).toHaveLength(1);
-    expect(
-      count(printedLines(printed.same[0]!.payload), `${thousandthsToDecimal(2000)} x Burger`),
-    ).toBe(1);
+    expect(count(printedLines(printed.same[0]!.payload), `2 x Burger`)).toBe(1);
     expect(printed.different).toHaveLength(2);
   });
 });

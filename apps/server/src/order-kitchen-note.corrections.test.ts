@@ -505,9 +505,7 @@ it("gives a shared instruction one slip at the printer and one notice at the sta
     expect.objectContaining({ lineName: "BURG", quantity: thousandthsToDecimal(3000) }),
   ]);
   const jobs = await v.db.select().from(printJobs);
-  expect(printedLines(jobs.at(-1)!.payload).filter((line) => line === "3.000 x BURG")).toHaveLength(
-    1,
-  );
+  expect(printedLines(jobs.at(-1)!.payload).filter((line) => line === "3 x BURG")).toHaveLength(1);
 
   const rows = await v.db.select().from(kitchenNotices);
   expect(await set(scope, "New shared time", submissionId, starting)).toEqual(saved);
@@ -557,10 +555,10 @@ it("A807 prints one slip per printer for stations that share one", async () => {
   const shared = (await jobsAt(s.shared)).slice(before.shared);
   expect(shared).toHaveLength(1);
   expect(shared[0]!.slice(0, 2)).toEqual(["*** NOTA PARA COCINA CAMBIADA ***", "Grill · Pastry"]);
-  expect(shared[0]!.slice(-5)).toEqual(["Grill", "2.000 x BURG", "Pastry", "1.000 x FLAN", ""]);
+  expect(shared[0]!.slice(-5)).toEqual(["Grill", "2 x BURG", "Pastry", "1 x FLAN", ""]);
   const own = (await jobsAt(s.own)).slice(before.own);
   expect(own).toHaveLength(1);
-  expect(own[0]).toContain("1.000 x PAELLA");
+  expect(own[0]).toContain("1 x PAELLA");
   const dishes = async (id: string) =>
     (await inTx(v, (tx) => listStationNotices(tx, id))).map((notice) =>
       notice.dishes?.map((dish) => dish.lineName),
