@@ -6,8 +6,11 @@ import type {
   MenuChange,
   MenuDocument,
   MenuPreview,
+  IncludeFolder,
+  MemberRef,
+  MenuHome,
+  SectionInput,
 } from "@waitron/shared";
-import type { IncludeFolder, MemberRef, MenuHome, SectionInput } from "@waitron/shared";
 
 export interface UndoStructureNode {
   memberId: string;
