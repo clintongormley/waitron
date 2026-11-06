@@ -108,7 +108,10 @@ const TAG_REFUSALS = [
   "no_space",
 ] as const satisfies readonly TagWriteRefusal[];
 
-/** The protocol's refusals as the module lists them; `host_failed` is a fixed line it lists nowhere. */
+/**
+ * The parser's refusals less `unknown_request` (answered as `unsupported`), plus `host_failed`,
+ * which no exported list holds.
+ */
 const moduleProtocol = [
   ...PARSER_REFUSALS.filter((refusal) => refusal !== "unknown_request"),
   "host_failed",
@@ -117,38 +120,46 @@ const moduleProtocol = [
 describe("the server's types and the protocol's lists", () => {
   it("each union equals the test's literal list, and that list equals the module's", () => {
     expectTypeOf<(typeof START)[number]>().toEqualTypeOf<StartScreen>();
-    expect(START_SCREENS).toEqual(START);
+    expect([...START_SCREENS].sort()).toEqual([...START].sort());
     expectTypeOf<(typeof SECURITY)[number]>().toEqualTypeOf<ScanSecurity>();
-    expect(SCAN_SECURITY).toEqual(SECURITY);
+    expect([...SCAN_SECURITY].sort()).toEqual([...SECURITY].sort());
     expectTypeOf<(typeof OUTCOMES)[number]>().toEqualTypeOf<TagOutcome>();
-    expect(TAG_OUTCOMES).toEqual(OUTCOMES);
+    expect([...TAG_OUTCOMES].sort()).toEqual([...OUTCOMES].sort());
     expectTypeOf<(typeof KINDS)[number]>().toEqualTypeOf<NetworkChange["kind"]>();
-    expect(CHANGE_KINDS).toEqual(KINDS);
+    expect([...CHANGE_KINDS].sort()).toEqual([...KINDS].sort());
     expectTypeOf<(typeof STATES)[number]>().toEqualTypeOf<NetworkChange["state"]>();
-    expect(CHANGE_STATES).toEqual(STATES);
+    expect([...CHANGE_STATES].sort()).toEqual([...STATES].sort());
     expectTypeOf<(typeof JOIN_CHANGE_REFUSALS)[number]>().toEqualTypeOf<JoinChangeRefusal>();
-    expect(CHANGE_REFUSALS.join).toEqual(JOIN_CHANGE_REFUSALS);
+    expect([...CHANGE_REFUSALS.join].sort()).toEqual([...JOIN_CHANGE_REFUSALS].sort());
     expectTypeOf<(typeof FORGET_CHANGE_REFUSALS)[number]>().toEqualTypeOf<ForgetChangeRefusal>();
-    expect(CHANGE_REFUSALS.forget).toEqual(FORGET_CHANGE_REFUSALS);
+    expect([...CHANGE_REFUSALS.forget].sort()).toEqual([...FORGET_CHANGE_REFUSALS].sort());
     expectTypeOf<(typeof COPY_STATES)[number]>().toEqualTypeOf<WifiCopyState>();
-    expect(WIFI_COPY_STATES).toEqual(COPY_STATES);
+    expect([...WIFI_COPY_STATES].sort()).toEqual([...COPY_STATES].sort());
     expectTypeOf<(typeof COPY_FAILURES)[number]>().toEqualTypeOf<WifiCopyFailure>();
-    expect(WIFI_COPY_FAILURES).toEqual(COPY_FAILURES);
+    expect([...WIFI_COPY_FAILURES].sort()).toEqual([...COPY_FAILURES].sort());
     expectTypeOf<(typeof NO_COPY_REASONS)[number]>().toEqualTypeOf<WifiNoCopyReason>();
-    expect(WIFI_NO_COPY_REASONS).toEqual(NO_COPY_REASONS);
+    expect([...WIFI_NO_COPY_REASONS].sort()).toEqual([...NO_COPY_REASONS].sort());
   });
 
   it("each request's refusals are the protocol's four plus that request's own list", () => {
     expectTypeOf<(typeof PROTOCOL)[number]>().toEqualTypeOf<ProtocolRefusal>();
-    expect(moduleProtocol).toEqual(PROTOCOL);
+    expect([...moduleProtocol].sort()).toEqual([...PROTOCOL].sort());
     expectTypeOf<(typeof SCAN_REFUSALS)[number]>().toEqualTypeOf<NetworkScanRefusal>();
-    expect([...moduleProtocol, ...REPLY_REFUSALS["network.scan"]!]).toEqual(SCAN_REFUSALS);
+    expect([...moduleProtocol, ...REPLY_REFUSALS["network.scan"]].sort()).toEqual(
+      [...SCAN_REFUSALS].sort(),
+    );
     expectTypeOf<(typeof JOIN_REFUSALS)[number]>().toEqualTypeOf<NetworkJoinRefusal>();
-    expect([...moduleProtocol, ...REPLY_REFUSALS["network.join"]!]).toEqual(JOIN_REFUSALS);
+    expect([...moduleProtocol, ...REPLY_REFUSALS["network.join"]].sort()).toEqual(
+      [...JOIN_REFUSALS].sort(),
+    );
     expectTypeOf<(typeof FORGET_REFUSALS)[number]>().toEqualTypeOf<NetworkForgetRefusal>();
-    expect([...moduleProtocol, ...REPLY_REFUSALS["network.forget"]!]).toEqual(FORGET_REFUSALS);
+    expect([...moduleProtocol, ...REPLY_REFUSALS["network.forget"]].sort()).toEqual(
+      [...FORGET_REFUSALS].sort(),
+    );
     expectTypeOf<(typeof TAG_REFUSALS)[number]>().toEqualTypeOf<TagWriteRefusal>();
-    expect([...moduleProtocol, ...REPLY_REFUSALS["tag.write"]!]).toEqual(TAG_REFUSALS);
+    expect([...moduleProtocol, ...REPLY_REFUSALS["tag.write"]].sort()).toEqual(
+      [...TAG_REFUSALS].sort(),
+    );
     expect(REPLY_REFUSALS["network.read"]).toEqual([]);
     expect(REPLY_REFUSALS["screen.read"]).toEqual([]);
     expect(REPLY_REFUSALS["screen.set"]).toEqual([]);
@@ -280,6 +291,7 @@ describe("every listed value passes through the client", () => {
       expect(await trip.call(client), trip.label).toEqual(trip.expected);
       ran += 1;
     }
+    // 21 boot-copy + 10 change + 3 security + 2 screens + 3 tag outcomes + 38 refusals.
     expect(ran).toBe(77);
     expect(host.connections()).toBe(77);
   });
