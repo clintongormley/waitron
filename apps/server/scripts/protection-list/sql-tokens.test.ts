@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { checksIn, normaliseSql } from "./sql-tokens.js";
+import { checksIn, createdObject, normaliseSql } from "./sql-tokens.js";
 
 describe("normaliseSql", () => {
   it("leaves whitespace inside quoted text untouched and removes it between tokens", () => {
@@ -121,5 +121,29 @@ describe("checksIn", () => {
 
   it("finds nothing in a table that has no CHECK", () => {
     expect(checksIn(`CREATE TABLE t (a TEXT DEFAULT 'CHECK (a)')`)).toEqual([]);
+  });
+});
+
+describe("createdObject", () => {
+  it.each([
+    ["CREATE TABLE `a b` (x)", { kind: "table", name: "a b" }],
+    ['create  temp table if not exists "t" (x)', { kind: "table", name: "t" }],
+    ["CREATE UNIQUE INDEX IF NOT EXISTS main.[i] ON t (x)", { kind: "index", name: "i" }],
+    [
+      "-- note\nCREATE TRIGGER t_x BEFORE INSERT ON t BEGIN SELECT 1; END",
+      { kind: "trigger", name: "t_x" },
+    ],
+    ["CREATE VIEW v AS SELECT 1", { kind: "view", name: "v" }],
+  ])("names what %s creates", (sql, expected) => {
+    expect(createdObject(sql)).toEqual(expected);
+  });
+
+  it.each([
+    "INSERT INTO t VALUES (1)",
+    "ALTER TABLE t ADD COLUMN y",
+    "CREATE VIRTUAL TABLE v USING fts5(x)",
+    "",
+  ])("answers null for %j", (sql) => {
+    expect(createdObject(sql)).toBeNull();
   });
 });

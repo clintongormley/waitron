@@ -1,6 +1,6 @@
 // Lists every protection the migrations build, or compares two such lists.
 //
-// Usage: pnpm --filter @waitron/server exec tsx scripts/protection-list/cli.ts list --out <absolute dir> [--migration-root <absolute dir>]
+// Usage: pnpm --filter @waitron/server exec tsx scripts/protection-list/cli.ts list --out <absolute dir> [--migration-root <absolute dir>] [--path descriptor|manifest]
 //        pnpm --filter @waitron/server exec tsx scripts/protection-list/cli.ts compare --old <absolute dir> --new <absolute dir> --report <absolute file>
 import {
   existsSync,
@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildSchemaListFile } from "./build.js";
+import { buildSchemaListFile, PATHS, type SetPath } from "./build.js";
 import {
   compareSchemaLists,
   formatDifferences,
@@ -24,7 +24,7 @@ export const LIST_FILE = "protection-list.json";
 export const SUMMARY_FILE = "summary.txt";
 
 const USAGE =
-  "Usage: list --out <absolute dir> [--migration-root <absolute dir>]\n" +
+  "Usage: list --out <absolute dir> [--migration-root <absolute dir>] [--path descriptor|manifest]\n" +
   "       compare --old <absolute dir> --new <absolute dir> --report <absolute file>";
 
 const BOOKKEEPING_PREFIX = "__drizzle_migrations_";
@@ -127,8 +127,12 @@ export function summaryOf(file: SchemaListFile): string {
 }
 
 async function list(args: readonly string[], print: (text: string) => void): Promise<number> {
-  const found = flags(args, ["--out", "--migration-root"]);
+  const found = flags(args, ["--out", "--migration-root", "--path"]);
   const out = required(found, "--out");
+  const path = found.get("--path") ?? "descriptor";
+  if (!(PATHS as readonly string[]).includes(path)) {
+    throw new Error(`--path must be descriptor or manifest: ${path}`);
+  }
   const root = found.get("--migration-root");
   if (root !== undefined && !isAbsolute(root)) {
     throw new Error(`--migration-root must be an absolute path: ${root}`);
@@ -138,6 +142,7 @@ async function list(args: readonly string[], print: (text: string) => void): Pro
   const file = await buildSchemaListFile({
     migrationRoot: root ?? null,
     workDir: join(out, "databases"),
+    path: path as SetPath,
   });
   writeFileSync(join(out, LIST_FILE), `${JSON.stringify(file, null, 2)}\n`);
   const summary = summaryOf(file);

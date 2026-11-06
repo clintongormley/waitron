@@ -3271,6 +3271,11 @@ A command it refuses, such as a relative path, exits 2 when you run it through `
 or `tsx`. Through `pnpm -s` (pnpm 9.15.0) the same refusal exited 1, the status a difference also
 gives. So when a script reads the exit status, don't pass `-s`, or read the printed report too.
 
+`list --path manifest` takes the list of migration sets, their order and their folders from
+`packages/migrations/migrations.manifest.json` instead of the module descriptors; the default is
+`--path descriptor`. On 2026-11-06, on `feat/a760-prepare` at `7cbcc9ccc8` plus this change, a
+manifest list compared with a descriptor list printed `EQUAL`.
+
 ### How a slice uses it
 
 1. Before the change, in a throwaway worktree of the base commit (`git worktree add --detach <dir> <base-sha>`,
@@ -3283,6 +3288,40 @@ gives. So when a script reads the exit status, don't pass `-s`, or read the prin
 - **It reads what a freshly built database holds, not what the code does.** A rule that only
   TypeScript enforces is not on it, and neither is a protection that an upgraded database holds but
   a new build does not.
+
+### The A760 baseline tools
+
+A760 replaces each migration set's history with one generated starting migration (a baseline).
+Three commands in `apps/server/scripts/migration-baseline/` support it. They run from `apps/server`
+as `pnpm migration-baseline <command>`, refuse a relative path, and exit 0 when all is well, 1 when
+they find a difference and 2 when they refuse the command (2 was seen through plain `pnpm`; through
+`pnpm -s` read the report as well, as above). None runs in CI; their unit tests run in
+`apps/server`'s suite.
+
+- **`preserve --reference <list dir> --set <name> --from <old set,old set,...>`** rewrites the one
+  generated SQL file of the manifest set `<name>`. The reference is a `protection-list list` folder
+  built from the old history, and only its `sql-only` phase is read, so triggers the installers add
+  later stay out. Each generated table and index keeps its place and takes the old database's
+  stored text; the old triggers follow in the order the old database created them, across all
+  the named old sets. It refuses a generated table or index the old sets do not have,
+  one the generator lost, a generated table or index that enforces something different from the
+  old one (a different column order alone is allowed), and an old set that owns nothing. It never
+  writes the journal or snapshot, and a second run changes nothing. So far it has run only on the
+  small fixtures in `preserve.test.ts`, not on the real schema.
+- **`controls --reference <list dir> --out <empty dir>`** copies the reference's databases under
+  `--out`, makes one change in each copy (dropping or editing a trigger, index, CHECK or foreign key,
+  changing a column's type or default or a key's columns, adding a table, changing a seeded value)
+  and compares the copy with the reference. Each control names exactly the differences it must
+  produce; an unchanged copy and a whitespace-only edit must print `EQUAL`. It prints `PASS` or
+  `FAIL` for each and writes the same to `controls.txt`. On 2026-11-06 at `7cbcc9ccc8` plus this
+  change, run on a fresh list of the real schema, every control printed `PASS` and it exited 0.
+- **`copies --dist <dir> --image-root <dir> --report <file>`** compares every file under each
+  manifest set's source folder with `drizzle/<set>/` in the built `apps/server/dist` and in an
+  image's `/app`, by SHA-256, and reports each `missing`, `extra` or `stale` file and any folder no
+  set names. On 2026-11-06 a fresh `pnpm build`'s `dist`, given as both roots, printed `EQUAL`; with
+  `/app/drizzle` copied out of a two-week-old `ghcr.io/clintongormley/waitron:main` as the image
+  root, it listed that image's missing and stale files and exited 1. No image of this commit was
+  built.
 
 
 ## Root receipt excerpts moved on 2026-10-23

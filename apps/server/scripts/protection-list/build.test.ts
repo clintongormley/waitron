@@ -8,7 +8,7 @@ import {
   type BuiltSchemaListFile,
 } from "./build.js";
 import { LIST_FILE, runCli } from "./cli.js";
-import type { SchemaListEntry, SchemaListFile } from "./compare.js";
+import { compareSchemaLists, type SchemaListEntry, type SchemaListFile } from "./compare.js";
 
 // The build measured 3.7 s locally; the margin is for a slower CI runner.
 const BUILD_TIMEOUT_MS = 120_000;
@@ -113,6 +113,39 @@ describe("buildSchemaListFile", () => {
       expect(e.checks.foreignKeys).toBe(1);
       if (e.phase !== "sql-only") expect(e.checks.recursiveTriggers).toBe(1);
     }
+  });
+});
+
+describe("the manifest path", () => {
+  it(
+    "builds the same protections from the manifest as from the descriptors",
+    async () => {
+      const manifestDir = mkdtempSync(join(tmpdir(), "wt-protection-list-manifest-"));
+      try {
+        const byManifest = await buildSchemaListFile({
+          migrationRoot: null,
+          workDir: manifestDir,
+          path: "manifest",
+        });
+        expect(byManifest.entries).toHaveLength(file.entries.length);
+        expect(compareSchemaLists(file, byManifest)).toEqual([]);
+        const none = byManifest.entries.find(
+          (e) =>
+            e.composition === "fiscal-none" && e.phase === "sql-only" && e.database === "venue",
+        );
+        expect(none?.setOrder).not.toContain("fiscal-verifactu");
+        expect(none?.setOrder).toContain("fiscal-none");
+      } finally {
+        rmSync(manifestDir, { recursive: true, force: true });
+      }
+    },
+    BUILD_TIMEOUT_MS,
+  );
+
+  it("refuses a path it does not know", async () => {
+    await expect(
+      runCli(["list", "--out", join(workDir, "path-out"), "--path", "elsewhere"], () => {}),
+    ).rejects.toThrow("--path must be descriptor or manifest");
   });
 });
 
