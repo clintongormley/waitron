@@ -1216,7 +1216,7 @@ export interface PrinterProfileOffer {
   pagePrinterId: string | null;
   profileId: string;
   profileName: string;
-  roles: ("receipt" | "payment_slip" | "cash_drawer" | "invoice")[];
+  roles: Exclude<EquipmentRole, "card_terminal">[];
   departmentId: string | null;
   departmentName: string | null;
 }

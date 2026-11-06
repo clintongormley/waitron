@@ -404,7 +404,9 @@ export class PrintersScreen extends LitElement {
         width: 100%;
         max-width: var(--wt-form-max-width);
       }
+      /* Block padding on an inline link makes its target tap-height without making its line taller. */
       .used-by a {
+        padding-block: calc((var(--wt-tap-min) - 1lh) / 2);
         color: var(--wt-color-primary-text);
       }
       .used-by a:focus-visible {
@@ -869,6 +871,8 @@ export class PrintersScreen extends LitElement {
 
   @state() private printerProfiles: PrinterProfileOffer[] = [];
   @state() private printerStations: PrinterStationName[] = [];
+  /** Which of the Used by reads have answered: until both have, no usage does not mean none. */
+  @state() private usageRead: ReadonlySet<"profiles" | "stations"> = new Set();
 
   @state() private armedRevokeId: string | null = null;
 
@@ -1077,9 +1081,11 @@ export class PrintersScreen extends LitElement {
         }),
         this.#queries.watch("listPrinterProfiles", [], (printerProfiles) => {
           this.printerProfiles = printerProfiles;
+          this.usageRead = new Set([...this.usageRead, "profiles"]);
         }),
         this.#queries.watch("listPrinterStationNames", [], (printerStations) => {
           this.printerStations = printerStations;
+          this.usageRead = new Set([...this.usageRead, "stations"]);
         }),
         this.#queries.watch("listPagePrinters", [], (pagePrinters) => {
           this.pagePrinters = pagePrinters;
@@ -3154,7 +3160,7 @@ export class PrintersScreen extends LitElement {
       className: "used-by",
       rows,
       after:
-        rows.length === 0
+        rows.length === 0 && this.usageRead.size === 2
           ? html`<p data-test="printer-used-by-nothing">${t("printers.used_by_nothing")}</p>`
           : nothing,
     });

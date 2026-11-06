@@ -5095,6 +5095,14 @@ it("links each name to its screen only where the person may open it", async () =
   ]);
 });
 
+it("gives each Used by link a full-height touch target", async () => {
+  const el = await openUsedBy(() => true);
+  const links = [...q(el, "[data-test=printer-section-used-by]")!.querySelectorAll("a")];
+  expect(links).toHaveLength(5);
+  for (const link of links)
+    expect(link.getBoundingClientRect().height, link.textContent!).toBeGreaterThanOrEqual(44);
+});
+
 it("says nothing uses a printer that no profile or station names", async () => {
   const el = await openUsedBy(
     () => true,
@@ -5106,6 +5114,58 @@ it("says nothing uses a printer that no profile or station names", async () => {
   expect(section.querySelector("dl dt")).toBeNull();
   expect(text(el, "[data-test=printer-used-by-nothing]")).toBe(t("printers.used_by_nothing"));
 });
+
+async function openUsedByWith(api: DashboardApi): Promise<PrintersScreen> {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  expect(q(el, "[data-test=printer-section-used-by]")).not.toBeNull();
+  return el;
+}
+
+it("does not say nothing uses a printer while the stations are still being read", async () => {
+  let answer!: (stations: PrinterStationName[]) => void;
+  const el = await openUsedByWith(
+    stubApi({
+      listPrinterProfiles: vi.fn().mockResolvedValue([]),
+      listPrinterStationNames: () => new Promise((resolve) => (answer = resolve)),
+    }),
+  );
+  expect(q(el, "[data-test=printer-used-by-nothing]")).toBeNull();
+  answer([{ printerId: "p1", stationId: "s1", stationName: "Barra" }]);
+  await flush(el);
+  expect(text(el, "[data-test=printer-used-by-stations]")).toBe("Barra");
+  expect(q(el, "[data-test=printer-used-by-nothing]")).toBeNull();
+});
+
+it("says nothing uses a printer only once the profiles have answered too", async () => {
+  let answer!: (profiles: PrinterProfileOffer[]) => void;
+  const el = await openUsedByWith(
+    stubApi({
+      listPrinterProfiles: () => new Promise((resolve) => (answer = resolve)),
+      listPrinterStationNames: vi.fn().mockResolvedValue([]),
+    }),
+  );
+  expect(q(el, "[data-test=printer-used-by-nothing]")).toBeNull();
+  answer([]);
+  await flush(el);
+  expect(text(el, "[data-test=printer-used-by-nothing]")).toBe(t("printers.used_by_nothing"));
+});
+
+it.each(["listPrinterProfiles", "listPrinterStationNames"] as const)(
+  "does not say nothing uses a printer when %s fails",
+  async (failing) => {
+    const el = await openUsedByWith(
+      stubApi({
+        listPrinterProfiles: vi.fn().mockResolvedValue([]),
+        listPrinterStationNames: vi.fn().mockResolvedValue([]),
+        [failing]: vi.fn().mockRejectedValue({ code: "server.unexpected" }),
+      }),
+    );
+    expect(q(el, "[data-test=printer-refresh-error]")).not.toBeNull();
+    expect(q(el, "[data-test=printer-used-by-nothing]")).toBeNull();
+  },
+);
 
 it("reopens printer status from its URL and reflects a saved drawer choice", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1?keep=yes");
