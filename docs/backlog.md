@@ -6846,6 +6846,18 @@ _Formerly parts of B9 and Track C._ Open work:
 
 ### Modules, data and code health
 
+- **Index the uncollected-bill lookup in A1308's orders slice (A1370 follow-up).** The station
+  queue now reads tickets by uncollected bill, but finding those bills still scans
+  `working_orders`. Add the partial index once the table-change hold ends.
+
+- **Measure the remaining top-level-dish reads (A1370 follow-up).** Other queries in
+  `order-groups.ts`, including `listOrderGroups`, still combine `parent_line_id is null`
+  with bill, group or party filters. Check their plans with history before changing them.
+
+- **Decide when a box refreshes SQLite's planner statistics (A1370 follow-up).** Running
+  `ANALYZE` or `PRAGMA optimize` is a separate lifecycle decision; no automatic run is
+  scheduled. Measure it on representative venue data before choosing its timing.
+
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
 - **A1308. Rationalise the tables, background jobs, environment variables and files** (owner,
