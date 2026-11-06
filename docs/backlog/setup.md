@@ -550,8 +550,7 @@ after a reload during the box's wait (read, not run: `#select(true)` in `first-h
 - **No Recover from backup when the setup's own record cannot be read.** Since A1131bc slice 3,
   Recover from backup is drawn disabled wherever Start again is disabled, including a setup record
   whose password cannot be checked; before, it opened the old recovery. The only way out is then a
-  reinstall. A record whose claim mark needs repair is offered both since A1379's first pull
-  request. Left open by A1131bc slice 3 (plan, N2).
+  reinstall. Left open by A1131bc slice 3 (plan, N2).
 
 ## The bucket and Waitron Cloud restores have not been run after Start again's deletion
 
@@ -626,7 +625,7 @@ that operation's reader. Do not remove exact-content checks to make a large file
 
 ## Bundle A1379: A failed setup always offers Start again
 
-4 entries, size M. From the backlog review of 2026-11-06; A1379's first pull request finished two and narrowed two.
+4 entries, size M. From the backlog review of 2026-11-06.
 
 - **A1322. A failed setup always offers Start again; remove "Continue with your setup password" (owner, 2026-11-04).**
   Today, once a setup has saved the settings the box sells with, Start again is refused and Continue is the only choice, so a lost password means reinstalling.

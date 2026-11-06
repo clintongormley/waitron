@@ -173,19 +173,16 @@ it.each(refusals)(
   },
 );
 
-it.each([
-  ["uncheckable", { password: "uncheckable", revision: null, ownerGeneration: null }],
-] as const)(
-  "where the wipe is not offered (%s), Recover from backup is drawn disabled like Start again",
-  async (name, inspection) => {
-    const { app, requests } = await wipeFixture({ inspection });
-    expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
-    expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(true);
-    expect(q(app, "start-again-refused")!.textContent).toBe(t.wipeUnavailable);
-    if (name === "uncheckable") expect(text(app)).toContain(t.uncheckable);
-    expect(oldRecoveryRequests(requests)).toEqual([]);
-  },
-);
+it("where the wipe is not offered (uncheckable), Recover from backup is drawn disabled like Start again", async () => {
+  const { app, requests } = await wipeFixture({
+    inspection: { password: "uncheckable", revision: null, ownerGeneration: null },
+  });
+  expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
+  expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(true);
+  expect(q(app, "start-again-refused")!.textContent).toBe(t.wipeUnavailable);
+  expect(text(app)).toContain(t.uncheckable);
+  expect(oldRecoveryRequests(requests)).toEqual([]);
+});
 
 it("pressing Recover beside Start again's open confirmation reads the box again and opens Recover's confirmation instead", async () => {
   const { app, requests } = await wipeFixture();

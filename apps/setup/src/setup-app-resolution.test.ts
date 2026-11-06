@@ -1131,9 +1131,9 @@ it("saved trading settings beside a database holding records offer Start again, 
 
 const DISK_FULL = {
   "en-GB":
-    "The box's disk is full, so Waitron cannot save anything. Restart the box: as it starts, it uses the space it keeps in reserve and removes old logs and crash reports to make room. Then try again. If the disk is still full, Waitron cannot free more space by itself. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
+    "The box's disk is full, so Waitron cannot save anything. Restart the box: as it starts, it uses any space it still keeps in reserve and removes old logs and crash reports to make room. Then try again. If the disk is still full, Waitron cannot free more space by itself. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
   "es-ES":
-    "El disco del equipo está lleno, así que Waitron no puede guardar nada. Reinicia el equipo: al arrancar, usa el espacio que guarda en reserva y quita registros y avisos de fallo antiguos para hacer sitio. Después, vuelve a intentarlo. Si el disco sigue lleno, Waitron no puede liberar más espacio por sí solo. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+    "El disco del equipo está lleno, así que Waitron no puede guardar nada. Reinicia el equipo: al arrancar, usa el espacio que aún guarde en reserva y quita registros y avisos de fallo antiguos para hacer sitio. Después, vuelve a intentarlo. Si el disco sigue lleno, Waitron no puede liberar más espacio por sí solo. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
 } as const;
 const DISK_FULL_RESTART_UNKNOWN = {
   "en-GB":

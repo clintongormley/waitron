@@ -1492,7 +1492,9 @@ Desktop during the slice's review (2026-10-21), where the 32 MiB tmpfs mounted a
 **A second real-disk file has its own small filesystem.** `apps/server/src/start-again-full-disk.e2e.test.ts`
 (A1127) runs the repair page's flows on a full disk beside a held setup database: Continue's
 password step (`/recover`) answers `507 storage.disk_full`, and the summary and Start again answer
-`507 storage.disk_full` and delete nothing, since nothing releases the spare there. It builds its
+`507 storage.disk_full` and delete nothing on the repair page as first served. After a restart
+through `runEntry`, the start releases the box's spare file and the summary and Start again finish;
+with no spare file, that restart serves the full-disk page instead. It builds its
 held setup from the held-database fixture (`apps/server/test/held-setup-database.ts`), whose
 module-level hooks must not run in `start-full-disk.e2e.test.ts`, so it is a file of its own, and
 two files filling one filesystem at once could fail each other: the server's test files run up to four at once

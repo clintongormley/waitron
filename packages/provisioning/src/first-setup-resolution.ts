@@ -177,7 +177,7 @@ function validateInput(value: unknown): asserts value is ResolutionInput {
     (["marker-repair", "ownership-rebind"].includes(String(value.action)) ||
       (value.action === "finish-publication" && value.database === "committed-exact"))
   ) {
-    // Null records no consultation; the observed outcome is checked separately.
+    // Null records that no register was consulted.
   } else if (
     exact(answer, ["kind", "confirmed"]) &&
     answer.kind === "no-current-master" &&

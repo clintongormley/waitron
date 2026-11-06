@@ -153,7 +153,7 @@ it("where the setup password cannot be checked, Start again is not offered and n
   expect(summaryReads(requests)).toEqual([]);
 });
 
-it("where the setup record pair is only repairable, Start again is offered", async () => {
+it("where the setup record pair is repairable, Start again is offered", async () => {
   const { app } = await wipeFixture({ inspection: { pair: "repairable" } });
   expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
 });

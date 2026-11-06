@@ -86,7 +86,7 @@ Reconnect, it opens its first screen; if that asks "Is this page secure?", press
 setup**, then choose **Join or recover**.
 
 Recover from backup is not offered where Start again is not, including when the setup's own record
-cannot be read or carries a mark that needs repair. The bilingual
+cannot be read. The bilingual
 [backup recovery guide](../../apps/server/src/guide/en/backup-recovery.md) walks through the
 controls. It is served with the other guides during normal operation; the repair-only listener does
 not link to or serve those guides.

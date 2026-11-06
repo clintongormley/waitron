@@ -31,8 +31,8 @@ configuración para terminarla), si la configuración ya terminó, o si la base 
 configuración tiene una factura u otro registro que Waitron nunca borra. Si el equipo no puede
 confirmar que borrar la configuración sea seguro, la página lo indica y no ofrece ninguna. Eso
 incluye una configuración cuyo propio registro no se puede leer: entonces la única salida es
-reinstalar Waitron. A una configuración cuyo registro lleva una marca que necesita reparación se le
-ofrecen las dos; si aún no había guardado nada, **Continuar con tu contraseña de configuración**
+reinstalar Waitron. Una configuración cuyo registro lleva una marca que necesita reparación se comprueba
+igual que cualquier otra; si aún no había guardado nada, **Continuar con tu contraseña de configuración**
 también repara el registro y sigue.
 
 Cuando se ha borrado la configuración, el equipo se reinicia. Después de **Recuperar desde una
