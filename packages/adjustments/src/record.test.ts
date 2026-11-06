@@ -2,13 +2,13 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  adjustmentLines,
+  adjustments,
   CORE_MIGRATIONS,
   withTransaction,
   workingOrderLines,
-  type Database,
-  adjustmentLines,
-  adjustments,
   type AdjustmentSplit,
+  type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, decimalToCents, stringToThousandths, subtractDecimal } from "@waitron/shared";

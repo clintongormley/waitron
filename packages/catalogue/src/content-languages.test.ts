@@ -3,15 +3,15 @@ import { eq } from "drizzle-orm";
 import {
   catalogues,
   CORE_MIGRATIONS,
-  products,
-  withTransaction,
-  type Transaction,
+  extraLists,
+  menuDetails,
   optionLabels,
   optionLists,
-  extraLists,
-  units,
+  products,
   sections,
-  menuDetails,
+  units,
+  withTransaction,
+  type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";

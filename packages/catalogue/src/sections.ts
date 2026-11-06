@@ -1,5 +1,5 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { tableExists, type Transaction, sectionMembers, sections } from "@waitron/db";
+import { sectionMembers, sections, tableExists, type Transaction } from "@waitron/db";
 import { AppError, contentLanguageCode, FALLBACK_LOCALE, colorOrNull } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { allTopLevelProducts } from "./categories.js";

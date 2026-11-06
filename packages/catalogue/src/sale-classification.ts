@@ -1,5 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
-import { categories, products, type Transaction, categoryDetails } from "@waitron/db";
+import { categories, categoryDetails, products, type Transaction } from "@waitron/db";
 import { AppError, type ClassificationEntry, type SaleLineClassification } from "@waitron/shared";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import "./errors.js";

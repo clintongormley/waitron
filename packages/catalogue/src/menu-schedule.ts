@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, gt, lte, ne, or } from "drizzle-orm";
-import { now, type Transaction, menuScheduledPublications, menuVersions } from "@waitron/db";
+import { menuScheduledPublications, menuVersions, now, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { buildMenuDocument, menuDocumentHash } from "./menu-document.js";
 import {

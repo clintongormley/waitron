@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
-  products,
   contentSuggestions,
-  optionLists,
-  optionLabels,
-  units,
   menuDetails,
-  sections,
+  optionLabels,
+  optionLists,
+  products,
   sectionMembers,
+  sections,
+  units,
 } from "@waitron/db";
 import { addMember } from "./sections.js";
 import { createCatalogue } from "./operations.js";

@@ -2,16 +2,16 @@ import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   catalogues,
+  contentLanguages,
   CORE_MIGRATIONS,
   locationCatalogues,
   locations,
-  tenants,
-  withTransaction,
-  venueLocationId,
-  contentLanguages,
   menuDetails,
   sections,
+  tenants,
   units,
+  withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";

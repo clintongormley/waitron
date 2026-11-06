@@ -3,12 +3,12 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  catalogues,
-  menuPublications,
-  menuVersions,
-  menuVersionImages,
   catalogueSettings,
+  catalogues,
   contentSuggestionJobs,
+  menuPublications,
+  menuVersionImages,
+  menuVersions,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery } from "@waitron/store";

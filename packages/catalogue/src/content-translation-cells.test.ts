@@ -2,15 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
+  extraLists,
+  menuDetails,
+  optionLabels,
+  optionLists,
   products,
+  sections,
+  units,
   withTransaction,
   type Transaction,
-  units,
-  menuDetails,
-  sections,
-  optionLists,
-  optionLabels,
-  extraLists,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";

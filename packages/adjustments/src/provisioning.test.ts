@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
-import { CORE_MIGRATIONS, tenants, withTransaction, adjustmentSettings } from "@waitron/db";
+import { adjustmentSettings, CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";

@@ -4,11 +4,11 @@ import { eq, inArray, type SQL } from "drizzle-orm";
 import {
   catalogues,
   categories,
-  products,
-  type Transaction,
   menuDetails,
   optionLabels,
+  products,
   sections,
+  type Transaction,
 } from "@waitron/db";
 import { AppError, effectiveColor, HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { batches } from "./batches.js";

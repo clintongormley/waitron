@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
-import { products, contentSuggestionJobs, contentSuggestions } from "@waitron/db";
+import { contentSuggestionJobs, contentSuggestions, products } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { createCatalogue } from "./operations.js";

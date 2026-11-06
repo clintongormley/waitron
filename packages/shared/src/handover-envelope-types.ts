@@ -1,4 +1,6 @@
-/** `HANDOVER_KINDS` in `@waitron/handover` lists these at run time; its tests hold the two equal. */
+/**
+ * `HANDOVER_KINDS` in `@waitron/handover` lists these at run time; its tests hold the two equal.
+ */
 export type HandoverKind =
   | "query"
   | "status"

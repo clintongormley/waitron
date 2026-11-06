@@ -5,7 +5,7 @@ import { listProductVariants, setMenuVariants, setProductVariants } from "./vari
 import { applyLiveFields } from "./menu-document.js";
 import { previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 import { menusFixture } from "../test/menus-fixture.js";
-import { products, withTransaction, menuItems } from "@waitron/db";
+import { menuItems, products, withTransaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { Transaction } from "@waitron/db";
 import { priceBasket } from "./pricing.js";

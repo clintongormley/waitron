@@ -1,5 +1,5 @@
 import type { TranslationTarget } from "./content-translation-targets.js";
-import { categories, products, tenants, type Transaction, contentSuggestions } from "@waitron/db";
+import { categories, contentSuggestions, products, tenants, type Transaction } from "@waitron/db";
 import type { ContentLanguages, TranslationGapKind } from "@waitron/shared";
 import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { batches } from "./batches.js";

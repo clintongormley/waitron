@@ -1,5 +1,5 @@
 import { asc, eq, inArray } from "drizzle-orm";
-import { products, type Transaction, extraListItems, extraLists } from "@waitron/db";
+import { extraListItems, extraLists, products, type Transaction } from "@waitron/db";
 import { buildMenuDocuments } from "./menu-document.js";
 import { productsUsingUnit } from "./units.js";
 

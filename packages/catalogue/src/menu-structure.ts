@@ -2,7 +2,7 @@ import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
-import { menuDetails, menuItems, sections, menuItemVariantOverrides } from "@waitron/db";
+import { menuDetails, menuItems, menuItemVariantOverrides, sections } from "@waitron/db";
 import { loadSectionGraph, reachableProducts, type SectionGraph } from "./section-graph.js";
 import { directIncludedMenus, includableMenus } from "./menu-inclusion.js";
 import type { IncludeFolder, MemberRef, SectionInput, SectionDetails } from "@waitron/shared";

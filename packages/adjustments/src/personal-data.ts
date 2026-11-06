@@ -1,4 +1,4 @@
-import { workingOrders, adjustments } from "@waitron/db";
+import { adjustments, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { jsonFile, type ModulePersonalData } from "@waitron/module";
 import {

@@ -1,7 +1,7 @@
 import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTransaction, type Transaction, menuItems, sectionMembers } from "@waitron/db";
+import { menuItems, sectionMembers, withTransaction, type Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { racePair, seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { and } from "drizzle-orm";

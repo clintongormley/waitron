@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { contentLanguageChoices } from "@waitron/shared";
 import {
+  contentSuggestions,
   CORE_MIGRATIONS,
   products,
+  units,
   withTransaction,
   type Transaction,
-  units,
-  contentSuggestions,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";

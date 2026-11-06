@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   categories,
-  products,
-  withTransaction,
-  type Transaction,
-  menuPublications,
   extraListItems,
   extraLists,
   menuItems,
   menuItemVariantOverrides,
+  menuPublications,
+  products,
   sectionMembers,
+  withTransaction,
+  type Transaction,
 } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, product } from "../test/menus-fixture.js";

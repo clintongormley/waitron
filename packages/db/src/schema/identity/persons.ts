@@ -2,7 +2,10 @@ import { sql, type SQL } from "drizzle-orm";
 import { check, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { enumCheck, enumType, id, label, newId, nowIso, table, tsString } from "../columns.js";
 
-/** Call sites gate on a permission; `packages/identity/src/permissions.ts` maps each role to its permission set. */
+/**
+ * Call sites gate on a permission; `packages/identity/src/permissions.ts` maps each role to its
+ * permission set.
+ */
 export const personRole = enumType(["staff", "supervisor", "manager", "admin"]);
 
 /** `suspended` keeps the row, and any history that references it, while refusing login. */
@@ -29,9 +32,9 @@ export const persons = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     displayName: label("display_name").notNull(),
-    /** `foldForUniqueness(display_name)` (`packages/identity/src/fold.ts`), set by every write path in `@waitron/identity` in
-     * the statement that sets `display_name`. Nullable because code outside `@waitron/identity` writes
-     * `persons` rows straight through the table definition. */
+    /** `foldForUniqueness(display_name)` (`packages/identity/src/fold.ts`), set by every write path
+     * in `@waitron/identity` in the statement that sets `display_name`. Nullable because code
+     * outside `@waitron/identity` writes `persons` rows straight through the table definition. */
     displayNameFolded: label("display_name_folded"),
     firstNames: label("first_names"),
     lastNames: label("last_names"),
@@ -67,11 +70,11 @@ export const persons = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
-    // A row without a folded value (written by code outside `@waitron/identity`) falls back to `lower()`,
-    // which on this engine folds ASCII only: the fallback keeps such a row in the index rather than
-    // closing the accented-letter gap for it. The migration that added the folded columns leaves
-    // existing rows NULL: with a backfill, its `CREATE UNIQUE INDEX` fails on a database already
-    // holding a pair the old index allowed (`José García` beside `JOSÉ GARCÍA`).
+    // A row without a folded value (written by code outside `@waitron/identity`) falls back to
+    // `lower()`, which on this engine folds ASCII only: the fallback keeps such a row in the index
+    // rather than closing the accented-letter gap for it. The migration that added the folded
+    // columns leaves existing rows NULL: with a backfill, its `CREATE UNIQUE INDEX` fails on a
+    // database already holding a pair the old index allowed (`José García` beside `JOSÉ GARCÍA`).
     uniqueIndex("persons_tenant_email_uq")
       .on(foldedKey(t.emailFolded, t.email))
       .where(sql`${t.email} is not null`),

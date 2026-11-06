@@ -3,16 +3,16 @@ import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   categories,
-  products,
-  withTransaction,
-  type Transaction,
+  contentSuggestions,
+  extraLists,
   menuDetails,
-  sections,
   optionLabels,
   optionLists,
-  extraLists,
+  products,
+  sections,
   units,
-  contentSuggestions,
+  withTransaction,
+  type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";

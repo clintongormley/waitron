@@ -94,7 +94,7 @@ non-test files and about 1,150 test files to judge. After reading them:
 | `apps/server/README.md:315–348` | `sello`, `representante`, `consultar` | Values of fiscal-verifactu's certificate kinds and AEAT's query operation |
 | five demo scripts (`allergens-demo.ts:43`, `daily-close-demo.ts:92`, `daily-close-z-demo.ts:101`, `dev-setup.ts:212`, `modelo-303-demo.ts:260`) | «Venta en establecimiento» | The filed operation description; copies fiscal-verifactu's default (`packages/fiscal-verifactu/src/slot.ts:100`). Could import it instead of repeating it |
 | `apps/server/scripts/receipt-look.ts:87–88` | AEAT's QR address parameters; «QR tributario:» | AEAT's names and the required caption (home: `packages/fiscal-verifactu/src/backend.ts:163`) |
-| `packages/shared/src/locales.ts:8`, `packages/identity/src/fold.ts:14, 19`, `packages/db/src/schema/identity/persons.ts:74` | «Español»; `López`, `José García` | A language's own name in the language picker (deliberate, comment at lines 4–5); accented examples in comments about case and accent folding |
+| `packages/shared/src/locales.ts:8`, `packages/identity/src/fold.ts:14, 19`, `packages/db/src/schema/identity/persons.ts:77` | «Español»; `López`, `José García` | A language's own name in the language picker (deliberate, comment at lines 4–5); accented examples in comments about case and accent folding |
 
 ## Bucket B — the three packages written for Spain (facts for the owner)
 

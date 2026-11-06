@@ -1,13 +1,13 @@
 import {
-  products,
   extraListItems,
-  units,
   menuDetails,
   menuPublications,
   menuVersionImages,
   menuVersions,
+  products,
   sectionMembers,
   sections,
+  units,
 } from "@waitron/db";
 import { takeOffMenus } from "./menu-removal.js";
 import type { MenuChange, MenuChangeBody } from "@waitron/shared";

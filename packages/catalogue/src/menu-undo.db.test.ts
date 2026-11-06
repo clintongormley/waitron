@@ -1,13 +1,13 @@
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  products,
-  withTransaction,
-  type Transaction,
   menuItems,
   menuItemVariantOverrides,
+  products,
   sectionMembers,
   sections,
+  withTransaction,
+  type Transaction,
 } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, type MenusFixture } from "../test/menus-fixture.js";

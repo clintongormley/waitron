@@ -1,12 +1,12 @@
 import { and, eq, gt, inArray } from "drizzle-orm";
 import {
   catalogues,
+  extraListItems,
+  menuScheduledPublications,
+  menuVersions,
   now,
   products,
   type Transaction,
-  menuScheduledPublications,
-  menuVersions,
-  extraListItems,
 } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";

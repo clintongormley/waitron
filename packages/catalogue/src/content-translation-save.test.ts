@@ -4,18 +4,18 @@ import { contentLanguageChoices } from "@waitron/shared";
 import {
   CORE_MIGRATIONS,
   catalogues,
+  contentLanguages,
+  contentSuggestions,
+  extraLists,
+  menuDetails,
+  optionLabels,
+  optionLists,
   products,
+  sectionMembers,
+  sections,
+  units,
   withTransaction,
   type Transaction,
-  sections,
-  sectionMembers,
-  menuDetails,
-  contentLanguages,
-  units,
-  optionLists,
-  optionLabels,
-  extraLists,
-  contentSuggestions,
 } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";

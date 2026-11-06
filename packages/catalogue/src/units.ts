@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { products, type Transaction, contentLanguages, productUnits, units } from "@waitron/db";
+import { contentLanguages, products, productUnits, units, type Transaction } from "@waitron/db";
 import type { ProductUsingUnit } from "./unit-types.js";
 
 export type { ProductUsingUnit };

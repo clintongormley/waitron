@@ -1,10 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import {
   kitchenCourses,
+  menuItems,
   withTransaction,
   type Database,
   type Transaction,
-  menuItems,
 } from "@waitron/db";
 import { seedLegacySellingUnits, seedVenueWithSeries } from "./fixtures.js";
 import { createCatalogue, createProduct, updateMenuItem } from "../src/operations.js";

@@ -1,4 +1,4 @@
-import { categories, now, products, type Transaction, categoryDetails } from "@waitron/db";
+import { categories, categoryDetails, now, products, type Transaction } from "@waitron/db";
 import { AppError, colorOrNull } from "@waitron/shared";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { batches } from "./batches.js";

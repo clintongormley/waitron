@@ -1,4 +1,4 @@
-import { products, menuItems, sectionMembers, menuItemVariantOverrides } from "@waitron/db";
+import { menuItems, menuItemVariantOverrides, products, sectionMembers } from "@waitron/db";
 import { and, eq, inArray } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { captureError, withTransaction, type Transaction } from "@waitron/db";

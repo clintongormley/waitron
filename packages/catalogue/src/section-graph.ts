@@ -1,4 +1,4 @@
-import { catalogues, type Transaction, sectionMembers, sections } from "@waitron/db";
+import { catalogues, sectionMembers, sections, type Transaction } from "@waitron/db";
 import { FOLLOWING_FOLDER } from "./include-folder-presentation.js";
 import type {
   IncludeFolder,

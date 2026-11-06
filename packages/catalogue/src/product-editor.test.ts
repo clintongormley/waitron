@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import {
+  contentLanguages,
   kitchenCourses,
   products,
   withTransaction,
   venueLocationId,
-  contentLanguages,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";

@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { catalogues, now, products, type Transaction, productUnits } from "@waitron/db";
+import { catalogues, now, products, productUnits, type Transaction } from "@waitron/db";
 import { AppError, validateDietaryDeclarations } from "@waitron/shared";
 import { readCategory } from "./categories.js";
 import { readContentLanguages } from "./content-languages.js";

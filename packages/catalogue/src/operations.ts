@@ -26,16 +26,16 @@ import {
   categories,
   locationCatalogues,
   locations,
+  menuItems,
+  menuItemVariantOverrides,
   now,
   products,
+  productUnits,
   readVenue,
   readVenueInvoiceLocales,
-  venueLocationId,
-  menuItems,
   sections,
-  productUnits,
   units,
-  menuItemVariantOverrides,
+  venueLocationId,
 } from "@waitron/db";
 import { readCategory } from "./categories.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";

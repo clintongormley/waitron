@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { stringToThousandths } from "@waitron/shared";
 import {
   catalogues,
+  contentLanguages,
   CORE_MIGRATIONS,
   products,
   withTransaction,
   type Transaction,
-  contentLanguages,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";

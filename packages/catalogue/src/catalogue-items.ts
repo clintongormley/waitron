@@ -1,10 +1,10 @@
 import {
   categories,
+  categoryDetails,
   now,
   products,
   tableExists,
   type Transaction,
-  categoryDetails,
 } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";

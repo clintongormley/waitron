@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
-import { products, optionLists, optionLabels, contentSuggestions } from "@waitron/db";
+import { contentSuggestions, optionLabels, optionLists, products } from "@waitron/db";
 import { deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationTargets } from "./content-translation-targets.js";

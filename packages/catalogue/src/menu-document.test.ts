@@ -7,15 +7,15 @@ import type {
 import { and, eq, inArray } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  products,
-  withTransaction,
-  type Transaction,
   extraListItems,
   menuDetails,
   optionLabels,
   optionLists,
+  products,
   sectionMembers,
   sections,
+  withTransaction,
+  type Transaction,
 } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { decimal, HOME_DISPLAY_DEFAULTS, shownMembers } from "@waitron/shared";

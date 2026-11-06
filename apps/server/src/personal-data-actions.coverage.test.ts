@@ -2,14 +2,21 @@
 // matches the usual spellings, and the three explicit names (credited_to, owner_id, editor_id)
 // were found by reading each `*_id`/`*_to` column's schema comment and the A664 audit (plan
 // decision 2), so a person column under any other name is missed until someone reads it. It reads
-// `@waitron/db`'s schema alone: the tables its root exports, and, for the three it does not, the
-// newest drizzle snapshot's columns. The adjustments module's actor columns are classified by
+// `@waitron/db`'s core schema alone: the tables its root exports less those of the module folders
+// in MODULE_SCHEMAS, and, for the tables the root does not export, the newest core drizzle
+// snapshot's columns. The adjustments module's actor columns are classified by
 // packages/adjustments/src/personal-data.coverage.test.ts; other modules' are in the backlog point
 // headed The rest of "who did what" in the download, in docs/backlog/data-protection.md, not here.
 // And it proves a column was classified, not that the actions part honours the classification
 // (personal-data-actions.test.ts does that).
 import { readFileSync, readdirSync } from "node:fs";
 import * as db from "@waitron/db";
+import * as adjustmentsSchema from "@waitron/db/schema/adjustments.js";
+import * as catalogueSchema from "@waitron/db/schema/catalogue.js";
+import * as credentialsSchema from "@waitron/db/schema/credentials.js";
+import * as handoverSchema from "@waitron/db/schema/handover.js";
+import * as identitySchema from "@waitron/db/schema/identity.js";
+import * as mediaSchema from "@waitron/db/schema/media.js";
 import { is } from "drizzle-orm";
 import { SQLiteTable, getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
@@ -160,8 +167,19 @@ const COLUMNS: Record<string, { readonly in: string[]; readonly out: string[] }>
 
 const ROOT_UNEXPORTED = ["change_log", "node_membership"];
 
+// Module tables the root also exports; each module's own migration set creates them.
+const MODULE_SCHEMAS = [
+  adjustmentsSchema,
+  catalogueSchema,
+  credentialsSchema,
+  handoverSchema,
+  identitySchema,
+  mediaSchema,
+];
+const moduleTables = new Set<unknown>(MODULE_SCHEMAS.flatMap((schema) => Object.values(schema)));
+
 const tables = Object.values(db).flatMap((value) =>
-  is(value, SQLiteTable) ? [getTableConfig(value)] : [],
+  is(value, SQLiteTable) && !moduleTables.has(value) ? [getTableConfig(value)] : [],
 );
 
 function newestSnapshot(): { name: string; columns: string[] }[] {

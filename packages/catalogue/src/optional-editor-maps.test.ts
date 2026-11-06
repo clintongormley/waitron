@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
-  withTransaction,
-  type Transaction,
+  extraLists,
   optionLabels,
   optionLists,
-  extraLists,
   sectionMembers,
   sections,
+  withTransaction,
+  type Transaction,
 } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useCatalogueDb } from "../test/fixtures.js";

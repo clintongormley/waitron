@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { withTransaction, type Transaction, productUnits } from "@waitron/db";
+import { productUnits, withTransaction, type Transaction } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture } from "../test/menus-fixture.js";
 import { createExtraList } from "./extras.js";

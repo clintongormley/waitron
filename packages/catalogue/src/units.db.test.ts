@@ -4,9 +4,9 @@ import {
   catalogues,
   CORE_MIGRATIONS,
   products,
-  withTransaction,
   productUnits,
   units,
+  withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";

@@ -3,13 +3,13 @@ import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   categories,
+  categoryDetails,
   invoiceSeries,
+  productUnits,
   products,
+  units,
   venueLocationId,
   withTransaction,
-  productUnits,
-  units,
-  categoryDetails,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seriesId as brandSeriesId } from "@waitron/shared";

@@ -2,12 +2,12 @@ import { and, asc, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   captureError,
-  withTransaction,
-  type Transaction,
   menuDetails,
   menuItems,
   sectionMembers,
   sections,
+  withTransaction,
+  type Transaction,
 } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, product, section, type MenusFixture } from "../test/menus-fixture.js";

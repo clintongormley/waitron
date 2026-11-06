@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { asc } from "drizzle-orm";
 import {
+  contentSuggestionJobs,
+  contentSuggestions,
   CORE_MIGRATIONS,
   products,
   withTransaction,
   type Database,
-  type Transaction,
-  contentSuggestionJobs,
-  contentSuggestions,
   type SuggestionJobRow,
+  type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";

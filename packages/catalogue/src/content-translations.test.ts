@@ -4,17 +4,17 @@ import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   catalogues,
+  contentLanguages,
+  extraLists,
+  menuDetails,
+  optionLabels,
+  optionLists,
   products,
+  sectionMembers,
+  sections,
+  units,
   withTransaction,
   type Transaction,
-  menuDetails,
-  contentLanguages,
-  sections,
-  sectionMembers,
-  optionLists,
-  optionLabels,
-  extraLists,
-  units,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";

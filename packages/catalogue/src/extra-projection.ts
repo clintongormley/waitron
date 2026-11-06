@@ -1,5 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
-import { products, type Transaction, productUnits, units } from "@waitron/db";
+import { products, productUnits, units, type Transaction } from "@waitron/db";
 import { centsToDecimal } from "@waitron/shared";
 import { readExtraListsByIds, resolveExtraPrice } from "./extras.js";
 import { readProductModifiers } from "./product-modifiers.js";

@@ -1,12 +1,12 @@
 import {
-  products,
-  type Transaction,
-  optionLists,
-  optionLabels,
   extraLists,
-  units,
-  sections,
+  optionLabels,
+  optionLists,
+  products,
   sectionMembers,
+  sections,
+  units,
+  type Transaction,
 } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";

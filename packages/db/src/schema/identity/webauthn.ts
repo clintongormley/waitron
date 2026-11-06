@@ -58,8 +58,8 @@ export const webauthnCredentials = table(
 export const challengePurpose = enumType(["registration", "login", "check"]);
 
 /**
- * Consumed by `consumeChallenge` (`packages/identity/src/passkey.ts`). An expired challenge is refused at consume time
- * by the `CHALLENGE_TTL_MS` check, not swept: there is no sweep job.
+ * Consumed by `consumeChallenge` (`packages/identity/src/passkey.ts`). An expired challenge is
+ * refused at consume time by the `CHALLENGE_TTL_MS` check, not swept: there is no sweep job.
  */
 export const webauthnChallenges = table(
   "webauthn_challenges",

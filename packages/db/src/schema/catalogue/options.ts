@@ -12,9 +12,9 @@ export const optionLists = table("option_lists", {
   // The label preselected when this list is asked. It names a label of THIS list, and nothing in
   // the database says so: a key here and option_labels.list_id below would point at each other, so
   // a create would have to write one side null and come back to it. `parseOptionListInput`
-  // (`packages/catalogue/src/option-contract.ts`) is what refuses an id naming no label of the list. No key, so
-  // `CATALOGUE_CONFIGURATION_TRANSFER` lists it in `references`; without that an import keeps the
-  // old id.
+  // (`packages/catalogue/src/option-contract.ts`) is what refuses an id naming no label of the
+  // list. No key, so `CATALOGUE_CONFIGURATION_TRANSFER` lists it in `references`; without that an
+  // import keeps the old id.
   defaultLabelId: id("default_label_id"),
   // An options list and an extras list are ordered by the same column name, and
   // `product_modifiers.sort` (`./extras.ts`) orders the two kinds together.

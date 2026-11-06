@@ -2,12 +2,12 @@ import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  withTransaction,
-  type Transaction,
   menuDetails,
   menuItems,
-  sections,
   menuItemVariantOverrides,
+  sections,
+  withTransaction,
+  type Transaction,
 } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";

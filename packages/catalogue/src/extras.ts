@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { eq, inArray, isNotNull, sql } from "drizzle-orm";
 import {
-  products,
-  type Transaction,
   extraListItems,
   extraLists,
   productModifiers,
+  products,
   productUnits,
   units,
+  type Transaction,
 } from "@waitron/db";
 import {
   AppError,

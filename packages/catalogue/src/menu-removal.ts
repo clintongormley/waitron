@@ -1,5 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { products, type Transaction, sectionMembers, menuItemVariantOverrides } from "@waitron/db";
+import { menuItemVariantOverrides, products, sectionMembers, type Transaction } from "@waitron/db";
 import { batches } from "./batches.js";
 import { onStructureChanged } from "./section-structure.js";
 import { loadSectionGraph, menusContaining, reachableProducts } from "./section-graph.js";

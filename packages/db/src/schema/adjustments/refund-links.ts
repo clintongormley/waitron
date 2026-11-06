@@ -4,7 +4,10 @@ import { id, money, newId, nowIso, table, tsString } from "../columns.js";
 import { tenderRefunds } from "../tender-refunds.js";
 import { adjustments } from "./adjustments.js";
 
-/** How much of one refund paid back one cancel. Declared `appendOnly()` in `packages/adjustments/src/classification.ts`. */
+/**
+ * How much of one refund paid back one cancel. Declared `appendOnly()` in
+ * `packages/adjustments/src/classification.ts`.
+ */
 export const adjustmentRefunds = table(
   "adjustment_refunds",
   {

@@ -1,4 +1,4 @@
-import { categories, type Transaction, categoryDetails } from "@waitron/db";
+import { categories, categoryDetails, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { eq, isNull } from "drizzle-orm";
 import type { Category } from "./categories.js";

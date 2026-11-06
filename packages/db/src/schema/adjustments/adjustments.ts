@@ -33,8 +33,8 @@ export interface AdjustmentSplit {
 
 /**
  * One cancellation, comp or discount taken off a bill, with the line and the reason copied as they
- * were. Declared `appendOnly()` in `packages/adjustments/src/classification.ts`. A row with no `line_id` is a discount on
- * the whole bill.
+ * were. Declared `appendOnly()` in `packages/adjustments/src/classification.ts`. A row with no
+ * `line_id` is a discount on the whole bill.
  */
 export const adjustments = table(
   "adjustments",

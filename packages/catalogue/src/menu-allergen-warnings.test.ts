@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  menuPublications,
+  menuScheduledPublications,
+  menuVersionImages,
+  menuVersions,
   withTransaction,
   type Transaction,
-  menuVersions,
-  menuVersionImages,
-  menuScheduledPublications,
-  menuPublications,
 } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, product, type MenusFixture } from "../test/menus-fixture.js";
