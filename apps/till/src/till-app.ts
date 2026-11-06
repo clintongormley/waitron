@@ -5461,7 +5461,7 @@ export class TillApp extends LitElement {
     this.#clockAccessLost = false;
     this.clockedOut = false;
     this.#loginPending = true;
-    if (personId !== this.operatorPersonId) this.#dropOthersDrafts(personId);
+    this.#dropOthersDrafts(personId);
     this.#sessionPersonId = personId;
     const signIn = ++this.#signIns;
     const session = this.#operatorSession;
@@ -10329,9 +10329,10 @@ export class TillApp extends LitElement {
     this.profileBusy = true;
     const sync = this.#draftSync;
     if (sync !== undefined) {
+      const ownEditWaiting = sync.ownEditWaiting;
       const saved = await sync.flush();
       if (session !== this.#operatorSession) return;
-      if (saved !== "saved") {
+      if (saved !== "saved" && !lostNothing(saved, ownEditWaiting)) {
         this.profileBusy = false;
         this.profileNotice =
           saved !== "failed" && DRAFT_REFUSALS.has(saved.refused)
