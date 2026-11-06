@@ -455,6 +455,9 @@ it("the actual relocated command resumes a retained import and publishes it once
   const environment = { ...process.env };
   for (const name of Object.keys(environment))
     if (name.startsWith("GIT_")) delete environment[name];
+  // Under either variable the bundled Stripe library prints a plugin hint on stderr.
+  delete environment.CLAUDECODE;
+  delete environment.CLAUDE_CODE_CHILD_SESSION;
   const buildScript = join(f.root, "build-command.mjs");
   await writeFile(
     buildScript,
