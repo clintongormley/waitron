@@ -106,6 +106,7 @@ import { readLateSendNeedsManager } from "./late-send.js";
 import { readReleaseReminderMinutesByZone } from "./release-reminders.js";
 import {
   assertProfileZone,
+  readDepartmentNames,
   readProfileServiceAccess,
   readProfileServiceScopes,
   readProfileZones,
@@ -226,6 +227,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   readProfilesZones,
   assertProfileZone,
   readProfileServiceScopes,
+  readDepartmentNames,
   setProfileServiceScope,
   readProfileKitchenScreens,
   setProfileKitchenScreens,

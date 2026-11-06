@@ -289,6 +289,19 @@ export async function readProfileServiceScopes(
   });
 }
 
+/** Every department `ids` names that exists, switched off or not, by name. */
+export async function readDepartmentNames(
+  tx: Transaction,
+  ids: readonly string[],
+): Promise<{ id: string; name: string }[]> {
+  if (ids.length === 0) return [];
+  return tx
+    .select({ id: departments.id, name: departments.name })
+    .from(departments)
+    .where(inArray(departments.id, [...ids]))
+    .orderBy(asc(departments.name), asc(departments.id));
+}
+
 async function liveFormFactor(tx: Transaction, profileId: string): Promise<string> {
   const [profile] = await tx
     .select({ formFactor: deviceProfiles.formFactor })

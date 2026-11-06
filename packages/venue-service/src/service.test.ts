@@ -69,6 +69,7 @@ describe("VENUE_SERVICE", () => {
       "productsOfferedIn",
       "readBillIdentities",
       "readDepartmentLogoRasters",
+      "readDepartmentNames",
       "readDepartmentReceipt",
       "readDepartmentReceiptPolicy",
       "readDepartmentTransfer",

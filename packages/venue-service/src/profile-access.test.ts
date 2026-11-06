@@ -22,6 +22,7 @@ import {
 } from "./operations.js";
 import {
   assertProfileZone,
+  readDepartmentNames,
   readProfileServiceAccess,
   readProfileServiceScopes,
   readProfileZones,
@@ -31,6 +32,7 @@ import {
   type ProfileServiceAccessInput,
 } from "./profile-access.js";
 import {
+  departments,
   deviceProfileServiceAccess,
   deviceProfileZones,
   zoneServicePolicies,
@@ -501,6 +503,22 @@ describe("a profile's service access", () => {
         .from(deviceProfileZones)
         .where(eq(deviceProfileZones.deviceProfileId, venue.profile)),
     ).toEqual([]);
+  });
+});
+
+describe("department names", () => {
+  it("reads the names of the departments asked for, switched off ones included, and nothing for an unknown id", async () => {
+    const venue = await seedVenueWithZones();
+    await db.update(departments).set({ active: false }).where(eq(departments.id, venue.deli));
+    await scoped((tx) => createDepartment(tx, { name: "Bar", orderStart: "counter" }));
+    const names = await scoped((tx) =>
+      readDepartmentNames(tx, [venue.restaurant, venue.deli, randomUUID()]),
+    );
+    expect(names).toEqual([
+      { id: venue.deli, name: "Deli" },
+      { id: venue.restaurant, name: "Restaurant" },
+    ]);
+    await expect(scoped((tx) => readDepartmentNames(tx, []))).resolves.toEqual([]);
   });
 });
 
