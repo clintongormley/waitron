@@ -1030,7 +1030,7 @@ password sign-in on the box; staff-host passkeys enrol separately. Venue devices
 `.local`, and local sales never depend on Cloud or the internet. Customer pages stay later.
 
 The first cut adds an optional dashboard-only HTTPS listener, using the existing staff key and
-certificate files. It excludes setup, recovery, till, device and print routes and marks requests
+certificate files. It excludes the setup and recovery pages, till, device, print and machine-operation routes and marks requests
 remote before the box's own-device check. Password guessing keeps the existing backoff. The local
 listener and its passkey hostname keep their configuration.
 

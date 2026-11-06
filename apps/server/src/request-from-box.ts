@@ -40,6 +40,14 @@ export function isRemoteStaffRequest(c: Context): boolean {
   return c.env?.remoteStaff === true;
 }
 
+export function managementSite(
+  c: Context,
+  local: { rpId: string; origin: string },
+): { rpId: string; origin: string } {
+  const url = new URL(c.req.url);
+  return isRemoteStaffRequest(c) ? { rpId: url.hostname, origin: url.origin } : local;
+}
+
 /** A missing socket is local unless the staff listener marked the request remote. */
 export function requestFromBox(c: Context, deps: RequestSourceDeps = {}): boolean {
   return !isRemoteStaffRequest(c) && addressIsBox(requestAddress(c), deps);

@@ -1050,3 +1050,21 @@ it("takes the explicit tunnel bind and port without changing the LAN listener", 
   });
   expect([config.httpHost, config.httpPort]).toEqual(["127.0.0.1", 8080]);
 });
+it.each(["8080", "80"])(
+  "refuses staff port %s when the local or landing listener uses it",
+  (port) => {
+    try {
+      loadConfig(
+        { WAITRON_STAFF_ORIGIN: "https://staff.example.test", WAITRON_STAFF_PORT: port },
+        ROOT,
+        STATE_ROOT,
+      );
+      expect.unreachable("colliding listener port accepted");
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "server.config_invalid",
+        params: { variable: "WAITRON_STAFF_PORT", reason: "listener_port_conflict" },
+      });
+    }
+  },
+);

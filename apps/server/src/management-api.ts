@@ -1,4 +1,4 @@
-import { isRemoteStaffRequest } from "./request-from-box.js";
+import { isRemoteStaffRequest, managementSite } from "./request-from-box.js";
 import { floorDeletionFor } from "./floor-delete.js";
 import { readZoneDeleteImpact, deleteZone } from "@waitron/venue-service";
 import { readStationDeleteImpact, deleteStation } from "./station-delete.js";
@@ -175,9 +175,10 @@ async function deliverAccountAction(
   deps: ManagementApiDeps,
   log: Logger,
   issued: IssuedAccountAction,
+  origin: string,
 ): Promise<boolean> {
   if (deps.sendAccountEmail === undefined) return false;
-  const actionUrl = new URL("/manage/account", deps.origin);
+  const actionUrl = new URL("/manage/account", origin);
   actionUrl.searchParams.set("token", issued.token);
   actionUrl.searchParams.set("purpose", issued.purpose);
   // Keep the email out of the action query. The SPA reads this fragment and supplies the semantic
@@ -760,11 +761,12 @@ export function mountManagementApi(
   );
   const recoveries = new Set<Promise<void>>();
   const credentialKeyRing = deps.credentialKeyRing;
-  const passkeySite = (c: Context) =>
-    isRemoteStaffRequest(c)
-      ? { rpId: new URL(c.req.url).hostname, origin: new URL(c.req.url).origin }
-      : { rpId: deps.rpId, origin: deps.origin };
+  const passkeySite = (c: Context) => managementSite(c, deps);
   const secureCookie = (c: Context) => deps.secureCookies || isRemoteStaffRequest(c);
+  const googleRedirect = (c: Context) =>
+    isRemoteStaffRequest(c)
+      ? new URL("/management-api/google/callback", c.req.url).href
+      : deps.googleOidc!.redirectUri;
   const passwordThrottle = deps.passwordThrottle ?? createPasswordThrottle();
   const credentialChangeThrottle = createPasswordThrottle();
   const acceptPasswordReset = createPasswordResetCooldown();
@@ -780,7 +782,7 @@ export function mountManagementApi(
     setCookie(c, googleFlowCookie, state, {
       httpOnly: true,
       sameSite: "Lax",
-      secure: deps.secureCookies,
+      secure: secureCookie(c),
       path: "/management-api/google/callback",
       maxAge: 10 * 60,
     });
@@ -803,7 +805,7 @@ export function mountManagementApi(
       const out = await withTransaction(deps.db, async (tx) => {
         return beginGoogleLogin(tx, {
           clientId: deps.googleOidc!.clientId,
-          redirectUri: deps.googleOidc!.redirectUri,
+          redirectUri: googleRedirect(c),
         });
       });
       bindGoogleFlow(c, out.state);
@@ -825,7 +827,7 @@ export function mountManagementApi(
           ...(typeof body.totp === "string" ? { totp: body.totp } : {}),
           keyRing: credentialKeyRing,
           clientId: deps.googleOidc!.clientId,
-          redirectUri: deps.googleOidc!.redirectUri,
+          redirectUri: googleRedirect(c),
         }),
         beginGoogleLink,
       );
@@ -852,11 +854,14 @@ export function mountManagementApi(
       // the account/session write instead of holding a database transaction open across the network.
       let subject: string;
       try {
-        ({ subject } = await googleCodeExchange(deps.googleOidc, {
-          code,
-          verifier: claimed.verifier,
-          nonce: claimed.nonce,
-        }));
+        ({ subject } = await googleCodeExchange(
+          { ...deps.googleOidc, redirectUri: googleRedirect(c) },
+          {
+            code,
+            verifier: claimed.verifier,
+            nonce: claimed.nonce,
+          },
+        ));
       } catch {
         throw new AppError("google.invalid", {});
       }
@@ -868,13 +873,13 @@ export function mountManagementApi(
             subject,
           });
         });
-        return c.redirect(`${deps.origin}/manage/profile?google=linked`);
+        return c.redirect(`${passkeySite(c).origin}/manage/profile?google=linked`);
       }
       const completion = await withTransaction(deps.db, async (tx) => {
         return loginWithGoogle(tx, { subject });
       });
       setManagementCookie(c, completion.token, secureCookie(c));
-      return c.redirect(`${deps.origin}/manage/?login=google`);
+      return c.redirect(`${passkeySite(c).origin}/manage/?login=google`);
     }),
   );
   app.get("/management-api/staff-roster", (c) =>
@@ -960,7 +965,8 @@ export function mountManagementApi(
         )
           .then(
             (issued) => {
-              if (issued !== null) void deliverAccountAction(deps, log, issued).catch(() => {});
+              if (issued !== null)
+                void deliverAccountAction(deps, log, issued, passkeySite(c).origin).catch(() => {});
             },
             () => {},
           )
@@ -1149,7 +1155,7 @@ export function mountManagementApi(
         });
         return { created, issued };
       });
-      const invitationSent = await deliverAccountAction(deps, log, issued);
+      const invitationSent = await deliverAccountAction(deps, log, issued, passkeySite(c).origin);
       return c.json({ ...created, invitationSent }, 201);
     }),
   );
@@ -1171,7 +1177,9 @@ export function mountManagementApi(
           purpose: "invitation",
         });
       });
-      return c.json({ invitationSent: await deliverAccountAction(deps, log, issued) });
+      return c.json({
+        invitationSent: await deliverAccountAction(deps, log, issued, passkeySite(c).origin),
+      });
     }),
   );
 
@@ -1255,7 +1263,9 @@ export function mountManagementApi(
           purpose: "invitation",
         });
       });
-      return c.json({ invitationSent: await deliverAccountAction(deps, log, issued) });
+      return c.json({
+        invitationSent: await deliverAccountAction(deps, log, issued, passkeySite(c).origin),
+      });
     }),
   );
 
@@ -1276,7 +1286,9 @@ export function mountManagementApi(
           purpose: "invitation",
         });
       });
-      return c.json({ invitationSent: await deliverAccountAction(deps, log, issued) });
+      return c.json({
+        invitationSent: await deliverAccountAction(deps, log, issued, passkeySite(c).origin),
+      });
     }),
   );
 

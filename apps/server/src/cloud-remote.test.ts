@@ -154,6 +154,9 @@ it("the staff entrance forwards only dashboard requests and marks their source r
     "/api/backup/status",
     "/api/box/health",
     "/help/en/staff",
+    "/media/presentations?ids=logo",
+    "/media/renditions/v1/image/cover/center",
+    "/media/logo.webp",
   ]) {
     expect((await staff.request(`https://staff.example.test${path}`)).status, path).toBe(200);
   }
@@ -174,6 +177,10 @@ it("the staff entrance forwards only dashboard requests and marks their source r
     "/api/box-other/x",
     "/manage/%2e%2e/setup",
     "/manage/%2f..%2fsetup",
+    "/management-api/membership",
+    "/management-api/mirror-bundle",
+    "/management-api/promote",
+    "/management-api/promote/preparation",
   ]) {
     for (const method of ["GET", "POST"])
       expect(
@@ -181,6 +188,12 @@ it("the staff entrance forwards only dashboard requests and marks their source r
         path,
       ).toBe(404);
   }
+  expect(
+    (await staff.request("https://staff.example.test/manage", { method: "POST" })).status,
+  ).toBe(404);
+  expect(
+    (await staff.request("https://staff.example.test/media/logo.webp", { method: "POST" })).status,
+  ).toBe(404);
 });
 it("refuses another venue hostname and does not accept a remote marker from HTTP headers", async () => {
   const { requestFromBox } = await import("./request-from-box.js");
@@ -270,4 +283,45 @@ it("leaves a missing staff certificate offline without throwing into local sales
     ["warn", "server.listen_failed", { listener: "staff", port: 8443, code: "ENOENT" }],
   ]);
   expect(startStaffListener({ stateDir: "/unused" }, new Hono(), () => {})).toBeUndefined();
+});
+
+it("bounds remote sign-in bodies before forwarding either declared or streamed input", async () => {
+  const app = new Hono();
+  app.post("*", async (c) => c.text(await c.req.text()));
+  const staff = createStaffApp(app, "https://staff.example.test");
+  for (const headers of [new Headers(), new Headers({ "content-length": "65537" })]) {
+    const response = await staff.request("https://staff.example.test/management-api/session", {
+      method: "POST",
+      headers,
+      body: "x".repeat(65537),
+    });
+    expect(response.status).toBe(413);
+  }
+  expect(
+    (
+      await staff.request("https://staff.example.test/management-api/session", {
+        method: "POST",
+        body: "small",
+      })
+    ).status,
+  ).toBe(200);
+});
+
+it("limits remote anonymous passkey challenges and allows a later minute", async () => {
+  const app = new Hono();
+  app.post("/management-api/passkey/auth/options", (c) => c.text("challenge created", 201));
+  const staff = createStaffApp(app, "https://staff.example.test");
+  const clock = vi.spyOn(Date, "now").mockReturnValue(100000);
+  const ask = () =>
+    staff.request("https://staff.example.test/management-api/passkey/auth/options", {
+      method: "POST",
+    });
+  try {
+    for (let i = 0; i < 20; i++) expect((await ask()).status).toBe(201);
+    expect((await ask()).status).toBe(429);
+    clock.mockReturnValue(160000);
+    expect((await ask()).status).toBe(201);
+  } finally {
+    clock.mockRestore();
+  }
 });

@@ -490,6 +490,22 @@ describe("passkey registration", () => {
 describe("passkey authentication", () => {
   const beginAuth = () => run((tx) => beginPasskeyAuthentication(tx, { rpId: "localhost" }));
 
+  it("removes expired anonymous login challenges while retaining live ceremonies", async () => {
+    const live = await beginAuth();
+    await run((tx) =>
+      tx.insert(webauthnChallenges).values({
+        challenge: "expired-login",
+        purpose: "login",
+        createdAt: new Date(Date.now() - CHALLENGE_TTL_MS - 1000).toISOString(),
+      }),
+    );
+    const next = await beginAuth();
+    const rows = await run((tx) => tx.select().from(webauthnChallenges));
+    expect(rows.map((row) => row.id).sort()).toEqual(
+      [live.challengeHandle, next.challengeHandle].sort(),
+    );
+  });
+
   const authenticate = (challengeHandle: string, credentialId: string) =>
     run((tx) =>
       finishPasskeyAuthentication(tx, {

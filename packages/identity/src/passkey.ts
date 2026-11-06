@@ -21,7 +21,7 @@ import {
   type challengePurpose,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 import type { TotpKeyRing } from "./mfa.js";
 import { requireEnrolledCode } from "./profile.js";
 import { passkeyProviderName } from "./passkey-providers.js";
@@ -247,6 +247,14 @@ export async function beginPasskeyAuthentication(
   tx: Transaction,
   input: { rpId: string },
 ): Promise<{ challengeHandle: string; options: PublicKeyCredentialRequestOptionsJSON }> {
+  await tx
+    .delete(webauthnChallenges)
+    .where(
+      and(
+        eq(webauthnChallenges.purpose, "login"),
+        lt(webauthnChallenges.createdAt, new Date(Date.now() - CHALLENGE_TTL_MS).toISOString()),
+      ),
+    );
   // The library default 'preferred' would let a device assert without UV and then fail verify.
   const options = await generateAuthenticationOptions({
     rpID: input.rpId,

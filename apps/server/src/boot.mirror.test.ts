@@ -29,14 +29,16 @@ import { seedFiscalRegistro } from "./testing/fiscal-fixtures.js";
 import { ensureMirrorViewer } from "./mirror-session.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
-import { freePort } from "./testing/free-ports.js";
+import { freePort, freePorts } from "./testing/free-ports.js";
+import { get } from "node:https";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
   return ephemeralHttpMock();
 });
 
-const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
+const { beforeServerStarts, startServer, startConfiguredServer, httpPort } =
+  ephemeralServerFixture();
 
 // Mirror-mode server boot. A mirror reads its origin, relay and CA from node.db's
 // `node_mirror_link`. Four venue directories: `mirror` (read-only, refuses writes); `primary`, the
@@ -191,6 +193,50 @@ async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
 }
 
 describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
+  it("keeps the ambient mirror viewer off the remote staff entrance", async () => {
+    const [localPort, staffPort] = await freePorts(2);
+    const certificate = mintSelfSignedServerCert({
+      hostnames: ["staff.example.test"],
+      ipAddresses: [],
+      now: new Date(),
+    });
+    writeFileSync(join(STATE_ROOT, "cloud-staff.key"), certificate.serverKeyPem);
+    writeFileSync(join(STATE_ROOT, "cloud-staff.crt"), certificate.serverCertPem);
+    const server = await startConfiguredServer({
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: venueDir.mirror,
+      WAITRON_HTTP_PORT: String(localPort),
+      WAITRON_STAFF_ORIGIN: "https://staff.example.test",
+      WAITRON_STAFF_PORT: String(staffPort),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    });
+    try {
+      const local = await fetch(`http://127.0.0.1:${localPort}/management-api/catalogues`);
+      expect(local.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
+      await local.arrayBuffer();
+      const remote = new Promise<number>((resolve, reject) => {
+        const request = get(
+          {
+            hostname: "127.0.0.1",
+            port: staffPort,
+            path: "/management-api/catalogues",
+            servername: "staff.example.test",
+            rejectUnauthorized: false,
+            headers: { Host: "staff.example.test" },
+          },
+          (response) => {
+            response.resume();
+            response.on("end", () => resolve(response.statusCode!));
+          },
+        );
+        request.on("error", reject);
+      });
+      await expect(remote).rejects.toMatchObject({ code: "ECONNREFUSED" });
+    } finally {
+      await server.close();
+    }
+  });
+
   it("serves dashboard reads, another person's download among them, via the ambient viewer and refuses writes", async () => {
     const port = await freePort();
     const server = await startServer({
