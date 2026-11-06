@@ -1,3 +1,4 @@
+import { isRemoteStaffRequest } from "./request-from-box.js";
 import { floorDeletionFor } from "./floor-delete.js";
 import { readZoneDeleteImpact, deleteZone } from "@waitron/venue-service";
 import { readStationDeleteImpact, deleteStation } from "./station-delete.js";
@@ -760,10 +761,10 @@ export function mountManagementApi(
   const recoveries = new Set<Promise<void>>();
   const credentialKeyRing = deps.credentialKeyRing;
   const passkeySite = (c: Context) =>
-    c.env?.remoteStaff === true
+    isRemoteStaffRequest(c)
       ? { rpId: new URL(c.req.url).hostname, origin: new URL(c.req.url).origin }
       : { rpId: deps.rpId, origin: deps.origin };
-  const secureCookie = (c: Context) => deps.secureCookies || c.env?.remoteStaff === true;
+  const secureCookie = (c: Context) => deps.secureCookies || isRemoteStaffRequest(c);
   const passwordThrottle = deps.passwordThrottle ?? createPasswordThrottle();
   const credentialChangeThrottle = createPasswordThrottle();
   const acceptPasswordReset = createPasswordResetCooldown();
@@ -876,10 +877,11 @@ export function mountManagementApi(
       return c.redirect(`${deps.origin}/manage/?login=google`);
     }),
   );
-  // Deliberately unauthenticated: `listActiveStaff` returns only `{ personId, displayName }`.
   app.get("/management-api/staff-roster", (c) =>
     run(c, log, async () => {
       const roster = await withTransaction(deps.db, async (tx) => {
+        if (isRemoteStaffRequest(c))
+          await readOwnProfile(tx, { managementSessionId: requireManagementSession(c) });
         return listActiveStaff(tx);
       });
       return c.json(roster);

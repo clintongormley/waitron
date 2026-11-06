@@ -3116,3 +3116,22 @@ it("keeps password backoff and ordinary password login through the remote entran
   expect(accepted.headers.get("set-cookie")).toContain("waitron_management_session=");
   expect(accepted.headers.get("set-cookie")).toContain("; Secure");
 });
+
+it("requires a real session for the staff roster through the remote entrance", async () => {
+  await setupTenant();
+  const local = mountApp(),
+    staff = createStaffApp(local, "https://staff.example.test");
+  const url = "https://staff.example.test/management-api/staff-roster";
+  expect((await local.request("/management-api/staff-roster")).status).toBe(200);
+  const anonymous = await staff.request(url);
+  expect(anonymous.status).toBe(401);
+  expect(await anonymous.json()).toEqual({
+    error: { code: "management_session.required", params: {} },
+  });
+  const cookie = await login(local, MANAGER_EMAIL);
+  const signed = await staff.request(url, { headers: { cookie } });
+  expect(signed.status).toBe(200);
+  expect(await signed.json()).toEqual(
+    expect.arrayContaining([{ personId: expect.any(String), displayName: "The Manager" }]),
+  );
+});

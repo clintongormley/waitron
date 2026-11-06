@@ -305,7 +305,8 @@ staff listener. This does not configure a tunnel or connect the box to Cloud.
 The separate HTTPS listener serves `/manage`, its management API, the dashboard's box and backup
 API groups, theme and content-language reads, and help pages. Other routes return 404, as does a
 request for another origin. Requests through it are remote even when the gateway connects over
-loopback. Use your usual password; enrol passkeys separately for the staff hostname.
+loopback. Use your usual password; enrol passkeys separately for the staff hostname. The staff roster
+requires a signed-in session through this entrance.
 
 A missing certificate or a staff port that will not bind is logged as `server.listen_failed` with
 `listener: staff`; it does not stop the local listener. The staff listener closes with the server.
