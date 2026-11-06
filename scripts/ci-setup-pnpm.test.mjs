@@ -74,7 +74,7 @@ case "$STUB_NPM_MODE" in
   wrong-version) printed="0.0.1" ;;
   slow-first-version) if [ "$attempt" -eq 1 ]; then before="sleep 2"; fi ;;
   version-then-fails)
-    if [ -n "$STUB_VERSION_DELAY_SECONDS" ]; then before="sleep $STUB_VERSION_DELAY_SECONDS"; fi
+    if [ "$attempt" -eq 1 ] && [ -n "$STUB_VERSION_DELAY_SECONDS" ]; then before="sleep $STUB_VERSION_DELAY_SECONDS"; fi
     after="exit 1" ;;
   version-then-hangs) after="exec sleep 300" ;;
 esac
@@ -279,6 +279,12 @@ describe("ci-setup-pnpm.sh", () => {
         expect(result.stderr).toMatch(
           new RegExp(`attempt ${attempt}/3 ${phase}: end status=${status} elapsed=[0-9]+s`),
         );
+      }
+      if (mode === "version-then-fails") {
+        const firstVersionEnd = /attempt 1\/3 version: end status=1 elapsed=([0-9]+)s/.exec(
+          result.stderr,
+        );
+        expect(Number(firstVersionEnd?.[1])).toBeGreaterThanOrEqual(2);
       }
       if (phase === "install") expect(result.stderr).not.toContain("version: start");
       else expect(result.stderr).toContain("install: end status=0");

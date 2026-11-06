@@ -2231,6 +2231,16 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **Retain failure screenshots for long browser test names.**
   [Detail](backlog/ci.md#retain-failure-screenshots-for-long-browser-test-names).
 
+- **Give pnpm's healthy package-manager read control its normal allowance.**
+  The slow-Node regression still gives the healthy reader a one-second deadline.
+  Preserve its first-attempt installation and no-Node assertions when separating those limits.
+  [Detail](backlog/ci.md#give-pnpms-healthy-package-manager-read-control-its-normal-allowance).
+
+- **Capture pnpm fixture scheduling delays if they recur.**
+  The ordinary version-failure diagnostic now has its normal allowance; the cause of the
+  original delayed commands remains unmeasured. Retain phase timing and host load on recurrence.
+  [Detail](backlog/ci.md#capture-pnpm-fixture-scheduling-delays-if-they-recur).
+
 - **Root guard deadlines under extreme external load (left open by A751).**
   [Detail](backlog/ci.md#at-a-load-average-near-60-more-root-guard-files-fail-on-time).
 
