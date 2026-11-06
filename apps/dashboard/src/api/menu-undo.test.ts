@@ -146,6 +146,21 @@ describe("undoRefusalText", () => {
     );
   });
 
+  it.each(["color", "image"])(
+    "words a section refusal naming its %s field as the published photo or colour",
+    (field) => {
+      expect(undoRefusalText({ code: "menu_section.invalid", params: { field } }, section)).toBe(
+        "Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.",
+      );
+    },
+  );
+
+  it("falls back to the code's own message for a section refusal naming another field", () => {
+    expect(
+      undoRefusalText({ code: "menu_section.invalid", params: { field: "names" } }, section),
+    ).toBe(codeMessage("menu_section.invalid"));
+  });
+
   it("falls back to the code's own message for a code no sentence names", () => {
     expect(undoRefusalText(refused("management.request_invalid"), rename)).toBe(
       codeMessage("management.request_invalid"),

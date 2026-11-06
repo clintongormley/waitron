@@ -31,7 +31,7 @@ export async function sendMenuUndo(api: MenuUndoApi, command: MenuUndoCommand): 
 /** The sentence for a refused Undo; a code its write is not expected to answer keeps its own text. */
 export function undoRefusalText(error: unknown, command: MenuUndoCommand): string {
   const code = codeOf(error);
-  const sentence = refusalSentence(code, command);
+  const sentence = refusalSentence(code, command, refusedField(error));
   return sentence ? fill(sentence.key, sentence.values) : codeMessage(code);
 }
 
@@ -41,9 +41,17 @@ const SECTION_REFUSALS: Readonly<Record<string, StringKey>> = {
   "content.translation_invalid": "menu_preview.undo_language_off",
 };
 
+function refusedField(error: unknown): unknown {
+  return (error as { params?: { field?: unknown } } | null)?.params?.field;
+}
+
+/** `menu_section.invalid` also answers a malformed name; only these fields are the photo or colour. */
+const PRESENTATION_FIELDS: readonly unknown[] = ["color", "image"];
+
 function refusalSentence(
   code: string,
   command: MenuUndoCommand,
+  field: unknown,
 ): { key: StringKey; values: Record<string, string> } | null {
   switch (command.method) {
     case "renameCatalogue":
@@ -57,6 +65,12 @@ function refusalSentence(
         return { key: "menu_preview.undo_item_gone", values: { name: command.name } };
       return null;
     case "updateSection": {
+      if (
+        code === "menu_section.invalid" &&
+        field !== undefined &&
+        !PRESENTATION_FIELDS.includes(field)
+      )
+        return null;
       const key = SECTION_REFUSALS[code];
       return key ? { key, values: { name: command.name } } : null;
     }
