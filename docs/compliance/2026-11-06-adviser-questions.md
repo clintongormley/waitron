@@ -28,7 +28,7 @@ unknown.
 
 A **confirmation** below gives our answer and asks only for a yes or a correction.
 
-## Five decisions for the owner, before anything is sent
+## The owner's decisions
 
 **1. A1324: the bucket copy needs a second look.** The owner accepted it on 6 November on advice that
 was partly wrong. Litestream 0.5.17 does accept a customer-supplied key: its source has
@@ -39,25 +39,28 @@ catches. Since April 2026
 so setup would have to unblock them, and other providers differ. Also, the AEPD's guide for small
 businesses (November 2025) has a case with these facts and calls encrypting backups «una medida
 fundamental». It says backups need «el mismo nivel de seguridad que los datos originales». B3 will
-encrypt the box's disk, which would leave the bucket copy as the weaker one. **Recommendation:** try
-it on a real Amazon bucket and on the S3 test server. If it works, derive the key from the recovery
-key the box already keeps, so there is no new secret to hold. Where a provider refuses, the box says
-so. This is a proposal: neither the test nor the derivation exists yet.
+encrypt the box's disk, which would leave the bucket copy as the weaker one. The owner chose to test
+it. If it works, the proposal is to derive the key from the recovery key the box already keeps, so
+there is no new secret to hold, and where a provider refuses, the box says so. A run on the local test
+server showed Litestream accepts the setting and restores with it, but that server ignores these
+keys, so it proves nothing about protection. The test needs a real Amazon bucket, and the test login
+expired on 3 November.
 
-**2. Does the stop on payments stay when the clock is behind?** The law does not require it. Article 3
-of Orden HAC/1177/2024 switches off the one-minute rule for Veri\*Factu systems, and AEAT's FAQ says
-so. The minute is the owner's own safeguard. The stop may still be right, but the adviser must be told
-it is a choice. **Recommendation:** decide this first, because the clock question assumes the answer.
+**2. The stop on payments stays (owner, 2026-11-06).** The law does not require it: article 3 of Orden
+HAC/1177/2024 switches off the one-minute rule for Veri\*Factu systems, and AEAT's FAQ says so. The
+owner keeps it, because a wrong clock means corrective invoices. The clock must be right before
+payments restart, which is how it is built: a confirmation counts only if it agrees with the box's
+clock to within a minute. The advisers are told this is a choice.
 
-**3. Tips: hold the questions or ask now?** The A793 tips design says no further question until the
-owner has rethought it, while the backlog puts the tip questions in this batch. Research makes the
-rethink possible without them. **Recommendation:** hold T9 and T10 below until A793 is revived.
+**3. Tips are held (owner, 2026-11-06).** T9 and T10 below stay out of what is sent until A793 is
+revived.
 
-**4. The software declaration and the owner's tax number.** A940's plan attaches each declaration to a
-public GitHub release, while another task keeps the owner's tax number out of public view. Both cannot
-stand. This needs the owner's decision before the first declaration is published.
+**4. The producer's tax number is public, and stays out of the repository (owner, 2026-11-06).** It
+reaches the release as a repository secret. This refines the owner's answer of 4 November, which
+named a repository variable. An earlier draft of this list called this an open conflict: the research
+had read a rule the owner withdrew on 4 November.
 
-**5. Deleting a person's data should block it first.** The AEPD's legal office (report 0148/2019) says
+**5. Open: deleting a person's data should block it first.** The AEPD's legal office (report 0148/2019) says
 real erasure means setting the data aside first, then destroying it. A980's S9 (erasing a booking guest) and S11 (clearing a former employee's
 email) just clear the field, and A664's removal has the same gap. **Recommendation:** add a blocking step to all three.
 

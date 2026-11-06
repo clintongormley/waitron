@@ -87,7 +87,7 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 
 **1. The owner's sessions, which need no building.**
 
-- Send the [curated adviser list](compliance/2026-11-06-adviser-questions.md), once the owner has made its five decisions and the Spanish is rebuilt from it. It holds up 26 entries,
+- Send the [curated adviser list](compliance/2026-11-06-adviser-questions.md), once A1324 is tested, the blocking decision is made and the Spanish is rebuilt from it. It holds up 26 entries,
   seven of them go-live, including 0% VAT and free items on mixed-rate bills.
 - [The owner's yes-or-no read: built defaults that wait only for a nod](backlog/till.md#bundle-the-owners-yes-or-no-read-built-defaults-that-wait-only-for-a-nod)
 - [One session at the real box: printers, paper, tax QR, the drawer](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
@@ -249,7 +249,7 @@ that bundle's heading in the area's file: take a bundle as one pull request.
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
 - **A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1 landed 2026-10-23 (#2000).**
-  Still open: how the producer's name and tax number reach a box (Task 8; a proposal is with the owner, 2026-11-04), then slices 1b to 6, and A993's plan.
+  Still open: how the producer's name and tax number reach a box (Task 8: public values, set on the official repository as a repository secret and never committed; owner, 2026-11-06), then slices 1b to 6, and A993's plan.
   Still needed from outside: the owner's publishable address, and the asesor's answer to Q53.
   [Detail](backlog/fiscal.md#a940-waitrons-declaración-responsable--design-approved-2026-10-22-slice-1-landed-2026-10-23-2000).
 
