@@ -194,6 +194,7 @@ describe("splitting a recalled dish through the public group command", () => {
         revision: p.draft.revision,
         expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
         submissionId: randomUUID(),
+        personId: venue.managerId,
       },
       venue.cookie.manager,
     );

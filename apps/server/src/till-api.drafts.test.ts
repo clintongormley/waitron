@@ -12,9 +12,11 @@ import {
   kitchenStations,
   orderDraftLines,
   orderDraftRecalledLines,
+  orderDrafts,
   orderGroups,
   parties,
   products,
+  serviceCommands,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -1013,6 +1015,74 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
     );
     expect(await snapshot()).toEqual(afterSending);
   });
+
+  it("refuses 409 draft.person_not_signed_in for a take-over naming someone else, changing nothing, and goes through once it names the session's person", async () => {
+    const party = await seated();
+    const anas = await newDraft(ana, party.partyId, [dish("Croquetas")]);
+    const path = `/api/parties/${party.partyId}/drafts/${anas.id}/take-over`;
+    const owner = async () => {
+      const [row] = await inTx(venue, (tx) =>
+        tx
+          .select({ ownerId: orderDrafts.ownerId })
+          .from(orderDrafts)
+          .where(eq(orderDrafts.id, anas.id)),
+      );
+      return row!.ownerId;
+    };
+    const editor = async () =>
+      (await inTx(venue, (tx) => readBillEditState(tx, party.tabId))).editorId;
+    const takeOverNaming = async (personId: string) =>
+      send(
+        venue.app,
+        adminCookie,
+        "POST",
+        path,
+        await draftBody("POST", path, { revision: anas.revision, personId }, venue.adminId),
+      );
+    const recorded = async () =>
+      (await inTx(venue, (tx) => tx.select().from(serviceCommands))).length;
+    const before = await snapshot();
+    const recordedBefore = await recorded();
+
+    for (const named of [venue.operatorId, venue.operatorId.toUpperCase()]) {
+      const refused = await takeOverNaming(named);
+      expect(refused.status).toBe(409);
+      expect(refused.json).toEqual(
+        refusal("draft.person_not_signed_in", { personId: venue.operatorId }),
+      );
+    }
+    expect(await owner()).toBe(venue.operatorId);
+    expect(await editor()).toBe(venue.operatorId);
+    expect(await snapshot()).toEqual(before);
+
+    const taken = await takeOverNaming(venue.adminId);
+    expect(taken.status).toBe(200);
+    expect(await owner()).toBe(venue.adminId);
+    expect(await editor()).toBe(venue.adminId);
+    expect(await recorded()).toBe(recordedBefore + 1);
+  });
+
+  it("goes through when the session's person is named with a capitalised id", async () => {
+    const party = await seated();
+    const anas = await newDraft(ana, party.partyId, [dish("Croquetas")]);
+    const path = `/api/parties/${party.partyId}/drafts/${anas.id}/take-over`;
+
+    const taken = await send(
+      venue.app,
+      adminCookie,
+      "POST",
+      path,
+      await draftBody(
+        "POST",
+        path,
+        { revision: anas.revision, personId: venue.adminId.toUpperCase() },
+        venue.adminId,
+      ),
+    );
+
+    expect(taken.status).toBe(200);
+    expect(taken.json.draft).toMatchObject({ id: anas.id, ownerId: venue.adminId });
+  });
 });
 
 describe("POST /api/parties/:id/drafts/:did/submit", () => {
@@ -1241,6 +1311,33 @@ describe("a malformed body", () => {
 
       expect(refused.status).toBe(400);
       expect(refused.json).toEqual(refusal("management.request_invalid", { field }));
+      expect(await snapshot()).toEqual(before);
+    },
+  );
+
+  it.each([
+    ["missing", {}],
+    ["not an id", { personId: "ana" }],
+    ["a number", { personId: 7 }],
+    ["null", { personId: null }],
+    ["empty", { personId: "" }],
+  ] as const)(
+    "refuses a take-over 400 management.request_invalid naming personId when it is %s",
+    async (_, person) => {
+      const party = await seated();
+      const anas = await newDraft(ana, party.partyId, [dish("Caña")]);
+      const path = `/api/parties/${party.partyId}/drafts/${anas.id}/take-over`;
+      const body = await observedDraftCommandBody(venue.db, "POST", path, {
+        submissionId: randomUUID(),
+        revision: anas.revision,
+        ...person,
+      });
+      const before = await snapshot();
+
+      const refused = await send(venue.app, adminCookie, "POST", path, body);
+
+      expect(refused.status).toBe(400);
+      expect(refused.json).toEqual(refusal("management.request_invalid", { field: "personId" }));
       expect(await snapshot()).toEqual(before);
     },
   );

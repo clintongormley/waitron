@@ -347,6 +347,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
         revision: p.draft.revision,
         submissionId: randomUUID(),
         expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
+        personId: venue.managerId,
       },
       venue.cookie.manager,
     );
