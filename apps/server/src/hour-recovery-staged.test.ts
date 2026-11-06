@@ -51,17 +51,15 @@ vi.mock("./restore.js", async (original) => {
     readArtifactNode: vi.fn(actual.readArtifactNode),
   };
 });
-const recordFloor = vi.hoisted(() => ({ reads: 0 }));
-vi.mock("@waitron/fiscal-verifactu/src/hour-history-reader.js", async (original) => {
-  type Reader = typeof import("@waitron/fiscal-verifactu/src/hour-history-reader.js");
+const recoveryState = vi.hoisted(() => ({ reads: 0 }));
+vi.mock("@waitron/fiscal-verifactu/src/hour-recovery-state.js", async (original) => {
+  type Reader = typeof import("@waitron/fiscal-verifactu/src/hour-recovery-state.js");
   const actual = await original<Reader>();
   return {
     ...actual,
-    readHourHistoryWithRecordFloor: (
-      ...args: Parameters<Reader["readHourHistoryWithRecordFloor"]>
-    ) => {
-      recordFloor.reads += 1;
-      return actual.readHourHistoryWithRecordFloor(...args);
+    readHourRecoveryState: (...args: Parameters<Reader["readHourRecoveryState"]>) => {
+      recoveryState.reads += 1;
+      return actual.readHourRecoveryState(...args);
     },
   };
 });
@@ -387,10 +385,10 @@ describe("a staged backup for the restore's clock requests", () => {
     await h.ok(h.send(stagedId, { action: "clock-challenge" }));
   });
 
-  it("reads the backup's preview and newest record once, and never writes the copy requests read", async () => {
+  it("reads the backup's preview and recovery state once, and never writes the copy requests read", async () => {
     const h = await stagedHost(true);
     preview.seen.length = 0;
-    recordFloor.reads = 0;
+    recoveryState.reads = 0;
     const { stagedId } = await h.ok(h.stage());
     const working = join(dirname(await h.stagedDatabase()), "working");
     // A request that wrote would change the database file or leave rows in its write-ahead log.
@@ -416,7 +414,7 @@ describe("a staged backup for the restore's clock requests", () => {
     expect(selected).toMatchObject({ status: "selected" });
     expect(h.bodies.length).toBeGreaterThanOrEqual(3);
     expect(preview.seen).toEqual(["working"]);
-    expect(recordFloor.reads).toBe(1);
+    expect(recoveryState.reads).toBe(1);
     expect(await bytes()).toBe(before);
   });
 
