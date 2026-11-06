@@ -98,6 +98,13 @@ it("persists a recovery hour before the real configured restore runner activates
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
 });
 
+it("a restore's chosen name records no backup-created reference", async () => {
+  const f = await host();
+  const selected = await f.selectPastWaits();
+  expect(selected).toMatchObject({ status: "selected" });
+  expect((selected as { references: string[] }).references).not.toContain("backup-created");
+});
+
 it("reopens the same selected hour after host restart and requires a fresh clock comparison", async () => {
   const first = await host();
   const selected = await first.selectPastWaits();
