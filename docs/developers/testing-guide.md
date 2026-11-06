@@ -2867,6 +2867,22 @@ Deployment does not set a process time zone in `deploy/Dockerfile`'s runtime `EN
 'console.log(Intl.DateTimeFormat().resolvedOptions().timeZone)'` printed `UTC`.
 That base-image probe does not measure an operator's configured appliance.
 
+## Kitchen-paper fixtures compare against the venue clock
+
+When paper changes from host time to the saved venue time zone, run all affected paper suites
+under a host zone with a different offset. A focused clock test does not read every integration
+suite's expected-time helper. Keep fixed expected hours literal and construct fixed fixture
+instants with an explicit offset.
+
+A1378's first affected-suite run used a Rome host beside Madrid venue fixtures. Its focused
+Canary/Madrid clock cases passed, but five integration helpers still used `getHours()` and a sixth
+file constructed its fixed reprint clocks in host time. The driver reproduced 56 failures and
+182 passes with `TZ=UTC pnpm --filter @waitron/server exec vitest run --maxWorkers=2` over
+`pass-release.test.ts`, `kitchen-request.alerts.test.ts`, `kitchen-print.concurrency.test.ts`,
+`kitchen-request.hold-paper.test.ts`, `till-api.service-periods.test.ts` and `print-problems.test.ts`
+under `apps/server/src`. The 238 cases passed after replacing those expected hours and instants.
+The six files' assertions still check the same venue hours, order, grouping and concurrency.
+
 ## Wait for a resolved response to reach the screen before checking its late effect
 
 Resolving a deferred request does not mean its consumer has published a snapshot yet. When your

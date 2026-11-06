@@ -83,10 +83,7 @@ async function parkedThenRelease<A, B>(
   return settled;
 }
 
-/** A kitchen ticket prints its time in the process's own time zone (`hhmm`, kitchen-ticket.ts). */
-const ticketClock = (at: Date) =>
-  `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
-const AT_CLOCK = ticketClock(new Date("2026-03-14T12:00:00.000Z"));
+const AT_CLOCK = "13:00";
 
 /**
  * A `deactivatePrinter` started while a kitchen fire is open never aborts the fire: the fire enqueues

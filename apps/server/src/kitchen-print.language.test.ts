@@ -64,7 +64,7 @@ it("uses the saved venue zone for every new paper and keeps already queued bytes
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderId, id));
     await withTransaction(suite.db, async (tx) => {
-      await tx.update(locations).set({ timeZone: "Europe/Madrid" });
+      await tx.update(locations).set({ timeZone: "Asia/Tokyo" });
       await enqueueCorrectionSlips(
         tx,
         v.cfg,
@@ -96,8 +96,8 @@ it("uses the saved venue zone for every new paper and keeps already queued bytes
     expect(papers).toHaveLength(8);
     for (const heading of ["*** VOID ***", "*** KITCHEN NOTE REMOVED ***", "*** MOVED ***"])
       expect(papers.filter((paper) => paper[0] === heading)).toHaveLength(2);
-    for (const paper of papers) expect(paper).toContain("01:30");
-    expect(papers.filter((paper) => paper[0] === "*** REPRINT 01:30 ***")).toHaveLength(2);
+    for (const paper of papers) expect(paper).toContain("08:30");
+    expect(papers.filter((paper) => paper[0] === "*** REPRINT 08:30 ***")).toHaveLength(2);
     for (const old of original)
       expect(all.find((job) => job.id === old.id)?.payload).toEqual(old.payload);
   } finally {

@@ -46,6 +46,7 @@ import {
   formatKitchenTicket,
   formatMovedSlip,
   joinKitchenTickets,
+  kitchenQuantityText,
   mergeKey,
   movedPlaceText,
 } from "./kitchen-ticket.js";
@@ -126,7 +127,7 @@ export function extraLabel(
   dishQuantity: Decimal,
   unitName?: string,
 ): string {
-  if (unitName !== undefined) return `${name} ${quantity} ${unitName}`;
+  if (unitName !== undefined) return `${name} ${kitchenQuantityText(quantity)} ${unitName}`;
   const perDish = perDishOptionQuantity(quantity, dishQuantity);
   return perDish > 1 ? `${name} x${perDish}` : name;
 }

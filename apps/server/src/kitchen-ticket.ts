@@ -168,12 +168,12 @@ export function arrangeTicketItems(
   }));
 }
 
-function quantityText(qty: number | string): string {
+export function kitchenQuantityText(qty: number | string): string {
   return String(qty).replace(/\.0+$/, "");
 }
 
 function itemLine(item: KitchenTicketItem): string {
-  return `${quantityText(item.qty)}${item.unit ? ` ${item.unit}` : ""} x ${item.name}`;
+  return `${kitchenQuantityText(item.qty)}${item.unit ? ` ${item.unit}` : ""} x ${item.name}`;
 }
 
 /**
@@ -253,7 +253,7 @@ function emitItem(
   const text = (s: string, indent: number): void => {
     for (const line of wrapText(prepareText(s), columns, indent)) b.line(line);
   };
-  const prefix = `${sign}${quantityText(item.qty)}${item.unit ? ` ${item.unit}` : ""} x `;
+  const prefix = `${sign}${kitchenQuantityText(item.qty)}${item.unit ? ` ${item.unit}` : ""} x `;
   text(`${sign}${itemLine(item)}`, prepareText(prefix).length);
   for (const modifier of item.modifiers ?? []) text(`  + ${modifier}`, 4);
   for (const ref of item.crossRefs ?? []) text(`  > ${ref}`, 4);
@@ -331,11 +331,7 @@ function emitLateMark(
     b.line(line);
 }
 
-/**
- * Emit `items`, heading each with `GROUP n` where its group differs from the item before, `current`
- * before the first, and, where `lateMarks`, the late-send mark before each run of items with the
- * same mark. A MOVED slip describes a move, not the agreed send, so it prints no mark.
- */
+/** MOVED and note-change slips describe a change, so carry no late-send marks or boundaries. */
 function emitGrouped(
   b: ReturnType<typeof esc>,
   items: readonly KitchenTicketItem[],
@@ -450,7 +446,7 @@ export function formatKitchenTicket(
     const { alsoOnOrder: heading, onHold: held } = kitchenTicketWords(alsoOnOrder.locale);
     text(`-- ${heading} --`);
     for (const item of alsoOnOrder.items) {
-      const prefix = `${quantityText(item.qty)}${item.unit ? ` ${item.unit}` : ""} x `;
+      const prefix = `${kitchenQuantityText(item.qty)}${item.unit ? ` ${item.unit}` : ""} x `;
       const line = `${prefix}${item.name} — ${item.stationName}${item.held ? ` ${held}` : ""}`;
       for (const part of wrapText(prepareText(line), columns, prepareText(prefix).length)) {
         b.line(part);

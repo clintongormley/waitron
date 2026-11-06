@@ -964,11 +964,11 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       .spyOn(VENUE_SERVICE, "readLinesSoldInEach")
       .mockImplementation(async (...args) => {
         calls += 1;
-        if (calls === 2) vi.setSystemTime(new Date(2026, 9, 27, 15, 21));
+        if (calls === 2) vi.setSystemTime(new Date("2026-10-27T15:21:00+01:00"));
         return real(...args);
       });
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date(2026, 9, 27, 15, 20));
+    vi.setSystemTime(new Date("2026-10-27T15:20:00+01:00"));
     try {
       await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
     } finally {
@@ -1002,7 +1002,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       .orderBy(sql`rowid`);
     expect(fired).toHaveLength(2);
     const at = (hours: number, minutes: number) =>
-      new Date(2026, 9, 27, hours, minutes).toISOString();
+      new Date(Date.UTC(2026, 9, 27, hours - 1, minutes)).toISOString();
     await db
       .update(ticketItems)
       .set({ firedAt: at(14, 30) })
@@ -1018,7 +1018,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     const before = (await jobsAt(v.kitchenPrinterId)).length;
 
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date(2026, 9, 27, 15, 20));
+    vi.setSystemTime(new Date("2026-10-27T15:20:00+01:00"));
     try {
       await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
     } finally {

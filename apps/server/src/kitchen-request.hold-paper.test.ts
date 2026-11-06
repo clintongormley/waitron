@@ -55,10 +55,7 @@ import "./errors.js";
 
 const AT = "2026-03-14T12:00:00.000Z";
 const LATER = "2026-03-14T12:05:00.000Z";
-/** A kitchen ticket prints its time in the process's own time zone (`hhmm`, kitchen-ticket.ts). */
-const ticketClock = (at: Date) =>
-  `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
-const LATER_CLOCK = ticketClock(new Date(LATER));
+const LATER_CLOCK = "13:05";
 
 type Venue = Awaited<ReturnType<typeof setupSplitExtrasVenue>>;
 

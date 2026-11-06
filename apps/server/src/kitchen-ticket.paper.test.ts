@@ -93,6 +93,17 @@ describe("kitchen paper in the venue's time zone", () => {
 });
 
 describe("whole quantities on kitchen paper", () => {
+  it("wraps a dish's continuation under its shortened quantity prefix", () => {
+    expect(
+      printedLines(
+        formatKitchenTicket(
+          { ...ticket, items: [{ qty: "2.000", name: "Roast beef with peppercorn sauce" }] },
+          { ...layout, paperWidth: "58mm" },
+          "UTC",
+        ),
+      ).slice(4),
+    ).toEqual(["2 x Roast beef with peppercorn", "    sauce", ""]);
+  });
   it("shortens whole quantities and keeps fractional amounts and units", () => {
     const lines = printedLines(
       formatKitchenTicket(
@@ -167,6 +178,35 @@ describe("whole quantities on kitchen paper", () => {
 });
 
 describe("the end of a late-send run", () => {
+  it("prints no late-run divider on MOVED or note-change slips", () => {
+    const items = [
+      { qty: 1, name: "Steak", afterPeriod: "Lunch" },
+      { qty: 1, name: "Water" },
+    ];
+    const common = {
+      locale: "en",
+      stationName: "Grill",
+      tableLabel: "Table 4",
+      orderNumber: "17",
+      at,
+    };
+    const moved = formatMovedSlip(
+      { ...common, fromNumber: "17", fromText: "Table 4", toText: "Table 5", items, held: [] },
+      layout,
+      "UTC",
+    );
+    const note = formatKitchenNoteChangeSlip(
+      {
+        ...common,
+        stations: [{ stationName: "Grill", items }],
+        orderNoteChange: { before: "No salt", after: null },
+      },
+      layout,
+      "UTC",
+    );
+    expect(printedLines(moved).slice(-3)).toEqual(["1 x Steak", "1 x Water", ""]);
+    expect(printedLines(note).slice(-3)).toEqual(["1 x Steak", "1 x Water", ""]);
+  });
   it.each(["58mm", "80mm"] as const)(
     "separates an unmarked dish from the marked run on %s",
     (paperWidth) => {

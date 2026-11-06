@@ -62,6 +62,7 @@ import {
   enqueueCorrectionSlips,
   enqueueHoldCorrections,
   enqueueKitchenTickets,
+  extraLabel,
   enqueueStationMoved,
   orderTableLabel,
   ordersWithPrintProblem,
@@ -163,6 +164,19 @@ function lineWidths(payload: Uint8Array): Set<number> {
 
 /** A basket line for a product at quantity 1. */
 const line = (productId: string) => ({ productId, quantity: "1" });
+
+it.each<[number, string, string]>([
+  [2000, "g", "Mint 2 g"],
+  [200_000, "g", "Mint 200 g"],
+  [1500, "kg", "Mint 1.500 kg"],
+])(
+  "prints a measured extra's %s thousandths without whole-number decimals",
+  (quantity, unit, expected) => {
+    expect(
+      extraLabel("Mint", thousandthsToDecimal(quantity), thousandthsToDecimal(1000), unit),
+    ).toBe(expected);
+  },
+);
 
 describe("paper for a move to another station", () => {
   it.each([
@@ -1476,7 +1490,7 @@ describe("dish extras on kitchen tickets", () => {
     });
 
     const ticket = decodeTicket(jobs.find((job) => job.printerId === printerId)!.payload);
-    expect(ticket).toContain("+ Ham 150.000 ES-g");
+    expect(ticket).toContain("+ Ham 150 ES-g");
     expect(ticket).not.toContain("CA-g");
   });
 
