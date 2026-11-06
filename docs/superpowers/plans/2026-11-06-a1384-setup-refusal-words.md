@@ -317,6 +317,15 @@ wave, with the Codex run-it seat as two reviews side by side.
 
 Each has a recommended default; the PR is built with the default.
 
+**Answered 2026-11-06:** the owner accepted all five recommended answers.
+
+- Q1: the «Tell a manager» exception covers the till's other full-disk refusals; stated in root
+  `CLAUDE.md`, `conventions-ui.md` and at both till sites.
+- Q2: accepted as built.
+- Q3: accepted as built.
+- Q4: moot; Task 10 found the pack is made.
+- Q5: accepted; the rename stands.
+
 1. **The till's full-disk refusals outside the strip** (`storage.disk_full`, `sale.disk_full`,
    `sale.disk_full_manual_card`, `sale.charged_disk_full`). They all end «Tell a manager», which
    your 28 October answer allowed for the strip only. **Recommended: the same exception covers them**,
