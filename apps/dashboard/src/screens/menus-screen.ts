@@ -3121,6 +3121,7 @@ export class MenusScreen extends LitElement {
         menuId=${this.menuId!}
         menuName=${this.#menuName()}
         .preview=${this.previewError ? null : this.preview}
+        .blocked=${this.undoOut?.menuId === this.menuId}
       ></dashboard-menu-publications
     ></dashboard-menu-preview>`;
   }

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import type {
   DashboardApi,
   MenuChange,
@@ -13,6 +14,7 @@ import type {
 import { currentLocale, setLocale } from "../i18n/t.js";
 import {
   cleanupWidgets,
+  documentProduct,
   documentSection,
   menuDocument,
   mountWidget,
@@ -94,7 +96,11 @@ function fakeApi(writes: Partial<DashboardApi>) {
     readFails: false,
     menuName: "Lunch Menu",
   };
-  const home = {} as MenuHome;
+  const home: MenuHome = {
+    homeSectionId: "home",
+    shortcuts: [],
+    ...structuredClone(HOME_DISPLAY_DEFAULTS),
+  };
   const listCatalogues = vi.fn(async () => [
     { id: MENU, name: state.menuName, active: true, version: 2 },
     { id: DINNER, name: "Dinner", active: true, version: 1 },
@@ -345,4 +351,157 @@ it("sends no Undo while the preview's read has failed", async () => {
   );
   await settle();
   expect(updateSection).not.toHaveBeenCalled();
+});
+
+const scheduleButton = (panel: MenuPreviewPanel) =>
+  panel
+    .querySelector("dashboard-menu-publications")
+    ?.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>(
+      '[data-test="schedule-open"]',
+    ) ?? null;
+
+it("draws Publish later disabled while an Undo of this menu is out", async () => {
+  const write = held();
+  const updateSection = vi.fn(() => write.promise);
+  const getMenuPublications = vi.fn(async () => ({
+    timeZone: "Europe/Madrid",
+    live: null,
+    editions: [],
+  }));
+  const fake = fakeApi({ updateSection, getMenuPublications } as unknown as Partial<DashboardApi>);
+  const { panel } = await mount(fake.api);
+  await vi.waitFor(() => expect(scheduleButton(panel())).not.toBeNull());
+  expect(scheduleButton(panel())!.disabled).toBe(false);
+  await userEvent.click(undoButton(panel(), "mains-colour")!);
+  await vi.waitFor(() => expect(updateSection).toHaveBeenCalledTimes(1));
+  await vi.waitFor(() => expect(scheduleButton(panel())!.disabled).toBe(true));
+  write.answer();
+  await vi.waitFor(() => expect(scheduleButton(panel())!.disabled).toBe(false));
+});
+
+const soupPrice: MenuChange = {
+  id: "soup-price",
+  targets: { before: [], after: [] },
+  kind: "price_changed",
+  productId: "p-soup",
+  name: "Soup",
+  from: "4.00",
+  to: "5.00",
+  source: "this_menu",
+};
+
+/** Soup's own price on this menu was 4.00 when published and is 5.00 now. */
+function soupPreview(): MenuPreview {
+  const priced = (price: string, menuName?: string) => {
+    const document = menuDocument([documentProduct("mi-soup", "p-soup")], { "p-soup": "Soup" }, menuName);
+    const offer = document.offers["mi-soup"]!;
+    return {
+      ...document,
+      offers: { "mi-soup": { ...offer, grossPrice: price, unitPrice: price } },
+    };
+  };
+  return {
+    ...previewOf([rename, soupPrice]),
+    live: { versionId: "v-2", document: priced("4.00", "Lunch") },
+    document: priced("5.00"),
+  };
+}
+
+it("runs a price Undo after a save of the same row that is out, and leaves the row unmarked once both finish", async () => {
+  const save = held();
+  const updateMenuItem = vi.fn((_menu: string, _item: string, input: { grossPrice: string | null }) =>
+    input.grossPrice === "6.00" ? save.promise : Promise.resolve(),
+  );
+  const fake = fakeApi({
+    updateMenuItem,
+    getMenuPrices: async () => [],
+  } as unknown as Partial<DashboardApi>);
+  fake.state.preview = soupPreview();
+  const { el, panel } = await mount(fake.api);
+  await vi.waitFor(() => expect(undoButton(panel(), "soup-price")).not.toBeNull());
+
+  visit(`/manage/menus/menu/${MENU}/view/prices`);
+  const prices = () =>
+    el.shadowRoot!.querySelector<HTMLElement & { saving: ReadonlySet<string> }>(
+      "dashboard-menu-prices-table",
+    );
+  await vi.waitFor(() => expect(prices()).not.toBeNull());
+  prices()!.dispatchEvent(
+    new CustomEvent("wt-price-save", {
+      detail: {
+        key: "mi-soup",
+        menuItemId: "mi-soup",
+        variantId: null,
+        name: "Soup",
+        price: "6.00",
+        previous: "5.00",
+      },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await vi.waitFor(() => expect(updateMenuItem).toHaveBeenCalledTimes(1));
+
+  visit(`/manage/menus/menu/${MENU}/view/preview`);
+  await vi.waitFor(() => expect(undoButton(panel(), "soup-price")).not.toBeNull());
+  askUndo(panel(), "soup-price");
+  await settle();
+  expect(updateMenuItem).toHaveBeenCalledTimes(1);
+
+  save.answer();
+  await vi.waitFor(() => expect(updateMenuItem).toHaveBeenCalledTimes(2));
+  expect(updateMenuItem.mock.calls.map(([, , input]) => input.grossPrice)).toEqual(["6.00", "4.00"]);
+  await vi.waitFor(() => expect(text(resultLine(panel()))).toContain("Undone"));
+
+  visit(`/manage/menus/menu/${MENU}/view/prices`);
+  await vi.waitFor(() => expect(prices()).not.toBeNull());
+  expect(prices()!.saving.has("mi-soup")).toBe(false);
+});
+
+const handheldColumns: MenuChange = {
+  id: "handheld-display",
+  targets: { before: [], after: [] },
+  kind: "home_display_changed",
+  device: "handheld",
+  source: "this_menu",
+};
+
+it("draws Undo blocked and sends nothing while a Home save is out", async () => {
+  const save = held();
+  const setHomeDisplay = vi.fn(() => save.promise);
+  const fake = fakeApi({ setHomeDisplay } as unknown as Partial<DashboardApi>);
+  const now = previewOf([rename, handheldColumns]);
+  fake.state.preview = {
+    ...now,
+    document: {
+      ...now.document,
+      home: { ...now.document.home, handheld: { ...now.document.home.handheld, columns: 2 } },
+    },
+  };
+  const { el, panel } = await mount(fake.api);
+  await vi.waitFor(() => expect(undoButton(panel(), "handheld-display")).not.toBeNull());
+
+  visit(`/manage/menus/menu/${MENU}/view/home`);
+  const slider = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-slider"]>(
+      'wt-slider[name="home-columns"]',
+    );
+  await vi.waitFor(() => expect(slider()).not.toBeNull());
+  await slider()!.updateComplete;
+  const native = slider()!.shadowRoot!.querySelector<HTMLInputElement>('input[type="range"]')!;
+  native.value = "2";
+  native.dispatchEvent(new Event("change", { bubbles: true }));
+  await vi.waitFor(() => expect(setHomeDisplay).toHaveBeenCalledTimes(1));
+
+  visit(`/manage/menus/menu/${MENU}/view/preview`);
+  await vi.waitFor(() => expect(undoButton(panel(), "handheld-display")).not.toBeNull());
+  await panel().updateComplete;
+  expect(undoButton(panel(), "handheld-display")!.getAttribute("aria-disabled")).toBe("true");
+  askUndo(panel(), "handheld-display");
+  await settle();
+  expect(setHomeDisplay).toHaveBeenCalledTimes(1);
+  save.answer();
+  await vi.waitFor(() =>
+    expect(undoButton(panel(), "handheld-display")!.getAttribute("aria-disabled")).toBeNull(),
+  );
 });
