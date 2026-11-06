@@ -92,7 +92,7 @@ function without(split: SplitPicks, id: string): { whole: Set<string>; picks: Ma
   return { whole, picks };
 }
 
-/** Whole keeps the bill's number, name and payments, so a paid dish or this person's unsent dishes,
+/** Whole keeps the bill's name and payments, so a paid dish or this person's unsent dishes,
  * which go only if the whole bill is chosen, leave the picks as picks. */
 function picksEveryDish(source: SplitSource, picks: Picks): boolean {
   return (

@@ -5764,7 +5764,7 @@ export class TillTableOrderScreen extends LitElement {
                 ?disabled=${sources === undefined || holding || (this.splitAttempted && countsBad)}
                 @click=${(event: Event) => void this.#confirmSplitPick(event)}
               >
-                ${t("table.split_guests_confirm")}
+                ${t("table.split_confirm")}
               </wt-button>`
         }
       </wt-form-actions>

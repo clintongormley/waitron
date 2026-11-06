@@ -1994,7 +1994,8 @@ handles belong to A672. (2026-10-16: A672 built those corner handles.) The curre
   the Name window by the owner's answer, 2026-10-15).** Asked whether such a save should be
   refused so the waiter sees the other count first, the owner answered "(a) keep it — the last count
   saved wins", and gave the same answer, (a), for the Name window. The Name window's save sends the
-  party revision this till holds (`#onNameParty`, `apps/till/src/till-app.ts`).
+  party revision this till holds (`#onNameParty`, `apps/till/src/till-app.ts`). 2026-11-06, A803 4c:
+  Split a table has no window of its own any more; both counts are set in its panel, beside the ticks.
 - **Guests: the waiter changes the count at any time, joined tables add their counts, and only Split
   a table asks again (A713, owner 2026-10-15).** Owner's words: "add joined counts. the waiter should
   always be able to update the number of people sitting at a table. when they split, the waiter
@@ -2005,7 +2006,8 @@ handles belong to A672. (2026-10-16: A672 built those corner handles.) The curre
   `apps/server/src/table-actions.ts`); and Split a table opens a window asking each side's count
   before the split goes through. A bill split by item has no count of its own, so it prints no guests
   line. A bill moved to a free table still starts a party with no count; the waiter sets it with
-  Guests.
+  Guests. 2026-11-06, A803 4c: both counts are now set in Split a table's own panel, beside the
+  ticks; there is no separate window.
 - **An emptied name field says what it goes back to only as its placeholder (A665, owner
   2026-10-14: "leave it").** Owner 2026-10-14: the name windows show what an emptied field goes back
   to as the placeholder only; no hidden description for screen readers. The windows are the till's
@@ -2988,7 +2990,7 @@ main bill, has landed (#2360); it leaves open A1256, A1258, A1261, A1263–A1267
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1286–A1294 and A1298–A1300. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454); it
 leaves open A1327. Slice 4c, Split a table through the same picker with any whole bills and single
-dishes in one panel, has landed; it leaves open A1347–A1363. Remaining: pre-bills through A446, which
+dishes in one panel, has landed; it leaves open A1347–A1366. Remaining: pre-bills through A446, which
 no longer waits for asesor S2. One payment pays one bill. Station modes, pass naming and grouped cross-bill
 firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
 "A773-2 PR D handoff" paragraph. New Spanish wording requires approval

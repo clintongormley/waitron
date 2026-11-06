@@ -309,7 +309,7 @@ describe("Split a table's panel", () => {
     [
       "es-ES",
       fill(t("table.split_pick_heading", "es-ES"), { table: "T8", party: "García (T7, T8)" }),
-      t("table.split_guests_confirm", "es-ES"),
+      t("table.split_confirm", "es-ES"),
     ],
   ])(
     "names its heading and Split in %s, and the heading has focus",

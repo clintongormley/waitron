@@ -1882,6 +1882,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   measured on a Mac with a warm cache (the 4c plan's R15). Add the index once the A1308 hold on table
   changes ends.
 
+- **A1366. Two dishes alike on one bill share a MOVED notice, so Split a table can miss a slip
+  (left open by A803 slice 4c).** `readNamesOnPaper` (`apps/server/src/kitchen-print.ts`) matches a
+  dish's last MOVED notice by bill, station and dish name, so a notice written for one Burger also
+  counts for another Burger on that bill, and a split can print no slip for a dish whose ticket still
+  names the table that left. Ran twice: the 4c plan's D6 (`Mesa 431` leaving: no notice, no slip),
+  and the finish-branch review (two Burgers sent at Mesa 940, one moved to another bill, Mesa 941
+  joined, that Burger moved back, Mesa 940 split away: no slip; with a Flan as the second dish the
+  slip printed). `kitchen_notices` names no ticket item, so telling the two apart needs a column,
+  which waits for the A1308 hold.
+
 ### The till, devices and table service
 
 - **A1330. A step started by a serving comes back after its bill moves (seen in A803 slice 4b's re-read;
@@ -2015,7 +2025,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 4c, Split a table through the same
-  picker, has landed; it leaves open A1347–A1363. Remaining: pre-bills through A446, which no longer
+  picker, has landed; it leaves open A1347–A1366. Remaining: pre-bills through A446, which no longer
   waits for asesor S2.
   [Detail](backlog/till.md#a803-bills-and-tables-one-portion-per-order-line-one-bill-switcher-one-picker)
 

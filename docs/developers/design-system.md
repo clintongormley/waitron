@@ -5983,7 +5983,8 @@ Guards: `split-selection.test.ts` (the model alone, no widget or screen); `split
 both themes, its listed states, not the foot); `till-table-order-screen.split-table.test.ts` and
 `.split-table.unsaved.test.ts` (the screen with reads handed in as properties); and
 `till-app-split-table.test.ts` (the real app against a stubbed API, not a server, which is where the
-comparison at Send is checked). Nothing checks another screen that might draw its own dish list
+comparison at Send is checked); `till-app-split-table.snapshot.test.ts` (the rows and the party revision a
+press sends come from one read) and `till-app-split-table.reads.test.ts` (the reads behind a refusal). Nothing checks another screen that might draw its own dish list
 instead of these widgets.
 
 ### The kitchen screen's cards

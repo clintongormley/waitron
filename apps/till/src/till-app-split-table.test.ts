@@ -5625,7 +5625,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         expect(refusal(el)!.textContent).toContain(
           t("table.split_taken", "es-ES").replace("{who}", "Luis"),
         );
-        expect(splitButton(el).textContent!.trim()).toBe(t("table.split_guests_confirm", "es-ES"));
+        expect(splitButton(el).textContent!.trim()).toBe(t("table.split_confirm", "es-ES"));
         expect(api.splitTable).not.toHaveBeenCalled();
       });
 

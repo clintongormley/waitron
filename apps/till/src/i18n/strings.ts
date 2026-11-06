@@ -1316,7 +1316,7 @@ export const en = {
   "table.name_save": "Save",
   "table.guests_title": "Guests at {tables}",
   "table.guests_save": "Save",
-  "table.split_guests_confirm": "Split",
+  "table.split_confirm": "Split",
   "table.no_other_bills": "No other bill of this party to choose",
   "table.confirm_different_people_title": "Separate bills for different people?",
   "table.confirm_different_people":
@@ -3201,7 +3201,7 @@ export const es: Record<StringKey, string> = {
   "table.name_save": "Guardar",
   "table.guests_title": "Comensales en {tables}",
   "table.guests_save": "Guardar",
-  "table.split_guests_confirm": "Separar",
+  "table.split_confirm": "Separar",
   "table.no_other_bills": "No hay otra cuenta de estos clientes para elegir",
   "table.confirm_different_people_title": "¿Cuentas separadas para distintas personas?",
   "table.confirm_different_people":

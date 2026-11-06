@@ -15824,7 +15824,7 @@ export class TillApp extends LitElement {
   #splitReadsOnPutBack?: () => void;
 
   /** A press's refusal reads and what they say. Ended by the till leaving the page, they start again
-   * once it is back, since the waiter may still be looking at that order (Task 12d). */
+   * once it is back, since the waiter may still be looking at that order. */
   async #pressRefusalReads<T>(
     partyId: string,
     reads: (live: () => boolean) => Promise<T>,
