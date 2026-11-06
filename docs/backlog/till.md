@@ -1295,17 +1295,6 @@ Pay items on a part-paid counter order lists one row per portion too. Once A739 
 group the rows with a count that sends the members' line numbers.
 
 
-## A1218. A counter device showing two counter zones cannot get back to its menu after a retrieve.
-
-Seen in A1208's LOOK (2026-10-30, demo Counter device with Downstairs bar and Upstairs
-bar): after Retrieve the Parked orders list stays, and choosing the zone again, or Floor and back,
-is refused "Clear the basket before changing service area" (`#onCounterZoneSelected`,
-`apps/till/src/till-app.ts`), so no dish can be added to the retrieved order. With one counter zone
-the plain Counter tab brings the menu back. I believe this predates A1208 (the refusal is from
-c90856059; A1208 changes how a retrieved order's lines load into the basket, `#loadIntoBasket`,
-but not `#onCounterZoneSelected` or the Parked orders list); not run on main.
-
-
 ## A1235. Parked orders, Waiting and department transfers can still name a table bill by an old table (left open by A803 slice 2).
 
 Parked orders now shows a table bill's stored number and
