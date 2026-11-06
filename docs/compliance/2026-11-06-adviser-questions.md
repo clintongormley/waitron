@@ -118,6 +118,17 @@ without Cloud. See [how a venue gives the tax office access](#how-a-venue-gives-
 
 ### Confirmations: records and the declaration
 
+**Keeping records.** Waitron sends a record of every invoice to AEAT as it is made (Veri\*Factu). AEAT
+says the restaurant need not keep records it has received, because AEAT holds them. The restaurant must
+still keep its invoice copies and other documents. Our proposal is one schedule for all of them, with
+six years as the starting point, so nobody has to work out a period for each document.
+
+**The declaration.** The maker of billing software, called the producer, must sign a statement for each
+version saying it meets the rules (declaración responsable, Orden HAC/1177/2024 article 15). It answers
+a fixed list of items, a) to g), and each restaurant keeps a copy. Item d) describes what the system
+consists of, and item f) says whether one installation can serve several taxpayers. Waitron's producer
+is a private individual today, and the statement has not been signed yet.
+
 - **T4.** The words «acceso en línea» do not need the data on the internet. RD 1619/2012 articles 21.2
   and 23 are met by a copy on the venue's own box if, when the tax office asks during a check, it can without
   unjustified delay see every invoice, search it, copy or download it and print it. No permanent
@@ -125,19 +136,66 @@ without Cloud. See [how a venue gives the tax office access](#how-a-venue-gives-
   almacenamiento local» and calls full access «una consulta en línea a los datos». DGT 0289-04 wants a
   network link only «en caso necesario», for a remote database. If AEAT asks from its own office, a copy
   of the period on a USB drive or by temporary download link is enough.
-- **T11.** The document list in the research is complete. It adds each past software declaration,
-  proof of payment for €1,000 or more kept five years, and pro formas.
-- **T12.** Records still pending or refused are kept until settled, then on the common schedule.
-- **T13.** The proposed archive meets the content rules, if it offers selective search, copying,
-  printing and the invoice lines.
-- **T14.** Our description for item d) of the declaration is sufficient after the five edits in the
-  research. In short: remove the backup server sentence, list third-party parts as a present fact, say
-  how the library is used, cover the print agent, and say what the terminals do.
-- **T15.** Answer f), whether one installation serves several taxpayers, stays N while each hosted
-  venue is its own installation.
-- **T16.** If the producer becomes a company: new installation and new chain; nothing to tell AEAT; a
-  new declaration; each restaurant keeps the old one. Moving between on-site and cloud keeps the same
-  code with a new installation number.
+- **T11. What a restaurant must keep.** For a restaurant company in the common tax regime, we think
+  this list is complete. Is anything missing?
+  - Copies of invoices issued, simplified tickets included (RD 1619/2012 article 19.1.b).
+  - Invoices received (article 19.1.a).
+  - Books, correspondence and business papers (Código de Comercio article 30.1).
+  - Any other evidence for its taxes (LGT article 29.2.e).
+  - Records of payments and refunds, as business papers. No specific list was found, so this is our
+    reading.
+  - The software declaration of every version used, because AEAT's FAQ says users «deben conservar los
+    certificados de los sistemas que se sustituyan o actualicen».
+  - Proof of payment for sales of €1,000 or more, kept five years from the payment (Ley 7/2012 article
+    7.Uno.4). A banquet is the likely case.
+  - Pro formas and drafts that never became invoices (developer FAQ §6). Whether a pre-bill counts as
+    one is a separate point, S2 in the [question register](asesor-questions.md).
+- **T12. Records AEAT does not hold.** The reason for not keeping a record is that it has been sent.
+  That fails for a record still waiting to go or one AEAT refused, which, in the words of the developer
+  FAQ, «no figuraría jamás en los sistemas de la AEAT (aunque constaría un rechazo)». So we keep each of
+  these with AEAT's reply until it is settled, then on the common schedule. No source sets a period,
+  so this is our reading.
+- **T13. The long-term archive.** Older data is to move out of the sales database into an archive,
+  proposed under A664 and not built. It would hold the complete originals, their links and the limits of
+  each chain, version data, and a reader that works without the sales server. We think that meets
+  RD 1619/2012 articles 19 to 21, if it offers selective search, copying, printing and the invoice lines.
+- **T14. The description for item d).** We think this draft is enough once the five changes below are
+  made:
+
+  > Waitron es un programa de punto de venta para restaurantes y bares. El servidor se ejecuta en un
+  > equipo compatible con Linux y Docker, en el establecimiento o en la nube. Las cajas, comanderos,
+  > pantallas de cocina y el panel de gestión se conectan mediante navegador. Se prevé un servidor de
+  > reserva que pueda sustituir al principal.
+  >
+  > Waitron no suministra hardware. El software comprende el servidor que genera, encadena, conserva y
+  > remite los registros de facturación; la biblioteca de facturación Veri\*Factu, con su versión y
+  > declaración responsable; las aplicaciones de los terminales, que no generan dichos registros; y el
+  > agente de impresión. Se identificarán también los componentes de terceros, entre ellos Node.js,
+  > SQLite, Litestream, Linux y Docker. Cada instalación factura para un solo obligado tributario; la
+  > versión española declarada funcionará exclusivamente como VERI\*FACTU.
+
+  1. Remove «Se prevé un servidor de reserva». The item describes what this version consists of, and
+     Waitron has no failover today.
+  2. Change «Se identificarán» to a present fact, naming the third-party parts and saying the producer
+     answers for them.
+  3. Say how the library is used. `@waitron/verifactu` has its own repository and releases, so the
+     declaration must say the system always calls it, which version, and how, when and what for.
+  4. Describe the print agent and how it works with the rest, because the developer FAQ counts invoice
+     printing and the QR code as relevant.
+  5. Add a sentence on what the terminals do: they ask for invoices and show them.
+- **T15. Item f): several taxpayers in one installation.** We answer N. Each venue has its own
+  installation, database and certificate, on-site or hosted in Waitron Cloud. If Cloud ever ran several
+  taxpayers inside one installation, the answer would become S.
+- **T16. If the producer changes, or a venue moves.** No source covers a change of producer, so this is
+  our reading. If the producer stops being an individual and becomes a company:
+  - Each restaurant's system counts as a new one, with a new installation number and a new invoice chain.
+  - Records already sent stay as they are.
+  - The company signs a declaration for its first version, and each restaurant keeps the old one.
+  - Nothing goes to AEAT, because no registration of a system exists.
+
+  If a venue moves between its own box and Waitron Cloud, with the same producer, it keeps the same
+  two-character software code and gets a new installation number. The declaration does not change, as
+  long as item d) says the server runs on-site or in the cloud.
 
 ## For the labour adviser or gestoría
 
