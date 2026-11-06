@@ -1428,6 +1428,93 @@ describe("DraftSync: reads and saves stop passing each other", () => {
       expect(server.saveDraft).not.toHaveBeenCalled();
     });
   });
+
+  describe("during a send or a correction of places, no save timer starts", () => {
+    it("when a read lands during a send, and the next read after it sends the edit", async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      draft.store.sending = true;
+
+      expect(await draft.load()).toBe(true);
+      await settle();
+      expect(server.saveDraft).not.toHaveBeenCalled();
+
+      draft.store.sending = false;
+      expect(await draft.load()).toBe(true);
+      await settle();
+      expect(server.saveDraft).toHaveBeenCalledOnce();
+    });
+
+    it("when a read already out lands during a correction", async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      const answerRead = holdRead();
+      const reading = draft.load();
+      await vi.advanceTimersByTimeAsync(0);
+      const cancel = new AbortController();
+      server.listDrafts.mockImplementationOnce(noAnswer);
+      const correcting = draft.correctPlaces(new Map(), cancel.signal, () => true);
+      await vi.advanceTimersByTimeAsync(0);
+
+      answerRead(await server.listDrafts("v1"));
+      expect(await reading).toBe(true);
+      await settle();
+
+      expect(server.saveDraft).not.toHaveBeenCalled();
+      cancel.abort();
+      await correcting;
+    });
+
+    it("and a save the read found waiting is not sent again when the send ends", async () => {
+      const draft = sync();
+      await draft.load();
+      server.saveDraft.mockRejectedValueOnce({ code: "group.not_found", status: 409 });
+      draft.store.addProduct(beer, "1");
+      draft.store.sending = true;
+      expect(await draft.flush()).toEqual({ refused: "group.not_found" });
+      expect(await draft.load()).toBe(true);
+
+      draft.store.sending = false;
+      await settle();
+
+      expect(server.saveDraft).toHaveBeenCalledOnce();
+    });
+
+    it("but an edit the store took during the send is saved once the send ends", async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      await draft.flush();
+      expect(server.saveDraft).toHaveBeenCalledOnce();
+      draft.store.sending = true;
+
+      draft.store.adoptLines(new Map([[0, { ...draft.store.lines[0]!, note: "Adopted" }]]));
+      await settle();
+      expect(server.saveDraft).toHaveBeenCalledOnce();
+
+      draft.store.sending = false;
+      await settle();
+      expect(server.saveDraft).toHaveBeenCalledTimes(2);
+    });
+
+    it("but an edit waiting on a bill that reopens during the send is saved once the send ends", async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      draft.billStatus = "placed";
+      draft.store.sending = true;
+
+      draft.billStatus = "open";
+      await settle();
+      expect(server.saveDraft).not.toHaveBeenCalled();
+
+      draft.store.sending = false;
+      await settle();
+      expect(server.saveDraft).toHaveBeenCalledOnce();
+    });
+  });
 });
 
 describe("DraftSync: after a submission", () => {

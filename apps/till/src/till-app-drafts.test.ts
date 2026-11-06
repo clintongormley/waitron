@@ -2504,6 +2504,37 @@ describe("till-app: sending the draft", () => {
       expect(banner(el)).not.toBeNull();
     });
 
+    it("sends no second save of the refused lines when a read lands while the send repairs their places", async () => {
+      const { el, store, detail, listGroups } = await raced("save");
+      const saves = api.saveDraft!.mock.calls.length;
+      let answerGroups!: (groups: unknown) => void;
+      listGroups.mockImplementationOnce(() => new Promise((resolve) => (answerGroups = resolve)));
+      emit(tableOrder(el)!, "submit-draft", detail);
+      await vi.waitFor(() => expect(answerGroups).toBeDefined());
+      expect(api.saveDraft).toHaveBeenCalledTimes(saves + 1);
+
+      window.dispatchEvent(new Event("focus"));
+      await flush(el, 6);
+      await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+
+      expect(store.sending).toBe(true);
+      expect(api.saveDraft).toHaveBeenCalledTimes(saves + 1);
+      answerGroups({
+        revision: 4,
+        groups: [{ ...mains, state: "fired", firedAt: "2026-10-17T12:00:00.000Z" }, desserts],
+        printProblems: [],
+      });
+      await vi.waitFor(() => expect(store.sending).toBe(false));
+      expect(api.saveDraft).toHaveBeenCalledTimes(saves + 2);
+      expect(
+        server.drafts[0]!.lines.map((line) => [line.slot, line.joinGroupId, line.afterGroupId]),
+      ).toEqual([
+        [0, null, null],
+        [0, null, null],
+        [8, null, "held-desserts"],
+      ]);
+    });
+
     it("keeps corrected dishes locally when their recovery save goes offline", async () => {
       const { el, store, detail } = await raced("submit");
       api
