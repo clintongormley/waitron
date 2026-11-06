@@ -168,7 +168,7 @@ describe("the submission id of a confirmation", () => {
 
   it.each([
     { code: "server.internal", status: 502 },
-    { code: "server.internal" },
+    { code: "server.internal", status: 404 },
     { status: 500 },
     {},
   ])("holds a first uncertain server answer %j before another identical payment", (error) => {
@@ -227,7 +227,7 @@ describe("the submission id of a confirmation", () => {
 
   it("is kept after a refusal, which does not say what became of the send that got no answer", () => {
     const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
-    const kept = unansweredAfter(first, { code: "reader.provider_disconnected", status: 503 });
+    const kept = unansweredAfter(first, { code: "server.internal", status: 503 });
 
     expect(submissionFor("wo-1", tenEuros, kept, ids("sub-2")).request.submissionId).toBe("sub-1");
   });

@@ -294,18 +294,18 @@ Waitron no cobra una cuenta con platos sin enviar. Mientras la cuenta en pantall
 no empieza ningún cobro y explica por qué, por ejemplo **Cuenta 1. Envía o quita los platos sin
 enviar antes de cobrar.** Envía o quita tus propios platos. Para los de otra persona, toca primero
 **Tomar el pedido** y después envíalos o quítalos. Los platos sin enviar de otra cuenta de la mesa
-no frenan esta. Si se envió un cobro de esta cuenta y no llegó respuesta, los botones de cobro que
-no son **Efectivo** ni **Tarjeta** siguen abriéndolo, para que puedas saber si se completó; esa
-ventana no acepta un cobro nuevo mientras haya platos sin enviar.
+no frenan esta. Si se envió un cobro de esta cuenta y su resultado no se ha confirmado, los botones
+de cobro que no son **Efectivo** ni **Tarjeta** siguen abriéndolo, para que puedas saber si se
+completó; esa ventana no acepta un cobro nuevo mientras haya platos sin enviar.
 
 Si eliges **Cerrar mesa** con una cuenta aún sin pagar, la caja indica **Hay una cuenta de esta mesa
 sin pagar. Cóbrala antes de cerrar la mesa** encima del pie. **Cobrar esta cuenta** pone en pantalla
 una cuenta sin pagar para que la cobres, y **Registrar salida sin pagar** registra que los clientes
 se fueron sin pagar.
 
-Si un cobro con tarjeta consta como no cobrado, puedes volver a cobrarlo. Si no se ha confirmado
-su resultado, elige **Comprobar de nuevo** para comprobar ese mismo cobro antes de cobrar otro.
-Los errores repetidos del servidor mantienen el cobro pendiente de confirmar hasta que responda.
+Si un cobro consta como no cobrado, puedes volver a cobrarlo. Si su resultado no se ha confirmado,
+elige **Comprobar de nuevo** para continuar ese mismo cobro antes de cobrar otro. Si no estaba
+registrado, puede cobrar la tarjeta o registrar el efectivo.
 
 ## Mover platos a otra cuenta {#move-dishes}
 

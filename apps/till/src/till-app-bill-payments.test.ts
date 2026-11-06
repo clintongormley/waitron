@@ -5320,7 +5320,7 @@ describe("till-app: a bill payment on the card reader", () => {
 
   it.each([
     { code: "server.internal", status: 502 },
-    { code: "server.internal" },
+    { code: "server.internal", status: 404 },
     { status: 500 },
     {},
   ])(
@@ -5404,6 +5404,160 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(sent()).toHaveLength(2);
     expect(sent()[1]).toEqual(sent()[0]);
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+  });
+
+  it("A1399: a pending balance row does not erase known-charge advice", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "sale.charged_not_recorded",
+        reason: "disk_full",
+        status: 507,
+      })
+      .mockResolvedValueOnce(
+        onReader("pending", "pending", { reserved: "40.00", outstanding: "80.00" }),
+      )
+      .mockResolvedValueOnce(
+        onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+      );
+    const getBillBalance = vi.fn(async () => {
+      const original = sent().at(-1);
+      return original === undefined
+        ? balanceOf()
+        : balanceOf({
+            reserved: "40.00",
+            outstanding: "80.00",
+            payments: [
+              paymentOf({
+                submissionId: original.submissionId,
+                method: "card",
+                entry: "reader",
+                state: "pending",
+                applied: "40.00",
+                tip: "0.00",
+                tendered: null,
+                change: null,
+              }),
+            ],
+          });
+    });
+    const el = await takeOnReader(takeBillPayment, { getBillBalance });
+
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.charged_disk_full"));
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    await press(el, "[data-pay-confirm]");
+    expect(sent()[1]).toEqual(sent()[0]);
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.charged_disk_full"));
+    await press(el, "[data-pay-confirm]");
+    expect(sent()[2]).toEqual(sent()[0]);
+    expect(dialog(el)!.confirmationLocked).toBe(false);
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+  });
+
+  it.each([
+    { code: "payment.provider_credential_rejected", status: 400 },
+    { code: "clock.unusable", status: 409 },
+  ])("A1399: a coded refusal with a pending row holds that submission %j", async (error) => {
+    const takeBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce(
+        onReader("pending", "pending", { reserved: "40.00", outstanding: "80.00" }),
+      )
+      .mockResolvedValueOnce(
+        onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+      )
+      .mockResolvedValueOnce(
+        onReader("received", "received", { received: "80.00", outstanding: "40.00" }),
+      );
+    const getBillBalance = vi.fn(async () => {
+      const original = sent().at(-1);
+      return original === undefined
+        ? balanceOf()
+        : balanceOf({
+            reserved: "40.00",
+            outstanding: "80.00",
+            payments: [
+              paymentOf({
+                submissionId: original.submissionId,
+                method: "card",
+                entry: "reader",
+                state: "pending",
+                applied: "40.00",
+                tip: "0.00",
+                tendered: null,
+                change: null,
+              }),
+            ],
+          });
+    });
+    const el = await takeOnReader(takeBillPayment, { getBillBalance });
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+    await press(el, "[data-pay-confirm]");
+    expect(sent()[1]).toEqual(sent()[0]);
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    await press(el, "[data-pay-confirm]");
+    expect(sent()[2]).toEqual(sent()[0]);
+    expect(dialog(el)!.confirmationLocked).toBe(false);
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+    await type(el, "amount", "40");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(sent()[3]!.submissionId).not.toBe(sent()[0]!.submissionId);
+  });
+
+  it("A1399: a cash full-disk refusal without a row keeps the form unlocked", async () => {
+    const { el } = await mountApp({
+      takeBillPayment: vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 }),
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "40");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(dialog(el)!.confirmationLocked).toBe(false);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.disk_full"));
+    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
+  });
+
+  it("A1399: reopening a held payment keeps its known-charge advice", async () => {
+    const takeBillPayment = vi.fn().mockRejectedValue({
+      code: "sale.charged_not_recorded",
+      reason: "disk_full",
+      status: 507,
+    });
+    const el = await takeOnReader(takeBillPayment);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.charged_disk_full"));
+
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    await openDialog(el, "share");
+
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.charged_disk_full"));
+    expect(sent()).toHaveLength(1);
+  });
+
+  it.each([
+    { code: "server.internal", status: 500 },
+    { code: "storage.disk_full", status: 507 },
+  ])("A1399: a failed recheck cannot replace an earlier known-charge warning %j", async (error) => {
+    const takeBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "sale.charged_not_recorded",
+        reason: "disk_full",
+        status: 507,
+      })
+      .mockRejectedValueOnce(error);
+    const el = await takeOnReader(takeBillPayment);
+    await press(el, "[data-pay-confirm]");
+    expect(sent()[1]).toEqual(sent()[0]);
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.charged_disk_full"));
   });
 
   it("A532 leaves cash payment waits subject to the ordinary idle sign-out", async () => {
@@ -5607,7 +5761,7 @@ describe("till-app: a bill payment on the card reader", () => {
       .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
       .toBe(t("bill_pay.unconfirmed"));
 
-    takeBillPayment.mockRejectedValueOnce({ code: "reader.provider_disconnected", status: 503 });
+    takeBillPayment.mockRejectedValueOnce({ code: "server.internal", status: 503 });
     await press(el, "[data-pay-confirm]");
     expect(dialog(el)!.confirmationLocked).toBe(true);
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
@@ -5781,6 +5935,7 @@ describe("till-app: a bill payment on the card reader", () => {
 
     expect(sent()[0]!.entry).toBe("manual");
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.disk_full_manual_card"));
+    expect(dialog(el)!.confirmationLocked).toBe(false);
   });
 
   /** A handheld whose profile declares the integrated reader, taking a card on the second reader. */
@@ -6105,7 +6260,7 @@ describe("till-app: a bill payment on the card reader", () => {
     it("an uncertain server answer checked again, then refused reader.not_held, says the server could not check it", async () => {
       const takeBillPayment = vi
         .fn()
-        .mockRejectedValueOnce({ code: "payment.provider_credential_rejected", status: 502 })
+        .mockRejectedValueOnce({ code: "server.internal", status: 502 })
         .mockRejectedValueOnce({ code: "reader.not_held", status: 409 });
       const el = await takeOnReader(takeBillPayment);
       expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));

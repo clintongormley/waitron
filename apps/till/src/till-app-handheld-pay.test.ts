@@ -6160,7 +6160,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
 
   it.each([
     {
-      code: "reader.provider_disconnected",
+      code: "server.internal",
       status: 503,
       held: true,
       refusal: "bill_pay.reader_not_held_unknown",

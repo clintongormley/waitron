@@ -1448,11 +1448,11 @@ export const en = {
   "sale.refused":
     "This sale cannot be filed with the tax agency. The till has recorded nothing, and trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up. If you already charged a card on the terminal, refund it there.",
   "sale.disk_full":
-    "Sale not recorded: the box is out of disk space. Don't take payment until it is fixed; tell a manager.",
+    "Sale not recorded: the box is out of disk space. Stop taking payments until space is available, then try again.",
   "sale.disk_full_manual_card":
-    "Sale not recorded: the box is out of disk space. Don't take payment until it is fixed; tell a manager. If you already charged a card on the terminal, refund it there.",
+    "Sale not recorded: the box is out of disk space. Stop taking payments until space is available, then try again. If you already charged a card on the terminal, refund it there.",
   "sale.charged_disk_full":
-    "Card charged, but the sale is not recorded: the box is out of space. Do not charge again; tell a manager.",
+    "Card charged, but the sale is not recorded: the box is out of space. Do not charge again. Retry recording this same payment once space is available.",
   "sale.clock_unusable":
     "Sale not recorded: the box's clock is wrong (it reads {date}). Tell a manager. If you already charged a card on the terminal, refund it there.",
   "sale.clock_unusable_check":
@@ -1629,11 +1629,11 @@ export const en = {
   "bill_pay.next": "Take the next",
   "bill_pay.next_share": "Take the next ({n} of {m})",
   "bill_pay.unconfirmed":
-    "This payment could not be confirmed. Press Check again to check this same payment without recording it twice.",
+    "This payment could not be confirmed. Check again continues this same payment: if it was not recorded, it may charge the card or record the cash payment.",
   "bill_pay.unconfirmed_elsewhere":
-    "A payment on this bill could not be confirmed. On the bill, press Pay items, then Check again to check that same payment without recording it twice.",
+    "A payment on this bill could not be confirmed. On the bill, press Pay items, then Check again to continue that same payment.",
   "bill_pay.unconfirmed_elsewhere_handheld":
-    "A payment on this bill could not be confirmed. On the bill, press Pay, then Check again to check that same payment without recording it twice.",
+    "A payment on this bill could not be confirmed. On the bill, press Pay, then Check again to continue that same payment.",
   "bill_pay.unanswered_title": "Payment not confirmed",
   "bill_pay.recheck": "Check again",
   "bill_pay.sending_title": "Waiting for the server",
@@ -1642,9 +1642,9 @@ export const en = {
   "bill_pay.reader_not_held":
     "This phone no longer has that card reader. Choose the reader in your hand. No card was charged.",
   "bill_pay.reader_not_held_unknown":
-    "This phone no longer has that card reader. Choose the reader in your hand. An earlier card on this bill got no answer: before charging again, ask a manager to check Card payments.",
+    "This phone no longer has that card reader. Choose the reader in your hand. The first payment may have gone through: look at the bill’s payments before taking it again.",
   "bill_pay.not_checked":
-    "The server could not check this payment. Look at the bill's payments before taking it again.",
+    "The server could not check this payment. The first payment may have gone through: look at the bill's payments before taking it again.",
   "bill_pay.payment_failed": "This payment is recorded as not taken. You can take it again.",
   "bill_pay.choose_later":
     "These items cost more than is left to pay on the bill. Choose how to pay for them.",
@@ -3330,11 +3330,11 @@ export const es: Record<StringKey, string> = {
   "sale.refused":
     "Esta venta no se puede registrar en Hacienda. La caja no ha registrado nada y reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró esta caja. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "sale.disk_full":
-    "Venta no registrada: el equipo no tiene espacio en disco. No cobres hasta que se resuelva; avisa al encargado.",
+    "Venta no registrada: el equipo no tiene espacio en disco. Deja de cobrar hasta que haya espacio y vuelve a intentarlo.",
   "sale.disk_full_manual_card":
-    "Venta no registrada: el equipo no tiene espacio en disco. No cobres hasta que se resuelva; avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+    "Venta no registrada: el equipo no tiene espacio en disco. Deja de cobrar hasta que haya espacio y vuelve a intentarlo. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "sale.charged_disk_full":
-    "Cobrado con tarjeta, pero la venta no se ha registrado: el equipo no tiene espacio. No vuelvas a cobrar; avisa al encargado.",
+    "Cobrado con tarjeta, pero la venta no se ha registrado: el equipo no tiene espacio. No vuelvas a cobrar. Reintenta registrar este mismo pago cuando haya espacio.",
   "sale.clock_unusable":
     "Venta no registrada: la hora del equipo es incorrecta (marca {date}). Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "sale.clock_unusable_check":
@@ -3507,11 +3507,11 @@ export const es: Record<StringKey, string> = {
   "bill_pay.next": "Cobrar al siguiente",
   "bill_pay.next_share": "Cobrar al siguiente ({n} de {m})",
   "bill_pay.unconfirmed":
-    "No se ha podido confirmar este cobro. Pulsa Comprobar de nuevo para comprobar este mismo cobro sin registrarlo dos veces.",
+    "No se ha podido confirmar este cobro. Comprobar de nuevo continúa ese mismo cobro: si no estaba registrado, puede cobrar la tarjeta o registrar el efectivo.",
   "bill_pay.unconfirmed_elsewhere":
-    "No se ha podido confirmar un cobro de esta cuenta. En la cuenta, pulsa Pagar artículos y luego Comprobar de nuevo para comprobar ese mismo cobro sin registrarlo dos veces.",
+    "No se ha podido confirmar un cobro de esta cuenta. En la cuenta, pulsa Pagar artículos y luego Comprobar de nuevo para continuar ese mismo cobro.",
   "bill_pay.unconfirmed_elsewhere_handheld":
-    "No se ha podido confirmar un cobro de esta cuenta. En la cuenta, pulsa Cobrar y luego Comprobar de nuevo para comprobar ese mismo cobro sin registrarlo dos veces.",
+    "No se ha podido confirmar un cobro de esta cuenta. En la cuenta, pulsa Cobrar y luego Comprobar de nuevo para continuar ese mismo cobro.",
   "bill_pay.unanswered_title": "Cobro sin confirmar",
   "bill_pay.recheck": "Comprobar de nuevo",
   "bill_pay.sending_title": "Esperando al servidor",
@@ -3520,9 +3520,9 @@ export const es: Record<StringKey, string> = {
   "bill_pay.reader_not_held":
     "Este teléfono ya no tiene ese lector de tarjetas. Elige el lector que tienes en la mano. No se ha cobrado ninguna tarjeta.",
   "bill_pay.reader_not_held_unknown":
-    "Este teléfono ya no tiene ese lector de tarjetas. Elige el lector que tienes en la mano. Una tarjeta anterior de esta cuenta no ha tenido respuesta: antes de cobrar otra vez, pide a un encargado que lo consulte en Pagos con tarjeta.",
+    "Este teléfono ya no tiene ese lector de tarjetas. Elige el lector que tienes en la mano. El primer cobro puede haberse realizado: mira los pagos de la cuenta antes de volver a cobrarlo.",
   "bill_pay.not_checked":
-    "El servidor no ha podido comprobar este cobro. Mira los pagos de la cuenta antes de volver a cobrarlo.",
+    "El servidor no ha podido comprobar este cobro. El primer cobro puede haberse realizado: mira los pagos de la cuenta antes de volver a cobrarlo.",
   "bill_pay.payment_failed": "Este cobro consta como no cobrado. Puedes volver a cobrarlo.",
   "bill_pay.choose_later":
     "Estos artículos cuestan más de lo que queda por pagar en la cuenta. Elige cómo se pagan.",

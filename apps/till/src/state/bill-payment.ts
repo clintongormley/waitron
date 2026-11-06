@@ -210,7 +210,7 @@ export function unansweredAfter<S extends { unconfirmed?: boolean }>(
     : sent;
 }
 
-export function billPaymentUnconfirmed(error: unknown): boolean {
+function billPaymentUnconfirmed(error: unknown): boolean {
   const code = (error as { code?: unknown } | null)?.code;
   if ((typeof code === "string" && FRESH_ID_AFTER.has(code)) || paymentNotRecorded(error))
     return false;
@@ -233,9 +233,6 @@ export function isLatestSend(
   return turns.get(billId) === turn;
 }
 
-/** A refusal's code and the request field it names, as the refund and unpaid departure dialogs
- * show it. The app's own codes: `network`, an unconfirmed request; `approvers`, a list of who
- * can approve that could not be read. */
 export interface DialogRefusal {
   code: string;
   field?: string;
