@@ -270,7 +270,7 @@ it("names a refused Undo beside the list as not undone once the person has left 
   write.refuse({ code: "menu_section.invalid", params: { field: "color" } });
   await vi.waitFor(() =>
     expect(memberError(el)).toBe(
-      `${bullet}: not undone. Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.`,
+      `Not undone: ${bullet}. Mains's published photo or colour can no longer be used. Change it on the Structure tab, or hide this change.`,
     ),
   );
   expect(memberError(el)).not.toContain("not saved");

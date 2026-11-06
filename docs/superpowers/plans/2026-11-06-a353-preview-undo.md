@@ -237,7 +237,7 @@ link (`menu_preview.hide_change`); the tab names are the existing `menus.tab_str
 | `menu_preview.undoing` (new) | Undoing… | Deshaciendo… |
 | `menu_preview.undone` (new) | Undone: {change}. | Cambio deshecho: {change}. |
 | `menu_preview.undo_refused` (new) | Not undone. {reason} | No se ha deshecho. {reason} |
-| `menu_preview.undo_refused_change` (new) | {change}: not undone. {reason} | {change}: no se ha deshecho. {reason} |
+| `menu_preview.undo_refused_change` (new) | Not undone: {change}. {reason} | No se ha deshecho: {change}. {reason} |
 | `menu_preview.edit_menu` (new) | Edit {menu} | Editar {menu} |
 | `product.edit` (reused) | Edit product | Editar producto |
 | `extras.edit` (reused, only if Q1a says so) | Edit extras list | Editar lista de extras |
@@ -259,8 +259,8 @@ sentences below; a code none of them names falls back to its existing `codeMessa
 
 `{device}` is the existing `home.device_handheld` / `home.device_till` ("Handheld" / "Terminal de
 mano", "Till" / "Caja registradora"). An Undo refused after the person has left this menu's
-Preview tab is named beside the list with `menu_preview.undo_refused_change` ("{change}: not
-undone. {reason}"), where a price save refused away from its tab is named
+Preview tab is named beside the list with `menu_preview.undo_refused_change` ("Not undone:
+{change}. {reason}"), where a price save refused away from its tab is named
 (`menus-screen.ts:2099-2109`). It does not reuse `menus.change_not_saved` ("Your change to {name}
 was not saved."): that would say the change itself was lost, when only the Undo failed.
 
