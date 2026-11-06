@@ -102,16 +102,23 @@ it("control: without the journal, the same held database refuses kept-records", 
   await expectHeldRefused(f, keptRecords);
 });
 
-it("a damaged held database whose private copy finds no room answers storage.disk_full, and nothing changes", async () => {
-  const f = await heldSetup({ pendingWal: true });
-  const wal = await readFile(`${venueDb(f)}-wal`);
-  damagePages(venueDb(f), "department_days");
-  // The damage is written with the -wal checkpointed; putting it back keeps the copy path.
-  await writeFile(`${venueDb(f)}-wal`, wal);
-  copyFails.on = true;
-  await expectHeldRefused(f, { code: "storage.disk_full" });
-  expect(copyFails.calls).toBeGreaterThan(0);
-});
+// A failed copy is never read as damage, which would offer deletion.
+it.each([
+  ["ENOSPC", { code: "storage.disk_full" }],
+  ["EIO", notReadyBecause("unreadable")],
+] as const)(
+  "a damaged held database whose private copy fails with %s is refused as the failure says, and nothing changes",
+  async (code, refusal) => {
+    const f = await heldSetup({ pendingWal: true });
+    const wal = await readFile(`${venueDb(f)}-wal`);
+    damagePages(venueDb(f), "department_days");
+    // The damage is written with the -wal checkpointed; putting it back keeps the copy path.
+    await writeFile(`${venueDb(f)}-wal`, wal);
+    copyFails.code = code;
+    await expectHeldRefused(f, refusal);
+    expect(copyFails.calls).toBeGreaterThan(0);
+  },
+);
 
 it("a venue.db the box may not open is refused setup.not_ready, and nothing changes", async () => {
   const f = await heldSetup();

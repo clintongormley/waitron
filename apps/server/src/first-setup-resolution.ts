@@ -179,6 +179,14 @@ const PRESENT_START_AGAIN_STATUSES: readonly string[] = [
   "consumption-intent",
   "abandoned",
 ];
+/** Start again's failure to build its deletion marker, as the repair page words it. */
+export function markerRefusal(error: unknown): unknown {
+  if (!(error instanceof AppError) || error.code !== "setup.start_again_incomplete") return error;
+  const reason = error.reason ?? error.code;
+  const cause = reason.startsWith("layout unexpected") ? "unexpected" : "unreadable";
+  return new AppError("setup.not_ready", { cause }, { reason });
+}
+
 export function createFirstSetupResolutionActions(
   options: FirstSetupRoots & {
     host: Pick<FirstFiscalHost, "resolution" | "owner" | "store" | "coordinator"> & {
@@ -222,13 +230,7 @@ export function createFirstSetupResolutionActions(
       { attemptId: state.frozen.attemptId, frozenDigest: firstSetupFrozenDigest(state) },
       markerOptions,
     ).catch((error: unknown) => {
-      throw error instanceof AppError && error.code === "setup.start_again_incomplete"
-        ? new AppError(
-            "setup.not_ready",
-            { cause: "unreadable" },
-            { reason: error.reason ?? error.code },
-          )
-        : error;
+      throw markerRefusal(error);
     });
     if (markerSize(marker) > (options.markerLimit ?? START_AGAIN_MARKER_LIMIT))
       unavailable("too-large");

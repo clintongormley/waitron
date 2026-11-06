@@ -33,8 +33,8 @@ export type SetupDatabaseRead =
   | { kind: "damaged"; code: Damage; seen: SetupDatabaseHoldings };
 
 // Reasons are log-only codes: they never carry a path or a value read from the database.
-const notReady = (reason: string): never => {
-  throw new AppError("setup.not_ready", { cause: "unreadable" }, { reason });
+const notReady = (reason: string, cause: "unexpected" | "unreadable" = "unreadable"): never => {
+  throw new AppError("setup.not_ready", { cause }, { reason });
 };
 const copyFailed = (error: unknown): never => {
   if ((error as NodeJS.ErrnoException | undefined)?.code === "ENOSPC")
@@ -95,7 +95,7 @@ export async function readSetupDatabase(
     else {
       scratch = await mkdtemp(join(tmpdir(), "waitron-setup-holdings-")).catch(copyFailed);
       const present = await copyVenueFiles(roots.venueDir, scratch, () =>
-        notReady("copy refused: not a plain file"),
+        notReady("copy refused: not a plain file", "unexpected"),
       ).catch((error: unknown) =>
         error instanceof AppError ? Promise.reject(error) : copyFailed(error),
       );

@@ -45,7 +45,7 @@ import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
 import { expectStartAgainDeleted } from "../test/start-again-deleted.js";
 import { PASSWORD, request } from "../test/first-fiscal.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
-import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
+import { createFirstSetupResolutionActions, markerRefusal } from "./first-setup-resolution.js";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { createFakeTimersHourClock, selectPastWaits } from "./testing/hour-test-clock.js";
@@ -1982,4 +1982,24 @@ it("lifetime: a restart of the repair listener leaves the confirmation record un
   for (const { app } of served)
     expect((await app.request("/setup-api/first-setup/resolution")).status).toBe(200);
   expect(await kept.bytes()).toEqual(kept.before);
+});
+
+it.each([
+  ["a file or folder it does not expect", "layout unexpected: /venue/stray", "unexpected"],
+  ["a listed file it cannot hash", "check failed: EACCES /state/modules.json", "unreadable"],
+] as const)(
+  "a deletion marker refused for %s (%s) is setup.not_ready with cause %s, keeping the reason",
+  (_label, reason, cause) => {
+    const refused = new AppError("setup.start_again_incomplete", {}, { reason });
+    expect(markerRefusal(refused)).toMatchObject({
+      code: "setup.not_ready",
+      params: { cause },
+      reason,
+    });
+  },
+);
+
+it("any other failure building the deletion marker passes through unchanged", () => {
+  const other = new AppError("setup.start_again_files_found", {});
+  expect(markerRefusal(other)).toBe(other);
 });

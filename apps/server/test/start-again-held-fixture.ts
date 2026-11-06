@@ -57,22 +57,23 @@ vi.mock("../src/first-setup-database-holdings.js", async (importOriginal) => {
   };
 });
 
-const copyFails = vi.hoisted(() => ({ on: false, calls: 0 }));
+/** `code`: the error code every copy of the venue files fails with; unset, copies run. */
+const copyFails = vi.hoisted(() => ({ code: undefined as string | undefined, calls: 0 }));
 
 vi.mock("../src/venue-private-copy.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/venue-private-copy.js")>();
   return {
     ...actual,
     copyVenueFiles: (...args: Parameters<typeof actual.copyVenueFiles>) => {
-      if (!copyFails.on) return actual.copyVenueFiles(...args);
+      if (copyFails.code === undefined) return actual.copyVenueFiles(...args);
       copyFails.calls += 1;
-      return Promise.reject(Object.assign(new Error("no space"), { code: "ENOSPC" }));
+      return Promise.reject(Object.assign(new Error("copy failed"), { code: copyFails.code }));
     },
   };
 });
 
 afterEach(() => {
-  copyFails.on = false;
+  copyFails.code = undefined;
   copyFails.calls = 0;
 });
 

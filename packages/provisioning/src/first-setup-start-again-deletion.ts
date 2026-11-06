@@ -322,13 +322,14 @@ export async function startAgainMarkerFor(
   options: Options = {},
 ): Promise<StartAgainMarker> {
   const canonical = await canonicalFirstSetupRoots(roots);
-  const items = await itemsOnDisk(canonical, options).catch((error: unknown) => {
+  const rethrow = (error: unknown): never => {
     throw error instanceof AppError ? error : checkFailed(error);
-  });
+  };
+  const items = await itemsOnDisk(canonical, options).catch(rethrow);
   const files: StartAgainMarkedFile[] = [];
   for (const item of items)
     if (item.kind === "file")
-      files.push({ root: item.root, name: item.name, ...(await sha256(item.path)) });
+      files.push({ root: item.root, name: item.name, ...(await sha256(item.path).catch(rethrow)) });
   const wal = async (name: string) => {
     const path = join(canonical.venueDir, name);
     return (await present(path)) ? sha256(path) : null;
@@ -338,7 +339,10 @@ export async function startAgainMarkerFor(
     ...attempt,
     ...canonical,
     files,
-    wal: { "venue.db-wal": await wal("venue.db-wal"), "node.db-wal": await wal("node.db-wal") },
+    wal: {
+      "venue.db-wal": await wal("venue.db-wal").catch(rethrow),
+      "node.db-wal": await wal("node.db-wal").catch(rethrow),
+    },
   });
 }
 

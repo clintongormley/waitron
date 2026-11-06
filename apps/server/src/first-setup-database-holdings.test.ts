@@ -194,3 +194,19 @@ it("reads through a private copy, read-write, when a leftover -journal sits besi
   expect(result.rows).toBe(ACTIVATION_ROWS);
   expect(await files(held.roots.venueDir)).toEqual(before);
 });
+
+it.each([
+  ["a folder", (path: string) => fileSystem.mkdir(path)],
+  ["a link", (path: string) => fileSystem.symlink("venue.db", path)],
+])(
+  "a side file that is %s is refused as something setup does not expect, never as unreadable",
+  async (_shape, make) => {
+    const held = await heldSetup();
+    await make(join(held.roots.venueDir, "venue.db-journal"));
+    await expect(read(held)).rejects.toMatchObject({
+      code: "setup.not_ready",
+      params: { cause: "unexpected" },
+      reason: "copy refused: not a plain file",
+    });
+  },
+);
