@@ -25,3 +25,9 @@ on the printer's details runs it again.
   receipt is as wide as the paper.
 - Say whether a cash drawer is attached, and test it. Switch on **Portable printer** for a printer
   one person carries, such as a belt printer. Choose **Save**.
+
+## Printer details {#printer-details}
+
+Choose a printer's name in the **Printers** tab or the **Print Queue** to open its details.
+**Active** switches the printer on or off at once. **Edit** changes its name and, for a network
+printer, its address. **Calibrate printer** runs calibration again.

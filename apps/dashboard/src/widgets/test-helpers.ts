@@ -601,3 +601,31 @@ export function timesAcrossLines(elements: readonly Node[]): { checked: number; 
   }
   return { checked, broken };
 }
+
+export type DetailsEditAction = "edit" | "save" | "cancel";
+
+export function detailsEditTest(action: DetailsEditAction): string {
+  return `${action}-printer-details`;
+}
+
+export function detailsEditButton<T extends HTMLElement = HTMLElement>(
+  el: HTMLElement,
+  action: DetailsEditAction,
+): T | null {
+  return el.shadowRoot!.querySelector<T>(`[data-test=${detailsEditTest(action)}]`);
+}
+
+/** Presses the details' Edit, and throws when there is none to press. */
+export function openDetailsEdit(el: HTMLElement): void {
+  const edit = detailsEditButton(el, "edit");
+  if (!edit) throw new Error("The printer details show no Edit to press.");
+  edit.click();
+}
+
+export function saveDetailsEdit(el: HTMLElement): void {
+  detailsEditButton(el, "save")!.click();
+}
+
+export function cancelDetailsEdit(el: HTMLElement): void {
+  detailsEditButton(el, "cancel")!.click();
+}

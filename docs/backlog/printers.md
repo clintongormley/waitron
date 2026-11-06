@@ -345,28 +345,6 @@ those letters (not checked).
 
 - **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room).** A modal means the printer page is no longer a sub-page, so the owner
   dropped lane B's A398 redraw of the printer page's heading (2026-10-08).
-  1. **Printer details become a modal, viewing and editing both.** Today's page is badly laid out:
-     Edit opens the name field off to the right, away from the title it changes; whether the
-     printer is active shows three times (a "Status" heading, "Status: Active" and an Active
-     toggle); times print raw ("2026-10-08 11:13"). "Calibrate printer" is hidden inside the
-     collapsed Calibration section — it is an ordinary action and is always visible with the
-     modal's other actions. A modal also fixes the print queue's link: clicking a printer name there
-     opens the details with an "All printers" link that goes back to the print queue; a modal
-     simply closes back to wherever it was opened.
-     **Layout (owner, 2026-10-14):** one line per fact, the label on the left and the value in a
-     column beside it — never today's label above value, which makes the page about two screens
-     long. The facts are grouped under Status, Connection, Paper and drawer, and Used by (point 5).
-     Active shows once, as its switch; times read as "Today 13:09". Delete, Calibrate and Edit sit
-     together at the bottom. Edit turns the same modal into a form holding only what can change
-     (Name and Address), with Cancel and Save; the Active switch stays on the viewing side, where it
-     acts at once.
-  2. **The connection line says the opposite of the truth for USB and Bluetooth printers.**
-     `printers.connection_roaming` ("Can roam between agents", `printers-screen.ts`) is shown for
-     them, but a USB or Bluetooth printer is tied to the one agent it is plugged into or paired
-     with; it is a network printer that any venue agent can reach. Say it is connected to one print
-     agent and name it (e.g. "Connected through: Waitron", from what "Last seen by" shows); fix the
-     Spanish ("Puede cambiar de agente") with it. Check whether anything besides the label treats
-     USB or Bluetooth printers as able to move between agents.
   3. **No way to pair a Bluetooth printer again after Unpair.** A succeeded Unpair switches the
      printer off (C109, #960), and the only way back is adding it again as a new printer. Offer
      "Pair again" (or similar) on the same printer record.

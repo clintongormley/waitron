@@ -1,4 +1,6 @@
 export const en = {
+  "time.today_at": "Today {time}",
+  "time.yesterday_at": "Yesterday {time}",
   "zone_repair.sign_in": "Sign in as a manager",
   "zone_repair.sign_in_explanation":
     "To confirm the time zone, sign in with an account that can configure the venue. This signs you out and opens sign-in.",
@@ -746,7 +748,10 @@ export const en = {
   "printers.last_seen_by": "Last seen by",
   "printers.agent_unknown": "No recent observation",
   "printers.connection": "Connection",
-  "printers.connection_roaming": "Can roam between agents",
+  "printers.connected_through": "Connected through",
+  "printers.details_paper": "Paper and drawer",
+  "printers.details_help":
+    "Active switches the printer on or off at once. Edit changes its name and, for a network printer, its address.",
   "printers.connection_network": "Any venue agent",
   "printers.connection_direct": "Direct (no agent)",
   "printers.jobs_limit":
@@ -1675,7 +1680,6 @@ export const en = {
   "printers.resolution_203": "203 dpi",
   "printers.agent_setup": "Open print agent",
   "printers.calibrate": "Calibrate printer",
-  "printers.calibration": "Calibration",
   "printers.calibration_progress": "Step {step} of 3",
   "printers.calibration_job_failed": "Not printed: {reason}",
   "printers.calibration_layout": "Set paper width and resolution",
@@ -3753,6 +3757,8 @@ export type StringKey = keyof typeof en;
 
 // Not Partial: an untranslated key fails typecheck rather than falling through to English.
 export const es: Record<StringKey, string> = {
+  "time.today_at": "Hoy {time}",
+  "time.yesterday_at": "Ayer {time}",
   "zone_repair.sign_in": "Iniciar sesión como responsable",
   "zone_repair.sign_in_explanation":
     "Para confirmar la zona horaria, inicia sesión con una cuenta que pueda configurar el local. Se cerrará tu sesión y se abrirá el inicio de sesión.",
@@ -4513,7 +4519,10 @@ export const es: Record<StringKey, string> = {
   "printers.last_seen_by": "Visto por última vez por",
   "printers.agent_unknown": "Sin observaciones recientes",
   "printers.connection": "Conexión",
-  "printers.connection_roaming": "Puede cambiar de agente",
+  "printers.connected_through": "Conectada a través de",
+  "printers.details_paper": "Papel y cajón",
+  "printers.details_help":
+    "Activa enciende o apaga la impresora al momento. Editar cambia su nombre y, si es de red, su dirección.",
   "printers.connection_network": "Cualquier agente del local",
   "printers.connection_direct": "Directa (sin agente)",
   "printers.jobs_limit":
@@ -5458,7 +5467,6 @@ export const es: Record<StringKey, string> = {
   "printers.resolution_203": "203 ppp",
   "printers.agent_setup": "Abrir agente de impresión",
   "printers.calibrate": "Calibrar impresora",
-  "printers.calibration": "Calibración",
   "printers.calibration_progress": "Paso {step} de 3",
   "printers.calibration_job_failed": "No se ha impreso: {reason}",
   "printers.calibration_layout": "Ajusta el ancho y la resolución",

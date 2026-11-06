@@ -2,10 +2,16 @@ import { afterEach, expect, it } from "vitest";
 import { LitElement, html } from "lit";
 import { LeaveController, UrlStateController, registerIcons } from "@waitron/ui";
 import type { DashboardApi, Printer } from "../api/client.js";
+import { LiveData } from "@waitron/dashboard-kit";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { dashboardPath } from "../navigation.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cancelDetailsEdit,
+  cleanupWidgets,
+  mountWidget,
+  saveDetailsEdit,
+} from "../widgets/test-helpers.js";
 import { PrintersScreen } from "./printers-screen.js";
 
 registerIcons(DASHBOARD_ICONS);
@@ -28,7 +34,7 @@ const printer: Printer = {
   lastPrintAgentId: null,
   active: true,
 };
-class InlinePrinterApp extends LitElement {
+class PrinterDetailsApp extends LitElement {
   readonly leave = new LeaveController(this);
   readonly url = new UrlStateController(this, () => {}, {
     ...dashboardPath,
@@ -49,7 +55,7 @@ class InlinePrinterApp extends LitElement {
       })}`;
   }
 }
-customElements.define("inline-printer-leave-test-app", InlinePrinterApp);
+customElements.define("printer-details-leave-test-app", PrinterDetailsApp);
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
@@ -57,7 +63,7 @@ afterEach(() => {
 async function mount(overrides: Partial<DashboardApi> = {}) {
   setLocale("en-GB");
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
-  const { el: app } = await mountWidget<InlinePrinterApp>("inline-printer-leave-test-app", {
+  const { el: app } = await mountWidget<PrinterDetailsApp>("printer-details-leave-test-app", {
     api: {
       listAgents: async () => [],
       listPrinters: async () => [printer],
@@ -76,39 +82,42 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
     } as DashboardApi,
   });
   const screen = app.shadowRoot!.querySelector("dashboard-printers-screen")!;
-  await expect.poll(() => q(screen, "[data-test=edit-printer-name]")).not.toBeNull();
+  await expect.poll(() => q(screen, "[data-test=edit-printer-details]")).not.toBeNull();
   return { app, screen };
 }
 function q(screen: PrintersScreen, selector: string) {
   return screen.shadowRoot!.querySelector<HTMLElement>(selector);
 }
-function field(screen: PrintersScreen, owner: "name" | "connection") {
+type Field = "name" | "host";
+function field(screen: PrintersScreen, name: Field | "port") {
   return screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-    `[name=printer-detail-${owner === "name" ? "name" : "host"}]`,
+    `[name=printer-detail-${name}]`,
   )!;
 }
-async function open(screen: PrintersScreen, owner: "name" | "connection") {
-  q(screen, `[data-test=edit-printer-${owner}]`)!.click();
+async function open(screen: PrintersScreen) {
+  q(screen, "[data-test=edit-printer-details]")!.click();
   await screen.updateComplete;
 }
-function change(screen: PrintersScreen, owner: "name" | "connection", value: string) {
-  field(screen, owner).dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+function change(screen: PrintersScreen, name: Field | "port", value: string) {
+  field(screen, name).dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
 }
 function unload() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
-async function choose(app: InlinePrinterApp, decision: "keep" | "discard") {
+async function choose(app: PrinterDetailsApp, decision: "keep" | "discard") {
   const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await expect.poll(() => question.open).toBe(true);
   await question.updateComplete;
   question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
   await expect.poll(() => question.open).toBe(false);
 }
-for (const owner of ["name", "connection"] as const) {
+const saved: Record<Field, string> = { name: "Kitchen", host: "10.0.0.9" };
+
+for (const owner of ["name", "host"] as const) {
   for (const refuses of [false, true]) {
-    it(`inline ${owner} departed ${refuses ? "refusal" : "success"} leaves a reopened editor alone`, async () => {
+    it(`a departed ${owner} ${refuses ? "refusal" : "success"} leaves a reopened form alone`, async () => {
       let finish!: () => void;
       const { app, screen } = await mount({
         updatePrinter: async () => {
@@ -118,16 +127,16 @@ for (const owner of ["name", "connection"] as const) {
           if (refuses) throw { code: "connection.failed" };
         },
       });
-      await open(screen, owner);
+      await open(screen);
       change(screen, owner, owner === "name" ? "Submitted" : "10.0.0.88");
-      q(screen, `[data-test=save-printer-${owner}]`)!.click();
+      saveDetailsEdit(screen);
       await expect.poll(() => typeof finish).toBe("function");
       screen.remove();
       const reopened = new PrintersScreen();
       reopened.api = app.api;
       app.shadowRoot!.append(reopened);
-      await expect.poll(() => q(reopened, "[data-test=edit-printer-name]")).not.toBeNull();
-      await open(reopened, owner);
+      await expect.poll(() => q(reopened, "[data-test=edit-printer-details]")).not.toBeNull();
+      await open(reopened);
       change(reopened, owner, owner === "name" ? "Reopened" : "10.0.0.99");
       finish();
       await new Promise((resolve) => setTimeout(resolve, 20));
@@ -135,44 +144,40 @@ for (const owner of ["name", "connection"] as const) {
       expect(field(reopened, owner).value).toBe(owner === "name" ? "Reopened" : "10.0.0.99");
       expect(field(reopened, owner).disabled).toBe(false);
       expect(unload()).toBe(true);
-      change(reopened, owner, owner === "name" ? "Kitchen" : "10.0.0.9");
+      change(reopened, owner, saved[owner]);
       expect(unload()).toBe(false);
     });
   }
-  const original = owner === "name" ? "Kitchen" : "10.0.0.9";
   const edited = owner === "name" ? "New kitchen" : "10.0.0.88";
-  it(`inline ${owner} protects unload and shared Cancel decisions, then reopens saved values`, async () => {
+  it(`a ${owner} edit protects unload and asks on Cancel, then reopens saved values`, async () => {
     const { app, screen } = await mount();
-    await open(screen, owner);
+    await open(screen);
     expect(unload()).toBe(false);
     change(screen, owner, edited);
     expect(unload()).toBe(true);
-    q(screen, `[data-test=cancel-printer-${owner}]`)!.click();
+    cancelDetailsEdit(screen);
     await choose(app, "keep");
     expect(field(screen, owner).value).toBe(edited);
     expect(unload()).toBe(true);
-    q(screen, `[data-test=cancel-printer-${owner}]`)!.click();
+    cancelDetailsEdit(screen);
     await choose(app, "discard");
     await expect.poll(() => field(screen, owner)).toBeNull();
     expect(unload()).toBe(false);
-    await open(screen, owner);
-    expect(field(screen, owner).value).toBe(original);
+    await open(screen);
+    expect(field(screen, owner).value).toBe(saved[owner]);
   });
-  it(`inline ${owner} treats normalized reverts as clean`, async () => {
+  it(`a ${owner} edit reverted with spaces around it is clean`, async () => {
     const { app, screen } = await mount();
-    await open(screen, owner);
+    await open(screen);
     change(screen, owner, edited);
     expect(unload()).toBe(true);
-    change(screen, owner, `  ${original}  `);
+    change(screen, owner, `  ${saved[owner]}  `);
     expect(unload()).toBe(false);
-    q(screen, `[data-test=cancel-printer-${owner}]`)!.click();
+    cancelDetailsEdit(screen);
     await expect.poll(() => field(screen, owner)).toBeNull();
     expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   });
-}
-
-for (const owner of ["name", "connection"] as const) {
-  it(`inline ${owner} success clears only the submitted owner before a failed refresh`, async () => {
+  it(`a ${owner} save's success clears the draft before a failed refresh`, async () => {
     let reads = 0;
     let dirtyAtRefresh: boolean | undefined;
     let body: unknown;
@@ -186,16 +191,16 @@ for (const owner of ["name", "connection"] as const) {
         body = submitted;
       },
     });
-    await open(screen, owner);
+    await open(screen);
     change(screen, owner, owner === "name" ? "  New kitchen  " : "10.0.0.88");
-    q(screen, `[data-test=save-printer-${owner}]`)!.click();
+    saveDetailsEdit(screen);
     await expect.poll(() => dirtyAtRefresh).toBe(false);
     expect(body).toEqual(
       owner === "name" ? { name: "New kitchen" } : { host: "10.0.0.88", port: 9100 },
     );
     expect(field(screen, owner)).toBeNull();
   });
-  it(`inline ${owner} retains newer input after success and commits the submitted baseline`, async () => {
+  it(`a ${owner} typed during the save stays dirty against the submitted value`, async () => {
     let finish!: () => void;
     const { screen } = await mount({
       updatePrinter: () =>
@@ -203,11 +208,11 @@ for (const owner of ["name", "connection"] as const) {
           finish = resolve;
         }),
     });
-    await open(screen, owner);
+    await open(screen);
     const submitted = owner === "name" ? "Submitted" : "10.0.0.88";
     const newer = owner === "name" ? "Newer" : "10.0.0.99";
     change(screen, owner, submitted);
-    q(screen, `[data-test=save-printer-${owner}]`)!.click();
+    saveDetailsEdit(screen);
     await expect.poll(() => field(screen, owner).disabled).toBe(true);
     change(screen, owner, newer);
     finish();
@@ -217,7 +222,7 @@ for (const owner of ["name", "connection"] as const) {
     change(screen, owner, submitted);
     expect(unload()).toBe(false);
   });
-  it(`inline ${owner} refusal preserves edits and unload protection`, async () => {
+  it(`a refused ${owner} save keeps the edits and unload protection`, async () => {
     let refuse!: (reason: unknown) => void;
     const { app, screen } = await mount({
       updatePrinter: () =>
@@ -225,45 +230,152 @@ for (const owner of ["name", "connection"] as const) {
           refuse = reject;
         }),
     });
-    await open(screen, owner);
+    await open(screen);
     const newer = owner === "name" ? "Newer" : "10.0.0.99";
     change(screen, owner, owner === "name" ? "Submitted" : "10.0.0.88");
-    q(screen, `[data-test=save-printer-${owner}]`)!.click();
+    saveDetailsEdit(screen);
     await expect.poll(() => field(screen, owner).disabled).toBe(true);
     change(screen, owner, newer);
     refuse({ code: "connection.failed" });
     await expect.poll(() => field(screen, owner).disabled).toBe(false);
     expect(field(screen, owner).value).toBe(newer);
     expect(unload()).toBe(true);
-    q(screen, `[data-test=cancel-printer-${owner}]`)!.click();
+    cancelDetailsEdit(screen);
     await choose(app, "keep");
   });
 }
-it("saving a printer name leaves the independently edited connection protected", async () => {
-  const { screen } = await mount();
-  await open(screen, "name");
-  await open(screen, "connection");
+
+it("a save whose refresh fails shows the failed read and its retry inside the details window", async () => {
+  let reads = 0;
+  const { screen } = await mount({
+    listPrinters: async () => {
+      if (++reads === 1) return [printer];
+      throw { code: "connection.failed" };
+    },
+  });
+  await open(screen);
   change(screen, "name", "New kitchen");
-  change(screen, "connection", "10.0.0.88");
-  q(screen, "[data-test=save-printer-name]")!.click();
-  await expect.poll(() => field(screen, "name")).toBeNull();
-  expect(field(screen, "connection").value).toBe("10.0.0.88");
-  expect(unload()).toBe(true);
+  saveDetailsEdit(screen);
+  await expect.poll(() => reads).toBe(2);
+  await expect
+    .poll(() => q(screen, "[data-test=printer-details-body] [data-test=printer-refresh-error]"))
+    .not.toBeNull();
+  expect(screen.shadowRoot!.querySelectorAll("[data-test=printer-refresh-error]")).toHaveLength(1);
+  expect(
+    q(screen, "[data-test=printer-details-body] [data-test=refresh-printer-lists]"),
+  ).not.toBeNull();
 });
 
-for (const owner of ["name", "connection"] as const) {
-  for (const route of ["breadcrumb", "back"] as const) {
-    it(`inline ${owner} ${route} preserves route and draft on Keep, leaves once on Discard`, async () => {
+it("a save whose refresh fails keeps both fields' newer input dirty", async () => {
+  let finish!: () => void;
+  let reads = 0;
+  const { screen } = await mount({
+    listPrinters: async () => {
+      if (++reads === 1) return [printer];
+      throw { code: "connection.failed" };
+    },
+    updatePrinter: () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  });
+  await open(screen);
+  change(screen, "name", "Submitted");
+  change(screen, "host", "10.0.0.88");
+  saveDetailsEdit(screen);
+  await expect.poll(() => field(screen, "name").disabled).toBe(true);
+  change(screen, "name", "Newer");
+  change(screen, "host", "10.0.0.99");
+  finish();
+  await expect.poll(() => reads).toBe(2);
+  await expect.poll(() => field(screen, "name")?.disabled).toBe(false);
+  expect(field(screen, "name").value).toBe("Newer");
+  expect(field(screen, "host").value).toBe("10.0.0.99");
+  expect(unload()).toBe(true);
+  change(screen, "name", "Submitted");
+  expect(unload()).toBe(true);
+  change(screen, "host", "10.0.0.88");
+  expect(unload()).toBe(false);
+});
+
+it("a Save whose draft a live change has made equal to the printer sends nothing and shows the details", async () => {
+  const liveData = new LiveData();
+  let current: Printer = printer;
+  let sent = 0;
+  const { screen } = await mount({
+    liveData,
+    listPrinters: async () => [current],
+    updatePrinter: async () => {
+      sent++;
+    },
+  } as Partial<DashboardApi>);
+  await open(screen);
+  change(screen, "name", "New kitchen");
+  current = { ...printer, name: "New kitchen" };
+  liveData.invalidate([{ type: "printers", id: "p1" }]);
+  await expect
+    .poll(() => q(screen, "[data-test=printer-details-modal]")?.getAttribute("heading"))
+    .toBe("New kitchen");
+  const save = q(screen, "[data-test=save-printer-details]") as HTMLElementTagNameMap["wt-button"];
+  expect(save.disabled).toBe(false);
+  save.click();
+  await expect.poll(() => q(screen, "[data-test=printer-details-form]")).toBeNull();
+  expect(q(screen, "[data-test=edit-printer-details]")).not.toBeNull();
+  expect(sent).toBe(0);
+  expect(unload()).toBe(false);
+});
+
+for (const owner of ["name", "host"] as const) {
+  const other = owner === "name" ? "host" : "name";
+  it(`a ${owner}-only Save keeps the ${other} another session changed while the form was open`, async () => {
+    const liveData = new LiveData();
+    let current: Printer = printer;
+    let reads = 0;
+    let submitted: unknown;
+    const { screen } = await mount({
+      liveData,
+      listPrinters: async () => {
+        reads++;
+        return [current];
+      },
+      updatePrinter: async (_id, body) => {
+        submitted = body;
+      },
+    } as Partial<DashboardApi>);
+    await open(screen);
+    change(screen, owner, owner === "name" ? "New kitchen" : "10.0.0.88");
+    current =
+      owner === "name" ? { ...printer, host: "10.0.0.77" } : { ...printer, name: "Remote name" };
+    const before = reads;
+    liveData.invalidate([{ type: "printers", id: "p1" }]);
+    await expect.poll(() => reads).toBeGreaterThan(before);
+    await screen.updateComplete;
+    saveDetailsEdit(screen);
+    await expect.poll(() => submitted).not.toBeUndefined();
+    expect(submitted).toEqual(
+      owner === "name" ? { name: "New kitchen" } : { host: "10.0.0.88", port: 9100 },
+    );
+  });
+}
+
+for (const owner of ["name", "host"] as const) {
+  for (const route of ["close", "back", "navigation"] as const) {
+    it(`a ${owner} edit: leaving by ${route} keeps the window and draft on Keep, leaves once on Discard`, async () => {
       const { app, screen } = await mount();
       await app.url.write({ printer: null });
       await app.url.write({ printer: "p1" });
-      await expect.poll(() => q(screen, "[data-test=edit-printer-name]")).not.toBeNull();
-      await open(screen, owner);
+      await expect.poll(() => q(screen, "[data-test=edit-printer-details]")).not.toBeNull();
+      await open(screen);
       const edited = owner === "name" ? "Edited" : "10.0.0.88";
       change(screen, owner, edited);
       const leave = () => {
         if (route === "back") history.back();
-        else q(screen, "[data-test=all-printers-link]")!.click();
+        else if (route === "navigation")
+          void app.url.write({ dashboard: "devices", view: null, printer: null });
+        else
+          void (
+            q(screen, "[data-test=printer-details-modal]") as HTMLElementTagNameMap["wt-modal"]
+          ).requestClose("escape");
       };
       leave();
       await choose(app, "keep");
@@ -272,49 +384,48 @@ for (const owner of ["name", "connection"] as const) {
       expect(unload()).toBe(true);
       leave();
       await choose(app, "discard");
-      await expect.poll(() => location.pathname).toBe("/manage/printers/view/printers");
-      await expect.poll(() => q(screen, "[data-test=printer-status]")).toBeNull();
+      await expect
+        .poll(() => location.pathname)
+        .toBe(route === "navigation" ? "/manage/devices" : "/manage/printers/view/printers");
+      if (route !== "navigation")
+        await expect.poll(() => q(screen, "[data-test=printer-details-form]")).toBeNull();
       expect(unload()).toBe(false);
+      expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     });
   }
 }
 
-for (const owner of ["name", "connection"] as const) {
-  it(`inline ${owner} ignores a detached field from an earlier opening of the same printer`, async () => {
+for (const owner of ["name", "host"] as const) {
+  it(`a detached ${owner} field from an earlier opening of the same printer changes nothing`, async () => {
     const { screen } = await mount();
-    await open(screen, owner);
+    await open(screen);
     const old = field(screen, owner);
-    q(screen, `[data-test=cancel-printer-${owner}]`)!.click();
+    cancelDetailsEdit(screen);
     await expect.poll(() => field(screen, owner)).toBeNull();
-    await open(screen, owner);
+    await open(screen);
     old.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "stale edit" } }));
     await screen.updateComplete;
-    expect(field(screen, owner).value).toBe(owner === "name" ? "Kitchen" : "10.0.0.9");
+    expect(field(screen, owner).value).toBe(saved[owner]);
     expect(unload()).toBe(false);
   });
 }
 
-it("an inline port-only edit protects leaving, normalizes a revert and sends an explicit cleared port", async () => {
+it("a port-only edit protects leaving, treats 09100 as 9100 and sends an explicit cleared port", async () => {
   let submitted: unknown;
   const { screen } = await mount({
     updatePrinter: async (_id, body) => {
       submitted = body;
     },
   });
-  await open(screen, "connection");
-  const port = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-    "[name=printer-detail-port]",
-  )!;
-  const changePort = (value: string) =>
-    port.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
-  changePort("9101");
+  await open(screen);
+  change(screen, "port", "9101");
   expect(unload()).toBe(true);
-  changePort("09100");
+  change(screen, "port", "09100");
   expect(unload()).toBe(false);
-  changePort("");
+  change(screen, "port", "");
   expect(unload()).toBe(true);
-  q(screen, "[data-test=save-printer-connection]")!.click();
+  saveDetailsEdit(screen);
   await expect.poll(() => submitted).toEqual({ host: "10.0.0.9", port: null });
-  await expect.poll(() => field(screen, "connection")).toBeNull();
+  await expect.poll(() => field(screen, "host")).toBeNull();
   expect(unload()).toBe(false);
 });

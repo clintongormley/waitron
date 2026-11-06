@@ -6,6 +6,7 @@ import { html } from "lit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { cleanupWidgets, menuDocument, mountWidget } from "./widgets/test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { MenuPreviewPanel } from "./widgets/menu-preview.js";
 import { DashboardApp } from "./dashboard-app.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
@@ -7915,7 +7916,7 @@ it("forced session exit aborts an open unsaved question and clears its registry 
   expect(value).toBe("Typed secret");
 });
 
-describe("printer breadcrumb during a pending save", () => {
+describe("printer details window during a pending save", () => {
   for (const locale of ["en-GB", "es-ES"] as const) {
     for (const theme of ["light", "dark"] as const) {
       for (const editor of ["name", "connection"] as const) {
@@ -7969,15 +7970,7 @@ describe("printer breadcrumb during a pending save", () => {
           const q = (selector: string) => screen.shadowRoot!.querySelector<HTMLElement>(selector)!;
           await screen.updateComplete;
           expect(q("[data-test=printer-refresh-error]")).toBeNull();
-          if (editor === "connection") {
-            const disclosure = q(
-              "[data-test=printer-section-connection]",
-            ) as import("@waitron/ui").WtDisclosure;
-            disclosure.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
-            await screen.updateComplete;
-            await disclosure.updateComplete;
-          }
-          q(`[data-test=edit-printer-${editor}]`).click();
+          q("[data-test=edit-printer-details]").click();
           await screen.updateComplete;
           const input = q(
             `[name="printer-detail-${editor === "name" ? "name" : "host"}"]`,
@@ -7990,12 +7983,13 @@ describe("printer breadcrumb during a pending save", () => {
             }),
           );
           await screen.updateComplete;
-          const save = q(`[data-test=save-printer-${editor}]`) as import("@waitron/ui").WtButton;
+          const save = q("[data-test=save-printer-details]") as import("@waitron/ui").WtButton;
           save.click();
           await expect.poll(() => typeof refuse).toBe("function");
           await screen.updateComplete;
           expect(save.disabled).toBe(true);
-          q("[data-test=all-printers-link]").click();
+          const modal = q("[data-test=printer-details-modal]") as import("@waitron/ui").WtModal;
+          void modal.requestClose("escape");
           await flush(el);
           expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
           expect(screenPrinters(el)).toBe(screen);
@@ -8003,10 +7997,14 @@ describe("printer breadcrumb during a pending save", () => {
           expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
           refuse({ code: "printer.invalid_config" });
           await expect
-            .poll(() =>
-              editor === "name"
-                ? q("[data-test=printer-name-refusal]")?.textContent?.trim()
-                : q("[data-test=printer-section-connection] [role=alert]")?.textContent?.trim(),
+            .poll(async () =>
+              (
+                await formMessageOf(
+                  q(
+                    "[data-test=printer-details-modal] > wt-form-actions[slot=footer]",
+                  ) as import("@waitron/ui").WtFormActions,
+                )
+              )?.textContent?.trim(),
             )
             .toBe(
               locale === "en-GB"
@@ -8014,7 +8012,7 @@ describe("printer breadcrumb during a pending save", () => {
                 : "Revisa los ajustes de conexión de la impresora",
             );
           expect(save.disabled).toBe(false);
-          q("[data-test=all-printers-link]").click();
+          void modal.requestClose("escape");
           const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
           await expect.poll(() => question.open).toBe(true);
           await question.updateComplete;

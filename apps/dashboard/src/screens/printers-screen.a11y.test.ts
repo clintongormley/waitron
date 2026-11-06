@@ -1,7 +1,14 @@
 import { expect, afterEach, describe, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption as pickOption } from "@waitron/ui/src/test-helpers.js";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+  openDetailsEdit,
+  detailsEditButton,
+  detailsEditTest,
+} from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import "./printers-screen.js";
 import type { PrintersScreen } from "./printers-screen.js";
@@ -233,9 +240,6 @@ async function openPrinter(el: PrintersScreen, id = "p1"): Promise<void> {
   await flush(el);
 }
 async function openCalibration(el: PrintersScreen): Promise<void> {
-  q(el, "[data-test=printer-section-calibration]")!
-    .shadowRoot!.querySelector<HTMLButtonElement>("button")!
-    .click();
   await flush(el);
   q(el, "[data-test=calibrate-printer-details]")!.click();
   await flush(el);
@@ -410,9 +414,6 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
         .click();
       await flush(el);
       await openPrinter(el, portable.id);
-      q(el, "[data-test=printer-section-calibration]")!
-        .shadowRoot!.querySelector<HTMLButtonElement>("button")!
-        .click();
       await flush(el);
       expect(q(el, "[data-test=printer-holder]")).not.toBeNull();
       await expectNoA11yViolations(host);
@@ -609,14 +610,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     );
     await flush(el);
     await openPrinter(el);
-    q(el, "[data-test=edit-printer-name]")!.click();
-    await flush(el);
-    await expectNoA11yViolations(host);
-    q(el, "[data-test=printer-section-connection]")!
-      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
-      .click();
-    await flush(el);
-    q(el, "[data-test=edit-printer-connection]")!.click();
+    openDetailsEdit(el);
     await flush(el);
     await expectNoA11yViolations(host);
   });
@@ -638,14 +632,17 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       await flush(el);
       await openPrinter(el);
       expect(el.scrollWidth).toBeLessThanOrEqual(width);
-      expect(q(el, "[data-test=printer-breadcrumb]")).not.toBeNull();
+      expect(
+        (q(el, "[data-test=printer-details-modal]") as (HTMLElement & { open: boolean }) | null)
+          ?.open,
+      ).toBe(true);
       expect(q(el, "[data-test=printer-section-status]")).not.toBeNull();
       expect(q(el, "[data-test=printer-section-connection]")).not.toBeNull();
       expect(q(el, "[data-test=printer-section-calibration]")).not.toBeNull();
-      expect(
-        q(el, "[data-test=edit-printer-name]")!.getBoundingClientRect().right,
-      ).toBeLessThanOrEqual(
-        q(el, "[data-test=printer-section-status]")!.getBoundingClientRect().right,
+      expect(detailsEditButton(el, "edit")!.getBoundingClientRect().right).toBeLessThanOrEqual(
+        q(el, "[data-test=printer-details-modal]")!
+          .shadowRoot!.querySelector("dialog")!
+          .getBoundingClientRect().right,
       );
       await expectNoA11yViolations(host);
       await page.screenshot({
@@ -836,7 +833,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
         await expectNoA11yViolations(host);
         q(el, '[data-test="cancel-edit-printer"]')!.click();
         await flush(el);
-        q(el, '[data-test="all-printers-link"]')!.click();
+        q(el, '[data-test="printer-details-close"]')!.click();
         await flush(el);
         q(el, '[data-test="open-add-agent"]')!.click();
         await flush(el);
@@ -1201,7 +1198,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it("renders the printer page's name and connection Save, quiet and changed, accessibly", async () => {
+  it("renders the details form's Save, quiet and changed, accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",
       { api: stubApi() },
@@ -1209,16 +1206,9 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     );
     await flush(el);
     await openPrinter(el);
-    q(el, "[data-test=edit-printer-name]")!.click();
+    openDetailsEdit(el);
     await flush(el);
-    q(el, "[data-test=printer-section-connection]")!
-      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
-      .click();
-    await flush(el);
-    q(el, "[data-test=edit-printer-connection]")!.click();
-    await flush(el);
-    expect(saveLook(el, "save-printer-name")).toEqual({ variant: "secondary", disabled: true });
-    expect(saveLook(el, "save-printer-connection")).toEqual({
+    expect(saveLook(el, detailsEditTest("save"))).toEqual({
       variant: "secondary",
       disabled: true,
     });
@@ -1226,8 +1216,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     edit(el, '[name="printer-detail-name"]', "Kitchen 2");
     edit(el, '[name="printer-detail-port"]', "9101");
     await flush(el);
-    expect(saveLook(el, "save-printer-name")).toEqual({ variant: "primary", disabled: false });
-    expect(saveLook(el, "save-printer-connection")).toEqual({
+    expect(saveLook(el, detailsEditTest("save"))).toEqual({
       variant: "primary",
       disabled: false,
     });
