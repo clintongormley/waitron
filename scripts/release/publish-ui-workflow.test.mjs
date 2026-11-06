@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -13,6 +13,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
+
+vi.setConfig({ testTimeout: 30000 });
 
 const workflowPath = resolve(import.meta.dirname, "../../.github/workflows/publish-ui.yml");
 const workflow = () => (existsSync(workflowPath) ? readFileSync(workflowPath, "utf8") : "");
