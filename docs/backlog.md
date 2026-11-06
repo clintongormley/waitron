@@ -1383,7 +1383,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **A SumUp API drift-detection suite** on a Virtual Solo in a sandbox merchant account — would have
   caught the #312 refund-unit bug. Needs a sandbox account and a CI secret.
 
-- **Tap to pay restore** (bundle of 2, size M, needs the owner). [Detail](backlog/payments.md#bundle-tap-to-pay-restore)
+- **Tap to pay restore** (bundle of 1, size M, needs the owner). [Detail](backlog/payments.md#bundle-tap-to-pay-restore)
 
 - **A user guide for the till's payment sheet** (left open by A796). No guide under
   `apps/server/src/guide/` covers it.

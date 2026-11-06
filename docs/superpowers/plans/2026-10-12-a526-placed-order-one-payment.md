@@ -7,6 +7,9 @@
 > returned. This constructs that state with an invoice fixture; it does not establish a current
 > public route that can create it.
 
+> A1395 also includes forwarded offline payments in the charged-row readers and refuses a
+> placed-order cancellation over stored unresolved or unfiled card payments before an invoice.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax. Every task is test-first: write the failing test, run it, watch it fail
