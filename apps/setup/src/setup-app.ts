@@ -1616,6 +1616,11 @@ export class SetupApp extends LitElement {
         this.provisionCanRetry = false;
         this.provisionReloadLabel = say("shell.reload");
         return;
+      case "sif.throwaway_allocation_refused":
+        this.provisionMessage = say("shell.provision.throwaway_refused");
+        this.provisionCanRetry = false;
+        this.provisionReloadLabel = say("shell.reload");
+        return;
       case "setup.not_ready":
         this.provisionMessage = say("shell.not_ready");
         this.provisionCanRetry = true;

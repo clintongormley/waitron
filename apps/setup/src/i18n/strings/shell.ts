@@ -54,6 +54,9 @@ export const shellEn = {
   "shell.fiscal_test.could_not_run":
     "The fiscal test could not run. Check the connection and try again.",
 
+  "shell.provision.throwaway_refused":
+    "This server is stamped for production, so it does not offer Demo or Prepare your restaurant. Reload to choose another option.",
+
   "shell.provision.failed":
     "Provisioning failed. Check that the server is on and your device is connected to its network, then try again. If you see a certificate warning, use the certificate help below.",
 
@@ -217,6 +220,9 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.fiscal_test.required": "Haz una prueba fiscal aceptada antes de activar la producción.",
   "shell.fiscal_test.could_not_run":
     "No se ha podido hacer la prueba fiscal. Comprueba la conexión e inténtalo de nuevo.",
+
+  "shell.provision.throwaway_refused":
+    "Este servidor está marcado para producción, así que no ofrece Demostración ni Prepara tu restaurante. Recarga para elegir otra opción.",
 
   "shell.provision.failed":
     "La configuración ha fallado. Comprueba que el servidor está encendido y que tu dispositivo está conectado a su red, e inténtalo de nuevo. Si ves un aviso de certificado, usa la ayuda sobre el certificado de abajo.",

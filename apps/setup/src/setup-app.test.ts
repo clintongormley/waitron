@@ -1459,6 +1459,42 @@ describe("setup-app", () => {
     );
   });
 
+  it.each([
+    [
+      "en-GB",
+      "This server is stamped for production, so it does not offer Demo or Prepare your restaurant. Reload to choose another option.",
+      "Reload",
+    ],
+    [
+      "es-ES",
+      "Este servidor está marcado para producción, así que no ofrece Demostración ni Prepara tu restaurante. Recarga para elegir otra opción.",
+      "Recargar",
+    ],
+  ] as const)(
+    "Demo refused sif.throwaway_allocation_refused says the box is for production and offers Reload, not Retry (%s)",
+    async (locale, sentence, reload) => {
+      try {
+        const provision = vi.fn().mockRejectedValue({
+          code: "sif.throwaway_allocation_refused",
+          params: { environment: "production" },
+          status: 400,
+        });
+        const el = await mountSetupApp(stubApi({ provision }));
+        setLocale(locale);
+        provisionRequest(el);
+        await flush(el);
+        expect(await screenText(el, "provisioning", "[data-test=error]")).toBe(sentence);
+        const host = await screenHost(el, "provisioning");
+        expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+        expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent?.trim()).toBe(
+          reload,
+        );
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+
   it("maps setup.not_ready to a not-ready message that CAN be retried", async () => {
     const provision = vi.fn().mockRejectedValue({ code: "setup.not_ready", params: {} });
     const el = await mountSetupApp(stubApi({ provision }));
