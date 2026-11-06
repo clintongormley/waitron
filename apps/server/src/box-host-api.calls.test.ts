@@ -232,11 +232,16 @@ describe("a place is freed whatever happens", () => {
     await vi.waitFor(() => expect(host.networkScan).toHaveBeenCalledTimes(1));
     let readAnswered = false;
     const read = route("networkRead")(app).finally(() => (readAnswered = true));
-    await vi.waitFor(() => {
-      expect(host.networkRead.mock.calls.length > 0 || readAnswered).toBe(true);
-    });
-    releaseScan();
-    releaseRead();
+    try {
+      await vi.waitFor(() => {
+        expect(host.networkRead.mock.calls.length > 0 || readAnswered).toBe(true);
+      });
+      await expectBusy(route("screenRead")(app));
+      expect(host.screenRead).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseScan();
+      releaseRead();
+    }
     expect([(await scan).status, (await read).status]).toEqual([200, 200]);
   });
 });
@@ -274,8 +279,9 @@ describe("refusals take no place", () => {
 });
 
 describe("no database lock around the host", () => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = () =>
-    new Promise<string>((resolve) => setTimeout(() => resolve("timed out"), 1000));
+    new Promise<string>((resolve) => (timer = setTimeout(() => resolve("timed out"), 1000)));
 
   it.each([
     ["a write lock", () => suite.db.withWriteLock(async () => "granted")],
@@ -289,6 +295,7 @@ describe("no database lock around the host", () => {
       await vi.waitFor(() => expect(host.networkJoin).toHaveBeenCalledTimes(1));
       expect(await Promise.race([take(), timedOut()])).toBe("granted");
     } finally {
+      clearTimeout(timer);
       release();
     }
     expect((await joined).status).toBe(200);

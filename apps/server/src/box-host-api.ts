@@ -41,7 +41,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 
 const BODY_MAX_BYTES = 4096;
 
-/** The host's socket serves four connections at once, and the clock side uses one or two. */
+/** The host's socket serves four connections at once (`deploy/box/waitron-box.socket`); why two
+ * of them go to the routes: D7 in `docs/superpowers/plans/2026-11-06-b3-9-host-routes.md`. */
 export const BOX_HOST_ROUTE_CALLS = 2;
 
 interface Places {
