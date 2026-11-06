@@ -5363,6 +5363,28 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
   });
 
+  it("A1399: keeps known-charge advice while checking the same payment after a full disk", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "sale.charged_not_recorded",
+        reason: "disk_full",
+        status: 507,
+      })
+      .mockResolvedValueOnce(
+        onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+      );
+    const el = await takeOnReader(takeBillPayment);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.charged_disk_full"));
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(sent()).toHaveLength(1);
+
+    await press(el, "[data-pay-confirm]");
+    expect(sent()).toHaveLength(2);
+    expect(sent()[1]).toEqual(sent()[0]);
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+  });
+
   it("A532 leaves cash payment waits subject to the ordinary idle sign-out", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, inactivityTimeoutSeconds: 30 }),
