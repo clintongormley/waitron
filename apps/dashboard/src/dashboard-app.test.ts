@@ -1170,6 +1170,11 @@ describe("dashboard-app", () => {
   }
   const closeProfileButton = (el: DashboardApp) =>
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
+  const travel = (move: () => void) =>
+    new Promise<void>((resolve) => {
+      window.addEventListener("popstate", () => resolve(), { once: true });
+      move();
+    });
 
   it.each([
     ["its close button", closeProfileButton],
@@ -1217,6 +1222,55 @@ describe("dashboard-app", () => {
     expect(location.pathname).toBe("/manage/device-profiles");
     expect(name()?.value).toBe("New counter");
     expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  });
+
+  it("closing Your profile, reached by Forward after a reload, keeps the device profile editor beneath it", async () => {
+    history.replaceState(null, "", "/manage/device-profiles/profile/dp1");
+    history.pushState(null, "", "/manage/profile");
+    await travel(() => history.back());
+    const { el, screen, name, rename } = await mountOnDeviceProfiles();
+    await expect.poll(() => name()?.value).toBe("Front counter");
+    await rename("Back counter");
+
+    await travel(() => history.forward());
+    await flush(el);
+    expect(location.pathname).toBe("/manage/profile");
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
+    closeProfileButton(el);
+    await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+    await flush(el);
+    await screen.updateComplete;
+
+    expect(location.pathname).toBe("/manage/device-profiles/profile/dp1");
+    expect(name()?.value).toBe("Back counter");
+  });
+
+  it("closing Your profile, reached by Forward after Back, keeps the device profile editor opened between", async () => {
+    history.replaceState(null, "", "/manage/device-profiles");
+    const { el, screen, name } = await mountOnDeviceProfiles();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
+    await flush(el);
+    expect(location.pathname).toBe("/manage/profile");
+    await travel(() => history.back());
+    await flush(el);
+    expect(location.pathname).toBe("/manage/device-profiles");
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("[data-test=edit-dp1]"))
+      .not.toBeNull();
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-dp1]")!.click();
+    await expect.poll(() => name()?.value).toBe("Front counter");
+    expect(location.pathname).toBe("/manage/device-profiles/profile/dp1");
+
+    await travel(() => history.forward());
+    await flush(el);
+    expect(location.pathname).toBe("/manage/profile");
+    closeProfileButton(el);
+    await expect.poll(() => location.pathname).not.toBe("/manage/profile");
+    await flush(el);
+    await screen.updateComplete;
+
+    expect(location.pathname).toBe("/manage/device-profiles/profile/dp1");
+    expect(name()?.value).toBe("Front counter");
   });
 
   it("closing Your profile keeps the product editor it opened over, with its unsaved price", async () => {

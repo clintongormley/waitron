@@ -2410,7 +2410,10 @@ export class DashboardApp extends LitElement {
 
   #writeCurrentUrl(replace: boolean): void {
     if (this.profileOpen) this.#url.write({ dashboard: "profile" }, replace);
-    else this.#writeScreenUrl(this.screen, replace);
+    else {
+      this.#writeScreenUrl(this.screen, replace);
+      this.#beneathProfile = navigationGuardFor(window)?.href ?? location.href;
+    }
   }
 
   /** A pushed navigation, so the browser's Back button closes the modal. */
@@ -2437,7 +2440,6 @@ export class DashboardApp extends LitElement {
       return;
     this.#applyRequestedScreen(this.#url.read("dashboard"));
     this.#writeCurrentUrl(true);
-    if (!this.profileOpen) this.#beneathProfile = navigationGuardFor(window)?.href ?? location.href;
     this.drawerOpen = false;
     diag.record("info", "nav", { screen: this.screen });
   };
