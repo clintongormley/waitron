@@ -378,6 +378,80 @@ it("a reload during a wait shows the server's time left", async () => {
     vi.useRealTimers();
   }
 });
+const flush = async (el: LitElement) => {
+  await new Promise((r) => setTimeout(r, 0));
+  await el.updateComplete;
+};
+const detailsTick = (el: LitElement) =>
+  el.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-details-confirmed"]')!;
+it("a reload during the box's wait ends at zero with no request, and Make the series waits for the tick", async () => {
+  fakeClock();
+  try {
+    const { el, calls } = await mount({
+      preview: { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 },
+    });
+    await vi.waitFor(() => expect(remaining(el)).toBeDefined());
+    vi.advanceTimersByTime(0);
+    await el.updateComplete;
+    expect(remaining(el)).toBe("1:01");
+    const sent = calls.length;
+    vi.advanceTimersByTime(61_000);
+    await flush(el);
+    expect(calls.length).toBe(sent);
+    expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
+    expect(quiet(el)).toEqual({ disabled: true, variant: "secondary" });
+    vi.useRealTimers();
+    await userEvent.click(detailsTick(el));
+    await el.updateComplete;
+    expect(quiet(el)).toEqual({ disabled: false, variant: "primary" });
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() =>
+      expect(calls.filter((c) => c.action === "candidates")).toEqual([
+        { action: "candidates", value: { comparisonId: "comparison-2" } },
+      ]),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("Check again after Make the series starts over: the wait it shows ends with no request", async () => {
+  let previews = 0;
+  let compared = 0;
+  const prepare = async (proposal: unknown) => {
+    const action = (proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") return { id: `comparison-${++compared}`, clock };
+    if (action === "selection")
+      return ++previews === 1
+        ? { status: "preview", identity: "0CSQW" }
+        : { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 };
+    throw new Error("unexpected action");
+  };
+  const { el, calls } = await mount({
+    prepare,
+    select: async () => ({ status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 }),
+  });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(remaining(el)).toBeDefined());
+    vi.advanceTimersByTime(0);
+    await el.updateComplete;
+    expect(remaining(el)).toBe("1:24");
+    expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1);
+    await userEvent.click(button(el, "compare"));
+    await vi.waitFor(() => expect(remaining(el)).toBe("1:01"));
+    expect(detailsTick(el).checked).toBe(false);
+    const sent = calls.length;
+    vi.advanceTimersByTime(61_000);
+    await flush(el);
+    expect(calls.length).toBe(sent);
+    expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("shows no countdown before a press when no wait is recorded", async () => {
   const { el, calls } = await mount();
   await vi.waitFor(() =>
