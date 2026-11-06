@@ -22,7 +22,7 @@ beforeAll(async () => {
 }, BUILD_TIMEOUT_MS);
 
 afterAll(() => {
-  rmSync(workDir, { recursive: true, force: true });
+  if (workDir !== undefined) rmSync(workDir, { recursive: true, force: true });
 });
 
 function entry(composition: string, phase: string, database: string): BuiltSchemaListEntry {
@@ -63,6 +63,14 @@ describe("buildSchemaListFile", () => {
     expect(entry("fiscal-verifactu", "sql-only", "venue").owningSet).toMatchObject({
       "trigger working_orders_enforce_transition": "core",
     });
+  });
+
+  it("keeps what applyMigrations added under applyMigrations in the change-feed entry", () => {
+    for (const phase of ["migrated", "change-feed"]) {
+      expect(entry("fiscal-verifactu", phase, "venue").owningSet).toMatchObject({
+        "trigger handover_activations_append_only_update": "applyMigrations",
+      });
+    }
   });
 
   it("holds a fiscal-verifactu table only in that composition", () => {

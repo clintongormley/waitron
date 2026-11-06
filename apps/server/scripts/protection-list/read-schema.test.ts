@@ -59,7 +59,7 @@ describe("readSchema", () => {
   });
 
   afterEach(() => {
-    db.close();
+    db?.close();
   });
 
   it("lists every table, view, index and trigger, leaving out the catalogue itself", () => {
@@ -166,8 +166,24 @@ describe("readSchema", () => {
         onUpdate: "SET NULL",
         onDelete: "CASCADE",
         match: "NONE",
+        deferrable: null,
       },
     ]);
+  });
+
+  it("ignores an ON INSERT clause, which the engine accepts and ignores", () => {
+    const other = new DatabaseSync(":memory:");
+    try {
+      other.exec(`
+        CREATE TABLE p (a INTEGER UNIQUE);
+        CREATE TABLE c (x INTEGER, FOREIGN KEY (x) REFERENCES p (a) ON INSERT CASCADE ON DELETE SET NULL);
+      `);
+      expect(byName(readSchema(other).tables, "c").foreignKeys).toMatchObject([
+        { table: "p", from: ["x"], to: ["a"], onUpdate: "NO ACTION", onDelete: "SET NULL" },
+      ]);
+    } finally {
+      other.close();
+    }
   });
 
   it("reads a composite foreign key column by column, and an implicit target as null", () => {
@@ -416,12 +432,46 @@ describe("readSchema", () => {
         { kind: "UNIQUE", columns: ["code"], onConflict: "FAIL" },
         { kind: "UNIQUE", columns: ["code", "plain"], onConflict: "ROLLBACK" },
       ],
-      foreignKeys: [
-        { table: "parents", from: ["parent"], deferrable: "DEFERRABLE INITIALLY DEFERRED" },
-        { table: "parents", from: ["other"], deferrable: "NOT DEFERRABLE" },
-        { table: "child table", from: ["plain", "code"], deferrable: "DEFERRABLE" },
-      ],
     });
+    expect(
+      byName(readSchema(db).tables, "declared").foreignKeys.map((key) => [
+        key.table,
+        key.from,
+        key.to,
+        key.onDelete,
+        key.match,
+        key.deferrable,
+      ]),
+    ).toEqual([
+      ["child table", ["plain", "code"], ["label", "first_id"], "NO ACTION", "NONE", "DEFERRABLE"],
+      ["parents", ["other"], [null], "NO ACTION", "NONE", "NOT DEFERRABLE"],
+      ["parents", ["parent"], ["id"], "CASCADE", "NONE", "DEFERRABLE INITIALLY DEFERRED"],
+    ]);
+  });
+
+  it("attaches each DEFERRABLE setting to the key whose whole definition it was declared with", () => {
+    db.exec(`
+      CREATE TABLE two_parents (id INTEGER PRIMARY KEY, a UNIQUE, b UNIQUE);
+      CREATE TABLE "Twice" (
+        X,
+        FOREIGN KEY (x) REFERENCES "TWO_parents" (A) ON DELETE set null DEFERRABLE INITIALLY DEFERRED,
+        FOREIGN KEY (x) REFERENCES two_parents (a) NOT DEFERRABLE INITIALLY IMMEDIATE,
+        FOREIGN KEY (x) REFERENCES two_parents (b) DEFERRABLE,
+        FOREIGN KEY (x) REFERENCES two_parents ON UPDATE NO ACTION DEFERRABLE INITIALLY IMMEDIATE
+      );
+    `);
+    expect(
+      byName(readSchema(db).tables, "Twice").foreignKeys.map((key) => [
+        key.to,
+        key.onDelete,
+        key.deferrable,
+      ]),
+    ).toEqual([
+      [[null], "NO ACTION", "DEFERRABLE INITIALLY IMMEDIATE"],
+      [["b"], "NO ACTION", "DEFERRABLE"],
+      [["a"], "NO ACTION", "NOT DEFERRABLE INITIALLY IMMEDIATE"],
+      [["A"], "SET NULL", "DEFERRABLE INITIALLY DEFERRED"],
+    ]);
   });
 
   it("reads what a later ALTER TABLE added to a column", () => {

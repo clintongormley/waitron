@@ -1,6 +1,17 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+// Lists every protection the migrations build, or compares two such lists.
+//
+// Usage: pnpm --filter @waitron/server exec tsx scripts/protection-list/cli.ts list --out <absolute dir> [--migration-root <absolute dir>]
+//        pnpm --filter @waitron/server exec tsx scripts/protection-list/cli.ts compare --old <absolute dir> --new <absolute dir> --report <absolute file>
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { isAbsolute, join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { buildSchemaListFile } from "./build.js";
 import {
   compareSchemaLists,
@@ -13,8 +24,8 @@ export const LIST_FILE = "protection-list.json";
 export const SUMMARY_FILE = "summary.txt";
 
 const USAGE =
-  "Usage: list --out <absolute dir> [--migration-root <dir>]\n" +
-  "       compare --old <dir> --new <dir> --report <file>";
+  "Usage: list --out <absolute dir> [--migration-root <absolute dir>]\n" +
+  "       compare --old <absolute dir> --new <absolute dir> --report <absolute file>";
 
 const BOOKKEEPING_PREFIX = "__drizzle_migrations_";
 
@@ -162,7 +173,10 @@ export async function runCli(
   throw new Error(USAGE);
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] !== undefined &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+) {
   runCli(process.argv.slice(2), (text) => console.log(text)).then(
     (status) => {
       process.exitCode = status;

@@ -1,4 +1,5 @@
 import type {
+  SchemaForeignKey,
   SchemaIndex,
   SchemaList,
   SchemaTable,
@@ -63,16 +64,14 @@ function keyed<T>(
   return map;
 }
 
-const foreignKeyName = (key: { from: readonly string[]; table: string }): string =>
-  `${key.from.join(",")}->${key.table}`;
+/** A key that names no parent column, and so targets the parent's primary key, prints none. */
+function foreignKeyName(key: SchemaForeignKey): string {
+  const parent = key.to.every((column) => column === null) ? "" : `(${key.to.join(",")})`;
+  return `${key.from.join(",")}->${key.table}${parent}`;
+}
 
 function canonicalTable(table: SchemaTable): Fields {
   const declaredColumns = new Map(table.declared.columns.map((column) => [column.name, column]));
-  const deferrable = new Map<string, (string | null)[]>();
-  for (const key of table.declared.foreignKeys) {
-    const name = foreignKeyName(key);
-    deferrable.set(name, [...(deferrable.get(name) ?? []), key.deferrable]);
-  }
   const rows = table.rows.map((row) => JSON.stringify(row)).sort();
   return {
     type: table.type,
@@ -103,11 +102,10 @@ function canonicalTable(table: SchemaTable): Fields {
       ),
       foreignKeyName,
       (key) => ({
-        to: key.to,
         onUpdate: key.onUpdate,
         onDelete: key.onDelete,
         match: key.match,
-        deferrable: sql(deferrable.get(foreignKeyName(key))?.shift() ?? null),
+        deferrable: sql(key.deferrable),
       }),
     ),
     checks: keyed(
@@ -257,12 +255,12 @@ function entriesOf(file: SchemaListFile, side: string): Map<string, SchemaListEn
   if (file.entries.length === 0) throw new Error(`The ${side} list has nothing to compare`);
   const entries = new Map<string, SchemaListEntry>();
   for (const entry of file.entries) {
+    const where = `composition=${entry.composition} phase=${entry.phase} database=${entry.database}`;
     const objects = objectsOf(entry.schema);
     if (objects.size === 0) {
-      throw new Error(
-        `The ${side} list has nothing to compare for composition=${entry.composition} phase=${entry.phase} database=${entry.database}`,
-      );
+      throw new Error(`The ${side} list has nothing to compare for ${where}`);
     }
+    if (entries.has(entryKey(entry))) throw new Error(`The ${side} list lists ${where} twice`);
     entries.set(entryKey(entry), entry);
   }
   return new Map([...entries].sort(([first], [second]) => compareText(first, second)));

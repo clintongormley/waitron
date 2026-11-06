@@ -7,7 +7,12 @@ import {
   tableDeclarations,
   triggerParts,
 } from "./sql-tokens.js";
-import type { CheckClause, TableDeclarations, TriggerParts } from "./sql-tokens.js";
+import type {
+  CheckClause,
+  DeclaredForeignKey,
+  TableDeclarations,
+  TriggerParts,
+} from "./sql-tokens.js";
 
 /** Values are strings so that the list survives JSON: a 64-bit integer and Infinity do not as numbers. */
 export type Cell = readonly ["null"] | readonly ["integer" | "real" | "text" | "blob", string];
@@ -31,6 +36,8 @@ export interface SchemaForeignKey {
   readonly onUpdate: string;
   readonly onDelete: string;
   readonly match: string;
+  /** From the stored CREATE text, which is the only place it is kept. */
+  readonly deferrable: string | null;
 }
 
 export interface SchemaTable {
@@ -44,7 +51,7 @@ export interface SchemaTable {
   readonly columns: readonly SchemaColumn[];
   readonly foreignKeys: readonly SchemaForeignKey[];
   readonly checks: readonly CheckClause[];
-  readonly declared: TableDeclarations;
+  readonly declared: Omit<TableDeclarations, "foreignKeys">;
   readonly rows: readonly (readonly Cell[])[];
 }
 
@@ -128,7 +135,36 @@ function readColumns(db: DatabaseSync, table: string): SchemaColumn[] {
   }));
 }
 
-function readForeignKeys(db: DatabaseSync, table: string): SchemaForeignKey[] {
+/** The engine folds only ASCII letters when it compares names. */
+function foldedName(name: string): string {
+  return name.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+}
+
+/**
+ * Everything the engine reports about a key and the CREATE text states too. MATCH is left out:
+ * the engine reports every key's as NONE, whatever the text says.
+ */
+function definitionOf(key: {
+  table: string;
+  from: readonly string[];
+  to: readonly (string | null)[];
+  onUpdate: string;
+  onDelete: string;
+}): string {
+  return JSON.stringify([
+    foldedName(key.table),
+    key.from.map(foldedName),
+    key.to.map((name) => (name === null ? null : foldedName(name))),
+    key.onUpdate,
+    key.onDelete,
+  ]);
+}
+
+function readForeignKeys(
+  db: DatabaseSync,
+  table: string,
+  declared: readonly DeclaredForeignKey[],
+): SchemaForeignKey[] {
   const rows = all<{
     id: number;
     table: string;
@@ -144,14 +180,37 @@ function readForeignKeys(db: DatabaseSync, table: string): SchemaForeignKey[] {
     if (key === undefined) keys.set(row.id, { head: row, parts: [row] });
     else key.parts.push(row);
   }
-  return [...keys.values()].map(({ head, parts }) => ({
-    table: head.table,
-    from: parts.map((part) => part.from),
-    to: parts.map((part) => part.to),
-    onUpdate: head.on_update,
-    onDelete: head.on_delete,
-    match: head.match,
+  const unclaimed = declared.map((key) => ({
+    definition: definitionOf({
+      ...key,
+      to: key.to.length === 0 ? key.from.map(() => null) : key.to,
+    }),
+    deferrable: key.deferrable,
   }));
+  const read = [...keys.values()].map(({ head, parts }) => {
+    const key = {
+      table: head.table,
+      from: parts.map((part) => part.from),
+      to: parts.map((part) => part.to),
+      onUpdate: head.on_update,
+      onDelete: head.on_delete,
+      match: head.match,
+    };
+    const definition = definitionOf(key);
+    const claimed = unclaimed.findIndex((candidate) => candidate.definition === definition);
+    const declaration = unclaimed[claimed];
+    if (declaration === undefined) {
+      throw new Error(`Could not find where ${table} declares its foreign key ${definition}`);
+    }
+    unclaimed.splice(claimed, 1);
+    return { ...key, deferrable: declaration.deferrable };
+  });
+  if (unclaimed.length > 0) {
+    throw new Error(
+      `${table} declares a foreign key the engine does not report: ${unclaimed[0]?.definition}`,
+    );
+  }
+  return read;
 }
 
 /**
@@ -302,6 +361,8 @@ export function readSchema(db: DatabaseSync): SchemaList {
     }
     const { sql, rowid } = catalogueRow(catalogue, "table", entry.name);
     const plainDdl = entry.type === "virtual" || sql === null ? null : sql;
+    const { foreignKeys, ...declared } =
+      plainDdl === null ? { columns: [], keys: [], foreignKeys: [] } : tableDeclarations(plainDdl);
     tables.push({
       name: entry.name,
       type: entry.type,
@@ -311,12 +372,9 @@ export function readSchema(db: DatabaseSync): SchemaList {
       sql,
       rowid,
       columns,
-      foreignKeys: readForeignKeys(db, entry.name),
+      foreignKeys: readForeignKeys(db, entry.name, foreignKeys),
       checks: plainDdl === null ? [] : checkClausesIn(plainDdl),
-      declared:
-        plainDdl === null
-          ? { columns: [], keys: [], foreignKeys: [] }
-          : tableDeclarations(plainDdl),
+      declared,
       rows: readRows(db, entry.name, columns),
     });
     indexes.push(...readIndexes(db, entry.name, catalogue));

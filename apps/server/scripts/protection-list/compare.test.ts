@@ -178,7 +178,7 @@ describe("compareSchemaLists refuses", () => {
       against(
         variant(" REFERENCES parents (id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED", ""),
       ),
-    ).toEqual([missing("table sales.foreignKeys[parent_id->parents]")]);
+    ).toEqual([missing("table sales.foreignKeys[parent_id->parents(id)]")]);
   });
 
   it("a missing trigger", () => {
@@ -197,7 +197,7 @@ describe("compareSchemaLists refuses", () => {
 
   it("a same-name change to a foreign key's action", () => {
     expect(against(variant("ON DELETE CASCADE", "ON DELETE SET NULL"))).toEqual([
-      changed("table sales.foreignKeys[parent_id->parents].onDelete", "CASCADE", "SET NULL"),
+      changed("table sales.foreignKeys[parent_id->parents(id)].onDelete", "CASCADE", "SET NULL"),
     ]);
   });
 
@@ -206,7 +206,7 @@ describe("compareSchemaLists refuses", () => {
       against(variant("DEFERRABLE INITIALLY DEFERRED", "DEFERRABLE INITIALLY IMMEDIATE")),
     ).toEqual([
       changed(
-        "table sales.foreignKeys[parent_id->parents].deferrable",
+        "table sales.foreignKeys[parent_id->parents(id)].deferrable",
         "DEFERRABLE INITIALLY DEFERRED",
         "DEFERRABLE INITIALLY IMMEDIATE",
       ),
@@ -344,6 +344,87 @@ describe("compareSchemaLists refuses", () => {
     expect(() => compareSchemaLists(full, empty)).toThrow(/nothing to compare/);
     expect(() => compareSchemaLists(fileOf(), full)).toThrow(/nothing to compare/);
     expect(() => compareSchemaLists(full, fileOf())).toThrow(/nothing to compare/);
+  });
+
+  it("either side listing one composition, phase and database twice", () => {
+    const original = entryOf(BASE);
+    const changedEntry = entryOf(variant("CHECK (amount >= 0)", "CHECK (amount > 0)"));
+    const twice = /lists composition=fiscal-verifactu phase=post-runtime database=venue twice/;
+    expect(() => compareSchemaLists(fileOf(changedEntry, original), fileOf(original))).toThrow(
+      twice,
+    );
+    expect(() => compareSchemaLists(fileOf(original), fileOf(original, changedEntry))).toThrow(
+      twice,
+    );
+  });
+});
+
+describe("compareSchemaLists on two foreign keys from one column", () => {
+  const twoKeys = (first: string, second: string): string => `
+    CREATE TABLE p (id INTEGER PRIMARY KEY, a UNIQUE, b UNIQUE);
+    CREATE TABLE c (x, FOREIGN KEY (x) REFERENCES ${first}, FOREIGN KEY (x) REFERENCES ${second});
+  `;
+  const compare = (before: string, after: string): Difference[] =>
+    compareSchemaLists(fileOf(entryOf(before)), fileOf(entryOf(after)));
+  const changed = (object: string, before: string, after: string): Difference => ({
+    kind: "changed",
+    ...where,
+    object,
+    before,
+    after,
+  });
+
+  it("accepts the same keys declared in the other order", () => {
+    const before = twoKeys(
+      "p (a) DEFERRABLE INITIALLY DEFERRED",
+      "p (b) NOT DEFERRABLE INITIALLY IMMEDIATE",
+    );
+    const after = twoKeys(
+      "p (b) NOT DEFERRABLE INITIALLY IMMEDIATE",
+      "p (a) DEFERRABLE INITIALLY DEFERRED",
+    );
+    expect(compare(before, before)).toEqual([]);
+    expect(compare(before, after)).toEqual([]);
+  });
+
+  it("refuses their parent columns trading DEFERRABLE settings", () => {
+    const before = twoKeys(
+      "p (a) DEFERRABLE INITIALLY DEFERRED",
+      "p (b) NOT DEFERRABLE INITIALLY IMMEDIATE",
+    );
+    const after = twoKeys(
+      "p (b) DEFERRABLE INITIALLY DEFERRED",
+      "p (a) NOT DEFERRABLE INITIALLY IMMEDIATE",
+    );
+    expect(compare(before, after)).toEqual([
+      changed(
+        "table c.foreignKeys[x->p(a)].deferrable",
+        "DEFERRABLE INITIALLY DEFERRED",
+        "NOT DEFERRABLE INITIALLY IMMEDIATE",
+      ),
+      changed(
+        "table c.foreignKeys[x->p(b)].deferrable",
+        "NOT DEFERRABLE INITIALLY IMMEDIATE",
+        "DEFERRABLE INITIALLY DEFERRED",
+      ),
+    ]);
+  });
+
+  it("refuses a key to the primary key trading DEFERRABLE settings with a named one", () => {
+    const before = twoKeys("p DEFERRABLE INITIALLY DEFERRED", "p (a) NOT DEFERRABLE");
+    const after = twoKeys("p NOT DEFERRABLE", "p (a) DEFERRABLE INITIALLY DEFERRED");
+    expect(compare(before, after)).toEqual([
+      changed(
+        "table c.foreignKeys[x->p(a)].deferrable",
+        "NOT DEFERRABLE",
+        "DEFERRABLE INITIALLY DEFERRED",
+      ),
+      changed(
+        "table c.foreignKeys[x->p].deferrable",
+        "DEFERRABLE INITIALLY DEFERRED",
+        "NOT DEFERRABLE",
+      ),
+    ]);
   });
 });
 

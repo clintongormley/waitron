@@ -272,6 +272,10 @@ export interface DeclaredKey {
 export interface DeclaredForeignKey {
   readonly table: string;
   readonly from: readonly string[];
+  /** Empty when the key names no parent column. */
+  readonly to: readonly string[];
+  readonly onUpdate: string;
+  readonly onDelete: string;
   readonly deferrable: string | null;
 }
 
@@ -314,10 +318,19 @@ export function tableDeclarations(createSql: string): TableDeclarations {
   const references = (from: string[], referencesAt: number): number => {
     const table = unquoted(token(referencesAt + 1).text);
     let index = referencesAt + 2;
-    if (isSymbol(tokens[index], "(")) index = matchingClose(tokens, index, createSql) + 1;
+    let to: string[] = [];
+    if (isSymbol(tokens[index], "(")) ({ names: to, next: index } = columnList(index));
+    const actions = { UPDATE: "NO ACTION", DELETE: "NO ACTION" };
     for (;;) {
       if (isWord(tokens[index], "ON") && !isWord(tokens[index + 1], "CONFLICT")) {
-        index += isWord(tokens[index + 2], "SET") || isWord(tokens[index + 2], "NO") ? 4 : 3;
+        const words = isWord(tokens[index + 2], "SET") || isWord(tokens[index + 2], "NO") ? 2 : 1;
+        const action = tokens
+          .slice(index + 2, index + 2 + words)
+          .map((word) => word.text.toUpperCase())
+          .join(" ");
+        const event = token(index + 1).text.toUpperCase();
+        if (event === "DELETE" || event === "UPDATE") actions[event] = action;
+        index += 2 + words;
       } else if (isWord(tokens[index], "MATCH")) {
         index += 2;
       } else {
@@ -333,7 +346,14 @@ export function tableDeclarations(createSql: string): TableDeclarations {
     } else {
       index = deferrableStart;
     }
-    foreignKeys.push({ table, from, deferrable });
+    foreignKeys.push({
+      table,
+      from,
+      to,
+      onUpdate: actions.UPDATE,
+      onDelete: actions.DELETE,
+      deferrable,
+    });
     return index - 1;
   };
 

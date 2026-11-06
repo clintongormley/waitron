@@ -47,12 +47,6 @@ interface SetPlan {
   readonly journal: readonly JournalEntry[];
 }
 
-interface CompositionPlan {
-  readonly modules: readonly WaitronModule[];
-  readonly options: VenueMigrationOptions[];
-  readonly sets: readonly SetPlan[];
-}
-
 /** Every module except the other module filling the fiscal slot. */
 function modulesFor(composition: string): WaitronModule[] {
   const fiscal = ALL_MODULES.filter((module) => module.fiscal !== undefined).map((m) => m.name);
@@ -62,12 +56,13 @@ function modulesFor(composition: string): WaitronModule[] {
   return ALL_MODULES.filter((module) => module.fiscal === undefined || module.name === composition);
 }
 
-function planFor(composition: string, migrationRoot: string | null): CompositionPlan {
-  const modules = modulesFor(composition);
-  const sets = orderedMigrationSets(modules);
+function planFor(
+  composition: string,
+  sets: ReturnType<typeof orderedMigrationSets>,
+  options: readonly VenueMigrationOptions[],
+): SetPlan[] {
   if (sets.length === 0) throw new Error(`No migration sets for ${composition}`);
-  const options = migrationOptionsFor(sets, migrationRoot);
-  const plans = sets.map((set, index) => {
+  return sets.map((set, index) => {
     const option = options[index];
     if (option === undefined || option.migrationsTable !== set.table) {
       throw new Error(`Migration options do not line up with the sets at ${set.name}`);
@@ -83,7 +78,6 @@ function planFor(composition: string, migrationRoot: string | null): Composition
       journal: journal.entries,
     };
   });
-  return { modules, options, sets: plans };
 }
 
 function objectKeys(db: DatabaseSync): string[] {
@@ -265,11 +259,10 @@ export async function buildSchemaListFile(options: {
 }): Promise<BuiltSchemaListFile> {
   const entries: BuiltSchemaListEntry[] = [];
   for (const composition of COMPOSITIONS) {
-    const {
-      modules,
-      options: migrationOptions,
-      sets: plan,
-    } = planFor(composition, options.migrationRoot);
+    const modules = modulesFor(composition);
+    const sets = orderedMigrationSets(modules);
+    const migrationOptions = migrationOptionsFor(sets, options.migrationRoot);
+    const plan = planFor(composition, sets, migrationOptions);
     const common = {
       composition,
       setOrder: plan.map((set) => set.name),
@@ -300,9 +293,12 @@ export async function buildSchemaListFile(options: {
     const productDir = join(options.workDir, composition, "product");
     await applyMigrations(productDir, migrationOptions);
     const migrated = await readProduct(productDir, plan, `${composition} migrated`);
-    push("migrated", migrated, (keys) =>
-      ownersFor(keys, sqlOnly.owningSet, plan, "applyMigrations"),
-    );
+    const migratedOwners: Record<string, string> = {};
+    push("migrated", migrated, (keys) => {
+      const owners = ownersFor(keys, sqlOnly.owningSet, plan, "applyMigrations");
+      Object.assign(migratedOwners, owners);
+      return owners;
+    });
 
     const sources = modules.flatMap((module) => module.changes ?? []);
     const store = await openVenueDatabase(productDir);
@@ -312,9 +308,7 @@ export async function buildSchemaListFile(options: {
       await store.close();
     }
     const feed = await readProduct(productDir, plan, `${composition} change-feed`);
-    push("change-feed", feed, (keys) =>
-      ownersFor(keys, sqlOnly.owningSet, plan, "installChangeFeed"),
-    );
+    push("change-feed", feed, (keys) => ownersFor(keys, migratedOwners, plan, "installChangeFeed"));
   }
   return { entries };
 }
