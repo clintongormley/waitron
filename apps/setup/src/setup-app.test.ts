@@ -13,6 +13,7 @@ import type { SetupDoneScreen } from "./screens/done-screen.js";
 import type { BucketRestoreRequestDetail } from "./events.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
+import { startEn } from "./i18n/strings/start.js";
 
 const mounted: HTMLElement[] = [];
 
@@ -3209,7 +3210,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
       "Esta exportación y este equipo no usan las mismas partes de Waitron, así que la exportación no se puede cargar aquí.",
     ],
   ] as const)(
-    "explains how to replace an incompatible configuration export (%s)",
+    "explains an export using different parts of Waitron (%s)",
     async (locale, sentence) => {
       try {
         for (const field of ["module:core", "modules"]) {
@@ -5219,7 +5220,7 @@ it("routes an internal description refusal to the venue action message", async (
   >("wt-form-actions")!;
   await actions.updateComplete;
   expect(actions.shadowRoot!.querySelector("[data-error]")!.textContent).toContain(
-    "500 characters",
+    startEn["server_fields.operation_description"],
   );
   expect(
     (venue.shadowRoot!.querySelector("[data-test=next]") as HTMLElement & { disabled: boolean })
