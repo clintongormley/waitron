@@ -508,7 +508,7 @@ and offers Start again. Repair-page Start again goes straight to its summary.
 
 | PR | Key | English | Spanish |
 | --- | --- | --- | --- |
-| 1 | `shell.first_setup.disk_full` (changed) | …Restart the box: as it starts, it uses any space it still keeps in reserve and removes old logs and crash reports to make room. Then try again. … | …Reinicia el equipo: al arrancar, usa el espacio que aún guarde en reserva y quita registros y avisos de fallo antiguos para hacer sitio. Después, vuelve a intentarlo. … |
+| 1 | `shell.first_setup.disk_full` (unchanged after review) | Unchanged: a restart gives up the reserve only under 8 MiB free, or 16 MiB after a start that failed for a full disk (`releaseSpareToStart`, `apps/server/src/node-entry.ts`), while this message shows under 256 MiB, so naming the reserve promised more than the restart does. | Sin cambios. |
 | 2 | stop ask (new) | To start again or recover from a backup, the box first stops this setup and restarts. Then this page shows what would be deleted, and nothing is deleted until you confirm it there. | Para empezar de nuevo o recuperar desde una copia, el equipo primero detiene esta configuración y se reinicia. Después esta página muestra lo que se borraría, y no se borra nada hasta que lo confirmes allí. |
 | 2 | stop button (new) | Stop this setup | Detener esta configuración |
 | 2 | stopped (new) | The setup is stopped and the box is restarting. Reconnect to continue. | La configuración está detenida y el equipo se está reiniciando. Reconecta para continuar. |
