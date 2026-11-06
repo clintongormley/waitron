@@ -16,6 +16,8 @@ export const BENCH_PROFILE = {
   /** The mean; each pair of bills holds exactly twice this between them. */
   linesPerBill: 4,
   roundsPerBill: { min: 2, max: 3 },
+  /** The chance a round after a bill's first is sent ahead, held, and fired when it is due. */
+  heldRoundShare: 1 / 3,
   tills: 4,
   kitchenScreens: 2,
   thermalPrinters: 3,

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
-import { orderGroups, ticketItems, withTransaction, workingOrders } from "@waitron/db";
+import { ticketItems, withTransaction, workingOrders } from "@waitron/db";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "@waitron/fiscal-verifactu";
 import { quoteIdent } from "@waitron/provisioning";
 import { computeDailyClose, recordDailyClose, resolveVenueClock } from "@waitron/reporting";
@@ -20,6 +20,8 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const OPENING_FLOAT = "150.00";
 const NO_ALLERGY = { party: { answer: "none", guests: [] }, ticks: [] };
+/** A held round is sent this long before it is due, while the round before it is still eaten. */
+const HELD_AHEAD_MINUTES = 6;
 
 export interface TradeDayOptions {
   /** Seat the day's bills evenly between these instants rather than over lunch and dinner. */
@@ -62,6 +64,8 @@ interface PlannedBill {
   zone: BenchVenue["zones"][number];
   till: BenchTill;
   rounds: string[][];
+  /** Per round: sent ahead and held, then fired when due. Never the first round. */
+  held: boolean[];
   route: PaymentRoute;
 }
 
@@ -78,7 +82,8 @@ interface LiveBill {
 type Step =
   | { kind: "seat" }
   | { kind: "allergy" }
-  | { kind: "round"; round: number }
+  | { kind: "round"; round: number; release: "fire" | "hold" }
+  | { kind: "fire"; round: number }
   | { kind: "advance"; round: number; to: "preparing" | "ready" }
   | { kind: "served"; round: number }
   | { kind: "pay" }
@@ -140,6 +145,7 @@ export async function tradeDay(
     );
   clock.set(new Date(opening));
   const sessions = new Map<string, string>();
+  const waiterOf = new Map<string, string>();
   const onShift = shiftOf(venue, day);
   for (const [index, till] of venue.tills.entries()) {
     const waiter = onShift[index % onShift.length]!;
@@ -150,6 +156,7 @@ export async function tradeDay(
     const token = /waitron_till_session=([^;]+)/.exec(response.headers.get("set-cookie") ?? "");
     if (token === null) throw new Error("bench: signing in set no session cookie");
     sessions.set(till.id, `${SESSION_COOKIE}=${token[1]}; ${till.cookie}`);
+    waiterOf.set(till.id, waiter.id);
   }
 
   const live = plans.map((plan): LiveBill => ({ plan, groupIds: [], tickets: [] }));
@@ -183,30 +190,38 @@ export async function tradeDay(
         allergy: NO_ALLERGY,
       });
     } else if (step.kind === "round") {
-      await call(cookie, "POST", `/api/parties/${bill.partyId}/groups`, {
-        expectedEdit: await editOf(bill.tabId!),
-        submissionId: randomUUID(),
-        expectedPartyRevision: revision(bill.partyId!),
-        groups: [
-          {
-            lines: plan.rounds[step.round]!.map((menuItemId) => ({ menuItemId, quantity: "1" })),
-            release: "fire",
-          },
-        ],
+      // As the till does: the waiter's unsent dishes are saved as a draft, then the draft is sent.
+      const edit = await editOf(bill.tabId!);
+      const { json: saved } = await call(cookie, "PUT", `/api/parties/${bill.partyId}/drafts`, {
+        billId: bill.tabId,
+        draftId: edit.draftId,
+        revision: edit.draftRevision ?? 0,
+        expectedEdit: edit,
+        personId: waiterOf.get(plan.till.id),
+        lines: plan.rounds[step.round]!.map((menuItemId) => ({ menuItemId, quantity: "1" })),
       });
-      const groups = await venue.db
-        .select({ id: orderGroups.id })
-        .from(orderGroups)
-        .where(eq(orderGroups.partyId, bill.partyId!))
-        .orderBy(sql`rowid`);
-      bill.groupIds.push(groups.at(-1)!.id);
-      const known = new Set(bill.tickets.flat().map((ticket) => ticket.id));
-      const tickets = await venue.db
-        .select({ id: ticketItems.id, stationId: ticketItems.stationId })
-        .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, bill.tabId!))
-        .orderBy(sql`rowid`);
-      bill.tickets.push(tickets.filter((ticket) => !known.has(ticket.id)));
+      const draft = saved.draft as { id: string; revision: number; lines: { id: string }[] };
+      const { json: submitted } = await call(
+        cookie,
+        "POST",
+        `/api/parties/${bill.partyId}/drafts/${draft.id}/submit`,
+        {
+          submissionId: randomUUID(),
+          expectedPartyRevision: revision(bill.partyId!),
+          expectedEdit: saved.edit,
+          draftRevision: draft.revision,
+          groups: [{ lineIds: draft.lines.map((line) => line.id), release: step.release }],
+        },
+      );
+      bill.groupIds[step.round] = (submitted.groups as { id: string }[])[0]!.id;
+      bill.tickets[step.round] = await newTickets(venue, bill);
+    } else if (step.kind === "fire") {
+      await call(
+        cookie,
+        "POST",
+        `/api/parties/${bill.partyId}/groups/${bill.groupIds[step.round]}/fire`,
+        { submissionId: randomUUID(), expectedPartyRevision: revision(bill.partyId!) },
+      );
     } else if (step.kind === "advance") {
       for (const ticket of bill.tickets[step.round]!)
         await call(cookie, "POST", `/api/ticket-items/${ticket.id}/advance`, {
@@ -258,6 +273,17 @@ export async function tradeDay(
 
   const overnight = await closeDay(venue, day, new Date(Date.parse(bounds.endAt) + 30 * MINUTE));
   return { day, bills: results, routes, requests, ...overnight };
+}
+
+/** The bill's ticket items not yet assigned to any of its rounds; a held round's exist unfired. */
+async function newTickets(venue: BenchVenue, bill: LiveBill) {
+  const known = new Set(bill.tickets.flat().map((ticket) => ticket.id));
+  const tickets = await venue.db
+    .select({ id: ticketItems.id, stationId: ticketItems.stationId })
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderId, bill.tabId!))
+    .orderBy(sql`rowid`);
+  return tickets.filter((ticket) => !known.has(ticket.id));
 }
 
 type Call = (
@@ -418,6 +444,8 @@ export function planDay(
   const pick = <T>(items: readonly T[]) => items[Math.floor(random() * items.length)]!;
   const between = (from: number, to: number) => from + Math.floor(random() * (to - from + 1));
   const routes = paymentRoutesFor(bills);
+  // Its own sequence, so holding rounds leaves every other draw of the day as it was.
+  const holds = seededRandom(daySeed(venue.seed, `${day}:hold`));
   const seatTimes: number[] = [];
   if (seats !== undefined) {
     const span = seats.to.getTime() - seats.from.getTime();
@@ -459,6 +487,7 @@ export function planDay(
       zone,
       till: pick(tills),
       rounds,
+      held: rounds.map((_, round) => round > 0 && holds() < BENCH_PROFILE.heldRoundShare),
       route: routes[index]!,
     };
   });
@@ -504,7 +533,10 @@ function eventsOf(plan: PlannedBill): Event[] {
   at(1, { kind: "allergy" });
   plan.rounds.forEach((_, round) => {
     const start = 3 + round * 18;
-    at(start, { kind: "round", round });
+    if (plan.held[round]) {
+      at(start - HELD_AHEAD_MINUTES, { kind: "round", round, release: "hold" });
+      at(start, { kind: "fire", round });
+    } else at(start, { kind: "round", round, release: "fire" });
     at(start + 2, { kind: "advance", round, to: "preparing" });
     at(start + 9, { kind: "advance", round, to: "ready" });
     at(start + 12, { kind: "served", round });

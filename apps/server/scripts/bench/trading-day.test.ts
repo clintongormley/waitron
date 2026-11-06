@@ -85,6 +85,43 @@ describe("tradeDay", () => {
   );
 
   it(
+    "sends each round through a waiter's draft, and releases every held round before it is made",
+    async () => {
+      const venue = await freshVenue("2025-11-03T08:00:00Z");
+
+      await tradeDay(venue, "2025-11-03", 10);
+
+      const counts = countRows(venue);
+      expect(counts.order_drafts).toBe(counts.order_groups);
+      expect(
+        rows(venue, sql`select kind, count(*) as n from order_draft_events group by kind`),
+      ).toEqual([
+        { kind: "created", n: counts.order_drafts },
+        { kind: "submitted", n: counts.order_drafts },
+      ]);
+      // Only a held group is fired by a command of its own.
+      const held = rows(
+        venue,
+        sql`select g.state, g.fired_at as firedAt, min(t.preparing_at) as firstAdvance
+            from order_group_events e
+            join order_groups g on g.id = e.group_id
+            join working_order_lines l on l.group_id = g.id
+            join ticket_items t on t.working_order_line_id = l.id
+            where e.kind = 'fired'
+            group by g.id`,
+      );
+      expect(held.length).toBeGreaterThan(0);
+      for (const group of held) {
+        expect(group.state).toBe("fired");
+        expect(Date.parse(group.firedAt as string)).toBeLessThan(
+          Date.parse(group.firstAdvance as string),
+        );
+      }
+    },
+    CASE_TIMEOUT_MS,
+  );
+
+  it(
     "gives equal row counts for one seed",
     async () => {
       const first = await freshVenue("2025-11-03T08:00:00Z", 7);
