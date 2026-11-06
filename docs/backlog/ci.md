@@ -534,6 +534,8 @@ infer either from the missing outcome alone.
 ## Bundle: Get ready for A760's history rewrite (A1306 and CI's concurrency groups)
 
 2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+Planned as Task 19 of [A760's plan](../superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md), with the
+guard's two wrong sentences corrected in its Task 17.
 
 - **A1306. Rewrite git history to drop the development artifacts** (owner, 2026-11-02: "there is
   no point in keeping these development artifacts as history"). Rewrite `main` with them removed,

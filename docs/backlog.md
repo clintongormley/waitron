@@ -131,7 +131,7 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1402. Build the front-end and the other Node bundles in CI, and open one](backlog/ci.md#bundle-a1402-build-the-front-end-and-the-other-node-bundles-in-ci-and-open-one)
 
 **3. The foundation, already running.** A1308 and A760 stay first in lane A, with
-[Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables) and A760's retag step added before A760 part 3.
+[Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables) and A760's history-rewrite task (Task 19, with the `:main` image check) planned before A760 part 3.
 
 **4. Released by the hold, once A760 lands.** Build order: A739 paying, the pay window, A446 pre-bill,
 A555, close the day, then A947 and its handover bundles, including the spare's backup settings, which
@@ -2371,7 +2371,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A760. Squash every migration set before go-live.** If A1308 is approved, the squash runs
   first, merged into its eight sets (owner, 2026-11-02; eight sets confirmed 2026-11-04).
   [Detail](backlog/architecture.md#a760-squash-every-migration-set-before-go-live)
-  Pull requests 1 and 2 of 3 have landed: a module may have no migration set of its own and the baseline tools are built (#2512); the module packages' table definitions now live in `@waitron/db`, and staffing's in workforce, with every migration set unchanged (#2516). Next: pull request 3, under the watcher's freeze. Its plan needs a retag step: rewriting history (A1306) otherwise stops image publishing until someone fixes it by hand. The additions in the [A1308 design](superpowers/specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026) go in before part 3.
+  Pull requests 1 and 2 of 3 have landed: a module may have no migration set of its own and the baseline tools are built (#2512); the module packages' table definitions now live in `@waitron/db`, and staffing's in workforce, with every migration set unchanged (#2516). Next: pull request 3, under the watcher's freeze. Its plan's Task 19 covers A1306's history rewrite, if the owner wants it in this freeze, and the `:main` image tag after it. The additions in the [A1308 design](superpowers/specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026) each go into a later A1308 slice, none into part 3.
 
 - **Full-invoice recipient: comma refusal and country code names** (bundle of 2, 1 important, size S). [Detail](backlog/architecture.md#bundle-full-invoice-recipient-comma-refusal-and-country-code-names)
 

@@ -585,6 +585,19 @@ only if the control passes.
   receipt about the old behaviour, wherever it is written.
 - [ ] Runbook: a dated section recording the epoch, reset SHA and "old backups need the old image".
   Backlog: delete A760, and A624 if resolved. Add the regeneration note to A790, A802, A799 and A739.
+- [ ] Narrow what three places say about a rewritten history: `scripts/main-tag-guard.sh`'s header,
+  `docs/developers/ci-and-gates.md` (the paragraph after "The print-agent image carries no
+  `WAITRON_BUILD_ID`") and `docs/backlog/ci.md` → "What the per-push CI concurrency groups (#384) left
+  open". Each says a rewritten history stops every later publish, and the script's header adds that
+  the `sha-` tags keep coming. Both need narrowing, checked on 6 November:
+  - GitHub's comparison answered `diverged` for `f8b36a6086`, a commit no branch or tag holds but
+    which shares history with `main` (#2442's head before its rebase), so the guard answers `move`.
+    For two commits with no shared history it answered 404, "No common ancestor" (`ha-fado`'s
+    `v0.0.2` against its `main`), so the guard fails. A rewrite stops publishing only when it leaves
+    the old and new tips with no commit in common.
+  - The guard runs inside the step "Work out the tags". The steps after it have no `if:`, so when the
+    guard fails nothing is published, `sha-` tag included. This part is read from
+    `.github/workflows/ci.yml`, not run, and the corrected text should say so.
 
 ### Task 18: Finish, land and reset
 
@@ -592,13 +605,76 @@ only if the control passes.
   PR's first line: **every existing venue requires a reset.** Include the schema report, controls,
   changed-check list, roster and the owner's fiscal approval.
 - [ ] **Step 2:** Read current-head CI, the image-nightly run on the same SHA, and the `changes` job's
-  scope. Report ready. **The owner runs `/land-branch`:** this PR carries fiscal SQL.
-- [ ] **Step 3:** After landing, confirm the merge SHA's own unfiltered CI, then reset the roster by
-  the runbook's table. Santet through its own `reset.sh`. The home box stays quarantined.
+  scope. **Lane A lands this PR itself** (owner, through the watcher, 6 November, for this PR only),
+  once the protection list prints `EQUAL` for both fiscal compositions, all CI is green and every
+  review, Codex included, is done. Tell the watcher just before landing, so the owner can look if
+  they are around; do not wait for them.
+- [ ] **Step 3:** After landing, confirm the merge SHA's own unfiltered CI. If the owner chose to
+  rewrite history in this freeze, do Task 19 now, so the boxes are reset once, onto the rewritten
+  `main`'s image. Then reset the roster by the runbook's table. Santet through its own `reset.sh`. The home box stays quarantined.
 - [ ] **Step 4:** Tell the watcher the squash has landed. It lifts the hold and the freeze, and:
   - queues a Cloud item to re-pin `deploy/backup-verifier/target.json` and the owner list and digest
-    in `packages/backups/test/verification-target.test.ts` from the merged `main`. Until that lands,
+    in `packages/backups/test/verification-target.test.ts` from the merged `main`, rewritten if Task 19
+    ran: Cloud pins a Waitron commit by its id (`ec91a9e34d…` in that `target.json` today). Until that lands,
     Cloud's verifier refuses new-epoch backups. Only pre-live venues exist, so nothing depends on it.
   - tells A790, A802, A799 and A739 to rebase and regenerate. A790's and A802's tables go in core,
     in `packages/db`, and A739's in payments. **Each branch shows its new tables in the protection
     list before it lands:** a table in a retired folder creates nothing, silently.
+
+### Task 19: The history rewrite (A1306) and the `:main` image tag
+
+Every push to `main` builds an image and, after asking `scripts/main-tag-guard.sh`, moves the `:main`
+tag on GitHub's container registry to it; boxes follow that tag. The guard asks GitHub to compare
+the commit `:main` was built from with the commit being published (Task 17's two findings). This task
+rewrites the history and makes sure `:main` still moves.
+
+**When:** only if the owner chooses to rewrite history in this freeze, with the paths the owner
+chooses (the question is with the watcher). Otherwise A1306 stays at the design's §9 step 7 and
+this task goes with it. It runs inside Task 18 Step 3, after the merge's own CI is green and before
+the resets. The owner does Step 4, because it replaces `main` for everyone.
+
+- [ ] **Step 1: Record what is there.** `git ls-remote origin` (the branches, the tag
+  `pre-sqlite-migration`, and about 2,500 `refs/pull/*` refs), the open pull requests, and the commit
+  `:main` was built from: `docker buildx imagetools inspect ghcr.io/clintongormley/waitron:main --format '{{range .Image.Config.Env}}{{println .}}{{end}}' | grep WAITRON_BUILD_ID`.
+- [ ] **Step 2: Rewrite a copy, and check it.** In a fresh clone of `main` and the tag only, outside
+  every worktree, run `git filter-repo` (the tool that rewrites every commit without the chosen
+  paths, installed on the owner's Mac). Then, with the old history fetched back
+  into a second ref so both can be read:
+  - `git merge-base <old tip> <new tip>` must print a commit. If it prints nothing (the paths
+    include something in the first commit, which holds the first design document), Step 5 will
+    take its fallback; say so to the owner before pushing.
+  - `git diff --stat <old tip> <new tip>` lists only the chosen paths.
+  - The number of commits with no `Signed-off-by` line is the same before and after. (The number
+    with one can fall, because `filter-repo` drops a commit the rewrite leaves empty.)
+  - Say in the owner's note what else changes: every signed commit loses its signature (none is
+    required), and commit ids quoted inside commit messages are rewritten.
+  - Measure what a plain `git clone` fetches, before and after, with A1306's method (`git rev-list
+    --objects --all` with `git cat-file --batch-check`). GitHub's own copy does not shrink: the
+    `refs/pull/*` refs keep the old history and nobody can delete them.
+- [ ] **Step 3: Decide every other branch.** Each remote branch other than `main` still holds the old
+  history, and a plain `git clone` fetches it. A790, A802, A799 and A739 are rebased onto the new
+  `main` with `git rebase --onto <new main> <old main tip> <branch>` and force-pushed, before they
+  regenerate their migrations. Every other remote branch is listed for the owner to delete or
+  rebase. Until a branch is rebased, its pull request must not be landed: `/land-branch`'s fallbacks
+  would bring the old history back.
+- [ ] **Step 4 (owner): Push.** In the rewritten clone, add the `origin` remote back (`filter-repo`
+  removes it), then `git push --force origin main` and `git push --force origin
+  refs/tags/pre-sqlite-migration`. The repository's ruleset refuses a force push to `main`, but an
+  administrator bypasses it.
+- [ ] **Step 5: Check that `:main` follows.** The push's CI run finds no earlier `main` run to compare
+  with, so it runs every check; a red check skips publishing, and is fixed as any red `main` is. When
+  green, the `publish` job runs the guard:
+  - If the old and new tips share a commit, GitHub answers `diverged`, the guard answers `move`, and
+    `:main` is rebuilt from the new tip. Confirm with Step 1's command that its build id is the new
+    tip.
+  - If they share none, the job fails at "Work out the tags" with "cannot place", and nothing is
+    published. Delete the `waitron` package version that holds `:main`: find its id with
+    `gh api /user/packages/container/waitron/versions --jq '.[] | select(.metadata.container.tags | index("main")) | .id'`
+    and delete it with `gh api -X DELETE /user/packages/container/waitron/versions/<id>`, after
+    `gh auth refresh -s delete:packages`. That version also carries the merge's `sha-` tag, which goes
+    with it. Then re-run the failed job: the guard reads `not found` and answers `move`. The
+    print-agent image needs nothing: the guard reads only the app image, and both tags move on its
+    answer.
+- [ ] **Step 6: Tell everyone what moved.** Every lane's worktrees and branches restart from the
+  rewritten `main`. Record the old and new tips, and which Step 5 path ran, in the runbook's dated
+  section. Then carry on with Task 18 Step 3's resets.

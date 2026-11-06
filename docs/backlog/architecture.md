@@ -1205,6 +1205,8 @@ product failures.
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 
 15 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+Where each lands: the A1308 slice named in the design's "Lands in" column
+([Additions of 6 November 2026](../superpowers/specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026)).
 
 - **The `media_images` filename CHECK accepts a name with an embedded NUL**: the review stored 64
   hex characters, `.png`, a NUL and `evil` (73 bytes) on `node:sqlite`, because `substr` stops at
