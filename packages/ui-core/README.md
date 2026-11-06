@@ -56,4 +56,4 @@ this proof alongside both UI packages' coverage; nightly mutation tests cover bo
 The tarball carries the repository's existing `LICENSE` and `LICENSE-GRANTS.md`
 under `dist/`. This extraction does not change their terms.
 
-Prepare a release for Cloud with the [source preparation guide](../../docs/developers/shared-ui-preparation.md). Cloud owns version reservation, source CI selection and publication; the source package stays private and keeps its workspace version.
+Waitron publishes a private `@waitron-io/ui-core@0.2.<workflow run number>` release after a main push changes this package. The [release guide](../../docs/developers/shared-ui-preparation.md) explains the checks and local inspection. The source package keeps its workspace version; Cloud owns dependency updates and portal qualification.

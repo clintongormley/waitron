@@ -2312,12 +2312,13 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **Small checks and indexes that are cheap only inside A1308's fresh tables** (bundle of 15, 8 important, size M, waits for A760). Holds A1368, A1351, A1366. [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
 
-- **Cloud's next shared UI release still needs registry and portal qualification.**
-  Waitron's [preparation guide](developers/shared-ui-preparation.md) covers source staging
-  and the independent package consumer. Cloud's D579 owns reservation, review of the
-  preparation from exact green main, the authorised `0.2.0` upload and readback, and
-  portal/image qualification. Its [approved plan](https://github.com/waitron-io/waitron-cloud/blob/d108bebc39f5d14c8824e34e208c5e00d9d110f1/docs/superpowers/plans/2026-11-05-public-ui-registry.md)
-  owns automatic publication and updating; no Waitron publisher is planned.
+- **Cloud's shared UI release still needs its first automatic publication and portal qualification.**
+  Waitron's [release workflow](../.github/workflows/publish-ui.yml) checks and publishes
+  the private package on main pushes changing `packages/ui-core`; the first real run
+  must establish publication to the existing Cloud-associated package. The
+  [release guide](developers/shared-ui-preparation.md) explains local inspection.
+  Cloud's D579 owns dependency updates, the seven-day lag check and portal/image
+  qualification under the [approved simple release plan](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/plans/2026-11-06-simple-private-ui-release.md).
 
 - **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
   2026-11-01, high priority; nothing new is built on locations meanwhile). Still open: S18e
