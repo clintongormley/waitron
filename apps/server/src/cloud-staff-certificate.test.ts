@@ -31,7 +31,9 @@ it("submits only the box CSR with its signed installation proof and installs the
   expect(f.calls).toHaveLength(2);
 });
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 async function fixture() {
   let patch: Record<string, unknown> = {},
