@@ -295,6 +295,10 @@ is still unpaid. Take payment before finishing the table** above the foot. **Tak
 unpaid bill on screen so you can take its payment, and **Record unpaid departure** records that the
 guests left without paying.
 
+If a card payment is recorded as not taken, you can try it again. If its result is unconfirmed,
+choose **Check again** to check the same payment before taking another. Repeated server errors
+keep that payment held until the box answers.
+
 ## Move dishes to another bill {#move-dishes}
 
 When one guest decides to pay for their own drinks, move those dishes onto a bill of their own. Open

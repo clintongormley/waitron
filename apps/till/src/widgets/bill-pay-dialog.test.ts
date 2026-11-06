@@ -2217,7 +2217,7 @@ describe("till-bill-pay-dialog: the locked confirmation (A796 default 7)", () =>
     return el;
   }
 
-  it("titles a locked confirmation 'No connection to the server' and says the message once, under the form", async () => {
+  it("titles a locked confirmation 'Payment not confirmed' and says the message once, under the form", async () => {
     const el = await locked();
 
     expect(box(el)!.getAttribute("role")).toBe("status");

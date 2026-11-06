@@ -312,6 +312,10 @@ sin pagar. Cóbrala antes de cerrar la mesa** encima del pie. **Cobrar esta cuen
 una cuenta sin pagar para que la cobres, y **Registrar salida sin pagar** registra que los clientes
 se fueron sin pagar.
 
+Si un cobro con tarjeta consta como no cobrado, puedes volver a cobrarlo. Si no se ha confirmado
+su resultado, elige **Comprobar de nuevo** para comprobar ese mismo cobro antes de cobrar otro.
+Los errores repetidos del servidor mantienen el cobro pendiente de confirmar hasta que responda.
+
 ## Mover platos a otra cuenta {#move-dishes}
 
 Cuando un cliente decide pagar sus propias bebidas, pasa esos platos a una cuenta suya. Abre el menú

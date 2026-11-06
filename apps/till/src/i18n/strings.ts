@@ -1653,12 +1653,12 @@ export const en = {
   "bill_pay.next": "Take the next",
   "bill_pay.next_share": "Take the next ({n} of {m})",
   "bill_pay.unconfirmed":
-    "The server did not answer, so this payment may or may not have been taken. Press Check again: it asks about this same payment, and it will not be recorded twice.",
+    "This payment could not be confirmed. Press Check again to check this same payment without recording it twice.",
   "bill_pay.unconfirmed_elsewhere":
-    "A payment on this bill got no answer from the server, so it may or may not have been taken. On the bill, press Pay items, then Check again: it will not be recorded twice.",
+    "A payment on this bill could not be confirmed. On the bill, press Pay items, then Check again to check that same payment without recording it twice.",
   "bill_pay.unconfirmed_elsewhere_handheld":
-    "A payment on this bill got no answer from the server, so it may or may not have been taken. On the bill, press Pay, then Check again: it will not be recorded twice.",
-  "bill_pay.unanswered_title": "No connection to the server",
+    "A payment on this bill could not be confirmed. On the bill, press Pay, then Check again to check that same payment without recording it twice.",
+  "bill_pay.unanswered_title": "Payment not confirmed",
   "bill_pay.recheck": "Check again",
   "bill_pay.sending_title": "Waiting for the server",
   "bill_pay.sending":
@@ -3555,12 +3555,12 @@ export const es: Record<StringKey, string> = {
   "bill_pay.next": "Cobrar al siguiente",
   "bill_pay.next_share": "Cobrar al siguiente ({n} de {m})",
   "bill_pay.unconfirmed":
-    "El servidor no ha respondido, así que este pago puede haberse cobrado o no. Pulsa Comprobar de nuevo: se pregunta por este mismo pago y no se registrará dos veces.",
+    "No se ha podido confirmar este cobro. Pulsa Comprobar de nuevo para comprobar este mismo cobro sin registrarlo dos veces.",
   "bill_pay.unconfirmed_elsewhere":
-    "Un pago de esta cuenta no ha tenido respuesta del servidor, así que puede haberse cobrado o no. En la cuenta, pulsa Pagar artículos y luego Comprobar de nuevo: no se registrará dos veces.",
+    "No se ha podido confirmar un cobro de esta cuenta. En la cuenta, pulsa Pagar artículos y luego Comprobar de nuevo para comprobar ese mismo cobro sin registrarlo dos veces.",
   "bill_pay.unconfirmed_elsewhere_handheld":
-    "Un pago de esta cuenta no ha tenido respuesta del servidor, así que puede haberse cobrado o no. En la cuenta, pulsa Cobrar y luego Comprobar de nuevo: no se registrará dos veces.",
-  "bill_pay.unanswered_title": "Sin conexión con el servidor",
+    "No se ha podido confirmar un cobro de esta cuenta. En la cuenta, pulsa Cobrar y luego Comprobar de nuevo para comprobar ese mismo cobro sin registrarlo dos veces.",
+  "bill_pay.unanswered_title": "Cobro sin confirmar",
   "bill_pay.recheck": "Comprobar de nuevo",
   "bill_pay.sending_title": "Esperando al servidor",
   "bill_pay.sending":

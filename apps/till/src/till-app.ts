@@ -284,6 +284,7 @@ import {
   refusalOf,
   submissionFor,
   unansweredAfter,
+  billPaymentUnconfirmed,
   type DialogRefusal,
   type RefundAsk,
   type RefundSubmission,
@@ -3627,7 +3628,6 @@ export class TillApp extends LitElement {
   #shownBalanceAt = 0;
   #pendingReread: PendingReread | null = null;
 
-  /** No payment may start on a bill while one is out on it, or one A773-1 holds has no answer. */
   #billPaymentHeld(billId: string): boolean {
     return (
       this.#unansweredPayments.get(billId)?.unconfirmed === true || this.#paymentsOut.has(billId)
@@ -19414,7 +19414,14 @@ export class TillApp extends LitElement {
       this.billPaying = {
         ...now,
         balance: result.balance,
-        refusal: { code: result.outcome === "network_unavailable" ? "card_network" : "declined" },
+        refusal: {
+          code:
+            result.outcome === "network_unavailable"
+              ? "card_network"
+              : result.outcome === "failed"
+                ? "payment_failed"
+                : "declined",
+        },
         busy: false,
       };
       return;
@@ -19466,13 +19473,6 @@ export class TillApp extends LitElement {
       await this.#refreshAfterWrite("held", "refresh.held_after_sale");
   }
 
-  /**
-   * A refusal shows above the dialog's action, or under the field it names, and the bill is read
-   * again, unless it was a preview refused for a field typed into the dialog.
-   * `bill.allocation_changed` reopens the confirmation with the amounts the server now gives, and
-   * sends nothing; a payment that got no answer stays on its confirmation, to be taken again under
-   * the same submission id. Any other refusal goes back to the form.
-   */
   async #onBillPayRefused(
     id: number,
     error: unknown,
@@ -19481,14 +19481,21 @@ export class TillApp extends LitElement {
   ): Promise<void> {
     const now = this.#billPayingNow(id);
     if (now === null) return;
+    const unconfirmed = stage === "take" && billPaymentUnconfirmed(error);
     const refusal = refusalOf(error, stage === "take");
+    if (
+      unconfirmed &&
+      refusal.code !== "storage.disk_full" &&
+      refusal.code !== "sale.charged_not_recorded"
+    )
+      refusal.code = "network";
     if (asked.pay.method === "card" && asked.card?.entry === "manual") refusal.manualCard = true;
     if (refusal.unsent !== undefined)
       refusal.billLabel = this.#paymentBillLabel(refusal.unsent.billId);
     const { preview } = error as { preview?: unknown };
     // A send that may have been recorded arrives here as `not_checked`, so this is a first send.
     const readerLost = stage === "take" && this.handheldMode && refusal.code === "reader.not_held";
-    if (refusal.code === "network") {
+    if (unconfirmed || refusal.code === "network") {
       this.billPaying = { ...now, refusal, busy: false };
     } else if (refusal.code === "bill.allocation_changed" && preview !== undefined) {
       this.billPaying = {
