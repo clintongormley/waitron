@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { PartyBill } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { billLabel, billName, billToShow, shownBills } from "./bill-state.js";
+import { billLabel, billName, billToShow, shownBills, stillToPay } from "./bill-state.js";
 
 afterEach(() => setLocale("en"));
 
@@ -142,5 +142,22 @@ describe("billToShow", () => {
   it("none when no bill is shown", () => {
     expect(billToShow("wo-1", [])).toBeUndefined();
     expect(billToShow("wo-0", [dropped])).toBeUndefined();
+  });
+});
+
+describe("stillToPay", () => {
+  it.each([
+    ["an open bill holding money", { status: "open", outstanding: "10.00" }, true],
+    ["an open bill with nothing on it", { status: "open", outstanding: "0.00" }, false],
+    ["a placed bill", { status: "placed", outstanding: "10.00" }, true],
+    ["a placed bill answering zero", { status: "placed", outstanding: "0.00" }, true],
+    ["a settled bill", { status: "settled", outstanding: "0.00" }, false],
+    ["an abandoned bill", { status: "abandoned", outstanding: "10.00" }, false],
+  ] as const)("%s: %#", (_, over, expected) => {
+    expect(stillToPay(bill(over))).toBe(expected);
+  });
+
+  it("reads an open bill's zero by value, whichever way it is written", () => {
+    expect(stillToPay(bill({ status: "open", outstanding: "0" }))).toBe(false);
   });
 });

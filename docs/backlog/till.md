@@ -2173,7 +2173,7 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 
 ## Bundle A1386: Blank or misleading Floor pages
 
-4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06); A1409 joined after it.
 
 - **A1055. At phone width, a Floor that opens on a later zone leaves its tab scrolled out of
   sight.** Fix: scroll the selected tab into view when the Floor opens on it.
@@ -2189,6 +2189,10 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 - **A1057. A handheld whose profile allows no zones shows a blank Floor.** Fix: give a handheld the
   same explanation and Retry.
   [Detail](till.md#a1057-a-handheld-whose-profile-allows-no-zones-shows-a-blank-floor)
+- **A1409. On a handheld, Find a bill on a presented counter order lands on the Floor with no
+  message.** Seen 2026-11-06 (A1236's LOOK, `x-61-find-open-placed-390-light-en.png` in
+  `~/waitron-campaign-c/a1236-shots/`): the bill, its lines and the waiting orders are read, then
+  nothing opens. Believed to predate A1236; not run on main.
 
 ## Bundle A1392: Discard and Cancel fail on a table bill reached from the counter
 

@@ -17,19 +17,23 @@ import type {
   DeviceEquipment,
   EquipmentChange,
   EquipmentItem,
+  PartyBill,
   RoleEquipment,
   TillApi,
+  TillProduct,
   TillSaleResult,
 } from "./api/client.js";
 import type { TillPayEquipment } from "./widgets/pay-equipment.js";
 import type { PresentedPayDetail, TillPresentedPayDialog } from "./widgets/presented-pay-dialog.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import { FakeNdefReader, installNfc, PRINTER_ID, READER_ID } from "../test/equipment-nfc.js";
+import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import { cameraFilming } from "../test/qr-camera.js";
 import { SUBMIT_RETRY_PAUSE_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import {
   balanceOf,
   BAR_PRINTER,
+  bill120,
   billOf,
   cash,
   dialog,
@@ -3532,7 +3536,10 @@ describe("the paid screen on a handheld", () => {
 
   /** The paid screen's Finish table answered that a paid dish is not served yet, then the
    * confirmation's send answered `refusal`. */
-  async function refusedAfterUnserved(refusal: { code: string }) {
+  async function refusedAfterUnserved(
+    refusal: { code: string },
+    overrides: Record<string, unknown> = {},
+  ) {
     const { el } = await threeShares(simplified(), {
       finishTable: vi
         .fn()
@@ -3544,6 +3551,7 @@ describe("the paid screen on a handheld", () => {
         revision: 3,
         context: structuredClone(unserved.context),
       }),
+      ...overrides,
     });
     await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
 
@@ -3588,6 +3596,25 @@ describe("the paid screen on a handheld", () => {
     expect(refusal).not.toBeNull();
     expect(refusal!.checkVisibility()).toBe(true);
   });
+
+  it.each(["party.bill_outstanding", "bill.payments_received"])(
+    "the confirmation for paid dishes not yet served, refused with %s, shows Still to pay as the floor now answers it",
+    async (code) => {
+      const el = await refusedAfterUnserved(
+        { code },
+        {
+          getTablesState: vi.fn(async () => [
+            mesa({
+              outstanding: vi.mocked(api.finishTable).mock.calls.length < 2 ? "170.00" : "50.00",
+            }),
+          ]),
+        },
+      );
+
+      expect(paidView(el)).toBeNull();
+      expect(text(inOrder(tableOrder(el), "[data-party-outstanding]"))).toBe(money("50.00"));
+    },
+  );
 
   it("Finish table refused because a bill holds money leaves the paid screen, and the order screen keeps the instruction", async () => {
     const { el } = await threeShares(simplified(), {
@@ -3891,6 +3918,795 @@ describe("the paid screen on a handheld", () => {
       }
     },
   );
+
+  /** A part-paid counter order paid off through Find bill, from a phone, in one last payment. */
+  async function payCounterOrder({ tableHeld }: { tableHeld: boolean }) {
+    const counter = billRow({ workingOrderId: "wo-counter", label: "Lucía" });
+    const getPartyBills = vi
+      .fn()
+      .mockResolvedValue([
+        billOf(),
+        billOf({ workingOrderId: "wo-5", billNumber: 2, total: "30.00", outstanding: "30.00" }),
+      ]);
+    const { el } = await mountApp(
+      onPhone({
+        getPartyBills,
+        getTablesState: vi.fn().mockResolvedValue([mesa({ billCount: 2 })]),
+        findBillOptions: vi.fn().mockResolvedValue(billOptions),
+        listBills: vi.fn().mockResolvedValue(listPage([counter])),
+        getFindBill: vi.fn().mockResolvedValue(counter),
+        retrieveWorkingOrder: vi.fn().mockResolvedValue({
+          kitchenNote: {
+            scope: { workingOrderId: "wo-counter" },
+            note: null,
+            revision: 0,
+            ownerRevision: 0,
+          },
+          id: "wo-counter",
+          orderNumber: 42,
+          label: "Lucía",
+          lines: [],
+        }),
+        previewBillPayment: vi.fn().mockResolvedValue(share),
+        takeBillPayment: vi.fn().mockResolvedValue(
+          takenOf(
+            { method: "card", entry: "reader", applied: "20.10", tendered: null, change: null },
+            {
+              workingOrderId: "wo-counter",
+              total: "25.10",
+              received: "25.10",
+              outstanding: "0.00",
+              status: "settled",
+              payments: [sharePaid(1)],
+            },
+            { ...simplified(), total: "25.10", orderLabel: "Lucía", invoiceNumber: "F-COUNTER" },
+          ),
+        ),
+        getReceiptPrintStatus: vi.fn().mockResolvedValue(printed),
+        getInvoiceDeliveries: vi.fn().mockResolvedValue(null),
+      }),
+    );
+    if (tableHeld) await openPhoneTable(el);
+    else {
+      await flush(el);
+      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el);
+    }
+    emit(shell(el), "find-bill");
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-bill-open", {
+      row: counter,
+    });
+    await flush(el);
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    await type(el, "amount", "20.10");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    const reads = getPartyBills.mock.calls.length;
+    await press(el, "[data-pay-confirm]");
+    await vi.waitFor(() => expect(paidView(el) ?? ticketView(el)).not.toBeNull());
+    await flush(el);
+    return { el, getPartyBills, reads };
+  }
+
+  it.each([
+    ["while the last table's party is still held", true],
+    ["with no table held", false],
+  ])(
+    "a counter order paid %s shows its own ticket, and New sale goes home",
+    async (_, tableHeld) => {
+      const { el } = await payCounterOrder({ tableHeld });
+
+      expect(paidView(el)).toBeNull();
+      expect(ticketView(el)).not.toBeNull();
+      expect(ticketView(el)!.checkVisibility()).toBe(true);
+      const ticket = (ticketView(el)!.shadowRoot!.textContent ?? "").replace(/\s+/g, " ");
+      expect(ticket).toContain("F-COUNTER");
+      expect(ticket).not.toContain("Table 4");
+
+      emit(ticketView(el)!, "new-sale");
+      await flush(el);
+
+      expect(ticketView(el)).toBeNull();
+      expect(paidView(el)).toBeNull();
+      expect(floor(el).checkVisibility()).toBe(true);
+    },
+  );
+
+  it("a counter order paid while a table's party is still held reads none of that party's bills", async () => {
+    const { getPartyBills, reads } = await payCounterOrder({ tableHeld: true });
+
+    expect(reads).toBeGreaterThan(0);
+    expect(getPartyBills.mock.calls.length).toBe(reads);
+  });
+
+  describe("with other bills to pay", () => {
+    const billOne = billOf();
+    const billTwo = billOf({
+      workingOrderId: "wo-5",
+      billNumber: 2,
+      total: "30.00",
+      outstanding: "30.00",
+    });
+    const billThree = billOf({
+      workingOrderId: "wo-9",
+      billNumber: 3,
+      total: "20.00",
+      outstanding: "20.00",
+    });
+    const settled = (bill: PartyBill): PartyBill => ({
+      ...bill,
+      status: "settled",
+      outstanding: "0.00",
+    });
+    const title = (el: TillApp) => text(inPaid(el, "[data-paid-title]"));
+    const left = (el: TillApp) => inPaid(el, "[data-paid-left]");
+    const finishButton = (el: TillApp) => inPaid(el, '[data-test="finish-table"]');
+    const backButton = (el: TillApp) => inPaid(el, '[data-test="back-to-table"]')!;
+    const firstDrawn = async (el: TillApp) => {
+      await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+      await paidView(el)!.updateComplete;
+    };
+
+    /** Bill 1 of a party paid in three shares from the phone. Bills are read as `before` until the
+     * last share is sent, and as `after` from then on: the stub's order is not number order. */
+    function payBillOne(
+      before: PartyBill[],
+      after: () => Promise<PartyBill[]> = async () =>
+        before.map((bill) => (bill.workingOrderId === "wo-4" ? settled(bill) : bill)),
+      overrides: Record<string, unknown> = {},
+    ) {
+      const takeBillPayment = vi
+        .fn()
+        .mockResolvedValueOnce(shareOf("80.00"))
+        .mockResolvedValueOnce(shareOf("40.00"))
+        .mockResolvedValueOnce(shareOf("0.00", simplified()));
+      return threeShares(simplified(), {
+        takeBillPayment,
+        getPartyBills: vi.fn(async () =>
+          takeBillPayment.mock.calls.length >= 3 ? after() : before,
+        ),
+        getTablesState: vi
+          .fn()
+          .mockResolvedValue([mesa({ billCount: before.length, outstanding: "170.00" })]),
+        ...overrides,
+      });
+    }
+    const threeBills = [billThree, billOne, billTwo];
+    const beer: TillProduct = {
+      id: "beer",
+      menuItemId: "offer-beer",
+      name: "Beer",
+      pricingUnit: "each",
+      unitPrice: "3.00",
+      vatClass: "general",
+      category: null,
+      allergens: null,
+    };
+
+    it("names the paid bill, lists the others in number order, offers no Finish table, and Back is primary", async () => {
+      const { el } = await payBillOne(threeBills);
+      await firstDrawn(el);
+
+      expect(title(el)).toBe("Table 4 · Bill 1 paid");
+      expect(text(left(el))).toBe("Still to pay: Bill 2, Bill 3");
+      expect(finishButton(el)).toBeNull();
+      expect(backButton(el)).toHaveProperty("variant", "primary");
+    });
+
+    it("Back shows the lowest-numbered bill still to pay, whose own lines are read", async () => {
+      const { el } = await payBillOne(threeBills);
+      await firstDrawn(el);
+
+      backButton(el).click();
+      await flush(el);
+
+      expect(paidView(el)).toBeNull();
+      expect(tableOrder(el).orderId).toBe("wo-5");
+      expect(vi.mocked(api.getTabLines).mock.lastCall?.[0]).toBe("wo-5");
+      expect(tableOrder(el).checkVisibility()).toBe(true);
+    });
+
+    it("Back reads the next bill's lines once", async () => {
+      const { el } = await payBillOne(threeBills);
+      await firstDrawn(el);
+
+      backButton(el).click();
+      await flush(el);
+
+      expect(tableOrder(el).orderId).toBe("wo-5");
+      expect(vi.mocked(api.getTabLines).mock.calls.filter(([id]) => id === "wo-5")).toHaveLength(1);
+    });
+
+    it("two quick presses of Back move once and read the next bill's lines once", async () => {
+      const { el } = await payBillOne(threeBills);
+      await firstDrawn(el);
+      const button = backButton(el);
+
+      button.click();
+      button.click();
+      await flush(el);
+
+      expect(tableOrder(el).orderId).toBe("wo-5");
+      expect(vi.mocked(api.getTabLines).mock.calls.filter(([id]) => id === "wo-5")).toHaveLength(1);
+    });
+
+    it("while the floor read is out at Back, the next bill's lines are already drawn under its name", async () => {
+      const nextLines = [{ ...bill120[0]!, name: "Next bill's dish" }];
+      const { el } = await payBillOne(threeBills, undefined, {
+        getTabLines: vi.fn(async (id: string) => ({
+          lines: id === "wo-5" ? nextLines : bill120,
+          revision: 0,
+        })),
+      });
+      await firstDrawn(el);
+      await flush(el);
+      let answerFloor!: (tables: unknown) => void;
+      vi.mocked(api.getTablesState).mockImplementation(
+        () => new Promise((resolve) => (answerFloor = resolve as (tables: unknown) => void)),
+      );
+
+      backButton(el).click();
+      await flush(el);
+
+      expect(tableOrder(el).orderId).toBe("wo-5");
+      expect(tableOrder(el).lines).toEqual(nextLines);
+
+      answerFloor([mesa({ billCount: 3, outstanding: "50.00" })]);
+      await flush(el);
+
+      expect(tableOrder(el).lines).toEqual(nextLines);
+      expect(text(inOrder(tableOrder(el), "[data-party-outstanding]"))).toBe(money("50.00"));
+      expect(vi.mocked(api.getTabLines).mock.calls.filter(([id]) => id === "wo-5")).toHaveLength(1);
+    });
+
+    it("Back shows the next bill's Still to pay at this table as the floor now answers it", async () => {
+      const { el } = await payBillOne(threeBills);
+      await firstDrawn(el);
+      vi.mocked(api.getTablesState).mockResolvedValue([
+        mesa({ billCount: 3, outstanding: "50.00" }),
+      ]);
+
+      backButton(el).click();
+      await flush(el);
+
+      expect(text(inOrder(tableOrder(el), "[data-party-outstanding]"))).toBe(money("50.00"));
+    });
+
+    it("a floor read failing at Back says the table could not be read again", async () => {
+      const { el } = await payBillOne(threeBills);
+      await firstDrawn(el);
+      vi.mocked(api.getTablesState).mockRejectedValue(new TypeError("Failed to fetch"));
+
+      backButton(el).click();
+      await flush(el);
+
+      expect(tableOrder(el).orderId).toBe("wo-5");
+      expect(text(el.shadowRoot!.querySelector('p.error[role="alert"]'))).toBe(
+        t("table.reread_failed"),
+      );
+    });
+
+    describe("Finish table refused from the paid screen", () => {
+      const billOnePaidAndRest = threeBills.map((bill) =>
+        bill === billOne ? settled(bill) : bill,
+      );
+      const allPaidThenRest = () =>
+        vi
+          .fn<() => Promise<PartyBill[]>>()
+          .mockResolvedValueOnce(threeBills.map(settled))
+          .mockResolvedValue(billOnePaidAndRest);
+      const pressFinish = async (el: TillApp) => {
+        await vi.waitFor(() => expect(finishButton(el)).not.toBeNull());
+        await userEvent.click(finishButton(el)!);
+        await flush(el);
+      };
+      const stillToPay = (el: TillApp) => text(inOrder(tableOrder(el), "[data-party-outstanding]"));
+
+      it("because a bill still owes, shows Still to pay as the floor now answers it", async () => {
+        const after = allPaidThenRest();
+        const { el } = await payBillOne(threeBills, after, {
+          finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+        });
+        await firstDrawn(el);
+        vi.mocked(api.getTablesState).mockResolvedValue([
+          mesa({ billCount: 3, outstanding: "50.00" }),
+        ]);
+
+        await pressFinish(el);
+
+        expect(paidView(el)).toBeNull();
+        expect(inOrder(tableOrder(el), "[data-finish-refusal]")).not.toBeNull();
+        expect(stillToPay(el)).toBe(money("50.00"));
+      });
+
+      it("because a bill holds money, shows Still to pay as the floor now answers it and keeps the instruction", async () => {
+        const after = allPaidThenRest();
+        const { el } = await payBillOne(threeBills, after, {
+          finishTable: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
+        });
+        await firstDrawn(el);
+        vi.mocked(api.getTablesState).mockResolvedValue([
+          mesa({ billCount: 3, outstanding: "50.00" }),
+        ]);
+
+        await pressFinish(el);
+
+        expect(paidView(el)).toBeNull();
+        expect(text(el.shadowRoot!.querySelector('p.error[role="alert"]'))).toBe(
+          t("table.finish_bill_holds_money"),
+        );
+        expect(stillToPay(el)).toBe(money("50.00"));
+      });
+
+      it("because a bill holds money, with the floor unreadable too, the instruction stays", async () => {
+        const after = allPaidThenRest();
+        const { el } = await payBillOne(threeBills, after, {
+          finishTable: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
+        });
+        await firstDrawn(el);
+        vi.mocked(api.getTablesState).mockRejectedValue(new TypeError("Failed to fetch"));
+
+        await pressFinish(el);
+
+        expect(text(el.shadowRoot!.querySelector('p.error[role="alert"]'))).toBe(
+          t("table.finish_bill_holds_money"),
+        );
+      });
+    });
+
+    it("Back reads the balance of the next bill, so what it has already taken is shown", async () => {
+      const partPaid = { ...billTwo, hasPayments: true, outstanding: "10.00" };
+      const getBillBalance = vi.fn(async (id: string) =>
+        balanceOf({ workingOrderId: id, total: "30.00", received: "20.00", outstanding: "10.00" }),
+      );
+      const { el } = await payBillOne([billThree, billOne, partPaid], undefined, {
+        getBillBalance,
+      });
+      await firstDrawn(el);
+
+      backButton(el).click();
+      await vi.waitFor(() => expect(tableOrder(el).orderId).toBe("wo-5"));
+      await flush(el);
+
+      expect(getBillBalance.mock.lastCall?.[0]).toBe("wo-5");
+      expect(text(inOrder(tableOrder(el), "[data-bill-received]"))).toContain(money("20.00"));
+    });
+
+    it("Back reads the next bill's balance once", async () => {
+      const partPaid = { ...billTwo, hasPayments: true, outstanding: "10.00" };
+      const getBillBalance = vi.fn(async (id: string) =>
+        balanceOf({ workingOrderId: id, total: "30.00", received: "20.00", outstanding: "10.00" }),
+      );
+      const { el } = await payBillOne([billThree, billOne, partPaid], undefined, {
+        getBillBalance,
+      });
+      await firstDrawn(el);
+
+      backButton(el).click();
+      await vi.waitFor(() => expect(tableOrder(el).orderId).toBe("wo-5"));
+      await flush(el);
+
+      expect(getBillBalance.mock.calls.filter(([id]) => id === "wo-5")).toHaveLength(1);
+    });
+
+    it("Back reads only once the move is done, so a slow draft save cannot lose the next bill's balance", async () => {
+      const partPaid = { ...billTwo, hasPayments: true, outstanding: "10.00" };
+      const bills = [billThree, billOne, partPaid];
+      const getBillBalance = vi.fn(async (id: string) =>
+        balanceOf({ workingOrderId: id, total: "30.00", received: "20.00", outstanding: "10.00" }),
+      );
+      const { el } = await payBillOne(bills, async () => bills, { getBillBalance });
+      await firstDrawn(el);
+      await flush(el);
+      const saving = vi.mocked(api.saveDraft);
+      const save = saving.getMockImplementation()!;
+      let answer!: () => void;
+      const held = new Promise<void>((resolve) => (answer = resolve));
+      saving.mockImplementation(async (...args) => {
+        await held;
+        return save(...args);
+      });
+      tableOrder(el).draftStore!.appendLines([{ product: beer, quantity: "1" }]);
+
+      backButton(el).click();
+      await flush(el);
+      expect(tableOrder(el).orderId).toBe("wo-4");
+      answer();
+      await vi.waitFor(() => expect(tableOrder(el).orderId).toBe("wo-5"));
+      await flush(el);
+
+      expect(getBillBalance.mock.lastCall?.[0]).toBe("wo-5");
+      expect(text(inOrder(tableOrder(el), "[data-bill-received]"))).toContain(money("20.00"));
+    });
+
+    it("draws at once from the bills already held, leaving out the paid bill they still call open", async () => {
+      const { el } = await payBillOne(threeBills, () => new Promise<PartyBill[]>(() => {}));
+      await firstDrawn(el);
+
+      expect(title(el)).toBe("Table 4 · Bill 1 paid");
+      expect(text(left(el))).toBe("Still to pay: Bill 2, Bill 3");
+      expect(finishButton(el)).toBeNull();
+    });
+
+    it("when the read after the payment says another till paid the rest, the title goes back to the table and Finish table returns", async () => {
+      const { el } = await payBillOne(threeBills, async () => threeBills.map(settled));
+      await firstDrawn(el);
+      await vi.waitFor(() => expect(left(el)).toBeNull());
+      await paidView(el)!.updateComplete;
+
+      expect(paidView(el)!.billsLeft).toEqual([]);
+      expect(title(el)).toBe("Table 4 paid");
+      expect(finishButton(el)).not.toBeNull();
+      expect(backButton(el)).toHaveProperty("variant", "secondary");
+    });
+
+    it("when the read after the payment fails, what the screen showed stays", async () => {
+      const { el } = await payBillOne(threeBills, () =>
+        Promise.reject(new TypeError("Failed to fetch")),
+      );
+      await firstDrawn(el);
+      await flush(el);
+      await paidView(el)!.updateComplete;
+
+      expect(title(el)).toBe("Table 4 · Bill 1 paid");
+      expect(text(left(el))).toBe("Still to pay: Bill 2, Bill 3");
+      expect(el.shadowRoot!.querySelector('p.error[role="alert"]')).toBeNull();
+    });
+
+    const alert = (el: TillApp) => el.shadowRoot!.querySelector('p.error[role="alert"]');
+
+    /** A read that answers only when the test says. */
+    function heldRead<T = PartyBill[]>() {
+      let answer!: (value: T) => void;
+      let fail!: (error: unknown) => void;
+      const answered = new Promise<T>((resolve, reject) => {
+        answer = resolve;
+        fail = reject;
+      });
+      return { answered, answer, fail };
+    }
+
+    /** Bill 1 paid in three shares, with `afterSecond` answering the bills read after the second
+     * and `afterLast` those from the last share on. */
+    async function payBillOneAfter(
+      afterSecond: () => Promise<PartyBill[]>,
+      afterLast: () => Promise<PartyBill[]>,
+      overrides: Record<string, unknown> = {},
+      tillOver: Record<string, unknown> = {},
+    ) {
+      const takeBillPayment = vi
+        .fn()
+        .mockResolvedValueOnce(shareOf("80.00"))
+        .mockResolvedValueOnce(shareOf("40.00"))
+        .mockResolvedValueOnce(shareOf("0.00", simplified()));
+      const getPartyBills = vi.fn(async () => {
+        const taken = takeBillPayment.mock.calls.length;
+        if (taken === 2) return afterSecond();
+        return taken < 3 ? threeBills : afterLast();
+      });
+      const { el } = await threeShares(
+        simplified(),
+        {
+          takeBillPayment,
+          getPartyBills,
+          getTablesState: vi
+            .fn()
+            .mockResolvedValue([mesa({ billCount: 3, outstanding: "170.00" })]),
+          ...overrides,
+        },
+        tillOver,
+      );
+      await firstDrawn(el);
+      return { el, getPartyBills };
+    }
+
+    const readFailed = () => Promise.reject(new TypeError("Failed to fetch"));
+    const billOnePaid = threeBills.map((bill) => (bill === billOne ? settled(bill) : bill));
+
+    it("when the bills read before the last payment failed, the read after it lists what is left and ends the alert", async () => {
+      const read = heldRead();
+      const { el, getPartyBills } = await payBillOneAfter(readFailed, () => read.answered);
+
+      expect(getPartyBills.mock.settledResults.map((result) => result.type)).toContain("rejected");
+      expect(text(alert(el))).toBe(t("table.reread_failed"));
+
+      read.answer(billOnePaid);
+      await flush(el);
+      await paidView(el)!.updateComplete;
+
+      expect(title(el)).toBe("Table 4 · Bill 1 paid");
+      expect(text(left(el))).toBe("Still to pay: Bill 2, Bill 3");
+      expect(finishButton(el)).toBeNull();
+      expect(alert(el)).toBeNull();
+    });
+
+    it("when the read after the last payment fails too, the alert stays", async () => {
+      const read = heldRead();
+      const { el } = await payBillOneAfter(readFailed, () => read.answered);
+
+      read.fail(new TypeError("Failed to fetch"));
+      await flush(el);
+
+      expect(paidView(el)).not.toBeNull();
+      expect(text(alert(el))).toBe(t("table.reread_failed"));
+    });
+
+    it("when the 15-second read overtakes the paid screen's read and fails, the alert stays once the older read answers", async () => {
+      const nativeTimeout = window.setTimeout.bind(window);
+      const fifteenSeconds: (() => void)[] = [];
+      const timeout = vi.spyOn(window, "setTimeout").mockImplementation(((
+        handler: TimerHandler,
+        delay?: number,
+        ...args: unknown[]
+      ) => {
+        if (delay === 15_000 && typeof handler === "function")
+          fifteenSeconds.push(handler as () => void);
+        return nativeTimeout(handler, delay, ...args);
+      }) as typeof window.setTimeout);
+      try {
+        const read = heldRead();
+        const afterLast = vi
+          .fn<() => Promise<PartyBill[]>>()
+          .mockReturnValueOnce(read.answered)
+          .mockImplementation(readFailed);
+        const { el } = await payBillOneAfter(readFailed, afterLast);
+        expect(afterLast).toHaveBeenCalledOnce();
+        expect(text(alert(el))).toBe(t("table.reread_failed"));
+
+        for (const fire of fifteenSeconds.splice(0)) fire();
+        await flush(el);
+        expect(afterLast).toHaveBeenCalledTimes(2);
+
+        read.answer(billOnePaid);
+        await flush(el);
+
+        expect(paidView(el)).not.toBeNull();
+        expect(text(alert(el))).toBe(t("table.reread_failed"));
+      } finally {
+        timeout.mockRestore();
+      }
+    });
+
+    it("what a newer re-read says stays once the paid screen's older read answers", async () => {
+      const read = heldRead();
+      const afterLast = vi
+        .fn<() => Promise<PartyBill[]>>()
+        .mockReturnValueOnce(read.answered)
+        .mockImplementation(readFailed);
+      const { el } = await payBillOneAfter(async () => threeBills, afterLast, {
+        updateOrderLine: vi
+          .fn()
+          .mockResolvedValue({ revision: 1, party: { id: "v1", revision: 4 } }),
+      });
+      expect(alert(el)).toBeNull();
+      vi.mocked(api.getTablesState).mockRejectedValue(new TypeError("Failed to fetch"));
+
+      emit(tableOrder(el), "change-line", { lineNo: 1, lineName: "x", patch: {}, revision: 0 });
+      await flush(el);
+      expect(afterLast).toHaveBeenCalledTimes(2);
+      expect(text(alert(el))).toBe(t("table.reread_failed"));
+
+      read.answer(billOnePaid);
+      await flush(el);
+
+      expect(paidView(el)).not.toBeNull();
+      expect(text(alert(el))).toBe(t("table.reread_failed"));
+    });
+
+    /** Bill 1 paid in three shares with its bills read still out, an earlier failure's alert showing
+     * and a Change, sent before the last share, answered: its re-read is out on the floor. */
+    async function newerRereadOnTheFloor() {
+      const read = heldRead();
+      const floor = heldRead<unknown>();
+      const change = heldRead<unknown>();
+      const afterSecond = vi.fn(() => {
+        emit(tableOrder(document.querySelector<TillApp>("till-app")!), "change-line", {
+          lineNo: 1,
+          lineName: "x",
+          patch: {},
+          revision: 0,
+        });
+        return readFailed();
+      });
+      const afterLast = vi
+        .fn<() => Promise<PartyBill[]>>()
+        .mockReturnValueOnce(read.answered)
+        .mockResolvedValue(billOnePaid);
+      const { el } = await payBillOneAfter(afterSecond, afterLast, {
+        updateOrderLine: vi.fn(() => change.answered),
+      });
+      expect(text(alert(el))).toBe(t("table.reread_failed"));
+      vi.mocked(api.getTablesState).mockImplementation(() => floor.answered as Promise<never>);
+
+      change.answer({ revision: 1, party: { id: "v1", revision: 4 } });
+      await flush(el);
+      expect(vi.mocked(api.getTablesState)).toHaveBeenCalled();
+      expect(afterLast).toHaveBeenCalledOnce();
+      return { el, read, floor };
+    }
+
+    it("the paid screen's read answering while a newer re-read waits on the floor, with that re-read then fine, ends the alert", async () => {
+      const { el, read, floor } = await newerRereadOnTheFloor();
+
+      read.answer(billOnePaid);
+      await flush(el);
+      floor.answer([mesa({ billCount: 3, outstanding: "50.00" })]);
+      await flush(el);
+
+      expect(paidView(el)).not.toBeNull();
+      expect(alert(el)).toBeNull();
+    });
+
+    it("the paid screen's read answering while a newer re-read waits on the floor, with that floor read then failing, says so", async () => {
+      const { el, read, floor } = await newerRereadOnTheFloor();
+
+      read.answer(billOnePaid);
+      await flush(el);
+      floor.fail(new TypeError("Failed to fetch"));
+      await flush(el);
+
+      expect(paidView(el)).not.toBeNull();
+      expect(text(alert(el))).toBe(t("table.reread_failed"));
+    });
+
+    it("a refused Open drawer stays when the paid screen's read succeeds", async () => {
+      const read = heldRead();
+      const { el } = await payBillOneAfter(
+        readFailed,
+        () => read.answered,
+        { openDrawer: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")) },
+        { capabilities: [...phoneCapabilities, "open-cash-drawer"] },
+      );
+
+      await userEvent.click(inPaid(el, '[data-test="open-drawer"]')!);
+      await flush(el);
+      expect(text(alert(el))).toBe(t("drawer.error"));
+
+      read.answer(billOnePaid);
+      await flush(el);
+
+      expect(text(left(el))).toBe("Still to pay: Bill 2, Bill 3");
+      expect(text(alert(el))).toBe(t("drawer.error"));
+    });
+
+    it("when the paid screen's read answers after Back, what the read at Back said stays", async () => {
+      const read = heldRead();
+      const afterLast = vi
+        .fn<() => Promise<PartyBill[]>>()
+        .mockReturnValueOnce(read.answered)
+        .mockResolvedValue(billOnePaid);
+      const { el } = await payBillOneAfter(readFailed, afterLast);
+      vi.mocked(api.getTablesState).mockRejectedValue(new TypeError("Failed to fetch"));
+
+      backButton(el).click();
+      await flush(el);
+      expect(paidView(el)).toBeNull();
+      expect(text(alert(el))).toBe(t("table.reread_failed"));
+
+      read.answer(billOnePaid);
+      await flush(el);
+
+      expect(text(alert(el))).toBe(t("table.reread_failed"));
+    });
+
+    it("a re-read still out from before the last payment says nothing over the paid screen", async () => {
+      const earlier = heldRead();
+      const { el } = await payBillOneAfter(
+        () => earlier.answered,
+        async () => billOnePaid,
+      );
+      await flush(el);
+      expect(text(left(el))).toBe("Still to pay: Bill 2, Bill 3");
+
+      earlier.fail(new TypeError("Failed to fetch"));
+      await flush(el);
+
+      expect(paidView(el)).not.toBeNull();
+      expect(alert(el)).toBeNull();
+    });
+
+    it("a re-read whose floor read is still out from before the last payment reads no more bills", async () => {
+      const floorRead = heldRead<unknown>();
+      const tables = [mesa({ billCount: 3, outstanding: "170.00" })];
+      const { el, getPartyBills } = await payBillOneAfter(
+        async () => threeBills,
+        async () => billOnePaid,
+        {
+          getTablesState: vi.fn(() =>
+            vi.mocked(api.takeBillPayment).mock.calls.length === 2
+              ? floorRead.answered
+              : Promise.resolve(tables),
+          ),
+        },
+      );
+      await flush(el);
+      const reads = getPartyBills.mock.calls.length;
+
+      floorRead.answer(tables);
+      await flush(el);
+
+      expect(getPartyBills.mock.calls.length).toBe(reads);
+      expect(text(left(el))).toBe("Still to pay: Bill 2, Bill 3");
+    });
+
+    it("lists a named bill by its name and a part-paid bill among those left", async () => {
+      const { el } = await payBillOne([
+        billOne,
+        { ...billThree, hasPayments: true, outstanding: "5.00" },
+        { ...billTwo, billName: "Clint" },
+      ]);
+      await firstDrawn(el);
+
+      expect(text(left(el))).toBe("Still to pay: Bill 2 · Clint, Bill 3");
+    });
+
+    it("names the paid bill in its own name in the title", async () => {
+      const { el } = await payBillOne([{ ...billOne, billName: "Clint" }, billTwo]);
+      await firstDrawn(el);
+
+      expect(title(el)).toBe("Table 4 · Bill 1 · Clint paid");
+    });
+
+    it("lists a presented bill, even one answering zero", async () => {
+      const { el } = await payBillOne([
+        billOne,
+        { ...billTwo, status: "placed", outstanding: "0.00" },
+      ]);
+      await firstDrawn(el);
+
+      expect(text(left(el))).toBe("Still to pay: Bill 2");
+    });
+
+    it.each([
+      ["an empty open bill", { ...billTwo, outstanding: "0.00", total: "0.00" }],
+      ["an abandoned bill", { ...billTwo, status: "abandoned" as const }],
+      ["a settled bill", settled(billTwo)],
+    ])("%s is not listed and Finish table stays", async (_, other) => {
+      const { el } = await payBillOne([billOne, other]);
+      await firstDrawn(el);
+
+      expect(left(el)).toBeNull();
+      expect(title(el)).toBe("Table 4 paid");
+      expect(finishButton(el)).not.toBeNull();
+    });
+
+    it("a table of one bill is as it was: its name, no list, Finish table first, Back staying on the bill", async () => {
+      const { el } = await payBillOne([billOne]);
+      await firstDrawn(el);
+
+      expect(title(el)).toBe("Table 4 paid");
+      expect(left(el)).toBeNull();
+      expect(backButton(el)).toHaveProperty("variant", "secondary");
+      expect(inPaid(el, ".actions wt-button")).toBe(finishButton(el));
+
+      vi.mocked(api.getTablesState).mockResolvedValue([
+        mesa({ billCount: 1, outstanding: "0.00" }),
+      ]);
+      backButton(el).click();
+      await flush(el);
+
+      expect(tableOrder(el).orderId).toBe("wo-4");
+      expect(text(inOrder(tableOrder(el), "[data-party-outstanding]"))).toBe(money("0.00"));
+    });
+
+    it("with a draft save refused at Back, the screen stays on the paid bill and says why", async () => {
+      const { el } = await payBillOne(threeBills, () => new Promise<PartyBill[]>(() => {}));
+      await firstDrawn(el);
+      vi.mocked(api.saveDraft).mockRejectedValue(new TypeError("Failed to fetch"));
+      tableOrder(el).draftStore!.appendLines([{ product: beer, quantity: "1" }]);
+
+      backButton(el).click();
+      await flush(el);
+
+      expect(api.saveDraft).toHaveBeenCalled();
+      expect(paidView(el)).toBeNull();
+      expect(tableOrder(el).orderId).toBe("wo-4");
+      expect(text(el.shadowRoot!.querySelector('p.error[role="alert"]'))).toContain(
+        t("table.draft_save_failed"),
+      );
+    });
+  });
 });
 
 describe("till-app: a phone's first payment picks up the one free reader (default 18)", () => {

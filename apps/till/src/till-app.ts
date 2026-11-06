@@ -328,6 +328,7 @@ import {
   owing,
   paidInPart,
   shownBills,
+  stillToPay,
 } from "./state/bill-state.js";
 import { foldRetrievedPortions, portionWireLines } from "./state/counter-portion-rows.js";
 import { billRequestOf } from "./state/table-signals.js";
@@ -3099,8 +3100,8 @@ export class TillApp extends LitElement {
    * it is dropped and a read that ends without an answer drops nothing. */
   #printProblemsRead = 0;
   #printProblemsShown = 0;
-  /** Identifies the latest {@link #rereadAmounts}, so once a newer one has started, an older one
-   * works out no "Still to pay" from its bills and says nothing. */
+  /** Identifies the latest {@link #rereadAmounts} or {@link #readBillsForPaidScreen}, so once a
+   * newer one has started, an older one works out no "Still to pay" from its bills and says nothing. */
   #amountsReread = 0;
   /** The last read of the party's groups failed, so {@link tabGroups} is empty for want of an answer. */
   #groupsUnread = false;
@@ -11480,20 +11481,28 @@ export class TillApp extends LitElement {
     return read;
   }
 
-  /** After a cancel or Change to the order `orderId` that landed, or may have: the floor's party,
-   * then the order's lines and bills. When the order is no longer the open one once the floor
-   * answers, or a later re-read has started, nothing more is read or said. Otherwise, unless the
-   * waiter has left the order since `visit` ({@link #hasLeftOrder}) or a later re-read has started:
-   * this re-read's own failed floor or bills read is said, unless another message already is,
+  /** After a change to the order `orderId` that landed, or may have: the floor's party, then the
+   * order's lines (unless `readLines` is false: the caller is reading them) and bills. When the
+   * order is no longer the open one once the floor answers, or a later re-read has started, nothing
+   * more is read or said. Otherwise, unless the waiter has left the order since `visit`
+   * ({@link #hasLeftOrder}) or a later re-read has started: this re-read's own failed floor or bills
+   * read is said, unless another message already is,
    * whether or not another read has refreshed the order since; and with its floor read failed and
    * its bills read still the latest, what the party still owes is taken from those bills when they
    * are the party's, which is the sum the floor would have answered (`readBillsOfParties` in
    * `apps/server/src/parties.ts` feeds both). */
-  async #rereadAmounts(orderId: string, visit: number, balance?: BillBalance): Promise<void> {
+  async #rereadAmounts(
+    orderId: string,
+    visit: number,
+    balance?: BillBalance,
+    readLines = true,
+  ): Promise<void> {
     const reread = ++this.#amountsReread;
     const floorRead = await this.#retakePartyFromFloor();
     if (this.activeTabId !== orderId || reread !== this.#amountsReread) return;
-    const [, bills] = await this.#loadLinesAndBills(balance);
+    const bills = readLines
+      ? (await this.#loadLinesAndBills(balance))[1]
+      : await this.#loadPartyBills(balance);
     if (this.#hasLeftOrder(orderId, visit) || reread !== this.#amountsReread) return;
     if (
       !floorRead &&
@@ -16902,14 +16911,12 @@ export class TillApp extends LitElement {
       }
       if (code === "party.bill_outstanding") {
         this.finishRefused = true;
-        this.#leavePaidScreen();
-        await this.#loadPartyBills();
+        await this.#readAfterFinishRefused(asked.visit);
         return;
       }
       if (isPaymentsReceived(error)) {
         this.errorKey = "table.finish_bill_holds_money";
-        this.#leavePaidScreen();
-        await this.#loadPartyBills();
+        await this.#readAfterFinishRefused(asked.visit);
         return;
       }
       if (code === "draft.out_of_date" || code === "draft.taken_over") this.errorKey = { code };
@@ -16920,6 +16927,16 @@ export class TillApp extends LitElement {
       if (this.#finishOpening === opening) this.#finishOpening = undefined;
     }
     if (live()) await this.#onTableClosed(party.id, asked.visit, asked.sent);
+  }
+
+  /** A last payment reads no floor, so leaving the paid screen on a refusal reads what the party
+   * still owes as well as its bills. */
+  async #readAfterFinishRefused(visit: number): Promise<void> {
+    const fromPaid = this.drill?.kind === "paid";
+    this.#leavePaidScreen();
+    if (fromPaid && this.activeTabId !== undefined)
+      await this.#rereadAmounts(this.activeTabId, visit);
+    else await this.#loadPartyBills();
   }
 
   async #readFinishDishes(
@@ -17204,8 +17221,7 @@ export class TillApp extends LitElement {
         this.#closeFinishTable();
         if (code === "party.bill_outstanding") this.finishRefused = true;
         else this.errorKey = "table.finish_bill_holds_money";
-        this.#leavePaidScreen();
-        await this.#loadPartyBills();
+        await this.#readAfterFinishRefused(asked.visit);
       } else if (code === "party.unserved_dishes") {
         const opening = { composition: asked, controller: new AbortController() };
         this.#finishOpening = opening;
@@ -17964,16 +17980,24 @@ export class TillApp extends LitElement {
     return bill === undefined ? undefined : billName(this.orderParty?.displayName ?? "", bill);
   }
 
-  /** Saves the draft of the bill on screen, then shows the bill chosen last, unless the waiter left
-   * the table or the bill on screen changed while the save was out. */
   async #onSwitchBill(event: Event): Promise<void> {
-    this.#switchTo = (event as CustomEvent<{ workingOrderId: string }>).detail.workingOrderId;
-    if (!(await this.#flushBeforeSwitch())) return;
+    const shown = await this.#switchToBill(
+      (event as CustomEvent<{ workingOrderId: string }>).detail.workingOrderId,
+    );
+    if (shown) await Promise.all([this.#loadTabLines(), this.#loadBillBalance()]);
+  }
+
+  /** Saves the draft of the bill on screen, then shows the bill chosen last, unless the waiter left
+   * the table or the bill on screen changed while the save was out. True when it showed a bill, whose
+   * lines and balance the caller reads. */
+  async #switchToBill(workingOrderId: string): Promise<boolean> {
+    this.#switchTo = workingOrderId;
+    if (!(await this.#flushBeforeSwitch())) return false;
     const chosen = this.#switchTo;
     this.#switchTo = undefined;
-    if (chosen === undefined) return;
+    if (chosen === undefined) return false;
     this.#showBill(chosen);
-    await this.#loadTabLines();
+    return true;
   }
 
   async #flushBeforeSwitch(): Promise<boolean> {
@@ -19282,7 +19306,8 @@ export class TillApp extends LitElement {
   ): Promise<void> {
     this.#closeBillPaying();
     this.result = invoice;
-    this.#showTicket(open.billId, true, payments);
+    // A counter order is no bill of the party a handheld may still hold.
+    this.#showTicket(open.billId, true, open.surface === "table" ? payments : null);
     // The paid order drops off the held list.
     if (open.surface === "counter")
       await this.#refreshAfterWrite("held", "refresh.held_after_sale");
@@ -19627,8 +19652,11 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * `settled` is the bill's payments when this payment settled it: on a handheld a simplified
-   * invoice then shows the paid screen, whose Finish table (`table.finish`) frees the table.
+   * `settled` is non-null only for a table's bill this payment settled; it holds the bill's
+   * payments, or none for a whole-bill payment. On a handheld a simplified invoice then shows the
+   * paid screen, which offers Finish table (`table.finish`) unless other bills are still to pay. The
+   * bills held predate this payment, so the screen draws from them without the paid bill, and the
+   * read here corrects them.
    */
   #showTicket(
     workingOrderId: string,
@@ -19653,14 +19681,58 @@ export class TillApp extends LitElement {
     this.paidPayments = paid ? settled : [];
     this.#pushDrill({ kind: paid ? "paid" : "ticket" });
     void this.#refreshReceiptPrint();
+    if (paid) void this.#readBillsForPaidScreen();
   }
 
-  /** A handheld's order screen is a tab (`builtInScreensFor`), which the paid screen covers. */
-  #onBackToTable(): void {
+  /** Stops any {@link #rereadAmounts} still out from before the payment, and reads the bills, not the
+   * floor. Its success ends a read's failure said earlier, unless the waiter has left the paid screen
+   * or a newer bills read has started, where the message may be that read's. */
+  async #readBillsForPaidScreen(): Promise<void> {
+    this.#amountsReread++;
+    const { read, bills } = await this.#loadPartyBills(undefined, true, true);
+    if (
+      bills !== null &&
+      read === this.#partyBillsRead &&
+      this.drill?.kind === "paid" &&
+      this.errorKey === "table.reread_failed"
+    )
+      this.errorKey = undefined;
+  }
+
+  #paidBill(): PartyBill | undefined {
+    return this.partyBills.find((bill) => bill.workingOrderId === this.ticketWorkingOrderId);
+  }
+
+  #paidOtherBills(): PartyBill[] {
+    const paid = this.#paidBill();
+    if (paid === undefined) return [];
+    return shownBills(this.partyBills).filter((bill) => bill !== paid && stillToPay(bill));
+  }
+
+  #paidTitle(): string {
+    const table = this.#activeTableTitle();
+    const paid = this.#paidBill();
+    return paid !== undefined && this.#paidOtherBills().length > 0 ? billName(table, paid) : table;
+  }
+
+  /** A handheld's order screen is a tab (`builtInScreensFor`), which the paid screen covers. With
+   * other bills to pay it moves to the first of them, and only then reads: a bills read loads the
+   * balance of whichever bill is on screen when it answers. The lines are read beside the floor,
+   * not after it, or the paid bill's lines stay drawn under the next bill's name until it answers. */
+  async #onBackToTable(): Promise<void> {
     if (this.drill?.kind !== "paid") return;
+    const next = this.#paidOtherBills()[0];
+    const visit = this.#orderVisit;
     this.errorKey = undefined;
     this.#leavePaidScreen();
-    void this.#loadPartyBills();
+    const moved = next !== undefined && (await this.#switchToBill(next.workingOrderId));
+    if (this.activeTabId === undefined) await this.#loadPartyBills();
+    else if (moved)
+      await Promise.all([
+        this.#loadTabLines(),
+        this.#rereadAmounts(this.activeTabId, visit, undefined, false),
+      ]);
+    else await this.#rereadAmounts(this.activeTabId, visit);
   }
 
   /** A refused Finish table (`table.finish`) is acted on from the order screen beneath. */
@@ -20211,7 +20283,8 @@ export class TillApp extends LitElement {
       case "paid":
         return html`<till-paid-view
           slot="drill"
-          .tableName=${this.#activeTableTitle()}
+          .tableName=${this.#paidTitle()}
+          .billsLeft=${this.#paidOtherBills().map(billLabel)}
           .total=${this.result!.total}
           .payments=${this.paidPayments}
           .change=${this.paidPayments.length === 0 && this.result!.tender.method === "cash" ? this.result!.tender.change : null}
@@ -20221,7 +20294,7 @@ export class TillApp extends LitElement {
           .canPrint=${this.deviceId === undefined || this.capabilities.includes("print-receipt")}
           .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
           .busy=${this.originalReceiptBusy}
-          @back-to-table=${() => this.#onBackToTable()}
+          @back-to-table=${() => void this.#onBackToTable()}
         ></till-paid-view>`;
       case "hours":
         return html`<till-hours-screen

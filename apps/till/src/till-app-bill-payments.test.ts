@@ -7529,3 +7529,133 @@ it("A773 keeps the approved refusal when the refused payment's follow-up balance
     "4 · Bill 1. Send or remove the unsent dishes before paying.",
   );
 });
+
+describe("till-app: switching bills reads the balance of the bill now shown", () => {
+  const partPaid = (workingOrderId: string, billNumber: number) =>
+    billOf({ workingOrderId, billNumber, outstanding: "70.00", hasPayments: true });
+  const holding = (workingOrderId: string, received: string) =>
+    balanceOf({ workingOrderId, received, outstanding: "70.00", payments: [paymentOf()] });
+  const receivedLine = (el: TillApp) =>
+    tableOrder(el).shadowRoot!.querySelector("[data-bill-received]");
+  const balanceReads = () => vi.mocked(api.getBillBalance).mock.calls.map(([id]) => id);
+
+  /** A balance read per bill that answers only when `answer` is called with that bill's id. */
+  function heldBalances(received: Record<string, string>) {
+    const waiting = new Map<string, () => void>();
+    return {
+      answer: (id: string) => waiting.get(id)!(),
+      getBillBalance: vi.fn(
+        (id: string) =>
+          new Promise<BillBalance>((resolve) => {
+            waiting.set(id, () => resolve(holding(id, received[id]!)));
+          }),
+      ),
+    };
+  }
+
+  it("reads the balance of a part-paid bill it switches to and shows what it has taken", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([billOf(), partPaid("wo-5", 2)]),
+      getBillBalance: vi.fn(async (id: string) => holding(id, "30.00")),
+    });
+    const order = await openTable(el);
+    expect(balanceReads()).toEqual([]);
+
+    emit(order, "switch-bill", { workingOrderId: "wo-5" });
+    await flush(el);
+
+    expect(tableOrder(el).orderId).toBe("wo-5");
+    expect(balanceReads()).toEqual(["wo-5"]);
+    expect(text(receivedLine(el))).toContain(money("30.00"));
+  });
+
+  it("reads nothing for a bill with no payments, and drops the last bill's balance", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([
+          partPaid("wo-4", 1),
+          billOf({ workingOrderId: "wo-5", billNumber: 2, outstanding: "20.00" }),
+        ]),
+      getBillBalance: vi.fn(async (id: string) => holding(id, "50.00")),
+    });
+    const order = await openTable(el);
+    expect(balanceReads()).toEqual(["wo-4"]);
+
+    emit(order, "switch-bill", { workingOrderId: "wo-5" });
+    await flush(el);
+
+    expect(tableOrder(el).orderId).toBe("wo-5");
+    expect(balanceReads()).toEqual(["wo-4"]);
+    expect(tableOrder(el).billBalance).toBeNull();
+    expect(receivedLine(el)).toBeNull();
+  });
+
+  it("draws none of the last bill's money while the next bill's balance has no answer", async () => {
+    const reads = heldBalances({ "wo-4": "50.00", "wo-5": "30.00" });
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([partPaid("wo-4", 1), partPaid("wo-5", 2)]),
+      getBillBalance: reads.getBillBalance,
+    });
+    const order = await openTable(el);
+    reads.answer("wo-4");
+    await flush(el);
+    expect(text(receivedLine(el))).toContain(money("50.00"));
+
+    emit(order, "switch-bill", { workingOrderId: "wo-5" });
+    await flush(el);
+
+    expect(tableOrder(el).orderId).toBe("wo-5");
+    expect(tableOrder(el).billBalance?.workingOrderId).toBe("wo-4");
+    expect(receivedLine(el)).toBeNull();
+    expect(balanceReads()).toEqual(["wo-4", "wo-5"]);
+
+    reads.answer("wo-5");
+    await flush(el);
+    expect(text(receivedLine(el))).toContain(money("30.00"));
+  });
+
+  it("ends on the last bill's balance when the first switch's read answers after it", async () => {
+    const reads = heldBalances({ "wo-5": "30.00", "wo-9": "40.00" });
+    const { el } = await mountApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([billOf(), partPaid("wo-5", 2), partPaid("wo-9", 3)]),
+      getBillBalance: reads.getBillBalance,
+    });
+    const order = await openTable(el);
+
+    emit(order, "switch-bill", { workingOrderId: "wo-5" });
+    await flush(el);
+    emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-9" });
+    await flush(el);
+    expect(balanceReads()).toEqual(["wo-5", "wo-9"]);
+
+    reads.answer("wo-9");
+    await flush(el);
+    reads.answer("wo-5");
+    await flush(el);
+
+    expect(tableOrder(el).orderId).toBe("wo-9");
+    expect(tableOrder(el).billBalance?.workingOrderId).toBe("wo-9");
+    expect(text(receivedLine(el))).toContain(money("40.00"));
+  });
+
+  it("reads only the last bill's balance when two switches are asked for at once", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([billOf(), partPaid("wo-5", 2), partPaid("wo-9", 3)]),
+      getBillBalance: vi.fn(async (id: string) => holding(id, id === "wo-9" ? "40.00" : "30.00")),
+    });
+    const order = await openTable(el);
+
+    emit(order, "switch-bill", { workingOrderId: "wo-5" });
+    emit(order, "switch-bill", { workingOrderId: "wo-9" });
+    await flush(el);
+
+    expect(tableOrder(el).orderId).toBe("wo-9");
+    expect(balanceReads()).toEqual(["wo-9"]);
+    expect(text(receivedLine(el))).toContain(money("40.00"));
+  });
+});

@@ -202,6 +202,7 @@ export interface BillBalance {
   received: Decimal;
   /** The applied amount of the pending payments. */
   reserved: Decimal;
+  /** The total less received and reserved; zero once the bill is settled or abandoned. */
   outstanding: Decimal;
   /** The net tips of the received payments. */
   tips: Decimal;
@@ -637,7 +638,7 @@ export async function readBillBalance(
     total: money(funds.total),
     received: money(funds.received),
     reserved: money(funds.reserved),
-    outstanding: order.status === "open" ? money(outstanding) : ZERO,
+    outstanding: order.status === "open" || order.status === "placed" ? money(outstanding) : ZERO,
     tips: money(
       sumDecimals(held.filter(({ row }) => row.state === "received").map(({ netTip }) => netTip)),
     ),

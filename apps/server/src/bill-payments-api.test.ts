@@ -652,6 +652,48 @@ describe("the balance", () => {
     });
   });
 
+  it("reads a presented bill with nothing paid as owing its whole total", async () => {
+    const billId = await tabWith("Tarta");
+    expect((await request("POST", `/api/working-orders/${billId}/place`)).status).toBe(200);
+
+    const { status, json } = await balance(billId);
+
+    expect(status).toBe(200);
+    expect(json).toMatchObject({
+      status: "placed",
+      total: "18.00",
+      received: "0.00",
+      outstanding: "18.00",
+    });
+  });
+
+  it("reads a bill settled in one whole payment as owing nothing, though no bill payment records it", async () => {
+    const billId = await tabWith("Tarta");
+    expect((await request("POST", `/api/working-orders/${billId}/place`)).status).toBe(200);
+    const collected = await request("POST", `/api/working-orders/${billId}/collect`, {
+      tender: { method: "cash", amount: "18.00" },
+    });
+    expect(collected.status).toBe(200);
+
+    const { json } = await balance(billId);
+
+    expect(json).toMatchObject({
+      status: "settled",
+      total: "18.00",
+      received: "0.00",
+      outstanding: "0.00",
+    });
+  });
+
+  it("reads an abandoned bill as owing nothing, keeping its total", async () => {
+    const billId = await tabWith("Tarta");
+    expect((await request("DELETE", `/api/working-orders/${billId}`)).status).toBe(200);
+
+    const { json } = await balance(billId);
+
+    expect(json).toMatchObject({ status: "abandoned", total: "18.00", outstanding: "0.00" });
+  });
+
   it("says how each card was taken: keyed on a separate terminal, or at a reader; cash says neither", async () => {
     const billId = await bill120();
     const cash = await contribute(billId, "10.00");

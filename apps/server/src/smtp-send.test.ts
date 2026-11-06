@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import dns from "node:dns";
 import type { Socket } from "node:net";
 import { sendSmtpMessage } from "./smtp-send.js";
 import { smtpRig, smtpTestTls } from "./testing/smtp-settings-fixture.js";
@@ -246,13 +247,28 @@ describe("SMTP wire diagnostics", () => {
   });
 
   it("reports an invalid hostname as missing rather than a deadline", async () => {
-    expect(
-      await sendSmtpMessage(
-        { url: "smtp://a987-smtp.invalid:587", from: "venue@example.test" },
-        message,
-        { timeoutMs: 5000 },
-      ),
-    ).toEqual({ status: "unknown", reason: "email.test_host_not_found" });
+    // A real resolver slower than the deadline would answer email.test_timeout instead.
+    const lookup = vi.spyOn(dns, "lookup").mockImplementation(((
+      _host: string,
+      _options: unknown,
+      callback: (error: Error) => void,
+    ) => {
+      setImmediate(() =>
+        callback(Object.assign(new Error("getaddrinfo ENOTFOUND"), { code: "ENOTFOUND" })),
+      );
+    }) as typeof dns.lookup);
+    try {
+      expect(
+        await sendSmtpMessage(
+          { url: "smtp://a987-smtp.invalid:587", from: "venue@example.test" },
+          message,
+          { timeoutMs: 5000 },
+        ),
+      ).toEqual({ status: "unknown", reason: "email.test_host_not_found" });
+      expect(lookup.mock.calls.map(([host]) => host)).toEqual(["a987-smtp.invalid"]);
+    } finally {
+      lookup.mockRestore();
+    }
   });
 
   it.each(["not a URL", "https://localhost"])(

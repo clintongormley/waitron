@@ -421,7 +421,8 @@ phone last chose Lector 2 and the Barra receipt printer.
     today's full ticket view (picture 9): the payments, whether a receipt was sent to a printer
     (default 12), and **Cerrar mesa**, which the waiter presses as the guests leave — paying never frees the table
     by itself (default 11). Once A758's not-served check is built, Cerrar mesa opens
-    it first.
+    it first. (2026-11-06, A1236: with other bills still to pay, the paid screen has no Cerrar mesa;
+    it names the bill and lists the others.)
 
 **First payment on a phone, and a reader or printer that has gone** (pictures 4 and 5; owner,
 2026-10-19; defaults 18 and 19). When this phone has no reader it can charge, the row opens by
@@ -744,7 +745,8 @@ are given.
    only cancel route, `POST /api/demo-reader/cancel`, is the simulator's pretend reader, mounted only
    for it, `till-api.ts:1178`, `:1220`).
 10. **"Cobrar al siguiente"** after a share, keeping the way chosen.
-11. **Settled: the table closes only on Cerrar mesa**, now a big button on the paid screen. Service
+11. **Settled: the table closes only on Cerrar mesa**, now a big button on the paid screen
+    (2026-11-06, A1236: not while other bills are still to pay; see §10's item 10). Service
     design §8 (owner-approved 2026-09-26): "Paying does not by itself free an occupied table. By
     default, **Finish table** closes the visit." Once built, it first runs A758's check (D12, owner
     answer Q40, 2026-10-18): "Finish table warns about dishes not served and offers 'Cancel and
