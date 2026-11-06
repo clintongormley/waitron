@@ -1449,14 +1449,19 @@ export class MenusScreen extends LitElement {
     this.#followStatus(true);
   }
 
-  /** Puts one Preview change back with the write its own form would make. A refusal stays beside
-   * the change; once that change is no longer drawn, it is named beside the list. */
+  #undoBlocked(menuId: string): boolean {
+    return (
+      this.busy || this.undoOut !== null || this.homePending !== null || this.publishing.has(menuId)
+    );
+  }
+
+  /** Puts one Preview change back with the write its own form would make. A refusal shows beside
+   * the change while the Preview draws it with its Undo; otherwise it is named beside the list. */
   #undo(changeId: string, change: string): void {
     const menuId = this.menuId;
     const preview = this.preview;
     if (menuId === null || preview === null || this.previewError) return;
-    if (this.busy || this.undoOut !== null || this.homePending !== null) return;
-    if (this.publishing.has(menuId)) return;
+    if (this.#undoBlocked(menuId)) return;
     const action = menuChangeActions({
       preview,
       languages: currentContentLanguages().languages,
@@ -1469,17 +1474,16 @@ export class MenusScreen extends LitElement {
     this.undoRefusals = without(this.undoRefusals, [changeId]);
     this.undoResult = null;
     const shown = () => this.menuId === menuId && this.view === "preview";
-    const listed = () =>
+    const drawn = () =>
       shown() &&
-      !this.previewError &&
-      this.preview?.changes.some(({ id }) => id === changeId) === true;
+      this.renderRoot.querySelector("dashboard-menu-preview")?.drawsUndo(changeId) === true;
     const task = async () => {
       try {
         try {
           await sendMenuUndo(this.api, command);
         } catch (error) {
           const reason = undoRefusalText(error, command);
-          if (listed()) this.undoRefusals = { ...this.undoRefusals, [changeId]: reason };
+          if (drawn()) this.undoRefusals = { ...this.undoRefusals, [changeId]: reason };
           else {
             const menu = this.menus.find(({ id }) => id === menuId)?.name ?? sentFrom;
             this.memberError = fill("menu_preview.undo_refused_change", { menu, change, reason });
@@ -3115,12 +3119,7 @@ export class MenusScreen extends LitElement {
       .publishing=${this.publishing.has(this.menuId!)}
       .result=${this.publishResult}
       .undoing=${this.#undoingHere()}
-      .undoBlocked=${
-        this.busy ||
-        this.homePending !== null ||
-        this.publishing.has(this.menuId!) ||
-        this.undoOut !== null
-      }
+      .undoBlocked=${this.#undoBlocked(this.menuId!)}
       .undoRefusals=${this.undoRefusals}
       .undoResult=${this.undoResult}
       @wt-menu-undo=${(event: CustomEvent<{ changeId: string; change: string }>) => {

@@ -314,7 +314,8 @@ export class MenuPreviewPanel extends LitElement {
   #positions: ReadonlyMap<MenuChange, number> = new Map();
   #actionsLanguages = "";
   #shownRefusals: Record<string, string> = {};
-  /** Refusals drawn for the first time in this list, the only ones announced. */
+  /** Refusals that are news in this update, the only ones announced: one drawn again, after its
+   * change is shown again or the list is redrawn, is not. */
   #freshRefusals = new Set<string>();
   /** Changes whose Undo finished since their refusal was last drawn: a refusal after one is news
    * even in the same words. */
@@ -438,7 +439,7 @@ export class MenuPreviewPanel extends LitElement {
       for (const id of this.#freshRefusals)
         this.#refusalTurns.set(id, (this.#refusalTurns.get(id) ?? 0) + 1);
       this.#shownRefusals = this.undoRefusals;
-    } else if (changed.has("preview")) this.#freshRefusals = new Set();
+    }
     const languages = currentContentLanguages().languages;
     if (!changed.has("preview") && this.#actionsLanguages !== languages.join(" ")) {
       this.#actionsLanguages = languages.join(" ");
@@ -471,6 +472,7 @@ export class MenuPreviewPanel extends LitElement {
   }
 
   override updated(): void {
+    this.#freshRefusals = new Set();
     const id = this.#focusedUndo;
     this.#focusedUndo = null;
     if (id === null) return;
@@ -486,6 +488,18 @@ export class MenuPreviewPanel extends LitElement {
       root.querySelector<HTMLElement>("a[data-hide-change]") ??
       root.querySelector<HTMLElement>('[data-test="changes-pane"]');
     next?.focus({ preventScroll: true });
+  }
+
+  /** Whether the change's bullet is drawn with its Undo: only then can its refusal show in it. */
+  drawsUndo(changeId: string): boolean {
+    const preview = this.preview;
+    return (
+      !this.failed &&
+      preview !== null &&
+      this.#upToDate(preview) === null &&
+      !this.hiddenChangeIds.has(changeId) &&
+      this.#actions.get(changeId)?.kind === "undo"
+    );
   }
 
   #undo(event: Event, change: MenuChange, words: string): void {

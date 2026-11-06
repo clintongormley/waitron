@@ -258,17 +258,18 @@ Owner approved 2026-11-06 via the watcher; reason sentences are the owner's own.
 | `menu_preview.undo_menu_gone` | `catalogue.not_found`, menu name and Home display | This menu has been deleted, so there is nothing to undo. | Esta carta se ha eliminado, así que no hay nada que deshacer. |
 | `menu_preview.undo_item_gone` | `menu_item.not_found`, a dish's or a variant's price | {name} is no longer on this menu. | {name} ya no está en esta carta. |
 | `menu_preview.undo_section_gone` | `menu_section.not_found`, a section | Section {name} has been deleted, so it cannot be restored. | La sección {name} se ha eliminado, así que no se puede restaurar. |
-| `menu_preview.undo_section_invalid` | `menu_section.invalid`, a section, when the refusal names the `color` or `image` field, or names none and the Undo sent only those (otherwise the code's own message) | {name}'s published photo or colour can no longer be used. | La foto o el color publicados de {name} ya no se pueden usar. |
+| `menu_preview.undo_section_invalid` | `menu_section.invalid`, a section, when the refusal names the `color` or `image` field (otherwise the code's own message) | {name}'s published photo or colour can no longer be used. | La foto o el color publicados de {name} ya no se pueden usar. |
 | `menu_preview.undo_language_off` | `content.translation_invalid`, a section | A language {name} was published in has been disabled since, so its name cannot be restored. | Se ha desactivado un idioma en el que se publicó {name}, así que no se puede restaurar su nombre. |
 | `menu_preview.undo_display_invalid` | `menu.home_display_invalid`, Home display | The published {device} display setting is no longer offered. | El ajuste de pantalla publicado para {device} ya no se ofrece. |
 
 `{device}` is the existing `home.device_handheld` / `home.device_till` ("Handheld" / "Terminal de
-mano", "Till" / "Caja registradora"). An Undo refused once its change is no longer drawn (the
-person has left this menu's Preview tab, or a fresh preview no longer lists the change) is named
-beside the list with `menu_preview.undo_refused_change` ("Not undone on {menu}: {change}.
-{reason}"), where a price save refused away from its tab is named
-(`menus-screen.ts:2099-2109`). It does not reuse `menus.change_not_saved` ("Your change to {name}
-was not saved."): that would say the change itself was lost, when only the Undo failed.
+mano", "Till" / "Caja registradora"). An Undo refused while its bullet is not drawn with its
+Undo (the person has left this menu's Preview tab or hidden the change, or the preview can no
+longer be read, no longer lists the change or no longer offers its Undo) is named beside the list
+with `menu_preview.undo_refused_change` ("Not undone on {menu}: {change}. {reason}"), where a
+price save refused away from its tab is named (`menus-screen.ts:2099-2109`). It does not reuse
+`menus.change_not_saved` ("Your change to {name} was not saved."): that would say the change
+itself was lost, when only the Undo failed.
 
 PRs 2–5 add their own refusal sentences to this section, in the same form, before each lands.
 
@@ -468,7 +469,8 @@ unchanged.
   put back to none". If it cannot, the photo field is covered by Task 1.3's planner test only; say
   so in the PR. (A live photo cannot be deleted from the library while a live version uses it —
   the review read `packages/media/src/images.ts:229-252,414-428` — so there is no "photo gone"
-  database case.)
+  database case.) *As built:* the photo case is `apps/server/src/menu-undo-photo.test.ts`, which
+  loads the media migrations the catalogue's own test database lacks.
 - [ ] An I `section_changed` (the included Drinks menu renamed) stays `edit_menu`.
 - [ ] `pnpm --filter @waitron/catalogue exec vitest run src/menu-undo.db.test.ts src/menu-undo.test.ts`
 
@@ -600,23 +602,24 @@ is queued and cleared only when that task ends. The Preview widget's `undoing` i
 `changeId` only while the record's menu is the one open, else null.
 
 `#undo(changeId, change)`: return unless `menuId`, `preview` and no `previewError`; return when
-`busy`, `undoOut !== null` (one Undo out at a time, on any menu), `homePending !== null`
-(`:752,2030`) or this menu is publishing. Take
+`#undoBlocked(menuId)`: `busy`, `undoOut !== null` (one Undo out at a time, on any menu),
+`homePending !== null` (`:752,2030`) or this menu is publishing. Take
 the action from the actions map built from `{ preview, languages: currentContentLanguages().languages }`;
 return unless `undo`. Set `busy`, `undoOut`, clear this change's refusal and `undoResult`. Run in
 `#priceWrites.run("undo:" + <row key>)` for the two price commands (Decision 3), else
 `#writes.run("undo:" + menuId)`. Inside: `await sendMenuUndo(this.api, command)`. While the same
 menu's Preview tab is shown (`this.menuId === menuId && this.view === "preview"`, as `#savePrice`
 judges it, `:2099-2109`): a success sets `undoResult`, and a refusal sets
-`undoRefusals[changeId] = undoRefusalText(…)` when the current preview read has not failed and
-still lists `changeId`. Otherwise a refusal sets `memberError` with
+`undoRefusals[changeId] = undoRefusalText(…)` when the Preview widget's `drawsUndo(changeId)`
+answers true (its read has not failed and it draws that change, not hidden, with its Undo).
+Otherwise a refusal sets `memberError` with
 `menu_preview.undo_refused_change` ("Not undone on {menu}: {change}. {reason}", `{menu}` the
 menu list's name for the menu the Undo was sent from, or the name taken when it was sent once
 that menu is gone, `{reason}` from `undoRefusalText`), and a success away from the Preview sets
 nothing. After a rename success also `await this.#watchMenus().catch(() => undefined)`
 as `#saveMenu` does (`:1427`); after a success `await this.#refresh()`. Clear `busy` and
 `undoOut` in a `finally` around the task's body. `#publish` returns while `undoOut`'s menu is the
-menu being published. Pass `undoing` (as above), `undoBlocked = busy || homePending !== null || publishing.has(menuId) || undoOut !== null`,
+menu being published. Pass `undoing` (as above), `undoBlocked = #undoBlocked(menuId)`,
 `undoRefusals`, `undoResult` to `dashboard-menu-preview` in `#renderPreview` (`:3029-3058`), and
 listen for `wt-menu-undo`.
 
@@ -631,7 +634,8 @@ listen for `wt-menu-undo`.
   - Refused after the person switched to Structure: `memberError` reads "Not undone on {menu}:
     {change}. {reason}", never "was not saved".
   - Refused after a fresh preview stopped listing the change while the Undo was out: the same
-    sentence in `memberError`.
+    sentence in `memberError`. Likewise after the person hid the change, and after a fresh preview
+    still lists the change but no longer offers its Undo.
   - Refused after the menu was renamed, and after it was deleted, while the Undo was out:
     `{menu}` is the new name, then the name taken when the Undo was sent.
   - An Undo held unanswered on one menu, another menu opened (the fixture gives it a change with

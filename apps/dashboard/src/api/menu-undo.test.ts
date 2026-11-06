@@ -141,28 +141,15 @@ describe("undoRefusalText", () => {
     },
   );
 
-  it("words a section refusal naming no field as the photo or colour when the Undo puts back only those", () => {
+  it("falls back to the code's own message for a section refusal naming no field, even when the Undo puts back only the photo and colour", () => {
     const presentation: MenuUndoCommand = {
       ...section,
       patch: { color: null, image: null },
     } as MenuUndoCommand;
     expect(undoRefusalText(refused("menu_section.invalid"), presentation)).toBe(
-      "Mains's published photo or colour can no longer be used.",
+      codeMessage("menu_section.invalid"),
     );
   });
-
-  it.each([
-    ["names", { internalName: "Mains", names: { en: "Mains" } }],
-    ["names and colour", { internalName: "Mains", names: { en: "Mains" }, color: null }],
-  ])(
-    "falls back to the code's own message for a section refusal naming no field when the Undo puts back %s",
-    (_label, patch) => {
-      const named = { ...section, patch } as MenuUndoCommand;
-      expect(undoRefusalText(refused("menu_section.invalid"), named)).toBe(
-        codeMessage("menu_section.invalid"),
-      );
-    },
-  );
 
   it("falls back to the code's own message for a section refusal naming another field", () => {
     expect(

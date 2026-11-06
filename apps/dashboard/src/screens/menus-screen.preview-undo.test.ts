@@ -744,6 +744,52 @@ it("names a refused Undo beside the list when a fresh preview stopped listing it
   expect(tabsOf(el).value).toBe("preview");
 });
 
+it("names a refused Undo beside the list when its change was hidden while it was out", async () => {
+  const write = held();
+  const updateSection = vi.fn(() => write.promise);
+  const fake = fakeApi({ updateSection } as unknown as Partial<DashboardApi>);
+  const { el, panel } = await mount(fake.api);
+  const bullet = words(panel(), "mains-colour");
+  await userEvent.click(undoButton(panel(), "mains-colour")!);
+  await vi.waitFor(() => expect(updateSection).toHaveBeenCalledTimes(1));
+  await userEvent.click(
+    panel().shadowRoot!.querySelector<HTMLElement>('a[data-hide-change="mains-colour"]')!,
+  );
+  await vi.waitFor(() => expect(undoButton(panel(), "mains-colour")).toBeNull());
+
+  write.refuse({ code: "menu_section.not_found" });
+  await vi.waitFor(() =>
+    expect(memberError(el)).toBe(
+      `Not undone on Lunch Menu: ${bullet}. Section Mains has been deleted, so it cannot be restored.`,
+    ),
+  );
+});
+
+it("names a refused Undo beside the list when a fresh preview still lists its change but offers no Undo", async () => {
+  const live = new LiveData();
+  const write = held();
+  const renameCatalogue = vi.fn(() => write.promise);
+  const fake = fakeApi({ renameCatalogue, liveData: live } as unknown as Partial<DashboardApi>);
+  const { el, panel } = await mount(fake.api);
+  const bullet = words(panel(), "own-rename");
+  await userEvent.click(undoButton(panel(), "own-rename")!);
+  await vi.waitFor(() => expect(renameCatalogue).toHaveBeenCalledTimes(1));
+
+  fake.state.preview = { ...previewOf([rename, recolour]), live: null };
+  live.invalidate([{ type: "catalogues" }]);
+  await vi.waitFor(() => expect(panel().preview?.live).toBeNull());
+  await panel().updateComplete;
+  expect(panel().shadowRoot!.querySelector('[data-change-row="own-rename"]')).not.toBeNull();
+  expect(undoButton(panel(), "own-rename")).toBeNull();
+
+  write.refuse({ code: "menu.name_taken" });
+  await vi.waitFor(() =>
+    expect(memberError(el)).toBe(
+      `Not undone on Lunch Menu: ${bullet}. Another menu called Lunch already exists.`,
+    ),
+  );
+});
+
 it("names the menu the refused Undo was sent from by its name now, or by the name it had once it is gone", async () => {
   const live = new LiveData();
   const write = held();

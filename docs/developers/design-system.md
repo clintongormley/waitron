@@ -1471,7 +1471,7 @@ The time adds its UTC offset only when the venue's clock shows that
 minute twice. The menus list does not show the queue: a menu whose only version is scheduled still
 reads "Unpublished" there until it goes live. "Publish later" opens a compact form with a date
 and a time; it is offered only when the preview has loaded with no clashes and the draft
-differs from the version it would follow. Each scheduled row has a row menu, pinned at the end,
+differs from the version it would follow. While an Undo of the menu is out, it is drawn disabled. Each scheduled row has a row menu, pinned at the end,
 with two separate actions: "Change time", which opens the same form starting at that version's date
 and time, and "Cancel this version", which asks first. A request that would put a newer version live
 before an older one is refused with a sentence naming each version in the way and its time, under
@@ -5416,11 +5416,14 @@ shared product's change links to Edit product, or Edit extras list for an extras
 maximum quantity. An included menu's change links to Edit {menu}, on its Price overrides tab for a
 price and its Structure tab otherwise. A deleted product, and every other change, gets none. Undo
 reads Undoing… while its write is out and is drawn muted while another write, a Home save or a
-publish is out; both states ignore clicks. While an Undo of a menu is out, that menu's Publish and
-Schedule are disabled. A refusal shows inside its bullet as "Not undone. {reason}"; once that bullet
-is no longer drawn (the person has left that menu's Preview tab, or a fresh preview no longer lists
-the change) it shows in the error line under the screen's heading as "Not undone on {menu}:
-{change}. {reason}", naming the menu the Undo was sent from. A success shows one status line under
+publish is out; both states ignore clicks. While an Undo of a menu is out, that menu's Publish now and
+Publish later are disabled. A refusal shows inside its bullet as "Not undone. {reason}" when the
+bullet is drawn with its Undo as the refusal arrives; otherwise (the person has left that menu's
+Preview tab or hidden the change, or the preview can no longer be read, no longer lists the change
+or no longer offers its Undo) it shows in the error line under the screen's heading as "Not undone
+on {menu}: {change}. {reason}", naming the menu the Undo was sent from. A refusal already in its
+bullet stays there when the change is hidden, and comes back with Show all changes without being
+announced again; it goes once the change no longer offers Undo. A success shows one status line under
 the Unpublished changes heading, "Undone: {change}.", and the preview is read again. Undo never asks
 for confirmation. Checks: `apps/dashboard/src/widgets/menu-preview.undo.test.ts` and
 `apps/dashboard/src/screens/menus-screen.preview-undo.test.ts`.

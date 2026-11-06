@@ -488,6 +488,47 @@ it.each([
   },
 );
 
+it("brings a hidden refusal back with Show all changes without announcing it again", async () => {
+  const el = await mountLive([ownRename, sharedPrice], {
+    undoRefusals: { "own-rename": "Another menu called Lunch already exists." },
+  });
+  const refusal = () =>
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-change-row="own-rename"] [data-undo-refusal]`);
+  expect(refusal()!.getAttribute("role")).toBe("alert");
+  el.shadowRoot!.querySelector<HTMLAnchorElement>('a[data-hide-change="own-rename"]')!.click();
+  await el.updateComplete;
+  expect(refusal()).toBeNull();
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="show-all-changes"]')!.click();
+  await el.updateComplete;
+  expect(text(refusal())).toBe("Not undone. Another menu called Lunch already exists.");
+  expect(refusal()!.hasAttribute("role")).toBe(false);
+});
+
+it.each([
+  ["drawn with its Undo", {}, "own-rename", true],
+  ["hidden", {}, "own-rename", false],
+  ["drawn with no Undo", {}, "shared-price", false],
+  ["not listed", {}, "gone", false],
+  ["in a preview that could not be read", { failed: true }, "own-rename", false],
+  [
+    "in a preview whose draft is already live",
+    { preview: { ...livePreview([ownRename]), status: { ...status, hash: "b".repeat(64) } } },
+    "own-rename",
+    false,
+  ],
+])(
+  "says whether a change is drawn with its Undo when it is %s",
+  async (state, props, id, drawn) => {
+    const el = await mountLive([ownRename, sharedPrice], props);
+    if (state === "hidden") {
+      el.shadowRoot!.querySelector<HTMLAnchorElement>(`a[data-hide-change="${id}"]`)!.click();
+      await el.updateComplete;
+    }
+    expect(el.drawsUndo(id)).toBe(drawn);
+    expect(undoButton(el, id) !== null).toBe(drawn);
+  },
+);
+
 it("keeps focus on a change's Undo across a new preview after a refusal", async () => {
   const el = await mountLive([ownRename, sharedPrice]);
   undoButton(el, "own-rename")!.focus();
