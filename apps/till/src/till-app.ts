@@ -16911,14 +16911,12 @@ export class TillApp extends LitElement {
       }
       if (code === "party.bill_outstanding") {
         this.finishRefused = true;
-        this.#leavePaidScreen();
-        await this.#loadPartyBills();
+        await this.#readAfterFinishRefused(asked.visit);
         return;
       }
       if (isPaymentsReceived(error)) {
         this.errorKey = "table.finish_bill_holds_money";
-        this.#leavePaidScreen();
-        await this.#loadPartyBills();
+        await this.#readAfterFinishRefused(asked.visit);
         return;
       }
       if (code === "draft.out_of_date" || code === "draft.taken_over") this.errorKey = { code };
@@ -16929,6 +16927,16 @@ export class TillApp extends LitElement {
       if (this.#finishOpening === opening) this.#finishOpening = undefined;
     }
     if (live()) await this.#onTableClosed(party.id, asked.visit, asked.sent);
+  }
+
+  /** A last payment reads no floor, so leaving the paid screen on a refusal reads what the party
+   * still owes as well as its bills. */
+  async #readAfterFinishRefused(visit: number): Promise<void> {
+    const fromPaid = this.drill?.kind === "paid";
+    this.#leavePaidScreen();
+    if (fromPaid && this.activeTabId !== undefined)
+      await this.#rereadAmounts(this.activeTabId, visit);
+    else await this.#loadPartyBills();
   }
 
   async #readFinishDishes(
@@ -17213,8 +17221,7 @@ export class TillApp extends LitElement {
         this.#closeFinishTable();
         if (code === "party.bill_outstanding") this.finishRefused = true;
         else this.errorKey = "table.finish_bill_holds_money";
-        this.#leavePaidScreen();
-        await this.#loadPartyBills();
+        await this.#readAfterFinishRefused(asked.visit);
       } else if (code === "party.unserved_dishes") {
         const opening = { composition: asked, controller: new AbortController() };
         this.#finishOpening = opening;
