@@ -701,7 +701,7 @@ it("a forged Counter selection cannot leave a table-only screen", async () => {
   expect(api.listDefaultZoneOffers).not.toHaveBeenCalled();
 });
 
-it("a Counter zone click is refused with basket lines and during a submitted action", async () => {
+it("a click on another Counter zone is refused with basket lines and during a submitted action", async () => {
   const { el, api } = await mount(selection(["bar", "shop"], "bar"));
   const store = counter(el)!.store!;
   store.addProduct(counter(el)!.products[0]!, "1");
@@ -744,11 +744,12 @@ it("choosing a Counter zone from Floor opens Counter once and closes its checked
   expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
 });
 
-describe("choosing the Counter zone the counter is already on, with an order in the basket", () => {
+describe("picking a Counter zone while the basket has lines or an order is in flight", () => {
   const REFUSAL = "Clear the basket before changing service area";
   const heldOrder = {
     kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 0 },
     id: "wo-1",
+    revision: 0,
     orderNumber: 5,
     label: null,
     lines: [{ menuItemId: "coffee-offer", quantity: "1.000" }],
