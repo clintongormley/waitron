@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as `subagent_type: "implementer"`.
 
+> 2026-11-06: the fresh-context review is folded in; see "Review fold" at the end.
+
 **Goal:** Every refusal the backlog bundle A1384 names says what happened and what each choice
 does, in English and Spanish, without sending the person to somebody else (root `CLAUDE.md` §3,
 first rule; `docs/developers/conventions-ui.md#refusals-name-a-self-service-next-step`). Six
@@ -29,10 +31,15 @@ mode-screen change, one new test that records an answer, and the backlog deletio
 
 - No table, no column, no migration, no schema change (the A1308 hold). If a step turns out to
   need one, stop that step and report.
-- Nothing here touches invoices, the hash chain, invoice series or AEAT filing. One task reads a
-  fiscal package's refusal (`packages/fiscal-verifactu`, `sif.throwaway_allocation_refused`) and
-  one runs the recovery pack on a throwaway venue; neither changes fiscal code. If a step finds it
-  must, stop and report.
+- Nothing here touches invoices, the hash chain, invoice series or AEAT filing. Task 9 does edit
+  fiscal package code: it renames the throwaway seat's request field in
+  `packages/fiscal-verifactu/src/hour-throwaway-allocation.ts` and `throwaway-allocation.ts`, and
+  nothing else there. Task 8 words that package's refusal and Task 10 runs the recovery pack on a
+  throwaway venue; neither edits it. If any other step finds it must change fiscal code, stop and
+  report.
+- An existing assertion changed to expect a different error code is a behaviour change: every
+  such test is named in its task, and the PR description lists them under "Tests changed because
+  the behaviour changed".
 - Every new user-visible sentence is listed in "Words for the owner's OK" below and goes into the
   PR description under that heading. The PR is built with them; it does not land until the owner
   has OK'd them.
@@ -76,9 +83,13 @@ All line numbers are on `59be31e3b7`.
 `initialOwnerStrings[lang].wipeUnavailable` for it (`apps/setup/src/setup-app.ts:2219-2226`,
 drawn at `:2332-2335`), EN `apps/setup/src/screens/initial-owner-strings.ts:38-39`, ES `:99-100`.
 The same words are drawn when the page itself does not offer Start again (`!offered`,
-`setup-app.ts:2333`), and when the page throws `setup.not_ready` itself, before any request, for a
-setup whose password it cannot check (`#firstResolutionSnapshot`, `setup-app.ts:1262-1275`; pinned
-by `setup-app-wipe.test.ts:294-304`).
+`setup-app.ts:2333`); `setup-app-wipe.test.ts:294-304` pins that path. The page can also throw
+`setup.not_ready` itself (`#firstResolutionSnapshot`, `setup-app.ts:1262-1275`, when the password is
+not `checkable` or the revision or owner generation is null), but not on the Start again path: the
+inspection sets `password: "uncheckable"` exactly when it sets `revision` null
+(`packages/provisioning/src/first-setup-resolution-inspection.ts:366-368`), and Start again is
+offered only with a revision and owner generation (`wipeOffered`, `setup-app.ts:235-239`, checked on
+the same inspection at `:1298` before the snapshot is built at `:1299`). It gets no new words.
 
 **The existing pattern for carrying a cause.** `setup.start_again_refused` carries
 `{ cause: "setup-finished" | "kept-records" | "trading-settings" }`
@@ -93,19 +104,22 @@ wiring passes `modules: ALL_MODULES` (`apps/server/src/first-setup-entry.ts:252-
 
 | Site | What it means | Can a person act on it? | Cause in this plan |
 | --- | --- | --- | --- |
-| `first-setup-resolution.ts:243` `readForRepair() === null` | the claim marker vanished after the inspection matched (`readForRepair` returns null only when the marker file is absent, `packages/provisioning/src/first-setup-state.ts:588-594`) | yes: the page reads again | answer `setup.attempt_conflict` instead (the page already words it, Task 3) |
-| `:250` database label `unreadable` | the inspection could not read `venue.db` as a file (not a regular file, over 128 MiB, or an I/O error: `packages/provisioning/src/first-setup-resolution-inspection.ts:84-85` with the 128 MiB limit at `:284`) | no step on the page | `unreadable` |
+| `first-setup-resolution.ts:243` `readForRepair() === null` | the claim marker is gone. Not reachable on this path: without the marker and with `first-setup.json` present, the read refuses `setup.attempt_invalid` (`packages/provisioning/src/first-setup-state.ts:472-477`), and deleting the marker changes the inspection, so `:241` answers `setup.attempt_conflict` first | no | none: worded as a fault |
+| `:250` database label `unreadable` | the inspection could not open `venue.db` as a regular file: the venue folder is not a plain folder, `venue.db` is not a regular file, or opening it failed (`first-setup-resolution-inspection.ts:84-85`, `artifact` at `:41-60`, called with no size limit at `:127`) | no step on the page | `unreadable` |
 | `:84` held setup whose database shows no records | activation went past its start, yet the database holds nothing | no | `may-have-filed` |
 | `:275` not provably unused | `firstSetupUnusedAssignment` (`apps/server/src/first-setup-unused-assignment.ts:10-80`) could not prove the attempt used nothing: a step past the checks, an unexpected file, or a module version that differs from the installed one | no; A1161 asks the owner whether some of these should still block | `may-have-filed` |
 | `:277` evidence configured outside the folders | public fiscal evidence the box keeps outside its folders | no | `may-have-filed` |
-| `:290` an "unused" database that reads whole and is not empty | rows without a venue | no | `may-have-filed` |
+| `:290` a setup database that should be unused reads whole and is not empty | data an unused setup should not hold | no | `unexpected` |
 | `:295` held database with no rows | same as `:84`, found by reading | no | `may-have-filed` |
-| `:295` damaged label, but the read succeeded | the inspection and the read disagree | no | `unreadable` |
-| `first-setup-database-holdings.ts:36-38` and its sites `:76, :88, :92, :95, :99, :101, :113, :119, :127, :151` | the box could not read or copy the setup database | no | `unreadable` (one change in the `notReady` helper) |
+| `:295` damaged label, but the read succeeded | the inspection could not read it; the later read could | no | `unreadable` |
+| `first-setup-database-holdings.ts:92, :99` the scratch copy failed with `ENOSPC` | no room for the copy | yes: free space, restart | answer `storage.disk_full`; the route turns it into the repair page's existing full-disk answer (`diskFullOr`, `setup-first-fiscal-api.ts:639-642`, words `shell.first_setup.disk_full`, `setup-app.ts:262-268`) |
+| `first-setup-database-holdings.ts:36-38` and its other sites `:76, :88, :92, :95, :99, :101, :113, :119, :127, :151` | the box could not read or copy the setup database | no | `unreadable` (in the `notReady` helper) |
+| `packages/provisioning/src/first-setup-resolution-inspection.ts:157` (first half) and `:192`, inside `captureFirstSetupOriginals` (called at `first-setup-resolution.ts:259`) | a listed path is not a plain file; the documents folder is not a plain folder | no | `unexpected` |
+| `first-setup-resolution-inspection.ts:157` (second half), `:159`, `:194` | a listed file over 128 MiB (for example `venue.db-wal`); over 1,024 documents | no | `too-large` |
 | `packages/provisioning/src/first-setup-start-again-deletion.ts:473, :498, :505-512, :514` (`check failed`, `node.db unreadable`) | I/O failure checking a file | no | `unreadable` |
-| `first-setup-start-again-deletion.ts:492` refused artifact; `:497` unexpected layout; `:503` `node.db-wal` holds pages; `:518` node.db holds another node's row or a table | the folders hold files Start again does not delete | no | `other-files` |
-| `first-setup-resolution.ts:227` deletion marker over its 1 MiB limit (Start again only) | too many files to list | no | `other-files` |
-| `first-setup-resolution.ts:224` marker build failed (`setup.start_again_incomplete` mapped) (Start again only) | hashing a listed file failed | no | `unreadable` |
+| `first-setup-start-again-deletion.ts:492` refused artifact; `:497` unexpected layout; `:503` `node.db-wal` holds pages; `:518` node.db holds another node's row or a table | files or rows the box does not expect | no | `unexpected` |
+| `first-setup-resolution.ts:227` deletion list over its 1 MiB limit (Start again only) | too many files to list | no | `too-large` |
+| `first-setup-resolution.ts:224` marker build failed (`setup.start_again_incomplete` mapped) (Start again only) | hashing a listed file failed (`check failed`, `first-setup-start-again-deletion.ts:119-122, :324-327`). Its other reason, `layout unexpected`, needs the folders to change after the check at `:281`, inside the same venue exclusion and turn (`first-setup-resolution.ts:327-328`): read, not run | no | `unreadable` |
 | `first-setup-resolution.ts:120, :287` `modules === undefined` | production always passes modules (`first-setup-entry.ts:252-256`) | only a Waitron fault can produce it | none: worded as a fault |
 | `first-setup-resolution.ts:257, :272, :274` | a Start again request the page never sends (the page always sends the confirmation, `start-again-wipe.ts:53-61`; `register` is sent only by the command line) | only a Waitron fault, from the page | none: worded as a fault |
 
@@ -113,19 +127,19 @@ wiring passes `modules: ALL_MODULES` (`apps/server/src/first-setup-entry.ts:252-
 page's Keep or Move form does not use it, so adding a cause there changes nothing on that form
 (`grep -rn assertStartAgainAllowedOnDisk apps packages`, 2026-11-06).
 
-**Decision.** `setup.not_ready`'s params become `{ cause?: "may-have-filed" | "other-files" |
-"unreadable" }` (`packages/provisioning/src/errors.ts:21`; the only declaration, by grep). Optional,
-so every other `setup.not_ready` in the tree is unchanged. The brief allowed either a cause on
-`setup.not_ready` or a new `setup.start_again_refused` cause; `setup.not_ready` keeps every log line
-and status (503) exactly as today and changes no other caller. A server-answered `setup.not_ready`
-with no cause is worded as a fault in Waitron; the page's own `setup.not_ready` (no `status`, see
-`ApiError.status`, `apps/setup/src/api/client.ts:240-250`) keeps today's `wipeUnavailable`, which
-A1379 pull request 2 retires with the inspection's `password` field.
+**Decision.** `setup.not_ready`'s params become `{ cause?: "may-have-filed" | "unexpected" |
+"too-large" | "unreadable" }` (`packages/provisioning/src/errors.ts:21`; the only declaration, by
+grep). Optional, so every other `setup.not_ready` in the tree is unchanged. The brief allowed either a
+cause on `setup.not_ready` or a new `setup.start_again_refused` cause; `setup.not_ready` keeps every
+log line and status (503) exactly as today and changes no other caller. A server-answered
+`setup.not_ready` with no cause is worded as a fault in Waitron. A copy that fails for lack of space
+answers the existing `storage.disk_full`, so the page shows the owner's approved full-disk words,
+which say to restart first.
 
-None of the three causes has a self-service way out today. `may-have-filed` does not offer
+None of the four causes has a self-service way out on the page. `may-have-filed` does not offer
 reinstalling, because a setup that may have reached AEAT must not be wiped by advice (that is
-A1161's owner decision, kept open). `other-files` and `unreadable` end with the owner's approved
-reinstall sentence (A1127, 2026-10-28 08:25; `shell.first_setup.disk_full`,
+A1161's owner decision, kept open). `unexpected`, `too-large` and `unreadable` end with the owner's
+approved reinstall sentence (A1127, 2026-10-28 08:25; `shell.first_setup.disk_full`,
 `apps/setup/src/i18n/strings/shell.ts:12-13`), which is a step the person can take, with its cost.
 A1159 (`docs/backlog/self-service-refusals.md#a1159-…`) stays open for the missing workflow.
 
@@ -135,8 +149,9 @@ A1159 (`docs/backlog/self-service-refusals.md#a1159-…`) stays open for the mis
 format version above 10 answers `setup.request_invalid { field: "version" }`; any other version
 answers `setup.configuration_outdated`. `validateConfigurationBundle` (`:571-586`): a module the box
 does not run answers `{ field: "modules" }`; any module whose schema version differs, in either
-direction, answers `{ field: "module:<name>" }`. The target versions are the box's shipped
-migration counts (`schemaVersionsByModule`, `apps/server/src/backup-manifest.ts:21-31`, called at
+direction, answers `{ field: "module:<name>" }`. The target versions are each module's applied
+schema version, read off the box's own database (`schemaVersionsByModule`,
+`apps/server/src/backup-manifest.ts:19-31`, called with the box's store at
 `apps/server/src/boot.ts:1517-1521`).
 
 The setup page words `version`, `modules` and `module:*` alike as
@@ -151,9 +166,25 @@ three fields, one sentence), `apps/server/src/configuration-import.test.ts:225-2
 and for an export module version above the box's. An export module version below the box's (or a
 module the export lacks) answers the existing `setup.configuration_outdated`, whose words already
 say the export is older. A module the box does not run (`modules`) and a module the box runs with no
-transfer contribution (`configuration-transfer.ts:171-172`) keep `setup.request_invalid` and today's
-words; neither is a version direction. Wording follows the existing "newer software" refusals
-(`shell.bucket.newer_software`, `shell.cloud.newer_software`, `shell.ts:101-102, :129-130`).
+transfer contribution (`configuration-transfer.ts:171-172`) keep `setup.request_invalid` and the key
+`shell.configuration.incompatible_version`, whose words change so they blame neither side; neither
+is a version direction. Wording follows the
+existing "newer software" refusals (`shell.bucket.newer_software`, `shell.cloud.newer_software`,
+`shell.ts:101-102, :129-130`).
+
+**Existing tests whose expected code flips** (a behaviour change; the PR names each):
+
+- `packages/provisioning/src/configuration-transfer.boundaries.test.ts:53` (`{ version: 11 }`):
+  `setup.request_invalid { field: "version" }` → `setup.configuration_newer`.
+- same file `:238` (export `synthetic-transfer: 2`, box 1): `module:synthetic-transfer` →
+  `setup.configuration_newer`; the row moves out of the `field` table into its own case.
+- same file `:275-283` (export 99, box 1, "checks an import's module version before replacing its
+  existing rows"): → `setup.configuration_newer`; the "rows kept" assertion stays.
+- `apps/server/src/configuration-import.test.ts:241` ("future version"): → `setup.configuration_newer`.
+- same file `:940` (venue-service older than the box): → `{ code: "setup.configuration_outdated", params: {} }`.
+- same file `:965` (core older than the box): → `{ code: "setup.configuration_outdated", params: {} }`.
+- `apps/setup/src/setup-app.test.ts:3165-3205`: the sentence changes (M2 words) and `"version"`
+  leaves its loop.
 
 ### Entry 3: other full-disk words
 
@@ -288,11 +319,13 @@ Each has a recommended default; the PR is built with the default.
    your 28 October answer allowed for the strip only. **Recommended: the same exception covers them**,
    for your reason ("a waiter at a stopped till has no step of their own"); the words stay and the
    exception is written at their site. Alternative: drop «Tell a manager» from them, since the strip
-   above already says it: "Not saved: the box is out of disk space." **Meanwhile:** the PR keeps the
-   words and writes the exception (Task 11).
-2. **Three Start again refusals have no way out but Reconnect** (Task 3): "cannot show that this
-   setup sent nothing to AEAT", "holds files that Start again does not delete", "cannot read some
-   of this setup's files". **Recommended:** the last two end with your approved reinstall sentence;
+   above already says it: "Not saved: the box is out of disk space." **Meanwhile:** the till is
+   untouched; the answer is written in (site comment and `conventions-ui.md`, or the shorter words)
+   before the PR lands.
+2. **Four Start again refusals have no way out but Reconnect** (Task 3): "cannot show that this
+   setup sent nothing to AEAT", "finds files or data it does not expect", "holds more than Start
+   again can check", "cannot read some of this setup's files". **Recommended:** the last three end
+   with your approved reinstall sentence;
    the first does not, because reinstalling a setup that may have reached AEAT is a fiscal decision
    (A1161 stays open for it). **Meanwhile:** built that way.
 3. **The managers' full-disk email's last sentence.** **Recommended:** the full-disk page's approved
@@ -303,25 +336,31 @@ Each has a recommended default; the PR is built with the default.
 4. **A throwaway venue's recovery pack** (Task 10 records the answer). If the PDF pack is made,
    nothing changes. If it is refused, **recommended:** a practice venue needs no pack, so the
    refusal stands with the words the dashboard already draws for it; the PR description shows them.
+5. **The throwaway seat's `taxpayerNif`** (the backlog called this your call). Lane E's A679 has
+   landed and nothing outside this repository uses the field, so **recommended: rename it to
+   `taxId`** in the contract. The allocation file's own `taxpayerNif` stays. **Meanwhile:** the PR is
+   built with the rename (Task 9); if you say keep, Task 9's commit is reverted.
 
 ## Words for the owner's OK
 
 | Where | Key | Old (EN / ES) | New (EN / ES) |
 | --- | --- | --- | --- |
-| Repair page, Start again refused, `may-have-filed` | `wipeMayHaveFiled` (new) | `wipeUnavailable`: "This box cannot confirm that deleting this setup is safe, so it is not offered. Reconnect keeps everything as it is." / «Este equipo no puede confirmar que borrar esta configuración sea seguro, así que no se ofrece. Reconectar lo deja todo como está.» | "This box cannot show that this setup sent nothing to AEAT, so deleting it is not offered. Reconnect keeps everything as it is." / «Este equipo no puede demostrar que esta configuración no envió nada a la AEAT, así que no se ofrece borrarla. Reconectar lo deja todo como está.» |
-| same, `other-files` | `wipeOtherFiles` (new) | as above | "This box holds files that Start again does not delete, so deleting this setup is not offered. Reconnect keeps everything as it is. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards." / «Este equipo guarda archivos que Empezar de nuevo no borra, así que no se ofrece borrar esta configuración. Reconectar lo deja todo como está. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.» |
+| Repair page, Start again refused, `may-have-filed` | `wipeMayHaveFiled` (new) | `wipeUnavailable`: "This box cannot confirm that deleting this setup is safe, so it is not offered. Reconnect keeps everything as it is." / «Este equipo no puede confirmar que borrar esta configuración sea seguro, así que no se ofrece. Reconectar lo deja todo como está.» | "This box cannot show that this setup sent nothing to AEAT, so deleting it is not offered. Reconnect keeps everything as it is." / «Este equipo no puede demostrar que esta configuración no haya enviado nada a la AEAT, así que no se ofrece borrarla. Reconectar lo deja todo como está.» |
+| same, `unexpected` | `wipeUnexpected` (new) | as above | "This box finds files or data it does not expect, so deleting this setup is not offered. Reconnect keeps everything as it is. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards." / «Este equipo encuentra archivos o datos que no espera, así que no se ofrece borrar esta configuración. Reconectar lo deja todo como está. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.» |
+| same, `too-large` | `wipeTooLarge` (new) | as above | "This setup holds more than Start again can check, so deleting it is not offered. Reconnect keeps everything as it is. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards." / «Esta configuración guarda más de lo que Empezar de nuevo puede comprobar, así que no se ofrece borrarla. Reconectar lo deja todo como está. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.» |
 | same, `unreadable` | `wipeUnreadable` (new) | as above | "This box cannot read some of this setup's files, so deleting it is not offered. Reconnect keeps everything as it is. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards." / «Este equipo no puede leer algunos archivos de esta configuración, así que no se ofrece borrarla. Reconectar lo deja todo como está. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.» |
 | same, no cause (a fault) | `wipeFault` (new) | as above | "Deleting this setup is not offered because of a fault in Waitron. Reconnect keeps everything as it is." / «No se ofrece borrar esta configuración por un fallo de Waitron. Reconectar lo deja todo como está.» |
 | same, plain HTTP | `wipeInsecure` (new) | as above | "Deleting this setup needs the box's secure connection. Set it up, then open this page over it." / «Para borrar esta configuración hace falta la conexión segura del equipo. Configúrala y abre esta página con ella.» |
 | Setup, loading a configuration export made by newer software | `shell.configuration.newer` (new) | `shell.configuration.incompatible_version`: "This export is not compatible with this Waitron version. Export it again from a box running the current version, then load the new export." / «Esta exportación no es compatible con esta versión de Waitron. Vuelve a exportar desde un equipo con la versión actual y carga la nueva exportación.» | "This export was made by newer Waitron software than this box has. Update this box, then load the export again." / «Esta exportación la hizo una versión de Waitron más nueva que la de este equipo. Actualiza este equipo y vuelve a cargar la exportación.» |
+| Setup, an export naming a part of Waitron this box does not run | `shell.configuration.incompatible_version` | "This export is not compatible with this Waitron version. Export it again from a box running the current version, then load the new export." / «Esta exportación no es compatible con esta versión de Waitron. Vuelve a exportar desde un equipo con la versión actual y carga la nueva exportación.» | "This export and this box do not use the same parts of Waitron, so the export cannot be loaded here." / «Esta exportación y este equipo no usan las mismas partes de Waitron, así que la exportación no se puede cargar aquí.» |
 | Setup, an export whose module is older than the box's | `shell.configuration.outdated` (unchanged words, now also used here) | `incompatible_version`, as above | "This configuration export is from an older format. Export it again from a current box." / «Esta exportación de configuración usa un formato anterior. Vuelve a exportarla desde un equipo actualizado.» |
-| Setup venue form, operation description refused | `server_fields.operation_description` | "Keep this to 500 characters or fewer, and remove any hidden characters — typing it out instead of pasting it usually clears them." / «Usa 500 caracteres como máximo y quita los caracteres ocultos; suele bastar con escribirlo en lugar de pegarlo.» | "Waitron filled in a hidden venue detail wrongly. This is a fault in Waitron, not in what you entered." / «Waitron rellenó mal un dato oculto del local. Es un fallo de Waitron, no de lo que has introducido.» |
+| Setup venue form, operation description refused | `server_fields.operation_description` | "Keep this to 500 characters or fewer, and remove any hidden characters — typing it out instead of pasting it usually clears them." / «Usa 500 caracteres como máximo y quita los caracteres ocultos; suele bastar con escribirlo en lugar de pegarlo.» | "Waitron filled in a hidden venue detail wrongly. This is a fault in Waitron, not in what you entered." / «Waitron ha rellenado mal un dato oculto del local. Es un fallo de Waitron, no de lo que has introducido.» |
 | Setup, Demo or Preparation refused on a production box | `shell.provision.throwaway_refused` (new) | `shell.provision.failed`: "Provisioning failed. Check that the server is on and your device is connected to its network, then try again. If you see a certificate warning, use the certificate help below." / «La configuración ha fallado. …» | "This server is stamped for production, so it does not offer Demo or Prepare your restaurant. Reload to choose another option." / «Este servidor está marcado para producción, así que no ofrece Demostración ni Prepara tu restaurante. Recarga para elegir otra opción.» |
 | Setup mode screen on a production box | (no new words) | Demo, Prepare your restaurant, Live, Already have a restaurant? | Live and Already have a restaurant? only |
 | Recovery page Start-again form, full disk | `diskFull` (`recovery-start-again.ts`) | "…If that is not enough, the choice cannot be saved on this box; if you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included." / «…si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él, también estos archivos.» | "…If that is not enough, the choice cannot be saved on this box; if you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included, unless a backup is restored afterwards." / «…si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, también estos archivos, salvo que después se restaure una copia de seguridad.» (the sentences before it unchanged) |
 | same form, password forgotten | `forgotten` | "If the password is forgotten, this page cannot go further. If you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included." / «Si se ha olvidado la contraseña, esta página no puede seguir. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él, también estos archivos.» | "If the password is forgotten, this page cannot go further. If you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included, unless a backup is restored afterwards." / «Si se ha olvidado la contraseña, esta página no puede seguir. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, también estos archivos, salvo que después se restaure una copia de seguridad.» |
 | Managers' full-disk email, last sentence | `BOX_EMAILS["storage.disk_full"].text` | "If that is not enough, ask whoever installed the box to free more space or fit a bigger disk." / «Si no basta, pide a quien instaló el equipo que libere más espacio o ponga un disco mayor.» | "If that is not enough, Waitron cannot free more space by itself: the rest of the disk holds the venue's data, the backups kept on this box and files that are not Waitron's." / «Si no basta, Waitron no puede liberar más espacio por sí solo: el resto del disco guarda los datos del local, las copias de seguridad que se guardan en este equipo y archivos que no son de Waitron.» |
-| Till full-disk refusals | (unchanged) | «Tell a manager» endings | unchanged; the owner's strip exception is written at their site (Owner question 1) |
+| Till full-disk refusals | (unchanged) | «Tell a manager» endings | unchanged until the owner answers Owner question 1 |
 
 ## File structure
 
@@ -331,7 +370,7 @@ Each has a recommended default; the PR is built with the default.
 - `packages/provisioning/src/configuration-transfer.ts`: newer and older exports answered by
   direction.
 - `apps/server/src/first-setup-resolution.ts`, `apps/server/src/first-setup-database-holdings.ts`:
-  causes; the vanished-marker case answers `setup.attempt_conflict`.
+  causes; a copy that fails for lack of space answers `storage.disk_full`.
 - `apps/server/src/setup-first-fiscal-api.ts`, `apps/server/src/errors.ts`:
   `setup.connection_insecure`.
 - `apps/server/src/setup-api.ts`: `setup.configuration_newer` → 400.
@@ -352,73 +391,89 @@ Each has a recommended default; the PR is built with the default.
 ### Task 1: Start again's disk checks name a cause (provisioning)
 
 **Files:** `packages/provisioning/src/errors.ts:21`,
-`packages/provisioning/src/first-setup-start-again-deletion.ts:462-521`; test
-`packages/provisioning/src/first-setup-start-again-deletion.test.ts`.
+`packages/provisioning/src/first-setup-start-again-deletion.ts:462-521`,
+`packages/provisioning/src/first-setup-resolution-inspection.ts:141-200`
+(`captureFirstSetupOriginals`); tests
+`packages/provisioning/src/first-setup-start-again-deletion.test.ts`,
+`packages/provisioning/src/first-setup-resolution-inspection.test.ts` (or wherever
+`grep -rln captureFirstSetupOriginals packages/provisioning/src --include='*.test.ts'` points).
 
 - [ ] **Step 1: failing tests.** In `first-setup-start-again-deletion.test.ts`, make its
   `refusal(...)` helper also return the error's `params`, then change the existing expectations:
   the `EACCES` case (`:70-81`) expects `params: { cause: "unreadable" }`; "with held, the disk check
   accepts the setup's modules.json; without it, refuses" (`:91-98`) expects
-  `params: { cause: "other-files" }`. Add one case per remaining site, each asserting `code`,
-  `params` and the unchanged `reason`: a `node.db-wal` holding pages → `other-files`; a `node.db`
-  that is not a database → `unreadable`; a `node.db` holding another node's row → `other-files`; an
-  unexpected file in the venue folder (`layout unexpected`) → `other-files`.
+  `params: { cause: "unexpected" }`. Add one case per remaining site, each asserting `code`,
+  `params` and the unchanged `reason`: a `node.db-wal` holding pages → `unexpected`; a `node.db`
+  that is not a database → `unreadable`; a `node.db` holding another node's row → `unexpected`; an
+  unexpected file in the venue folder (`layout unexpected`) → `unexpected`.
+  For `captureFirstSetupOriginals`, one case each asserting `{ code: "setup.not_ready", params }`:
+  a listed path that is a folder (`state/setup-operation.json` made a directory) → `unexpected`; a
+  `first-fiscal-documents` that is a file → `unexpected`; a `venue.db-wal` over the limit →
+  `too-large` (pass a smaller `limit` through a test seam only if one exists; otherwise write a
+  sparse file with `truncate` to just over 128 MiB, which uses no disk); 1,025 files in
+  `first-fiscal-documents` → `too-large`.
 - [ ] **Step 2:** run `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-start-again-deletion.test.ts`;
   the new and changed cases fail on `params`.
-- [ ] **Step 3: change.** `errors.ts`: `"setup.not_ready": { cause?: "may-have-filed" | "other-files" | "unreadable" };`
+- [ ] **Step 3: change.** `errors.ts`: `"setup.not_ready": { cause?: "may-have-filed" | "unexpected" | "too-large" | "unreadable" };`
   with a one-line doc comment saying the cause is a log-safe name the setup page words. In
   `assertStartAgainAllowedOnDisk`, `notReady(reason, cause)`: `check failed` (`:473, :498`),
   `node.db unreadable` and the `-wal` check failure (`:505-514`) → `unreadable`; refused artifact
   (`:492`), `layout unexpected` (`:497`), `node.db-wal holds pages` (`:503`) and `nodeRefusal`
-  (`:518`) → `other-files`. `writeStartAgainMarker`'s size refusal (`:374`) stays cause-less (it is
+  (`:518`) → `unexpected`. In `captureFirstSetupOriginals`, split `:157`'s condition: not a file →
+  `unexpected`, over the limit → `too-large`; `:159` → `too-large`; `:192` → `unexpected`; `:194` →
+  `too-large`. `writeStartAgainMarker`'s size refusal (`:374`) stays cause-less (it is
   checked after `markerFor`'s own check, `apps/server/src/first-setup-resolution.ts:227`, so only a
   fault reaches it).
 - [ ] **Step 4:** the same command passes; read the `Tests` count. Run
   `pnpm --filter @waitron/provisioning typecheck` and `pnpm format:check`. Commit:
   "Start again's disk checks say which kind of problem stopped them".
 
-### Task 2: the server's Start again names a cause, and a vanished record reads as changed
+### Task 2: the server's Start again names a cause
 
 **Files:** `apps/server/src/first-setup-resolution.ts`, `apps/server/src/first-setup-database-holdings.ts`;
 tests `apps/server/src/first-setup-start-again.test.ts`,
+`apps/server/src/first-setup-start-again-held*.test.ts`,
 `apps/server/src/first-setup-database-holdings.test.ts`,
-`apps/server/src/first-setup-database-holdings-damage.test.ts`, and the other files the grep below
-finds.
+`apps/server/src/first-setup-database-holdings-damage.test.ts`.
 
-- [ ] **Step 1: failing tests.**
-  - `first-setup-start-again.test.ts:399-420`, "with venue.db missing, a damaged node.db …": the
-    `refusal` object gains `params: { cause: "unreadable" }`.
-  - The case "with the database present and empty, a %s public fiscal record refuses the summary
-    and Start again setup.not_ready, and nothing is written" (`first-setup-start-again.test.ts:801`): expects
-    `params: { cause: "may-have-filed" }`.
-  - `first-setup-database-holdings.test.ts` / `-damage.test.ts`: every `setup.not_ready` expectation
-    from `readSetupDatabase` gains `params: { cause: "unreadable" }`.
-  - New case in `first-setup-start-again.test.ts`: "a claim marker removed after the inspection
-    answers the summary setup.attempt_conflict, and nothing changes": inspect, delete
-    `venue/first-setup-claim.json`, call `actions.startAgainSummary(ids)`, expect
-    `{ code: "setup.attempt_conflict" }`, and `attemptFiles(f)` unchanged apart from the marker.
-  - New case: "a held setup whose database holds no rows refuses may-have-filed" if no existing
-    case covers `:84` or `:295`; find existing ones with
-    `grep -rn "rows === 0\|holdsRecords\|no rows" apps/server/src/first-setup-start-again-held*.test.ts`
-    and add the cause to them instead where they exist.
-- [ ] **Step 2:** run `pnpm --filter @waitron/server exec vitest run src/first-setup-start-again.test.ts src/first-setup-database-holdings.test.ts src/first-setup-database-holdings-damage.test.ts`;
+- [ ] **Step 1: failing tests.** One assertion of `params` per site, written explicitly. The held
+  fixture's `notReady = { code: "setup.not_ready" }` (`apps/server/test/start-again-held-fixture.ts:155`)
+  is used as a partial match, so a test that passes it proves nothing about the cause: assert
+  `expect(error.params).toEqual({ cause })` beside it, or add a `notReadyBecause(cause)` helper in
+  that fixture that matches `{ code, params: { cause } }`.
+  - `:250` (`venue.db` a directory) → `unreadable`.
+  - `:84` and the `rows === 0` half of `:295` (held setups; find the existing cases with
+    `grep -rn "notReady" apps/server/src/first-setup-start-again-held*.test.ts`, add one where a
+    site has none) → `may-have-filed`. The damaged-label half of `:295` → `unreadable`.
+  - `:275`: `first-setup-start-again.test.ts:801` ("with the database present and empty, a %s
+    public fiscal record refuses…") → `may-have-filed`; `:277` (an `outside-` artifact) →
+    `may-have-filed`.
+  - `:290` (an unused setup's database with a row) → `unexpected`.
+  - `first-setup-start-again.test.ts:399-420` (damaged `node.db`) → `unreadable`.
+  - `:227` (`markerLimit: 1`, the existing test seam at `first-setup-resolution.ts:188-189`) →
+    `too-large`.
+  - Database holdings: every `setup.not_ready` expectation from `readSetupDatabase` gains
+    `params: { cause: "unreadable" }`; new case "a copy that fails with ENOSPC answers
+    storage.disk_full": make the copy fail with `ENOSPC` (the module's copy seam if one exists, or
+    the small real filesystem the full-disk tests use, `docs/developers/testing-guide.md`), expect
+    `{ code: "storage.disk_full" }`.
+  - `:243` gets no test and no cause: it is not reachable on this path (see Entry 1).
+- [ ] **Step 2:** run `pnpm --filter @waitron/server exec vitest run src/first-setup-start-again.test.ts src/first-setup-start-again-held.test.ts src/first-setup-database-holdings.test.ts src/first-setup-database-holdings-damage.test.ts`;
   the changed cases fail.
-- [ ] **Step 3: change.** In `first-setup-resolution.ts`, replace `unavailable()` with
-  `unavailable(cause?)` and use the table in "Entry 1" above: `:250` and the damaged-label half of
-  `:295` → `unreadable`; `:84`, `:275`, `:277`, `:290` and the `rows === 0` half of `:295` →
-  `may-have-filed` (split `:295`'s condition in two); `:227` → `other-files`; `:224`'s mapped
-  `setup.start_again_incomplete` → `unreadable`; `:243` throws `conflict()`; `:120, :257, :272,
-  :274, :287` stay cause-less. In `first-setup-database-holdings.ts:36-38`, the `notReady` helper
-  passes `{ cause: "unreadable" }` (all its sites are read or copy failures). Log reasons unchanged.
+- [ ] **Step 3: change.** In `first-setup-resolution.ts`, `unavailable(cause?)`, following the
+  Entry 1 table; split `:295`'s condition in two. `:120, :243, :257, :272, :274, :287` stay
+  cause-less. In `first-setup-database-holdings.ts`, the `notReady` helper passes
+  `{ cause: "unreadable" }`; the two copy failures (`:92`, `:99`) first throw
+  `new AppError("storage.disk_full", {})` when the error's `code` is `ENOSPC`. Log reasons unchanged.
 - [ ] **Step 4:** find every other test pinning these answers:
   `grep -rln "setup.not_ready" apps/server/src apps/server/test --include='*.test.ts' --include='*fixture*.ts'`,
   and run the Start again ones among them:
   `pnpm --filter @waitron/server exec vitest run src/first-setup-start-again src/first-setup-resolution src/setup-first-fiscal.route.test.ts src/first-setup-unused-pdf.test.ts src/first-setup-retired-assignments.test.ts`.
   An expectation written with `toEqual` on a site this task gave a cause gains the cause; one written
-  with `toMatchObject` passes unchanged. Do not weaken any assertion. `apps/server/test/start-again-held-fixture.ts:155`
-  (`const notReady = { code: "setup.not_ready" }`) is used with `toMatchObject`; check, do not guess.
+  with `toMatchObject` passes unchanged. Do not weaken any assertion.
 - [ ] **Step 5:** `pnpm --filter @waitron/server typecheck`, `pnpm format:check`. Commit: "Start
-  again's refusal says why: may have reached AEAT, other files, or files it cannot read".
+  again's refusal says why: may have reached AEAT, unexpected files, too much to check, or files it
+  cannot read".
 
 ### Task 3: the repair page words each cause
 
@@ -429,34 +484,31 @@ finds.
 
 - [ ] **Step 1: failing tests.**
   - `start-again-wipe.test.ts` table (`:229-230`): add rows `setup.not_ready` with
-    `params: { cause: "may-have-filed" }` → `"may-have-filed"`, `other-files` → `"other-files"`,
+    `params: { cause: "may-have-filed" }` → `"may-have-filed"`, `unexpected` → `"unexpected"`,
+    `too-large` → `"too-large"`,
     `unreadable` → `"unreadable"`; `{ code: "setup.not_ready", params: {}, status: 503 }` →
     `"fault"`; `{ code: "setup.not_ready", params: { cause: "something-new" }, status: 503 }` →
-    `"fault"`; `{ code: "setup.not_ready" }` (no `status`: the page's own) → `"unavailable"`.
+    `"fault"`; `{ code: "setup.not_ready" }` (no `status`: the page's own, unreachable on this path) →
+    `"unavailable"`.
   - `setup-app-wipe.test.ts` refusals table (`:240-260`): the `setup.not_ready` row (status 409,
     `params: {}`) now expects `wipeFault`; add one row per cause expecting `wipeMayHaveFiled`,
-    `wipeOtherFiles`, `wipeUnreadable`. The table runs in EN and ES already (`:263`). Also
+    `wipeUnexpected`, `wipeTooLarge`, `wipeUnreadable`. The table runs in EN and ES already (`:263`). Also
     `:333-335` ("a send refused setup.not_ready…") expects `wipeFault`.
-  - New case in `setup-app-wipe.test.ts`: "a summary refused setup.attempt_conflict says the setup
-    changed, and Start again opens on the next read": the first summary answers
-    `{ error: { code: "setup.attempt_conflict", params: {} } }` (409), the page shows
-    `t.heldChanged` and not `shellEn["shell.first_setup.attempt_conflict"]`.
   - New case in `apps/setup/src/i18n/strings.test.ts` or beside the table: each new key exists in
     EN and ES and the two differ.
 - [ ] **Step 2:** check `memory_pressure | grep free`, then run
   `pnpm --filter @waitron/setup exec vitest run src/start-again-wipe.test.ts src/setup-app-wipe.test.ts`;
   the new rows fail.
 - [ ] **Step 3: change.**
-  - `wipeRefusal` returns `StartAgainRefusalCause | "may-have-filed" | "other-files" |
+  - `wipeRefusal` returns `StartAgainRefusalCause | "may-have-filed" | "unexpected" | "too-large" |
     "unreadable" | "fault" | "unavailable" | undefined`: a `setup.not_ready` with a numeric
     `status` (the server answered, `apps/setup/src/api/client.ts:240-250`) and a known
     `params.cause` gives that cause; with a `status` and no known cause, `"fault"`; with no
     `status`, `"unavailable"`. `setup.owner_required` keeps `"unavailable"` until Task 4.
-  - `#openWipeConfirmation`'s catch draws `heldChanged` for `setup.attempt_conflict`, as
-    `#sendWipeFirstSetup` already does (`setup-app.ts:1356-1362`).
   - `#renderFirstOwner` maps each new kind to its key; add the keys to `initial-owner-strings.ts`
-    EN and ES with the exact sentences in "Words for the owner's OK". `wipeUnavailable` stays (the
-    page-level "not offered" and the page's own refusal).
+    EN and ES with the exact sentences in "Words for the owner's OK". `wipeUnavailable` stays for the
+    page-level "not offered"; the page's own `setup.not_ready` keeps it too and gets no new words,
+    because it cannot be reached on this path (Entry 1).
 - [ ] **Step 4:** the same command passes, `Tests` count read; also run
   `pnpm --filter @waitron/setup exec vitest run src/setup-app-held-refusals.test.ts src/setup-app-recover.test.ts src/setup-app-resolution.test.ts src/setup-app-resolution.a11y.test.ts`
   (they pin `wipeUnavailable` for page-level cases, which must still pass unchanged).
@@ -512,17 +564,17 @@ finds.
 `apps/server/src/configuration-import.test.ts:225-249`, `apps/setup/src/setup-app.test.ts:3165-3233`.
 
 - [ ] **Step 1: failing tests.**
-  - `configuration-transfer.boundaries.test.ts`: the `{ version: 11 }` row expects
-    `setup.configuration_newer`; new cases "a module version above the box's answers
-    setup.configuration_newer" and "a module version below the box's, or missing, answers
-    setup.configuration_outdated" (copy the existing module-version case's setup).
-  - `configuration-import.test.ts:241`: the "future version" label expects
-    `{ code: "setup.configuration_newer", params: {} }`.
+  - Change the six existing expectations listed under "Existing tests whose expected code flips"
+    (Entry 2), each to the code named there; these are behaviour changes and go in the PR
+    description's "Tests changed because the behaviour changed".
+  - `configuration-transfer.boundaries.test.ts`, new case: "a module missing from the export
+    answers setup.configuration_outdated" (`modules: {}`, box 1).
   - `setup-app.test.ts`: new `it.each` over en-GB and es-ES, "explains an export from newer
     software", rejecting `stageConfiguration` with `{ code: "setup.configuration_newer", params: {},
     status: 400 }` and expecting the new sentence on `live-source`, no draft import, no preview
     (copy `:3207-3232`). The existing "incompatible" case drops `"version"` from its loop (the server
-    no longer sends it) and keeps `module:core` and `modules`.
+    no longer sends it), keeps `module:core` and `modules`, and expects the reworded
+    `incompatible_version` sentence in EN and ES.
 - [ ] **Step 2:** run `pnpm --filter @waitron/provisioning exec vitest run src/configuration-transfer.boundaries.test.ts`,
   `pnpm --filter @waitron/server exec vitest run src/configuration-import.test.ts src/configuration-import.previous-export.test.ts`,
   `pnpm --filter @waitron/setup exec vitest run src/setup-app.test.ts -t "configuration"`; red.
@@ -532,7 +584,8 @@ finds.
   exported < target` throws `setup.configuration_outdated`; `target === undefined` keeps
   `setup.request_invalid { field: "module:<name>" }`. `setup-api.ts`'s status map gains
   `"setup.configuration_newer": 400`. `describeConfigurationRefusal` maps it to
-  `shell.configuration.newer`; drop `params.field === "version"` there. Add the EN and ES strings.
+  `shell.configuration.newer`; drop `params.field === "version"` there. Add the EN and ES strings
+  and reword `shell.configuration.incompatible_version` (words table).
 - [ ] **Step 4:** the three commands green. Also run `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-command-deployment`
   (the command line validates the same bundle, `first-setup-command-deployment.ts:97`) and
   `pnpm exec vitest run scripts/errors-reachable.test.ts`. Typecheck provisioning, server and setup;
@@ -625,8 +678,7 @@ allocation through `provision(...)`) and `apps/server/src/backup-recovery-pack-a
 ### Task 11: full-disk words outside the till strip
 
 **Files:** `apps/server/src/recovery-start-again.ts:81-82, :92-93, :122-123, :134-135`,
-`apps/server/src/i18n/box-emails.ts:13-21`, `apps/till/src/i18n/codes.ts:775-777`,
-`apps/till/src/i18n/strings.ts:1450-1455`, `docs/developers/conventions-ui.md:21-26`; tests
+`apps/server/src/i18n/box-emails.ts:13-21`; tests
 `apps/server/src/recovery-start-again.test.ts:250-277`, `apps/server/src/box-alert-email.test.ts:70-85`.
 
 - [ ] **Step 1: failing tests.**
@@ -638,16 +690,16 @@ allocation through `provision(...)`) and `apps/server/src/backup-recovery-pack-a
     at `:70-85`: EN text `not.toMatch(/install|support/i)`, ES `not.toMatch(/instal|soporte/i)`,
     and both still name "Settings → Box status" / «Ajustes → Estado del equipo».
 - [ ] **Step 2:** `pnpm --filter @waitron/server exec vitest run src/recovery-start-again.test.ts src/box-alert-email.test.ts`; red.
-- [ ] **Step 3:** the four strings and the email's last sentence as in the words table. In the till,
-  a one-line comment above `storage.disk_full` in `codes.ts` and above the `sale.disk_full` group in
-  `strings.ts`: their «Tell a manager» is the owner's strip exception (A1127 Q4), extended to them
-  pending Owner question 1. In `conventions-ui.md`, the sentence "The till's other full-disk refusal
-  words also say «Tell a manager» and are not covered by this answer (backlog)." becomes "The till's
-  other full-disk refusals (`storage.disk_full`, `sale.disk_full` and its two variants) keep it on
-  the same reasoning, stated at their site." Do not change any till string.
+- [ ] **Step 3:** the four strings and the email's last sentence as in the words table. The till,
+  `conventions-ui.md` and root `CLAUDE.md` are not touched in this task: they wait for the owner's
+  answer to Owner question 1. When it comes, before landing: if the exception is extended, a
+  one-line comment at `apps/till/src/i18n/codes.ts:775` and above the `sale.disk_full` group in
+  `apps/till/src/i18n/strings.ts:1450` saying their «Tell a manager» is the owner's strip exception
+  (A1127 Q4), and `conventions-ui.md:25-26` says the same; if not, the shorter words, with
+  `apps/till/src/i18n/codes.test.ts:790-814` and the guides' quotes
+  (`apps/server/src/guide/{en,es}/kitchen-service.md`) following.
 - [ ] **Step 4:** green; also `pnpm --filter @waitron/server exec vitest run src/recovery-surface.test.ts src/start-full-disk.e2e.test.ts -t "Start again|start again|diskFull"`
-  (the never-delete word list and the full-disk page check), and
-  `pnpm --filter @waitron/till exec vitest run src/i18n/codes.test.ts`. `pnpm format:check`.
+  (the never-delete word list and the full-disk page check). `pnpm format:check`.
   Commit: "Full-disk words outside the till strip send nobody elsewhere".
 
 ### Task 12: backlog, decisions and the PR's words
@@ -685,6 +737,12 @@ allocation through `provision(...)`) and `apps/server/src/backup-recovery-pack-a
   `diskFull` words show: read (`FULL_DISK_BYTES` 16 MiB is below `START_FREE_SPACE_FLOOR` 256 MiB,
   `apps/server/src/boot-failure.ts:47`, `apps/server/src/start-space.ts:11`); those sentences are
   unchanged here.
+- That the copy in `readSetupDatabase` reports a full disk as `ENOSPC` (it copies into the system
+  temporary folder, `first-setup-database-holdings.ts:91`, which may be on another disk than the
+  venue folder): read; Task 2 runs it.
+- That `:224`'s `layout unexpected` reason cannot occur after the check at `:281`: read.
+- That an export's module version above the box's applied version means newer software: the box's
+  database is read as it is, not checked against what its software ships.
 - That the till's full-disk refusals show while the strip is up: not established; Owner question 1's
   recommendation does not depend on it.
 
@@ -694,3 +752,25 @@ allocation through `provision(...)`) and `apps/server/src/backup-recovery-pack-a
 main first; if #2521 has landed, resolve `setup-app.ts`, the two wipe tests and the guide paragraph
 by keeping both changes.
 
+
+## Review fold (2026-11-06)
+
+The fresh-context plan review's findings, each checked against the code before the plan changed:
+
+- **I1:** `captureFirstSetupOriginals` refuses `setup.not_ready` at
+  `first-setup-resolution-inspection.ts:157, :159, :192, :194` (read). Added to the Entry 1 table and
+  Task 1, with a new `too-large` cause.
+- **I2:** confirmed (`first-setup-state.ts:472-477`; the inspection id covers the marker). `:243`
+  stays cause-less; Task 3's `attempt_conflict` page change is gone (also settles M8).
+- **M1:** the six flipping expectations are listed under Entry 2 and named as behaviour changes.
+- **M2:** `incompatible_version` reworded to blame neither side.
+- **M3:** `:227` and the oversize sites take `too-large`; `:290` takes `unexpected` (old
+  `other-files`, reworded to "files or data it does not expect"); an `ENOSPC` copy answers
+  `storage.disk_full`, the approved full-disk words.
+- **M4:** both Spanish sentences corrected.
+- **M5:** the fiscal-code sentence now names Task 9's edits; the rename is Owner question 5.
+- **M6:** Task 11 leaves the till, `conventions-ui.md` and `CLAUDE.md` until the owner answers.
+- **M7:** `schemaVersionsByModule` reads the applied version (`backup-manifest.ts:19-31`);
+  `setup-app-wipe.test.ts:294-304` pins the not-offered path; the page's own `setup.not_ready` is
+  unreachable on this path and gets no new words.
+- **M9:** Task 2 asserts `params` explicitly per site, including `:84`, `:250`, `:275`, `:295`.
