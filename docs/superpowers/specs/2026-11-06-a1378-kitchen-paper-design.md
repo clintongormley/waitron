@@ -2,8 +2,7 @@
 
 The watcher relayed the owner's approval of all six recommendations on 6 November 2026 at about
 13:30. This records that approved scope alongside the three independent paper fixes. Everything
-lands in one pull request. New English and Spanish fixed words need the watcher's approval before
-landing; that wording question is in Lane F's questions file, not this repository.
+lands in one pull request. The watcher relayed approval of the exact English and Spanish fixed words at about 14:10.
 
 ## Approved behavior
 
@@ -48,20 +47,21 @@ party context from order context, then includes the change time and before/after
 keeps the data's bill attribution while presenting one party notice. Do not attach another bill's
 lines to an anchor bill or delete notice rows to simulate grouping.
 
-Change `setPartyName` to accept the existing trading context; update its route and direct callers.
-Read the old name, save the new normalized name, and enqueue name-change paper in that same
-transaction. Reuse the existing pending-work and party-family rules, checking whether each station
+Keep `setPartyName`'s existing arguments: identity-only paper needs no item presentation or
+trading context. Read the old name, save the new normalized name, and enqueue name-change paper
+in that same transaction. Reuse the existing pending-work and party-family rules, checking whether each station
 actually received held paper. A disabled or deleted printer gets no new job. Name slips contain
 identity and old/new names, not a new cooking command.
 
 Build a party-wide note slip from all affected bills at once, resolving their ticket items once.
 Only bills represented at a particular output appear on its paper. A name change also lists only
-orders with outstanding work at that printer. Group by party identity, not its name. Follow merged
+orders with outstanding work at that printer. Independent counter orders delivered to a party's table do not gain its identity or receive its
+name-change paper. Group by party identity, not its name. Follow merged
 party identity through the existing survivor reader; two counter orders never share an identity.
 
-The proposed new fixed words are `Orders` / `Pedidos`, `NAME CHANGED` / `NOMBRE CAMBIADO`,
+The approved new fixed words are `Orders` / `Pedidos`, `NAME CHANGED` / `NOMBRE CAMBIADO`,
 `Now` / `Ahora`, and `(unnamed)` / `(sin nombre)`. Reuse existing `Was` / `Antes` and all FIRE,
-HOLD, note-change and singular-order words. Proposal approval remains a landing condition.
+HOLD, note-change and singular-order words. The watcher relayed the owner's wording approval on 6 November 2026 at about 14:10.
 
 ## Constraints and evidence
 

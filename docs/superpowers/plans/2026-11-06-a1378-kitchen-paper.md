@@ -75,15 +75,15 @@ Files: `kitchen-print.ts`, `kitchen-ticket.ts`, shared `KitchenNoteChange` type,
 Files: `parties.ts`, `till-api.ts`, `kitchen-print.ts`, `kitchen-ticket.ts`,
 `i18n/kitchen-ticket.ts`, direct callers and party/name integration tests.
 
-- [ ] Add failing rename, first-name and clear-name cases with two bills and shared/separate
+- [x] Add failing rename, first-name and clear-name cases with two bills and shared/separate
   printers. Assert old/new names and exact affected order lists. Add unchanged normalized name,
   no work, served work, made-here and unrecorded HOLD controls.
-- [ ] Add `formatPartyNameChangeSlip` with station names, table label, order numbers, before/after,
+- [x] Add `formatPartyNameChangeSlip` with station names, table label, order numbers, before/after,
   instant, locale and explicit venue zone. Add the four proposed bilingual fixed words.
-- [ ] Add `enqueuePartyNameChange` using existing party-family and outstanding printed-work reads.
-  Require trading context in `setPartyName`; read old name and enqueue after saving in the same
-  transaction. Update all direct consumers and preserve rollback/revision assertions. Run to green.
-- [ ] Commit signed off; update EN/ES kitchen guides and affected historical/decision prose.
+- [x] Add `enqueuePartyNameChange` using existing party-family and outstanding printed-work reads.
+  Read the old name and enqueue after saving in the same transaction. Identity-only paper does
+  not need trading context; retain the existing signature and rollback/revision assertions. Run to green.
+- [x] Commit signed off; update EN/ES kitchen guides and affected historical/decision prose.
 
 ### Task 5: Finish the whole bundle
 

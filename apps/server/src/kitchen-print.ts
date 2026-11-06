@@ -46,6 +46,7 @@ import {
   formatKitchenNoteChangeSlip,
   formatKitchenTicket,
   formatMovedSlip,
+  formatPartyNameChangeSlip,
   joinKitchenTickets,
   kitchenQuantityText,
   mergeKey,
@@ -931,13 +932,11 @@ type CorrectionChange =
   | { kind: "ALLERGY"; blocks: ReadonlyMap<string, KitchenAllergyBlock | null> }
   | HoldCorrection;
 
-export async function enqueueOrderKitchenNoteChange(
+async function readKitchenChangeItems(
   tx: Transaction,
-  cfg: TradingContext,
   orderIds: readonly string[],
-  change: KitchenNoteChange,
-): Promise<void> {
-  if (orderIds.length === 0 || change.before === change.after) return;
+): Promise<Map<string, CorrectionItem[]>> {
+  if (orderIds.length === 0) return new Map();
   const rows = await tx
     .select({
       orderId: ticketItems.workingOrderId,
@@ -979,6 +978,82 @@ export async function enqueueOrderKitchenNoteChange(
     });
     byOrder.set(orderId, items);
   }
+  return byOrder;
+}
+
+export async function enqueuePartyNameChange(
+  tx: Transaction,
+  partyId: string,
+  change: { before: string | null; after: string | null },
+): Promise<void> {
+  if (change.before === change.after) return;
+  const orders = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(inArray(workingOrders.partyId, await partyFamily(tx, partyId)));
+  const byOrder = await readKitchenChangeItems(
+    tx,
+    orders.map((order) => order.id),
+  );
+  const all = [...byOrder].flatMap(([orderId, items]) =>
+    items.map((item) => ({ ...item, orderId })),
+  );
+  const held = [...new Set(all.flatMap((item) => item.holdGroupId ?? []))];
+  const recorded =
+    held.length === 0 ? new Map<string, ReadonlySet<string>>() : await heldPaperStations(tx, held);
+  const items = all.filter(
+    (item) =>
+      item.holdGroupId === undefined ||
+      recorded.get(item.holdGroupId)?.has(item.stationId) === true,
+  );
+  const stationIds = [...new Set(items.map((item) => item.stationId))];
+  if (stationIds.length === 0) return;
+  const mappings = await printerMappings(tx, stationIds);
+  if (mappings.length === 0) return;
+  const language = await readKitchenLanguage(tx);
+  const { timeZone } = await readVenueClock(tx);
+  const headers = await readOrderHeaders(tx, [...new Set(items.map((item) => item.orderId))]);
+  const stations = await readStations(tx, stationIds);
+  const sorted = stationIds.sort((a, b) =>
+    compareStationNames(stations.get(a)!.name, stations.get(b)!.name),
+  );
+  const at = new Date().toISOString();
+  const venue = venueOnce(tx);
+  for (const route of routeKitchenTickets(sorted, mappingsByStation(mappings))) {
+    const visible = [
+      ...new Set(
+        items
+          .filter((item) => route.stationIds.includes(item.stationId))
+          .map((item) => item.orderId),
+      ),
+    ].sort((a, b) => Number(headers.get(a)!.orderNumber) - Number(headers.get(b)!.orderNumber));
+    const tableLabel =
+      [...new Set(visible.flatMap((id) => headers.get(id)!.tableLabel ?? []))].join(" · ") || null;
+    const bytes = formatPartyNameChangeSlip(
+      {
+        locale: language,
+        stationNames: route.stationIds.map((id) => stations.get(id)!.name),
+        tableLabel,
+        orderNumbers: visible.map((id) => headers.get(id)!.orderNumber),
+        ...change,
+        at,
+      },
+      route.printers[0]!,
+      timeZone,
+    );
+    for (const printer of route.printers)
+      await enqueuePrintJob(tx, printer.printerId, bytes, "document", { venueId: await venue() });
+  }
+}
+
+export async function enqueueOrderKitchenNoteChange(
+  tx: Transaction,
+  cfg: TradingContext,
+  orderIds: readonly string[],
+  change: KitchenNoteChange,
+): Promise<void> {
+  if (orderIds.length === 0 || change.before === change.after) return;
+  const byOrder = await readKitchenChangeItems(tx, orderIds);
   if (byOrder.size === 0) return;
   const headers = await readOrderHeaders(tx, [...byOrder.keys()]);
   const survivors = await partySurvivors(tx, [
@@ -1424,8 +1499,7 @@ export async function enqueueAllergyCorrectionSlips(
 }
 
 /**
- * One slip per item, to its station's printers, headed with the current table; a kitchen-note change
- * prints one slip per printer instead.
+ * Identical portions share a correction; each station uses its own printer routes.
  */
 async function printCorrectionSlips(
   tx: Transaction,

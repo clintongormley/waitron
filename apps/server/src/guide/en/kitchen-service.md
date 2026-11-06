@@ -51,7 +51,15 @@ with a correction when its current instructions differ.
 
 Changing or removing the order's kitchen note gives your station one notice listing every dish it
 affects, and **Got it** clears it. Each kitchen printer prints one slip listing the dishes of the
-stations it serves. A table with more than one bill gets one notice and one slip for each bill.
+stations it serves. A party with more than one affected bill gets one notice per station and one
+slip per printer, listing those bill numbers. Read the list before acknowledging it.
+
+## Match changed names to the original orders {#party-names}
+
+Correction slips show the party's current name beside the order number. If staff name, rename or
+clear the name of a party with kitchen work still outstanding, each affected printer receives a
+**NAME CHANGED** slip. Match its order numbers to the original tickets and use the name shown after
+**Now**. This slip changes the name; it does not ask you to cook the food again.
 
 ## Keep advance HOLD instructions with the work {#held-work}
 
@@ -64,8 +72,7 @@ another station set so may start getting the group's HOLD paper later: a HOLD ti
 dish is moved to it, or a HOLD CHANGED slip when a held dish is added to the group there. A station
 that has the group's HOLD paper keeps getting it, its corrections and the ticket marked FIRE, even
 if its switch is turned off. Any other station prints its part unmarked when the group is fired,
-unless it shares a printer with a station that has the group's HOLD paper: that printer's ticket
-marked FIRE carries both.
+including on a shared printer: only the sections that already received HOLD paper are marked FIRE.
 
 Firing held work at the same station does not duplicate an existing allergy correction. Recalling
 a dish into a draft ends its old kitchen work. Sending that draft again creates a new kitchen copy
@@ -75,6 +82,9 @@ from the instructions you confirm for that send.
 
 On kitchen paper, a group's heading names the courses of the dishes printed under it, in course
 order: **GROUP 3 · STARTERS, MAINS**. A reprint shows them as they are when you reprint.
+
+MOVED slips use the station's combined or separate dish setting too. A combined line such as
+**3 x Steak** covers three identical whole portions in that group.
 
 ## Reprint the original, then check its notices {#reprints}
 

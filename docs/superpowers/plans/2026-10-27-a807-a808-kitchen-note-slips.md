@@ -1,5 +1,10 @@
 # A807 and A808 — one kitchen-note slip per printer, one notice per station, and the reprint time: build plan
 
+> **2026-11-06, A1378:** A party note change now shares one slip per affected printer and one notice per station across
+> its affected bills, listing their numbers. Acknowledgment covers all underlying bill rows. The
+> per-bill decision and examples below describe the earlier implementation.
+
+
 > **2026-11-06, A1378:** kitchen tickets, reprints and correction, note-change and MOVED slips
 > now take the venue's saved time zone explicitly. Whole quantities print without `.000`;
 > fractional quantities retain their stored precision. The clock and quantity examples below

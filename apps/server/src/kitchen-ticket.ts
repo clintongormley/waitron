@@ -372,6 +372,11 @@ function emitOrderLine(
   columns: number,
 ): void {
   const label = `${order} · `;
+  if (partyName !== undefined && prepareText(label).length >= columns) {
+    for (const part of wrapText(prepareText(order), columns)) b.line(part);
+    for (const part of wrapText(prepareText(partyName), columns)) b.line(part);
+    return;
+  }
   const [line, indent] =
     partyName === undefined ? [order, 0] : [`${label}${partyName}`, prepareText(label).length];
   for (const part of wrapText(prepareText(line), columns, indent)) b.line(part);
@@ -622,7 +627,7 @@ export interface KitchenNoteChangeSlip {
 }
 
 /**
- * One order's kitchen-note change at one printer: the header as a correction slip prints it, then
+ * A kitchen-note change at one printer: the affected orders and party, then
  * each station's dishes, under the station's name when there is more than one. Dishes that share
  * one group name it once under the note lines; otherwise each group's run is headed, as a ticket
  * heads them, with no late-send marks.
@@ -663,6 +668,39 @@ export function formatKitchenNoteChangeSlip(
     emitGrouped(b, station.items, columns, onlyGroup, slip.locale, false);
   }
 
+  return b.feedAndCut().bytes();
+}
+
+export interface PartyNameChangeSlip {
+  locale: string;
+  stationNames: readonly string[];
+  tableLabel: string | null;
+  orderNumbers: readonly string[];
+  before: string | null;
+  after: string | null;
+  at: string;
+}
+
+export function formatPartyNameChangeSlip(
+  slip: PartyNameChangeSlip,
+  layout: EscSetting,
+  timeZone: string,
+): Uint8Array {
+  const b = esc(layout).init();
+  b.printArea(b.grid.widthDots);
+  const text = (value: string): void => {
+    for (const line of wrapText(prepareText(value), b.grid.columns)) b.line(line);
+  };
+  const words = kitchenTicketWords(slip.locale);
+  text(`*** ${words.nameChanged} ***`);
+  text(slip.stationNames.join(" · "));
+  if (slip.tableLabel !== null) text(slip.tableLabel);
+  text(
+    `${slip.orderNumbers.length === 1 ? words.order : words.orders} ${slip.orderNumbers.join(", ")}`,
+  );
+  text(hhmm(new Date(slip.at), timeZone));
+  text(`${words.was}: ${slip.before ?? words.unnamed}`);
+  text(`${words.now}: ${slip.after ?? words.unnamed}`);
   return b.feedAndCut().bytes();
 }
 

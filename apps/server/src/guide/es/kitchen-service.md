@@ -55,8 +55,17 @@ original y lleva una corrección cuando las instrucciones actuales son distintas
 
 Cambiar o quitar la nota para cocina del pedido da a tu estación un solo aviso con todos los platos
 afectados, y **Entendido** lo retira. Cada impresora de cocina imprime un solo ticket con los
-platos de las estaciones a las que sirve. Una mesa con más de una cuenta recibe un aviso y un ticket
-por cada cuenta.
+platos de las estaciones a las que sirve. Un grupo de comensales con varias cuentas afectadas recibe
+un aviso por estación y un ticket por impresora, con los números de esas cuentas. Lee la lista antes
+de confirmar.
+
+## Relaciona los nombres cambiados con los pedidos originales {#party-names}
+
+Los tickets de corrección muestran el nombre actual del grupo de comensales junto al número de
+pedido. Si se añade, cambia o quita el nombre de un grupo con trabajo pendiente en cocina, cada
+impresora afectada recibe un ticket **NOMBRE CAMBIADO**. Relaciona sus números de pedido con los
+tickets originales y usa el nombre que aparece después de **Ahora**. Este ticket cambia el nombre;
+no pide que vuelvas a preparar la comida.
 
 ## Conserva las instrucciones anticipadas del trabajo en espera {#held-work}
 
@@ -71,9 +80,8 @@ recibir más tarde lo que se imprime en espera del grupo: un ticket anticipado d
 mueve un plato en espera, o una comanda HOLD CHANGED cuando se añade al grupo un plato en espera en
 ella. Una estación que tiene lo impreso en espera del grupo sigue recibiéndolo, junto con sus
 correcciones y la comanda marcada FIRE, aunque se desactive su ajuste. Cualquier otra estación
-imprime su parte sin marca cuando se envía el grupo a preparar, salvo si comparte impresora con una
-estación que tiene lo impreso en espera del grupo: la comanda marcada FIRE de esa impresora lleva
-las dos.
+imprime su parte sin marca cuando se envía el grupo a preparar, también si comparte impresora:
+solo las secciones que ya recibieron lo impreso en espera llevan la marca MARCHAR.
 
 Enviar a preparar el trabajo en espera en la misma estación no duplica una corrección de alergia
 existente. Recuperar un plato a un borrador termina su trabajo anterior en cocina. Volver a enviar
@@ -84,6 +92,9 @@ ese borrador crea una copia nueva con las instrucciones que confirmas para ese e
 En el papel de cocina, el encabezado de un grupo nombra los cursos de los platos impresos debajo, en
 el orden de los cursos: **GRUPO 3 · ENTRANTES, PRINCIPALES**. Una reimpresión los muestra como estén
 al reimprimir.
+
+Los tickets MOVIDO también usan el ajuste de platos combinados o separados de la estación. Una
+línea combinada como **3 x Filete** abarca tres porciones enteras iguales de ese grupo.
 
 ## Reimprime el original y comprueba sus avisos {#reprints}
 

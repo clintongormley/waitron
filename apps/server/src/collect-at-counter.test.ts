@@ -436,9 +436,8 @@ describe("moveSettledBillToCounter", () => {
     expect(slip![0]).toBe("*** MOVIDO ***");
     expect(slip).toContain("A:  (mostrador)");
     const text = slip!.join("\n");
-    // A MOVED slip still names each line (A803 D16), and each burger is its own line.
-    expect(slip!.filter((line) => line.includes("1 x BURG"))).toHaveLength(2);
-    expect(text).not.toContain("2 x BURG");
+    expect(slip!.filter((line) => line.includes("2 x BURG"))).toHaveLength(1);
+    expect(text).not.toContain("1 x BURG");
     expect(text).toContain("1 x RIBEYE");
     expect(await noticesOn(p.billId)).toEqual([
       { stationId: venue.stationId, kind: "moved", lineName: "BURG", movedTo: null },

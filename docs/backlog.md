@@ -104,7 +104,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - A1329: write the box's key files so a power cut cannot lose them.
 - A1236 and A1361: "Table 3 paid" while two bills are unpaid.
 - A1218: a counter with two zones cannot get back to its menu.
-- [A1378. Fix kitchen paper: Spanish time, whole quantities, then the owner's slip questions](backlog/kitchen.md#bundle-a1378-fix-kitchen-paper-spanish-time-whole-quantities-then-the-owners-slip-questions)
 - [A1379. A failed setup always offers Start again](backlog/setup.md#bundle-a1379-a-failed-setup-always-offers-start-again)
 - [A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
 - [A1381. A manager's stuck-payment actions cover placed orders and only this box's own payments](backlog/payments.md#bundle-a1381-a-managers-stuck-payment-actions-cover-placed-orders-and-only-this-boxs-own-payments)
@@ -730,7 +729,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **What a kitchen card draws** (bundle of 5, 3 important, size S). Holds A1220, A1006, A1202. [Detail](backlog/kitchen.md#bundle-what-a-kitchen-card-draws)
 
-- **A1378. Fix kitchen paper: Spanish time, whole quantities, then the owner's slip questions** (six slip decisions remain, size M, needs the owner). Venue-zone, whole-quantity and late-send-boundary fixes are on the A1378 branch. Holds A1065, A694, A695, A1192. [Detail](backlog/kitchen.md#bundle-a1378-fix-kitchen-paper-spanish-time-whole-quantities-then-the-owners-slip-questions)
 
 - **Held paper followups** (bundle of 3, 1 important, size M). Holds A1066, A1369. [Detail](backlog/kitchen.md#bundle-held-paper-followups)
 

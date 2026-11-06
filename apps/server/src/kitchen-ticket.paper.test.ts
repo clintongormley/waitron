@@ -330,3 +330,24 @@ describe("the end of a late-send run", () => {
     ]);
   });
 });
+
+it("wraps a party note's long bill list without reducing its name to one character per line", () => {
+  const lines = printedLines(
+    formatKitchenNoteChangeSlip(
+      {
+        locale: "en",
+        stations: [{ stationName: "Grill", items: [item] }],
+        tableLabel: "Table 4",
+        orderNumber: "10001",
+        orderNumbers: ["10001", "10002", "10003", "10004", "10005", "10006"],
+        party: { name: "Ana and friends", locale: "en" },
+        at,
+        orderNoteChange: { before: null, after: "Bring together" },
+      },
+      { paperWidth: "58mm", resolution: "203dpi" },
+      "Europe/Madrid",
+    ),
+  );
+  expect(lines.some((line) => line.includes("Ana and friends"))).toBe(true);
+  expect(lines.filter((line) => line.trim().length === 1)).toEqual([]);
+});

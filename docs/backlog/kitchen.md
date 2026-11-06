@@ -124,14 +124,6 @@ and now records its stations. Left open by A756 PR 6's review.
   reads its own through `GET …/menu-periods/:periodId/delete-impact`. Work each out only where it is
   used.
 
-## A695 — Naming or renaming a party after its food was sent prints nothing
-
-- **A695 — Naming or renaming a party after its food was sent prints nothing (2026-10-15; open,
-  owner decision).** Since A683 a named party's kitchen tickets read "Order 5 · Ana", but Name the
-  party prints no MOVED slip (A650 design, path 17), so a ticket already on the rail keeps the old
-  name, or none, while later tickets for the same order carry the new one. Decide: should a rename
-  of a party with sent food print a slip? Raised by A683's review (#1724).
-
 ## A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
 
 - **A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
@@ -212,13 +204,6 @@ guests leave unpaid; departure stays as it is until then. The worked example is 
   #1540 the fade is resized when the tab grows; scrolling it back was not added because doing so
   broke the "leaves a strip the reader scrolled where it is when only its height changes" case.
 
-## A694 — Correction slips do not print the party's name (2026-10-15; open, owner decision)
-
-Kitchen tickets and MOVED slips read "Order 5 · Ana" for a named party (A683). The other kitchen
-slips — VOID, RECALLED, MOVED TO a station, HOLD CHANGED, HOLD CANCELLED and CHANGED (an extra
-taken off) — still print the bare order number (`formatCorrectionSlip`,
-`apps/server/src/kitchen-ticket.ts`). Decide: should they carry the name too? Left open by A683.
-
 ## A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a "Not allowed" station.
 
 Within one dish `ticket.already_started` is checked first, but across a
@@ -285,31 +270,6 @@ By `git blame`, `:71`, `:73` and `:75` come from `c072fd5db6` (2026-10-24) and `
 guide's language and a kitchen's can differ. 4b's own new text names no marker, so the question stayed
 open for these older lines only. A803 slice 4b does not change them. Their Spanish words need the
 owner's answer first.
-
-## Bundle A1378: Fix kitchen paper: Spanish time, whole quantities, then the owner's slip questions
-
-6 owner decisions remain, size M. The venue-zone, whole-quantity and late-send-boundary fixes
-are on the A1378 branch; this bundle remains open until its slip questions are answered.
-
-- **A1065. A printer shared by a station recorded for a held group and one not recorded prints one
-  FIRE-marked ticket carrying both stations' dishes** (`apps/server/src/kitchen-print.ts:703-707`);
-  ask the owner whether FIRE should mark only the recorded station's part. Left open by A756 PR 6.
-- **A reprint covering several sends prints the earliest send time (left open by A808,
-  2026-10-27).** `planKitchenTickets` (`apps/server/src/kitchen-print.ts`) prints the earliest send
-  on each reprinted ticket. Ask the owner whether it should be the latest, or one time per send.
-- **A kitchen-note change gives a slip and a notice per bill, not per party (left open by A807,
-  2026-10-27).** A party with two bills gets two slips per printer and two notices per station
-  ([decision](kitchen.md#decisions-and-deliberate-limits)). Ask the owner whether a party
-  should get one.
-- **A694 — Correction slips do not print the party's name (2026-10-15; open, owner decision).**
-  [Detail](kitchen.md#a694--correction-slips-do-not-print-the-partys-name-2026-10-15-open-owner-decision)
-- **A695 — Naming or renaming a party after its food was sent prints nothing (2026-10-15; open,
-  owner decision).**
-  [Detail](kitchen.md#a695--naming-or-renaming-a-party-after-its-food-was-sent-prints-nothing)
-- **A1192. MOVED slips print each portion on its own line (left open by A803 slice 1, D16).**
-  Moving three identical croquetas prints three "1 x CROQ JAMON" lines, where the other kitchen
-  slips print one line for identical portions: `printMovedSlips` (`apps/server/src/kitchen-print.ts`)
-  lays out each line alone. Decide whether MOVED slips should group them too.
 
 ## Bundle: What happens to the kitchen when guests leave unpaid
 
@@ -600,11 +560,26 @@ the change (plan PR 8 Decision 1).
   the Each unit. The printed receipt prints an Each count bare since A663 Part 2 (owner,
   2026-10-15).
 
-- **A whole-order kitchen-note change prints one slip per printer and raises one notice per
-  station (owner, 2026-10-17).** The slip lists the affected dishes, and the cook acknowledges the
-  notice once per station, replacing A743's default of a slip and a notice per dish. Built in A807
-  (2026-10-27). The unit is the bill: a party with two bills gets a slip per printer and a notice
-  per station for each bill, each naming its own bill.
+- **A party kitchen-note change prints one slip per affected printer and one notice per station,
+  listing its affected bills (owner, 2026-11-06, A1378).** Acknowledging the notice covers every
+  underlying bill row. Independent counter orders and other parties stay separate. This replaces
+  A807's per-bill presentation; each row retains its original bill attribution.
+
+- **Kitchen paper uses the saved venue zone; a reprint keeps the earliest send and separate reprint
+  times (owner, 2026-11-06, A1378).** Whole quantities print without a zero fractional suffix;
+  fractions keep their supplied precision. A divider ends a late-send run before an unmarked dish.
+
+- **FIRE marks only station sections whose HOLD paper was recorded (owner, 2026-11-06, A1378).**
+  A station getting its first paper stays unmarked on a shared printer's ticket.
+
+- **Correction paper carries the current surviving party's name (owner, 2026-11-06, A1378).**
+  Naming, renaming or clearing a party with outstanding printed kitchen work sends one identity
+  slip per affected printer, with the old/new names and affected order numbers. Served, collected,
+  abandoned, made-here-only and never-printed held work receive no name-change paper. Independent
+  counter orders do not take the party's name merely because they are delivered to its table.
+
+- **MOVED uses the station's combined/separate choice (owner, 2026-11-06, A1378).** Identical whole
+  portions combine only within their group; measured and printed-as-sold items stay separate.
 
 - **Dishes that arrive in a party get a kitchen group at the receiving party (P16, owner,
   2026-10-17: kept).** Spec §15's "leaves with them outside any group" is read as the side the bill
