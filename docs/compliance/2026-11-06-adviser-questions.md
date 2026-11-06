@@ -72,8 +72,11 @@ database, which waits for A760.
 - **T1. Delivering a corrective invoice to strangers.** When a wrong clock misdates tickets, a
   corrective invoice is needed. The customers are unknown. Must it reach them, or is keeping it and
   filing its record enough? May a ticket the customer never received be cancelled and reissued?
-- **T2. Proving the real date.** When the real time of a sale is unknown, what evidence is enough to
-  fix its date? For example the card provider's time, or the elapsed time the machine measured.
+- **T2. Proving the real date.** When the box and its evidence cannot show the real time of a sale, what
+  is enough to fix its date? The box usually can show it: the boot-time clock gives the size of the
+  error within one run, and a card payment carries the provider's time. The hard case is a clock wrong
+  across a restart with no internet, on a sale paid in cash. May the restaurant keep the stamped date
+  if nothing shows it is wrong?
 - **T3. A false time from a crafted request.** During a stop found at start-up, a signed-in staff
   member confirms a till's time, and a crafted request could send a false one. It would then date
   invoices. Past records stay untouched, the person is named and the owner is alerted. Does this risk
@@ -183,6 +186,35 @@ here, the owner should say so.
   first is enough.
 - **P10.** The procedure and short text for collecting a customer's details on an invoice are right.
 
+## How a wrong clock is known, and what a late filing is
+
+**A late filing is not a wrong clock.** A record's time is when it was made, and sending it after an
+outage does not change that. AEAT's FAQ says the sending deadline extends through an outage, with
+«no hay establecido un plazo máximo fijo», and that invoicing must carry on. The send carries
+Incidencia = S, which Waitron sets. In AEAT's test service, records sent over five minutes late came
+back accepted with warning 2004, and one sent six minutes late with Incidencia = S came back `Correcto`.
+Warning 2004 needs no correction, and Waitron treats it that way. Production has not been tested.
+
+**So AEAT's replies cannot show a wrong clock.** Warning 2004 looks the same for a late record and a
+clock running ahead, and AEAT never sees a record made by a clock running behind as anything but late.
+The only hard refusal is 1112, an issue date later than AEAT's date.
+
+**How Waitron can know instead:**
+
+| Signal | Built? | What it shows |
+| --- | --- | --- |
+| The box reads behind the newest record | Yes, this is the stop | The clock is behind, or an earlier record was ahead |
+| AEAT's time, from its public QR page and from each reply | Read at start-up and during a stop. Using it in normal trading is slice 9c | Whether the clock is right now |
+| Tills' own clocks | Yes | Whether they agree with the box |
+| The box's boot-time clock, which clock changes do not move | Used to work out when a stop began. Watching every change is slice 9c | The exact size of a change, within one run |
+
+**What this means for the real time of a sale.** It is often knowable. Within one run, the boot-time
+clock gives the error, so the real time is the stamped time less that error. Online sales would also
+have AEAT's own receipt time within seconds of the sale, but Waitron does not keep it yet. A card
+payment has the provider's time. It is really unknown only when the clock was wrong across a restart,
+with no internet, on a cash sale (T2). The date is all that matters for tax, so only an error crossing
+midnight needs a remedy.
+
 ## Answered by research: no need to ask
 
 | Point | Answer | Source |
@@ -259,6 +291,8 @@ A1406, A1407 and A1408.
   period in that report.
 - **Three identical refusals hold the rest of a chain**, so a clock a day ahead could stop later filings.
 - **Clocks running behind are not listed** for the owner, though they need the same remedy.
+- **AEAT's receipt time is read but not kept.** Stored with each record, it would prove the real time
+  of most sales. It needs a column, so it waits for A760.
 - **Allergy wording is out of date:** the privacy guide and questions describe an allergy noted when
   mentioned. The till asks every table.
 - **Masked logs are not anonymous**, and the venue's notice must name Waitron as a recipient once bug
