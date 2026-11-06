@@ -2,7 +2,6 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { verifyThrottledCredential, type PinAttempts } from "./credential.js";
 import { createPinThrottle, type PinThrottle } from "./pin-throttle.js";
 import { verifyPin } from "./verify-pin.js";
@@ -17,7 +16,7 @@ vi.mock("./verify-pin.js", async (importOriginal) => {
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {

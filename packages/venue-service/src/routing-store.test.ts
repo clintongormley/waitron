@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  CATALOGUE_MIGRATIONS,
   createCatalogue,
   createCategory,
   addProductToMenu,
@@ -37,7 +36,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
   chooseExtraMakerBeside,
   chooseMaker,
@@ -79,7 +77,7 @@ import { ensureDefaultSeasons } from "./seasons.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 let db: Database;

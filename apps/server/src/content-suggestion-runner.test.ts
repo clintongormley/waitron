@@ -4,7 +4,6 @@ import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db"
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
-  CATALOGUE_MIGRATIONS,
   contentSuggestionJobs,
   contentSuggestions,
   createCatalogue,
@@ -29,7 +28,7 @@ import {
   type RunnerStep,
 } from "./content-suggestion-runner.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const context: TranslationContext = { fallbackLanguage: "es-ES", required: [] };
 const inTx = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 type Fake = Awaited<ReturnType<typeof translationCloudFixture>>;

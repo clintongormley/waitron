@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Agent, errors as undiciErrors, fetch as undiciFetch } from "undici";
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
 import type { Cabecera, EnvioRegistro } from "@waitron/verifactu";
 import {
@@ -30,7 +30,7 @@ const KEY_ENV = {
 const MINIMAL_SOAP_BODY = '<?xml version="1.0"?><Envelope><Body/></Envelope>';
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 120_000,
 });
 const ring = loadKeyRing(KEY_ENV);

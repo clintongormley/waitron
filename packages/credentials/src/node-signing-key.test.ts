@@ -14,7 +14,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
-import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 import {
   establishNodeSigningKey,
   nodeSigningPublicKey,
@@ -46,7 +45,7 @@ const PRIVATE_KEY = pair.privateKey.export({ format: "der", type: "pkcs8" }).toS
 const PUBLIC_KEY = pair.publicKey.export({ format: "der", type: "spki" }).toString("base64");
 
 describe("before the node set has run", () => {
-  const bare = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+  const bare = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("refuses a read when node.db has no signing-key table", async () => {
     await expect(readNodeSigningKey(bare.node, RING_V1, NODE)).rejects.toThrow(

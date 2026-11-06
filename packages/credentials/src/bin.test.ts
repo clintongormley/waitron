@@ -17,7 +17,6 @@ import { NODE_MIGRATIONS, nodeSigningKey } from "@waitron/node-db";
 import { runBin } from "./bin.js";
 import type { CliIo } from "./cli.js";
 import { loadKeyRing } from "./keyring.js";
-import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 import { sealNodeSigningKeyTx } from "./node-signing-key.js";
 
 const KEY_ENV = {
@@ -63,7 +62,6 @@ describe("waitron-credentials against a real venue directory", () => {
     const store = await openVenueDatabase(venueDir);
     try {
       await runMigrations(store.venue, CORE_MIGRATIONS);
-      await runMigrations(store.venue, CREDENTIALS_MIGRATIONS);
       await runMigrations(store.node, NODE_MIGRATIONS);
     } finally {
       await store.close();

@@ -4,8 +4,8 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
-import { CATALOGUE_MIGRATIONS, activateDueMenuPublications } from "@waitron/catalogue";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { activateDueMenuPublications } from "@waitron/catalogue";
 import type { MenuPreview, MenuPublicationsAnswer, MenuStatus } from "@waitron/catalogue";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -30,7 +30,7 @@ let staffCookie: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     vi.useFakeTimers({ toFake: ["Date"] });

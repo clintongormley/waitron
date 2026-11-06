@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   departments,
@@ -17,12 +16,11 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { eq, sql } from "drizzle-orm";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, listDepartments } from "./operations.js";
 import * as receipts from "./index.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const pair = {
   "58mm": { widthDots: 8, heightDots: 1, data: "gA==" },

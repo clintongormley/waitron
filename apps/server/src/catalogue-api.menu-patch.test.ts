@@ -4,10 +4,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import type { LiveMenu, MenuPatchResult, MenuPreview } from "@waitron/catalogue";
-import { MEDIA_MIGRATIONS, mediaImages } from "@waitron/media";
+import { mediaImages } from "@waitron/media";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
@@ -21,7 +20,7 @@ let staffCookie: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS, MEDIA_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);

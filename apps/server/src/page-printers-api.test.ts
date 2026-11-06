@@ -9,11 +9,9 @@ import {
   withTransaction,
   venueLocationId,
 } from "@waitron/db";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { createStation } from "./kitchen.js";
@@ -26,12 +24,7 @@ import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import "./errors.js";
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 

@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   catalogues,
@@ -48,7 +47,6 @@ import {
   readServiceDeleteSettings,
   clearServiceDeleteSettings,
 } from "./service-delete-settings.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
   readProfileZones,
   readProfileServiceScopes,
@@ -62,7 +60,7 @@ import { VENUE_SERVICE } from "./service.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 

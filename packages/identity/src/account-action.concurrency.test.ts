@@ -9,13 +9,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, managementAccountActions } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { seedManager } from "../test/fixtures.js";
 import { requestAccountRecoveryAction } from "./account-action.js";
 
 const EMAIL = "reset-race@x.com";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 let personId: string;
 

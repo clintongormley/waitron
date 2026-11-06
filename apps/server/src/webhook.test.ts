@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, nodes, venueLocationId, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { PAYMENTS_MIGRATIONS, insertInitiated } from "@waitron/payments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, deviceOrigin, nodeId as brandNodeId } from "@waitron/shared";
@@ -28,7 +28,7 @@ const KEY_ENV = {
 };
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, PAYMENTS_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   timeoutMs: 60_000,
 });
 const ring = loadKeyRing(KEY_ENV);

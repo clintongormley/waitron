@@ -23,19 +23,13 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import {
-  CREDENTIALS_MIGRATIONS,
-  loadKeyRing,
-  nodeSigningPublicKey,
-  type KeyRing,
-} from "@waitron/credentials";
+import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import {
   bindingFingerprint,
   signEnvelope,
   verifyEnvelope,
   type HandoverBinding,
 } from "@waitron/handover";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import {
   endorseKey,
@@ -90,7 +84,7 @@ const STRANGER = { nodeId: OTHER_BOX, ...generateNodeKeyPair() };
 const PASSWORD_SIGN_IN = { method: "password", password: "correct horse" };
 const FORGED_TEXT = "<img src=x onerror=alert(1)>\nsecond line";
 
-const migrations = [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS];
+const migrations = [CORE_MIGRATIONS, NODE_MIGRATIONS];
 const mainBox = useVenueDb({ migrations });
 const spareBox = useVenueDb({ migrations });
 

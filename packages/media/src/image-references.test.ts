@@ -1,4 +1,3 @@
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
@@ -13,7 +12,6 @@ import {
   activateDueMenuPublications,
   addMember,
   cancelMenuPublication,
-  CATALOGUE_MIGRATIONS,
   createCatalogue,
   createProduct,
   createSectionIn,
@@ -32,7 +30,6 @@ import {
 } from "@waitron/catalogue";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { MEDIA_MIGRATIONS } from "./migrations.js";
 
 /**
  * `products.image`, `sections.image`, `section_members.folder_overrides`'s `image` key and
@@ -54,7 +51,7 @@ import { MEDIA_MIGRATIONS } from "./migrations.js";
  * itself and returns them rather than reaching the delete trigger.
  */
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS, MEDIA_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 const PRESENT = `${"a".repeat(64)}.jpg`;

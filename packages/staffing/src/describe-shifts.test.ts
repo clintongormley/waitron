@@ -2,23 +2,12 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { WORKFORCE_MIGRATIONS, shiftAssignments, shifts, staffRoles } from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
-import { STAFFING_MIGRATIONS } from "./migrations.js";
 import * as staffing from "./index.js";
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    WORKFORCE_MIGRATIONS,
-    STAFFING_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 describe("describeShifts", () => {
   it("labels only the requested assigned shifts with their area and staff role, including inactive retained areas", async () => {

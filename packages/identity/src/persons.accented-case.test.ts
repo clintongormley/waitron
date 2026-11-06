@@ -16,7 +16,6 @@ import {
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { createPerson, setEmail } from "./staff.js";
 import { saveOwnProfile } from "./profile.js";
 import { openManagementSession, seedManager, seedPerson, TOTP_KEY_RING } from "../test/fixtures.js";
@@ -24,7 +23,7 @@ import { foldForUniqueness } from "./fold.js";
 import { PERSONS_LIVE_DISPLAY_NAME } from "./person-constraints.js";
 import { startManagementSession } from "./management-session.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, fn);

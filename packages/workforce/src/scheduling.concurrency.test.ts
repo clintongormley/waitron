@@ -14,7 +14,6 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { WorkforceBackend } from "./clocking.js";
 import { rosterVersions } from "./schema/roster-versions.js";
@@ -24,7 +23,7 @@ const PUBLISHERS = 6;
 
 const backend = new WorkforceBackend();
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 
 let locationId: string;

@@ -5,7 +5,6 @@ import { isUuid } from "@waitron/shared";
 import { generateSecret, generateSync } from "otplib";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import {
   codeOf,
   refusalOf,
@@ -33,7 +32,7 @@ vi.mock("./verify-password.js", async (importOriginal) => {
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 // `Promise<T> | T`: `tx.execute` is synchronous on this engine and a `Promise<T>`-only parameter
 // refuses it.

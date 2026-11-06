@@ -4,10 +4,9 @@ import { CORE_MIGRATIONS, withTransaction, type Database, type Transaction } fro
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { PersonRoleValue } from "@waitron/identity";
 import { decimal } from "@waitron/shared";
-import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { readAdjustmentSettings, saveAdjustmentSettings } from "./settings.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 let db: Database;
 beforeAll(() => {

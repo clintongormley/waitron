@@ -7,7 +7,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue, seedWorkingOrder as seedOrder } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
-  IDENTITY_MIGRATIONS,
   persons,
   registerModulePermissions,
   startManagementSession,
@@ -16,7 +15,6 @@ import {
 import type { ModuleRouteContext } from "@waitron/module";
 import { decimal } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
-import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { ADJUSTMENTS_PERMISSIONS } from "./permissions.js";
 import { policySnapshotOf } from "./policy.js";
 import { recordAdjustment } from "./record.js";
@@ -27,7 +25,7 @@ import { seedReason, seedWorkingOrder } from "../test/seed.js";
 registerModulePermissions(ADJUSTMENTS_PERMISSIONS);
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, ADJUSTMENTS_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 let db: Database;
 beforeAll(() => {

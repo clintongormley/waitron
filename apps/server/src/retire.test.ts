@@ -14,7 +14,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
+import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
   endorseKey,
   generateNodeKeyPair,
@@ -48,7 +48,7 @@ const ownKeys = new Map<string, string>();
 // Two cases depend on `useVenueDb`'s default per-test reset: each expects no chart held, and would
 // otherwise read the chart an earlier case wrote.
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 

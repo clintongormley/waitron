@@ -19,13 +19,12 @@ import {
   seedRefundableSale,
   seedTenderRefund,
 } from "@waitron/reporting/test/tender-refund-fixtures.js";
-import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { policySnapshotOf, type AdjustmentReason } from "./policy.js";
 import { recordAdjustment } from "./record.js";
 import { linkRefundToCancels, readCancelsForRefund } from "./refund-links.js";
 import { seedVoidReason, seedWorkingOrder } from "../test/seed.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 let db: Database;
 beforeAll(() => {

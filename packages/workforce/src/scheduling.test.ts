@@ -8,7 +8,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { listShiftsForPerson } from "./schedule-reads.js";
 import { acceptSwap, decideSwap } from "./shift-swaps.js";
 import { WorkforceBackend } from "./clocking.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import {
   insertDraftShift,
@@ -27,7 +26,7 @@ let personId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
     locationId = await seedLocation(db);

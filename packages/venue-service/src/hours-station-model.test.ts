@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   departments,
@@ -15,10 +14,9 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { readSpecialDaysModel } from "./named-days.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import { routingModel } from "./routing-store.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const at = new Date("2026-10-06T10:00:00Z");
 

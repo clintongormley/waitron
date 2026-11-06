@@ -1,7 +1,6 @@
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createOptionList, getOptionList, updateOptionList } from "./options.js";
 import { racePair } from "../test/fixtures.js";
 
@@ -10,7 +9,7 @@ import { racePair } from "../test/fixtures.js";
  * catches a `writeLabels` that deletes before its ownership check is the options.test.ts case
  * "refuses a foreign label id before deleting the list's own labels".
  */
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 /** The domain code a save was refused with, else its cause's code, else the error itself. */
 function refusalCode(reason: unknown): unknown {

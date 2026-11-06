@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CREDENTIALS_MIGRATIONS } from "@waitron/credentials";
 import {
   DEMO_READER_ID,
   PAYMENTS_MIGRATIONS,
@@ -12,7 +11,7 @@ import {
 import { buildCardProvider } from "./boot.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, PAYMENTS_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   timeoutMs: 60_000,
 });
 

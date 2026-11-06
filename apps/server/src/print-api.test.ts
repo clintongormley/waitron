@@ -19,12 +19,9 @@ import {
   withTransaction,
   venueLocationId,
 } from "@waitron/db";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import {
-  IDENTITY_MIGRATIONS,
   hashPin,
   hashSessionToken,
   persons,
@@ -89,12 +86,7 @@ let managerCookie: string;
 let staffCookie: string;
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 

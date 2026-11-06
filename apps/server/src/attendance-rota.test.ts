@@ -4,7 +4,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, locations, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
+import { persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
   WORKFORCE_MIGRATIONS,
@@ -19,7 +19,7 @@ import { mountWorkforceApi } from "./workforce-api.js";
 import { markAttendanceSourceChanged } from "./attendance-source-changes.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
 });
 const backend = new WorkforceBackend();
 let app: Hono, locationId: string, personId: string, otherId: string, cookie: string;

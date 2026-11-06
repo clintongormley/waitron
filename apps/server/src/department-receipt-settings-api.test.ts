@@ -6,15 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, tenants, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS, contentLanguages } from "@waitron/catalogue";
+import { contentLanguages } from "@waitron/catalogue";
+import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import {
-  IDENTITY_MIGRATIONS,
-  persons,
-  registerModulePermissions,
-  startManagementSession,
-} from "@waitron/identity";
-import {
-  MEDIA_MIGRATIONS,
   MEDIA_MODULE,
   mediaImages,
   mediaImageBlobs,
@@ -24,12 +18,7 @@ import {
   readCurrentImage,
 } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
-import {
-  VENUE_SERVICE_MIGRATIONS,
-  departments,
-  departmentReceipts,
-  departmentSalePolicies,
-} from "@waitron/venue-service";
+import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { nodeId, type DepartmentReceiptWrite } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
@@ -40,13 +29,7 @@ import { moduleCoreServices } from "./parties.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    MEDIA_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS],
 });
 const fiscal = ALL_MODULES.find((module) => module.fiscal?.venueFields !== undefined)!.fiscal!
   .venueFields!;

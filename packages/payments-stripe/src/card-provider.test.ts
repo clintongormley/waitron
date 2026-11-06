@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import Stripe from "stripe";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing, putCredential } from "@waitron/credentials";
 import type { IncidentSink } from "@waitron/payments";
 import { AppError } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -22,7 +22,7 @@ const KEY_ENV = {
 };
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 const ring = loadKeyRing(KEY_ENV);

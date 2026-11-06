@@ -8,11 +8,10 @@ import { CORE_MIGRATIONS, captureError, withTransaction, persons } from "@waitro
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { hashPin } from "./verify-pin.js";
 import { asEmailTaken, asPersonUniqueViolation } from "./staff.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 const PIN = hashPin("1234");
 

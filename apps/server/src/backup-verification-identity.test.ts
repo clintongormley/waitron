@@ -5,7 +5,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing } from "@waitron/credentials";
 import {
   IDENTITY_BACKUP_VERIFICATION,
-  IDENTITY_MIGRATIONS,
   beginOwnTotpEnrollment,
   hashPassword,
   persons,
@@ -14,7 +13,7 @@ import {
 import { openBackupQuery } from "@waitron/store";
 import { accountPurposeKey, resolveAccountKey } from "./account-key.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 describe("archived operational TOTP derivation", () => {
   it.each(["derived", "explicit", "empty"])(

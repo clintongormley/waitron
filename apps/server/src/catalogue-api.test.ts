@@ -10,9 +10,8 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import {
-  CATALOGUE_MIGRATIONS,
   categoryDetails,
   menuDetails,
   menuPublications,
@@ -28,12 +27,7 @@ import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { createCourse } from "./kitchen.js";
-import {
-  VENUE_SERVICE_MIGRATIONS,
-  setRoutingCell,
-  createDepartment,
-  configureZone,
-} from "@waitron/venue-service";
+import { setRoutingCell, createDepartment, configureZone } from "@waitron/venue-service";
 import { floorZones, kitchenStations } from "@waitron/db";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -554,12 +548,7 @@ let staffCookie: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);

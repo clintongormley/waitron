@@ -2,7 +2,6 @@ import { listVenueReadiness } from "./operations.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
-  CATALOGUE_MIGRATIONS,
   buildMenuDocument,
   createCatalogue,
   menuDocumentHash,
@@ -25,7 +24,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { CALENDAR_MONTH_PLAN_READS } from "./dashboard/live-queries.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
   readCalendarMonthPlan,
   readOpeningHoursMonth,
@@ -39,7 +37,7 @@ import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { englishSeasonName, starterSeasonName } from "./testing/starter-seasons.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);

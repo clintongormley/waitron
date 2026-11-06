@@ -11,25 +11,13 @@ import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, locations, tenants, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
-import {
-  IDENTITY_MIGRATIONS,
-  persons,
-  managementSessions,
-  startManagementSession,
-} from "@waitron/identity";
+import { persons, managementSessions, startManagementSession } from "@waitron/identity";
 import * as requestKit from "@waitron/server-kit";
 import { mountVenueZoneRepairApi } from "./venue-zone-repair-api.js";
 import { TradingAdmission } from "./trading-admission.js";
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS],
 });
 const PATH = "/management-api/venue-details/time-zone-repair";
 const ORIGIN = "https://manage.example.test";

@@ -12,7 +12,6 @@ import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { hasCode } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
-import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 import { readNodeSigningKey, sealNodeSigningKeyTx } from "./node-signing-key.js";
 import { getCredential, putCredential, rotateCredentials } from "./store.js";
 import { captured } from "./testing/captured.js";
@@ -41,7 +40,7 @@ const STRIPE = {
 };
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";

@@ -3,7 +3,6 @@ import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { getCountryPack } from "@waitron/country-packs";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   holidayGeographies,
@@ -18,7 +17,6 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   hashSessionToken,
-  IDENTITY_MIGRATIONS,
   managementSessions,
   persons,
   registerModulePermissions,
@@ -28,7 +26,6 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import type { HolidayGeography, HolidayRead, SpecialDaysModel } from "./holiday-types.js";
 import { readHolidays } from "./holidays.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 import { saveSpecialDay } from "./special-days.js";
@@ -36,12 +33,7 @@ import { saveSpecialDay } from "./special-days.js";
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS],
 });
 let db: Database;
 beforeAll(() => {

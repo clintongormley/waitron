@@ -4,14 +4,14 @@ import { Hono } from "hono";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { hashPin, persons, sessions, IDENTITY_MIGRATIONS } from "@waitron/identity";
+import { hashPin, persons, sessions } from "@waitron/identity";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { nodeId } from "@waitron/shared";
 import { mountTillApi } from "./till-api.js";
 import { DEV_DEVICE_HEADER } from "./device-session.js";
 import { systemClock } from "./till-backend.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 it("signs in normally in a venue where workforce has never been migrated", async () => {
   await seedVenue(suite.db, {

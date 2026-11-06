@@ -6,7 +6,6 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
-  CATALOGUE_MIGRATIONS,
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
@@ -18,9 +17,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import {
-  VENUE_SERVICE_MIGRATIONS,
   configureZone,
   setRoutingCell,
   zoneDays,
@@ -36,7 +33,6 @@ import {
 import { WORKFORCE_MIGRATIONS, staffingBlocks, staffingDays, staffRoles } from "@waitron/workforce";
 import { AppError } from "@waitron/shared";
 import { seedVenueWithStaff } from "../test/seed.js";
-import { STAFFING_MIGRATIONS } from "./migrations.js";
 import {
   listStaffingAreas,
   readSeasonStaffing,
@@ -48,14 +44,7 @@ import {
 import type { AreaRef, StaffingBlock } from "./slots.js";
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    WORKFORCE_MIGRATIONS,
-    STAFFING_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 
 const inTx = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);

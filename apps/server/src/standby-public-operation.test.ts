@@ -16,8 +16,8 @@ import {
 import { NODE_MIGRATIONS, readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { CREDENTIALS_MIGRATIONS, loadKeyRing } from "@waitron/credentials";
-import { IDENTITY_MIGRATIONS, hashPassword, persons } from "@waitron/identity";
+import { loadKeyRing } from "@waitron/credentials";
+import { hashPassword, persons } from "@waitron/identity";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
 import {
@@ -37,7 +37,7 @@ import { TOTP_KEY_RING, enrolAuthenticator, wrongTotpCode } from "./testing/auth
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, IDENTITY_MIGRATIONS, NODE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
 let LOCATION: string;
 const PRIMARY = "f1000000-0000-4000-8000-000000000002";

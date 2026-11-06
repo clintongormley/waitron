@@ -3,7 +3,6 @@ import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  CATALOGUE_MIGRATIONS,
   createCatalogue,
   createProduct,
   previewMenu,
@@ -18,13 +17,13 @@ import { updateMenuItem } from "@waitron/catalogue/src/operations.js";
 import { addMember, createSectionIn } from "@waitron/catalogue/src/sections.js";
 import { seedLegacySellingUnits, seedVenueWithSeries } from "@waitron/catalogue/test/fixtures.js";
 import { offerOf } from "@waitron/catalogue/test/menus-fixture.js";
-import { MEDIA_MIGRATIONS, mediaImages } from "@waitron/media";
+import { mediaImages } from "@waitron/media";
 
 // The catalogue's own test database has no media tables, so it cannot store a section photo
 // (`mediaImageExists`); this case needs them.
 const PHOTO = `${"a".repeat(64)}.jpg`;
 
-const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, MEDIA_MIGRATIONS] });
+const fx = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 /** Dinner holds Mains, which holds Burger; Lunch holds Soup. */

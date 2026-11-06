@@ -8,14 +8,13 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { readChain } from "./chain.js";
 import { computeEntryHash, verifyChain } from "./chain-hash.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { historicalSet } from "../../../scripts/fixtures/a760-history/historical-set.mjs";
 import { attendanceMail, attendanceQuestions } from "./schema/attendance.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 let personId: string, manager: string, locationId: string, questionId: string;
 beforeEach(async () => {

@@ -1,6 +1,5 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   kitchenStations,
@@ -9,13 +8,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
-import {
-  VENUE_SERVICE_MIGRATIONS,
-  departments,
-  specialDayDates,
-  specialDays,
-} from "@waitron/venue-service";
+import { departments, specialDayDates, specialDays } from "@waitron/venue-service";
 import {
   WorkforceBackend,
   WORKFORCE_MIGRATIONS,
@@ -23,21 +16,13 @@ import {
   staffRoles,
 } from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
-import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { QUERY_DEPENDENCIES } from "./dashboard/live-queries.js";
 import { readStaffingMonth } from "./month.js";
 import { saveSeasonStaffing, saveSpecialDayStaffing } from "./paint.js";
 import type { AreaRef, StaffingBlock } from "./slots.js";
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    WORKFORCE_MIGRATIONS,
-    STAFFING_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 
 const inTx = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);

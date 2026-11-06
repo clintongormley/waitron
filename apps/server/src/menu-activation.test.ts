@@ -11,7 +11,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   CATALOGUE_CHANGE_SOURCES,
-  CATALOGUE_MIGRATIONS,
   listMenuPublications,
   menuPublications,
   menuScheduledPublications,
@@ -26,7 +25,7 @@ import { changeSubscriber, LiveEvents } from "./live-api.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { startMenuActivation } from "./menu-activation.js";
 
-const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const fx = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 const MAX_WAIT_MS = 20 * 86_400_000;

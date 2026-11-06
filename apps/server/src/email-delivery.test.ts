@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { isAppError } from "@waitron/shared";
 import {
@@ -27,7 +27,7 @@ afterEach(() => {
   decryptedOverride = null;
 });
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const ring = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",

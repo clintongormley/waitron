@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS, contentLanguages } from "@waitron/catalogue";
+import { contentLanguages } from "@waitron/catalogue";
 import { departmentReceiptLanguages } from "./department-receipt-languages.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 async function read(receiptLanguage: string, languages?: string[], country: string | null = "ES") {
   if (country !== null)

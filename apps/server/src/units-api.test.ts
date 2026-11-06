@@ -5,14 +5,14 @@ import { catalogues, CORE_MIGRATIONS, products, withTransaction } from "@waitron
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS, createExtraList, productUnits } from "@waitron/catalogue";
-import { hashPin, IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
+import { createExtraList, productUnits } from "@waitron/catalogue";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { mountUnitsApi } from "./units-api.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const log: Logger = () => {};
 let cookie: string;

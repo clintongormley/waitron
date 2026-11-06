@@ -1,6 +1,5 @@
 import { eq, inArray, sql, type SQL } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   deviceKitchenScreenRemovals,
@@ -23,7 +22,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice as seedSharedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
 import type { DeviceKitchenScreen, ProfileKitchenScreens } from "@waitron/module";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, createServiceZone } from "./operations.js";
 import {
   addProfileKitchenScreen,
@@ -44,7 +42,7 @@ import {
 } from "./kitchen-screens.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 

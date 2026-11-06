@@ -2,10 +2,9 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { contentLanguages, CORE_MIGRATIONS, units, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createUnit, getUnit, updateUnit, EACH_UNIT } from "./units.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const input = () => ({
   staffName: "Kilogram",
   staffAbbreviation: "kg",

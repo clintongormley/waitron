@@ -2,7 +2,6 @@ import type { HoursSubject } from "./testing/legacy-station-types.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { createHolidayCalendar, type CountryPack } from "@waitron/country";
 import {
   CORE_MIGRATIONS,
@@ -25,13 +24,12 @@ import { createHolidayStore, readHolidayFacts as installedReadHolidayFacts } fro
 import { stationStates } from "./routing-store.js";
 import { readCalendarDays as packageReadCalendarDays } from "./index.js";
 import { type CalendarDay, type HolidayFact, type LocalDate } from "./hours-types.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { occursOn } from "./repeat-rules.js";
 import { deleteSpecialDay, saveSpecialDay } from "./special-days.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 let db: Database;
 beforeAll(() => {

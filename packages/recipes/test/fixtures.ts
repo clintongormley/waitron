@@ -4,12 +4,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { withTransaction } from "@waitron/db";
-import {
-  CATALOGUE_MIGRATIONS,
-  createCatalogue,
-  createProduct,
-  createUnit,
-} from "@waitron/catalogue";
+import { createCatalogue, createProduct, createUnit } from "@waitron/catalogue";
 
 /** Seeds the taxpayer, the venue and a node. */
 export async function seedVenueWithNode(db: Database): Promise<void> {
@@ -49,7 +44,7 @@ export async function seedProduct(db: Database): Promise<string> {
  * go first — `recipe_lines` holds the foreign key.
  */
 export function useIngredientDb(): { readonly db: Database } {
-  const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+  const fx = useVenueDb({ migrations: [CORE_MIGRATIONS] });
   beforeEach(async () => {
     await fx.db.delete(recipeLines);
     await fx.db.delete(ingredients);

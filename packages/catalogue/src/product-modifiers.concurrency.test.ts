@@ -1,7 +1,6 @@
 import { beforeEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { createExtraList, deleteExtraList } from "./extras.js";
 import { createOptionList, deleteOptionList } from "./options.js";
@@ -13,7 +12,7 @@ import { racePair } from "../test/fixtures.js";
  * A save of a product's attachment list, started together with a DELETE of one of the lists it
  * names: both transactions complete, neither is refused, and the dish is left carrying nothing.
  */
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 /** The domain code a transaction was refused with, else its cause's code, else the error itself. */
 function refusalCode(reason: unknown): unknown {

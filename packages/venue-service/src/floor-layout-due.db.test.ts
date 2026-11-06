@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { CATALOGUE_MIGRATIONS, createCatalogue } from "@waitron/catalogue";
+import { createCatalogue } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   departmentFloorPlanSets,
@@ -17,12 +17,11 @@ import type { ZoneFloorLayout } from "@waitron/module";
 import { linkFloorPlanSet } from "./floor-plan-set-store.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { VENUE_SERVICE } from "./service.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);

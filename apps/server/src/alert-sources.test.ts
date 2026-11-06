@@ -2,12 +2,10 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
-  CATALOGUE_MIGRATIONS,
   contentSuggestionJobs,
   contentSuggestions,
   markSuggestionRunOpened,
 } from "@waitron/catalogue";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import {
   CORE_MIGRATIONS,
   printAgents,
@@ -697,7 +695,7 @@ describe("certificateAlertSource", () => {
 });
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 function minsAgo(mins: number): string {

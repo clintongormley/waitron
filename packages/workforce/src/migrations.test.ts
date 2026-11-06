@@ -11,7 +11,7 @@ import {
   newId,
   nowIso,
 } from "@waitron/db";
-import { IDENTITY_MIGRATIONS, hashPin } from "@waitron/identity";
+import { hashPin } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -31,7 +31,7 @@ const suite = useVenueDb({
   // Core for the `tenants` row the setup seeds and the `locations` and `nodes` rows the cases seed
   // (`seedLocation`, `seedNode`); identity for `persons`, which the cases write and workforce's
   // tables reference.
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
   },

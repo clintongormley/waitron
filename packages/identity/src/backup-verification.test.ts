@@ -17,7 +17,6 @@ import {
   validateBackupVerificationContribution,
 } from "@waitron/module";
 import { IDENTITY_BACKUP_VERIFICATION } from "./index.js";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { IDENTITY_TABLES } from "./classification.js";
 import { decryptTotpSecret, encryptTotpSecret } from "./mfa.js";
 import { hashSecret } from "./secret-hash.js";
@@ -28,8 +27,8 @@ const IDENTITY_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
   (IDENTITY_TABLES as readonly string[]).includes(table),
 );
 
-const original = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
-const restored = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const original = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const restored = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const withoutIdentity = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const person = "10000000-0000-4000-8000-000000000001";
 const second = "10000000-0000-4000-8000-000000000002";

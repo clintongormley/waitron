@@ -20,12 +20,11 @@ import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { IDENTITY_PERSONAL_DATA } from "./personal-data.js";
 import { SECRET_HASH_PREFIX } from "./secret-hash.js";
 import { codeOf } from "../test/fixtures.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 /** A 64-character hex value unique to `seed`, the shape the hash columns require. */
 const hash64 = (seed: string): string => createHash("sha256").update(seed).digest("hex");

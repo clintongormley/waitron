@@ -12,13 +12,8 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { type BusinessDayClock } from "@waitron/shared";
-import { CATALOGUE_MIGRATIONS, createCatalogue } from "@waitron/catalogue";
-import {
-  VENUE_SERVICE_MIGRATIONS,
-  createDepartment,
-  saveMenuPeriod,
-  replaceMenuWeek,
-} from "@waitron/venue-service";
+import { createCatalogue } from "@waitron/catalogue";
+import { createDepartment, saveMenuPeriod, replaceMenuWeek } from "@waitron/venue-service";
 import * as details from "./venue-details.js";
 import * as businessDay from "./business-day-start.js";
 import {
@@ -28,7 +23,7 @@ import {
 } from "./venue-zone-context.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const AT = new Date("2026-10-14T23:30:00.000Z");
 let scope: { nodeId: string; locationId: string };

@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import {
   CORE_MIGRATIONS,
   kitchenStations,
@@ -18,7 +16,7 @@ import { printersInTrouble } from "./print-job-trouble.js";
 const NOW = new Date("2026-09-15T12:00:00Z");
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 function minsAgo(mins: number): string {

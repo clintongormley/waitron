@@ -3,7 +3,6 @@ import { CORE_MIGRATIONS, withTransaction, persons } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { registerModulePermissions } from "./permissions.js";
 import type { PersonRoleValue } from "@waitron/shared";
 import { hashPin } from "./verify-pin.js";
@@ -11,7 +10,7 @@ import { listActivePersonsWithPermission } from "./staff.js";
 
 const PIN = hashPin("1234");
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 /** Through the table definition, not raw SQL: `id` and `created_at` are Drizzle `$defaultFn`
  * generators that only the insert BUILDER runs. */

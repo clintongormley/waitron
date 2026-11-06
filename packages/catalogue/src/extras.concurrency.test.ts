@@ -2,7 +2,6 @@ import { beforeEach, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCatalogue, addProductToMenu, createProduct } from "./operations.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { readProductExtras } from "./extra-projection.js";
@@ -13,7 +12,7 @@ import { racePair } from "../test/fixtures.js";
  * Two saves of an extras list started together (through `racePair`, test/fixtures.ts), the
  * item-exchanging save the delete-then-insert exists for, and a list item whose product has gone.
  */
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 /** The domain code a save was refused with, else its cause's code, else the error itself. */
 function refusalCode(reason: unknown): unknown {

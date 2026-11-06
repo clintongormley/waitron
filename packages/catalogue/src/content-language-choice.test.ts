@@ -2,10 +2,9 @@ import { contentLanguageChoices } from "@waitron/shared";
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { readContentLanguages, writeContentLanguages } from "./content-languages.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 it("keeps required enabled languages while freely choosing a default", async () => {
   await withTransaction(suite.db, (tx) =>

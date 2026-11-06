@@ -13,7 +13,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { contentLanguageChoices } from "@waitron/shared";
-import { CATALOGUE_MIGRATIONS } from "../src/migrations.js";
 import { createCatalogue, createProduct } from "../src/operations.js";
 import { writeContentLanguages } from "../src/content-languages.js";
 import {
@@ -27,7 +26,7 @@ import type { TranslationContext } from "../src/content-translation-targets.js";
 export const context: TranslationContext = { fallbackLanguage: "ca", required: [] };
 
 export function suggestionSuite() {
-  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
   const app = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
   return { suite, app };
 }

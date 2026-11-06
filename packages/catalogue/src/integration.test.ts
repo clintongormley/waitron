@@ -14,7 +14,6 @@ import {
   listAvailableProducts,
 } from "./operations.js";
 import { createUnit } from "./units.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { priceBasket } from "./pricing.js";
 import { customerPresentationText, deviceOrigin } from "@waitron/shared";
 import { seedVenueWithSeries } from "../test/fixtures.js";
@@ -31,7 +30,7 @@ import { seedDevice } from "@waitron/db/testing/seed.js";
  * regime backend.
  */
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   // `FakeFiscalBackend.recordSale`/`registerNode` read and write their own
   // `fake_node_registrations`/`fake_fiscal_records` tables, and nothing creates those tables except
   // this call.

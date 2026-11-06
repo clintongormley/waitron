@@ -14,32 +14,24 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   sections,
   sectionMembers,
-  CATALOGUE_MIGRATIONS,
   menuVersions,
   menuVersionImages,
   menuDocumentHash,
   type MenuDocument,
 } from "@waitron/catalogue";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { openBackupQuery } from "@waitron/store";
 import {
   validateBackupVerificationContribution,
   validateBackupModuleResult,
 } from "@waitron/module";
 import { MEDIA_BACKUP_VERIFICATION as OWNER, MEDIA_MODULE, MEDIA_TABLES } from "./index.js";
-import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { sampleImage } from "./testing/sample-image.js";
 
 /** This module's share of core's classification, which holds its tables. */
 const MEDIA_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
   (MEDIA_TABLES as readonly string[]).includes(table),
 );
-const migrations = [
-  CORE_MIGRATIONS,
-  CATALOGUE_MIGRATIONS,
-  VENUE_SERVICE_MIGRATIONS,
-  MEDIA_MIGRATIONS,
-];
+const migrations = [CORE_MIGRATIONS];
 const original = useVenueDb({ migrations });
 const restored = useVenueDb({ migrations });
 const absent = useVenueDb({

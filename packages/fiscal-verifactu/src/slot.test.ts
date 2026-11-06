@@ -4,12 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import {
-  CREDENTIALS_MIGRATIONS,
-  credentialRevision,
-  getCredential,
-  loadKeyRing,
-} from "@waitron/credentials";
+import { credentialRevision, getCredential, loadKeyRing } from "@waitron/credentials";
 import { hasCode, isAppError } from "@waitron/shared";
 import type { TrustedClock } from "@waitron/fiscal";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -205,7 +200,7 @@ describe("FISCAL_SLOT.resetInFlight", () => {
 describe("FISCAL_SLOT.provisioningSecret", () => {
   const secret = FISCAL_SLOT.provisioningSecret!;
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
+    migrations: [CORE_MIGRATIONS],
     timeoutMs: 120_000,
   });
   const ring = loadKeyRing({

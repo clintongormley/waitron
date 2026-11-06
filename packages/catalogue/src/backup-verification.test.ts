@@ -6,6 +6,7 @@ import {
   catalogueSettings,
   catalogues,
   contentSuggestionJobs,
+  mediaImages,
   menuPublications,
   menuVersionImages,
   menuVersions,
@@ -18,7 +19,6 @@ import {
   validateBackupVerificationContribution,
 } from "@waitron/module";
 import { CATALOGUE_BACKUP_VERIFICATION as OWNER } from "./index.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { CATALOGUE_TABLES } from "./classification.js";
 import type { MenuDocument } from "@waitron/shared";
 
@@ -26,10 +26,18 @@ import type { MenuDocument } from "@waitron/shared";
 const CATALOGUE_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
   (CATALOGUE_TABLES as readonly string[]).includes(table),
 );
-const migrations = [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS];
+const migrations = [CORE_MIGRATIONS];
 const original = useVenueDb({ migrations });
 const restored = useVenueDb({ migrations });
-const absent = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const absent = useVenueDb({
+  migrations: [CORE_MIGRATIONS],
+  // A source from before these tables existed: core's set now creates them, so they are dropped.
+  setup: async (db) => {
+    for (const table of [...CATALOGUE_TABLES].reverse()) db.run(sql.raw(`drop table "${table}"`));
+  },
+  // Never written; emptying it would reach core tables whose keys name the dropped ones.
+  resetPerTest: false,
+});
 const menu = "10000000-0000-4000-8000-000000000001";
 const version = "10000000-0000-4000-8000-000000000002";
 const person = "10000000-0000-4000-8000-000000000003";
@@ -72,6 +80,7 @@ beforeEach(async () => {
       publishedAt: new Date("2026-10-20T08:00:00.000Z"),
       publishedBy: person,
     });
+    await suite.db.insert(mediaImages).values({ filename: image, names: { en: "Archive" } });
     await suite.db.insert(menuVersionImages).values({ versionId: version, filename: image });
   }
 });

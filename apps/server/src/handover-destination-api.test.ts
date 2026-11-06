@@ -13,12 +13,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import {
-  CREDENTIALS_MIGRATIONS,
-  loadKeyRing,
-  nodeSigningPublicKey,
-  type KeyRing,
-} from "@waitron/credentials";
+import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import {
   sha256Hex,
   signEnvelope,
@@ -59,7 +54,7 @@ const SETTINGS = { backupSettings: null, moduleSettings: null, ringVersions: [1]
 const IMAGE = imageMigrationsDigest(null);
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
 
 let self: string;

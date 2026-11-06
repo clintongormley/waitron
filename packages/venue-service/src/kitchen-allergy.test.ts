@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_CLASSIFICATION,
   CORE_MIGRATIONS,
@@ -15,7 +14,6 @@ import {
 } from "@waitron/db";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { VENUE_SERVICE_CHANGE_SOURCES, VENUE_SERVICE_TABLES } from "./classification.js";
 import { readPartyAllergy, savePartyAllergy } from "./party-allergy.js";
@@ -28,7 +26,7 @@ const VENUE_SERVICE_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
 );
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const actor = randomUUID();
 const original = {

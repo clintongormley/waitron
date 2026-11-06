@@ -11,7 +11,7 @@ import {
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
+import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
   endorseKey,
   generateNodeKeyPair,
@@ -53,7 +53,7 @@ function signed(
 
 describe("the held document's check against the keys this box stores", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+    migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
   });
 
   async function box(): Promise<{ db: Database; nodeId: string }> {

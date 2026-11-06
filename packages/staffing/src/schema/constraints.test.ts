@@ -1,17 +1,10 @@
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, kitchenStations, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import {
-  VENUE_SERVICE_MIGRATIONS,
-  departments,
-  seasons,
-  specialDayDates,
-  specialDays,
-} from "@waitron/venue-service";
+import { persons } from "@waitron/identity";
+import { departments, seasons, specialDayDates, specialDays } from "@waitron/venue-service";
 import { CALENDAR_COLOURS } from "@waitron/venue-service/hours-types";
 import {
   WORKFORCE_MIGRATIONS,
@@ -21,17 +14,9 @@ import {
   staffingBlocks,
   staffingDays,
 } from "@waitron/workforce";
-import { STAFFING_MIGRATIONS } from "../migrations.js";
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    WORKFORCE_MIGRATIONS,
-    STAFFING_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 
 async function venue() {

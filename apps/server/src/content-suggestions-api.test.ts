@@ -3,10 +3,9 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
+import { persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
-  CATALOGUE_MIGRATIONS,
   contentSuggestionJobs,
   contentSuggestions,
   createCatalogue,
@@ -29,7 +28,7 @@ import {
 } from "./content-suggestions-api.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const inTx = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 const context: TranslationContext = { fallbackLanguage: "es-ES", required: [] };

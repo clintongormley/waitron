@@ -4,31 +4,16 @@ import { afterEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, tenants, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS, contentLanguages } from "@waitron/catalogue";
-import {
-  IDENTITY_MIGRATIONS,
-  persons,
-  startManagementSession,
-  registerModulePermissions,
-} from "@waitron/identity";
-import {
-  VENUE_SERVICE_MIGRATIONS,
-  departments,
-  departmentReceipts,
-  departmentSalePolicies,
-} from "@waitron/venue-service";
+import { contentLanguages } from "@waitron/catalogue";
+import { persons, startManagementSession, registerModulePermissions } from "@waitron/identity";
+import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { type DepartmentReceiptWrite } from "@waitron/shared";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { checkedDepartmentReceiptWrite } from "./department-receipt-draft.js";
 import { departmentReceiptLanguages } from "./department-receipt-languages.js";
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS],
 });
 const fiscal = ALL_MODULES.find((module) => module.fiscal?.venueFields !== undefined)!.fiscal!
   .venueFields!;

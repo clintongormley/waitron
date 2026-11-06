@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type Stripe from "stripe";
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { isAppError, type AppError } from "@waitron/shared";
 import { defaultMakeStripe, stripeAccountResolver, stripeSecretKeyFrom } from "./stripe-account.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -13,7 +13,7 @@ const KEY_ENV = {
 };
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 const ring = loadKeyRing(KEY_ENV);

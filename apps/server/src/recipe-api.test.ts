@@ -4,14 +4,8 @@ import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
-import {
-  CATALOGUE_MIGRATIONS,
-  createCatalogue,
-  createProduct,
-  createUnit,
-  setProductVariants,
-} from "@waitron/catalogue";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { createCatalogue, createProduct, createUnit, setProductVariants } from "@waitron/catalogue";
 import type { Logger } from "./logger.js";
 import { mountRecipeApi } from "./recipe-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -30,7 +24,7 @@ let productId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);

@@ -9,7 +9,6 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { AppError } from "@waitron/shared";
 import {
   canUseDeviceProfile,
@@ -24,7 +23,7 @@ import { seedPerson } from "../test/fixtures.js";
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 const ROLES: readonly PersonRoleValue[] = ["staff", "supervisor", "manager", "admin"];

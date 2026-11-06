@@ -2,14 +2,14 @@ import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS, invoiceSeries, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { decimal, deviceOrigin } from "@waitron/shared";
 import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 import { recordCorrection, type RecordCorrectionInput } from "./record-correction.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   setup: (db) => FakeFiscalBackend.install(db),
 });
 let personId: string;

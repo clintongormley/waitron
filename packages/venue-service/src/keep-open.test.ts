@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { CATALOGUE_MIGRATIONS, createCatalogue } from "@waitron/catalogue";
+import { createCatalogue } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   locationDayCutoverChanges,
@@ -16,7 +16,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, listZoneOffers, menuState } from "./operations.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
@@ -26,7 +25,7 @@ import { closedZoneIdsAt, replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { readKeepOpen } from "./keep-open.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 const at = (time: string, date = "2026-10-09") =>

@@ -13,7 +13,6 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import {
   clearPersonPin,
   createPerson,
@@ -39,7 +38,7 @@ import {
 // Reset per test (the default), deliberately: the last-admin guard counts every admin in the
 // database, so admins created by earlier tests would be counted too.
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {

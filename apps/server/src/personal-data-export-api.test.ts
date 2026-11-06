@@ -7,7 +7,6 @@ import { CORE_MIGRATIONS, locations, withTransaction, venueLocationId } from "@w
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
-  IDENTITY_MIGRATIONS,
   IDLE_TIMEOUT_MS,
   endManagementSession,
   hashSessionToken,
@@ -26,7 +25,7 @@ import {
   type PersonalDataExportDeps,
 } from "./personal-data-export-api.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const PATH = "/management-api/me/personal-data/export";
 const NOW = new Date("2026-10-04T22:30:00Z");
 const MARTA_PIN_HASH = "MARTA-PIN-HASH-CANARY";

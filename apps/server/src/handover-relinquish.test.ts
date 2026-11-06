@@ -4,12 +4,7 @@ import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  loadKeyRing,
-  nodeSigningPublicKey,
-  CREDENTIALS_MIGRATIONS,
-  type KeyRing,
-} from "@waitron/credentials";
+import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import {
   CORE_MIGRATIONS,
   nodes,
@@ -104,7 +99,7 @@ async function errorCode(response: Response): Promise<string> {
 
 describe("the old box's acceptance route", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+    migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
   });
 
   let stateDir: string;

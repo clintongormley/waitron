@@ -12,7 +12,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
+import { persons } from "@waitron/identity";
 import {
   addDecimal,
   decimal,
@@ -21,7 +21,6 @@ import {
   stringToThousandths,
   subtractDecimal,
 } from "@waitron/shared";
-import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { policySnapshotOf, type AdjustmentReason } from "./policy.js";
 import type { AdjustmentAction } from "@waitron/shared";
 import { recordAdjustment } from "./record.js";
@@ -41,7 +40,7 @@ import {
 import { seedReason } from "../test/seed.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, ADJUSTMENTS_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 let db: Database;
 beforeAll(() => {

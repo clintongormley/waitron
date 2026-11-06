@@ -10,7 +10,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import {
   assignProductUnit,
   createUnit,
@@ -27,7 +26,7 @@ import { plantStoredUnit, racePair, storedUnitId } from "../test/fixtures.js";
  * Units against a real database: rollback, two transactions started together, and the bulk
  * reassignment's scoping.
  */
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 const app = <T>(action: (tx: Parameters<typeof getUnit>[0]) => Promise<T>) =>
   withTransaction(suite.db, action);

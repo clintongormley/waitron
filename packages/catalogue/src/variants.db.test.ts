@@ -14,7 +14,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { racePair } from "../test/fixtures.js";
 import { createCatalogue, createProduct, addProductToMenu } from "./operations.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
@@ -36,7 +35,7 @@ import { createCategory, setMainReportingCategory } from "./categories.js";
  * with a `parent_id`; the per-menu settings of one live in
  * `menu_item_variant_overrides`, and a row there exists only while it overrides something.
  */
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const app = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
 
 /** Leaves `active` out, as a caller in code may: a new variant is then created Active. */

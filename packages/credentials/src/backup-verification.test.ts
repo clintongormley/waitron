@@ -3,7 +3,6 @@ import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction, tenantCredentials } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
-import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 import { seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
 import { putCredential } from "./store.js";
@@ -22,7 +21,7 @@ const inputs = {
   WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
 };
 const email = { url: "smtp://private-sentinel@example.test", from: "owner@example.test" };
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 beforeEach(() => {
   suite.db.run(sql`delete from tenant_credentials`);

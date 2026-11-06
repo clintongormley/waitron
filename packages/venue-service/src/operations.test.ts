@@ -3,7 +3,6 @@ import * as settingsOperations from "./operations.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  CATALOGUE_MIGRATIONS,
   HOME_DISPLAY_DEFAULTS,
   addShortcut,
   buildMenuDocument,
@@ -57,7 +56,6 @@ import type { ZoneMenu, ZoneMenuState } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 
 import { resolveMakers, setRoutingCell } from "./routing-store.js";
 import { STARTER_PERIOD_NAMES } from "./starter-content.js";
@@ -101,7 +99,7 @@ import {
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 

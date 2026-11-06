@@ -36,9 +36,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { type BusinessDayClock } from "@waitron/shared";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
   businessDayClockConflicts,
   assertBusinessDayClockChange,
@@ -48,7 +46,7 @@ import {
 import { inForceClock, settledClock } from "./service-day-context.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const before: BusinessDayClock = {
   timeZone: "Europe/Madrid",

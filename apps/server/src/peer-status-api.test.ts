@@ -8,12 +8,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import {
-  CREDENTIALS_MIGRATIONS,
-  loadKeyRing,
-  nodeSigningPublicKey,
-  type KeyRing,
-} from "@waitron/credentials";
+import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import { signEnvelope, verifyEnvelope, type SignedHandoverEnvelope } from "@waitron/handover";
 import {
   endorseKey,
@@ -58,7 +53,7 @@ function chart(
 
 describe("POST /api/node/peer-status", () => {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+    migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
   });
 
   interface Boxes {

@@ -3,7 +3,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   createPinThrottle,
   endSession,
-  IDENTITY_MIGRATIONS,
   loginWithPin,
   PIN_THROTTLE_FREE_ATTEMPTS,
 } from "@waitron/identity";
@@ -19,7 +18,7 @@ vi.mock("node:crypto", async (importOriginal) =>
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 /** A shift session for an operator of `role`. */

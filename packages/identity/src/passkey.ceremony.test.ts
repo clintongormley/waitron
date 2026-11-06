@@ -13,7 +13,6 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import {
   beginOwnPasskeyCheck,
   beginPasskeyAuthentication,
@@ -27,7 +26,7 @@ import { codeOf, openManagementSession, TOTP_KEY_RING } from "../test/fixtures.j
 const RP_ID = "localhost";
 const ORIGIN = "http://localhost";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
 

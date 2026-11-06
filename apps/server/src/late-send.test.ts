@@ -4,7 +4,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   checkPin,
   createPinThrottle,
-  IDENTITY_MIGRATIONS,
   loginWithPin,
   registerModulePermissions,
 } from "@waitron/identity";
@@ -20,7 +19,7 @@ vi.mock("@waitron/identity", async (importOriginal) => {
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 const MENU = "0a3c9b52-6f1e-4c8a-9d2b-7e4f5a6b8c01";

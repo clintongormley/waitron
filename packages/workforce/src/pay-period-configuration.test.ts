@@ -2,14 +2,13 @@ import { expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import {
   WORKFORCE_MIGRATIONS,
   WORKFORCE_CONFIGURATION_TRANSFER,
   setPayPeriodSettings,
 } from "./index.js";
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 it("includes the saved venue cadence in transferable configuration without clock history or venue ids", async () => {
   await withTransaction(suite.db, (tx) =>

@@ -7,7 +7,6 @@ import {
   beginOwnPasskeyCheck,
   encryptTotpSecret,
   hashSessionToken,
-  IDENTITY_MIGRATIONS,
   managementSessions,
   persons,
   regenerateOwnRecoveryCodes,
@@ -29,7 +28,7 @@ const mockVerifyAuth = vi.mocked(verifyAuthenticationResponse);
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 const secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";

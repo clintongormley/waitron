@@ -3,11 +3,8 @@ import { Hono } from "hono";
 import sharp from "sharp";
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { MEDIA_ROUTES } from "./routes.js";
 import { uploadImage } from "./images.js";
 import { saveImage } from "./image-edits.js";
@@ -15,7 +12,7 @@ import { DEFAULT_FRAMING } from "./framing.js";
 import { samplePreparedImage } from "./testing/sample-image.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS, MEDIA_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const first = await samplePreparedImage({ width: 32, height: 24 });
 const second = await samplePreparedImage({ width: 60, height: 40 });

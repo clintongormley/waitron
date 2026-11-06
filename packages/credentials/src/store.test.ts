@@ -4,7 +4,6 @@ import { CORE_MIGRATIONS, withTransaction, tenantCredentials } from "@waitron/db
 import { hasCode } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
-import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 import {
   credentialRevision,
   deleteCredential,
@@ -32,7 +31,7 @@ const STRIPE = {
   cancelUrl: "https://example.test/no",
 };
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 // Listing reads the whole vault, so each case starts with an empty credential table.
 beforeEach(async () => {

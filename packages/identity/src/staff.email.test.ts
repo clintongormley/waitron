@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS } from "@waitron/db";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -8,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createPerson, setEmail } from "./staff.js";
 import { openManagementSession, seedPerson } from "../test/fixtures.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 afterEach(async () => {
   await suite.db.execute(sql`delete from management_sessions`);

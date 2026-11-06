@@ -19,7 +19,6 @@ import {
 } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
@@ -27,7 +26,7 @@ import { saveContentTranslations } from "./content-translations.js";
 import { addMember } from "./sections.js";
 import type { TranslationCellEdit, TranslationCellRef } from "./content-translation-types.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const context = { fallbackLanguage: "es", required: ["es"] };
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 const kinds = [

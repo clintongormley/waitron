@@ -6,7 +6,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
+import { persons, startManagementSession } from "@waitron/identity";
 import type { PersonalDataPart } from "@waitron/module";
 import { savePrivacyContact } from "@waitron/provisioning";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -17,7 +17,7 @@ import {
 } from "./personal-data-export-api.js";
 import { personalDataReadme } from "./personal-data-readme.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const PATH = "/management-api/me/personal-data/export";
 const NOW = new Date("2026-10-04T22:30:00Z");
 const PRIVACY = "https://venue.example/privacy";

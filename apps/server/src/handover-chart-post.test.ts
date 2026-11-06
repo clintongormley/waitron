@@ -5,12 +5,7 @@ import type { AddressInfo } from "node:net";
 import { getRequestListener } from "@hono/node-server";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  CREDENTIALS_MIGRATIONS,
-  loadKeyRing,
-  nodeSigningPublicKey,
-  type KeyRing,
-} from "@waitron/credentials";
+import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import {
   CORE_MIGRATIONS,
   nodes,
@@ -53,7 +48,7 @@ const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const migrations = [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS];
+const migrations = [CORE_MIGRATIONS, NODE_MIGRATIONS];
 
 const oldBox = useVenueDb({ migrations });
 const newBox = useVenueDb({ migrations });

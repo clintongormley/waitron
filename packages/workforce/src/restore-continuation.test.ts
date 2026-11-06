@@ -14,7 +14,6 @@ import { CORE_MIGRATIONS, captureError, constraintTarget, isUniqueViolation } fr
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { jobOrigin } from "@waitron/shared";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { appendToChain, readChain, type ChainKey, type TimeEntryAppend } from "./chain.js";
 import { verifyChain } from "./chain-hash.js";
@@ -22,7 +21,7 @@ import { workforceChains } from "./schema/workforce-chains.js";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 
 let personId: string;

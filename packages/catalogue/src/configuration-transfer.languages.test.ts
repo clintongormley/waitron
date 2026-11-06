@@ -4,7 +4,6 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import {
   CATALOGUE_CONFIGURATION_TRANSFER,
   validateCatalogueConfiguration,
@@ -54,7 +53,7 @@ it("refuses another singleton id with a domain error", () => {
 });
 
 describe("destination language requirements", () => {
-  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
   it("refuses a destination with no taxpayer before importing its language setting", async () => {
     await expect(
       withTransaction(suite.db, (tx) =>

@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   departments,
@@ -24,10 +23,9 @@ import { seedDevice, seedVenue, seedWorkingOrder } from "@waitron/db/testing/see
 import type { FloorDeletion } from "@waitron/module";
 import { AppError, type DeleteImpactRefusal } from "@waitron/shared";
 import * as serviceDelete from "./index.js";
-import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 const NOW = new Date("2026-10-11T12:00:00Z");

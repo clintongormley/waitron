@@ -27,13 +27,7 @@ import {
   MAX_DELIVERY_ATTEMPTS,
   PRINTER_DELETED,
 } from "@waitron/printing";
-import {
-  hashSecret,
-  hashPin,
-  persons,
-  startManagementSession,
-  IDENTITY_MIGRATIONS,
-} from "@waitron/identity";
+import { hashSecret, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { createClient, createAgent, FakeSink } from "@waitron/print-agent";
 import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
@@ -53,7 +47,7 @@ import { mountPrintApi } from "./print-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { deliverDemoPrinterJobs } from "./demo-printer.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const clock: TrustedClock = {
   now: () => ({
     instant: new Date("2026-10-07T12:00:00.000Z"),

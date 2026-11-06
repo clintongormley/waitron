@@ -14,8 +14,6 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   AppError,
@@ -42,7 +40,7 @@ import "./errors.js";
 // The one-default partial unique is pinned in packages/db/src/schema/kitchen-stations.test.ts.
 const LOCALE = "es-ES";
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
 });
 let db: Database;

@@ -3,13 +3,12 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { setPersonLocale } from "./staff.js";
 import { codeOf, seedPerson } from "../test/fixtures.js";
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS],
 });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {

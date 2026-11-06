@@ -12,9 +12,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
+import { persons, startManagementSession } from "@waitron/identity";
 import {
   ZONE_REPAIR_ALERT_CLAIM,
   confirmVenueZone,
@@ -24,12 +22,7 @@ import { createAlertRegistry, readHandledAlerts, readOpenAlerts } from "./alerts
 import { TradingAdmission } from "./trading-admission.js";
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    CATALOGUE_MIGRATIONS,
-    VENUE_SERVICE_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS],
 });
 const AT = new Date("2026-10-14T23:30:00.000Z");
 const RAW = "Invalid/Zone?token=private-invalid-value";

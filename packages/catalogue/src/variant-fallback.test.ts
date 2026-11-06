@@ -11,7 +11,6 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import {
   assignCatalogueToVenue,
   addProductToMenu,
@@ -45,7 +44,7 @@ import { plantStoredUnit, seedVenueWithSeries } from "../test/fixtures.js";
  * parent and 175 ml each carry three different names (125 ml has only its staff name), so a
  * reader that takes the wrong row or the wrong name fails rather than passing on a shared value.
  */
-const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
+const fx = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 const PARENT_ALLERGENS = { sulphites: {} };

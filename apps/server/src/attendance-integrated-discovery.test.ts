@@ -9,7 +9,7 @@ import {
 } from "@waitron/db";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
+import { persons } from "@waitron/identity";
 import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import {
   WORKFORCE_MIGRATIONS,
@@ -21,7 +21,7 @@ import { beginIntegratedAttendance } from "./attendance-integrated.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { beginAttendanceDiscovery, discoverAttendanceDays } from "./attendance-discovery.js";
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS, PAYMENTS_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, PAYMENTS_MIGRATIONS],
 });
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 let locationId: string, personId: string, nodeId: string, orderId: string;

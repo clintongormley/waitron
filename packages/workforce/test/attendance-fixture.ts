@@ -2,14 +2,14 @@ import { beforeEach } from "vitest";
 import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
+import { persons } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
 import * as api from "../src/index.js";
 import { seedEmployment, seedLocation } from "./fixtures.js";
 
 export function attendanceFixture() {
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, api.WORKFORCE_MIGRATIONS],
+    migrations: [CORE_MIGRATIONS, api.WORKFORCE_MIGRATIONS],
   });
   const backend = new api.WorkforceBackend();
   const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);

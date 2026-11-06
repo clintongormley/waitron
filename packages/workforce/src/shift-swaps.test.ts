@@ -6,7 +6,6 @@ import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { acceptSwap, decideSwap, listPendingSwaps, requestSwap } from "./shift-swaps.js";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { insertDraftShift, insertShiftSwap, seedLocation, seedPerson } from "../test/fixtures.js";
 
@@ -14,7 +13,7 @@ let locationId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
     locationId = await seedLocation(db);

@@ -3,14 +3,13 @@ import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, units, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import {
   readContentLanguages,
   writeContentLanguages,
   listContentTranslationGaps,
 } from "./content-languages.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const valencian = "ca-ES-valencia";
 
 describe("stored Valencian content", () => {

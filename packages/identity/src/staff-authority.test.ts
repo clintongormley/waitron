@@ -9,7 +9,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { openManagementSession, seedPerson } from "../test/fixtures.js";
-import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import {
   completeAccountAction,
   inspectAccountAction,
@@ -120,7 +119,7 @@ const changes: {
     value: "replacement@example.test",
   },
 ];
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 const row = async (id: string) =>
   (await suite.db.select().from(persons).where(eq(persons.id, id)))[0]!;

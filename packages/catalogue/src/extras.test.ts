@@ -15,7 +15,6 @@ import {
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { addProductToMenu, createCatalogue, createProduct, updateProduct } from "./operations.js";
 import {
@@ -33,7 +32,7 @@ import { createUnit, updateUnit } from "./units.js";
 
 // With no `content_languages` row, `readContentLanguages` falls back to the language passed in.
 // `useVenueDb` empties every data table after each test, so the products are re-made per test.
-const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
+const fx = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
 

@@ -12,9 +12,9 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedWorkingOrder, seedVenue } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
+import { persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { ADJUSTMENTS_MIGRATIONS, adjustments, recordAdjustment } from "@waitron/adjustments";
+import { adjustments, recordAdjustment } from "@waitron/adjustments";
 import { decimal, jobOrigin } from "@waitron/shared";
 import { WORKFORCE_MIGRATIONS, WorkforceBackend } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
@@ -23,13 +23,7 @@ import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import { mountMeApi } from "./me-api.js";
 
 const suite = useVenueDb({
-  migrations: [
-    CORE_MIGRATIONS,
-    IDENTITY_MIGRATIONS,
-    WORKFORCE_MIGRATIONS,
-    WORKFORCE_ES_MIGRATIONS,
-    ADJUSTMENTS_MIGRATIONS,
-  ],
+  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
 });
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 const PATH = "/management-api/me/personal-data/export";

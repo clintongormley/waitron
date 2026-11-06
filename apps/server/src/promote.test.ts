@@ -19,7 +19,7 @@ import { NODE_MIGRATIONS, readNodeMode, setNodeMode, setSingletonRole } from "@w
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
+import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
   endorseKey,
   generateNodeKeyPair,
@@ -173,7 +173,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
   // Declared inside the describe so its hooks do not fire around the mirror block's cases. The
   // per-test reset matters: the term-0 mint case fails when it sees an earlier case's rows.
   const suite = useVenueDb({
-    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+    migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
     timeoutMs: 60_000,
   });
 
