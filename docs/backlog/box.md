@@ -1132,15 +1132,13 @@ client. No screen calls them yet.
   refuses a change that carries the dashboard's sign-in cookie from a page that is neither the box's
   own nor a trusted one, with 403 `management.origin_refused`, logged at warn, before any route code
   runs, so it asks the host nothing and reads none of the body. Trusted pages on another address
-  are taken: `managementOrigin` when it differs from the address the browser used, the venue's other
-  servers named in the held membership document, and, in dev mode only, the dev Vite pages
-  (`apps/server/src/boot.ts:1314-1317`, `apps/server/src/allowed-origins.ts:57-58`). Of the box's
+  are taken ([which ones](../developers/conventions-data.md#a-change-carrying-the-dashboards-sign-in-cookie-is-checked-for-the-page-that-sent-it)). Of the box's
   network and screen routes, only the join still demands the box's own page. None of the three
   needs an encrypted connection, since none carries a secret. A change from another page that
   carries no dashboard cookie passes that check and is refused by the session check as 401
   `management_session.required`, or, when its body is over the size limit, by that limit first as
   400 `management.request_invalid` `{ field: "body" }` (the limit runs ahead of the session check,
-  `apps/server/src/box-host-api.ts:174-175`, and reads a body sent without a `Content-Length` to
+  `apps/server/src/box-host-api.ts:173-174`, and reads a body sent without a `Content-Length` to
   measure it); either way the host is asked nothing. The
   reads are not checked: another page cannot read their answers. Why: SameSite ignores the port,
   so a page served on another port of the box's own name is sent the manager's cookie; a review run
@@ -1486,7 +1484,7 @@ once released. Belongs with A1016.
 
 ## A1187: code part 1 built twice.
 
-- **A1187: code part 1 built twice.** The same-origin TLS check is copied across several routes,
+- **A1187: code part 1 built twice.** The encrypted-connection check is copied across several routes,
   and `promote-api.ts` still answers a plain-HTTP or cross-site request with
   `authorization.not_permitted`. The archive code, the backup-key check, the bucket recovery kit,
   the server key's name and its created date are each built in more than one place.
@@ -2280,7 +2278,7 @@ pull request that left it:
   holding no kit or no archive pack still name the kit file and the archive recovery pack file,
   which tests pin word for word, where both forms now take the pack PDF. Setup's pack refusals say
   "paste the code" where the field's help says "paste the kit".
-- **#2263 (the server makes and records the pack).** The same-origin TLS check is copied across
+- **#2263 (the server makes and records the pack).** The encrypted-connection check is copied across
   several routes; `promote-api.ts` still answers a plain-HTTP or cross-site request with
   `authorization.not_permitted`, the answer the plan calls untruthful. The archive code, the
   backup-key check, the bucket recovery kit, the server key's name and the created date are each

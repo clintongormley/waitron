@@ -25,7 +25,7 @@ because the shared one now covers its routes.
 2026-11-06), TypeScript 7 in `apps/server`, Vitest 4.1.12.
 
 **Spec:** the A1371 item as queued by the watcher on 2026-11-06, and its backlog entry
-[`docs/backlog/box.md` "Management changes do not check which page sent them"](../../backlog/box.md#management-changes-do-not-check-which-page-sent-them)
+`docs/backlog/box.md` "Management changes do not check which page sent them"
 (line 732 on `4d1500bbf8`), with its pointer at `docs/backlog.md:5326`.
 
 **Branch:** `feat/a1371-management-origin-check`, worktree

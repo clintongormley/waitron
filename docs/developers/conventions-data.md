@@ -1581,7 +1581,7 @@ management cookie (A1371's plan, D1).
 "Absent" means the header was not sent; an empty header counts as present and foreign.
 
 - Taken when `Origin` is absent or equals the request's own origin, and `Sec-Fetch-Site` is absent,
-  `same-origin` or `none`. The page checks in six other files under `apps/server/src/` call
+  `same-origin` or `none`. The page checks in other files under `apps/server/src/` call
   `sentFromThisOrigin` for the same test.
 - Also taken when `Origin` is some other address, not `""` and not `null`, that the trusted-page
   lookup accepts, whatever its `Sec-Fetch-Site`, since a browser rightly calls a trusted page on
