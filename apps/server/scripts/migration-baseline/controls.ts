@@ -1,7 +1,7 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { LIST_FILE } from "../protection-list/cli.js";
+import { readList } from "../protection-list/cli.js";
 import {
   compareSchemaLists,
   formatDifferences,
@@ -149,9 +149,7 @@ export function runControls(options: {
   out: string;
   controls?: readonly Control[];
 }): ControlOutcome[] {
-  const reference = JSON.parse(
-    readFileSync(join(options.reference, LIST_FILE), "utf8"),
-  ) as SchemaListFile;
+  const reference = readList(options.reference);
   const controls = options.controls ?? CONTROLS;
   for (const control of controls) entryFor(reference, control);
   return controls.map((control, index) =>

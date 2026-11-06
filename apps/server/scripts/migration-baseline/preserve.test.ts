@@ -223,4 +223,44 @@ describe("preserveBaseline", () => {
       preserveBaseline({ reference: disagreeing, folder, from: ["alpha", "beta"] }),
     ).toThrow("disagree");
   });
+
+  // Same objects and owners as ALPHA then BETA, but alpha's `z_first` is created after beta's
+  // `a_second`, so the two BEFORE INSERT triggers on `a` are created in the other order.
+  const LATE_TRIGGER: readonly FixtureSet[] = [
+    { name: "alpha", sql: ALPHA.sql.replace(/CREATE TRIGGER[^\n]*\n/, "") },
+    BETA,
+    { name: "alpha", sql: "CREATE TRIGGER z_first BEFORE INSERT ON a BEGIN SELECT 1; END;" },
+  ];
+
+  it.each([
+    ["first", false],
+    ["second", true],
+  ])(
+    "refuses when the compositions create one table event's triggers in other orders (%s listed first)",
+    (_label, swapped) => {
+      const at = join(dir, "orders");
+      const inOrder = fixtureEntry(at, [ALPHA, BETA]);
+      const late = fixtureEntry(at, LATE_TRIGGER, { composition: "fiscal-none" });
+      const entries = swapped ? [late, inOrder] : [inOrder, late];
+      const disagreeing = writeReference(at, entries);
+      expect(() =>
+        preserveBaseline({ reference: disagreeing, folder, from: ["alpha", "beta"] }),
+      ).toThrow("trigger order on a BEFORE INSERT");
+      expect(baseline()).toBe(GENERATED);
+    },
+  );
+
+  it("accepts compositions that create the triggers in the same relative order", () => {
+    const at = join(dir, "same-order");
+    // Gamma's objects sit between alpha's and beta's here, so every later row number shifts.
+    const shifted = fixtureEntry(at, [ALPHA, GAMMA, BETA], { composition: "fiscal-none" });
+    const agreeing = writeReference(at, [fixtureEntry(at, [ALPHA, BETA]), shifted]);
+    const expected = preserveBaseline({ reference, folder, from: ["alpha", "beta"] });
+    const written = baseline();
+    writeBaseline(GENERATED);
+    expect(preserveBaseline({ reference: agreeing, folder, from: ["alpha", "beta"] })).toEqual(
+      expected,
+    );
+    expect(baseline()).toBe(written);
+  });
 });

@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { LIST_FILE } from "../protection-list/cli.js";
+import { readList } from "../protection-list/cli.js";
 import {
   compareSchemaLists,
   formatDifference,
@@ -56,10 +56,33 @@ function storedObjects(entry: SchemaListEntry): Map<string, Omit<OldObject, "set
   return objects;
 }
 
+/**
+ * The kept triggers' names, in `sqlite_schema` row order, for each table, timing and event: A760
+ * keeps that relative order (plan risk 4).
+ */
+function triggerOrders(
+  entry: SchemaListEntry,
+  kept: ReadonlyMap<string, OldObject>,
+): Map<string, string> {
+  const groups = new Map<string, string[]>();
+  const triggers = entry.schema.triggers
+    .filter((trigger) => kept.has(`trigger ${trigger.name}`))
+    .sort((a, b) => a.rowid - b.rowid);
+  for (const trigger of triggers) {
+    const group = `${trigger.table} ${trigger.timing} ${trigger.event}`;
+    groups.set(group, [...(groups.get(group) ?? []), trigger.name]);
+  }
+  return new Map([...groups].map(([group, names]) => [group, names.join(", ")]));
+}
+
 /** The final stored objects of the old sets, from the one database that holds them. */
 function oldObjects(reference: SchemaListFile, from: readonly string[]): Map<string, OldObject> {
   const wanted = new Set(from);
-  let found: { where: string; objects: Map<string, OldObject> } | null = null;
+  let found: {
+    where: string;
+    objects: Map<string, OldObject>;
+    orders: Map<string, string>;
+  } | null = null;
   for (const entry of reference.entries.filter((candidate) => candidate.phase === PHASE)) {
     const stored = storedObjects(entry);
     const objects = new Map<string, OldObject>();
@@ -71,8 +94,9 @@ function oldObjects(reference: SchemaListFile, from: readonly string[]): Map<str
     }
     if (objects.size === 0) continue;
     const where = `composition=${entry.composition} database=${entry.database}`;
+    const orders = triggerOrders(entry, objects);
     if (found === null) {
-      found = { where, objects };
+      found = { where, objects, orders };
       continue;
     }
     const same = (a: OldObject, b: OldObject | undefined) =>
@@ -85,6 +109,14 @@ function oldObjects(reference: SchemaListFile, from: readonly string[]): Map<str
       throw new Error(
         `The reference's ${PHASE} entries disagree about ${from}: ${found.where} and ${where}`,
       );
+    }
+    for (const [group, names] of found.orders) {
+      if (orders.get(group) !== names) {
+        throw new Error(
+          `The reference's ${PHASE} entries disagree about the trigger order on ${group}: ` +
+            `${found.where} has ${names}, ${where} has ${orders.get(group)}`,
+        );
+      }
     }
   }
   const objects = found?.objects ?? new Map<string, OldObject>();
@@ -155,9 +187,7 @@ export function preserveBaseline(options: {
   folder: string;
   from: readonly string[];
 }): PreserveResult {
-  const reference = JSON.parse(
-    readFileSync(join(options.reference, LIST_FILE), "utf8"),
-  ) as SchemaListFile;
+  const reference = readList(options.reference);
   const old = oldObjects(reference, options.from);
 
   const journal = JSON.parse(

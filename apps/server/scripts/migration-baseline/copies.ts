@@ -53,23 +53,24 @@ export function checkCopies(sets: readonly CopySet[], roots: readonly CopyRoot[]
     const files = filesUnder(set.folder);
     if (files.length === 0)
       throw new Error(`Set ${set.name}'s source ${set.folder} holds no files`);
-    return { set, files };
+    return { set, hashes: new Map(files.map((path) => [path, hashOf(join(set.folder, path))])) };
   });
   const differences: CopyDifference[] = [];
   let files = 0;
   for (const root of roots) {
     if (!existsSync(root.dir)) throw new Error(`${root.label} ${root.dir} does not exist`);
     const drizzle = join(root.dir, "drizzle");
-    for (const { set, files: sourceFiles } of sources) {
+    for (const { set, hashes } of sources) {
       const shipped = join(drizzle, set.name);
-      const shippedFiles = filesUnder(shipped);
-      for (const path of [...new Set([...sourceFiles, ...shippedFiles])].sort()) {
+      const shippedFiles = new Set(filesUnder(shipped));
+      for (const path of [...new Set([...hashes.keys(), ...shippedFiles])].sort()) {
         const at = { root: root.label, path: `drizzle/${set.name}/${path}` };
-        if (!shippedFiles.includes(path)) differences.push({ kind: "missing", ...at });
-        else if (!sourceFiles.includes(path)) differences.push({ kind: "extra", ...at });
+        const sourceHash = hashes.get(path);
+        if (!shippedFiles.has(path)) differences.push({ kind: "missing", ...at });
+        else if (sourceHash === undefined) differences.push({ kind: "extra", ...at });
         else {
           files += 1;
-          if (hashOf(join(set.folder, path)) !== hashOf(join(shipped, path))) {
+          if (sourceHash !== hashOf(join(shipped, path))) {
             differences.push({ kind: "stale", ...at });
           }
         }

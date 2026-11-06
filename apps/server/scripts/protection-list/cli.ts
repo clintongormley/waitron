@@ -151,7 +151,7 @@ async function list(args: readonly string[], print: (text: string) => void): Pro
   return 0;
 }
 
-function readList(dir: string): SchemaListFile {
+export function readList(dir: string): SchemaListFile {
   return JSON.parse(readFileSync(join(dir, LIST_FILE), "utf8")) as SchemaListFile;
 }
 
