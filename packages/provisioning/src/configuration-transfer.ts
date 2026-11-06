@@ -588,10 +588,10 @@ export function validateConfigurationBundle(
     const exported = bundle.modules[module.name];
     const target = targetVersions[module.name];
     if (exported === target) continue;
-    if (target === undefined) {
+    if (target === undefined || exported === undefined) {
       throw new AppError("setup.request_invalid", { field: `module:${module.name}` });
     }
-    if (exported !== undefined && exported > target) {
+    if (exported > target) {
       throw new AppError("setup.configuration_newer", {});
     }
     throw new AppError("setup.configuration_outdated", {});
