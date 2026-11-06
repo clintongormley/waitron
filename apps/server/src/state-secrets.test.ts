@@ -9,10 +9,16 @@ import { RECOVERY_FILES, collectStateSecrets, unpackBundleToDir } from "./state-
 
 vi.mock("node:fs/promises", { spy: true });
 
-/** Each sync of an opened file or folder and each rename, in order, while `run` runs. */
+/** Each sync of an opened file or folder, each rename and each `mkdir` that created a folder, in
+ * order, while `run` runs. */
 async function syncsAndRenames(run: () => Promise<unknown>): Promise<string[]> {
   const events: string[] = [];
   const real = await vi.importActual<typeof fs>("node:fs/promises");
+  vi.mocked(fs.mkdir).mockImplementation((async (path, options) => {
+    const created = await real.mkdir(path, options);
+    if (created !== undefined) events.push(`mkdir ${String(path)}`);
+    return created;
+  }) as typeof fs.mkdir);
   vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
     const handle = await real.open(...args);
     const realSync = handle.sync.bind(handle);
@@ -29,6 +35,7 @@ async function syncsAndRenames(run: () => Promise<unknown>): Promise<string[]> {
   try {
     await run();
   } finally {
+    vi.mocked(fs.mkdir).mockReset();
     vi.mocked(fs.open).mockReset();
     vi.mocked(fs.rename).mockReset();
   }
@@ -117,6 +124,56 @@ describe("state-secrets", () => {
     expect((await stat(outside)).mode & 0o777).toBe(0o755);
   });
 
+  it("creates no folder through a link escaping destDir to a folder below the link", async () => {
+    const dest = mkdtempSync(join(tmpdir(), "state-secrets-deep-link-"));
+    const outside = mkdtempSync(join(tmpdir(), "state-secrets-deep-outside-"));
+    await symlink(outside, join(dest, "tls"));
+    let refusal: unknown;
+    const events = await syncsAndRenames(() =>
+      unpackBundleToDir({ "tls/sub/server.key": "pwned\n" }, dest).catch((err: unknown) => {
+        refusal = err;
+      }),
+    );
+    expect(refusal).toMatchObject({
+      code: "recovery.bundle_invalid",
+      params: { reason: "unsafe_path" },
+    });
+    expect(await readdir(outside)).toEqual([]);
+    expect(events).toEqual([]);
+  });
+
+  it("refuses an entry whose folder is swapped for an escaping link after the first check", async () => {
+    const dest = mkdtempSync(join(tmpdir(), "state-secrets-swap-"));
+    const outside = mkdtempSync(join(tmpdir(), "state-secrets-swap-outside-"));
+    const real = await vi.importActual<typeof fs>("node:fs/promises");
+    vi.mocked(fs.mkdir).mockImplementation((async (path, options) => {
+      if (path === join(dest, "tls")) await real.symlink(outside, path);
+      return real.mkdir(path, options);
+    }) as typeof fs.mkdir);
+    try {
+      await expect(unpackBundleToDir({ "tls/server.key": "pwned\n" }, dest)).rejects.toMatchObject({
+        code: "recovery.bundle_invalid",
+        params: { reason: "unsafe_path" },
+      });
+    } finally {
+      vi.mocked(fs.mkdir).mockReset();
+    }
+    expect(await readdir(outside)).toEqual([]);
+  });
+
+  it("creates the missing folders between an existing one and an entry", async () => {
+    const dest = mkdtempSync(join(tmpdir(), "state-secrets-deep-"));
+    await unpackBundleToDir({ "a/b/c/k": "k\n" }, dest);
+    expect(await readFile(join(dest, "a", "b", "c", "k"), "utf8")).toBe("k\n");
+  });
+
+  it("propagates an lstat failure other than a missing entry", async () => {
+    const dest = mkdtempSync(join(tmpdir(), "state-secrets-lstat-eio-"));
+    const failure = Object.assign(new Error("injected lstat failure"), { code: "EIO" });
+    vi.mocked(fs.lstat).mockRejectedValueOnce(failure);
+    await expect(unpackBundleToDir({ "a/k": "k\n" }, dest)).rejects.toBe(failure);
+  });
+
   it("syncs each unpacked file before renaming it into place, and its folder after", async () => {
     const files = await collectStateSecrets(await seedStateDir());
     const dest = mkdtempSync(join(tmpdir(), "state-secrets-durable-"));
@@ -130,6 +187,25 @@ describe("state-secrets", () => {
         `sync ${dirname(target)}`,
       ]);
     }
+  });
+
+  it("syncs the destination after creating a tls folder in it", async () => {
+    const files = await collectStateSecrets(await seedStateDir());
+    const dest = mkdtempSync(join(tmpdir(), "state-secrets-new-tls-"));
+    const events = await syncsAndRenames(() => unpackBundleToDir(files, dest));
+    const created = events.indexOf(`mkdir ${join(dest, "tls")}`);
+    expect(created).not.toBe(-1);
+    expect(events.indexOf(`sync ${dest}`, created)).toBeGreaterThan(created);
+  });
+
+  it("syncs the folder above each folder it creates for a missing destination", async () => {
+    const above = mkdtempSync(join(tmpdir(), "state-secrets-new-dest-"));
+    const dest = join(above, "a", "state");
+    const events = await syncsAndRenames(() => unpackBundleToDir({ "secrets.env": "x\n" }, dest));
+    const created = events.indexOf(`mkdir ${dest}`);
+    expect(created).not.toBe(-1);
+    expect(events.indexOf(`sync ${above}`, created)).toBeGreaterThan(created);
+    expect(events.indexOf(`sync ${join(above, "a")}`, created)).toBeGreaterThan(created);
   });
 
   it("unpacks into a tls that is a link to a folder inside the destination", async () => {

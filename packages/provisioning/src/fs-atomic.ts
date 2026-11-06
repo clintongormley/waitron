@@ -1,9 +1,9 @@
 import "./errors.js";
-import { open, realpath, writeFile, rename, rm } from "node:fs/promises";
-import { dirname } from "node:path";
+import { mkdir, open, realpath, writeFile, rename, rm } from "node:fs/promises";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { syncFolder } from "./folder-sync.js";
 
-/** Where {@link stageFile} writes `path`'s working copy. */
+/** Where {@link stageFile} and {@link stageFileDurable} write `path`'s working copy. */
 export function stagedPath(path: string): string {
   return `${path}.tmp`;
 }
@@ -51,6 +51,24 @@ export async function syncFolderHolding(path: string): Promise<void> {
     if (code !== "ENOTDIR" && code !== "ELOOP") throw error;
     await syncFolder(await realpath(folder));
   }
+}
+
+/** Sync the folder holding each folder that a recursive `mkdir` of `deepest` created, `first` being
+ * what that `mkdir` returned: a new folder's own entry lives in the folder above it, so a file
+ * written durably inside it is guaranteed to survive a crash only once that entry is synced too. */
+export async function syncNewFolders(first: string | undefined, deepest: string): Promise<void> {
+  if (first === undefined) return;
+  let folder = resolve(first);
+  await syncFolderHolding(folder);
+  for (const part of relative(folder, resolve(deepest)).split(sep).filter(Boolean)) {
+    folder = join(folder, part);
+    await syncFolderHolding(folder);
+  }
+}
+
+/** A recursive `mkdir` of `path`, then {@link syncNewFolders} for the folders it created. */
+export async function mkdirDurable(path: string, mode: number): Promise<void> {
+  await syncNewFolders(await mkdir(path, { recursive: true, mode }), path);
 }
 
 /** Whether `error` came from {@link writeFileDurable}'s folder sync, after the file was in place. */

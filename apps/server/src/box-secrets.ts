@@ -1,5 +1,4 @@
 import {
-  mkdir,
   access,
   chmod,
   copyFile,
@@ -23,7 +22,13 @@ import {
   isPermittedLeafIpv4,
   reissueServerLeaf,
 } from "./self-signed-cert.js";
-import { stageFileDurable, stagedPath, syncFolderHolding, writeFileDurable } from "./fs-atomic.js";
+import {
+  mkdirDurable,
+  stageFileDurable,
+  stagedPath,
+  syncFolderHolding,
+  writeFileDurable,
+} from "./fs-atomic.js";
 import { formatEnvFile } from "./env-file.js";
 import type { TlsFiles } from "./tls.js";
 
@@ -95,7 +100,7 @@ export async function writeVenueAuthority(
   authority: { certPem: string; keyPem: string },
 ): Promise<void> {
   const tlsDir = join(stateDir, "tls");
-  await mkdir(tlsDir, { recursive: true, mode: 0o700 });
+  await mkdirDurable(tlsDir, 0o700);
   await writeFileDurable(join(tlsDir, "venue-ca.crt"), authority.certPem, 0o600);
   await writeFileDurable(join(tlsDir, "venue-ca.key"), authority.keyPem, 0o600);
 }
@@ -179,7 +184,7 @@ const exists = (p: string): Promise<boolean> =>
  * the destination.
  */
 export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxTlsFiles> {
-  await mkdir(deps.stateDir, { recursive: true, mode: 0o700 });
+  await mkdirDurable(deps.stateDir, 0o700);
   return withRecoveryLock(deps.stateDir, () => ensureBoxSecretsLocked(deps));
 }
 
@@ -190,7 +195,7 @@ async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTl
   const listIpv4 = deps.listIpv4 ?? listBoxIpv4;
 
   const files = boxTlsPaths(deps.stateDir);
-  await mkdir(files.tlsDir, { recursive: true, mode: 0o700 });
+  await mkdirDurable(files.tlsDir, 0o700);
   await tightenTlsDir(deps.stateDir);
 
   if (!(await exists(files.keyFile))) {
@@ -234,8 +239,10 @@ async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTl
  * match, so both new files are written under working names first and renamed into place only when
  * both are written; a failed write removes the working files and leaves the old pair, and a failed
  * key rename puts the old certificate back unless that rename fails too, when the old certificate
- * is kept as `server.crt.previous` until the next reissue overwrites it. What is left is a crash
- * between the two renames, or the key rename and the put-back both failing.
+ * is kept as `server.crt.previous` until the next reissue overwrites it. A failed folder sync after
+ * both renames throws with the new pair in place and the old certificate kept as
+ * `server.crt.previous`. What is left is a crash after the first rename and before the folder
+ * sync, or the key rename and the put-back both failing.
  */
 export async function reissueBoxLeaf(deps: {
   stateDir: string;

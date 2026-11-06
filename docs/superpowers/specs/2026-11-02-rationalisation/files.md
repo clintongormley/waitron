@@ -152,6 +152,9 @@ target has one helper: write a temporary name, flush it, rename, flush the folde
 2026-11-04) moves the box's key files to `writeFileDurable` first, ahead of this helper:
 `secrets.env` is written by `box-secrets.ts:225` with the helper that does not flush.
 
+*2026-11-06 (A1329): `secrets.env`, `backup.env`'s recovery key, the box's certificate files and
+every file a restore unpacks are now written and flushed to disk; the list above predates it.*
+
 **Secrets: three box files, and every other secret named.** `secrets.env` holds the vault key ring.
 `backup.env` holds the backup key and its rotation time. `trading.env` holds identity and no secret.
 Restore treats the three differently, so they stay three files (README U7). `WAITRON_ACCOUNT_KEY` is
@@ -380,6 +383,8 @@ together.
 - **Power cuts.** At least seven kinds of file are written without a flush today (`writeFileAtomic`,
   `fs-atomic.ts:36-38`). `secrets.env` is among them, and losing it makes every stored credential
   and every backup unreadable (`state-secrets.ts:30-33`). One durable helper closes this.
+  *2026-11-06 (A1329): `secrets.env`, `backup.env`'s recovery key, the box's certificate files and
+  every file a restore unpacks are now written and flushed to disk; the list above predates it.*
 - **Torn pairs.** The web certificate and key are renamed separately (`box-secrets.ts:231-237`).
   One file, or one folder swap, closes that.
 - **Wrong module set after a restore.** `modules.json` travels beside the database as a separate,

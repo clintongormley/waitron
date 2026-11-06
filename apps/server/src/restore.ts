@@ -795,11 +795,10 @@ export async function clearReplacedDatabases(
 
 /**
  * Restore every `secrets/<path>` entry into `stateDir`, prefix stripped, via `unpackBundleToDir` —
- * which re-applies the same traversal guard AND writes each file 0600 atomically, exactly as the
+ * which re-applies the same traversal guard AND writes each file 0600 durably, exactly as the
  * recovery-bundle unpack does. Secret contents are utf8 text (`RECOVERY_FILES` are `.env`/PEM),
  * matching the utf8 they were read as into the archive. `trading.env` is written last, after every
- * other secret succeeds; failure during that final atomic write can leave a temporary file, but
- * cannot publish a partial identity.
+ * other secret succeeds, so a failure cannot publish a partial identity.
  */
 export async function restoreSecrets(args: {
   entries: readonly ArchiveEntry[];

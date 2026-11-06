@@ -110,10 +110,12 @@ export type { PasswordThrottle, PasswordThrottleProbe } from "./password-throttl
 export { inTurn, keysInTurn } from "./attempt-turns.js";
 export {
   failedAtFolderSync,
+  mkdirDurable,
   stagedPath,
   stageFile,
   stageFileDurable,
   syncFolderHolding,
+  syncNewFolders,
   writeFileAtomic,
   writeFileDurable,
 } from "./fs-atomic.js";

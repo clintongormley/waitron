@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   failedAtFolderSync,
+  mkdirDurable,
   stageFile,
   stageFileDurable,
   writeFileAtomic,
@@ -131,6 +132,16 @@ describe("writeFileDurable", () => {
 
     expect(await readFile(target, "utf8")).toBe("fresh");
     expect((await stat(target)).mode & 0o777).toBe(0o600);
+  });
+
+  it("removes the working copy and throws the rename's error when the rename fails", async () => {
+    const d = await newDir();
+    const target = join(d, "record.json");
+    await writeFile(target, "old");
+    vi.mocked(fs.rename).mockRejectedValueOnce(Object.assign(new Error("no"), { code: "EXDEV" }));
+    await expect(writeFileDurable(target, "{}", 0o600)).rejects.toMatchObject({ code: "EXDEV" });
+    expect(await readFile(target, "utf8")).toBe("old");
+    await expect(stat(`${target}.tmp`)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("throws when the folder cannot be synced after the rename, leaving the file in place", async () => {
@@ -341,5 +352,36 @@ describe("stageFileDurable", () => {
     }
     expect(thrown).toBe(closeError);
     await expect(stat(`${target}.tmp`)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
+describe("mkdirDurable", () => {
+  it("creates the missing folders at the mode and syncs the folder above each, top down", async () => {
+    const d = await newDir();
+    const deepest = join(d, "a", "b");
+
+    const events = await syncsAndRenames(() => mkdirDurable(deepest, 0o700));
+
+    expect(events).toEqual([`sync ${d}`, `sync ${join(d, "a")}`]);
+    expect((await stat(join(d, "a"))).mode & 0o777).toBe(0o700);
+    expect((await stat(deepest)).mode & 0o777).toBe(0o700);
+  });
+
+  it("syncs nothing when the folder already exists", async () => {
+    const d = await newDir();
+
+    expect(await syncsAndRenames(() => mkdirDurable(d, 0o700))).toEqual([]);
+  });
+
+  it("syncs the real folder when the folder above a new one is a link to it", async () => {
+    const d = await fs.realpath(await newDir());
+    const real = join(d, "real-state");
+    await fs.mkdir(real);
+    await fs.symlink(real, join(d, "state"));
+
+    const events = await syncsAndRenames(() => mkdirDurable(join(d, "state", "tls"), 0o700));
+
+    expect(events).toEqual([`sync ${real}`]);
+    expect((await stat(join(real, "tls"))).isDirectory()).toBe(true);
   });
 });
