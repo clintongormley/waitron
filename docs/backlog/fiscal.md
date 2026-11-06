@@ -1372,7 +1372,9 @@ number and postal address are public; they are three settings named for the soft
 official image from repository secrets of the same names and never committed, so a fork builds with
 its own. A production start with none refuses whether or not the build is stamped, and a production
 start whose open chain was made under another tax number refuses (`sif.producer_changed`) until A993
-can open the new installation. The owner or the watcher sets the three secrets before Task 8 lands.
+can open the new installation, so a change of producer is blocked in production until A993 lands
+and the tax number is not changed before then. The owner or the watcher sets the three secrets
+before Task 8 lands.
 Then slices 1b to 6, and A993's plan. Still needed from outside: the asesor's answer to Q53. The
 owner's address is settled: supplied on 2026-11-04, it travels with the other two.
 

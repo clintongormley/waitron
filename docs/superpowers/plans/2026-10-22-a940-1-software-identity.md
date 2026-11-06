@@ -114,7 +114,8 @@
      those 31 lines and nothing else — no `huella` line (Task 6).
    - `apps/server/src/taxpayer-rename.filing.test.ts:92-93` — **in Task 8, not before**: while the
      producer is pending, `producerFields` still answers the taxpayer's name at the moment of
-     recording, so the lines stay true until the producer is filled. Task 8 deletes them; line 91,
+     recording, so the lines stay true until the producer is filled. Task 8 deletes them (superseded
+     2026-11-06: the rewritten Task 8 keeps them, now `:91-92`, since the suite sets no producer); line 91,
      the issuer's name following the rename, stays.
    - `packages/fiscal-verifactu/src/backup-verification-chain.test.ts:39-43` — set-up only: its
      `append` helper also sets the record's issuer NIF to the SIF row's, because the check now
@@ -569,7 +570,8 @@ taxpayer.
 > **This replaces every earlier Task 8.** The original (fill two constants), the 2026-11-03 amendment
 > (a box's private `.env` and `--producer-file`) and the 2026-11-04 proposal (a venue-database row,
 > a build-origin stamp, a file on the owner's own stick) were all withdrawn by the owner on 2026-11-04.
-> The withdrawn text is in git: commit `303b8cdd3a` and its parent hold it as it was.
+> The withdrawn text is in git: commit `303b8cdd3a` holds it as it was. Revised the same day for a
+> fresh-context review's seventeen findings (the commit message lists them).
 
 **What the owner decided** (the campaign questions file, 2026-11-04 about 10:05 and 10:10, and
 2026-11-06 about 14:19; recorded on `main` at `1072f1cbd6` in
@@ -584,12 +586,17 @@ during upgrades". The postal address is the third value of the same kind. On 202
 chose a repository **secret**, not a repository variable, to carry them to the release. The values
 are public, but they are **never committed**: a fork inherits nothing.
 
+"Secret" here is only GitHub's storage for a value that is not in the source; it hides nothing. The
+values end up readable in every official image — `docker inspect`, the image's history, and
+`docker buildx imagetools inspect` (which read the image's settings off the registry on 2026-11-06,
+printing only a count of `WAITRON_` names). That fits "public".
+
 **This plan never holds the real values**, and neither does any commit, test or log line a task
 writes. Test fixtures use made-up values: name `PRODUCER PERSON`, tax number `00000000T` (eight
 zeros take the check letter `T`, since 0 mod 23 is 0; the slice-1 probe at the top of this plan
 filed it), address `1 Example Street, 00000 Nowhere (Province), Spain`.
 
-**Path: FULL, and fiscal — the owner lands it.** One pull request for 8a–8e, opened green and
+**Path: FULL, and fiscal — the owner lands it.** One pull request for 8a–8h, opened green and
 parked `needs-owner-review`. **No table, column or migration is added** (the A1308 hold): every part
 below reads what is stored today.
 
@@ -602,37 +609,51 @@ already uses (its key names were listed on 2026-11-06 without printing a value).
 (CLAUDE.md §3, "General code is English only", and the module-seams rule).
 
 - **The address is one line**, written as it is to appear in the declaration (street, number,
-  postcode, town, province, country, separated by commas). A line break in the value is refused.
-  Chosen over one setting per line because the declaration's item 1.j) prints it as one run of
-  text (design §4, the 1.j) template) and a value with a line break does not survive every place a
-  setting passes through (a `.env` file, a GitHub secret's log masking).
-- **Room for a foreign identifier.** The generic reader returns the tax number as
-  `{ country: "ES"; value: string }`. Only Spain is read now; a foreign identifier (design §5.6's
-  table: "The producer's NIF (or foreign identifier, its type and country)") later adds a fourth
-  setting naming the issuing country, and widens `country`. The Veri\*Factu library already carries
-  the choice: its `SistemaInformatico` type is `NIF` or `IDOtro`, never both
+  postcode, town, province, country, separated by commas). A line break in the value is refused,
+  because CI hands build arguments to `docker/build-push-action` as one newline-separated list:
+  its README for the `v7` ref says «`List` type is a newline-delimited string» (README line 214),
+  and its `src/context.ts:59` reads the list as
+  `Util.getInputList('build-args', {ignoreComma: true})`, so commas stay inside a value and a line
+  break would split it into two arguments (both fetched with `curl` on 2026-11-06; read, not run).
+  The declaration's item 1.j) prints the address as one run of text anyway (design §4).
+- **Room for a foreign identifier.** The generic reader returns the tax number as a plain string
+  and says nothing about its country. `fiscal-verifactu` treats it as a Spanish identifier. A
+  foreign identifier (design §5.6's table: "The producer's NIF (or foreign identifier, its type and
+  country)") later adds a fourth setting naming the issuing country. The Veri\*Factu library already
+  carries the choice: its `SistemaInformatico` type is `NIF` or `IDOtro`, never both
   (`@waitron/verifactu` 0.2.1 `dist/types.d.ts:53-60`), and its `validate` checks `IDOtro`'s shape
   (`dist/validate.js:473-482`). Read, not run. Two readers would then need widening, because they
   compare only `NIF`: the drain's AEAT comparison (`packages/fiscal-verifactu/src/drain.ts:1794`)
-  and reconciliation (`reconcile.ts:445`).
+  and reconciliation (`reconcile.ts:443`).
 
 **Where they are read.** A generic, browser-safe parser in `@waitron/shared`
 (`packages/shared/src/software-producer.ts`, new): `readSoftwareProducer(env)` takes an environment
-object, never touches `process` itself, and returns the three values, or `null` when all three are
-unset. "Unset" follows the house rule: an empty value counts as unset (CLAUDE.md §3, "An empty value
-is a valid value"; `apps/server/src/env-value.ts`). **This is the shape check for any module that
-has none:** each value trimmed and non-empty, at most 200 characters, no line break; all three set
-or none. Anything else throws `software_producer.invalid` with `{ setting, reason }` — the setting's
-NAME and a reason word, never the value (the personal-data logging rule, CLAUDE.md §3).
+object, never touches `process` itself, and returns `{ name, taxId, address }`, or `null` when all
+three are unset. "Unset" follows the house rule: an empty value counts as unset (CLAUDE.md §3, "An
+empty value is a valid value"; `apps/server/src/env-value.ts`). **This is the shape check for any
+module that has none:** each value trimmed and non-empty, at most 200 characters, no line break; all
+three set or none. Anything else throws `software_producer.invalid` with `{ setting, reason }` — the
+setting's NAME and a reason word, never the value (the personal-data logging rule, CLAUDE.md §3).
 
-`fiscal-verifactu` pulls them in itself, from the process's own environment, as
-`allocation-configuration.ts:180` already reads its settings (`configuredOperations(process.env)`),
-and maps them to its own fields: name → `NombreRazon`, tax number → `NIF`. It adds Veri\*Factu's own
-rules — the name at most 120 characters, the tax number passing the library's NIF check — by running
-the library's exported `validate` over a block carrying them and reading only the
+`fiscal-verifactu` pulls them from the process's own environment and maps them to its own fields:
+name → `NombreRazon`, tax number → `NIF`. Reading `process.env` inside the package has a precedent:
+`FISCAL_OPERATIONS.prepare` falls back to `configuredOperations(process.env)`
+(`packages/fiscal-verifactu/src/allocation-configuration.ts:180`), though its configured path
+(`:177`) takes `host.environment` from the host instead. Veri\*Factu adds its own rules — the name
+at most 120 characters, the tax number passing the library's NIF check — by running the library's
+exported `validate` over a block carrying them and reading only the
 `SistemaInformatico.NombreRazon` and `SistemaInformatico.NIF` issues (`dist/validate.js:458,478`;
-the library does not export its `hasValidNifControl` from `dist/index.d.ts`, read on 2026-11-06).
-A failure there throws `sif.producer_invalid` with `{ setting, reason }`.
+the library's `dist/index.d.ts` does not export its `hasValidNifControl`, read on 2026-11-06). A
+failure there throws `sif.producer_invalid` with `{ setting, reason }`.
+
+**When they are read.** Never at import. `makeVerifactuBackend` reads them **once** and hands the
+result to `VerifactuBackend` through its existing `identity` option (`backend.ts:180`), so every
+record that backend builds, and the start check (8e) that the same backend runs, see one reading.
+The two remedy files that build a software block without a backend
+(`record-remedy-absent.ts:142`, `record-remedy-http.ts:129`) read at call time; the corrective
+remedy builds a backend through `makeVerifactuBackend` (`record-remedy-corrective-http.ts:100-103`)
+and so reads when it is called. A running box's environment does not change, so these agree on a
+box; a test sets the values before the server or backend it tests is built (8d).
 
 **Why the process environment, and not the box's own settings files.** On a box, the app's settings
 come from three places: the image's own `ENV` lines, the `environment:` block of
@@ -649,23 +670,47 @@ is why the start check under "The catch" exists.
 1. `deploy/Dockerfile`'s runtime stage declares `ARG WAITRON_PRODUCER_NAME`,
    `ARG WAITRON_PRODUCER_TAX_ID` and `ARG WAITRON_PRODUCER_ADDRESS` and adds the three to its `ENV`
    block (today's block: `deploy/Dockerfile:266-278`). The print-agent target does not take them.
-   **Measured 2026-11-06** with a throwaway two-line image on `alpine:3.23` (built, run, removed):
-   a build argument holding spaces, commas and brackets arrived in the container's environment
-   exactly, inside a multi-line `ENV` block; with no build argument the variable was present and
-   empty, which `isUnset` reads as unset.
+   A build argument is visible only in a stage that declares it, which is why the Dockerfile
+   already declares `WAITRON_BUILD_ID` again in each stage that reads it (`:4`, `:26`, `:128`,
+   `:264`); slice 2's renderer, which runs in the build stage, needs its own three declarations
+   there. **Measured 2026-11-06** with a throwaway image, built, run and removed:
+   ```
+   printf 'FROM alpine:3.23\nARG P_NAME\nARG P_ADDR\nENV A=1 \\\n  P_NAME=${P_NAME} \\\n  P_ADDR=${P_ADDR} \\\n  B=2\n' > Dockerfile
+   docker build -q --pull=false -t a940-env-probe --build-arg 'P_NAME=Made Up Person' --build-arg 'P_ADDR=1 Example Street, 00000 Nowhere (Province), Spain' .
+   docker run --rm a940-env-probe sh -c 'printf "[%s]\n[%s]\n[%s]\n" "$P_NAME" "$P_ADDR" "$B"'
+   ```
+   printed `[Made Up Person]`, `[1 Example Street, 00000 Nowhere (Province), Spain]`, `[2]`; the
+   same image built with no build arguments printed the variable as set and empty, which `isUnset`
+   reads as unset. That measured `docker build --build-arg`, not `build-push-action`'s list; 8g
+   checks the action's result in CI.
 2. `.github/workflows/ci.yml`'s publish job passes them from three repository secrets of the same
-   names as build arguments to the app image only (`build-args`, today `ci.yml:4062`). A step before
-   the build fails the job when any of the three secrets is empty, printing each one's length, not
-   its value; a step after the build runs the built image with `--entrypoint node` and fails when the
-   tax number is not in its environment. The image-smoke workflow (`image-smoke.yml:133-155`) passes
-   none: its box starts blank and preproduction (`image-smoke.yml:195-198`).
-3. Every image published from the official repository therefore carries them — `:main` and
-   `sha-…` on each push to `main`, and each release tag when slice 4 adds them. `:main` must carry
-   them because boxes install it today (`deploy/compose.yml:11`) and no release exists yet (§5.1).
-4. **A new value reaches a node by upgrading it.** Changing a secret changes nothing already
-   published; the next publish carries the new value, and a box takes it when it is upgraded to
-   that image (A993's upgrade step, design §5.6, once built; `waitron.sh install` until then).
-   Switching to a company is: change the three secrets, publish, upgrade.
+   names as build arguments to the app image only. Today that job builds and pushes in one step,
+   `push: true`, with the `:main` tag among its tags (`ci.yml:4054-4066`, `push: true` at `:4060`), so a check after it would
+   run after `:main` had moved. 8g reorders it: build with `load: true`; then check, in the shell
+   and without printing, that each of the three values inside the built image equals its secret;
+   then push the `sha-…` tag and move `:main`. A step before the build fails when any secret is
+   empty, printing lengths only. The image-smoke workflow (`image-smoke.yml:133-155`) passes none:
+   its box starts blank and preproduction (`image-smoke.yml:195-198`).
+3. Every image published from the official repository then carries them — `:main` and `sha-…` on a
+   push to `main`, and each release tag when slice 4 adds them. `:main` must carry them because
+   boxes install it today (`deploy/compose.yml:11`) and no release exists yet (§5.1).
+4. **Changing the values: blocked in production until A993.** A changed secret publishes nothing by
+   itself: the publish job runs only on a push to `main` that changed code
+   (`needs.changes.outputs.code == 'true'`, `ci.yml:3949`). And once a new tax number is published,
+   every production box upgraded to it **refuses to start** (`sif.producer_changed`, "The catch"):
+   its chain's last record names the old number, and nothing before A993 can open the new
+   installation a new producer needs. Upgrading the spare first leaves the main box refusing when
+   it is upgraded in turn; a one-box venue has no way through. So:
+   - **Do not change the three secrets' tax number until A993 has landed.** A change of name or
+     address alone is not a new system (§5.6 compares the tax number only) and goes through.
+   - 8g adds a guard to the publish job: it reads the tax number in the image `:main` points at
+     now, from the registry (`docker buildx imagetools inspect ghcr.io/<owner>/waitron:main
+     --format '{{json .Image.Config.Env}}'`, run on 2026-11-06 against the live image, printing
+     only a count), and fails when the new secret's differs, unless the repository variable
+     `WAITRON_PRODUCER_CHANGE_ALLOWED` is `yes` — a deliberate act, cleared after that publish. The
+     publish job runs on a push, so a variable stands in for a workflow input. An image with no tax
+     number yet (today's `:main`) is no difference, so the first publish passes. A failed or
+     timed-out registry read fails the job, bounded like the workflow's other network steps.
 5. **Someone building their own passes their own**: `docker build --build-arg
    WAITRON_PRODUCER_NAME=… --build-arg WAITRON_PRODUCER_TAX_ID=… --build-arg
    WAITRON_PRODUCER_ADDRESS=…`, or the three variables in the environment when running from source.
@@ -682,10 +727,11 @@ same sentence is on
 So a pull request from a fork builds without the values. **Not verified from a source sentence:**
 that forking a repository copies none of its secrets into the fork. The pages above, the secrets
 reference and concepts pages and "About forks" were searched for it on 2026-11-06 and say nothing
-either way. Step 8e's fork check settles it by running it.
+either way. 8g's fork test settles it by running it.
 
 **Setting the secrets — a step for the owner or the watcher, done once before this pull request
-lands** (after it lands, a push to `main` with the secrets missing fails the publish job by design):
+lands** (after it lands, a code push to `main` with the secrets missing fails the publish job by
+design):
 
 ```
 gh secret set --env-file ~/waitron-campaign-shared/private/producer-identity.env --app actions --repo clintongormley/waitron
@@ -694,9 +740,11 @@ gh secret list --app actions --repo clintongormley/waitron
 
 `gh` 2.103.3's help says `-f, --env-file file  Load secret names and values from a dotenv-formatted
 file`; the file's three key names are already the setting names. Never `cat` or `echo` the file.
-Not run: whether `gh`'s dotenv reading keeps an unquoted value with spaces whole is unverified, so
-the first publish's lengths line is compared with the file's own lengths, computed without printing
-a value (`awk -F= '{print $1, length(substr($0, index($0,"=")+1))}'` over the file).
+Not run: whether `gh`'s dotenv reading keeps an unquoted value with spaces whole; 8g's in-image
+comparison is against the secrets as stored, so it would not catch a value cut short on the way in.
+Compare the first publish's lengths line with the file's own lengths, computed without printing a
+value (`awk -F= '{print $1, length(substr($0, index($0,"=")+1))}'` over the file). **After that, do
+not change the tax number until A993 lands** (step 4 above).
 
 **What a start does** (every environment counts an empty value as unset):
 
@@ -711,34 +759,47 @@ a value (`awk -F= '{print $1, length(substr($0, index($0,"=")+1))}'` over the fi
 as part of a chain's identity: a different producer means a new installation, which closes the
 chain and restarts the series, and cannot be undone. A993, which makes that change by itself, is not
 built (`git grep -n 'identity_mismatch\|identity-change' -- packages apps` finds only the
-dashboard's unrelated `venue-identity-changed` event). So today
-a box given a different value — a hand override, or a release whose secrets changed — would put the
-new producer on new records of the **same** chain, silently. With settings rather than a database row
-there is no stored copy to absorb a mistake. But one stored record already exists: every record keeps
-the software block it was filed with (`registros_facturacion.sistema_informatico`,
+dashboard's unrelated `venue-identity-changed` event). So today a box given a different value — a
+hand override, or a release whose secrets changed — would put the new producer on new records of
+the **same** chain, silently. With settings rather than a database row there is no stored copy to
+absorb a mistake. But one stored record already exists: every record keeps the software block it was
+filed with (`registros_facturacion.sistema_informatico`,
 `packages/fiscal-verifactu/src/schema/registros.ts:98`), and the node's chain head points at its
-latest record (`cadenas.ultimo_registro_id`, `schema/cadenas.ts:27-29`), emptied by every activation
-— setup, restore and promotion alike (`allocation.ts:448-455`). So a start can compare the running
-tax number with the one the chain's latest record carries, with no new column:
+latest record (`cadenas.ultimo_registro_id`, `schema/cadenas.ts:29`). The head is written in
+four places: `chain.ts:117` creates the row if missing and `chain.ts:257` advances it on every
+append; `registro-sif.ts:59-66` (`resetChainHead`) empties it, reached only through `registerSif`
+and `writeReservedSif`, neither of which has a caller outside tests (`git grep` on 2026-11-06); and
+the private `activate` empties it (`allocation.ts:448-455`), the path every setup, restore and
+promotion takes (`activateAllocation` and its siblings, `allocation.ts:129-256`). So a start can
+compare the running tax number with the one the chain's latest record carries, with no new column:
 
 - **Production, different:** the start refuses, `sif.producer_changed`, with the recovery page's
   fixed title and action. Nothing is filed and no installation is opened. This is the safe answer
   for both causes: a hand override is caught at its first start, and a genuine change of producer
   waits for A993, whose upgrade step is the one moment design §5.6 ("When the change is made")
-  lets a change take effect.
+  lets a change take effect. 8g's publish guard keeps the genuine case from reaching `:main`
+  unacknowledged.
 - **No record yet on the chain** (a fresh setup, restore or promotion): nothing to compare; the
   first record names the running producer.
 - **Preproduction, different:** trades, the new producer on the same chain. Disclosed rather than
   refused: AEAT's test service only, and the first official image to carry the values would
   otherwise stop every preproduction box that ran without them. The design's "Order" paragraph
   (§5.6) already accepts a preproduction chain changing producer part-way.
+- **A production chain whose last record names the taxpayer** — filed before slice 1, or by an
+  unstamped production build while the producer was unset — refuses with no way out until A993. I
+  believe no such box exists: the README says Waitron is "Not yet running in production anywhere"
+  (`README.md:9`); not checked on the owner's box.
 - **Only the tax number is compared**, as §5.6's identity table lists it; a change of name or
   address alone is not a new system.
-- **Where it runs: only on the node that files** — `isSingletonPrimary`, boot's own reading of
-  `node_mode.singleton_role` (`apps/server/src/boot.ts:2021`), which is false on a mirror and on a
-  fenced box (the fence demotes the role first, `boot.ts:1972-1979`). A restricted box returns
-  before this point (`return restrictedStart()`, `boot.ts:1832,1931`). Why it must not run on a mirror is under "The fifth
-  point".
+- **Where it runs: on every node that can add a record** — every trading start that is neither a
+  mirror nor fenced (`fencedOrMirror`, `apps/server/src/boot.ts:1989`). Not only the singleton
+  primary: the sale routes are not gated on the role. `isSingletonPrimary` (`boot.ts:2021`) gates
+  role-specific duties and, joined with `!fencedOrMirror`, the till's `acceptingSales` and
+  `isPrimary` answers (`boot.ts:2345,2359`); the read-only gate, which refuses writes, is mounted for
+  `fencedOrMirror` alone (`boot.ts:2042-2051`). The only thing that sets a mode-primary node's role
+  to secondary at boot is the fence (`boot.ts:1972-1979`). A restricted box returns before this
+  point (`return restrictedStart()`, `boot.ts:1832,1931`). Why it must not run on a mirror is under
+  "The fifth point".
 
 **What the catch does not cover, said plainly.** At first setup, a restore and a promotion — each
 done with a person present — the running values are taken as they are, and nothing checks them
@@ -753,8 +814,8 @@ fallback would let a stray value open a new installation at an unattended start,
 the case Task 8 refuses. Recommended for A993: a start opens a new installation for a **producer**
 difference only when the upgrade's own step left its marker naming that same new producer (§5.6
 already has the upgrade write a marker in the box's folder before it stops the old release);
-otherwise it keeps Task 8's refusal. This is an owner question (the report that delivers this plan
-asks it); Task 8 does not depend on the answer.
+otherwise it keeps Task 8's refusal. Put to the owner together with "a producer switch is blocked in
+production until A993"; Task 8 does not depend on the answer.
 
 **The fifth point: the mirror is upgraded first, so the two boxes may hold different values.**
 Traced on `main` at `5558d26e89`; read, not run, except where a command is named.
@@ -765,18 +826,19 @@ Traced on `main` at `5558d26e89`; read, not run, except where a command is named
   intended: a mirror runs the same official image.
 - **The chain check must not run on a mirror.** A mirror's database is a copy of the primary's, so
   it holds `cadenas` rows for other nodes and, for a box that was once the main box, a row for its
-  own node still pointing at its old chain: nothing outside an activation empties a node's chain
-  head (`git grep -n cadenas` over `apps/server/src`, `packages/handover/src` and
-  `packages/fiscal-verifactu/src` finds the write only in `allocation.ts:448-455`; the rest read it
-  or are test fixtures). A box handed over from, now a mirror upgraded first, would compare its new
-  value with its own old chain and refuse. The `isSingletonPrimary` gate keeps it out.
+  own node still pointing at its old chain: of the head's writers above, only an activation empties
+  it, and handing over does not activate the box that hands over. A box handed over from, now a
+  mirror upgraded first, would compare its new value with its own old chain and refuse. The
+  `!fencedOrMirror` gate keeps it out.
 - **Controlled handover (A1018) and emergency takeover** both promote the receiving box through the
   fiscal module's `promote` operation (`apps/server/src/promote.ts:277-297`), which is an
   activation: a new SIF row, the node's chain head emptied, new series (`allocation.ts:436-461`).
   The new main box's first record names **its** running producer, and §5.6 already says "When it is
   promoted, its activation writes the running release's identity". The old chain's records keep the
-  block they were filed with and are sent unchanged, grouped by `sif_id` (`partition by r.sif_id`, now `drain.ts:645`). So a spare on new values taking over from a main box on old values is a new installation
-  under the new producer, legitimately.
+  block they were filed with and are sent unchanged, grouped by `sif_id` (`partition by r.sif_id`,
+  `drain.ts:645`). So a spare taking over from a main box on another value is a new installation
+  under the spare's producer. With a changed tax number that happens only after 8g's
+  acknowledgment, and it is the legitimate path §5.6 already allows.
 - **Nothing compares one box's producer with the other's.** The handover's copy check compares
   migration hashes and module names (`apps/server/src/handover-compare.ts:236-285`), and its chain
   summary reads installation codes, not producers (`packages/fiscal-verifactu/src/handover-summary.ts:44-50`).
@@ -792,37 +854,37 @@ Traced on `main` at `5558d26e89`; read, not run, except where a command is named
   (`handover-compare.ts:236-275`). A950's "upgrade the spare first"
   ([A950 design](../specs/2026-10-27-a950-automatic-upgrades-design.md), line 557) meets that, not
   this task. Read, not run.
-- **Open, for the implementer to establish before 8d's step 1:** the boot comment at
-  `boot.ts:2016` speaks of "a sell-only local secondary". If any non-primary node appends to its
-  own chain (`git grep -n appendToChain` and the sale path's gate), the gate widens to every node
-  that is neither a mirror nor fenced (`fencedOrMirror`, `boot.ts:1989`), and 8d gains the case of
-  a box that was once the main box. Report what was found either way.
 
 **The declaration's rendered copy** (design §5.3, built in slice 2 and later; nothing here builds
 it). Each version's committed text, `packages/fiscal-verifactu/declarations/v<version>.md`, keeps
 the producer's three facts as slots (‹nombre y apellidos›, ‹NIF›, ‹dirección›), never values, so a
 fork inherits none. The image build fills them from the same three build arguments that build gives
-its `ENV`, so the official image's PDF carries the official values and a fork's carries its own. A
-build with none renders no declaration, and its production start refuses anyway. The GitHub Release
-copies the files out of the official image (§5.3), so the public archive carries the public values.
-`pnpm release prepare` (§5.4, step 3) shows the text filled from the same three variables in the
-environment of whoever runs it, and refuses when they are unset. The design is updated to say so.
+its `ENV` (declared again in the renderer's stage, step 1 above), so the official image's PDF
+carries the official values and a fork's carries its own. A build with none renders no declaration,
+and its production start refuses anyway. The GitHub Release copies the files out of the official
+image (§5.3), so the public archive carries the public values. `pnpm release prepare` (§5.4,
+step 3) shows the text filled from the same three variables in the environment of whoever runs it,
+and refuses when they are unset. The design says so.
 
 **`apps/server/src/taxpayer-rename.filing.test.ts` — rechecked on `main` at `5558d26e89`.** The
 lines the original Task 8 would have deleted are now `:91-92` (the comment, then the assertion that
 the software block's `NombreRazon` follows the rename). They **stay**: the suite sets no producer
 settings and names no production start (`grep -n 'WAITRON_ENV\|production\|PRODUCER'` over it
-prints nothing), so its records keep the taxpayer fallback and the lines remain true. 8b adds a case
-beside them with the settings set, showing the block keeping the producer across a rename.
+prints nothing), so its records keep the taxpayer fallback and the lines remain true — provided the
+developer's own shell cannot supply the values, which 8d makes sure of. 8c adds a case beside them
+with the settings set, showing the block keeping the producer across a rename.
 
 **Changed test checks** (the owner's 2026-10-05 rule; each listed in the pull request):
 
-- `packages/fiscal-verifactu/src/slot.test.ts:70,106` and `software-identity.test.ts:145-170` —
-  the refusal no longer takes a "published" flag; the "production, unstamped, served" expectation
-  becomes a refusal.
+- `packages/fiscal-verifactu/src/software-identity.test.ts:27-35` — `SOFTWARE_IDENTITY` no longer
+  holds `producer: PRODUCER_PENDING`; and `:145-170` — the refusal no longer takes a "published"
+  flag.
+- `packages/fiscal-verifactu/src/slot.test.ts` — the "served in production" cases `:81-84`
+  (unpublished build) and `:86-89` (no stamp, through the slot) become refusals; the stamped
+  `describe` at `:91-116` loses its reason to exist and is removed.
 - `apps/server/src/recovery-surface.test.ts:344,470` — `sif.producer_unset`'s new words, and the
   three new codes.
-- The production-start fixtures 8c finds failing gain the made-up values; each file is listed.
+- The test files 8d finds failing gain the made-up values; each file is listed.
 - **Unchanged and run unedited:** the golden huella test
   (`packages/fiscal-verifactu/src/write-path.e2e.test.ts:613`), the `inmutabilidad` suite
   (`packages/fiscal-verifactu/src/inmutabilidad.test.ts`), the seed golden
@@ -837,10 +899,10 @@ modify `packages/shared/src/errors.ts` (`software_producer.invalid`: `{ setting:
 "missing" | "too_long" | "line_break" | "partial" }`) and the package's exports.
 
 - [ ] **Step 1: failing tests**, one per row: all three unset (and all three `""`) → `null`; all set
-  → `{ name, taxId: { country: "ES", value }, address }`, trimmed; one or two unset →
-  `partial` naming the first missing setting; a 201-character value → `too_long`; a value with
-  `\n` → `line_break`; a whitespace-only value counts as missing. Assert the thrown error's `code`
-  and that its params hold no value (serialise the error and check the made-up value is absent).
+  → `{ name, taxId, address }`, trimmed, with no country; one or two unset → `partial` naming the
+  first missing setting; a 201-character value → `too_long`; a value with `\n` → `line_break`; a
+  whitespace-only value counts as missing. Assert the thrown error's `code`, and that its params
+  hold no value (serialise the error and check the made-up value is absent).
 - [ ] **Step 2: run, expect FAIL:** `pnpm --filter @waitron/shared exec vitest run src/software-producer.test.ts`
 - [ ] **Step 3: implement.** Pure; takes `env: Readonly<Record<string, string | undefined>>`.
 - [ ] **Step 4: PASS**, then `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/english-only.test.ts scripts/module-seams.test.ts`.
@@ -848,57 +910,37 @@ modify `packages/shared/src/errors.ts` (`software_producer.invalid`: `{ setting:
 
 #### 8b. Veri\*Factu takes its producer from the settings, and refuses without them in production
 
-**Files:** modify `packages/fiscal-verifactu/src/software-identity.ts`, `slot.ts:35-47,75`,
-`record-remedy-absent.ts:142`, `record-remedy-http.ts:129`, `record-remedy-corrective-http.ts:100-103`
-(it builds a backend through `makeVerifactuBackend`), `backend.ts:180`, `errors.ts:75-76`
-(`sif.producer_invalid`); `apps/server/src/i18n/recovery-page.ts:243-255` and its test. Tests:
-`software-identity.test.ts`, `slot.test.ts`, `record-remedy-*.test.ts` as they exist,
-`apps/server/src/recovery-surface.test.ts`, `apps/server/src/taxpayer-rename.filing.test.ts` (one
-added case).
+**Files:** modify `packages/fiscal-verifactu/src/software-identity.ts`, `slot.ts:36-47,75`,
+`record-remedy-absent.ts:142`, `record-remedy-http.ts:129`, `record-remedy-corrective-http.ts:100-103`,
+`backend.ts:180`, `errors.ts:75-76` (`sif.producer_invalid`). Tests: `software-identity.test.ts`,
+`slot.test.ts`, the remedy test files as they exist.
 
-- `software-identity.ts`: `SOFTWARE_IDENTITY` keeps the product's facts; its `producer` comes from
-  `runningProducer(env = process.env)`, which calls `readSoftwareProducer` and the Veri\*Factu
-  checks above and answers the producer, `PRODUCER_PENDING` (unset), or an invalid result carrying
-  the error to throw. It never throws at import: a throw there would break every importer, the
-  recovery page's included. `producerFields` throws the invalid result's error if ever reached.
-  `refuseUnsetProducer(environment, published)` becomes `refuseProducerSettings(environment,
+- `software-identity.ts`: `SOFTWARE_IDENTITY` keeps the product's facts only. A new
+  `runningProducer(env = process.env)` calls `readSoftwareProducer`, applies Spain and the
+  Veri\*Factu checks above, and answers the producer, `PRODUCER_PENDING` (unset), or an invalid
+  result carrying the error to throw. `producerFields` throws the invalid result's error if ever
+  reached. `refuseUnsetProducer(environment, published)` becomes `refuseProducerSettings(environment,
   identity)`: invalid → throw in every environment; pending and production → `sif.producer_unset`.
   `BUILD_COMMIT` stays, for the version only.
-- The three readers (`backend.ts`'s `buildSistemaInformatico` at `:771` through `this.identity`,
-  and the two remedy files) read the running identity through one function, so a test sets it once.
-- Recovery page words (a refusal says what happened and what each choice does, and sends nobody
-  elsewhere — CLAUDE.md §3; check the final words against
-  [conventions-ui.md](../../developers/conventions-ui.md#refusals-name-a-self-service-next-step)):
-  - `sif.producer_unset` — en-GB title "This copy of Waitron was built without the name, tax number
-    and address of its producer, so it cannot be used for real sales." Action "Install an official
-    Waitron update on this box. If you build Waitron yourself, build it with your own producer's
-    details." es-ES «Esta copia de Waitron se creó sin el nombre, el NIF y la dirección de quien la
-    produce, así que no puede usarse para ventas reales.» / «Instala en este equipo una
-    actualización oficial de Waitron. Si creas Waitron tú mismo, créalo con los datos de tu propio
-    productor.»
-  - `software_producer.invalid` and `sif.producer_invalid` — en-GB "This copy of Waitron was built
-    with its producer's details incomplete or in the wrong form, so it cannot be used." Same action.
-    es-ES «Esta copia de Waitron se creó con los datos de quien la produce incompletos o mal
-    escritos, así que no puede usarse.» Same action.
+- `makeVerifactuBackend(deps)` (no `published` argument) reads `runningProducer()` once, refuses,
+  and passes the identity through `identity`. The two remedy files call `runningProducer()` when
+  they build their block.
 - [ ] **Step 1: failing tests:**
   - `software-identity.test.ts`: each row of the start table above except the last, through
-    `vi.stubEnv`; an NIE-shaped made-up tax number with a wrong check letter (`X1234567A`) →
-    `sif.producer_invalid`, the correct one (`X1234567L`) accepted (measured with the library on
-    2026-11-03, see git history of this plan); a 121-character name → `sif.producer_invalid`;
-    `producerFields` names the producer when set and the taxpayer when unset.
+    `vi.stubEnv`; a made-up NIE-shaped tax number with a wrong check letter (`X1234567A`) →
+    `sif.producer_invalid`, the correct one (`X1234567L`) accepted (the library answered so on
+    2026-11-03; the measurement is in commit `6a52e7189c`'s text of this plan); a 121-character
+    name → `sif.producer_invalid`; `producerFields` names the producer when set and the taxpayer
+    when unset; reading twice with the environment changed between shows the backend keeps its
+    first reading.
   - `slot.test.ts`: `makeVerifactuBackend({…, environment: "production" })` with no settings throws
-    `sif.producer_unset` **with no stamp** (the old `(…, false)` served case becomes this refusal);
-    with the made-up values it returns a backend; preproduction with none returns a backend.
+    `sif.producer_unset` **with no stamp**; with the made-up values it returns a backend;
+    preproduction with none returns a backend.
   - A record built by each remedy path with the values set carries `NombreRazon`/`NIF` = the made-up
     producer, and the cancellation's issuer name stays the taxpayer's (Review focus 1).
-  - `taxpayer-rename.filing.test.ts`: a new case with the values stubbed: across the rename the
-    block keeps `PRODUCER PERSON` while `nombre_razon_emisor` follows the rename. Lines `:91-92`
-    are not touched.
-  - `recovery-surface.test.ts`: the words above for each code in each language.
 - [ ] **Step 2: run, expect FAIL:**
-  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/software-identity.test.ts src/slot.test.ts`,
-  the remedy test files by name, and
-  `pnpm --filter @waitron/server exec vitest run src/recovery-surface.test.ts src/taxpayer-rename.filing.test.ts`.
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/software-identity.test.ts src/slot.test.ts`
+  and the remedy test files by name.
 - [ ] **Step 3: implement.**
 - [ ] **Step 4: PASS.** Prove by deletion: delete the production branch of `refuseProducerSettings`;
   the unset-production case fails; restore. Delete the call to the library check; the wrong-letter
@@ -907,116 +949,188 @@ added case).
   — PASS; and `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/module-seams.test.ts scripts/english-only.test.ts scripts/personal-log-params.test.ts`.
 - [ ] **Step 5: commit** — `fiscal: the records name the producer from the release's settings; production refuses without them`.
 
-#### 8c. Production-start test fixtures supply made-up values
+#### 8c. The recovery page's words, and the rename case
+
+**Files:** `apps/server/src/i18n/recovery-page.ts:243-255`, `apps/server/src/recovery-surface.test.ts`,
+`apps/server/src/taxpayer-rename.filing.test.ts` (one added case).
+
+Words (a refusal says what happened and what each choice does, and sends nobody elsewhere —
+CLAUDE.md §3; check the final words against
+[conventions-ui.md](../../developers/conventions-ui.md#refusals-name-a-self-service-next-step)):
+
+- `sif.producer_unset` — en-GB title "This copy of Waitron was built without the name, tax number
+  and address of its producer, so it cannot be used for real sales." Action "Install an official
+  Waitron update on this box. If you build Waitron yourself, build it with your own producer's
+  details." es-ES «Esta copia de Waitron se creó sin el nombre, el NIF y la dirección de quien la
+  produce, así que no puede usarse para ventas reales.» / «Instala en este equipo una actualización
+  oficial de Waitron. Si creas Waitron tú mismo, créalo con los datos de tu propio productor.»
+- `software_producer.invalid` and `sif.producer_invalid` — en-GB "This copy of Waitron was built
+  with its producer's details incomplete or in the wrong form, so it cannot be used." Same action.
+  es-ES «Esta copia de Waitron se creó con los datos de quien la produce incompletos o mal
+  escritos, así que no puede usarse.» Same action.
+
+- [ ] **Step 1: failing tests:** `recovery-surface.test.ts`, the words above for each code in each
+  language; `taxpayer-rename.filing.test.ts`, a new case with the values set (8d's helper): across
+  the rename the block keeps `PRODUCER PERSON` while `nombre_razon_emisor` follows the rename. Lines
+  `:91-92` are not touched.
+- [ ] **Step 2: run, expect FAIL:**
+  `pnpm --filter @waitron/server exec vitest run src/recovery-surface.test.ts src/taxpayer-rename.filing.test.ts`
+- [ ] **Step 3: implement. Step 4: PASS.**
+- [ ] **Step 5: commit** — `server: the recovery page names a missing or malformed producer`.
+
+#### 8d. Tests start from unset, and production starts supply made-up values
 
 Removing the stamp gate makes every unbundled test that starts trading in production refuse
-`sif.producer_unset` — the reason slice 1 gated on the stamp ("The placeholder", above).
-`git grep -ln 'WAITRON_ENV: "production"' -- apps packages` lists 28 files on `5558d26e89`; not all
-reach the trading start.
+`sif.producer_unset` — the reason slice 1 gated on the stamp ("The placeholder", above). Production
+is set in tests in more ways than one literal: `WAITRON_ENV: "production"` in an env object (28
+files under `apps` and `packages` on `5558d26e89`), a `trading.env` file the test writes
+(`apps/server/src/testing/backup-verification-fixture.ts:289`,
+`backup-verification-compatibility.test.ts:584`), `vi.stubEnv("WAITRON_ENV", "production")`
+(`apps/server/scripts/demo-seed/seed.test.ts:263`, `seed-sales.test.ts:192`), an assignment
+(`packages/provisioning/src/cli-first-setup.test.ts:265,628,853`), a constant
+(`PRODUCTION_BOX`, `apps/server/src/setup-api.throwaway.test.ts:38`), and backends built with
+`environment: "production"` in 90 `packages/fiscal-verifactu` test files. So the selection is by
+outcome, not by text.
 
-**Files:** create `apps/server/src/testing/test-producer.ts` (`useTestProducer()`: `vi.stubEnv` of
-the three made-up values in `beforeEach`, restored after); add it to each failing file. A test that
-starts the server in a child process passes the three values in that child's environment if it
-builds one by hand.
+**Files:** create `apps/server/src/testing/test-producer.ts` (`useTestProducer()`: stubs the three
+made-up values in `beforeAll` — before any server or backend the file starts there — and restores
+them in `afterAll`); a copy or export of it for `packages/fiscal-verifactu` and
+`packages/provisioning` if their failing files need it; the `vitest` configs of `apps/server`,
+`packages/fiscal-verifactu` and `packages/provisioning` set the three to `""` under `test.env`, so a
+developer's shell can never supply them to a test that assumes they are unset (the rename suite and
+the seed golden among them). A test that starts the server in a child process passes the three
+values in that child's environment if it builds one by hand.
 
-- [ ] **Step 1:** on 8b's commit, run every file that names a production start, beside a control
-  run of the same files on `main` (check free memory first, `memory_pressure | grep free`), under
-  `bash` so the list splits:
-  ```bash
-  bash <<'EOF'
-  git grep -ln 'WAITRON_ENV: "production"' -- 'apps/server/**/*.test.ts' | sed 's|apps/server/||' > /tmp/a940-8c-server.txt
-  (cd apps/server && TESTCONTAINERS_RYUK_DISABLED=true pnpm exec vitest run $(cat /tmp/a940-8c-server.txt))
-  files=$(git grep -ln 'WAITRON_ENV: "production"' -- 'packages/provisioning/src/*.test.ts' | sed 's|packages/provisioning/||')
-  (cd packages/provisioning && pnpm exec vitest run $files)
-  EOF
-  ```
-  Record each file failing on 8b and not on `main`, and whether its log shows `sif.producer_unset`.
-- [ ] **Step 2:** add `useTestProducer()` to exactly those files; nothing else changes in them.
-- [ ] **Step 3:** Step 1's block again: no file fails that does not also fail on `main`, and no log
-  holds `sif.producer_unset`. A file still failing for another reason stops the sub-task.
-- [ ] **Step 4: commit** — `test: production starts in tests name a made-up producer`, the file
-  list in the message.
+- [ ] **Step 1: the measurement.** On 8b's commit, run the whole `apps/server`,
+  `packages/provisioning` and `packages/fiscal-verifactu` suites; beside them, the control: the same
+  three suites in a throwaway `git worktree add --detach <dir> main` (with `pnpm install` in it,
+  removed after). Check free memory first (`memory_pressure | grep free`) and scale concurrency to
+  it. Save each run's output to a file and select the test files whose output on 8b contains
+  `sif.producer_unset` and whose control run passed.
+- [ ] **Step 2:** add `useTestProducer()` to exactly those files, and the `test.env` lines; nothing
+  else changes in them.
+- [ ] **Step 3:** Step 1's runs again: no file fails that does not also fail on `main`, and no output
+  holds `sif.producer_unset` outside the cases that test it. Then, with the three exported in the
+  shell running vitest (made-up values), run
+  `pnpm --filter @waitron/server exec vitest run src/taxpayer-rename.filing.test.ts scripts/demo-seed/seed-sales.golden.test.ts`
+  — PASS unedited, which shows `test.env` wins over the shell.
+- [ ] **Step 4: commit** — `test: tests start with no producer, and production starts name a made-up one`,
+  the file list in the message.
 
-#### 8d. A start refuses when its chain was made under another producer
+#### 8e. The chain check and its entry point
 
-**Files:** modify `packages/fiscal/src/contribution.ts` (a new optional seat on
-`FiscalContribution`: `checkFilingIdentity?(tx: Transaction, deps: { nodeId: NodeId; environment:
-DeploymentEnvironment }): Promise<void>`, "throws when this node's open chain was made under a
-different software producer from the running one"); `packages/fiscal-verifactu/src/slot.ts` fills it
-from a new `packages/fiscal-verifactu/src/producer-change.ts`; `errors.ts` gains `sif.producer_changed`
-(no params); `apps/server/src/boot.ts` calls the seat after `makeFiscalBackend` (`:2084`), in one
-read transaction, only when `isSingletonPrimary` (`:2021`); `apps/server/src/i18n/recovery-page.ts`
-gains the code's words. A cross-package contract change, which is a risk trigger: the full review
-wave runs on this pull request anyway.
+**Files:** `packages/fiscal/src/backend.ts` (the `FiscalBackend` interface, `:374`, gains an optional
+`checkFilingIdentity?(db: Database, nodeId: string): Promise<void>` — "throws when this node's open
+chain was made under a different software producer from the one this backend files under"; it
+takes a plain `db` and `nodeId`, as the contract's other read-only entries do,
+`hasNonproductionRecords?(db)` and `readinessRejections?(db)` at `packages/fiscal/src/contribution.ts:178,180`,
+and opens no write transaction); `packages/fiscal-verifactu/src/backend.ts` implements it from a new
+`packages/fiscal-verifactu/src/producer-change.ts`, using the identity the backend captured (so the
+check and the records agree); `errors.ts` gains `sif.producer_changed` (no params). A cross-package
+contract change, which is a risk trigger: the full review wave runs on this pull request anyway.
 
-- The check: read `cadenas` for the node; no row, or `ultimo_registro_id` null → return. Otherwise
-  read that record's `sistema_informatico` and compare its `NIF` with the running tax number;
-  equal → return; different and production → throw; different and preproduction → return.
-- Words: en-GB title "This box has been given a different software producer from the one its
-  invoices were recorded under. A new producer needs a new fiscal installation, which only an
-  official upgrade can open, so the box will not sell until they match." Action "Remove the change
-  to the producer's details on this box, or install the official Waitron update that carries them."
-  es-ES «Este equipo tiene un productor del software distinto del de sus facturas registradas. Un
-  productor nuevo necesita una nueva instalación fiscal, que solo puede abrir una actualización
-  oficial, así que el equipo no venderá hasta que coincidan.» / «Deshaz el cambio de los datos del
-  productor en este equipo o instala la actualización oficial de Waitron que los incluye.»
+- The check: read `cadenas` for `nodeId`; no row, or `ultimo_registro_id` null → return. Otherwise
+  read that record's `sistema_informatico` and compare its `NIF` with the backend's tax number;
+  equal → return; different and production → throw; different and preproduction → return. With the
+  producer unset (preproduction fallback) there is nothing to compare → return.
+- [ ] **Step 1: failing tests** in `producer-change.test.ts` (`useVenueDb`, chains built with
+  `appendToChain` as `backup-verification-chain.test.ts:11-17` does): production, head record's
+  `NIF` ≠ the backend's → `sif.producer_changed`; equal → passes; no `cadenas` row → passes; head
+  emptied by an activation → passes; preproduction, different → passes; a different **name** with
+  the same tax number → passes.
+- [ ] **Step 2: run, expect FAIL:**
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/producer-change.test.ts`
+- [ ] **Step 3: implement. Step 4: PASS**; prove by deletion: delete the comparison → the refusing
+  case fails; restore. Then unedited:
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`.
+- [ ] **Step 5: commit** — `fiscal: a backend can tell when its node's chain was made under another producer`.
+
+#### 8f. The start runs the check, and the recovery page explains it
+
+**Files:** `apps/server/src/boot.ts` (after `makeFiscalBackend`, `:2084`, when `!fencedOrMirror`
+(`:1989`): `await nodeBackend.checkFilingIdentity?.(db, config.node.nodeId)`);
+`apps/server/src/i18n/recovery-page.ts` (the code's words); a new
+`apps/server/src/boot.producer-change.test.ts`; `recovery-surface.test.ts`.
+
+Words, true in both the mistaken and the legitimate case (8g's guard means the legitimate case
+arrives only after a deliberate acknowledgment): en-GB title "This box has been given a different
+software producer from the one its invoices were recorded under. A new producer needs a new fiscal
+installation, and this version of Waitron cannot open one, so the box will not sell." Action "Install
+a Waitron version that names the same producer as this box's invoices. Changing the producer needs a
+Waitron version that can open a new fiscal installation, which does not exist yet." es-ES «Este
+equipo tiene un productor del software distinto del de sus facturas registradas. Un productor nuevo
+necesita una nueva instalación fiscal, y esta versión de Waitron no puede abrirla, así que el equipo
+no venderá.» / «Instala una versión de Waitron que indique el mismo productor que las facturas de este
+equipo. Cambiar de productor necesita una versión de Waitron capaz de abrir una nueva instalación
+fiscal, que todavía no existe.» (A993 rewrites the action when it lands.)
+
 - [ ] **Step 1: failing tests:**
-  - `producer-change.test.ts` (`useVenueDb`, chains built with `appendToChain` as
-    `backup-verification-chain.test.ts:11-17` does): production, head record's `NIF` ≠ running →
-    `sif.producer_changed`; equal → passes; no `cadenas` row → passes; head emptied by an activation
-    → passes; preproduction, different → passes; a different **name** with the same tax number →
-    passes.
-  - A new `apps/server/src/boot.producer-change.test.ts`, built like the trading boot case at
-    `boot.test.ts:798`: a production primary whose chain's last record names another tax number does
-    not trade and its failure carries `sif.producer_changed`; the same database started as a mirror
-    trades (the fifth point); the matching value trades.
+  - `boot.producer-change.test.ts`, built like the trading boot case at `boot.test.ts:798`: a
+    production node whose chain's last record names another tax number does not trade and its
+    failure carries `sif.producer_changed`; the matching value trades; and **the same node id,
+    with the same chain head naming the other tax number**, started as a mirror, trades — so
+    deleting the gate makes that case fail.
   - `recovery-surface.test.ts`: the code's words in each language.
 - [ ] **Step 2: run, expect FAIL:**
-  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/producer-change.test.ts` and
-  `pnpm --filter @waitron/server exec vitest run src/boot.producer-change.test.ts src/recovery-surface.test.ts`.
-- [ ] **Step 3: implement.**
-- [ ] **Step 4: PASS.** Prove by deletion: delete the comparison → the refusing cases fail; delete
-  the `isSingletonPrimary` gate → the mirror case fails; restore both. Then unedited:
-  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`,
-  and the handover and promotion suites that start a receiving box:
-  `pnpm --filter @waitron/server exec vitest run src/handover-controlled.e2e.test.ts src/handover-two-boxes.test.ts src/promote.test.ts src/boot.promote.test.ts`
-  — PASS, or failing exactly as on `main`.
-- [ ] **Step 5: commit** — `fiscal: a box will not sell on a chain made under another producer`.
+  `pnpm --filter @waitron/server exec vitest run src/boot.producer-change.test.ts src/recovery-surface.test.ts`
+- [ ] **Step 3: implement. Step 4: PASS.** Prove by deletion: delete the call → the refusing case
+  fails; delete the `!fencedOrMirror` condition → the mirror case fails; restore both. Then:
+  `pnpm --filter @waitron/server exec vitest run src/boot.failed-start.test.ts src/handover-controlled.e2e.test.ts src/handover-two-boxes.test.ts src/promote.test.ts src/boot.promote.test.ts`
+  — PASS, or failing exactly as on `main` (`boot.failed-start.test.ts` guards that each duty boot
+  starts registers its stop before the next throwing step; a new throwing step must not break it).
+- [ ] **Step 5: commit** — `server: a box will not sell on a chain made under another producer`.
 
-#### 8e. The image carries the values; the publish job requires them
+#### 8g. The image carries the values; the publish job requires and guards them
 
-**Files:** `deploy/Dockerfile` (runtime stage: three `ARG`s, three `ENV` entries), `.github/workflows/ci.yml`
-(publish job: the empty-secret check, the app image's `build-args`, the after-build check),
-`scripts/deploy-image-env.test.ts` (a case: the Dockerfile's runtime `ENV` names the three, and
-`deploy/compose.yml` names none of them — so `.env` cannot reach them), `scripts/ci-workflow.test.mjs`
-(a case: the publish job's app build passes the three secrets and the print-agent build and
-image-smoke pass none), `deploy/README.md` (two sentences for someone building their own: pass the
-three build arguments; a fork's publish job needs its own three secrets).
+**Files:** `deploy/Dockerfile` (runtime stage: three `ARG`s, three `ENV` entries),
+`.github/workflows/ci.yml` (publish job), `scripts/deploy-image-env.test.ts` (a case: the
+Dockerfile's runtime `ENV` names the three, and `deploy/compose.yml` names none of them — so `.env`
+cannot reach them), `scripts/ci-workflow.test.mjs` (cases: the publish job's app build passes the
+three secrets, builds with `load: true` and pushes only after the in-image comparison, runs the
+`:main` guard before pushing, and the print-agent build and image-smoke pass none),
+`deploy/README.md` (two sentences for someone building their own: pass the three build arguments; a
+fork's publish job needs its own three secrets).
+
+The publish job, in order: (1) fail if any secret is empty, printing lengths; (2) read `:main`'s tax
+number from the registry and fail on a difference unless `vars.WAITRON_PRODUCER_CHANGE_ALLOWED ==
+'yes'`; (3) build the app image with `load: true`; (4) compare each of the three values inside it
+with its secret in the shell, without printing either; (5) push the `sha-…` tag, then move `:main`
+(and the release tag) as today. Every network step keeps the workflow's existing bounded-retry
+shape (CLAUDE.md §2).
 
 - [ ] **Step 1: failing guard cases** in the two script tests; run
   `pnpm exec vitest run scripts/deploy-image-env.test.ts scripts/ci-workflow.test.mjs` — FAIL.
 - [ ] **Step 2: implement**; the same command — PASS. Prove by deletion: drop one name from the
   `ENV` block → the image case fails; add `WAITRON_PRODUCER_NAME: ${WAITRON_PRODUCER_NAME:-}` to
-  `compose.yml` → the compose case fails; restore both.
+  `compose.yml` → the compose case fails; move the push before the comparison → the order case
+  fails; restore all three.
 - [ ] **Step 3: a local image build with the made-up values** (`docker build -f deploy/Dockerfile
   --build-arg WAITRON_BUILD_ID=development --build-arg WAITRON_PRODUCER_NAME='PRODUCER PERSON' …`),
   then `docker run --rm --entrypoint node <tag> -e 'console.log(process.env.WAITRON_PRODUCER_ADDRESS)'`
   prints the made-up address whole; remove the image you built, by its tag.
-- [ ] **Step 4: the one real-fork test, after the owner has set the secrets.** Fork the repository
-  to a scratch account or organisation, run a one-step `workflow_dispatch` workflow there that
-  prints `${#WAITRON_PRODUCER_TAX_ID}` from `secrets.WAITRON_PRODUCER_TAX_ID`: expect `0`. The
-  control, the same workflow on a branch of the official repository: expect the real length. Delete
-  the fork. Report both numbers.
-- [ ] **Step 5: commit** — `deploy: the release image carries its producer's settings from repository secrets`.
+- [ ] **Step 4: commit** — `deploy: the release image carries its producer's settings from repository secrets`.
+- [ ] **Step 5: the one real-fork test — only once the owner has set the secrets.** If they are not
+  set, stop here and hand back to the driver; the steps above do not depend on it. Fork the
+  repository to a scratch account or organisation and push, to a scratch branch there, a one-step
+  workflow triggered by `push` that prints `${#WAITRON_PRODUCER_TAX_ID}` from
+  `secrets.WAITRON_PRODUCER_TAX_ID`: expect `0`. The control: the same workflow pushed to a scratch
+  branch of the official repository: expect the real length. A `push` trigger, not
+  `workflow_dispatch`: GitHub's events page says of `workflow_dispatch` «This event will only
+  trigger a workflow run if the workflow file exists on the default branch» (fetched 2026-11-06).
+  Delete both scratch branches and the fork. Report both numbers.
 
-#### 8f. Docs and the pull request
+#### 8h. Docs and the pull request
 
 - [ ] `docs/backlog.md` and `docs/backlog/fiscal.md`: A940 — Task 8 built and parked; the address is
   supplied. A993 — the inherited constraint above, and the owner's answer once given.
-- [ ] `docs/compliance/action-plan.md` Step 8: a dated note with the pull request number.
+- [ ] Dated pointers where the old behaviour is described: `docs/backlog/fiscal.md`'s A940 detail
+  ("a published build set to production refuses to trade") and `docs/compliance/action-plan.md`
+  Step 8's 2026-10-23 note ("a published production build will not trade"): after Task 8, a
+  production start with no producer refuses whether or not the build is published.
 - [ ] Design §5.2/§5.3/§5.4/§5.6 already say where the values come from (updated with this plan);
   re-read them against what was built.
 - [ ] `/finish-branch` with this plan named; the full wave (fiscal), the Codex run-it seat as two
   reviews. The description opens "Fiscal — the owner lands this", says that no migration is added,
-  lists every changed test check, the fork test's two numbers, and that the secrets must be set
-  before it lands. Label `needs-owner-review`. Do not merge.
+  lists every changed test check, the fork test's two numbers (or that it waits for the secrets),
+  that the secrets must be set before it lands, and that the tax number must not change until A993
+  lands. Label `needs-owner-review`. Do not merge.

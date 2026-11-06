@@ -35,7 +35,8 @@ plan: [`2026-10-22-a940-1-software-identity.md`](../plans/2026-10-22-a940-1-soft
 > number and postal address are public. They are three settings named for the software's producer
 > (`WAITRON_PRODUCER_NAME`, `WAITRON_PRODUCER_TAX_ID`, `WAITRON_PRODUCER_ADDRESS`), carried by each
 > official image from repository secrets and never committed, so a fork builds with its own. A new
-> value reaches a box when it is upgraded. §5.2, §5.3, §5.4 and §5.6's first table row are updated
+> value reaches a box when it is upgraded, except that a new tax number is held back until A993 can
+> open the new installation it needs (a production box refuses it, and the publish job guards it). §5.2, §5.3, §5.4 and §5.6's first table row are updated
 > for it; the build is [slice 1's plan, Task 8](../plans/2026-10-22-a940-1-software-identity.md). The
 > 2026-11-02 choice to keep the number out of everything public, and the 2026-11-04 proposal built on
 > it (a venue-database row, a build-origin stamp, a file on the owner's stick), are withdrawn.
@@ -720,7 +721,7 @@ not a new system (developer FAQ §4, p. 9). So the identity a chain is opened un
 | Fact | Where it comes from at a start | Changes when |
 | --- | --- | --- |
 | The producer's NIF (or foreign identifier, its type and country) | The running release's producer settings (§5.2) | The producer changes, e.g. the owner to a future Waitron company |
-| The two-character code | The same file | Waitron ships a different product |
+| The two-character code | The running release's `software-identity.ts` (§5.2) | Waitron ships a different product |
 | The compliance mode («VERI\*FACTU» today, the only one) | The enabled fiscal module | A venue moves between fiscal policies — a new installation by **Waitron's own conservative choice** (the owner, Q2), not by a source: the developer FAQ's «cuando se produce un cambio de la implementación de la forma de facturar del SIF, realmente se ha cambiado de SIF» (§3, p. 9) is about a change of regulation (its example: RD 1007/2023 to the SII), and §3 also calls an adapted system one system «tanto actuando en la modalidad VERI\*FACTU como en la NO VERI\*FACTU» (p. 7; `docs/compliance/verifactu-faq-notes.md` §6). §12 keeps it for the asesor |
 | The taxpayer's NIF | The `tenants` row | Never, through the product (below) |
 
@@ -1051,8 +1052,10 @@ between (a switch to the spare, say) — more fiscal code, to save a delay that 
 > opened a new installation on any producer difference would let a stray value (a hand override)
 > do it with nobody present. Until A993 is built, a production start refuses instead
 > (`sif.producer_changed`, slice 1's plan, Task 8, which compares the record the chain head points
-> at). Recommended to A993, and put to the owner: a start opens a new installation for a producer
-> difference only when the upgrade's own marker names that producer; otherwise it keeps refusing.
+> at), and the publish job refuses a changed tax number unless deliberately allowed, so a change
+> of producer is blocked in production until A993 lands. Recommended to A993, and put to the owner:
+> a start opens a new installation for a producer difference only when the upgrade's own marker
+> names that producer; otherwise it keeps refusing.
 
 **Under A, what a start does.** Every start still compares the identities (above). After an
 upgrade through its step they match. They differ in two cases: the new release was started some
@@ -1402,7 +1405,7 @@ Each slice is one pull request.
 
 | Slice | What | Path |
 | --- | --- | --- |
-| 1 | `software-identity.ts`; the records carry the producer — the owner personally, his name and NIF, which he still has to supply — not the taxpayer (until he supplies them, a marked placeholder: the records keep today's producer fields and a production start on a published image refuses, [slice 1's plan](../plans/2026-10-22-a940-1-software-identity.md)); the name "Waitron"; the build's version; `TipoUsoPosibleSoloVerifactu` = S (unchanged), `TipoUsoPosibleMultiOT` = N (was S), `IndicadorMultiplesOT` = N (unchanged); the cancellation reader, the drain's grouping and the backup check keep the taxpayer's name and NIF | FULL, **fiscal: the owner lands it** |
+| 1 | `software-identity.ts`; the records carry the producer — the owner personally — not the taxpayer (landed as #2000 with a marked placeholder: the records keep today's producer fields and a production start on a published image refuses; 2026-11-06: the name, NIF and address are supplied and public, and [slice 1's plan, Task 8](../plans/2026-10-22-a940-1-software-identity.md) reads them from the release's settings and refuses any production start without them); the name "Waitron"; the build's version; `TipoUsoPosibleSoloVerifactu` = S (unchanged), `TipoUsoPosibleMultiOT` = N (was S), `IndicadorMultiplesOT` = N (unchanged); the cancellation reader, the drain's grouping and the backup check keep the taxpayer's name and NIF | FULL, **fiscal: the owner lands it** |
 | 1b | **A993**, the automatic identity change (§5.6): each chain stores its producer and mode; the upgrade's one-off step and every start compare; a difference opens a new installation under A947's five-symbol rules, only with a second clock (way A, chosen); the stuck page that takes a phone's or a till's clock, explaining every wait with a countdown; `waitron.sh install` runs the step — checking the clock while the old release serves — records the previous image and box files, and puts the old release back when the step changes nothing; the guard; the dashboard notice | FULL, **fiscal: the owner lands it** |
 | 2 | The template, `functions.md`, the renderer, the "agree" and "headings" guards, `pnpm release prepare` and `tag`, and the release runbook | FULL |
 | 3 | `/legal/declaration` (HTML, PDF, plain text) in every mode and on the landing and recovery listeners; About Waitron on the dashboard, the till's More menu, the ⓘ corners and the setup wizard; guides in English and Spanish | LIGHT |
