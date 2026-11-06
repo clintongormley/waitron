@@ -252,8 +252,8 @@ its npm package in `deploy/Dockerfile`); `deploy/third-party/README.md` says wha
 
 What it cost. Litestream 0.5.17 landed in the image (#590) with its own Apache 2.0 licence alone,
 while the binary is a statically linked Go program carrying the Go standard library and runtime
-and 97 Go modules (`go version -m` on each of the two pinned linux binaries lists 97 `dep` lines).
-`deploy/third-party/litestream/NOTICES.txt` now prints 68 distinct texts; counted 2026-09-24 over
+and 97 Go modules (`go version -m` on each of the two 0.5.17 linux binaries listed 97 `dep` lines).
+`deploy/third-party/litestream/NOTICES.txt` then printed 68 distinct texts; counted 2026-09-24 over
 those printed blocks with whitespace collapsed and case ignored, 23 contain MIT's "shall be
 included in all copies" and 28 BSD's "Redistributions in binary form must reproduce the above
 copyright notice" (29 counting the toolchain's `src/crypto/internal/boring/LICENSE`, where ` * `
@@ -4837,7 +4837,7 @@ parent's unique target is checked by WRITING a row, never by watching the migrat
 
 ## A streamed `venue.db` holds Litestream's own tables and a directory beside it
 
-Litestream 0.5.17 adds two tables, `_litestream_seq` and `_litestream_lock`, to the database it
+Litestream adds two tables, `_litestream_seq` and `_litestream_lock`, to the database it
 replicates, and keeps its own copies of what it uploaded in `.venue.db-litestream/` beside the file.
 A restore of the stream carries the two tables too; a migrated database that nothing has streamed has
 neither.

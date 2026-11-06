@@ -23,8 +23,9 @@ export interface RestoreGenerationArgs {
   bucket: BucketConfig;
   venueId: string;
   generation: string;
-  /** Must not exist, or exist empty, with no `-wal`, `-shm` or `-journal` beside it: Litestream
-   * 0.5.17 refuses either (`cmd/litestream/restore.go:279-289`, `prepareOutputPath`). */
+  /** Must not exist, or exist empty, with no `-wal`, `-shm` or `-journal` beside it. Litestream
+   * refuses a non-empty file, and those names only beside a file that exists
+   * (`cmd/litestream/restore.go:283-293` at the pinned tag, `prepareOutputPath`). */
   outPath: string;
   /** Where the restore's configuration is written; `.litestream-restore` beside `outPath` when absent. */
   configDir?: string;
@@ -49,7 +50,7 @@ async function sizeOf(path: string): Promise<number> {
  * The configuration's database path is a name only and never exists: the bench rig measured on
  * 0.5.17 that restoring with the source absent returns every row (`bench/sqlite-failover/src/litestream.ts`).
  *
- * Progress is the size of `outPath` or `<outPath>.tmp`, whichever is larger: Litestream 0.5.17
+ * Progress is the size of `outPath` or `<outPath>.tmp`, whichever is larger: the pinned Litestream
  * writes into `<outPath>.tmp` and renames it at the end. Time is read from the monotonic clock, so a
  * system clock set mid-restore moves neither bound.
  */

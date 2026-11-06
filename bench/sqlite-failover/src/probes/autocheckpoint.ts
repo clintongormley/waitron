@@ -32,7 +32,7 @@ import {
 import { openNode } from "../model.ts";
 import { startStore } from "../store.ts";
 import type { Store } from "../store.ts";
-import { createUnreachableStore } from "../unreachable-store.ts";
+import { createSilentStore } from "../unreachable-store.ts";
 import {
   driveLoad,
   integrityOf,
@@ -83,7 +83,7 @@ async function runArm(bin: string, arm: Arm, store: Store, dir: string): Promise
   const dbPath = join(dir, `${arm.name}.db`);
   const prefix = `venues/v1/gen-1-arm${arm.name.toLowerCase()}-20260923T000000Z`;
   const node = openNode("box-a", dbPath);
-  const offline = arm.reachable ? undefined : await createUnreachableStore();
+  const offline = arm.reachable ? undefined : await createSilentStore();
   let daemon: ReturnType<typeof replicate> | undefined;
   let log = "";
   try {

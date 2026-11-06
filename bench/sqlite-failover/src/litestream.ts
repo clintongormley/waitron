@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import type { Store } from "./store.ts";
 
 /** The pinned release. `litestream version` prints exactly this, with no `v`, on stdout. */
-export const LITESTREAM_VERSION = "0.5.17";
+export const LITESTREAM_VERSION = "0.5.18";
 
 /**
  * How long any one litestream call may take before it is killed, unless the caller passes its own
@@ -63,7 +63,7 @@ const credentialsByConfig = new Map<string, Store["credentials"]>();
 /**
  * Litestream's compaction settings, turned down from minutes to seconds. They are TOP-LEVEL keys,
  * not per-database ones: written under `dbs[0]` instead, the same run kept every L0 file and
- * litestream reported nothing wrong (measured 2026-09-18 on the pin).
+ * litestream reported nothing wrong (measured 2026-09-18 on 0.5.17).
  *
  * What the individual keys MEAN is not established here, and this comment does not say. What is
  * established is the effect of setting all four together, and the names are litestream's own: the
@@ -87,8 +87,8 @@ const FAST_COMPACTION = [
  * (`scenarios/s4_offline_load.ts`) is the exception and degrades to its SQLite half, which is why
  * this returns a value rather than throwing on either path.
  *
- * A wrong VERSION is also `null`, not a warning. Everything this rig records about litestream is a
- * measurement on the pin, so a different build silently answering the same calls would produce
+ * A wrong VERSION is also `null`, not a warning. Each recorded result is a measurement on the
+ * version its row names, so a different build silently answering the same calls would produce
  * results attributed to a version that never ran.
  */
 export async function resolveLitestream(): Promise<{ bin: string; version: string } | null> {
@@ -209,7 +209,7 @@ export function replicate(
   let log = "";
   // BOTH streams, and stdout is the one that matters: litestream 0.5.17 logs to STDOUT unless the
   // config sets `logging.stderr: true` (its bundled `etc/litestream.yml` documents the default as
-  // false). Measured 2026-09-18 on the pin — one `replicate -once` run redirected separately gave
+  // false). Measured 2026-09-18 on 0.5.17 — one `replicate -once` run redirected separately gave
   // 7 lines on stdout and 0 on stderr. A daemon whose stdout was discarded would report its own
   // death with an empty explanation.
   const collect = (chunk: Buffer) => {
@@ -269,7 +269,7 @@ export function replicate(
  * stdout, the `NoSuchBucket` line on stderr). That is the opposite of the DAEMON above, whose
  * ordinary logging goes to stdout.
  *
- * Two things `outPath` has to already be, both measured on the pin on 2026-09-18, and both waiting
+ * Two things `outPath` has to already be, both measured on 0.5.17 on 2026-09-18, and both waiting
  * for whichever later scenario restores over a database that is already there: an EMPTY file at
  * `outPath` is fine and litestream removes it when the restore then fails, while a NON-EMPTY one is
  * refused before any store call — `Error: cannot restore, output path already exists and is not
@@ -306,7 +306,7 @@ export async function restore(
  * The one-shot is `replicate -once` ("one-shot replication complete", exit 0). It is NOT the `sync`
  * subcommand, whose help asks for a control socket (`-socket PATH`, default
  * `/var/run/litestream.sock`) — that talks to a daemon that is already running (measured
- * 2026-09-18 on the pin).
+ * 2026-09-18 on 0.5.17).
  */
 export async function syncOnce(
   bin: string,

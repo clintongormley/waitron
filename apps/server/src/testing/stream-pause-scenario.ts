@@ -602,7 +602,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
     clock.begin("restart-held");
     // 7. Litestream is killed, and the supervisor starts a new one against the frozen bucket. The
     //    new one takes its read transaction, then waits on the bucket in its start-up check
-    //    (`init` in Litestream 0.5.17's `db.go`), so nothing can restart the side file; a running
+    //    (`init` in Litestream's `db.go`), so nothing can restart the side file; a running
     //    Litestream keeps checkpointing locally without the bucket, restarting the side file. Probe
     //    sales then wait until a reader is seen holding the side file, so the fill starts held.
     const logDir = join(stateDir, "logs");

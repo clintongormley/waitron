@@ -1,13 +1,15 @@
 /**
- * A `Store`-shaped value whose endpoint points at a closed local port, so that `writeConfig`
- * (`litestream.ts`) can be used unchanged to configure a litestream that cannot reach anything.
+ * `Store`-shaped values that reach no bucket, so that `writeConfig` (`litestream.ts`) can be used
+ * unchanged: `createUnreachableStore` refuses connections, `createSilentStore` accepts them and never
+ * answers.
  *
- * It is for the OFFLINE half of S4 (`scenarios/s4_offline_load.ts`), and it VERIFIES its own premise
+ * `createUnreachableStore` is for the OFFLINE half of S4 (`scenarios/s4_offline_load.ts`), and it VERIFIES its own premise
  * rather than assuming it: a scenario whose "offline" arm was quietly online would measure nothing
  * at all, and both answers would look alike (`CLAUDE.md` §1). The verification is a real TCP
  * connection to the endpoint, which has to be refused.
  */
 import { createServer, connect } from "node:net";
+import type { AddressInfo, Socket } from "node:net";
 import { S3Client } from "@aws-sdk/client-s3";
 import type { Store } from "./store.ts";
 
@@ -37,6 +39,34 @@ export async function createUnreachableStore(): Promise<{ store: Store; refusedW
   const port = await reservePort();
   const refusedWith = await probeRefusal(port);
   return { store: buildStore(port), refusedWith };
+}
+
+/**
+ * A `Store`-shaped value whose endpoint accepts every connection and never answers. Litestream 0.5.18
+ * gives up on a refused connection after 8 quick attempts and drops its read transaction before
+ * retrying, so a side file that must grow needs a bucket that does not answer (2026-11-06: against a
+ * refused port `restart-at-limit.ts` ended 40,000 sales at 87 MB and 134 MB, short of its 256 MiB
+ * limit). Unlike `createUnreachableStore` it does not check its own premise: `refusedWith` is a label
+ * here.
+ */
+export async function createSilentStore(): Promise<{ store: Store; refusedWith: string }> {
+  const sockets = new Set<Socket>();
+  const server = createServer((socket) => {
+    sockets.add(socket);
+    socket.on("error", () => socket.destroy());
+    socket.on("close", () => sockets.delete(socket));
+  });
+  const port = await new Promise<number>((resolve, reject) => {
+    server.on("error", reject);
+    server.listen(0, HOST, () => resolve((server.address() as AddressInfo).port));
+  });
+  const base = buildStore(port);
+  const stop = async (): Promise<void> => {
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await base.stop();
+  };
+  return { store: { ...base, stop }, refusedWith: "silent" };
 }
 
 /** Bind an ephemeral port, read which one it was, and give it back. */
